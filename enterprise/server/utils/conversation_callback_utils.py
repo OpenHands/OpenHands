@@ -4,13 +4,14 @@ import pickle
 from datetime import datetime
 
 from server.logger import logger
+from sqlalchemy import and_, select
 from storage.conversation_callback import (
     CallbackStatus,
     ConversationCallback,
     ConversationCallbackProcessor,
 )
 from storage.conversation_work import ConversationWork
-from storage.database import session_maker
+from storage.database import a_session_maker, session_maker
 from storage.stored_conversation_metadata import StoredConversationMetadata
 
 from openhands.core.config import load_openhands_config
@@ -79,15 +80,16 @@ async def invoke_conversation_callbacks(
         conversation_id: The conversation ID to process callbacks for
         observation: The AgentStateChangedObservation that triggered the callback
     """
-    with session_maker() as session:
-        callbacks = (
-            session.query(ConversationCallback)
-            .filter(
-                ConversationCallback.conversation_id == conversation_id,
-                ConversationCallback.status == CallbackStatus.ACTIVE,
+    async with a_session_maker() as session:
+        result = await session.execute(
+            select(ConversationCallback).filter(
+                and_(
+                    ConversationCallback.conversation_id == conversation_id,
+                    ConversationCallback.status == CallbackStatus.ACTIVE,
+                )
             )
-            .all()
         )
+        callbacks = result.scalars().all()
 
         for callback in callbacks:
             try:
@@ -115,7 +117,7 @@ async def invoke_conversation_callbacks(
                 callback.status = CallbackStatus.ERROR
                 callback.updated_at = datetime.now()
 
-        session.commit()
+        await session.commit()
 
 
 def update_conversation_metadata(conversation_id: str, content: dict):

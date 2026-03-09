@@ -57,7 +57,7 @@ JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 
 
-class JiraManager(Manager):
+class JiraManager(Manager[JiraViewInterface]):
     """Manager for processing Jira webhook events.
 
     This class orchestrates the flow from webhook receipt to conversation creation,
@@ -257,7 +257,7 @@ class JiraManager(Manager):
 
         return jira_user, saas_user_auth
 
-    async def start_job(self, view: JiraViewInterface):
+    async def start_job(self, view: JiraViewInterface) -> None:
         """Start a Jira job/conversation."""
         # Import here to prevent circular import
         from server.conversation_callback_processor.jira_callback_processor import (
@@ -341,17 +341,25 @@ class JiraManager(Manager):
 
     async def send_message(
         self,
-        message: Message,
+        message: str,
         issue_key: str,
         jira_cloud_id: str,
         svc_acc_email: str,
         svc_acc_api_key: str,
     ):
-        """Send a comment to a Jira issue."""
+        """Send a comment to a Jira issue.
+
+        Args:
+            message: The message content to send (plain text string)
+            issue_key: The Jira issue key (e.g., 'PROJ-123')
+            jira_cloud_id: The Jira Cloud ID
+            svc_acc_email: Service account email for authentication
+            svc_acc_api_key: Service account API key for authentication
+        """
         url = (
             f'{JIRA_CLOUD_API_URL}/{jira_cloud_id}/rest/api/2/issue/{issue_key}/comment'
         )
-        data = {'body': message.message}
+        data = {'body': message}
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(
                 url, auth=(svc_acc_email, svc_acc_api_key), json=data
@@ -366,7 +374,7 @@ class JiraManager(Manager):
                 view.jira_workspace.svc_acc_api_key
             )
             await self.send_message(
-                self.create_outgoing_message(msg=msg),
+                msg,
                 issue_key=view.payload.issue_key,
                 jira_cloud_id=view.jira_workspace.jira_cloud_id,
                 svc_acc_email=view.jira_workspace.svc_acc_email,
@@ -388,7 +396,7 @@ class JiraManager(Manager):
         try:
             api_key = self.token_manager.decrypt_text(workspace.svc_acc_api_key)
             await self.send_message(
-                self.create_outgoing_message(msg=error_msg),
+                error_msg,
                 issue_key=payload.issue_key,
                 jira_cloud_id=workspace.jira_cloud_id,
                 svc_acc_email=workspace.svc_acc_email,

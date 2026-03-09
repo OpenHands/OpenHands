@@ -22,6 +22,9 @@ describe("frontend/routes/_oh", () => {
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
       };
 
       return {
@@ -139,6 +142,9 @@ describe("frontend/routes/_oh", () => {
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
       },
     });
 
@@ -177,6 +183,9 @@ describe("frontend/routes/_oh", () => {
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
       },
     });
     useConfigMock.mockReturnValue({
@@ -265,6 +274,9 @@ describe("frontend/routes/_oh", () => {
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
       },
     });
     useConfigMock.mockReturnValue({

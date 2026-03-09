@@ -137,11 +137,23 @@ class LiteLlmManager:
                     client, keycloak_user_id, org_id, team_budget
                 )
 
+                # We delete the key if it already exists. In environments where multiple
+                # installations are using the same keycloak and litellm instance, this
+                # will mean other installations will have their key invalidated.
+                key_alias = get_openhands_cloud_key_alias(keycloak_user_id, org_id)
+                try:
+                    await LiteLlmManager._delete_key_by_alias(client, key_alias)
+                except httpx.HTTPStatusError as ex:
+                    if ex.status_code == 404:
+                        logger.debug(f'Key "{key_alias}" did not exist - continuing')
+                    else:
+                        raise
+
                 key = await LiteLlmManager._generate_key(
                     client,
                     keycloak_user_id,
                     org_id,
-                    get_openhands_cloud_key_alias(keycloak_user_id, org_id),
+                    key_alias,
                     None,
                 )
 
@@ -316,14 +328,13 @@ class LiteLlmManager:
                             get_openhands_cloud_key_alias(keycloak_user_id, org_id),
                             None,
                         )
-                        if new_key:
-                            logger.info(
-                                'LiteLlmManager:migrate_lite_llm_entries:generated_new_key',
-                                extra={'org_id': org_id, 'user_id': keycloak_user_id},
-                            )
-                            # Update user_settings with the new key so it gets stored in org_member
-                            user_settings.llm_api_key = SecretStr(new_key)
-                            user_settings.llm_api_key_for_byor = SecretStr(new_key)
+                        logger.info(
+                            'LiteLlmManager:migrate_lite_llm_entries:generated_new_key',
+                            extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                        )
+                        # Update user_settings with the new key so it gets stored in org_member
+                        user_settings.llm_api_key = SecretStr(new_key)
+                        user_settings.llm_api_key_for_byor = SecretStr(new_key)
 
         logger.info(
             'LiteLlmManager:migrate_lite_llm_entries:complete',
@@ -1051,10 +1062,9 @@ class LiteLlmManager:
         team_id: str | None,
         key_alias: str | None,
         metadata: dict | None,
-    ) -> str | None:
+    ) -> str:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
-            logger.warning('LiteLLM API configuration not found')
-            return None
+            raise ValueError('LiteLLM API configuration not found')
         json_data: dict[str, Any] = {
             'user_id': keycloak_user_id,
             'models': [],
@@ -1171,7 +1181,7 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
-        user = await UserStore.get_user_by_id_async(keycloak_user_id)
+        user = await UserStore.get_user_by_id(keycloak_user_id)
         if not user:
             return {}
 

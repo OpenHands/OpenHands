@@ -304,6 +304,76 @@ class TestRunMaintenanceTasks:
             assert 'error' in updated_task.info
             assert updated_task.info['error'] == 'Test error'
 
+    def test_set_stale_task_error_uses_naive_utc_cutoff(self, session_maker):
+        """set_stale_task_error must compare against a naive UTC cutoff."""
+        # Create tasks using naive UTC started_at values (matching what run_tasks writes).
+        with session_maker() as session:
+            stale = MaintenanceTask(
+                status=MaintenanceTaskStatus.WORKING,
+                processor_type='test.processor',
+                processor_json='{}',
+                started_at=datetime.now(timezone.utc).replace(tzinfo=None)
+                - timedelta(hours=2),
+            )
+            recent = MaintenanceTask(
+                status=MaintenanceTaskStatus.WORKING,
+                processor_type='test.processor',
+                processor_json='{}',
+                started_at=datetime.now(timezone.utc).replace(tzinfo=None)
+                - timedelta(minutes=30),
+            )
+            session.add_all([stale, recent])
+            session.commit()
+            stale_id, recent_id = stale.id, recent.id
+
+        with patch('run_maintenance_tasks.session_maker', return_value=session_maker()):
+            set_stale_task_error()
+
+        with session_maker() as session:
+            assert (
+                session.get(MaintenanceTask, stale_id).status
+                == MaintenanceTaskStatus.ERROR
+            )
+            assert (
+                session.get(MaintenanceTask, recent_id).status
+                == MaintenanceTaskStatus.WORKING
+            )
+
+    @pytest.mark.asyncio
+    async def test_run_tasks_stores_naive_utc_started_at(self, session_maker):
+        """run_tasks must write naive UTC datetimes to started_at and updated_at."""
+        processor = AsyncMock(return_value={})
+
+        with session_maker() as session:
+            task = MaintenanceTask(
+                status=MaintenanceTaskStatus.PENDING,
+                processor_type='test.processor',
+                processor_json='{}',
+            )
+            session.add(task)
+            session.commit()
+            task_id = task.id
+
+        with patch(
+            'storage.maintenance_task.MaintenanceTask.get_processor',
+            return_value=processor,
+        ):
+            with patch(
+                'run_maintenance_tasks.session_maker', return_value=session_maker()
+            ):
+                with patch('asyncio.sleep', new_callable=AsyncMock):
+                    try:
+                        await asyncio.wait_for(run_tasks(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        pass
+
+        with session_maker() as session:
+            updated = session.get(MaintenanceTask, task_id)
+            assert updated.started_at is not None
+            assert updated.started_at.tzinfo is None
+            assert updated.updated_at is not None
+            assert updated.updated_at.tzinfo is None
+
     @pytest.mark.asyncio
     async def test_run_tasks_respects_delay(self, session_maker):
         """Test that run_tasks respects the delay parameter."""

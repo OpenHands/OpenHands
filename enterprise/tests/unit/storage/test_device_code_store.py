@@ -1,33 +1,17 @@
 """Unit tests for DeviceCodeStore."""
 
-from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from storage.device_code import DeviceCode
 from storage.device_code_store import DeviceCodeStore
 
 
 @pytest.fixture
-def mock_session():
-    """Mock database session."""
-    session = MagicMock()
-    return session
-
-
-@pytest.fixture
-def mock_session_maker(mock_session):
-    """Mock session maker."""
-    session_maker = MagicMock()
-    session_maker.return_value.__enter__.return_value = mock_session
-    session_maker.return_value.__exit__.return_value = None
-    return session_maker
-
-
-@pytest.fixture
-def device_code_store(mock_session_maker):
+def device_code_store():
     """Create DeviceCodeStore instance."""
-    return DeviceCodeStore(mock_session_maker)
+    return DeviceCodeStore()
 
 
 class TestDeviceCodeStore:
@@ -49,145 +33,257 @@ class TestDeviceCodeStore:
         assert len(code) == 128
         assert code.isalnum()
 
-    def test_create_device_code_success(self, device_code_store, mock_session):
+    @pytest.mark.asyncio
+    async def test_create_device_code_success(
+        self, device_code_store, async_session_maker
+    ):
         """Test successful device code creation."""
-        # Mock successful creation (no IntegrityError)
-        mock_device_code = MagicMock(spec=DeviceCode)
-        mock_device_code.device_code = 'test-device-code-123'
-        mock_device_code.user_code = 'TESTCODE'
-
-        # Mock the session to return our mock device code after refresh
-        def mock_refresh(obj):
-            obj.device_code = mock_device_code.device_code
-            obj.user_code = mock_device_code.user_code
-
-        mock_session.refresh.side_effect = mock_refresh
-
-        result = device_code_store.create_device_code(expires_in=600)
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            result = await device_code_store.create_device_code(expires_in=600)
 
         assert isinstance(result, DeviceCode)
-        mock_session.add.assert_called_once()
-        mock_session.commit.assert_called_once()
-        mock_session.refresh.assert_called_once()
-        mock_session.expunge.assert_called_once()
+        assert len(result.device_code) == 128
+        assert len(result.user_code) == 8
 
-    def test_create_device_code_with_retries(
-        self, device_code_store, mock_session_maker
+        # Verify the DeviceCode was created in the database
+        async with async_session_maker() as session:
+            result_db = await session.execute(
+                select(DeviceCode).filter(DeviceCode.device_code == result.device_code)
+            )
+            device_code = result_db.scalars().first()
+            assert device_code is not None
+            assert device_code.user_code == result.user_code
+
+    @pytest.mark.asyncio
+    async def test_create_device_code_with_retries(
+        self, device_code_store, async_session_maker
     ):
         """Test device code creation with constraint violation retries."""
-        mock_session = MagicMock()
-        mock_session_maker.return_value.__enter__.return_value = mock_session
-        mock_session_maker.return_value.__exit__.return_value = None
+        # First create a device code to cause a collision
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            first_code = await device_code_store.create_device_code(expires_in=600)
 
-        # First attempt fails with IntegrityError, second succeeds
-        mock_session.commit.side_effect = [IntegrityError('', '', ''), None]
+        # Patch generate methods to return the same codes on first attempt,
+        # then different codes on second attempt
+        call_count = {'user': 0, 'device': 0}
+        original_generate_user_code = device_code_store.generate_user_code
+        original_generate_device_code = device_code_store.generate_device_code
 
-        mock_device_code = MagicMock(spec=DeviceCode)
-        mock_device_code.device_code = 'test-device-code-456'
-        mock_device_code.user_code = 'TESTCD2'
+        def mock_generate_user_code():
+            call_count['user'] += 1
+            if call_count['user'] == 1:
+                return first_code.user_code  # Collision
+            return original_generate_user_code()
 
-        def mock_refresh(obj):
-            obj.device_code = mock_device_code.device_code
-            obj.user_code = mock_device_code.user_code
+        def mock_generate_device_code():
+            call_count['device'] += 1
+            if call_count['device'] == 1:
+                return first_code.device_code  # Collision
+            return original_generate_device_code()
 
-        mock_session.refresh.side_effect = mock_refresh
+        device_code_store.generate_user_code = mock_generate_user_code
+        device_code_store.generate_device_code = mock_generate_device_code
 
-        store = DeviceCodeStore(mock_session_maker)
-        result = store.create_device_code(expires_in=600)
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            result = await device_code_store.create_device_code(expires_in=600)
 
         assert isinstance(result, DeviceCode)
-        assert mock_session.add.call_count == 2  # Two attempts
-        assert mock_session.commit.call_count == 2  # Two attempts
+        assert result.device_code != first_code.device_code  # Should be different
+        assert call_count['user'] == 2  # Two attempts
 
-    def test_create_device_code_max_attempts_exceeded(
-        self, device_code_store, mock_session_maker
+    @pytest.mark.asyncio
+    async def test_create_device_code_max_attempts_exceeded(
+        self, device_code_store, async_session_maker
     ):
         """Test device code creation failure after max attempts."""
-        mock_session = MagicMock()
-        mock_session_maker.return_value.__enter__.return_value = mock_session
-        mock_session_maker.return_value.__exit__.return_value = None
+        # First create a device code
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            first_code = await device_code_store.create_device_code(expires_in=600)
 
-        # All attempts fail with IntegrityError
-        mock_session.commit.side_effect = IntegrityError('', '', '')
+        # Always return the same codes to cause repeated collisions
+        device_code_store.generate_user_code = lambda: first_code.user_code
+        device_code_store.generate_device_code = lambda: first_code.device_code
 
-        store = DeviceCodeStore(mock_session_maker)
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            with pytest.raises(
+                RuntimeError,
+                match='Failed to generate unique device codes after 3 attempts',
+            ):
+                await device_code_store.create_device_code(
+                    expires_in=600, max_attempts=3
+                )
 
-        with pytest.raises(
-            RuntimeError,
-            match='Failed to generate unique device codes after 3 attempts',
-        ):
-            store.create_device_code(expires_in=600, max_attempts=3)
+    @pytest.mark.asyncio
+    async def test_get_by_device_code(self, device_code_store, async_session_maker):
+        """Test getting device code by device code."""
+        # Create a device code first
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            created = await device_code_store.create_device_code(expires_in=600)
+            result = await device_code_store.get_by_device_code(created.device_code)
 
-    @pytest.mark.parametrize(
-        'lookup_method,lookup_field',
-        [
-            ('get_by_device_code', 'device_code'),
-            ('get_by_user_code', 'user_code'),
-        ],
-    )
-    def test_lookup_methods(
-        self, device_code_store, mock_session, lookup_method, lookup_field
+        assert result is not None
+        assert result.device_code == created.device_code
+        assert result.user_code == created.user_code
+
+    @pytest.mark.asyncio
+    async def test_get_by_device_code_not_found(
+        self, device_code_store, async_session_maker
     ):
-        """Test device code lookup methods."""
-        test_code = 'test-code-123'
-        mock_device_code = MagicMock()
-        mock_session.query.return_value.filter_by.return_value.first.return_value = (
-            mock_device_code
-        )
+        """Test getting non-existent device code."""
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            result = await device_code_store.get_by_device_code('non-existent-code')
 
-        result = getattr(device_code_store, lookup_method)(test_code)
+        assert result is None
 
-        assert result == mock_device_code
-        mock_session.query.assert_called_once_with(DeviceCode)
-        mock_session.query.return_value.filter_by.assert_called_once_with(
-            **{lookup_field: test_code}
-        )
+    @pytest.mark.asyncio
+    async def test_get_by_user_code(self, device_code_store, async_session_maker):
+        """Test getting device code by user code."""
+        # Create a device code first
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            created = await device_code_store.create_device_code(expires_in=600)
+            result = await device_code_store.get_by_user_code(created.user_code)
 
-    @pytest.mark.parametrize(
-        'device_exists,is_pending,expected_result',
-        [
-            (True, True, True),  # Success case
-            (False, True, False),  # Device not found
-            (True, False, False),  # Device not pending
-        ],
-    )
-    def test_authorize_device_code(
-        self,
-        device_code_store,
-        mock_session,
-        device_exists,
-        is_pending,
-        expected_result,
+        assert result is not None
+        assert result.device_code == created.device_code
+        assert result.user_code == created.user_code
+
+    @pytest.mark.asyncio
+    async def test_get_by_user_code_not_found(
+        self, device_code_store, async_session_maker
     ):
-        """Test device code authorization."""
-        user_code = 'ABC12345'
+        """Test getting non-existent user code."""
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            result = await device_code_store.get_by_user_code('NOTFOUND')
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_authorize_device_code_success(
+        self, device_code_store, async_session_maker
+    ):
+        """Test successful device code authorization."""
         user_id = 'test-user-123'
 
-        if device_exists:
-            mock_device = MagicMock()
-            mock_device.is_pending.return_value = is_pending
-            mock_session.query.return_value.filter_by.return_value.first.return_value = mock_device
-        else:
-            mock_session.query.return_value.filter_by.return_value.first.return_value = None
-
-        result = device_code_store.authorize_device_code(user_code, user_id)
-
-        assert result == expected_result
-        if expected_result:
-            mock_device.authorize.assert_called_once_with(user_id)
-            mock_session.commit.assert_called_once()
-
-    def test_deny_device_code(self, device_code_store, mock_session):
-        """Test device code denial."""
-        user_code = 'ABC12345'
-        mock_device = MagicMock()
-        mock_device.is_pending.return_value = True
-        mock_session.query.return_value.filter_by.return_value.first.return_value = (
-            mock_device
-        )
-
-        result = device_code_store.deny_device_code(user_code)
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            created = await device_code_store.create_device_code(expires_in=600)
+            result = await device_code_store.authorize_device_code(
+                created.user_code, user_id
+            )
 
         assert result is True
-        mock_device.deny.assert_called_once()
-        mock_session.commit.assert_called_once()
+
+        # Verify the device code was authorized in the database
+        async with async_session_maker() as session:
+            result_db = await session.execute(
+                select(DeviceCode).filter(DeviceCode.user_code == created.user_code)
+            )
+            device_code = result_db.scalars().first()
+            assert device_code.status == 'authorized'
+            assert device_code.keycloak_user_id == user_id
+
+    @pytest.mark.asyncio
+    async def test_authorize_device_code_not_found(
+        self, device_code_store, async_session_maker
+    ):
+        """Test authorizing non-existent device code."""
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            result = await device_code_store.authorize_device_code(
+                'NOTFOUND', 'user-123'
+            )
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_authorize_device_code_not_pending(
+        self, device_code_store, async_session_maker
+    ):
+        """Test authorizing already authorized device code."""
+        user_id = 'test-user-123'
+
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            created = await device_code_store.create_device_code(expires_in=600)
+            # First authorization
+            await device_code_store.authorize_device_code(created.user_code, user_id)
+            # Second authorization should fail
+            result = await device_code_store.authorize_device_code(
+                created.user_code, 'another-user'
+            )
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_deny_device_code_success(
+        self, device_code_store, async_session_maker
+    ):
+        """Test successful device code denial."""
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            created = await device_code_store.create_device_code(expires_in=600)
+            result = await device_code_store.deny_device_code(created.user_code)
+
+        assert result is True
+
+        # Verify the device code was denied in the database
+        async with async_session_maker() as session:
+            result_db = await session.execute(
+                select(DeviceCode).filter(DeviceCode.user_code == created.user_code)
+            )
+            device_code = result_db.scalars().first()
+            assert device_code.status == 'denied'
+
+    @pytest.mark.asyncio
+    async def test_deny_device_code_not_found(
+        self, device_code_store, async_session_maker
+    ):
+        """Test denying non-existent device code."""
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            result = await device_code_store.deny_device_code('NOTFOUND')
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_deny_device_code_not_pending(
+        self, device_code_store, async_session_maker
+    ):
+        """Test denying already denied device code."""
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            created = await device_code_store.create_device_code(expires_in=600)
+            # First denial
+            await device_code_store.deny_device_code(created.user_code)
+            # Second denial should fail
+            result = await device_code_store.deny_device_code(created.user_code)
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_update_poll_time_success(
+        self, device_code_store, async_session_maker
+    ):
+        """Test updating poll time."""
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            created = await device_code_store.create_device_code(expires_in=600)
+            original_interval = created.current_interval
+            result = await device_code_store.update_poll_time(
+                created.device_code, increase_interval=True
+            )
+
+        assert result is True
+
+        # Verify the poll time was updated
+        async with async_session_maker() as session:
+            result_db = await session.execute(
+                select(DeviceCode).filter(DeviceCode.device_code == created.device_code)
+            )
+            device_code = result_db.scalars().first()
+            assert device_code.current_interval > original_interval
+
+    @pytest.mark.asyncio
+    async def test_update_poll_time_not_found(
+        self, device_code_store, async_session_maker
+    ):
+        """Test updating poll time for non-existent device code."""
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            result = await device_code_store.update_poll_time(
+                'non-existent-code', increase_interval=False
+            )
+
+        assert result is False

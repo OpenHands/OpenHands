@@ -3,6 +3,7 @@ Service class for managing organization operations.
 Separates business logic from route handlers.
 """
 
+from typing import NoReturn
 from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
@@ -24,13 +25,14 @@ from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.storage.data_models.settings import Settings
 
 
 class OrgService:
     """Service for handling organization-related operations."""
 
     @staticmethod
-    def validate_name_uniqueness(name: str) -> None:
+    async def validate_name_uniqueness(name: str) -> None:
         """
         Validate that organization name is unique.
 
@@ -40,12 +42,12 @@ class OrgService:
         Raises:
             OrgNameExistsError: If organization name already exists
         """
-        existing_org = OrgStore.get_org_by_name(name)
+        existing_org = await OrgStore.get_org_by_name(name)
         if existing_org is not None:
             raise OrgNameExistsError(name)
 
     @staticmethod
-    async def create_litellm_integration(org_id: UUID, user_id: str) -> dict:
+    async def create_litellm_integration(org_id: UUID, user_id: str) -> Settings:
         """
         Create LiteLLM team integration for the organization.
 
@@ -54,7 +56,7 @@ class OrgService:
             user_id: User ID who will own the organization
 
         Returns:
-            dict: LiteLLM settings object
+            Settings: LiteLLM settings object
 
         Raises:
             LiteLLMIntegrationError: If LiteLLM integration fails
@@ -115,7 +117,7 @@ class OrgService:
         )
 
     @staticmethod
-    def apply_litellm_settings_to_org(org: Org, settings: dict) -> None:
+    def apply_litellm_settings_to_org(org: Org, settings: Settings) -> None:
         """
         Apply LiteLLM settings to organization entity.
 
@@ -129,7 +131,7 @@ class OrgService:
                 setattr(org, key, value)
 
     @staticmethod
-    def get_owner_role():
+    async def get_owner_role():
         """
         Get the owner role from the database.
 
@@ -139,7 +141,7 @@ class OrgService:
         Raises:
             Exception: If owner role not found
         """
-        owner_role = RoleStore.get_role_by_name('owner')
+        owner_role = await RoleStore.get_role_by_name('owner')
         if not owner_role:
             raise Exception('Owner role not found in database')
         return owner_role
@@ -149,7 +151,7 @@ class OrgService:
         org_id: UUID,
         user_id: str,
         role_id: int,
-        settings: dict,
+        settings: Settings,
     ) -> OrgMember:
         """
         Create an organization member entity.
@@ -213,7 +215,7 @@ class OrgService:
         )
 
         # Step 1: Validate name uniqueness (fails early, no cleanup needed)
-        OrgService.validate_name_uniqueness(name)
+        await OrgService.validate_name_uniqueness(name)
 
         # Step 2: Generate organization ID
         org_id = uuid4()
@@ -236,7 +238,7 @@ class OrgService:
             OrgService.apply_litellm_settings_to_org(org, settings)
 
             # Step 6: Get owner role and create member entity
-            owner_role = OrgService.get_owner_role()
+            owner_role = await OrgService.get_owner_role()
             org_member = OrgService.create_org_member_entity(
                 org_id=org_id,
                 user_id=user_id,
@@ -303,7 +305,7 @@ class OrgService:
             OrgDatabaseError: If database operations fail
         """
         try:
-            persisted_org = OrgStore.persist_org_with_owner(org, org_member)
+            persisted_org = await OrgStore.persist_org_with_owner(org, org_member)
             return persisted_org
 
         except Exception as e:
@@ -325,7 +327,7 @@ class OrgService:
         user_id: str,
         original_error: Exception,
         error_message: str,
-    ) -> None:
+    ) -> NoReturn:
         """
         Handle failure by cleaning up LiteLLM resources and raising appropriate error.
 
@@ -397,7 +399,7 @@ class OrgService:
             return e
 
     @staticmethod
-    def has_admin_or_owner_role(user_id: str, org_id: UUID) -> bool:
+    async def has_admin_or_owner_role(user_id: str, org_id: UUID) -> bool:
         """
         Check if user has admin or owner role in the specified organization.
 
@@ -414,12 +416,12 @@ class OrgService:
 
             # Get the user's membership in this organization
             # Note: The type annotation says int but the actual column is UUID
-            org_member = OrgMemberStore.get_org_member(org_id, user_uuid)
+            org_member = await OrgMemberStore.get_org_member(org_id, user_uuid)
             if not org_member:
                 return False
 
             # Get the role details
-            role = RoleStore.get_role_by_id(org_member.role_id)
+            role = await RoleStore.get_role_by_id(org_member.role_id)
             if not role:
                 return False
 
@@ -439,7 +441,7 @@ class OrgService:
             return False
 
     @staticmethod
-    def is_org_member(user_id: str, org_id: UUID) -> bool:
+    async def is_org_member(user_id: str, org_id: UUID) -> bool:
         """
         Check if user is a member of the specified organization.
 
@@ -452,7 +454,7 @@ class OrgService:
         """
         try:
             user_uuid = parse_uuid(user_id)
-            org_member = OrgMemberStore.get_org_member(org_id, user_uuid)
+            org_member = await OrgMemberStore.get_org_member(org_id, user_uuid)
             return org_member is not None
         except Exception as e:
             logger.warning(
@@ -534,12 +536,12 @@ class OrgService:
         )
 
         # Validate organization exists
-        existing_org = OrgStore.get_org_by_id(org_id)
+        existing_org = await OrgStore.get_org_by_id(org_id)
         if not existing_org:
             raise ValueError(f'Organization with ID {org_id} not found')
 
         # Check if user is a member of this organization
-        if not OrgService.is_org_member(user_id, org_id):
+        if not await OrgService.is_org_member(user_id, org_id):
             logger.warning(
                 'Non-member attempted to update organization',
                 extra={
@@ -554,7 +556,7 @@ class OrgService:
         # Check if name is being updated and validate uniqueness
         if update_data.name is not None:
             # Check if new name conflicts with another org
-            existing_org_with_name = OrgStore.get_org_by_name(update_data.name)
+            existing_org_with_name = await OrgStore.get_org_by_name(update_data.name)
             if (
                 existing_org_with_name is not None
                 and existing_org_with_name.id != org_id
@@ -573,7 +575,7 @@ class OrgService:
         llm_fields_being_updated = OrgService._has_llm_settings_updates(update_data)
         if llm_fields_being_updated:
             # Verify user has admin or owner role
-            has_permission = OrgService.has_admin_or_owner_role(user_id, org_id)
+            has_permission = await OrgService.has_admin_or_owner_role(user_id, org_id)
             if not has_permission:
                 logger.warning(
                     'User attempted to update LLM settings without permission',
@@ -607,7 +609,7 @@ class OrgService:
 
         # Perform the update
         try:
-            updated_org = OrgStore.update_org(org_id, update_dict)
+            updated_org = await OrgStore.update_org(org_id, update_dict)
             if not updated_org:
                 raise OrgDatabaseError('Failed to update organization in database')
 
@@ -682,7 +684,7 @@ class OrgService:
             return None
 
     @staticmethod
-    def get_user_orgs_paginated(
+    async def get_user_orgs_paginated(
         user_id: str, page_id: str | None = None, limit: int = 100
     ):
         """
@@ -705,7 +707,7 @@ class OrgService:
         user_uuid = parse_uuid(user_id)
 
         # Fetch organizations from store
-        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+        orgs, next_page_id = await OrgStore.get_user_orgs_paginated(
             user_id=user_uuid, page_id=page_id, limit=limit
         )
 
@@ -744,7 +746,7 @@ class OrgService:
         )
 
         # Verify user is a member of the organization
-        org_member = OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
+        org_member = await OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
         if not org_member:
             logger.warning(
                 'User is not a member of organization or organization does not exist',
@@ -753,7 +755,7 @@ class OrgService:
             raise OrgNotFoundError(str(org_id))
 
         # Retrieve organization
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             logger.error(
                 'Organization not found despite valid membership',
@@ -773,7 +775,7 @@ class OrgService:
         return org
 
     @staticmethod
-    def verify_owner_authorization(user_id: str, org_id: UUID) -> None:
+    async def verify_owner_authorization(user_id: str, org_id: UUID) -> None:
         """
         Verify that the user is the owner of the organization.
 
@@ -786,17 +788,17 @@ class OrgService:
             OrgAuthorizationError: If user is not authorized to delete
         """
         # Check if organization exists
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             raise OrgNotFoundError(str(org_id))
 
         # Check if user is a member of the organization
-        org_member = OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
+        org_member = await OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
         if not org_member:
             raise OrgAuthorizationError('User is not a member of this organization')
 
         # Check if user has owner role
-        role = RoleStore.get_role_by_id(org_member.role_id)
+        role = await RoleStore.get_role_by_id(org_member.role_id)
         if not role or role.name != 'owner':
             raise OrgAuthorizationError(
                 'Only organization owners can delete organizations'
@@ -834,7 +836,7 @@ class OrgService:
         )
 
         # Step 1: Verify user authorization
-        OrgService.verify_owner_authorization(user_id, org_id)
+        await OrgService.verify_owner_authorization(user_id, org_id)
 
         # Step 2: Perform database cascade deletion with LiteLLM cleanup in transaction
         try:
@@ -874,11 +876,11 @@ class OrgService:
         Returns:
             bool: True if BYOR export is enabled, False otherwise
         """
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
         if not user or not user.current_org_id:
             return False
 
-        org = OrgStore.get_org_by_id(user.current_org_id)
+        org = await OrgStore.get_org_by_id(user.current_org_id)
         if not org:
             return False
 
@@ -912,12 +914,12 @@ class OrgService:
         )
 
         # Step 1: Check if organization exists
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             raise OrgNotFoundError(str(org_id))
 
         # Step 2: Validate user is a member of the organization
-        if not OrgService.is_org_member(user_id, org_id):
+        if not await OrgService.is_org_member(user_id, org_id):
             logger.warning(
                 'User attempted to switch to organization they are not a member of',
                 extra={'user_id': user_id, 'org_id': str(org_id)},
@@ -928,7 +930,7 @@ class OrgService:
 
         # Step 3: Update user's current_org_id
         try:
-            updated_user = UserStore.update_current_org(user_id, org_id)
+            updated_user = await UserStore.update_current_org(user_id, org_id)
             if not updated_user:
                 raise OrgDatabaseError('User not found')
 

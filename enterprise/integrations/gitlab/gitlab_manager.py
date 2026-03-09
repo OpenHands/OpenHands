@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from types import MappingProxyType
+from typing import cast
 
 from integrations.gitlab.gitlab_view import (
     GitlabFactory,
@@ -17,6 +20,7 @@ from integrations.utils import (
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
 )
+from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
@@ -33,7 +37,7 @@ from openhands.server.types import (
 from openhands.storage.data_models.secrets import Secrets
 
 
-class GitlabManager(Manager):
+class GitlabManager(Manager[GitlabViewType]):
     def __init__(self, token_manager: TokenManager, data_collector: None = None):
         self.token_manager = token_manager
 
@@ -67,11 +71,11 @@ class GitlabManager(Manager):
             logger.warning(f'Got invalid keyloak user id for GitLab User {user_id}')
             return False
 
-        # Importing here prevents circular import
+        # GitLabServiceImpl returns SaaSGitLabService in enterprise context
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
-            external_auth_id=keycloak_user_id
+        gitlab_service = cast(
+            SaaSGitLabService, GitLabServiceImpl(external_auth_id=keycloak_user_id)
         )
 
         return await gitlab_service.user_has_write_access(project_id)
@@ -121,55 +125,52 @@ class GitlabManager(Manager):
         # Check if the user has write access to the repository
         return has_write_access
 
-    async def send_message(self, message: Message, gitlab_view: ResolverViewInterface):
-        """
-        Send a message to GitLab based on the view type.
+    async def send_message(self, message: str, gitlab_view: ResolverViewInterface):
+        """Send a message to GitLab based on the view type.
 
         Args:
-            message: The message to send
+            message: The message content to send (plain text string)
             gitlab_view: The GitLab view object containing issue/PR/comment info
         """
         keycloak_user_id = gitlab_view.user_info.keycloak_user_id
 
-        # Importing here prevents circular import
+        # GitLabServiceImpl returns SaaSGitLabService in enterprise context
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
-            external_auth_id=keycloak_user_id
+        gitlab_service = cast(
+            SaaSGitLabService, GitLabServiceImpl(external_auth_id=keycloak_user_id)
         )
-
-        outgoing_message = message.message
 
         if isinstance(gitlab_view, GitlabInlineMRComment) or isinstance(
             gitlab_view, GitlabMRComment
         ):
             await gitlab_service.reply_to_mr(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                gitlab_view.discussion_id,
-                message.message,
+                project_id=str(gitlab_view.project_id),
+                merge_request_iid=str(gitlab_view.issue_number),
+                discussion_id=gitlab_view.discussion_id,
+                body=message,
             )
 
         elif isinstance(gitlab_view, GitlabIssueComment):
             await gitlab_service.reply_to_issue(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                gitlab_view.discussion_id,
-                outgoing_message,
+                project_id=str(gitlab_view.project_id),
+                issue_number=str(gitlab_view.issue_number),
+                discussion_id=gitlab_view.discussion_id,
+                body=message,
             )
         elif isinstance(gitlab_view, GitlabIssue):
             await gitlab_service.reply_to_issue(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                None,  # no discussion id, issue is tagged
-                outgoing_message,
+                project_id=str(gitlab_view.project_id),
+                issue_number=str(gitlab_view.issue_number),
+                discussion_id=None,  # no discussion id, issue is tagged
+                body=message,
             )
         else:
             logger.warning(
                 f'[GitLab] Unsupported view type: {type(gitlab_view).__name__}'
             )
 
-    async def start_job(self, gitlab_view: GitlabViewType):
+    async def start_job(self, gitlab_view: GitlabViewType) -> None:
         """
         Start a job for the GitLab view.
 
@@ -214,8 +215,18 @@ class GitlabManager(Manager):
                     )
                 )
 
+                # Initialize conversation and get metadata (following GitHub pattern)
+                convo_metadata = await gitlab_view.initialize_new_conversation()
+
+                saas_user_auth = await get_saas_user_auth(
+                    gitlab_view.user_info.keycloak_user_id, self.token_manager
+                )
+
                 await gitlab_view.create_new_conversation(
-                    self.jinja_env, secret_store.provider_tokens
+                    self.jinja_env,
+                    secret_store.provider_tokens,
+                    convo_metadata,
+                    saas_user_auth,
                 )
 
                 conversation_id = gitlab_view.conversation_id
@@ -224,18 +235,19 @@ class GitlabManager(Manager):
                     f'[GitLab] Created conversation {conversation_id} for user {user_info.username}'
                 )
 
-                # Create a GitlabCallbackProcessor for this conversation
-                processor = GitlabCallbackProcessor(
-                    gitlab_view=gitlab_view,
-                    send_summary_instruction=True,
-                )
+                if not gitlab_view.v1_enabled:
+                    # Create a GitlabCallbackProcessor for this conversation
+                    processor = GitlabCallbackProcessor(
+                        gitlab_view=gitlab_view,
+                        send_summary_instruction=True,
+                    )
 
-                # Register the callback processor
-                register_callback_processor(conversation_id, processor)
+                    # Register the callback processor
+                    register_callback_processor(conversation_id, processor)
 
-                logger.info(
-                    f'[GitLab] Created callback processor for conversation {conversation_id}'
-                )
+                    logger.info(
+                        f'[GitLab] Created callback processor for conversation {conversation_id}'
+                    )
 
                 conversation_link = CONVERSATION_URL.format(conversation_id)
                 msg_info = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
@@ -262,12 +274,10 @@ class GitlabManager(Manager):
                 msg_info = get_session_expired_message(user_info.username)
 
             # Send the acknowledgment message
-            msg = self.create_outgoing_message(msg_info)
-            await self.send_message(msg, gitlab_view)
+            await self.send_message(msg_info, gitlab_view)
 
         except Exception as e:
             logger.exception(f'[GitLab] Error starting job: {str(e)}')
-            msg = self.create_outgoing_message(
-                msg='Uh oh! There was an unexpected error starting the job :('
+            await self.send_message(
+                'Uh oh! There was an unexpected error starting the job :(', gitlab_view
             )
-            await self.send_message(msg, gitlab_view)

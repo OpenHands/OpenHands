@@ -24,7 +24,6 @@ from jinja2 import Environment
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from server.config import get_config
-from storage.database import session_maker
 from storage.org_store import OrgStore
 from storage.proactive_conversation_store import ProactiveConversationStore
 from storage.saas_secrets_store import SaasSecretsStore
@@ -73,7 +72,6 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
         This function checks both the global environment variable kill switch AND
         the user's individual setting. Both must be true for the function to return true.
     """
-
     # If no user ID is provided, we can't check user settings
     if not user_id:
         return False
@@ -82,13 +80,10 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     if not ENABLE_PROACTIVE_CONVERSATION_STARTERS:
         return False
 
-    def _get_setting():
-        org = OrgStore.get_current_org_from_keycloak_user_id(user_id)
-        if not org:
-            return False
-        return bool(org.enable_proactive_conversation_starters)
-
-    return await call_sync_from_async(_get_setting)
+    org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
+    if not org:
+        return False
+    return bool(org.enable_proactive_conversation_starters)
 
 
 # =================================================
@@ -153,9 +148,7 @@ class GithubIssue(ResolverViewInterface):
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
-        secrets_store = SaasSecretsStore(
-            self.user_info.keycloak_user_id, session_maker, get_config()
-        )
+        secrets_store = SaasSecretsStore(self.user_info.keycloak_user_id, get_config())
         user_secrets = await secrets_store.load()
 
         return user_secrets.custom_secrets if user_secrets else None
@@ -238,6 +231,29 @@ class GithubIssue(ResolverViewInterface):
             conversation_instructions=conversation_instructions,
         )
 
+    async def _get_v1_initial_user_message(self, jinja_env: Environment) -> str:
+        """Build the initial user message for V1 resolver conversations.
+
+        For "issue opened" events (no specific comment body), we can simply
+        concatenate the user prompt and the rendered issue context.
+
+        Subclasses that represent comment-driven events (issue comments, PR review
+        comments, inline review comments) override this method to control ordering
+        (e.g., context first, then the triggering comment, then previous comments).
+        """
+
+        user_instructions, conversation_instructions = await self._get_instructions(
+            jinja_env
+        )
+
+        parts: list[str] = []
+        if user_instructions.strip():
+            parts.append(user_instructions.strip())
+        if conversation_instructions.strip():
+            parts.append(conversation_instructions.strip())
+
+        return '\n\n'.join(parts)
+
     async def _create_v1_conversation(
         self,
         jinja_env: Environment,
@@ -247,13 +263,11 @@ class GithubIssue(ResolverViewInterface):
         """Create conversation using the new V1 app conversation system."""
         logger.info('[GitHub V1]: Creating V1 conversation')
 
-        user_instructions, conversation_instructions = await self._get_instructions(
-            jinja_env
-        )
+        initial_user_text = await self._get_v1_initial_user_message(jinja_env)
 
         # Create the initial message request
         initial_message = SendMessageRequest(
-            role='user', content=[TextContent(text=user_instructions)]
+            role='user', content=[TextContent(text=initial_user_text)]
         )
 
         # Create the GitHub V1 callback processor
@@ -265,7 +279,9 @@ class GithubIssue(ResolverViewInterface):
         # Create the V1 conversation start request with the callback processor
         start_request = AppConversationStartRequest(
             conversation_id=UUID(conversation_metadata.conversation_id),
-            system_message_suffix=conversation_instructions,
+            # NOTE: Resolver instructions are intended to be lower priority than the
+            # system prompt, so we inject them into the initial user message.
+            system_message_suffix=None,
             initial_message=initial_message,
             selected_repository=self.full_repo_name,
             selected_branch=self._get_branch_name(),
@@ -336,6 +352,17 @@ class GithubIssueComment(GithubIssue):
 
         return user_instructions, conversation_instructions
 
+    async def _get_v1_initial_user_message(self, jinja_env: Environment) -> str:
+        await self._load_resolver_context()
+        template = jinja_env.get_template('issue_comment_initial_message.j2')
+        return template.render(
+            issue_number=self.issue_number,
+            issue_title=self.title,
+            issue_body=self.description,
+            issue_comment=self.comment_body,
+            previous_comments=self.previous_comments,
+        ).strip()
+
 
 @dataclass
 class GithubPRComment(GithubIssueComment):
@@ -361,6 +388,18 @@ class GithubPRComment(GithubIssueComment):
         )
 
         return user_instructions, conversation_instructions
+
+    async def _get_v1_initial_user_message(self, jinja_env: Environment) -> str:
+        await self._load_resolver_context()
+        template = jinja_env.get_template('pr_update_initial_message.j2')
+        return template.render(
+            pr_number=self.issue_number,
+            branch_name=self.branch_name,
+            pr_title=self.title,
+            pr_body=self.description,
+            pr_comment=self.comment_body,
+            comments=self.previous_comments,
+        ).strip()
 
 
 @dataclass
@@ -407,6 +446,20 @@ class GithubInlinePRComment(GithubPRComment):
         )
 
         return user_instructions, conversation_instructions
+
+    async def _get_v1_initial_user_message(self, jinja_env: Environment) -> str:
+        await self._load_resolver_context()
+        template = jinja_env.get_template('pr_update_initial_message.j2')
+        return template.render(
+            pr_number=self.issue_number,
+            branch_name=self.branch_name,
+            pr_title=self.title,
+            pr_body=self.description,
+            file_location=self.file_location,
+            line_number=self.line_number,
+            pr_comment=self.comment_body,
+            comments=self.previous_comments,
+        ).strip()
 
     def _create_github_v1_callback_processor(self):
         """Create a V1 callback processor for GitHub integration."""
@@ -740,7 +793,7 @@ class GithubFactory:
     @staticmethod
     async def create_github_view_from_payload(
         message: Message, keycloak_user_id: str
-    ) -> ResolverViewInterface:
+    ) -> GithubViewType:
         """Create the appropriate class (GithubIssue or GithubPRComment) based on the payload.
         Also return metadata about the event (e.g., action type).
         """

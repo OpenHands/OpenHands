@@ -113,24 +113,6 @@ async def load_settings(
         )
 
 
-@app.post(
-    '/reset-settings',
-    responses={
-        410: {
-            'description': 'Reset settings functionality has been removed',
-            'model': dict,
-        }
-    },
-)
-async def reset_settings() -> JSONResponse:
-    """Resets user settings. (Deprecated)"""
-    logger.warning('Deprecated endpoint /api/reset-settings called by user')
-    return JSONResponse(
-        status_code=status.HTTP_410_GONE,
-        content={'error': 'Reset settings functionality has been removed.'},
-    )
-
-
 async def store_llm_settings(
     settings: Settings, existing_settings: Settings
 ) -> Settings:
@@ -141,9 +123,12 @@ async def store_llm_settings(
             settings.llm_api_key = existing_settings.llm_api_key
         if settings.llm_model is None:
             settings.llm_model = existing_settings.llm_model
-        # if llm_base_url is missing or empty, try to determine appropriate URL
+        # if llm_base_url is missing or empty, try to preserve existing or determine appropriate URL
         if not settings.llm_base_url:
-            if is_openhands_model(settings.llm_model):
+            if settings.llm_base_url is None and existing_settings.llm_base_url:
+                # Not provided at all (e.g. MCP config save) - preserve existing
+                settings.llm_base_url = existing_settings.llm_base_url
+            elif is_openhands_model(settings.llm_model):
                 # OpenHands models use the LiteLLM proxy
                 settings.llm_base_url = LITE_LLM_API_URL
             elif settings.llm_model:

@@ -11,41 +11,37 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
+from server.email_validation import get_admin_user_id
+from server.routes.org_models import (
+    CannotModifySelfError,
+    InsufficientPermissionError,
+    InvalidRoleError,
+    LastOwnerError,
+    LiteLLMIntegrationError,
+    MeResponse,
+    OrgAppSettingsResponse,
+    OrgAppSettingsUpdate,
+    OrgAuthorizationError,
+    OrgDatabaseError,
+    OrgMemberNotFoundError,
+    OrgMemberPage,
+    OrgMemberResponse,
+    OrgMemberUpdate,
+    OrgNameExistsError,
+    OrgNotFoundError,
+    OrphanedUserError,
+    RoleNotFoundError,
+)
+from server.routes.orgs import (
+    get_me,
+    get_org_members,
+    org_router,
+    remove_org_member,
+    update_org_member,
+)
+from storage.org import Org
 
-# Mock database before imports
-with patch('storage.database.engine', create=True), patch(
-    'storage.database.a_engine', create=True
-):
-    from server.email_validation import get_admin_user_id
-    from server.routes.org_models import (
-        CannotModifySelfError,
-        InsufficientPermissionError,
-        InvalidRoleError,
-        LastOwnerError,
-        LiteLLMIntegrationError,
-        MeResponse,
-        OrgAuthorizationError,
-        OrgDatabaseError,
-        OrgMemberNotFoundError,
-        OrgMemberPage,
-        OrgMemberResponse,
-        OrgMemberUpdate,
-        OrgNameExistsError,
-        OrgNotFoundError,
-        OrphanedUserError,
-        RoleNotFoundError,
-    )
-    from server.routes.orgs import (
-        get_me,
-        get_org_members,
-        org_router,
-        remove_org_member,
-        update_org_member,
-    )
-    from storage.org import Org
-
-    from openhands.server.user_auth import get_user_id
-
+from openhands.server.user_auth import get_user_id
 
 # Test user ID constant (must be a valid UUID string)
 TEST_USER_ID = str(uuid.uuid4())
@@ -518,12 +514,12 @@ async def test_list_user_orgs_success(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([mock_org], None),
+            AsyncMock(return_value=([mock_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -572,12 +568,12 @@ async def test_list_user_orgs_returns_current_org_id(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([current_org, other_org], None),
+            AsyncMock(return_value=([current_org, other_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -617,12 +613,12 @@ async def test_list_user_orgs_with_pagination(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([org1, org2], '2'),
+            AsyncMock(return_value=([org1, org2], '2')),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -652,12 +648,12 @@ async def test_list_user_orgs_empty(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([], None),
+            AsyncMock(return_value=([], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -719,12 +715,12 @@ async def test_list_user_orgs_service_error(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            side_effect=Exception('Database error'),
+            AsyncMock(side_effect=Exception('Database error')),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -785,12 +781,12 @@ async def test_list_user_orgs_personal_org_identified(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([personal_org], None),
+            AsyncMock(return_value=([personal_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -824,12 +820,12 @@ async def test_list_user_orgs_team_org_identified(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([team_org], None),
+            AsyncMock(return_value=([team_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -873,12 +869,12 @@ async def test_list_user_orgs_mixed_personal_and_team(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([personal_org, team_org], None),
+            AsyncMock(return_value=([personal_org, team_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -945,12 +941,12 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([mock_org], None),
+            AsyncMock(return_value=([mock_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -1031,7 +1027,7 @@ async def test_get_org_success(mock_app_with_get_user_id, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1071,7 +1067,7 @@ async def test_get_org_user_not_member(mock_app_with_get_user_id):
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app_with_get_user_id)
@@ -1096,7 +1092,7 @@ async def test_get_org_not_found(mock_app_with_get_user_id, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1171,7 +1167,7 @@ async def test_get_org_unexpected_error(mock_app_with_get_user_id, mock_owner_ro
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1222,7 +1218,7 @@ async def test_get_org_personal_workspace():
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
@@ -1264,7 +1260,7 @@ async def test_get_org_team_workspace(mock_app_with_get_user_id, mock_owner_role
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1309,7 +1305,7 @@ async def test_get_org_with_credits_none(mock_app_with_get_user_id, mock_owner_r
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1358,7 +1354,7 @@ async def test_get_org_sensitive_fields_not_exposed(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1408,7 +1404,7 @@ async def test_delete_org_success(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1443,7 +1439,7 @@ async def test_delete_org_not_found(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1473,7 +1469,7 @@ async def test_delete_org_not_owner(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1507,7 +1503,7 @@ async def test_delete_org_not_member(mock_app):
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app)
@@ -1532,7 +1528,7 @@ async def test_delete_org_database_failure(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1562,7 +1558,7 @@ async def test_delete_org_unexpected_error(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1610,7 +1606,7 @@ async def test_delete_org_unauthorized(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1640,7 +1636,7 @@ async def test_delete_org_orphaned_users(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1712,7 +1708,7 @@ async def test_update_org_personal_workspace_preserved():
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
@@ -1773,7 +1769,7 @@ async def test_update_org_team_workspace_preserved():
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
@@ -1813,7 +1809,7 @@ async def test_update_org_not_found(mock_update_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1849,7 +1845,7 @@ async def test_update_org_permission_denied_non_member(mock_update_app):
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         async with httpx.AsyncClient(
@@ -1880,7 +1876,7 @@ async def test_update_org_permission_denied_llm_settings(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1921,7 +1917,7 @@ async def test_update_org_duplicate_name_returns_409(mock_update_app, mock_owner
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1955,7 +1951,7 @@ async def test_update_org_database_error(mock_update_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1989,7 +1985,7 @@ async def test_update_org_unexpected_error(mock_update_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -2045,7 +2041,7 @@ async def test_update_org_invalid_field_values(mock_update_app, mock_owner_role)
     update_data = {'default_max_iterations': -1}  # Invalid: must be > 0
 
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
@@ -2072,7 +2068,7 @@ async def test_update_org_empty_name_returns_422(mock_update_app, mock_owner_rol
     update_data = {'name': '   '}
 
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
@@ -2099,7 +2095,7 @@ async def test_update_org_invalid_email_format(mock_update_app, mock_owner_role)
     update_data = {'contact_email': 'invalid-email'}  # Missing @
 
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
@@ -3035,6 +3031,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3070,6 +3067,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3090,6 +3088,7 @@ class TestGetMeEndpoint:
         """
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=OrgMemberNotFoundError(str(test_org_id), 'user-id'),
         ):
             client = TestClient(mock_me_app)
@@ -3135,6 +3134,7 @@ class TestGetMeEndpoint:
         """
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=RuntimeError('Database connection failed'),
         ):
             client = TestClient(mock_me_app)
@@ -3161,6 +3161,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3189,6 +3190,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3214,6 +3216,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3234,6 +3237,7 @@ class TestGetMeEndpoint:
         """
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=RoleNotFoundError(role_id=999),
         ):
             client = TestClient(mock_me_app)
@@ -3254,6 +3258,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             result = await get_me(org_id=test_org_id, user_id=test_user_id)
@@ -3270,6 +3275,7 @@ class TestGetMeEndpoint:
         """Test direct function call to get_me raises HTTPException on member not found."""
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=OrgMemberNotFoundError(str(test_org_id), test_user_id),
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -3285,6 +3291,7 @@ class TestGetMeEndpoint:
         """Test direct function call to get_me raises HTTPException on role not found."""
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=RoleNotFoundError(role_id=999),
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -3424,3 +3431,421 @@ async def test_switch_org_database_error(mock_app_with_get_user_id):
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert 'Failed to switch organization' in response.json()['detail']
+
+
+# =============================================================================
+# Tests for App Settings Endpoints
+# =============================================================================
+
+
+@pytest.fixture
+def mock_member_role():
+    """Create a mock member role for authorization tests."""
+    mock_role = MagicMock()
+    mock_role.name = 'member'
+    return mock_role
+
+
+@pytest.mark.asyncio
+async def test_get_org_app_settings_success(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Authenticated user with MANAGE_APPLICATION_SETTINGS permission
+    WHEN: GET /api/organizations/app is called
+    THEN: App settings are returned with 200 status
+    """
+    # Arrange
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=False,
+        max_budget_per_task=10.0,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get('/api/organizations/app')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['enable_proactive_conversation_starters'] is True
+        assert response_data['enable_solvability_analysis'] is False
+        assert response_data['max_budget_per_task'] == 10.0
+
+
+@pytest.mark.asyncio
+async def test_get_org_app_settings_with_null_values(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Organization has null app settings values
+    WHEN: GET /api/organizations/app is called
+    THEN: Default values are returned where applicable
+    """
+    # Arrange
+    # OrgAppSettingsResponse.from_org() handles defaults, so we test the response model
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=True,  # Default when None in Org
+        enable_solvability_analysis=None,
+        max_budget_per_task=None,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get('/api/organizations/app')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        # enable_proactive_conversation_starters defaults to True when None
+        assert response_data['enable_proactive_conversation_starters'] is True
+        assert response_data['enable_solvability_analysis'] is None
+        assert response_data['max_budget_per_task'] is None
+
+
+@pytest.mark.asyncio
+async def test_get_org_app_settings_not_found(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: User has no current organization
+    WHEN: GET /api/organizations/app is called
+    THEN: 404 Not Found error is returned
+    """
+    # Arrange
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
+            AsyncMock(side_effect=OrgNotFoundError('current')),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get('/api/organizations/app')
+
+        # Assert
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert 'not found' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_get_org_app_settings_user_not_member(mock_app_with_get_user_id):
+    """
+    GIVEN: User is not a member of any organization
+    WHEN: GET /api/organizations/app is called
+    THEN: 403 Forbidden error is returned
+    """
+    # Arrange - user has no role (not a member)
+    with patch(
+        'server.auth.authorization.get_user_org_role',
+        AsyncMock(return_value=None),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get('/api/organizations/app')
+
+        # Assert
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'not a member' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_success(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Valid update data and authenticated user
+    WHEN: POST /api/organizations/app is called
+    THEN: Updated app settings are returned with 200 status
+    """
+    # Arrange
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=False,
+        enable_solvability_analysis=True,
+        max_budget_per_task=25.0,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ) as mock_update,
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(
+            '/api/organizations/app',
+            json={
+                'enable_proactive_conversation_starters': False,
+                'enable_solvability_analysis': True,
+                'max_budget_per_task': 25.0,
+            },
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['enable_proactive_conversation_starters'] is False
+        assert response_data['enable_solvability_analysis'] is True
+        assert response_data['max_budget_per_task'] == 25.0
+        mock_update.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_partial_update(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Partial update data (only some fields)
+    WHEN: POST /api/organizations/app is called
+    THEN: Only specified fields are updated
+    """
+    # Arrange
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=False,
+        enable_solvability_analysis=True,
+        max_budget_per_task=10.0,  # Unchanged
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ) as mock_update,
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act - only updating one field
+        response = client.post(
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        mock_update.assert_called_once()
+        # Verify the update data only contains the specified field
+        call_args = mock_update.call_args
+        update_data = call_args[0][0]  # First positional argument (update_data)
+        assert isinstance(update_data, OrgAppSettingsUpdate)
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_set_null(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Request to set max_budget_per_task to null
+    WHEN: POST /api/organizations/app is called
+    THEN: The field is set to null successfully
+    """
+    # Arrange
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=True,
+        max_budget_per_task=None,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act - explicitly setting max_budget_per_task to null
+        response = client.post(
+            '/api/organizations/app',
+            json={'max_budget_per_task': None},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['max_budget_per_task'] is None
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_invalid_max_budget(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Invalid max_budget_per_task value (zero or negative)
+    WHEN: POST /api/organizations/app is called
+    THEN: 422 Validation error is returned
+    """
+    # Arrange
+    with patch(
+        'server.auth.authorization.get_user_org_role',
+        AsyncMock(return_value=mock_member_role),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act - negative value
+        response = client.post(
+            '/api/organizations/app',
+            json={'max_budget_per_task': -5.0},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_zero_max_budget(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: max_budget_per_task is set to zero
+    WHEN: POST /api/organizations/app is called
+    THEN: 422 Validation error is returned (must be greater than 0)
+    """
+    # Arrange
+    with patch(
+        'server.auth.authorization.get_user_org_role',
+        AsyncMock(return_value=mock_member_role),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act - zero value
+        response = client.post(
+            '/api/organizations/app',
+            json={'max_budget_per_task': 0},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_not_found(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: User has no current organization
+    WHEN: POST /api/organizations/app is called
+    THEN: 404 Not Found error is returned
+    """
+    # Arrange
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(side_effect=OrgNotFoundError('current')),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert 'not found' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_database_error(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Database update fails
+    WHEN: POST /api/organizations/app is called
+    THEN: 500 Internal Server Error is returned
+    """
+    # Arrange
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(side_effect=Exception('Database connection failed')),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert 'unexpected error' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_user_not_member(mock_app_with_get_user_id):
+    """
+    GIVEN: User is not a member of any organization
+    WHEN: POST /api/organizations/app is called
+    THEN: 403 Forbidden error is returned
+    """
+    # Arrange - user has no role (not a member)
+    with patch(
+        'server.auth.authorization.get_user_org_role',
+        AsyncMock(return_value=None),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'not a member' in response.json()['detail'].lower()

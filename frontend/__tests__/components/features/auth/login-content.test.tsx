@@ -13,6 +13,8 @@ vi.mock("#/hooks/use-auth-url", () => ({
     const urls: Record<string, string> = {
       gitlab: "https://gitlab.com/oauth/authorize",
       bitbucket: "https://bitbucket.org/site/oauth2/authorize",
+      bitbucket_data_center:
+        "https://bitbucket-dc.example.com/site/oauth2/authorize",
     };
     if (config.appMode === "saas") {
       return urls[config.identityProvider] || null;
@@ -235,6 +237,38 @@ describe("LoginContent", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("should display Bitbucket signup disabled message when Bitbucket is configured", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github", "bitbucket"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("AUTH$BITBUCKET_SIGNUP_DISABLED"),
+    ).toBeInTheDocument();
+  });
+
+  it("should not display Bitbucket signup disabled message when Bitbucket is not configured", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByText("AUTH$BITBUCKET_SIGNUP_DISABLED"),
+    ).not.toBeInTheDocument();
+  });
+
   it("should call buildOAuthStateData when clicking auth button", async () => {
     const user = userEvent.setup();
     const mockBuildOAuthStateData = vi.fn((baseState) => ({
@@ -263,6 +297,24 @@ describe("LoginContent", () => {
       const callArg = mockBuildOAuthStateData.mock.calls[0][0];
       expect(callArg).toHaveProperty("redirect_url");
     });
+  });
+
+  it("should display Bitbucket Data Center button when configured", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl={null}
+          appMode="saas"
+          providersConfigured={["bitbucket_data_center"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /BITBUCKET_DATA_CENTER\$CONNECT_TO_BITBUCKET_DATA_CENTER/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("should encode state with invitation token when buildOAuthStateData provides token", async () => {

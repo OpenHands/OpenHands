@@ -34,7 +34,6 @@ async def test_send_comment_to_jira_success(mock_jira_manager, processor):
     )
     mock_jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
     mock_jira_manager.send_message = AsyncMock()
-    mock_jira_manager.create_outgoing_message.return_value = MagicMock()
 
     # Action
     await processor._send_comment_to_jira('This is a summary.')
@@ -130,7 +129,6 @@ async def test_call_sends_summary_to_jira(
         return_value=mock_workspace
     )
     mock_jira_manager.send_message = AsyncMock()
-    mock_jira_manager.create_outgoing_message.return_value = MagicMock()
 
     with patch(
         'server.conversation_callback_processor.jira_callback_processor.asyncio.create_task'
@@ -200,7 +198,6 @@ async def test_send_comment_to_jira_api_error(mock_jira_manager, processor):
     )
     mock_jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
     mock_jira_manager.send_message = AsyncMock(side_effect=Exception('API Error'))
-    mock_jira_manager.create_outgoing_message.return_value = MagicMock()
 
     # Action - should not raise exception, but handle it gracefully
     await processor._send_comment_to_jira('This is a summary.')
@@ -328,18 +325,15 @@ async def test_send_comment_to_jira_message_construction(mock_jira_manager, proc
     )
     mock_jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
     mock_jira_manager.send_message = AsyncMock()
-    mock_outgoing_message = MagicMock()
-    mock_jira_manager.create_outgoing_message.return_value = mock_outgoing_message
 
     test_message = 'This is a test summary message.'
 
     # Action
     await processor._send_comment_to_jira(test_message)
 
-    # Assert
-    mock_jira_manager.create_outgoing_message.assert_called_once_with(msg=test_message)
+    # Assert - send_message now receives the string directly
     mock_jira_manager.send_message.assert_called_once_with(
-        mock_outgoing_message,
+        test_message,
         issue_key='TEST-123',
         jira_cloud_id='cloud123',
         svc_acc_email='service@test.com',
@@ -386,7 +380,6 @@ async def test_call_creates_background_task_for_sending(
         return_value=mock_workspace
     )
     mock_jira_manager.send_message = AsyncMock()
-    mock_jira_manager.create_outgoing_message.return_value = MagicMock()
 
     with patch(
         'server.conversation_callback_processor.jira_callback_processor.asyncio.create_task'

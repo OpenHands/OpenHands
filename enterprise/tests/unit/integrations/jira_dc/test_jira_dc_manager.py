@@ -738,7 +738,7 @@ class TestStartJob:
         # Should send error message about re-login
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
-        assert 'Please re-login' in call_args[0].message
+        assert 'Please re-login' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_start_job_llm_authentication_error(
@@ -763,7 +763,7 @@ class TestStartJob:
         # Should send error message about LLM API key
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
-        assert 'valid LLM API key' in call_args[0].message
+        assert 'valid LLM API key' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_start_job_session_expired_error(
@@ -788,8 +788,8 @@ class TestStartJob:
         # Should send error message about session expired
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
-        assert 'session has expired' in call_args[0].message
-        assert 'login again' in call_args[0].message
+        assert 'session has expired' in call_args[0]
+        assert 'login again' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_start_job_unexpected_error(
@@ -814,7 +814,7 @@ class TestStartJob:
         # Should send generic error message
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
-        assert 'unexpected error' in call_args[0].message
+        assert 'unexpected error' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_start_job_send_message_fails(
@@ -943,9 +943,8 @@ class TestSendMessage:
                 return_value=mock_response
             )
 
-            message = Message(source=SourceType.JIRA_DC, message='Test message')
             result = await jira_dc_manager.send_message(
-                message, 'PROJ-123', 'https://jira.company.com', 'bearer_token'
+                'Test message', 'PROJ-123', 'https://jira.company.com', 'bearer_token'
             )
 
             assert result == {'id': 'comment_id'}
@@ -1014,7 +1013,7 @@ class TestSendRepoSelectionComment:
 
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
-        assert 'which repository to work with' in call_args[0].message
+        assert 'which repository to work with' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_send_repo_selection_comment_send_fails(

@@ -78,6 +78,9 @@ export const SETTINGS_HANDLERS = [
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
       },
       providers_configured: [],
       maintenance_start_time: null,
@@ -121,12 +124,6 @@ export const SETTINGS_HANDLERS = [
     }
 
     return HttpResponse.json(null, { status: 400 });
-  }),
-
-  http.post("/api/reset-settings", async () => {
-    await delay();
-    MOCK_USER_PREFERENCES.settings = { ...MOCK_DEFAULT_USER_SETTINGS };
-    return HttpResponse.json(null, { status: 200 });
   }),
 
   http.post("/api/add-git-providers", async ({ request }) => {
