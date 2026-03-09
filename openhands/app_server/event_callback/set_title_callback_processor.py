@@ -41,7 +41,7 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             get_httpx_client,
         )
 
-        _logger.info(f'Callback {callback.id} Invoked for event {event}')
+        _logger.info(f"Callback {callback.id} Invoked for event {event}")
 
         state = InjectorState()
         setattr(state, USER_CONTEXT_ATTR, ADMIN)
@@ -49,7 +49,9 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             async with (
                 get_event_callback_service(state) as event_callback_service,
                 get_app_conversation_service(state) as app_conversation_service,
-                get_app_conversation_info_service(state) as app_conversation_info_service,
+                get_app_conversation_info_service(
+                    state
+                ) as app_conversation_info_service,
                 get_httpx_client(state) as httpx_client,
             ):
                 # Generate a title for the conversation
@@ -63,14 +65,14 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
                     app_conversation_url
                 )
                 response = await httpx_client.post(
-                    f'{app_conversation_url}/generate_title',
+                    f"{app_conversation_url}/generate_title",
                     headers={
-                        'X-Session-API-Key': app_conversation.session_api_key,
+                        "X-Session-API-Key": app_conversation.session_api_key,
                     },
-                    content='{}',
+                    content="{}",
                 )
                 response.raise_for_status()
-                title = response.json()['title']
+                title = response.json()["title"]
 
                 # Save the conversation info
                 info = AppConversationInfo(
@@ -93,7 +95,7 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
                 conversation_id=conversation_id,
             )
         except Exception as e:
-            #[Key Fixes] Capture all exceptions (including timeouts and HTTP errors)
+            # [Key Fixes] Capture all exceptions (including timeouts and HTTP errors)
             _logger.error(f"Failed to generate title for {conversation_id}: {e}")
 
             # Actively return a failure result object
@@ -104,5 +106,5 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
                 event_callback_id=callback.id,
                 event_id=event.id,
                 conversation_id=conversation_id,
-                detail=str(e) # 记录具体的错误原因（如 ReadTimeout）
+                detail=str(e),  # 记录具体的错误原因（如 ReadTimeout）
             )
