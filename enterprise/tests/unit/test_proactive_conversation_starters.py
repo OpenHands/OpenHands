@@ -1,11 +1,8 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# Mock the database module before importing
-with patch('storage.database.engine'), patch('storage.database.a_engine'):
-    from integrations.github.github_view import get_user_proactive_conversation_setting
-    from storage.org import Org
+from integrations.github.github_view import get_user_proactive_conversation_setting
+from storage.org import Org
 
 pytestmark = pytest.mark.asyncio
 

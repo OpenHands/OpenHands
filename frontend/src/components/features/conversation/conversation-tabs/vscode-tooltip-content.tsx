@@ -2,33 +2,27 @@ import { FaExternalLinkAlt } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
-import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
-import { useConversationId } from "#/hooks/use-conversation-id";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { useAgentState } from "#/hooks/use-agent-state";
+import { useUnifiedVSCodeUrl } from "#/hooks/query/use-unified-vscode-url";
 
 export function VSCodeTooltipContent() {
   const { curAgentState } = useAgentState();
-
   const { t } = useTranslation();
-  const { conversationId } = useConversationId();
+  const { data, refetch } = useUnifiedVSCodeUrl();
 
   const handleVSCodeClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (conversationId) {
-      try {
-        const data = await ConversationService.getVSCodeUrl(conversationId);
-        if (data.vscode_url) {
-          const transformedUrl = transformVSCodeUrl(data.vscode_url);
-          if (transformedUrl) {
-            window.open(transformedUrl, "_blank");
-          }
-        }
-      } catch (err) {
-        // Silently handle the error
-      }
+    let vscodeUrl = data?.url;
+
+    if (!vscodeUrl) {
+      const result = await refetch();
+      vscodeUrl = result.data?.url ?? null;
+    }
+
+    if (vscodeUrl) {
+      window.open(vscodeUrl, "_blank", "noopener,noreferrer");
     }
   };
 

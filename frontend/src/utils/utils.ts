@@ -56,15 +56,31 @@ export const setStyleHeightPx = (el: HTMLElement, height: number): void => {
 };
 
 /**
- * Detect if the user is on a mobile device
- * @returns True if the user is on a mobile device, false otherwise
+ * Detect if the user is on a mobile device.
+ * Touch support alone is not sufficient — touchscreen laptops have touch
+ * but use a mouse/trackpad as primary input. We check that the primary
+ * pointing device is coarse (finger) to avoid false positives.
  */
-export const isMobileDevice = (): boolean =>
-  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent,
-  ) ||
-  "ontouchstart" in window ||
-  navigator.maxTouchPoints > 0;
+export const isMobileDevice = (): boolean => {
+  if (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent,
+    )
+  )
+    return true;
+
+  const hasTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  if (!hasTouch) return false;
+
+  // If matchMedia is available, check whether the primary pointer is fine
+  // (mouse/trackpad). Touchscreen laptops report fine, real mobile devices don't.
+  if (typeof window.matchMedia === "function") {
+    return !window.matchMedia("(pointer: fine)").matches;
+  }
+
+  // Fallback: touch present but no matchMedia — assume mobile
+  return true;
+};
 
 /**
  * Checks if the current domain is the production domain
@@ -194,6 +210,7 @@ export const shouldUseInstallationRepos = (
 
   switch (provider) {
     case "bitbucket":
+    case "bitbucket_data_center":
       return true;
     case "gitlab":
       return false;
@@ -206,7 +223,16 @@ export const shouldUseInstallationRepos = (
   }
 };
 
-export const getGitProviderBaseUrl = (gitProvider: Provider): string => {
+export const getGitProviderBaseUrl = (
+  gitProvider: Provider,
+  host?: string | null,
+): string => {
+  // If custom host provided, use it (with https:// prefix if needed)
+  if (host && host.trim() !== "") {
+    return host.startsWith("http") ? host : `https://${host}`;
+  }
+
+  // Fall back to defaults
   switch (gitProvider) {
     case "github":
       return "https://github.com";
@@ -233,6 +259,7 @@ export const getGitProviderBaseUrl = (gitProvider: Provider): string => {
 export const getProviderName = (gitProvider: Provider) => {
   if (gitProvider === "gitlab") return "GitLab";
   if (gitProvider === "bitbucket") return "Bitbucket";
+  if (gitProvider === "bitbucket_data_center") return "Bitbucket Data Center";
   if (gitProvider === "azure_devops") return "Azure DevOps";
   if (gitProvider === "forgejo") return "Forgejo";
   return "GitHub";
@@ -264,13 +291,15 @@ export const getPRShort = (isGitLab: boolean) => (isGitLab ? "MR" : "PR");
  * constructPullRequestUrl(123, "github", "owner/repo") // "https://github.com/owner/repo/pull/123"
  * constructPullRequestUrl(456, "gitlab", "owner/repo") // "https://gitlab.com/owner/repo/-/merge_requests/456"
  * constructPullRequestUrl(789, "bitbucket", "owner/repo") // "https://bitbucket.org/owner/repo/pull-requests/789"
+ * constructPullRequestUrl(789, "bitbucket", "PROJECT/repo", "server.com") // "https://server.com/projects/PROJECT/repos/repo/pull-requests/789"
  */
 export const constructPullRequestUrl = (
   prNumber: number,
   provider: Provider,
   repositoryName: string,
+  host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(provider);
+  const baseUrl = getGitProviderBaseUrl(provider, host);
 
   switch (provider) {
     case "github":
@@ -281,6 +310,10 @@ export const constructPullRequestUrl = (
       return `${baseUrl}/${repositoryName}/-/merge_requests/${prNumber}`;
     case "bitbucket":
       return `${baseUrl}/${repositoryName}/pull-requests/${prNumber}`;
+    case "bitbucket_data_center": {
+      const [project, repo] = repositoryName.split("/");
+      return `${baseUrl}/projects/${project}/repos/${repo}/pull-requests/${prNumber}`;
+    }
     case "azure_devops": {
       // Azure DevOps format: org/project/repo
       const parts = repositoryName.split("/");
@@ -314,8 +347,9 @@ export const constructMicroagentUrl = (
   gitProvider: Provider,
   repositoryName: string,
   microagentPath: string,
+  host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(gitProvider);
+  const baseUrl = getGitProviderBaseUrl(gitProvider, host);
 
   switch (gitProvider) {
     case "github":
@@ -326,6 +360,10 @@ export const constructMicroagentUrl = (
       return `${baseUrl}/${repositoryName}/-/blob/main/${microagentPath}`;
     case "bitbucket":
       return `${baseUrl}/${repositoryName}/src/main/${microagentPath}`;
+    case "bitbucket_data_center": {
+      const [project, repo] = repositoryName.split("/");
+      return `${baseUrl}/projects/${project}/repos/${repo}/browse/${microagentPath}?at=refs/heads/main`;
+    }
     case "azure_devops": {
       // Azure DevOps format: org/project/repo
       const parts = repositoryName.split("/");
@@ -373,8 +411,13 @@ export const extractRepositoryInfo = (
 export const constructRepositoryUrl = (
   provider: Provider,
   repositoryName: string,
+  host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(provider);
+  const baseUrl = getGitProviderBaseUrl(provider, host);
+  if (provider === "bitbucket_data_center") {
+    const [project, repo] = repositoryName.split("/");
+    return `${baseUrl}/projects/${project}/repos/${repo}`;
+  }
   return `${baseUrl}/${repositoryName}`;
 };
 
@@ -383,19 +426,22 @@ export const constructRepositoryUrl = (
  * @param provider The git provider
  * @param repositoryName The repository name in format "owner/repo"
  * @param branchName The branch name
+ * @param host Optional custom host for self-hosted instances
  * @returns The branch URL
  *
  * @example
  * constructBranchUrl("github", "owner/repo", "main") // "https://github.com/owner/repo/tree/main"
  * constructBranchUrl("gitlab", "owner/repo", "develop") // "https://gitlab.com/owner/repo/-/tree/develop"
  * constructBranchUrl("bitbucket", "owner/repo", "feature") // "https://bitbucket.org/owner/repo/src/feature"
+ * constructBranchUrl("bitbucket", "PROJECT/repo", "feature", "server.com") // "https://server.com/projects/PROJECT/repos/repo/browse?at=refs/heads/feature"
  */
 export const constructBranchUrl = (
   provider: Provider,
   repositoryName: string,
   branchName: string,
+  host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(provider);
+  const baseUrl = getGitProviderBaseUrl(provider, host);
 
   switch (provider) {
     case "github":
@@ -406,6 +452,15 @@ export const constructBranchUrl = (
       return `${baseUrl}/${repositoryName}/-/tree/${branchName}`;
     case "bitbucket":
       return `${baseUrl}/${repositoryName}/src/${branchName}`;
+    case "bitbucket_data_center": {
+      // Bitbucket Server format: /projects/{PROJECT}/repos/{repo}/browse?at=refs/heads/{branch}
+      const parts = repositoryName.split("/");
+      if (parts.length >= 2) {
+        const [project, repo] = parts;
+        return `${baseUrl}/projects/${project}/repos/${repo}/browse?at=refs/heads/${branchName}`;
+      }
+      return "";
+    }
     case "azure_devops": {
       // Azure DevOps format: org/project/repo
       const parts = repositoryName.split("/");

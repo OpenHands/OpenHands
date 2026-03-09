@@ -2,7 +2,8 @@ import logging
 from uuid import UUID
 
 import httpx
-from integrations.utils import CONVERSATION_URL, get_summary_instruction
+from integrations.utils import get_summary_instruction
+from integrations.v1_utils import handle_callback_error
 from pydantic import Field
 from slack_sdk import WebClient
 from storage.slack_team_store import SlackTeamStore
@@ -39,7 +40,6 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         event: Event,
     ) -> EventCallbackResult | None:
         """Process events for Slack V1 integration."""
-
         # Only handle ConversationStateUpdateEvent
         if not isinstance(event, ConversationStateUpdateEvent):
             return None
@@ -62,19 +62,14 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.exception('[Slack V1] Error processing callback: %s', e)
-
-            # Only try to post error to Slack if we have basic requirements
-            try:
-                await self._post_summary_to_slack(
-                    f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                    f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
-                    'for more information.'
-                )
-            except Exception as post_error:
-                _logger.warning(
-                    '[Slack V1] Failed to post error message to Slack: %s', post_error
-                )
+            await handle_callback_error(
+                error=e,
+                conversation_id=conversation_id,
+                service_name='Slack',
+                service_logger=_logger,
+                can_post_error=True,  # Slack always attempts to post errors
+                post_error_func=self._post_summary_to_slack,
+            )
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
@@ -88,17 +83,18 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
     # Slack helpers
     # -------------------------------------------------------------------------
 
-    def _get_bot_access_token(self):
+    async def _get_bot_access_token(self) -> str | None:
+        team_id = self.slack_view_data.get('team_id')
+        if team_id is None:
+            return None
         slack_team_store = SlackTeamStore.get_instance()
-        bot_access_token = slack_team_store.get_team_bot_token(
-            self.slack_view_data['team_id']
-        )
+        bot_access_token = await slack_team_store.get_team_bot_token(team_id)
 
         return bot_access_token
 
     async def _post_summary_to_slack(self, summary: str) -> None:
         """Post a summary message to the configured Slack channel."""
-        bot_access_token = self._get_bot_access_token()
+        bot_access_token = await self._get_bot_access_token()
         if not bot_access_token:
             raise RuntimeError('Missing Slack bot access token')
 
@@ -148,8 +144,8 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f'{agent_server_url.rstrip("/")}'
-            f'/api/conversations/{conversation_id}/ask_agent'
+            f"{agent_server_url.rstrip('/')}"
+            f"/api/conversations/{conversation_id}/ask_agent"
         )
         headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
@@ -211,8 +207,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
     # -------------------------------------------------------------------------
 
     async def _request_summary(self, conversation_id: UUID) -> str:
-        """
-        Ask the agent to produce a summary of its work and return the agent response.
+        """Ask the agent to produce a summary of its work and return the agent response.
 
         NOTE: This method now returns a string (the agent server's response text)
         and raises exceptions on errors. The wrapping into EventCallbackResult

@@ -38,7 +38,7 @@ describe("useAppTitle", () => {
   it("should return 'OpenHands' if is OSS and NOT in /conversations", async () => {
     // @ts-expect-error - only returning partial config for test
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "oss",
+      app_mode: "oss",
     });
 
     const { result } = renderAppTitleHook();
@@ -49,7 +49,7 @@ describe("useAppTitle", () => {
   it("should return 'OpenHands Cloud' if is SaaS and NOT in /conversations", async () => {
     // @ts-expect-error - only returning partial config for test
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "saas",
+      app_mode: "saas",
     });
 
     const { result } = renderAppTitleHook();
@@ -59,7 +59,7 @@ describe("useAppTitle", () => {
 
   it("should return '{some title} | OpenHands' if is OSS and in /conversations", async () => {
     // @ts-expect-error - only returning partial config for test
-    getConfigSpy.mockResolvedValue({ APP_MODE: "oss" });
+    getConfigSpy.mockResolvedValue({ app_mode: "oss" });
     mockUseParams.mockReturnValue({ conversationId: "123" });
     mockUseUserConversation.mockReturnValue({
       // @ts-expect-error - only returning partial config for test
@@ -75,7 +75,7 @@ describe("useAppTitle", () => {
 
   it("should return '{some title} | OpenHands Cloud' if is SaaS and in /conversations", async () => {
     // @ts-expect-error - only returning partial config for test
-    getConfigSpy.mockResolvedValue({ APP_MODE: "saas" });
+    getConfigSpy.mockResolvedValue({ app_mode: "saas" });
     mockUseParams.mockReturnValue({ conversationId: "456" });
     mockUseUserConversation.mockReturnValue({
       // @ts-expect-error - only returning partial config for test
@@ -93,7 +93,7 @@ describe("useAppTitle", () => {
 
   it("should return app name while conversation is loading", async () => {
     // @ts-expect-error - only returning partial config for test
-    getConfigSpy.mockResolvedValue({ APP_MODE: "oss" });
+    getConfigSpy.mockResolvedValue({ app_mode: "oss" });
     mockUseParams.mockReturnValue({ conversationId: "123" });
     // @ts-expect-error - only returning partial config for test
     mockUseUserConversation.mockReturnValue({ data: undefined });

@@ -231,9 +231,12 @@ class SaasConversationStore(ConversationStore):
 
     @classmethod
     async def get_instance(
-        cls, config: OpenHandsConfig, user_id: str | None
+        cls,
+        config: OpenHandsConfig,
+        user_id: str,  # type: ignore[override]
     ) -> ConversationStore:
-        # user_id should not be None in SaaS, should we raise?
-        user = await UserStore.get_user_by_id_async(user_id)
+        # Use async version since callers now use asyncio.run_coroutine_threadsafe()
+        # to dispatch to the main event loop where asyncpg connections work properly.
+        user = await UserStore.get_user_by_id(user_id)
         org_id = user.current_org_id if user else None
-        return SaasConversationStore(str(user_id), org_id, session_maker)
+        return SaasConversationStore(user_id, org_id, session_maker)

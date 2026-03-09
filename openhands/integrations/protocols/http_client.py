@@ -3,12 +3,13 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from httpx import AsyncClient, HTTPError, HTTPStatusError
+from httpx import AsyncClient, HTTPError, HTTPStatusError, TimeoutException
 from pydantic import SecretStr
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.service_types import (
     AuthenticationError,
+    ProviderTimeoutError,
     RateLimitError,
     RequestMethod,
     ResourceNotFoundError,
@@ -93,7 +94,13 @@ class HTTPClient(ABC):
         logger.warning(f'Status error on {self.provider} API: {e}')
         return UnknownException(f'Unknown error: {e}')
 
-    def handle_http_error(self, e: HTTPError) -> UnknownException:
+    def handle_http_error(
+        self, e: HTTPError
+    ) -> ProviderTimeoutError | UnknownException:
         """Handle general HTTP errors."""
         logger.warning(f'HTTP error on {self.provider} API: {type(e).__name__} : {e}')
+        if isinstance(e, TimeoutException):
+            return ProviderTimeoutError(
+                f'{self.provider} API request timed out: {type(e).__name__}'
+            )
         return UnknownException(f'HTTP error {type(e).__name__} : {e}')

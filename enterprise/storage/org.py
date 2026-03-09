@@ -46,10 +46,14 @@ class Org(Base):  # type: ignore
     v1_enabled = Column(Boolean, nullable=True)
     conversation_expiration = Column(Integer, nullable=True)
     condenser_max_size = Column(Integer, nullable=True)
+    byor_export_enabled = Column(Boolean, nullable=False, default=False)
 
     # Relationships
     org_members = relationship('OrgMember', back_populates='org')
     current_users = relationship('User', back_populates='current_org')
+    invitations = relationship(
+        'OrgInvitation', back_populates='org', passive_deletes=True
+    )
     billing_sessions = relationship('BillingSession', back_populates='org')
     stored_conversation_metadata_saas = relationship(
         'StoredConversationMetadataSaas', back_populates='org'

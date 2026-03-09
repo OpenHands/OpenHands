@@ -4,7 +4,6 @@ from storage.billing_session import BillingSession
 from storage.billing_session_type import BillingSessionType
 from storage.conversation_callback import CallbackStatus, ConversationCallback
 from storage.conversation_work import ConversationWork
-from storage.experiment_assignment import ExperimentAssignment
 from storage.feedback import ConversationFeedback, Feedback
 from storage.github_app_installation import GithubAppInstallation
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
@@ -20,8 +19,10 @@ from storage.linear_workspace import LinearWorkspace
 from storage.maintenance_task import MaintenanceTask, MaintenanceTaskStatus
 from storage.openhands_pr import OpenhandsPR
 from storage.org import Org
+from storage.org_invitation import OrgInvitation
 from storage.org_member import OrgMember
 from storage.proactive_convos import ProactiveConversation
+from storage.resend_synced_user import ResendSyncedUser
 from storage.role import Role
 from storage.slack_conversation import SlackConversation
 from storage.slack_team import SlackTeam
@@ -48,7 +49,6 @@ __all__ = [
     'ConversationFeedback',
     'StoredConversationMetadataSaas',
     'ConversationWork',
-    'ExperimentAssignment',
     'Feedback',
     'GithubAppInstallation',
     'GitlabWebhook',
@@ -65,8 +65,10 @@ __all__ = [
     'MaintenanceTaskStatus',
     'OpenhandsPR',
     'Org',
+    'OrgInvitation',
     'OrgMember',
     'ProactiveConversation',
+    'ResendSyncedUser',
     'Role',
     'SlackConversation',
     'SlackTeam',

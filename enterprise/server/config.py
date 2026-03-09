@@ -9,6 +9,7 @@ import requests  # type: ignore
 from fastapi import HTTPException
 from server.auth.constants import (
     BITBUCKET_APP_CLIENT_ID,
+    BITBUCKET_DATA_CENTER_CLIENT_ID,
     ENABLE_ENTERPRISE_SSO,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
@@ -163,6 +164,9 @@ class SaaSServerConfig(ServerConfig):
 
         if ENABLE_ENTERPRISE_SSO:
             providers_configured.append(ProviderType.ENTERPRISE_SSO)
+
+        if BITBUCKET_DATA_CENTER_CLIENT_ID:
+            providers_configured.append(ProviderType.BITBUCKET_DATA_CENTER)
 
         config: dict[str, typing.Any] = {
             'APP_MODE': self.app_mode,
