@@ -426,7 +426,15 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
                 'error': str(e),
             },
         )
-        # Return empty options - Slack will display "Nothing could be found"
+        # Notify user about the unexpected error with error code
+        background_tasks.add_task(
+            slack_manager.handle_slack_error,
+            payload,
+            SlackError(
+                SlackErrorCode.UNEXPECTED_ERROR,
+                log_context={'slack_user_id': slack_user_id, 'error': str(e)},
+            ),
+        )
         return JSONResponse({'options': []})
 
 
