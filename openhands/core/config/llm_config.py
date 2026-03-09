@@ -134,7 +134,7 @@ class LLMConfig(BaseModel):
         for suffix in endpoint_suffixes:
             if url.endswith(suffix):
                 raise ValueError(
-                    f"base_url should be the API base URL, not a specific endpoint. "
+                    f'base_url should be the API base URL, not a specific endpoint. '
                     f"Remove the trailing '{suffix}' from '{v}'"
                 )
         return v
