@@ -317,6 +317,27 @@ class SlackManager(Manager[SlackViewInterface]):
         )
         return options
 
+    async def search_repos_for_slack(
+        self, user_auth: UserAuth, query: str, per_page: int = 20
+    ) -> list[dict[str, Any]]:
+        """Public API for repository search with formatted Slack options.
+
+        This method searches for repositories and formats the results as Slack
+        external_select options.
+
+        Args:
+            user_auth: The user's authentication context
+            query: Search query to filter repositories (empty string returns all)
+            per_page: Maximum number of results to return (default: 20)
+
+        Returns:
+            List of Slack option objects ready for external_select response
+        """
+        repos = await self._search_repositories(
+            user_auth, query=query, per_page=per_page
+        )
+        return self._build_repo_options(repos, include_no_repo=True)
+
     async def receive_message(self, message: Message):
         """Process an incoming Slack message.
 
