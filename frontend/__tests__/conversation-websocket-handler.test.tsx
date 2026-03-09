@@ -1084,4 +1084,232 @@ describe("Conversation WebSocket Handler", () => {
       );
     });
   });
+
+  // 5. Message Queue Tests
+  describe("Message Queue", () => {
+    it("should queue messages when WebSocket is not connected", async () => {
+      // Create a SendMessageComponent to test message sending
+      const SendMessageComponent = () => {
+        const ws = useConversationWebSocket();
+
+        const handleSendMessage = () => {
+          if (ws) {
+            ws.sendMessage({ message: "test message before connection" });
+          }
+        };
+
+        return (
+          <div>
+            <button type="button" onClick={handleSendMessage} data-testid="send-message-btn">
+              Send Message
+            </button>
+            <div data-testid="connection-state">{ws?.connectionState || "no-context"}</div>
+          </div>
+        );
+      };
+
+      renderWithWebSocketContext(<SendMessageComponent />);
+
+      // Initially should be CONNECTING
+      expect(screen.getByTestId("connection-state")).toHaveTextContent(
+        "CONNECTING",
+      );
+
+      // Send message while still connecting - should not throw
+      const sendButton = screen.getByTestId("send-message-btn");
+      expect(() => {
+        sendButton.click();
+      }).not.toThrow();
+
+      // Wait for connection to be established
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN");
+      });
+    });
+
+    it("should flush queued messages when WebSocket connection opens", async () => {
+      // Track messages sent through WebSocket
+      const sentMessages: string[] = [];
+
+      // Set up MSW to capture sent messages
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+
+          // Listen for messages sent from client
+          client.addEventListener("message", (event) => {
+            sentMessages.push(event.data.toString());
+          });
+        }),
+      );
+
+      // Create a SendMessageComponent
+      const SendMessageComponent = () => {
+        const ws = useConversationWebSocket();
+        const [messageCount, setMessageCount] = React.useState(0);
+
+        const handleSendMessage = () => {
+          if (ws) {
+            ws.sendMessage({ message: `test message ${messageCount}` });
+            setMessageCount((c) => c + 1);
+          }
+        };
+
+        return (
+          <div>
+            <button type="button" onClick={handleSendMessage} data-testid="send-message-btn">
+              Send Message
+            </button>
+            <div data-testid="connection-state">{ws?.connectionState || "no-context"}</div>
+            <div data-testid="message-count">{messageCount}</div>
+          </div>
+        );
+      };
+
+      renderWithWebSocketContext(<SendMessageComponent />);
+
+      // Send multiple messages while connecting
+      const sendButton = screen.getByTestId("send-message-btn");
+      sendButton.click(); // Send message 0
+      sendButton.click(); // Send message 1
+      sendButton.click(); // Send message 2
+
+      // Wait for connection and message flushing
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN");
+      });
+
+      // Wait for messages to be flushed
+      await waitFor(() => {
+        expect(sentMessages.length).toBe(3);
+      });
+
+      // Verify messages were sent in order
+      expect(JSON.parse(sentMessages[0]).message).toBe("test message 0");
+      expect(JSON.parse(sentMessages[1]).message).toBe("test message 1");
+      expect(JSON.parse(sentMessages[2]).message).toBe("test message 2");
+    });
+
+    it("should clear pending messages when conversation changes", async () => {
+      // Track messages sent through WebSocket
+      const sentMessages: string[] = [];
+
+      // Set up MSW to capture sent messages
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+
+          // Listen for messages sent from client
+          client.addEventListener("message", (event) => {
+            sentMessages.push(event.data.toString());
+          });
+        }),
+      );
+
+      // Create a SendMessageComponent
+      const SendMessageComponent = ({ convId }: { convId: string }) => {
+        const ws = useConversationWebSocket();
+
+        const handleSendMessage = () => {
+          if (ws) {
+            ws.sendMessage({ message: "test message" });
+          }
+        };
+
+        return (
+          <div>
+            <button type="button" onClick={handleSendMessage} data-testid="send-message-btn">
+              Send Message
+            </button>
+            <div data-testid="connection-state">{ws?.connectionState || "no-context"}</div>
+          </div>
+        );
+      };
+
+      // Create a wrapper that can change conversationId
+      const WrapperComponent = ({ convId }: { convId: string }) => {
+        return renderWithWebSocketContext(<SendMessageComponent convId={convId} />, convId);
+      };
+
+      const { rerender } = WrapperComponent("conversation-1");
+
+      // Send message while connecting in first conversation
+      const sendButton = screen.getByTestId("send-message-btn");
+      sendButton.click();
+
+      // Change to a different conversation (this should clear pending messages)
+      rerender(WrapperComponent("conversation-2"));
+
+      // Wait for connection
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN");
+      });
+
+      // Wait a bit to ensure no messages are sent
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+
+      // No messages should have been sent (pending queue was cleared)
+      expect(sentMessages.length).toBe(0);
+    });
+
+    it("should send messages immediately when WebSocket is already open", async () => {
+      // Track messages sent through WebSocket
+      const sentMessages: string[] = [];
+
+      // Set up MSW to capture sent messages
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+
+          // Listen for messages sent from client
+          client.addEventListener("message", (event) => {
+            sentMessages.push(event.data.toString());
+          });
+        }),
+      );
+
+      // Create a SendMessageComponent
+      const SendMessageComponent = () => {
+        const ws = useConversationWebSocket();
+
+        const handleSendMessage = () => {
+          if (ws) {
+            ws.sendMessage({ message: "test message after connection" });
+          }
+        };
+
+        return (
+          <div>
+            <button type="button" onClick={handleSendMessage} data-testid="send-message-btn">
+              Send Message
+            </button>
+            <div data-testid="connection-state">{ws?.connectionState || "no-context"}</div>
+          </div>
+        );
+      };
+
+      renderWithWebSocketContext(<SendMessageComponent />);
+
+      // Wait for connection to be established
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN");
+      });
+
+      // Send message after connection is open
+      const sendButton = screen.getByTestId("send-message-btn");
+      sendButton.click();
+
+      // Wait for message to be sent
+      await waitFor(() => {
+        expect(sentMessages.length).toBe(1);
+      });
+
+      // Verify message was sent
+      expect(JSON.parse(sentMessages[0]).message).toBe(
+        "test message after connection",
+      );
+    });
+  });
 });

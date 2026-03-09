@@ -93,6 +93,9 @@ export function ConversationWebSocketProvider({
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
+  // Queue for pending messages when WebSocket is not yet connected
+  const pendingMessagesRef = React.useRef<V1SendMessageRequest[]>([]);
+
   const posthog = usePostHog();
   const queryClient = useQueryClient();
   const { addEvent } = useEventStore();
@@ -290,6 +293,8 @@ export function ConversationWebSocketProvider({
     receivedEventCountRefPlanning.current = 0;
     // Reset the tracked event ref when sub-conversations change
     latestPlanningFileEventRef.current = null;
+    // Clear any pending messages when sub-conversations change
+    pendingMessagesRef.current = [];
   }, [subConversationIds]);
 
   // Merged loading history state - true if either connection is still loading
@@ -306,6 +311,8 @@ export function ConversationWebSocketProvider({
     receivedEventCountRefMain.current = 0;
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
+    // Clear any pending messages when conversation changes
+    pendingMessagesRef.current = [];
   }, [conversationId]);
 
   const { data: preloadedEvents } = useConversationHistory(conversationId);
@@ -809,6 +816,28 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
+  // Flush pending messages when WebSocket connection opens
+  const flushPendingMessages = useCallback(
+    (socket: WebSocket | null) => {
+      if (!socket || pendingMessagesRef.current.length === 0) {
+        return;
+      }
+
+      // Send all queued messages in order
+      pendingMessagesRef.current.forEach((queuedMessage) => {
+        try {
+          socket.send(JSON.stringify(queuedMessage));
+        } catch (error) {
+          // Log error but continue flushing remaining messages
+          console.error("Failed to send queued message:", error);
+        }
+      });
+      // Clear the queue after flushing
+      pendingMessagesRef.current = [];
+    },
+    [],
+  );
+
   // V1 send message function via WebSocket
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest) => {
@@ -817,9 +846,9 @@ export function ConversationWebSocketProvider({
         currentMode === "plan" ? planningAgentSocket : mainSocket;
 
       if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
-        const error = "WebSocket is not connected";
-        setErrorMessage(error);
-        throw new Error(error);
+        // Queue the message to be sent when the connection opens
+        pendingMessagesRef.current.push(message);
+        return;
       }
 
       try {
@@ -847,6 +876,8 @@ export function ConversationWebSocketProvider({
             break;
           case WebSocket.OPEN:
             setMainConnectionState("OPEN");
+            // Flush any pending messages when connection opens
+            flushPendingMessages(mainSocket);
             break;
           case WebSocket.CLOSING:
             setMainConnectionState("CLOSING");
@@ -862,7 +893,7 @@ export function ConversationWebSocketProvider({
 
       updateState();
     }
-  }, [mainSocket, wsUrl]);
+  }, [mainSocket, wsUrl, flushPendingMessages]);
 
   // Track planning agent socket state changes
   useEffect(() => {
@@ -876,6 +907,8 @@ export function ConversationWebSocketProvider({
             break;
           case WebSocket.OPEN:
             setPlanningConnectionState("OPEN");
+            // Flush any pending messages when connection opens
+            flushPendingMessages(planningAgentSocket);
             break;
           case WebSocket.CLOSING:
             setPlanningConnectionState("CLOSING");
@@ -891,7 +924,7 @@ export function ConversationWebSocketProvider({
 
       updateState();
     }
-  }, [planningAgentSocket, planningAgentWsUrl]);
+  }, [planningAgentSocket, planningAgentWsUrl, flushPendingMessages]);
 
   const contextValue = useMemo(
     () => ({ connectionState, sendMessage, isLoadingHistory }),
