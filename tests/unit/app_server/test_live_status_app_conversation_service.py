@@ -460,7 +460,9 @@ class TestLiveStatusAppConversationService:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_get_laminar_observability_env_returns_env_when_static_secret_set(self):
+    async def test_get_laminar_observability_env_returns_env_when_static_secret_set(
+        self,
+    ):
         """Test _get_laminar_observability_env returns env dict when LMNR_PROJECT_API_KEY is StaticSecret."""
         self.mock_user_context.get_secrets = AsyncMock(
             return_value={

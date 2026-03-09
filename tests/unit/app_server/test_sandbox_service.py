@@ -52,9 +52,7 @@ class MockSandboxService(SandboxService):
         sandbox_id: str | None = None,
         extra_env: dict[str, str] | None = None,
     ) -> SandboxInfo:
-        return await self.start_sandbox_mock(
-            sandbox_spec_id, sandbox_id, extra_env
-        )
+        return await self.start_sandbox_mock(sandbox_spec_id, sandbox_id, extra_env)
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         return await self.resume_sandbox_mock(sandbox_id)
