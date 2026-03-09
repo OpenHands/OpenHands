@@ -1,10 +1,15 @@
+import logging
 import os
 from logging.config import fileConfig
 
-from alembic import context
-from google.cloud.sql.connector import Connector
-from sqlalchemy import create_engine
-from storage.base import Base
+# Suppress alembic.runtime.plugins INFO logs during import to prevent non-JSON logs in production
+# These plugin setup messages would otherwise appear before logging is configured
+logging.getLogger('alembic.runtime.plugins').setLevel(logging.WARNING)
+
+from alembic import context  # noqa: E402
+from google.cloud.sql.connector import Connector  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from storage.base import Base  # noqa: E402
 
 target_metadata = Base.metadata
 

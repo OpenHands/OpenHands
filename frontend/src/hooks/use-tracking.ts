@@ -14,7 +14,7 @@ export const useTracking = () => {
 
   // Common properties included in all tracking events
   const commonProperties = {
-    app_surface: config?.APP_MODE || "unknown",
+    app_surface: config?.app_mode || "unknown",
     plan_tier: null,
     current_url: window.location.href,
     user_email: settings?.email || settings?.git_user_email || null,
@@ -99,6 +99,29 @@ export const useTracking = () => {
     });
   };
 
+  const trackAddTeamMembersButtonClick = () => {
+    posthog.capture("exp_add_team_members", {
+      ...commonProperties,
+    });
+  };
+
+  const trackOnboardingCompleted = ({
+    role,
+    orgSize,
+    useCase,
+  }: {
+    role: string;
+    orgSize: string;
+    useCase: string;
+  }) => {
+    posthog.capture("onboarding_completed", {
+      role,
+      org_size: orgSize,
+      use_case: useCase,
+      ...commonProperties,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -109,5 +132,7 @@ export const useTracking = () => {
     trackUserSignupCompleted,
     trackCreditsPurchased,
     trackCreditLimitReached,
+    trackAddTeamMembersButtonClick,
+    trackOnboardingCompleted,
   };
 };

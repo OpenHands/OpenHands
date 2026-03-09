@@ -13,7 +13,7 @@ store = OpenhandsPRStore.get_instance()
 data_collector = GitHubDataCollector()
 
 
-def get_unprocessed_prs() -> list[OpenhandsPR]:
+async def get_unprocessed_prs() -> list[OpenhandsPR]:
     """
     Get unprocessed PR entries from the OpenhandsPR table.
 
@@ -23,7 +23,7 @@ def get_unprocessed_prs() -> list[OpenhandsPR]:
     Returns:
         List of OpenhandsPR objects that need processing
     """
-    unprocessed_prs = store.get_unprocessed_prs(PROCESS_AMOUNT, MAX_RETRIES)
+    unprocessed_prs = await store.get_unprocessed_prs(PROCESS_AMOUNT, MAX_RETRIES)
     logger.info(f'Retrieved {len(unprocessed_prs)} unprocessed PRs for enrichment')
     return unprocessed_prs
 
@@ -35,7 +35,7 @@ async def process_pr(pr: OpenhandsPR):
 
     logger.info(f'Processing PR #{pr.pr_number} from repo {pr.repo_name}')
     await data_collector.save_full_pr(pr)
-    store.increment_process_attempts(pr.repo_id, pr.pr_number)
+    await store.increment_process_attempts(pr.repo_id, pr.pr_number)
 
 
 async def main():
@@ -45,7 +45,7 @@ async def main():
     logger.info('Starting PR data enrichment process')
 
     # Get unprocessed PRs
-    unprocessed_prs = get_unprocessed_prs()
+    unprocessed_prs = await get_unprocessed_prs()
     logger.info(f'Found {len(unprocessed_prs)} PRs to process')
 
     # Process each PR

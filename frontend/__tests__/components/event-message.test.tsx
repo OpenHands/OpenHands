@@ -5,7 +5,7 @@ import { EventMessage } from "#/components/features/chat/event-message";
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({
-    data: { APP_MODE: "saas" },
+    data: { app_mode: "saas" },
   }),
 }));
 

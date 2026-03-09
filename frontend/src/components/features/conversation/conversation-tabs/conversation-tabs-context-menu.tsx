@@ -12,7 +12,6 @@ import GitChanges from "#/icons/git_changes.svg?react";
 import VSCodeIcon from "#/icons/vscode.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 
 interface ConversationTabsContextMenuProps {
@@ -30,23 +29,18 @@ export function ConversationTabsContextMenu({
   const { state, setUnpinnedTabs } =
     useConversationLocalStorageState(conversationId);
 
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
-
   const tabConfig = [
+    {
+      tab: "planner",
+      icon: LessonPlanIcon,
+      i18nKey: I18nKey.COMMON$PLANNER,
+    },
     { tab: "editor", icon: GitChanges, i18nKey: I18nKey.COMMON$CHANGES },
     { tab: "vscode", icon: VSCodeIcon, i18nKey: I18nKey.COMMON$CODE },
     { tab: "terminal", icon: TerminalIcon, i18nKey: I18nKey.COMMON$TERMINAL },
     { tab: "served", icon: ServerIcon, i18nKey: I18nKey.COMMON$APP },
     { tab: "browser", icon: GlobeIcon, i18nKey: I18nKey.COMMON$BROWSER },
   ];
-
-  if (shouldUsePlanningAgent) {
-    tabConfig.unshift({
-      tab: "planner",
-      icon: LessonPlanIcon,
-      i18nKey: I18nKey.COMMON$PLANNER,
-    });
-  }
 
   if (!isOpen) return null;
 

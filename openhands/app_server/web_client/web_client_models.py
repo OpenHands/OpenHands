@@ -13,6 +13,9 @@ class WebClientFeatureFlags(BaseModel):
     enable_jira: bool = False
     enable_jira_dc: bool = False
     enable_linear: bool = False
+    hide_users_page: bool = False
+    hide_billing_page: bool = False
+    hide_integrations_page: bool = False
 
 
 class WebClientConfig(DiscriminatedUnionMixin):
@@ -25,3 +28,5 @@ class WebClientConfig(DiscriminatedUnionMixin):
     recaptcha_site_key: str | None
     faulty_models: list[str]
     error_message: str | None
+    updated_at: datetime
+    github_app_slug: str | None

@@ -108,13 +108,6 @@ class WebSession:
             EventStreamSubscriber.SERVER, self.on_event, self.sid
         )
         self.config = config
-
-        # Lazy import to avoid circular dependency
-        from openhands.experiments.experiment_manager import ExperimentManagerImpl
-
-        self.config = ExperimentManagerImpl.run_config_variant_test(
-            user_id, sid, self.config
-        )
         self.loop = asyncio.get_event_loop()
         self.user_id = user_id
 
@@ -202,10 +195,11 @@ class WebSession:
             self.logger.debug(f'Merged custom MCP Config: {mcp_config}')
 
         # Add OpenHands' MCP server by default
-        openhands_mcp_server, openhands_mcp_stdio_servers = (
-            OpenHandsMCPConfigImpl.create_default_mcp_server_config(
-                self.config.mcp_host, self.config, self.user_id
-            )
+        (
+            openhands_mcp_server,
+            openhands_mcp_stdio_servers,
+        ) = await OpenHandsMCPConfigImpl.create_default_mcp_server_config(
+            self.config.mcp_host, self.config, self.user_id
         )
 
         if openhands_mcp_server:

@@ -1,10 +1,9 @@
 import { useAuthUrl } from "./use-auth-url";
-import { GetConfigResponse } from "#/api/option-service/option.types";
+import { WebClientConfig } from "#/api/option-service/option.types";
 
 interface UseGitHubAuthUrlConfig {
-  appMode: GetConfigResponse["APP_MODE"] | null;
-  gitHubClientId: GetConfigResponse["GITHUB_CLIENT_ID"] | null;
-  authUrl?: GetConfigResponse["AUTH_URL"];
+  appMode: WebClientConfig["app_mode"] | null;
+  authUrl?: WebClientConfig["auth_url"];
 }
 
 export const useGitHubAuthUrl = (config: UseGitHubAuthUrlConfig) =>

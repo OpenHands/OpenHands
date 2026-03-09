@@ -5,7 +5,9 @@ import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
+import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
+import { cn } from "#/utils/utils";
 
 function PlannerTab() {
   const { t } = useTranslation();
@@ -13,7 +15,8 @@ function PlannerTab() {
     React.useRef<HTMLDivElement>(null),
   );
 
-  const { planContent } = useConversationStore();
+  const { planContent, conversationMode } = useConversationStore();
+  const isPlanMode = conversationMode === "plan";
   const { handlePlanClick } = useHandlePlanClick();
 
   if (planContent !== null && planContent !== undefined) {
@@ -23,7 +26,7 @@ function PlannerTab() {
         onScroll={(e) => onChatBodyScroll(e.currentTarget)}
         className="flex flex-col w-full h-full p-4 overflow-auto"
       >
-        <MarkdownRenderer includeStandard includeHeadings>
+        <MarkdownRenderer includeStandard components={planComponents}>
           {planContent}
         </MarkdownRenderer>
       </div>
@@ -39,7 +42,13 @@ function PlannerTab() {
       <button
         type="button"
         onClick={handlePlanClick}
-        className="flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px] hover:cursor-pointer hover:opacity-80"
+        disabled={isPlanMode}
+        className={cn(
+          "flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px]",
+          isPlanMode
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:cursor-pointer hover:opacity-80",
+        )}
       >
         {t(I18nKey.COMMON$CREATE_A_PLAN)}
       </button>

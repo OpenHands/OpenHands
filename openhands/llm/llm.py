@@ -136,7 +136,7 @@ class LLM(RetryMixin, DebugMixin):
         if self.config.model.startswith('openhands/'):
             model_name = self.config.model.removeprefix('openhands/')
             self.config.model = f'litellm_proxy/{model_name}'
-            self.config.base_url = 'https://llm-proxy.app.all-hands.dev/'
+            self.config.base_url = _get_openhands_llm_base_url()
             logger.debug(
                 f'Rewrote openhands/{model_name} to {self.config.model} with base URL {self.config.base_url}'
             )
@@ -160,9 +160,13 @@ class LLM(RetryMixin, DebugMixin):
                 )
             elif any(
                 k in self.config.model
-                for k in ('claude-sonnet-4-5', 'claude-haiku-4-5-20251001')
+                for k in (
+                    'claude-sonnet-4-5',
+                    'claude-haiku-4-5-20251001',
+                    'claude-opus-4-6',
+                )
             ):
-                # don't send reasoning_effort to specific Claude Sonnet/Haiku 4.5 variants
+                # don't send reasoning_effort to specific Claude Sonnet/Haiku 4.5 variants or Claude Opus 4.6
                 kwargs.pop('reasoning_effort', None)
             else:
                 if self.config.reasoning_effort is not None:
@@ -198,13 +202,14 @@ class LLM(RetryMixin, DebugMixin):
         if 'claude-opus-4-1' in self.config.model.lower():
             kwargs['thinking'] = {'type': 'disabled'}
 
-        # Anthropic constraint: Opus 4.1, Opus 4.5, and Sonnet 4 models cannot accept both temperature and top_p
+        # Anthropic constraint: Opus 4.1, Opus 4.5, Opus 4.6, and Sonnet 4.x models cannot accept both temperature and top_p
         # Prefer temperature (drop top_p) if both are specified.
         _model_lower = self.config.model.lower()
-        # Apply to Opus 4.1, Opus 4.5, and Sonnet 4 models to avoid API errors
+        # Apply to Opus 4.1, Opus 4.5, Opus 4.6, and Sonnet 4.x models to avoid API errors
         if (
             ('claude-opus-4-1' in _model_lower)
             or ('claude-opus-4-5' in _model_lower)
+            or ('claude-opus-4-6' in _model_lower)
             or ('claude-sonnet-4' in _model_lower)
         ) and ('temperature' in kwargs and 'top_p' in kwargs):
             kwargs.pop('top_p', None)
@@ -843,6 +848,7 @@ class LLM(RetryMixin, DebugMixin):
                 k in self.config.model
                 for k in (
                     'openrouter/anthropic/claude-sonnet-4',
+                    'openrouter/anthropic/claude-opus-4-6',
                     'openrouter/anthropic/claude-sonnet-4-5-20250929',
                     'openrouter/anthropic/claude-haiku-4-5-20251001',
                 )
@@ -851,3 +857,18 @@ class LLM(RetryMixin, DebugMixin):
 
         # let pydantic handle the serialization
         return [message.model_dump() for message in messages]
+
+
+def _get_openhands_llm_base_url():
+    # Get the API url if specified
+    lite_llm_api_url = os.getenv('LITE_LLM_API_URL')
+    if lite_llm_api_url:
+        return lite_llm_api_url
+
+    # Fallback to using web_host.
+    web_host = os.getenv('WEB_HOST')
+    if web_host and ('.staging.' in web_host or web_host.startswith('staging')):
+        return 'https://llm-proxy.staging.all-hands.dev/'
+
+    # Use the default
+    return 'https://llm-proxy.app.all-hands.dev/'
