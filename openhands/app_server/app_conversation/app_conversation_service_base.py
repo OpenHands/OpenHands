@@ -735,14 +735,15 @@ class AppConversationServiceBase(AppConversationService, ABC):
             elapsed = time.monotonic() - step_start
             if result.exit_code != 0:
                 error_output = result.stderr or result.stdout or ''
+                full_output = (result.stdout or '') + '\n' + (result.stderr or '')
                 _logger.warning(
                     f'[{task.sandbox_id}] Setup step {i + 1} of {total} failed after {elapsed:.1f}s '
                     f'("{description}", exit {result.exit_code}): '
-                    f'{error_output}'
+                    f'{full_output}'
                 )
                 await self._log_to_sandbox(
                     workspace,
-                    f'Setup step {i + 1} of {total} failed after {elapsed:.1f}s: {error_output[:200]}',
+                    f'Setup step {i + 1} of {total} failed after {elapsed:.1f}s: {error_output}',
                 )
                 task.status = AppConversationStartTaskStatus.ERROR
                 # Show first line of error output to the user

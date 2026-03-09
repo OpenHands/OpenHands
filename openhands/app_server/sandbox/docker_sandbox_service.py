@@ -254,21 +254,9 @@ class DockerSandboxService(SandboxService):
                         'chmod 666 /var/run/docker.sock', user='root'
                     ),
                 )
-                # Authenticate to private registries that need
-                # per-user credentials.  The BUILDONE_USER /
-                # BUILDONE_TOKEN env vars are set per-sandbox from
-                # the user's custom secrets.
-                await loop.run_in_executor(
-                    None,
-                    lambda: container.exec_run(
-                        'bash -c "'
-                        'if [ -n "$BUILDONE_USER" ] && [ -n "$BUILDONE_TOKEN" ]; then '
-                        'docker login docker.cloudsmith.io '
-                        '-u "$BUILDONE_USER" -p "$BUILDONE_TOKEN" '
-                        '>/dev/null 2>&1; fi"',
-                        user='root',
-                    ),
-                )
+
+                # Authenticate to ECR if AWS credentials are available
+                await self._login_ecr(container)
                 return
             await asyncio.sleep(1)
         # Capture dockerd log to help diagnose startup failures.
@@ -282,6 +270,92 @@ class DockerSandboxService(SandboxService):
             f'dockerd failed to start in container {container.name}. '
             f'dockerd log:\n{dockerd_log}'
         )
+
+    @staticmethod
+    def _get_codeartifact_token(env_vars: dict[str, str]) -> str | None:
+        """Fetch a CodeArtifact authorization token using AWS credentials.
+
+        Uses B1_ACCESS_KEY_ID / B1_SECRET_ACCESS_KEY from env_vars if
+        available, otherwise falls back to the server's default AWS
+        credential chain (IAM role, environment, etc.).
+
+        Returns the token string, or None if the API call fails.
+        """
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+
+        region = os.environ.get('AWS_REGION', 'eu-central-1')
+        access_key = env_vars.get('B1_ACCESS_KEY_ID', '')
+        secret_key = env_vars.get('B1_SECRET_ACCESS_KEY', '')
+
+        try:
+            if access_key and secret_key:
+                session = boto3.Session(
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    region_name=region,
+                )
+            else:
+                session = boto3.Session(region_name=region)
+            ca_client = session.client('codeartifact')
+            ca_response = ca_client.get_authorization_token(
+                domain='buildone',
+                domainOwner='653306034207',
+            )
+            _logger.info('CodeArtifact auth token fetched successfully')
+            return ca_response['authorizationToken']
+        except (BotoCoreError, ClientError) as e:
+            _logger.warning(f'Failed to fetch CodeArtifact auth token: {e}')
+            return None
+
+    async def _login_ecr(self, container) -> None:
+        """Authenticate the sandbox's Docker daemon to AWS ECR.
+
+        Uses the container's B1_ACCESS_KEY_ID and B1_SECRET_ACCESS_KEY
+        environment variables to obtain an ECR authorization token via
+        boto3, then runs ``docker login`` inside the container.
+        """
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+
+        # Read credentials from the container's environment
+        result = container.exec_run('bash -c "echo $B1_ACCESS_KEY_ID"', user='root')
+        access_key = result.output.decode().strip() if result.output else ''
+
+        result = container.exec_run('bash -c "echo $B1_SECRET_ACCESS_KEY"', user='root')
+        secret_key = result.output.decode().strip() if result.output else ''
+
+        if not access_key or not secret_key:
+            _logger.debug(
+                f'No AWS credentials in container {container.name}, skipping ECR login'
+            )
+            return
+
+        region = os.environ.get('AWS_REGION', 'eu-central-1')
+        try:
+            session = boto3.Session(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region,
+            )
+            ecr_client = session.client('ecr')
+            token_response = ecr_client.get_authorization_token()
+            auth_data = token_response['authorizationData'][0]
+            token = auth_data['authorizationToken']
+            endpoint = auth_data['proxyEndpoint']
+
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: container.exec_run(
+                    f'bash -c "echo {token} | base64 -d | cut -d: -f2 | '
+                    f'docker login --username AWS --password-stdin {endpoint}"',
+                    user='root',
+                ),
+            )
+            _logger.info(f'ECR login successful in container {container.name}')
+        except (BotoCoreError, ClientError) as e:
+            _logger.warning(f'ECR login failed in container {container.name}: {e}')
 
     def _schedule_codespace_port_visibility(
         self, port_mappings: dict[int, int]
@@ -668,6 +742,11 @@ class DockerSandboxService(SandboxService):
         if extra_env:
             env_vars.update(extra_env)
         env_vars[SESSION_API_KEY_VARIABLE] = session_api_key
+
+        # Fetch CodeArtifact auth token if AWS credentials are available
+        ca_token = self._get_codeartifact_token(env_vars)
+        if ca_token:
+            env_vars['CODEARTIFACT_AUTH_TOKEN'] = ca_token
         webhook_host = self.app_hostname or 'host.docker.internal'
         env_vars[WEBHOOK_CALLBACK_VARIABLE] = (
             f'http://{webhook_host}:{self.host_port}/api/v1/webhooks'
@@ -1158,7 +1237,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Mapping of upstream registry hostnames to local pull-through cache URLs. '
             'Used to configure containerd host mirrors inside privileged sandboxes '
             'so that pulls from non-Docker-Hub registries are cached locally. '
-            'Example: {"docker.cloudsmith.io": "http://openhands-cloudsmith-cache:5000"} '
+            'Example: {"myregistry.example.com": "http://openhands-registry-cache:5000"} '
             'Configure via OH_SANDBOX__DIND_REGISTRY_MIRRORS environment variable '
             'as comma-separated host=url pairs.'
         ),

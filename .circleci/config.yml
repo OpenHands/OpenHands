@@ -1,5 +1,8 @@
 version: 2.1
 
+orbs:
+  aws-cli: circleci/aws-cli@5.1.1
+
 executors:
   python:
     docker:
@@ -120,23 +123,43 @@ jobs:
 
   publish:
     executor: python-node
+    parameters:
+      image-name:
+        type: string
+        default: openhands
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
+      - aws-cli/setup:
+          role_arn: "${B1_ROLE_ARN}"
+          region: "${AWS_REGION}"
       - run:
-          name: Log in to Cloudsmith Docker registry
-          command: docker login docker.cloudsmith.io -u ${BUILDONE_USER} -p ${BUILDONE_TOKEN}
-      - run:
-          name: Build and push Docker image
+          name: "Login to ECR"
           command: |
-            IMAGE="docker.cloudsmith.io/buildone/repository/openhands"
-            docker build \
-              -f containers/app/Dockerfile \
-              -t ${IMAGE}:${CIRCLE_TAG} \
-              .
-            docker push ${IMAGE}:${CIRCLE_TAG}
+            aws ecr get-login-password --region $AWS_REGION | \
+              docker login --username AWS --password-stdin \
+              653306034207.dkr.ecr.$AWS_REGION.amazonaws.com
+      - run:
+          name: "Build image"
+          command: |
+            VERSION="${CIRCLE_TAG:-$CIRCLE_BRANCH}"
+            NAME="openhands"
+            REPOSITORY=653306034207.dkr.ecr.$AWS_REGION.amazonaws.com/b1
+            docker build . -f containers/app/Dockerfile \
+              -t "${REPOSITORY}/${NAME}:${VERSION}" \
+              --build-arg BUILD_VERSION="${VERSION}" \
+              --build-arg BUILD_DATE="$(date)" \
+              --build-arg BUILD_NAME="${NAME}" \
+              --build-arg BUILD_IMAGE="${REPOSITORY}/${NAME}"
           no_output_timeout: 30m
+      - run:
+          name: "Publish image"
+          command: |
+            VERSION="${CIRCLE_TAG:-$CIRCLE_BRANCH}"
+            NAME="openhands"
+            REPOSITORY=653306034207.dkr.ecr.$AWS_REGION.amazonaws.com/b1
+            docker push "${REPOSITORY}/${NAME}:${VERSION}"
 
 workflows:
   lint:

@@ -25,16 +25,16 @@ from openhands.integrations.service_types import ProviderType
 WELL_KNOWN_SECRET_LLM_API_KEY = 'anthropic-api-key'
 WELL_KNOWN_SECRET_GITHUB_TOKEN = 'github-token'
 WELL_KNOWN_SECRET_NEON_API_KEY = 'neon-api-key'
-WELL_KNOWN_SECRET_BUILDONE_USER = 'buildone-user'
-WELL_KNOWN_SECRET_BUILDONE_TOKEN = 'buildone-token'
+WELL_KNOWN_SECRET_B1_ACCESS_KEY_ID = 'b1-access-key-id'
+WELL_KNOWN_SECRET_B1_SECRET_ACCESS_KEY = 'b1-secret-access-key'
 
 # Custom secret names that must be forwarded to the sandbox under a
 # different environment variable name.  The original name is always
 # included as well.
 _SANDBOX_ENV_ALIASES: dict[str, str] = {
     WELL_KNOWN_SECRET_NEON_API_KEY: 'NEON_API_KEY',
-    WELL_KNOWN_SECRET_BUILDONE_USER: 'BUILDONE_USER',
-    WELL_KNOWN_SECRET_BUILDONE_TOKEN: 'BUILDONE_TOKEN',
+    WELL_KNOWN_SECRET_B1_ACCESS_KEY_ID: 'B1_ACCESS_KEY_ID',
+    WELL_KNOWN_SECRET_B1_SECRET_ACCESS_KEY: 'B1_SECRET_ACCESS_KEY',
 }
 
 
