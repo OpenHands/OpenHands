@@ -27,7 +27,6 @@ import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { AlertBanner } from "#/components/features/alerts/alert-banner";
-import { MaintenanceBanner } from "#/components/features/maintenance/maintenance-banner";
 import { cn, isMobileDevice } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
@@ -243,10 +242,7 @@ export default function MainApp() {
               updatedAt={config.data.updated_at}
             />
           )}
-        {config.data?.MAINTENANCE && (
-          <MaintenanceBanner startTime={config.data.MAINTENANCE.startTime} />
-        )}
-        {config.data?.APP_MODE === "saas" && (
+        {config.data?.app_mode === "saas" && (
           <>
             <OngoingIncidentBanners />
             <InProgressMaintenanceBanners />
