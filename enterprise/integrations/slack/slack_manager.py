@@ -285,9 +285,7 @@ class SlackManager(Manager[SlackViewInterface]):
             },
         ]
 
-    def _build_repo_options(
-        self, repos: list[Repository]
-    ) -> list[dict[str, Any]]:
+    def _build_repo_options(self, repos: list[Repository]) -> list[dict[str, Any]]:
         """Build Slack options list from repositories.
 
         Always includes a "No Repository" option at the top, followed by up to 99
