@@ -508,8 +508,8 @@ async def get_conversation_skills(
         )
         if not sandbox_spec:
             # TODO: This is a temporary work around for the fact that we don't store previous
-            # sandbox spec versions when updating. When the SandboxSpecServices transition to
-            # truly multi sandbox spec model we can update this.
+            # sandbox spec versions when updating OpenHands. When the SandboxSpecServices
+            # transition to truly multi sandbox spec model this should raise a 404 error
             logger.warning('Sandbox spec not found - using default.')
             sandbox_spec = await sandbox_spec_service.get_default_sandbox_spec()
 
