@@ -1,13 +1,25 @@
 ---
-name: ship-release
-description: This skill should be used when the user asks to "ship a release", "cut a new version", "bump the version", "prepare a release", "create a release branch", "what files change for a release", "pin SDK to a commit", "test unreleased SDK", or needs to know the release process for OpenHands 1.x versions.
+name: update-sdk
+description: This skill should be used when the user asks to "update SDK", "bump SDK version", "pin SDK to a commit", "test unreleased SDK", "update agent-server image", "bump the version", "prepare a release", "what files change for a release", or needs to know how SDK packages are managed in the OpenHands repository.
 ---
 
-# Ship Release
+# Update SDK
 
-Prepare and execute an OpenHands 1.x release, or pin SDK packages to unreleased commits for testing.
+Bump SDK packages (`openhands-sdk`, `openhands-agent-server`, `openhands-tools`), pin them to unreleased commits for testing, and cut an OpenHands release.
 
-## Release Commit — Files to Change
+## SDK Package Bump
+
+When a new SDK version is available, land a PR to update all three packages. This updates 5 files (plus 3 auto-generated lock files). See commit `929dcc3` (SDK 1.11.5 bump) and `aa22d34` (SDK 1.11.4 bump) for examples.
+
+| File | What to change |
+|------|----------------|
+| `pyproject.toml` | `openhands-sdk`, `openhands-agent-server`, `openhands-tools` in **two** sections: `dependencies` array and `[tool.poetry.dependencies]` |
+| `openhands/app_server/sandbox/sandbox_spec_service.py` | `AGENT_SERVER_IMAGE` constant |
+| `poetry.lock` | Auto-regenerated |
+| `uv.lock` | Auto-regenerated |
+| `enterprise/poetry.lock` | Auto-regenerated |
+
+## Cutting a Release
 
 A release commit updates the version number across 3 files and verifies compose files use agent-server images. The gold-standard pattern was established in release 1.1.0 (commit `9885dde`) and 1.2.0 (commit `c97d661`).
 
@@ -39,28 +51,16 @@ The following files reference `SANDBOX_RUNTIME_CONTAINER_IMAGE` / `runtime_conta
 
 These are still used by `docker_runtime.py`, `kubernetes_runtime.py`, `remote_runtime.py`, `modal_runtime.py`, and `daytona_runtime.py` but follow a separate update cadence.
 
-## SDK Package Bump (separate PR, before the release)
+### Release Workflow
 
-When a new SDK version is available, land a separate PR before the release commit. This updates 5 files (plus 3 auto-generated lock files). See commit `929dcc3` (SDK 1.11.5 bump) and `aa22d34` (SDK 1.11.4 bump) for examples.
-
-| File | What to change |
-|------|----------------|
-| `pyproject.toml` | `openhands-sdk`, `openhands-agent-server`, `openhands-tools` in **two** sections: `dependencies` array and `[tool.poetry.dependencies]` |
-| `openhands/app_server/sandbox/sandbox_spec_service.py` | `AGENT_SERVER_IMAGE` constant |
-| `poetry.lock` | Auto-regenerated |
-| `uv.lock` | Auto-regenerated |
-| `enterprise/poetry.lock` | Auto-regenerated |
-
-## Release Workflow
-
-### Step 1: Verify the SDK bump has landed
+#### Step 1: Verify the SDK bump has landed
 
 ```bash
 grep -n "openhands-sdk\|openhands-agent-server\|openhands-tools" pyproject.toml
 grep -n "AGENT_SERVER_IMAGE" openhands/app_server/sandbox/sandbox_spec_service.py
 ```
 
-### Step 2: Bump version numbers and Docker image tags
+#### Step 2: Bump version numbers and Docker image tags
 
 Update the version in the 3 version files, then commit, tag, and create the SaaS branch:
 
@@ -72,7 +72,7 @@ git tag X.Y.Z
 
 Create a `saas-rel-X.Y.Z` branch from the tagged commit for the SaaS deployment pipeline.
 
-### Step 3: CI builds Docker images automatically
+#### Step 3: CI builds Docker images automatically
 
 The `ghcr-build.yml` workflow triggers on tag pushes and produces:
 - `ghcr.io/openhands/openhands:X.Y.Z`, `X.Y`, `X`, `latest`

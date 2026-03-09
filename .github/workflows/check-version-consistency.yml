@@ -114,7 +114,7 @@ jobs:
                   print(f"  ✖ {e}")
               print(
                   "\nAll version numbers and Docker image tags must be consistent."
-                  "\nSee .agents/skills/ship-release/SKILL.md for the full release checklist."
+                  "\nSee .agents/skills/update-sdk/SKILL.md for the full checklist."
               )
               sys.exit(1)
           else:
