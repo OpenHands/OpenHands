@@ -1,29 +1,61 @@
 ---
 name: update-sdk
-description: This skill should be used when the user asks to "update SDK", "bump SDK version", "pin SDK to a commit", "test unreleased SDK", "update agent-server image", "bump the version", "prepare a release", "what files change for a release", or needs to know how SDK packages are managed in the OpenHands repository.
+description: This skill should be used when the user asks to "update SDK", "bump SDK version", "pin SDK to a commit", "test unreleased SDK", "update agent-server image", "bump the version", "prepare a release", "what files change for a release", or needs to know how SDK packages are managed in the OpenHands repository. For detailed reference material, see references/docker-image-locations.md and references/sdk-pinning-examples.md in this skill directory.
 ---
 
 # Update SDK
 
 Bump SDK packages (`openhands-sdk`, `openhands-agent-server`, `openhands-tools`), pin them to unreleased commits for testing, and cut an OpenHands release.
 
-## SDK Package Bump
+## Quick Summary — How Many Files Change?
 
-When a new SDK version is available, land a PR to update all three packages. This updates 5 files (plus 3 auto-generated lock files). See commit `929dcc3` (SDK 1.11.5 bump) and `aa22d34` (SDK 1.11.4 bump) for examples.
+| Activity | Manual edits | Auto-regenerated | Total |
+|----------|:------------:|:----------------:|:-----:|
+| **SDK bump** (released PyPI version) | 2 | 3 | **5** |
+| **SDK pin** (unreleased git commit) | 3 | 3 | **6** |
+| **Release commit** (version bump) | 3 | 0 | **3** |
+
+The 3 auto-regenerated files are always: `poetry.lock`, `uv.lock`, `enterprise/poetry.lock`.
+
+## SDK Package Bump — 2 Files + 3 Lock Files
+
+Land as a separate PR before the release. Examples: `929dcc3` (SDK 1.11.5), `cd235cc` (SDK 1.11.4).
 
 | File | What to change |
 |------|----------------|
-| `pyproject.toml` | `openhands-sdk`, `openhands-agent-server`, `openhands-tools` in **two** sections: `dependencies` array and `[tool.poetry.dependencies]` |
-| `openhands/app_server/sandbox/sandbox_spec_service.py` | `AGENT_SERVER_IMAGE` constant |
-| `poetry.lock` | Auto-regenerated |
-| `uv.lock` | Auto-regenerated |
-| `enterprise/poetry.lock` | Auto-regenerated |
+| `pyproject.toml` | `openhands-sdk`, `openhands-agent-server`, `openhands-tools` in **two** sections: the `dependencies` array (PEP 508) **and** `[tool.poetry.dependencies]` |
+| `openhands/app_server/sandbox/sandbox_spec_service.py` | `AGENT_SERVER_IMAGE` constant — set to `ghcr.io/openhands/agent-server:<version>-python` |
 
-## Cutting a Release
+Then regenerate lock files:
+```bash
+poetry lock && uv lock && cd enterprise && poetry lock && cd ..
+```
 
-A release commit updates the version number across 3 files and verifies compose files use agent-server images. The gold-standard pattern was established in release 1.1.0 (commit `9885dde`) and 1.2.0 (commit `c97d661`).
+## Docker Image Locations — All Hardcoded References
 
-### Version Numbers (3 files)
+For the complete inventory of every file containing a hardcoded Docker image tag or repository, see `references/docker-image-locations.md`. Key files that must stay in sync during an SDK bump:
+
+| File | Image reference | Updated during SDK bump? |
+|------|----------------|:------------------------:|
+| `openhands/app_server/sandbox/sandbox_spec_service.py` | `AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:<tag>-python'` | ✅ Yes |
+| `docker-compose.yml` | `AGENT_SERVER_IMAGE_TAG` default | ✅ Should be |
+| `containers/dev/compose.yml` | `AGENT_SERVER_IMAGE_REPOSITORY` + `_TAG` defaults | ✅ Should be |
+
+> **CI enforcement:** `.github/workflows/check-version-consistency.yml` validates version consistency and compose file image references on every PR and push to main.
+
+### ⚠️ Docker Image Tag Gotcha (merge-commit SHA)
+
+The SDK CI in `software-agent-sdk` repo tags Docker images with the **GitHub Actions merge-commit SHA**, NOT the PR head-commit SHA. When pinning to an SDK PR branch:
+
+1. Check the SDK PR description for the actual image tag (look for the `AGENT_SERVER_IMAGES` section)
+2. Or query the CI logs: the "Consolidate Build Information" job prints `"short_sha": "<tag>"`
+3. The merge-commit SHA differs from the head SHA shown in the PR
+
+For released SDK versions, images use a version tag (e.g., `1.12.0-python`) — no merge-commit ambiguity.
+
+## Cutting a Release — 3 Files
+
+A release commit updates the version string across 3 files. Gold-standard examples: 1.3.0 (`d063c8c`), 1.4.0 (`495f48b`).
 
 | File | What to change |
 |------|----------------|
@@ -31,25 +63,16 @@ A release commit updates the version number across 3 files and verifies compose 
 | `frontend/package.json` | `"version": "X.Y.Z"` |
 | `frontend/package-lock.json` | `"version": "X.Y.Z"` in **two** places (root object and `packages[""]`) |
 
+> **Note:** `openhands/version.py` reads the version from `pyproject.toml` at runtime — no manual edit needed there.
+
 ### Compose Files (2 files)
 
-Both compose files should use `ghcr.io/openhands/agent-server` with the current SDK version or commit hash tag.
+Both compose files should use `ghcr.io/openhands/agent-server` with the current SDK version tag.
 
 | File | What to verify |
 |------|----------------|
 | `docker-compose.yml` | `AGENT_SERVER_IMAGE_REPOSITORY` defaults to agent-server, `AGENT_SERVER_IMAGE_TAG` is current |
 | `containers/dev/compose.yml` | Same — must use agent-server, not runtime |
-
-> **CI enforcement:** The `check-version-consistency.yml` workflow validates version consistency and compose file image references on every PR and push to main.
-
-### V0 Legacy Files (not part of V1 release)
-
-The following files reference `SANDBOX_RUNTIME_CONTAINER_IMAGE` / `runtime_container_image` for the V0 local-dev and Kubernetes runtime paths. These are **not** updated as part of a V1 release:
-
-- `Development.md` — example `SANDBOX_RUNTIME_CONTAINER_IMAGE` for local Docker runtime
-- `openhands/runtime/impl/kubernetes/README.md` — `runtime_container_image` config example
-
-These are still used by `docker_runtime.py`, `kubernetes_runtime.py`, `remote_runtime.py`, `modal_runtime.py`, and `daytona_runtime.py` but follow a separate update cadence.
 
 ### Release Workflow
 
@@ -58,13 +81,13 @@ These are still used by `docker_runtime.py`, `kubernetes_runtime.py`, `remote_ru
 ```bash
 grep -n "openhands-sdk\|openhands-agent-server\|openhands-tools" pyproject.toml
 grep -n "AGENT_SERVER_IMAGE" openhands/app_server/sandbox/sandbox_spec_service.py
+grep "AGENT_SERVER_IMAGE_TAG" docker-compose.yml containers/dev/compose.yml
 ```
 
-#### Step 2: Bump version numbers and Docker image tags
-
-Update the version in the 3 version files, then commit, tag, and create the SaaS branch:
+#### Step 2: Bump version numbers
 
 ```bash
+# Edit pyproject.toml, frontend/package.json, frontend/package-lock.json
 git add pyproject.toml frontend/package.json frontend/package-lock.json
 git commit -m "Release X.Y.Z"
 git tag X.Y.Z
@@ -78,72 +101,23 @@ The `ghcr-build.yml` workflow triggers on tag pushes and produces:
 - `ghcr.io/openhands/openhands:X.Y.Z`, `X.Y`, `X`, `latest`
 - `ghcr.io/openhands/runtime:X.Y.Z-nikolaik`, `X.Y-nikolaik`
 
-The tagging logic lives in `containers/build.sh` — when `GITHUB_REF_NAME` matches a semver pattern, it auto-generates major, major.minor, and `latest` tags.
+The tagging logic lives in `containers/build.sh` — when `GITHUB_REF_NAME` matches a semver pattern (`^[0-9]+\.[0-9]+\.[0-9]+$`), it auto-generates major, major.minor, and `latest` tags.
 
 ## Development: Pin SDK to an Unreleased Commit
 
-To test an SDK change that has not been released to PyPI, pin the three SDK packages (`openhands-sdk`, `openhands-agent-server`, `openhands-tools`) to a git commit or branch from the [software-agent-sdk](https://github.com/OpenHands/software-agent-sdk) monorepo. Each package lives in a subdirectory of that repo.
+For detailed examples of all pinning formats (commit, branch, uv-only), see `references/sdk-pinning-examples.md`.
 
-### Files to change
+### Files to change (3 manual + 3 lock files)
 
-Update **both** dependency sections in `pyproject.toml` (the PEP 508 `dependencies` array and the Poetry `[tool.poetry.dependencies]` section). If using `uv`, also add a `[tool.uv.sources]` section.
-
-### Pin to a specific commit
-
-Example from commit `169fb76` (pinning all 3 packages to SDK commit `100e9af`):
-
-**`dependencies` array (PEP 508 format):**
-```toml
-"openhands-agent-server @ git+https://github.com/OpenHands/software-agent-sdk.git@100e9af#subdirectory=openhands-agent-server",
-"openhands-sdk @ git+https://github.com/OpenHands/software-agent-sdk.git@100e9af#subdirectory=openhands-sdk",
-"openhands-tools @ git+https://github.com/OpenHands/software-agent-sdk.git@100e9af#subdirectory=openhands-tools",
-```
-
-**`[tool.poetry.dependencies]` (Poetry format):**
-```toml
-openhands-sdk = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "100e9af", subdirectory = "openhands-sdk" }
-openhands-agent-server = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "100e9af", subdirectory = "openhands-agent-server" }
-openhands-tools = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "100e9af", subdirectory = "openhands-tools" }
-```
-
-### Pin to a branch
-
-Example from commit `430ee1c` (pinning to branch `openhands/issue-2228-sdk-settings-schema`):
-
-**`[tool.poetry.dependencies]`:**
-```toml
-openhands-sdk = { git = "https://github.com/OpenHands/software-agent-sdk.git", branch = "openhands/issue-2228-sdk-settings-schema", subdirectory = "openhands-sdk" }
-```
-
-### Using `[tool.uv.sources]` override
-
-When only `uv` needs the override (keep PyPI versions in the main arrays), add a `[tool.uv.sources]` section. Example from commit `1daca49`:
-
-```toml
-[tool.uv.sources]
-openhands-sdk = { git = "https://github.com/OpenHands/software-agent-sdk.git", subdirectory = "openhands-sdk", rev = "4170cca" }
-openhands-agent-server = { git = "https://github.com/OpenHands/software-agent-sdk.git", subdirectory = "openhands-agent-server", rev = "4170cca" }
-openhands-tools = { git = "https://github.com/OpenHands/software-agent-sdk.git", subdirectory = "openhands-tools", rev = "4170cca" }
-```
-
-### Update the agent-server Docker image
-
-When testing an unreleased SDK commit, also update the agent-server Docker image tag in `openhands/app_server/sandbox/sandbox_spec_service.py` to match. The image is built by CI for every commit pushed to the SDK repo. Example from commit `fb37bbc`:
-
-```python
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:<short-commit-hash>-python'
-```
-
-### Regenerate lock files
-
-After changing `pyproject.toml`, regenerate the lock files:
-
-```bash
-poetry lock
-uv lock
-cd enterprise && poetry lock && cd ..
-```
+| File | What to change |
+|------|----------------|
+| `pyproject.toml` | Pin all 3 SDK packages in **both** `dependencies` and `[tool.poetry.dependencies]` |
+| `openhands/app_server/sandbox/sandbox_spec_service.py` | `AGENT_SERVER_IMAGE` — use the merge-commit SHA tag, NOT the head-commit SHA |
+| `docker-compose.yml` | `AGENT_SERVER_IMAGE_TAG` default (for local development) |
+| `poetry.lock` | Auto-regenerated via `poetry lock` |
+| `uv.lock` | Auto-regenerated via `uv lock` |
+| `enterprise/poetry.lock` | Auto-regenerated via `cd enterprise && poetry lock` |
 
 ### CI guard
 
-The existing `check-package-versions.yml` workflow blocks merging to `main` if `[tool.poetry.dependencies]` contains any `rev` fields. This ensures unreleased SDK pins do not accidentally ship in a release.
+The `check-package-versions.yml` workflow blocks merging to `main` if `[tool.poetry.dependencies]` contains any `rev` fields. This ensures unreleased SDK pins do not accidentally ship in a release.
