@@ -286,25 +286,25 @@ class SlackManager(Manager[SlackViewInterface]):
         ]
 
     def _build_repo_options(
-        self, repos: list[Repository], include_no_repo: bool = True
+        self, repos: list[Repository]
     ) -> list[dict[str, Any]]:
         """Build Slack options list from repositories.
 
+        Always includes a "No Repository" option at the top, followed by up to 99
+        repositories (Slack has a 100 option limit for external_select).
+
         Args:
             repos: List of Repository objects
-            include_no_repo: Whether to include "No Repository" option
 
         Returns:
             List of Slack option objects
         """
-        options: list[dict[str, Any]] = []
-        if include_no_repo:
-            options.append(
-                {
-                    'text': {'type': 'plain_text', 'text': 'No Repository'},
-                    'value': '-',
-                }
-            )
+        options: list[dict[str, Any]] = [
+            {
+                'text': {'type': 'plain_text', 'text': 'No Repository'},
+                'value': '-',
+            }
+        ]
         options.extend(
             {
                 'text': {
@@ -336,7 +336,7 @@ class SlackManager(Manager[SlackViewInterface]):
         repos = await self._search_repositories(
             user_auth, query=query, per_page=per_page
         )
-        return self._build_repo_options(repos, include_no_repo=True)
+        return self._build_repo_options(repos)
 
     async def receive_message(self, message: Message):
         """Process an incoming Slack message.
