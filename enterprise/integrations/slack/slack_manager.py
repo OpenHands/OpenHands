@@ -3,6 +3,7 @@ from typing import Any
 import jwt
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
+from integrations.slack.slack_errors import SlackError, SlackErrorCode
 from integrations.slack.slack_types import (
     SlackMessageView,
     SlackViewInterface,
@@ -12,7 +13,6 @@ from integrations.slack.slack_view import (
     SlackFactory,
     SlackNewConversationFromRepoFormView,
     SlackNewConversationView,
-    SlackUnkownUserView,
     SlackUpdateExistingConversationView,
 )
 from integrations.utils import (
@@ -303,42 +303,112 @@ class SlackManager(Manager[SlackViewInterface]):
         return options
 
     async def receive_message(self, message: Message):
+        """Process an incoming Slack message.
+
+        This is the single entry point for all Slack message processing.
+        All SlackErrors raised during processing are caught and handled here,
+        sending appropriate error messages to the user.
+        """
         self._confirm_incoming_source_type(message)
 
+        try:
+            slack_view = await self._process_message(message)
+            if slack_view and await self.is_job_requested(message, slack_view):
+                await self.start_job(slack_view)
+
+        except SlackError as e:
+            await self._handle_slack_error(e, message)
+
+        except Exception as e:
+            logger.exception(
+                'slack_unexpected_error',
+                extra={'error': str(e), **message.message},
+            )
+            await self._handle_slack_error(
+                SlackError(SlackErrorCode.UNEXPECTED_ERROR),
+                message,
+            )
+
+    async def _process_message(self, message: Message) -> SlackViewInterface | None:
+        """Process message and return view if authenticated, or raise SlackError.
+
+        Returns:
+            SlackViewInterface if user is authenticated and ready to proceed,
+            None if processing should stop (but no error).
+
+        Raises:
+            SlackError: If user is not authenticated or other recoverable error.
+        """
         slack_user, saas_user_auth = await self.authenticate_user(
             slack_user_id=message.message['slack_user_id']
         )
 
-        try:
-            slack_view = await SlackFactory.create_slack_view_from_payload(
-                message, slack_user, saas_user_auth
+        slack_view = await SlackFactory.create_slack_view_from_payload(
+            message, slack_user, saas_user_auth
+        )
+
+        # Check if this is an unauthenticated user (SlackMessageView but not SlackViewInterface)
+        if not isinstance(slack_view, SlackViewInterface):
+            login_link = self._generate_login_link_with_state(message)
+            raise SlackError(
+                SlackErrorCode.USER_NOT_AUTHENTICATED,
+                message_kwargs={'login_link': login_link},
+                log_context=slack_view.to_log_context(),
             )
-        except Exception as e:
+
+        return slack_view
+
+    def _generate_login_link_with_state(self, message: Message) -> str:
+        """Generate OAuth login link with message state encoded."""
+        jwt_secret = config.jwt_secret
+        if not jwt_secret:
+            raise ValueError('Must configure jwt_secret')
+        state = jwt.encode(
+            message.message, jwt_secret.get_secret_value(), algorithm='HS256'
+        )
+        return authorize_url_generator.generate(state)
+
+    async def _handle_slack_error(self, error: SlackError, message: Message) -> None:
+        """Handle a SlackError by logging and sending user message.
+
+        This is the centralized error handler for all SlackErrors.
+        """
+        # Create a minimal view for sending the error message
+        view = await SlackMessageView.from_payload(
+            message.message, self._get_slack_team_store()
+        )
+
+        if not view:
             logger.error(
-                f'[Slack]: Failed to create slack view: {e}',
-                exc_info=True,
-                stack_info=True,
+                'slack_error_no_view',
+                extra={
+                    'error_code': error.code.value,
+                    **error.log_context,
+                },
             )
             return
 
-        if isinstance(slack_view, SlackUnkownUserView):
-            jwt_secret = config.jwt_secret
-            if not jwt_secret:
-                raise ValueError('Must configure jwt_secret')
-            state = jwt.encode(
-                message.message, jwt_secret.get_secret_value(), algorithm='HS256'
-            )
-            link = authorize_url_generator.generate(state)
-            msg = self.login_link.format(link)
+        # Log the error
+        log_level = (
+            'exception' if error.code == SlackErrorCode.UNEXPECTED_ERROR else 'warning'
+        )
+        log_data = {
+            'error_code': error.code.value,
+            **view.to_log_context(),
+            **error.log_context,
+        }
+        getattr(logger, log_level)(
+            f'slack_error_{error.code.name.lower()}', extra=log_data
+        )
 
-            logger.info('slack_not_yet_authenticated')
-            await self.send_message(msg, slack_view, ephemeral=True)
-            return
+        # Send user-facing message
+        await self.send_message(error.get_user_message(), view, ephemeral=True)
 
-        if not await self.is_job_requested(message, slack_view):
-            return
+    def _get_slack_team_store(self):
+        """Get the SlackTeamStore instance (lazy import to avoid circular deps)."""
+        from storage.slack_team_store import SlackTeamStore
 
-        await self.start_job(slack_view)
+        return SlackTeamStore.get_instance()
 
     async def send_message(
         self,
@@ -378,62 +448,6 @@ class SlackManager(Manager[SlackViewInterface]):
                 markdown_text=message,
                 thread_ts=slack_view.message_ts,
             )
-
-    @staticmethod
-    async def send_ephemeral_message(
-        bot_token: str,
-        channel_id: str,
-        user_id: str,
-        message: str,
-        thread_ts: str | None = None,
-    ) -> bool:
-        """Send an ephemeral message to a Slack user without requiring a SlackView.
-
-        This is a standalone helper method for sending ephemeral messages when
-        a full SlackView object is not available (e.g., in route handlers).
-
-        Args:
-            bot_token: The Slack bot token for the team.
-            channel_id: The Slack channel ID.
-            user_id: The Slack user ID to send the message to.
-            message: The message text to send.
-            thread_ts: Optional thread timestamp for threaded messages.
-
-        Returns:
-            True if the message was sent successfully, False otherwise.
-        """
-        try:
-            client = AsyncWebClient(token=bot_token)
-            await client.chat_postEphemeral(
-                channel=channel_id,
-                user=user_id,
-                text=message,
-                thread_ts=thread_ts,
-            )
-            return True
-        except Exception as e:
-            logger.error(
-                'slack_send_ephemeral_message_failed',
-                extra={
-                    'channel_id': channel_id,
-                    'user_id': user_id,
-                    'error': str(e),
-                },
-                exc_info=True,
-            )
-            return False
-
-    def generate_login_link(self, state: str = '') -> str:
-        """Generate the OAuth login link for Slack authentication.
-
-        Args:
-            state: Optional state parameter for the OAuth flow.
-
-        Returns:
-            The login link message with embedded OAuth URL.
-        """
-        link = authorize_url_generator.generate(state)
-        return self.login_link.format(link)
 
     async def _try_verify_inferred_repo(
         self, slack_view: SlackNewConversationView
@@ -523,25 +537,24 @@ class SlackManager(Manager[SlackViewInterface]):
             2. If a repo can be inferred and verified from the message
             3. Otherwise shows the repo selection form
 
+        Args:
+            slack_view: Must be a SlackViewType (authenticated view that can start jobs)
+
         Returns:
             True if job should start, False if waiting for user input
         """
-
         # Check if view type allows immediate start
         if isinstance(slack_view, SlackUpdateExistingConversationView):
             return True
         if isinstance(slack_view, SlackNewConversationFromRepoFormView):
             return True
-        if isinstance(slack_view, SlackNewConversationFromRepoFormView):
-            return True
 
         # For new conversations, try to infer/verify repo or show selection form
-        if isinstance(
-            slack_view, SlackNewConversationView
-        ) and await self._try_verify_inferred_repo(slack_view):
-            return True
+        if isinstance(slack_view, SlackNewConversationView):
+            if await self._try_verify_inferred_repo(slack_view):
+                return True
+            await self._show_repo_selection_form(slack_view)
 
-        await self._show_repo_selection_form(slack_view)
         return False
 
     async def start_job(self, slack_view: SlackViewInterface) -> None:

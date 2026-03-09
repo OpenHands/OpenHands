@@ -11,7 +11,9 @@ from fastapi.responses import (
     RedirectResponse,
 )
 from integrations.models import Message, SourceType
+from integrations.slack.slack_errors import SlackError, SlackErrorCode
 from integrations.slack.slack_manager import SlackManager
+from integrations.slack.slack_types import SlackMessageView
 from integrations.utils import (
     HOST_URL,
 )
@@ -37,7 +39,7 @@ from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
 
-from openhands.integrations.service_types import ProviderType
+from openhands.integrations.service_types import ProviderTimeoutError, ProviderType
 from openhands.server.shared import config, sio
 
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
@@ -373,16 +375,16 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     slack_user, saas_user_auth = await slack_manager.authenticate_user(slack_user_id)
 
     if not slack_user or not saas_user_auth:
-        logger.warning(
-            f'slack_on_options_load: User not authenticated: {slack_user_id}'
-        )
         # Send ephemeral message asking user to link their account
         background_tasks.add_task(
-            _send_account_linking_message,
+            _send_slack_error,
             payload,
-            slack_user_id,
+            SlackError(
+                SlackErrorCode.USER_NOT_AUTHENTICATED,
+                message_kwargs={'login_link': _generate_login_link()},
+                log_context={'slack_user_id': slack_user_id},
+            ),
         )
-        # Return empty options
         return JSONResponse({'options': []})
 
     try:
@@ -408,12 +410,28 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
 
         return JSONResponse({'options': options})
 
-    except Exception as e:
-        logger.error(
-            f'slack_on_options_load: Error searching repositories: {e}',
-            exc_info=True,
+    except ProviderTimeoutError as e:
+        # Handle provider timeout with user notification
+        background_tasks.add_task(
+            _send_slack_error,
+            payload,
+            SlackError(
+                SlackErrorCode.PROVIDER_TIMEOUT,
+                log_context={'slack_user_id': slack_user_id, 'error': str(e)},
+            ),
         )
-        # Return empty options - Slack will display its own error UI
+        return JSONResponse({'options': []})
+
+    except Exception as e:
+        logger.exception(
+            'slack_options_load_error',
+            extra={
+                'slack_user_id': slack_user_id,
+                'search_value': search_value,
+                'error': str(e),
+            },
+        )
+        # Return empty options - Slack will display "Nothing could be found"
         return JSONResponse({'options': []})
 
 
@@ -465,46 +483,36 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
     except Exception as e:
         redis_error = True
         logger.error(
-            'slack_on_form_interaction: Redis error retrieving user_msg',
+            'slack_form_interaction_redis_error',
             extra={
                 'message_ts': message_ts,
                 'thread_ts': thread_ts,
                 'slack_user_id': slack_user_id,
+                'slack_team_id': team_id,
                 'error': str(e),
             },
             exc_info=True,
         )
 
     if not user_msg:
-        if not redis_error:
-            logger.error(
-                'slack_on_form_interaction: user_msg not found in Redis (likely expired)',
-                extra={
-                    'message_ts': message_ts,
-                    'thread_ts': thread_ts,
-                    'slack_user_id': slack_user_id,
-                },
-            )
-        # Send appropriate user-friendly message to Slack
-        bot_token = await slack_team_store.get_team_bot_token(team_id)
-        if bot_token:
-            if redis_error:
-                error_text = (
-                    '⚠️ Something went wrong on our end. '
-                    'Please try again in a few moments.'
-                )
-            else:
-                error_text = (
-                    '⏰ Your session has expired. '
-                    'Please mention me again with your request to start a new conversation.'
-                )
-            await SlackManager.send_ephemeral_message(
-                bot_token=bot_token,
-                channel_id=channel_id,
-                user_id=slack_user_id,
-                message=error_text,
-                thread_ts=thread_ts,
-            )
+        # Send error message to user
+        form_payload = {
+            'team_id': team_id,
+            'channel_id': channel_id,
+            'slack_user_id': slack_user_id,
+            'message_ts': message_ts,
+            'thread_ts': thread_ts,
+        }
+        error_code = (
+            SlackErrorCode.REDIS_RETRIEVE_FAILED
+            if redis_error
+            else SlackErrorCode.SESSION_EXPIRED
+        )
+        background_tasks.add_task(
+            _send_slack_error,
+            form_payload,
+            SlackError(error_code, log_context={'slack_user_id': slack_user_id}),
+        )
         return JSONResponse({'success': True})
 
     payload = {
@@ -526,55 +534,44 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
     return JSONResponse({'success': True})
 
 
-async def _send_account_linking_message(payload: dict, slack_user_id: str):
-    """Send an ephemeral message asking the user to link their Slack account.
+async def _send_slack_error(payload: dict, error: SlackError) -> None:
+    """Send an ephemeral error message to a Slack user.
 
-    This is called when a user tries to interact with the repo selector dropdown
-    but hasn't linked their Slack account to OpenHands yet.
+    This is the single helper for sending error messages from routes.
+    It creates a minimal view from the payload and sends the error message.
+
+    Args:
+        payload: The Slack payload containing channel/user info
+        error: The SlackError to send to the user
     """
-    # Extract team and channel info from block_suggestion payload
-    team_id = payload.get('team', {}).get('id')
-    # For block_suggestion payloads, channel is in the container
-    channel_id = payload.get('container', {}).get('channel_id')
-    # Fallback to channel key if container doesn't have it
-    if not channel_id:
-        channel_id = payload.get('channel', {}).get('id')
+    view = await SlackMessageView.from_payload(payload, slack_team_store)
 
-    if not team_id or not channel_id:
+    if not view:
         logger.warning(
-            'slack_send_account_linking_message: Missing team_id or channel_id',
+            'slack_error_view_creation_failed',
             extra={
-                'team_id': team_id,
-                'channel_id': channel_id,
+                'error_code': error.code.value,
                 'payload_keys': list(payload.keys()),
+                **error.log_context,
             },
         )
         return
 
-    bot_token = await slack_team_store.get_team_bot_token(team_id)
-    if not bot_token:
-        logger.warning(
-            f'slack_send_account_linking_message: No bot token for team {team_id}'
-        )
-        return
+    # Log the error
+    log_data = {
+        'error_code': error.code.value,
+        **view.to_log_context(),
+        **error.log_context,
+    }
+    logger.warning(f'slack_error_{error.code.name.lower()}', extra=log_data)
 
-    msg = slack_manager.generate_login_link(state='')
-    success = await SlackManager.send_ephemeral_message(
-        bot_token=bot_token,
-        channel_id=channel_id,
-        user_id=slack_user_id,
-        message=msg,
-    )
+    # Send user-facing message
+    await slack_manager.send_message(error.get_user_message(), view, ephemeral=True)
 
-    if success:
-        logger.info(
-            'slack_account_linking_message_sent',
-            extra={
-                'slack_user_id': slack_user_id,
-                'team_id': team_id,
-                'channel_id': channel_id,
-            },
-        )
+
+def _generate_login_link(state: str = '') -> str:
+    """Generate the OAuth login link for Slack authentication."""
+    return authorize_url_generator.generate(state)
 
 
 def _html_response(title: str, description: str, status_code: int) -> HTMLResponse:
