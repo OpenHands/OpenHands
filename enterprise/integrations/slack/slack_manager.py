@@ -48,12 +48,12 @@ from openhands.server.user_auth.user_auth import UserAuth
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
-    scopes=["app_mentions:read", "chat:write"],
-    user_scopes=["search:read"],
+    scopes=['app_mentions:read', 'chat:write'],
+    user_scopes=['search:read'],
 )
 
 # Key prefix for storing user messages in Redis during repo selection flow
-SLACK_USER_MSG_KEY_PREFIX = "slack_user_msg"
+SLACK_USER_MSG_KEY_PREFIX = 'slack_user_msg'
 # Expiration time for stored user messages (5 minutes)
 # Arbitrary timeout based on typical user attention span; may be tuned based on feedback
 SLACK_USER_MSG_EXPIRATION = 300
@@ -63,16 +63,16 @@ class SlackManager(Manager[SlackViewInterface]):
     def __init__(self, token_manager):
         self.token_manager = token_manager
         self.login_link = (
-            "User has not yet authenticated: [Click here to Login to OpenHands]({})."
+            'User has not yet authenticated: [Click here to Login to OpenHands]({}).'
         )
 
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + "slack")
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'slack')
         )
 
     def _confirm_incoming_source_type(self, message: Message):
         if message.source != SourceType.SLACK:
-            raise ValueError(f"Unexpected message source {message.source}")
+            raise ValueError(f'Unexpected message source {message.source}')
 
     async def authenticate_user(
         self, slack_user_id: str
@@ -113,27 +113,27 @@ class SlackManager(Manager[SlackViewInterface]):
         Returns:
             True if the message was stored successfully, False otherwise
         """
-        key = f"{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}"
+        key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
             redis = sio.manager.redis
             await redis.set(key, user_msg, ex=SLACK_USER_MSG_EXPIRATION)
             logger.info(
-                "slack_stored_user_msg",
+                'slack_stored_user_msg',
                 extra={
-                    "message_ts": message_ts,
-                    "thread_ts": thread_ts,
-                    "key": key,
+                    'message_ts': message_ts,
+                    'thread_ts': thread_ts,
+                    'key': key,
                 },
             )
             return True
         except Exception as e:
             logger.error(
-                "slack_store_user_msg_failed",
+                'slack_store_user_msg_failed',
                 extra={
-                    "message_ts": message_ts,
-                    "thread_ts": thread_ts,
-                    "key": key,
-                    "error": str(e),
+                    'message_ts': message_ts,
+                    'thread_ts': thread_ts,
+                    'key': key,
+                    'error': str(e),
                 },
             )
             return False
@@ -148,36 +148,48 @@ class SlackManager(Manager[SlackViewInterface]):
             thread_ts: The thread timestamp (if in a thread)
 
         Returns:
-            The stored user message, or None if not found
+            The stored user message, or None if not found or on error
         """
-        key = f"{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}"
-        redis = sio.manager.redis
-        user_msg = await redis.get(key)
-        if user_msg:
-            # Redis returns bytes, decode to string
-            if isinstance(user_msg, bytes):
-                user_msg = user_msg.decode("utf-8")
-            logger.info(
-                "slack_retrieved_user_msg",
+        key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
+        try:
+            redis = sio.manager.redis
+            user_msg = await redis.get(key)
+            if user_msg:
+                # Redis returns bytes, decode to string
+                if isinstance(user_msg, bytes):
+                    user_msg = user_msg.decode('utf-8')
+                logger.info(
+                    'slack_retrieved_user_msg',
+                    extra={
+                        'message_ts': message_ts,
+                        'thread_ts': thread_ts,
+                        'key': key,
+                    },
+                )
+            else:
+                logger.warning(
+                    'slack_user_msg_not_found',
+                    extra={
+                        'message_ts': message_ts,
+                        'thread_ts': thread_ts,
+                        'key': key,
+                    },
+                )
+            return user_msg
+        except Exception as e:
+            logger.error(
+                'slack_retrieve_user_msg_failed',
                 extra={
-                    "message_ts": message_ts,
-                    "thread_ts": thread_ts,
-                    "key": key,
+                    'message_ts': message_ts,
+                    'thread_ts': thread_ts,
+                    'key': key,
+                    'error': str(e),
                 },
             )
-        else:
-            logger.warning(
-                "slack_user_msg_not_found",
-                extra={
-                    "message_ts": message_ts,
-                    "thread_ts": thread_ts,
-                    "key": key,
-                },
-            )
-        return user_msg
+            return None
 
     async def _search_repositories(
-        self, user_auth: UserAuth, query: str = "", per_page: int = 100
+        self, user_auth: UserAuth, query: str = '', per_page: int = 100
     ) -> list[Repository]:
         """Search repositories for a user with optional query filtering.
 
@@ -203,8 +215,8 @@ class SlackManager(Manager[SlackViewInterface]):
             selected_provider=None,
             query=query,
             per_page=per_page,
-            sort="pushed",
-            order="desc",
+            sort='pushed',
+            order='desc',
             app_mode=server_config.app_mode,
         )
         return repos
@@ -228,31 +240,31 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         return [
             {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Choose a repository",
-                    "emoji": True,
+                'type': 'header',
+                'text': {
+                    'type': 'plain_text',
+                    'text': 'Choose a repository',
+                    'emoji': True,
                 },
             },
             {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "Type to search your repositories:",
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': 'Type to search your repositories:',
                 },
             },
             {
-                "type": "actions",
-                "elements": [
+                'type': 'actions',
+                'elements': [
                     {
-                        "type": "external_select",
-                        "action_id": f"repository_select:{message_ts}:{thread_ts}",
-                        "placeholder": {
-                            "type": "plain_text",
-                            "text": "Search repositories...",
+                        'type': 'external_select',
+                        'action_id': f'repository_select:{message_ts}:{thread_ts}',
+                        'placeholder': {
+                            'type': 'plain_text',
+                            'text': 'Search repositories...',
                         },
-                        "min_query_length": 0,  # Load initial options immediately
+                        'min_query_length': 0,  # Load initial options immediately
                     }
                 ],
             },
@@ -274,17 +286,17 @@ class SlackManager(Manager[SlackViewInterface]):
         if include_no_repo:
             options.append(
                 {
-                    "text": {"type": "plain_text", "text": "No Repository"},
-                    "value": "-",
+                    'text': {'type': 'plain_text', 'text': 'No Repository'},
+                    'value': '-',
                 }
             )
         options.extend(
             {
-                "text": {
-                    "type": "plain_text",
-                    "text": repo.full_name[:75],  # Slack has 75 char limit for text
+                'text': {
+                    'type': 'plain_text',
+                    'text': repo.full_name[:75],  # Slack has 75 char limit for text
                 },
-                "value": repo.full_name,
+                'value': repo.full_name,
             }
             for repo in repos[:99]  # Leave room for "No Repository" option
         )
@@ -294,7 +306,7 @@ class SlackManager(Manager[SlackViewInterface]):
         self._confirm_incoming_source_type(message)
 
         slack_user, saas_user_auth = await self.authenticate_user(
-            slack_user_id=message.message["slack_user_id"]
+            slack_user_id=message.message['slack_user_id']
         )
 
         try:
@@ -303,7 +315,7 @@ class SlackManager(Manager[SlackViewInterface]):
             )
         except Exception as e:
             logger.error(
-                f"[Slack]: Failed to create slack view: {e}",
+                f'[Slack]: Failed to create slack view: {e}',
                 exc_info=True,
                 stack_info=True,
             )
@@ -312,14 +324,14 @@ class SlackManager(Manager[SlackViewInterface]):
         if isinstance(slack_view, SlackUnkownUserView):
             jwt_secret = config.jwt_secret
             if not jwt_secret:
-                raise ValueError("Must configure jwt_secret")
+                raise ValueError('Must configure jwt_secret')
             state = jwt.encode(
-                message.message, jwt_secret.get_secret_value(), algorithm="HS256"
+                message.message, jwt_secret.get_secret_value(), algorithm='HS256'
             )
             link = authorize_url_generator.generate(state)
             msg = self.login_link.format(link)
 
-            logger.info("slack_not_yet_authenticated")
+            logger.info('slack_not_yet_authenticated')
             await self.send_message(msg, slack_view, ephemeral=True)
             return
 
@@ -357,8 +369,8 @@ class SlackManager(Manager[SlackViewInterface]):
                 channel=slack_view.channel_id,
                 user=slack_view.slack_user_id,
                 thread_ts=slack_view.thread_ts,
-                text=message["text"],
-                blocks=message["blocks"],
+                text=message['text'],
+                blocks=message['blocks'],
             )
         else:
             await client.chat_postMessage(
@@ -401,17 +413,17 @@ class SlackManager(Manager[SlackViewInterface]):
             return True
         except Exception as e:
             logger.error(
-                "slack_send_ephemeral_message_failed",
+                'slack_send_ephemeral_message_failed',
                 extra={
-                    "channel_id": channel_id,
-                    "user_id": user_id,
-                    "error": str(e),
+                    'channel_id': channel_id,
+                    'user_id': user_id,
+                    'error': str(e),
                 },
                 exc_info=True,
             )
             return False
 
-    def generate_login_link(self, state: str = "") -> str:
+    def generate_login_link(self, state: str = '') -> str:
         """Generate the OAuth login link for Slack authentication.
 
         Args:
@@ -455,7 +467,7 @@ class SlackManager(Manager[SlackViewInterface]):
         inferred_repo = inferred_repos[0]
         logger.info(
             f'[Slack] Verifying inferred repo "{inferred_repo}" '
-            f"for user {user.slack_display_name} (id={slack_view.saas_user_auth.get_user_id()})"
+            f'for user {user.slack_display_name} (id={slack_view.saas_user_auth.get_user_id()})'
         )
 
         try:
@@ -476,7 +488,7 @@ class SlackManager(Manager[SlackViewInterface]):
         except (AuthenticationError, ProviderTimeoutError) as e:
             logger.info(
                 f'[Slack] Could not verify repo "{inferred_repo}": {e}. '
-                f"Showing repository selector."
+                f'Showing repository selector.'
             )
             return False
 
@@ -490,12 +502,12 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         user = slack_view.slack_to_openhands_user
         logger.info(
-            "render_repository_selector",
+            'render_repository_selector',
             extra={
-                "slack_user_id": user.slack_user_id,
-                "keycloak_user_id": user.keycloak_user_id,
-                "message_ts": slack_view.message_ts,
-                "thread_ts": slack_view.thread_ts,
+                'slack_user_id': user.slack_user_id,
+                'keycloak_user_id': user.keycloak_user_id,
+                'message_ts': slack_view.message_ts,
+                'thread_ts': slack_view.thread_ts,
             },
         )
 
@@ -504,14 +516,14 @@ class SlackManager(Manager[SlackViewInterface]):
         )
         if not store_success:
             error_msg = (
-                "Sorry, we are experiencing temporary issues. Please try again later."
+                'Sorry, we are experiencing temporary issues. Please try again later.'
             )
             await self.send_message(error_msg, slack_view, ephemeral=True)
             return False
 
         repo_selection_msg = {
-            "text": "Choose a Repository:",
-            "blocks": self._generate_repo_selection_form(
+            'text': 'Choose a Repository:',
+            'blocks': self._generate_repo_selection_form(
                 slack_view.message_ts, slack_view.thread_ts
             ),
         }
@@ -555,15 +567,15 @@ class SlackManager(Manager[SlackViewInterface]):
             user_info = slack_view.slack_to_openhands_user
             try:
                 logger.info(
-                    f"[Slack] Starting job for user {user_info.slack_display_name} (id={user_info.slack_user_id})",
-                    extra={"keyloak_user_id": user_info.keycloak_user_id},
+                    f'[Slack] Starting job for user {user_info.slack_display_name} (id={user_info.slack_user_id})',
+                    extra={'keyloak_user_id': user_info.keycloak_user_id},
                 )
                 conversation_id = await slack_view.create_or_update_conversation(
                     self.jinja_env
                 )
 
                 logger.info(
-                    f"[Slack] Created conversation {conversation_id} for user {user_info.slack_display_name}"
+                    f'[Slack] Created conversation {conversation_id} for user {user_info.slack_display_name}'
                 )
 
                 # Only add SlackCallbackProcessor for new conversations (not updates) and non-v1 conversations
@@ -587,36 +599,36 @@ class SlackManager(Manager[SlackViewInterface]):
                     register_callback_processor(conversation_id, processor)
 
                     logger.info(
-                        f"[Slack] Created callback processor for conversation {conversation_id}"
+                        f'[Slack] Created callback processor for conversation {conversation_id}'
                     )
                 elif isinstance(slack_view, SlackUpdateExistingConversationView):
                     logger.info(
-                        f"[Slack] Skipping callback processor for existing conversation update {conversation_id}"
+                        f'[Slack] Skipping callback processor for existing conversation update {conversation_id}'
                     )
                 elif slack_view.v1_enabled:
                     logger.info(
-                        f"[Slack] Skipping callback processor for v1 conversation {conversation_id}"
+                        f'[Slack] Skipping callback processor for v1 conversation {conversation_id}'
                     )
 
                 msg_info = slack_view.get_response_msg()
 
             except MissingSettingsError as e:
                 logger.warning(
-                    f"[Slack] Missing settings error for user {user_info.slack_display_name}: {str(e)}"
+                    f'[Slack] Missing settings error for user {user_info.slack_display_name}: {str(e)}'
                 )
 
-                msg_info = f"{user_info.slack_display_name} please re-login into [OpenHands Cloud]({HOST_URL}) before starting a job."
+                msg_info = f'{user_info.slack_display_name} please re-login into [OpenHands Cloud]({HOST_URL}) before starting a job.'
 
             except LLMAuthenticationError as e:
                 logger.warning(
-                    f"[Slack] LLM authentication error for user {user_info.slack_display_name}: {str(e)}"
+                    f'[Slack] LLM authentication error for user {user_info.slack_display_name}: {str(e)}'
                 )
 
-                msg_info = f"@{user_info.slack_display_name} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job."
+                msg_info = f'@{user_info.slack_display_name} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
 
             except SessionExpiredError as e:
                 logger.warning(
-                    f"[Slack] Session expired for user {user_info.slack_display_name}: {str(e)}"
+                    f'[Slack] Session expired for user {user_info.slack_display_name}: {str(e)}'
                 )
 
                 msg_info = get_session_expired_message(user_info.slack_display_name)
@@ -627,7 +639,7 @@ class SlackManager(Manager[SlackViewInterface]):
             await self.send_message(msg_info, slack_view)
 
         except Exception:
-            logger.exception("[Slack]: Error starting job")
+            logger.exception('[Slack]: Error starting job')
             await self.send_message(
-                "Uh oh! There was an unexpected error starting the job :(", slack_view
+                'Uh oh! There was an unexpected error starting the job :(', slack_view
             )

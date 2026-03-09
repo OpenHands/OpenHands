@@ -3,9 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import BackgroundTasks
-from openhands.integrations.service_types import ProviderTimeoutError, ProviderType, Repository
-from openhands.server.user_auth.user_auth import UserAuth
-
 from integrations.slack.slack_manager import (
     SLACK_USER_MSG_EXPIRATION,
     SLACK_USER_MSG_KEY_PREFIX,
@@ -13,6 +10,13 @@ from integrations.slack.slack_manager import (
 )
 from integrations.slack.slack_view import SlackNewConversationView
 from storage.slack_user import SlackUser
+
+from openhands.integrations.service_types import (
+    ProviderTimeoutError,
+    ProviderType,
+    Repository,
+)
+from openhands.server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture
@@ -68,7 +72,10 @@ def slack_new_conversation_view(mock_slack_user, mock_user_auth):
     'message,expected',
     [
         ('OpenHands/Openhands', ['OpenHands/Openhands']),
-        ('help me with repo', []),  # Updated: this pattern is not matched by infer_repo_from_message
+        (
+            'help me with repo',
+            [],
+        ),  # Updated: this pattern is not matched by infer_repo_from_message
         ('use hello world', []),
     ],
 )
@@ -320,7 +327,9 @@ class TestSearchRepositories:
 
         # Setup: Mock provider handler to return real repos
         mock_provider_handler = MagicMock()
-        mock_provider_handler.search_repositories = AsyncMock(return_value=expected_repos)
+        mock_provider_handler.search_repositories = AsyncMock(
+            return_value=expected_repos
+        )
         mock_provider_handler_class.return_value = mock_provider_handler
 
         # Setup: Mock user_auth to return valid tokens
@@ -410,7 +419,9 @@ class TestSearchRepositories:
         search_results = await slack_manager._search_repositories(
             mock_user_auth, query='', per_page=100
         )
-        options = slack_manager._build_repo_options(search_results, include_no_repo=True)
+        options = slack_manager._build_repo_options(
+            search_results, include_no_repo=True
+        )
 
         # Verify: Options are correctly built from search results
         assert len(options) == 4  # "No Repository" + 3 repos
@@ -445,7 +456,9 @@ class TestSearchRepositories:
         search_results = await slack_manager._search_repositories(
             mock_user_auth, query='nonexistent-repo', per_page=100
         )
-        options = slack_manager._build_repo_options(search_results, include_no_repo=True)
+        options = slack_manager._build_repo_options(
+            search_results, include_no_repo=True
+        )
 
         # Verify: Only "No Repository" option
         assert len(options) == 1
@@ -456,45 +469,85 @@ class TestSearchRepositories:
 class TestUserMsgStorage:
     """Test the user message storage for repo selection form flow."""
 
+    @pytest.mark.parametrize(
+        'message_ts,thread_ts,user_msg',
+        [
+            (
+                '1234567890.123456',
+                '1234567890.111111',
+                'Hello OpenHands, help me with my code',
+            ),
+            ('1234567890.123456', None, 'Hello OpenHands'),
+            ('9999999999.999999', '8888888888.888888', 'Another test message'),
+        ],
+        ids=['with_thread', 'without_thread', 'different_timestamps'],
+    )
     @patch('integrations.slack.slack_manager.sio')
-    async def test_store_user_msg_for_form(self, mock_sio, slack_manager):
-        """Test storing user message in Redis."""
+    async def test_store_user_msg_for_form(
+        self, mock_sio, slack_manager, message_ts, thread_ts, user_msg
+    ):
+        """Test storing user message in Redis with various timestamp combinations."""
         mock_redis = AsyncMock()
         mock_sio.manager.redis = mock_redis
 
-        message_ts = '1234567890.123456'
-        thread_ts = '1234567890.111111'
-        user_msg = 'Hello OpenHands, help me with my code'
-
-        await slack_manager.store_user_msg_for_form(message_ts, thread_ts, user_msg)
+        result = await slack_manager.store_user_msg_for_form(
+            message_ts, thread_ts, user_msg
+        )
 
         expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         mock_redis.set.assert_called_once_with(
             expected_key, user_msg, ex=SLACK_USER_MSG_EXPIRATION
         )
+        assert result is True
 
+    @pytest.mark.parametrize(
+        'exception_type,exception_msg',
+        [
+            (ConnectionError, 'Connection refused'),
+            (TimeoutError, 'Redis operation timed out'),
+            (Exception, 'Redis internal error'),
+        ],
+        ids=['connection_error', 'timeout_error', 'generic_exception'],
+    )
     @patch('integrations.slack.slack_manager.sio')
-    async def test_store_user_msg_for_form_no_thread(self, mock_sio, slack_manager):
-        """Test storing user message when there's no thread."""
+    async def test_store_user_msg_for_form_redis_failure(
+        self, mock_sio, slack_manager, exception_type, exception_msg
+    ):
+        """Test that Redis failures during store are handled gracefully."""
         mock_redis = AsyncMock()
+        mock_redis.set.side_effect = exception_type(exception_msg)
         mock_sio.manager.redis = mock_redis
 
         message_ts = '1234567890.123456'
-        thread_ts = None
+        thread_ts = '1234567890.111111'
         user_msg = 'Hello OpenHands'
 
-        await slack_manager.store_user_msg_for_form(message_ts, thread_ts, user_msg)
-
-        expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
-        mock_redis.set.assert_called_once_with(
-            expected_key, user_msg, ex=SLACK_USER_MSG_EXPIRATION
+        result = await slack_manager.store_user_msg_for_form(
+            message_ts, thread_ts, user_msg
         )
 
+        # Should return False when Redis fails
+        assert result is False
+
+    @pytest.mark.parametrize(
+        'redis_return_value,expected_result',
+        [
+            (
+                b'Hello OpenHands, help me with my code',
+                'Hello OpenHands, help me with my code',
+            ),
+            ('Hello OpenHands', 'Hello OpenHands'),  # String instead of bytes
+            (None, None),  # Key not found
+        ],
+        ids=['bytes_response', 'string_response', 'key_not_found'],
+    )
     @patch('integrations.slack.slack_manager.sio')
-    async def test_retrieve_user_msg_for_form_found(self, mock_sio, slack_manager):
-        """Test retrieving user message from Redis when it exists."""
+    async def test_retrieve_user_msg_for_form(
+        self, mock_sio, slack_manager, redis_return_value, expected_result
+    ):
+        """Test retrieving user message from Redis with various response types."""
         mock_redis = AsyncMock()
-        mock_redis.get.return_value = b'Hello OpenHands, help me with my code'
+        mock_redis.get.return_value = redis_return_value
         mock_sio.manager.redis = mock_redis
 
         message_ts = '1234567890.123456'
@@ -504,39 +557,33 @@ class TestUserMsgStorage:
 
         expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         mock_redis.get.assert_called_once_with(expected_key)
-        assert result == 'Hello OpenHands, help me with my code'
+        assert result == expected_result
 
+    @pytest.mark.parametrize(
+        'exception_type,exception_msg',
+        [
+            (ConnectionError, 'Connection refused'),
+            (TimeoutError, 'Redis operation timed out'),
+            (Exception, 'Redis internal error'),
+        ],
+        ids=['connection_error', 'timeout_error', 'generic_exception'],
+    )
     @patch('integrations.slack.slack_manager.sio')
-    async def test_retrieve_user_msg_for_form_not_found(self, mock_sio, slack_manager):
-        """Test retrieving user message from Redis when it doesn't exist."""
-        mock_redis = AsyncMock()
-        mock_redis.get.return_value = None
-        mock_sio.manager.redis = mock_redis
-
-        message_ts = '1234567890.123456'
-        thread_ts = None
-
-        result = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
-
-        expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
-        mock_redis.get.assert_called_once_with(expected_key)
-        assert result is None
-
-    @patch('integrations.slack.slack_manager.sio')
-    async def test_retrieve_user_msg_for_form_string_response(
-        self, mock_sio, slack_manager
+    async def test_retrieve_user_msg_for_form_redis_failure(
+        self, mock_sio, slack_manager, exception_type, exception_msg
     ):
-        """Test retrieving user message when Redis returns string instead of bytes."""
+        """Test that Redis failures during retrieve are handled gracefully."""
         mock_redis = AsyncMock()
-        mock_redis.get.return_value = 'Hello OpenHands'
+        mock_redis.get.side_effect = exception_type(exception_msg)
         mock_sio.manager.redis = mock_redis
 
         message_ts = '1234567890.123456'
-        thread_ts = None
+        thread_ts = '1234567890.111111'
 
         result = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
 
-        assert result == 'Hello OpenHands'
+        # Should return None when Redis fails
+        assert result is None
 
 
 class TestIsJobRequestedWithUserMsgStorage:
@@ -649,7 +696,6 @@ class TestOnOptionsLoadEndpoint:
     ):
         """Test that invalid Slack signature raises 403 HTTPException."""
         from fastapi import HTTPException
-
         from server.routes.integration.slack import on_options_load
 
         payload_str = json.dumps(valid_block_suggestion_payload)
@@ -774,10 +820,18 @@ class TestOnOptionsLoadEndpoint:
         # Mock options building
         expected_options = [
             {'text': {'type': 'plain_text', 'text': 'No Repository'}, 'value': '-'},
-            {'text': {'type': 'plain_text', 'text': 'owner/repo1'}, 'value': 'owner/repo1'},
-            {'text': {'type': 'plain_text', 'text': 'owner/repo2'}, 'value': 'owner/repo2'},
+            {
+                'text': {'type': 'plain_text', 'text': 'owner/repo1'},
+                'value': 'owner/repo1',
+            },
+            {
+                'text': {'type': 'plain_text', 'text': 'owner/repo2'},
+                'value': 'owner/repo2',
+            },
         ]
-        mock_slack_manager._build_repo_options = MagicMock(return_value=expected_options)
+        mock_slack_manager._build_repo_options = MagicMock(
+            return_value=expected_options
+        )
 
         response = await on_options_load(mock_request, background_tasks)
 
@@ -787,7 +841,7 @@ class TestOnOptionsLoadEndpoint:
 
         # Verify search was called with correct parameters
         mock_slack_manager._search_repositories.assert_called_once_with(
-            mock_user_auth, query='test-query', per_page=100
+            mock_user_auth, query='test-query', per_page=20
         )
         mock_slack_manager._build_repo_options.assert_called_once_with(
             repos, include_no_repo=True
@@ -829,7 +883,9 @@ class TestOnOptionsLoadEndpoint:
         )
         mock_slack_manager._search_repositories = AsyncMock(return_value=[])
         mock_slack_manager._build_repo_options = MagicMock(
-            return_value=[{'text': {'type': 'plain_text', 'text': 'No Repository'}, 'value': '-'}]
+            return_value=[
+                {'text': {'type': 'plain_text', 'text': 'No Repository'}, 'value': '-'}
+            ]
         )
 
         response = await on_options_load(mock_request, background_tasks)
@@ -838,7 +894,7 @@ class TestOnOptionsLoadEndpoint:
 
         # Verify search was called with empty query
         mock_slack_manager._search_repositories.assert_called_once_with(
-            mock_user_auth, query='', per_page=100
+            mock_user_auth, query='', per_page=20
         )
 
     @pytest.mark.asyncio
@@ -918,9 +974,11 @@ class TestOnOptionsLoadEndpoint:
 
         response = await on_options_load(mock_request, background_tasks)
 
+        assert response.status_code == 200
+
         # Should default to empty string for search
         mock_slack_manager._search_repositories.assert_called_once_with(
-            mock_user_auth, query='', per_page=100
+            mock_user_auth, query='', per_page=20
         )
 
     @pytest.mark.asyncio
@@ -986,10 +1044,10 @@ class TestSendAccountLinkingMessage:
     """Test the _send_account_linking_message helper function."""
 
     @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SlackManager')
     @patch('server.routes.integration.slack.slack_team_store')
-    @patch('server.routes.integration.slack.AsyncWebClient')
     async def test_send_account_linking_message_success(
-        self, mock_web_client_class, mock_team_store
+        self, mock_team_store, mock_slack_manager_class
     ):
         """Test successful sending of account linking message."""
         from server.routes.integration.slack import _send_account_linking_message
@@ -1001,44 +1059,47 @@ class TestSendAccountLinkingMessage:
         slack_user_id = 'U1234567890'
 
         mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
-        mock_client = AsyncMock()
-        mock_web_client_class.return_value = mock_client
+        mock_slack_manager_class.send_ephemeral_message = AsyncMock(return_value=True)
 
         await _send_account_linking_message(payload, slack_user_id)
 
         mock_team_store.get_team_bot_token.assert_called_once_with('T1234567890')
-        mock_client.chat_postEphemeral.assert_called_once()
-        call_kwargs = mock_client.chat_postEphemeral.call_args[1]
-        assert call_kwargs['channel'] == 'C1234567890'
-        assert call_kwargs['user'] == 'U1234567890'
+        mock_slack_manager_class.send_ephemeral_message.assert_called_once()
+        call_kwargs = mock_slack_manager_class.send_ephemeral_message.call_args[1]
+        assert call_kwargs['channel_id'] == 'C1234567890'
+        assert call_kwargs['user_id'] == 'U1234567890'
+        assert call_kwargs['bot_token'] == 'xoxb-test-token'
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'payload,description',
+        [
+            (
+                {'container': {'channel_id': 'C1234567890'}},
+                'missing team key',
+            ),
+            (
+                {'team': {'id': 'T1234567890'}},
+                'missing container and channel keys',
+            ),
+            (
+                {'team': {}, 'container': {'channel_id': 'C1234567890'}},
+                'empty team dict',
+            ),
+            (
+                {'team': {'id': 'T1234567890'}, 'container': {}},
+                'empty container dict',
+            ),
+        ],
+        ids=['missing_team', 'missing_channel', 'empty_team', 'empty_container'],
+    )
     @patch('server.routes.integration.slack.slack_team_store')
-    async def test_send_account_linking_message_missing_team_id(self, mock_team_store):
-        """Test handling of missing team_id in payload."""
+    async def test_send_account_linking_message_missing_payload_fields(
+        self, mock_team_store, payload, description
+    ):
+        """Test handling of missing or empty payload fields."""
         from server.routes.integration.slack import _send_account_linking_message
 
-        payload = {
-            'container': {'channel_id': 'C1234567890'},
-            # 'team' is missing
-        }
-        slack_user_id = 'U1234567890'
-
-        # Should handle gracefully without raising
-        await _send_account_linking_message(payload, slack_user_id)
-
-        mock_team_store.get_team_bot_token.assert_not_called()
-
-    @pytest.mark.asyncio
-    @patch('server.routes.integration.slack.slack_team_store')
-    async def test_send_account_linking_message_missing_channel_id(self, mock_team_store):
-        """Test handling of missing channel_id in payload."""
-        from server.routes.integration.slack import _send_account_linking_message
-
-        payload = {
-            'team': {'id': 'T1234567890'},
-            # 'container' and 'channel' are missing
-        }
         slack_user_id = 'U1234567890'
 
         # Should handle gracefully without raising
@@ -1064,10 +1125,10 @@ class TestSendAccountLinkingMessage:
         await _send_account_linking_message(payload, slack_user_id)
 
     @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SlackManager')
     @patch('server.routes.integration.slack.slack_team_store')
-    @patch('server.routes.integration.slack.AsyncWebClient')
     async def test_send_account_linking_message_slack_api_error(
-        self, mock_web_client_class, mock_team_store
+        self, mock_team_store, mock_slack_manager_class
     ):
         """Test graceful handling of Slack API error when sending message."""
         from server.routes.integration.slack import _send_account_linking_message
@@ -1079,20 +1140,20 @@ class TestSendAccountLinkingMessage:
         slack_user_id = 'U1234567890'
 
         mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
-        mock_client = AsyncMock()
-        mock_client.chat_postEphemeral = AsyncMock(
-            side_effect=Exception('Slack API error')
-        )
-        mock_web_client_class.return_value = mock_client
+        # send_ephemeral_message returns False when it fails internally
+        mock_slack_manager_class.send_ephemeral_message = AsyncMock(return_value=False)
 
         # Should handle gracefully without raising
         await _send_account_linking_message(payload, slack_user_id)
 
+        # Verify the method was called
+        mock_slack_manager_class.send_ephemeral_message.assert_called_once()
+
     @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SlackManager')
     @patch('server.routes.integration.slack.slack_team_store')
-    @patch('server.routes.integration.slack.AsyncWebClient')
     async def test_send_account_linking_message_fallback_channel(
-        self, mock_web_client_class, mock_team_store
+        self, mock_team_store, mock_slack_manager_class
     ):
         """Test fallback to 'channel' key when 'container' doesn't have channel_id."""
         from server.routes.integration.slack import _send_account_linking_message
@@ -1105,10 +1166,9 @@ class TestSendAccountLinkingMessage:
         slack_user_id = 'U1234567890'
 
         mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
-        mock_client = AsyncMock()
-        mock_web_client_class.return_value = mock_client
+        mock_slack_manager_class.send_ephemeral_message = AsyncMock(return_value=True)
 
         await _send_account_linking_message(payload, slack_user_id)
 
-        call_kwargs = mock_client.chat_postEphemeral.call_args[1]
-        assert call_kwargs['channel'] == 'C_FALLBACK'
+        call_kwargs = mock_slack_manager_class.send_ephemeral_message.call_args[1]
+        assert call_kwargs['channel_id'] == 'C_FALLBACK'
