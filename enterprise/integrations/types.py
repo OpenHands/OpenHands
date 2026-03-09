@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
+
 from jinja2 import Environment
 from pydantic import BaseModel
 
