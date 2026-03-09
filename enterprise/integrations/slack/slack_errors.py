@@ -6,10 +6,13 @@ This module provides:
 - get_user_message(): Function to get user-facing messages for error codes
 """
 
+import logging
 from enum import Enum
 from typing import Any
 
 from integrations.utils import HOST_URL
+
+logger = logging.getLogger(__name__)
 
 
 class SlackErrorCode(Enum):
@@ -116,6 +119,10 @@ def get_user_message(error_code: SlackErrorCode, **kwargs) -> str:
     )
     try:
         return msg.format(code=error_code.value, **kwargs)
-    except KeyError:
-        # If formatting fails due to missing kwargs, return message with code only
-        return msg.format(code=error_code.value, username='', login_link='')
+    except KeyError as e:
+        logger.warning(
+            f'Missing format key {e} in error message',
+            extra={'error_code': error_code.value},
+        )
+        # Return a generic error message with the code for debugging
+        return f'An error occurred (ref: {error_code.value}). Please try again later.'
