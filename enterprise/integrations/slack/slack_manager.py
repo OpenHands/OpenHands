@@ -317,16 +317,16 @@ class SlackManager(Manager[SlackViewInterface]):
                 await self.start_job(slack_view)
 
         except SlackError as e:
-            await self._handle_slack_error(e, message)
+            await self.handle_slack_error(message.message, e)
 
         except Exception as e:
             logger.exception(
                 'slack_unexpected_error',
                 extra={'error': str(e), **message.message},
             )
-            await self._handle_slack_error(
+            await self.handle_slack_error(
+                message.message,
                 SlackError(SlackErrorCode.UNEXPECTED_ERROR),
-                message,
             )
 
     async def _process_message(self, message: Message) -> SlackViewInterface | None:
@@ -368,14 +368,19 @@ class SlackManager(Manager[SlackViewInterface]):
         )
         return authorize_url_generator.generate(state)
 
-    async def _handle_slack_error(self, error: SlackError, message: Message) -> None:
+    async def handle_slack_error(self, payload: dict, error: SlackError) -> None:
         """Handle a SlackError by logging and sending user message.
 
-        This is the centralized error handler for all SlackErrors.
+        This is the centralized error handler for all SlackErrors, used by both
+        the manager and routes.
+
+        Args:
+            payload: The Slack payload dict containing channel/user info
+            error: The SlackError to handle
         """
         # Create a minimal view for sending the error message
         view = await SlackMessageView.from_payload(
-            message.message, self._get_slack_team_store()
+            payload, self._get_slack_team_store()
         )
 
         if not view:

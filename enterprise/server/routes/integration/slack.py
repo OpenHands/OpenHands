@@ -13,7 +13,6 @@ from fastapi.responses import (
 from integrations.models import Message, SourceType
 from integrations.slack.slack_errors import SlackError, SlackErrorCode
 from integrations.slack.slack_manager import SlackManager
-from integrations.slack.slack_types import SlackMessageView
 from integrations.utils import (
     HOST_URL,
 )
@@ -377,7 +376,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     if not slack_user or not saas_user_auth:
         # Send ephemeral message asking user to link their account
         background_tasks.add_task(
-            _send_slack_error,
+            slack_manager.handle_slack_error,
             payload,
             SlackError(
                 SlackErrorCode.USER_NOT_AUTHENTICATED,
@@ -413,7 +412,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     except ProviderTimeoutError as e:
         # Handle provider timeout with user notification
         background_tasks.add_task(
-            _send_slack_error,
+            slack_manager.handle_slack_error,
             payload,
             SlackError(
                 SlackErrorCode.PROVIDER_TIMEOUT,
@@ -509,7 +508,7 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
             else SlackErrorCode.SESSION_EXPIRED
         )
         background_tasks.add_task(
-            _send_slack_error,
+            slack_manager.handle_slack_error,
             form_payload,
             SlackError(error_code, log_context={'slack_user_id': slack_user_id}),
         )
@@ -532,41 +531,6 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
 
     background_tasks.add_task(slack_manager.receive_message, message)
     return JSONResponse({'success': True})
-
-
-async def _send_slack_error(payload: dict, error: SlackError) -> None:
-    """Send an ephemeral error message to a Slack user.
-
-    This is the single helper for sending error messages from routes.
-    It creates a minimal view from the payload and sends the error message.
-
-    Args:
-        payload: The Slack payload containing channel/user info
-        error: The SlackError to send to the user
-    """
-    view = await SlackMessageView.from_payload(payload, slack_team_store)
-
-    if not view:
-        logger.warning(
-            'slack_error_view_creation_failed',
-            extra={
-                'error_code': error.code.value,
-                'payload_keys': list(payload.keys()),
-                **error.log_context,
-            },
-        )
-        return
-
-    # Log the error
-    log_data = {
-        'error_code': error.code.value,
-        **view.to_log_context(),
-        **error.log_context,
-    }
-    logger.warning(f'slack_error_{error.code.name.lower()}', extra=log_data)
-
-    # Send user-facing message
-    await slack_manager.send_message(error.get_user_message(), view, ephemeral=True)
 
 
 def _generate_login_link(state: str = '') -> str:
