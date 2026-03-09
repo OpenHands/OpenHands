@@ -61,82 +61,73 @@ jobs:
               else:
                   print(f"  ✔ frontend/package-lock.json {key}: {val}")
 
-          # ── 4. Check Docker image tags in documentation / compose files ───
+          # ── 4. Check runtime image tags in documentation ──────────────────
+          # These always use the OpenHands major.minor version pattern.
           runtime_tag_pattern = re.compile(r"runtime:(\d+\.\d+)-nikolaik")
-          agent_tag_pattern = re.compile(
-              r"AGENT_SERVER_IMAGE_TAG\$\{AGENT_SERVER_IMAGE_TAG:-([^}]+)\}"
-          )
-          # Simpler: just grab anything after ":-" inside the ${...} block
-          agent_tag_default = re.compile(r"AGENT_SERVER_IMAGE_TAG:-([^}]+)")
 
-          checks = [
-              (
-                  "Development.md",
-                  runtime_tag_pattern,
-                  major_minor,
-                  "runtime image tag",
-              ),
-              (
-                  "openhands/runtime/impl/kubernetes/README.md",
-                  runtime_tag_pattern,
-                  major_minor,
-                  "runtime image tag",
-              ),
-              (
-                  "containers/dev/compose.yml",
-                  agent_tag_default,
-                  None,  # checked separately
-                  "AGENT_SERVER_IMAGE_TAG default",
-              ),
-              (
-                  "docker-compose.yml",
-                  agent_tag_default,
-                  None,
-                  "AGENT_SERVER_IMAGE_TAG default",
-              ),
-          ]
-
-          for filepath, pattern, expected, label in checks:
+          for filepath in ["Development.md", "openhands/runtime/impl/kubernetes/README.md"]:
               try:
                   with open(filepath) as f:
                       content = f.read()
               except FileNotFoundError:
-                  warnings.append(f"{filepath}: file not found, skipping {label} check")
+                  warnings.append(f"{filepath}: file not found, skipping runtime image tag check")
                   continue
-
-              matches = pattern.findall(content)
+              matches = runtime_tag_pattern.findall(content)
               if not matches:
-                  warnings.append(f"{filepath}: no {label} found")
+                  warnings.append(f"{filepath}: no runtime image tag found")
+                  continue
+              for match in matches:
+                  if match != major_minor:
+                      errors.append(
+                          f"{filepath}: runtime image tag is '{match}', expected '{major_minor}'"
+                      )
+                  else:
+                      print(f"  ✔ {filepath} runtime image tag: {match}")
+
+          # ── 5. Check compose files ────────────────────────────────────────
+          # Compose files pair AGENT_SERVER_IMAGE_REPOSITORY with AGENT_SERVER_IMAGE_TAG.
+          # - Runtime repos (ghcr.io/.../runtime): tag must match OpenHands major.minor
+          # - Agent-server repos (ghcr.io/.../agent-server): tag uses SDK version or
+          #   commit hash, so just verify it is not empty.
+          repo_pattern = re.compile(r"AGENT_SERVER_IMAGE_REPOSITORY[^}]*:-([^}]+)")
+          tag_pattern = re.compile(r"AGENT_SERVER_IMAGE_TAG:-([^}]+)")
+
+          for filepath in ["containers/dev/compose.yml", "docker-compose.yml"]:
+              try:
+                  with open(filepath) as f:
+                      content = f.read()
+              except FileNotFoundError:
+                  warnings.append(f"{filepath}: file not found")
                   continue
 
-              for match in matches:
-                  if expected is not None:
-                      # Exact major.minor match expected
-                      if match != expected:
-                          errors.append(
-                              f"{filepath}: {label} is '{match}', expected '{expected}'"
-                          )
-                      else:
-                          print(f"  ✔ {filepath} {label}: {match}")
-                  else:
-                      # For compose files, accept either:
-                      #   - a version-based tag like "1.4-nikolaik" or "1.12.0-python"
-                      #   - we just flag if it contains a stale major.minor
-                      version_match = re.match(r"(\d+\.\d+)", match)
-                      if version_match:
-                          found_mm = version_match.group(1)
-                          if found_mm != major_minor:
-                              errors.append(
-                                  f"{filepath}: {label} is '{match}' (version {found_mm}), "
-                                  f"expected major.minor '{major_minor}'"
-                              )
-                          else:
-                              print(f"  ✔ {filepath} {label}: {match}")
-                      else:
-                          # Commit hash tag like "31536c8-python" — acceptable
-                          print(f"  ℹ {filepath} {label}: '{match}' (commit hash, skipping version check)")
+              repos = repo_pattern.findall(content)
+              tags = tag_pattern.findall(content)
+              if not tags:
+                  warnings.append(f"{filepath}: no AGENT_SERVER_IMAGE_TAG default found")
+                  continue
 
-          # ── 5. Report ─────────────────────────────────────────────────────
+              is_runtime = any("runtime" in r and "agent-server" not in r for r in repos)
+              tag = tags[0]
+
+              if is_runtime:
+                  # Runtime image — tag should match OpenHands major.minor
+                  version_match = re.match(r"(\d+\.\d+)", tag)
+                  if version_match and version_match.group(1) != major_minor:
+                      errors.append(
+                          f"{filepath}: runtime image tag is '{tag}' (version {version_match.group(1)}), "
+                          f"expected major.minor '{major_minor}'"
+                      )
+                  elif not version_match:
+                      errors.append(
+                          f"{filepath}: runtime image tag '{tag}' does not start with a version number"
+                      )
+                  else:
+                      print(f"  ✔ {filepath} runtime image tag: {tag}")
+              else:
+                  # Agent-server image — accept version tags or commit hashes
+                  print(f"  ✔ {filepath} agent-server image tag: {tag}")
+
+          # ── 6. Report ─────────────────────────────────────────────────────
           print()
           if warnings:
               print("⚠ Warnings:")
