@@ -435,21 +435,6 @@ class SlackManager(Manager[SlackViewInterface]):
         link = authorize_url_generator.generate(state)
         return self.login_link.format(link)
 
-    def _should_start_job_immediately(
-        self, slack_view: SlackViewInterface
-    ) -> bool | None:
-        """Check if the job should start immediately without repo selection.
-
-        Returns:
-            True if job should start (view already has repo context)
-            None if further processing is needed (new conversation needs repo)
-        """
-        if isinstance(slack_view, SlackUpdateExistingConversationView):
-            return True
-        elif isinstance(slack_view, SlackNewConversationFromRepoFormView):
-            return True
-        return None
-
     async def _try_verify_inferred_repo(
         self, slack_view: SlackNewConversationView
     ) -> bool:
@@ -494,7 +479,7 @@ class SlackManager(Manager[SlackViewInterface]):
 
     async def _show_repo_selection_form(
         self, slack_view: SlackNewConversationView
-    ) -> bool:
+    ) -> None:
         """Display the repository selection form to the user.
 
         Returns:
@@ -519,7 +504,6 @@ class SlackManager(Manager[SlackViewInterface]):
                 'Sorry, we are experiencing temporary issues. Please try again later.'
             )
             await self.send_message(error_msg, slack_view, ephemeral=True)
-            return False
 
         repo_selection_msg = {
             'text': 'Choose a Repository:',
@@ -528,7 +512,6 @@ class SlackManager(Manager[SlackViewInterface]):
             ),
         }
         await self.send_message(repo_selection_msg, slack_view, ephemeral=True)
-        return False
 
     async def is_job_requested(
         self, message: Message, slack_view: SlackViewInterface
@@ -543,18 +526,23 @@ class SlackManager(Manager[SlackViewInterface]):
         Returns:
             True if job should start, False if waiting for user input
         """
+
         # Check if view type allows immediate start
-        immediate_start = self._should_start_job_immediately(slack_view)
-        if immediate_start is not None:
-            return immediate_start
+        if isinstance(slack_view, SlackUpdateExistingConversationView):
+            return True
+        if isinstance(slack_view, SlackNewConversationFromRepoFormView):
+            return True
+        if isinstance(slack_view, SlackNewConversationFromRepoFormView):
+            return True
 
         # For new conversations, try to infer/verify repo or show selection form
-        if isinstance(slack_view, SlackNewConversationView):
-            if await self._try_verify_inferred_repo(slack_view):
-                return True
-            return await self._show_repo_selection_form(slack_view)
+        if isinstance(
+            slack_view, SlackNewConversationView
+        ) and await self._try_verify_inferred_repo(slack_view):
+            return True
 
-        return True
+        await self._show_repo_selection_form(slack_view)
+        return False
 
     async def start_job(self, slack_view: SlackViewInterface) -> None:
         # Importing here prevents circular import
