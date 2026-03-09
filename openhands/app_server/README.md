@@ -17,3 +17,7 @@ The app server is organized into several key modules:
 - **user/**: User management and authentication
 - **services/**: Core services like JWT authentication
 - **utils/**: Utility functions for common operations
+
+## Observability
+
+Laminar observability is supported when running agents through the hosted Web UI. Add a workspace secret named `LMNR_PROJECT_API_KEY` with your Laminar project API key; see [sandbox/README.md](sandbox/README.md#observability-laminar) for details.

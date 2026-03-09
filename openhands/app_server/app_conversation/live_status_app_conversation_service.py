@@ -98,6 +98,10 @@ from openhands.tools.preset.planning import (
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
+# Environment variable used by Laminar (lmnr) for observability. When set in workspace
+# secrets, it is injected into the agent server so traces are exported in the hosted Web UI.
+LMNR_PROJECT_API_KEY_SECRET_NAME = 'LMNR_PROJECT_API_KEY'
+
 # Planning agent instruction to prevent "Ready to proceed?" behavior
 PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
 You are a Planning Agent that can ONLY create plans - you CANNOT execute code or make changes.
@@ -490,6 +494,31 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 result[stored_conversation.sandbox_id].append(stored_conversation.id)
         return result
 
+    async def _get_laminar_observability_env(self) -> dict[str, str] | None:
+        """Resolve Laminar observability env vars from workspace secrets for the hosted Web UI.
+
+        If the user has set LMNR_PROJECT_API_KEY in their custom (workspace) secrets,
+        returns it so the agent server can export traces to Laminar. Only StaticSecret
+        values are supported; LookupSecret is not resolved here.
+        """
+        try:
+            secrets = await self.user_context.get_secrets()
+        except Exception:
+            return None
+        if not secrets or LMNR_PROJECT_API_KEY_SECRET_NAME not in secrets:
+            return None
+        source = secrets[LMNR_PROJECT_API_KEY_SECRET_NAME]
+        if not isinstance(source, StaticSecret):
+            return None
+        raw = source.value
+        if hasattr(raw, 'get_secret_value'):
+            value = raw.get_secret_value()
+        else:
+            value = str(raw)
+        if not value or not value.strip():
+            return None
+        return {LMNR_PROJECT_API_KEY_SECRET_NAME: value.strip()}
+
     async def _wait_for_sandbox_start(
         self, task: AppConversationStartTask
     ) -> AsyncGenerator[AppConversationStartTask, None]:
@@ -502,8 +531,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 if task.request.conversation_id is not None
                 else None
             )
+            extra_env = await self._get_laminar_observability_env()
             sandbox = await self.sandbox_service.start_sandbox(
-                sandbox_id=sandbox_id_str
+                sandbox_id=sandbox_id_str,
+                extra_env=extra_env,
             )
             task.sandbox_id = sandbox.id
         else:

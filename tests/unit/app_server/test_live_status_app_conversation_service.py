@@ -22,6 +22,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
+    LMNR_PROJECT_API_KEY_SECRET_NAME,
     PLANNING_AGENT_INSTRUCTION,
     LiveStatusAppConversationService,
 )
@@ -450,6 +451,52 @@ class TestLiveStatusAppConversationService:
         assert isinstance(result['MY_SECRET'], StaticSecret)
         # Empty string description is preserved
         assert result['MY_SECRET'].description == ''
+
+    @pytest.mark.asyncio
+    async def test_get_laminar_observability_env_returns_none_when_no_secret(self):
+        """Test _get_laminar_observability_env returns None when LMNR_PROJECT_API_KEY not in secrets."""
+        self.mock_user_context.get_secrets = AsyncMock(return_value={})
+        result = await self.service._get_laminar_observability_env()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_laminar_observability_env_returns_env_when_static_secret_set(self):
+        """Test _get_laminar_observability_env returns env dict when LMNR_PROJECT_API_KEY is StaticSecret."""
+        self.mock_user_context.get_secrets = AsyncMock(
+            return_value={
+                LMNR_PROJECT_API_KEY_SECRET_NAME: StaticSecret(
+                    value=SecretStr('laminar-key-123'),
+                ),
+            }
+        )
+        result = await self.service._get_laminar_observability_env()
+        assert result is not None
+        assert result[LMNR_PROJECT_API_KEY_SECRET_NAME] == 'laminar-key-123'
+
+    @pytest.mark.asyncio
+    async def test_get_laminar_observability_env_returns_none_for_lookup_secret(self):
+        """Test _get_laminar_observability_env returns None when value is LookupSecret (not resolved)."""
+        self.mock_user_context.get_secrets = AsyncMock(
+            return_value={
+                LMNR_PROJECT_API_KEY_SECRET_NAME: LookupSecret(
+                    url='https://example.com/secret',
+                    headers={},
+                ),
+            }
+        )
+        result = await self.service._get_laminar_observability_env()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_laminar_observability_env_returns_none_for_empty_value(self):
+        """Test _get_laminar_observability_env returns None when value is empty string."""
+        self.mock_user_context.get_secrets = AsyncMock(
+            return_value={
+                LMNR_PROJECT_API_KEY_SECRET_NAME: StaticSecret(value='   '),
+            }
+        )
+        result = await self.service._get_laminar_observability_env()
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_model(self):

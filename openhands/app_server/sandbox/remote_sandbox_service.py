@@ -269,10 +269,15 @@ class RemoteSandboxService(SandboxService):
         return runtimes_by_id
 
     async def _init_environment(
-        self, sandbox_spec: SandboxSpecInfo, sandbox_id: str
+        self,
+        sandbox_spec: SandboxSpecInfo,
+        sandbox_id: str,
+        extra_env: dict[str, str] | None = None,
     ) -> dict[str, str]:
         """Initialize the environment variables for the sandbox."""
         environment = sandbox_spec.initial_env.copy()
+        if extra_env:
+            environment.update(extra_env)
 
         # If a public facing url is defined, add a callback to the agent server environment.
         if self.web_url:
@@ -442,7 +447,10 @@ class RemoteSandboxService(SandboxService):
         return await self._get_sandbox_by_session_api_key_legacy(session_api_key)
 
     async def start_sandbox(
-        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+        self,
+        sandbox_spec_id: str | None = None,
+        sandbox_id: str | None = None,
+        extra_env: dict[str, str] | None = None,
     ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
@@ -479,7 +487,9 @@ class RemoteSandboxService(SandboxService):
             self.db_session.add(stored_sandbox)
 
             # Prepare environment variables
-            environment = await self._init_environment(sandbox_spec, sandbox_id)
+            environment = await self._init_environment(
+                sandbox_spec, sandbox_id, extra_env=extra_env
+            )
 
             # Prepare start request
             start_request: dict[str, Any] = {
