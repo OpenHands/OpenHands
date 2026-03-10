@@ -47,6 +47,40 @@ PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
 PRE_COMMIT_LOCAL = '.git/hooks/pre-commit.local'
 
 
+def get_project_dir(
+    working_dir: str,
+    selected_repository: str | None = None,
+) -> str:
+    """Get the project root directory for a conversation.
+
+    When a repository is selected, the project root is the cloned repo directory
+    at {working_dir}/{repo_name}.  This is the directory that contains the
+    `.openhands/` configuration (setup.sh, pre-commit.sh, skills/, etc.).
+
+    Without a repository, the project root is the working_dir itself.
+
+    This must be used consistently for ALL features that depend on the project root:
+    - workspace.working_dir (terminal CWD, file editor root, etc.)
+    - .openhands/setup.sh execution
+    - .openhands/pre-commit.sh (git hooks setup)
+    - .openhands/skills/ (project skills)
+    - PLAN.md path
+
+    Args:
+        working_dir: Base working directory path in the sandbox
+            (e.g., '/workspace/project' from sandbox_spec)
+        selected_repository: Repository name (e.g., 'OpenHands/software-agent-sdk')
+            If provided, the repo name is appended to working_dir.
+
+    Returns:
+        The project root directory path.
+    """
+    if selected_repository:
+        repo_name = selected_repository.split('/')[-1]
+        return f'{working_dir}/{repo_name}'
+    return working_dir
+
+
 @dataclass
 class AppConversationServiceBase(AppConversationService, ABC):
     """App Conversation service which adds git specific functionality.
@@ -63,6 +97,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         selected_repository: str | None,
         working_dir: str,
         agent_server_url: str,
+        project_dir: str | None = None,
     ) -> list[Skill]:
         """Load skills from all sources via the agent-server.
 
@@ -77,8 +112,10 @@ class AppConversationServiceBase(AppConversationService, ABC):
         Args:
             sandbox: SandboxInfo containing exposed URLs and agent-server URL
             selected_repository: Repository name or None
-            working_dir: Working directory path
+            working_dir: Working directory path (sandbox base)
             agent_server_url: Agent-server URL (required)
+            project_dir: Pre-computed project directory. If provided, skips
+                computing it from working_dir + selected_repository.
 
         Returns:
             List of merged Skill objects from all sources, or empty list on failure
@@ -97,10 +134,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
             sandbox_config = build_sandbox_config(sandbox)
 
             # Determine project directory for project skills
-            project_dir = working_dir
-            if selected_repository:
-                repo_name = selected_repository.split('/')[-1]
-                project_dir = f'{working_dir}/{repo_name}'
+            if project_dir is None:
+                project_dir = get_project_dir(working_dir, selected_repository)
 
             # Single API call to agent-server for ALL skills
             all_skills = await load_skills_from_agent_server(
@@ -180,24 +215,26 @@ class AppConversationServiceBase(AppConversationService, ABC):
         agent: Agent,
         remote_workspace: AsyncRemoteWorkspace,
         selected_repository: str | None,
-        working_dir: str,
+        project_dir: str,
     ):
         """Load all skills and update agent with them.
 
         Args:
             agent: The agent to update
             remote_workspace: AsyncRemoteWorkspace for loading repo skills
-            selected_repository: Repository name or None
-            working_dir: Working directory path
+            selected_repository: Repository name or None (used for org config)
+            project_dir: Project root directory (already resolved via get_project_dir).
 
         Returns:
             Updated agent with skills loaded into context
         """
-        # Load and merge all skills
-        # Extract agent_server_url from remote_workspace host
         agent_server_url = remote_workspace.host
         all_skills = await self.load_and_merge_all_skills(
-            sandbox, selected_repository, working_dir, agent_server_url
+            sandbox,
+            selected_repository,
+            project_dir,
+            agent_server_url,
+            project_dir=project_dir,
         )
 
         # Update agent with skills
@@ -216,13 +253,20 @@ class AppConversationServiceBase(AppConversationService, ABC):
         yield task
         await self.clone_or_init_git_repo(task, workspace)
 
+        # Compute the project root — the cloned repo directory when a repo is
+        # selected, or the sandbox working_dir otherwise.  This must be used
+        # for all .openhands/ features (setup.sh, pre-commit.sh, skills).
+        project_dir = get_project_dir(
+            workspace.working_dir, task.request.selected_repository
+        )
+
         task.status = AppConversationStartTaskStatus.RUNNING_SETUP_SCRIPT
         yield task
-        await self.maybe_run_setup_script(workspace)
+        await self.maybe_run_setup_script(workspace, project_dir)
 
         task.status = AppConversationStartTaskStatus.SETTING_UP_GIT_HOOKS
         yield task
-        await self.maybe_setup_git_hooks(workspace)
+        await self.maybe_setup_git_hooks(workspace, project_dir)
 
         task.status = AppConversationStartTaskStatus.SETTING_UP_SKILLS
         yield task
@@ -334,26 +378,35 @@ class AppConversationServiceBase(AppConversationService, ABC):
     async def maybe_run_setup_script(
         self,
         workspace: AsyncRemoteWorkspace,
+        project_dir: str,
     ):
-        """Run .openhands/setup.sh if it exists in the workspace or repository."""
-        setup_script = workspace.working_dir + '/.openhands/setup.sh'
+        """Run .openhands/setup.sh if it exists in the project root.
+
+        Args:
+            workspace: Remote workspace for command execution.
+            project_dir: Project root directory (repo root when a repo is selected).
+        """
+        setup_script = project_dir + '/.openhands/setup.sh'
 
         await workspace.execute_command(
-            f'chmod +x {setup_script} && source {setup_script}', timeout=600
+            f'chmod +x {setup_script} && source {setup_script}',
+            cwd=project_dir,
+            timeout=600,
         )
-
-        # TODO: Does this need to be done?
-        # Add the action to the event stream as an ENVIRONMENT event
-        # source = EventSource.ENVIRONMENT
-        # self.event_stream.add_event(action, source)
 
     async def maybe_setup_git_hooks(
         self,
         workspace: AsyncRemoteWorkspace,
+        project_dir: str,
     ):
-        """Set up git hooks if .openhands/pre-commit.sh exists in the workspace or repository."""
+        """Set up git hooks if .openhands/pre-commit.sh exists in the project root.
+
+        Args:
+            workspace: Remote workspace for command execution.
+            project_dir: Project root directory (repo root when a repo is selected).
+        """
         command = 'mkdir -p .git/hooks && chmod +x .openhands/pre-commit.sh'
-        result = await workspace.execute_command(command, workspace.working_dir)
+        result = await workspace.execute_command(command, project_dir)
         if result.exit_code:
             return
 
@@ -370,7 +423,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                         f'chmod +x {PRE_COMMIT_LOCAL}'
                     )
                     result = await workspace.execute_command(
-                        command, workspace.working_dir
+                        command, project_dir
                     )
                     if result.exit_code != 0:
                         _logger.error(
