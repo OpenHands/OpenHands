@@ -10,6 +10,9 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from server.utils.saas_app_conversation_info_injector import (
+    SaasSQLAppConversationInfoService,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -17,9 +20,6 @@ from storage.base import Base
 from storage.org import Org
 from storage.user import User
 
-from enterprise.server.utils.saas_app_conversation_info_injector import (
-    SaasSQLAppConversationInfoService,
-)
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )

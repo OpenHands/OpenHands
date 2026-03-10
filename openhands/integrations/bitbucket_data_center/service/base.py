@@ -216,13 +216,18 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         )
 
     async def _parse_repository(
-        self, repo: dict, link_header: str | None = None
+        self,
+        repo: dict,
+        link_header: str | None = None,
+        fetch_default_branch: bool = False,
     ) -> Repository:
         """Parse a Bitbucket data center API repository response into a Repository object.
 
         Args:
             repo: Repository data from Bitbucket data center API
             link_header: Optional link header for pagination
+            fetch_default_branch: Whether to make an additional API call to fetch the
+                default branch. Set to False for listing endpoints to avoid N+1 queries.
 
         Returns:
             Repository object
@@ -240,14 +245,15 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         is_public = repo.get('public', False)
 
         main_branch: str | None = None
-        try:
-            default_branch_url = (
-                f'{self._repo_api_base(project_key, repo_slug)}/default-branch'
-            )
-            default_branch_data, _ = await self._make_request(default_branch_url)
-            main_branch = default_branch_data.get('displayId') or None
-        except Exception as e:
-            logger.debug(f'Could not fetch default branch for {full_name}: {e}')
+        if fetch_default_branch:
+            try:
+                default_branch_url = (
+                    f'{self._repo_api_base(project_key, repo_slug)}/default-branch'
+                )
+                default_branch_data, _ = await self._make_request(default_branch_url)
+                main_branch = default_branch_data.get('displayId') or None
+            except Exception as e:
+                logger.debug(f'Could not fetch default branch for {full_name}: {e}')
 
         return Repository(
             id=str(repo.get('id', '')),
@@ -275,7 +281,7 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         owner, repo = self._extract_owner_and_repo(repository)
         url = self._repo_api_base(owner, repo)
         data, _ = await self._make_request(url)
-        return await self._parse_repository(data)
+        return await self._parse_repository(data, fetch_default_branch=True)
 
     async def _get_cursorrules_url(self, repository: str) -> str:
         """Get the URL for checking .cursorrules file."""
