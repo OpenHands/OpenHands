@@ -27,7 +27,6 @@ from openhands.app_server.config import (
     get_event_callback_service,
 )
 from openhands.app_server.errors import AuthError
-from openhands.app_server.event.event_service import EventService
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.services.injector import InjectorState
@@ -107,7 +106,9 @@ async def on_conversation_update(
     # Swap the user context to whoever started the sandbox...
     if sandbox_info.created_by_user_id:
         switch_user(request, sandbox_info.created_by_user_id)
-    async with app_conversation_info_service_dependency(request) as app_conversation_info_service:
+    async with app_conversation_info_service_dependency(
+        request
+    ) as app_conversation_info_service:
         existing = await valid_conversation(
             conversation_info.id, sandbox_info, app_conversation_info_service
         )
@@ -152,7 +153,9 @@ async def on_event(
     if sandbox_info.created_by_user_id:
         switch_user(request, sandbox_info.created_by_user_id)
     async with (
-        app_conversation_info_service_dependency(request) as app_conversation_info_service,
+        app_conversation_info_service_dependency(
+            request
+        ) as app_conversation_info_service,
         event_service_dependency(request) as event_service,
     ):
         app_conversation_info = await valid_conversation(
@@ -166,7 +169,10 @@ async def on_event(
 
             # Process stats events for V1 conversations
             for event in events:
-                if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
+                if (
+                    isinstance(event, ConversationStateUpdateEvent)
+                    and event.key == 'stats'
+                ):
                     await app_conversation_info_service.process_stats_event(
                         event, conversation_id
                     )
