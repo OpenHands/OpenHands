@@ -137,10 +137,10 @@ describe("UserContextMenu", () => {
       screen.queryByText("ORG$INVITE_ORG_MEMBERS"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("ORG$MANAGE_ORGANIZATION_MEMBERS"),
+      screen.queryByText("ORG$ORGANIZATION_MEMBERS"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("ORG$MANAGE_ORGANIZATION"),
+      screen.queryByText("COMMON$ORGANIZATIONS"),
     ).not.toBeInTheDocument();
   });
 
@@ -339,8 +339,8 @@ describe("UserContextMenu", () => {
 
     screen.getByTestId("org-selector");
     screen.getByText("ORG$INVITE_ORG_MEMBERS");
-    screen.getByText("ORG$MANAGE_ORGANIZATION_MEMBERS");
-    screen.getByText("ORG$MANAGE_ORGANIZATION");
+    screen.getByText("ORG$ORGANIZATION_MEMBERS");
+    screen.getByText("COMMON$ORGANIZATIONS");
   });
 
   it("should render additional context items when user is an owner", () => {
@@ -348,8 +348,8 @@ describe("UserContextMenu", () => {
 
     screen.getByTestId("org-selector");
     screen.getByText("ORG$INVITE_ORG_MEMBERS");
-    screen.getByText("ORG$MANAGE_ORGANIZATION_MEMBERS");
-    screen.getByText("ORG$MANAGE_ORGANIZATION");
+    screen.getByText("ORG$ORGANIZATION_MEMBERS");
+    screen.getByText("COMMON$ORGANIZATIONS");
   });
 
   it("should call the logout handler when Logout is clicked", async () => {
@@ -416,7 +416,7 @@ describe("UserContextMenu", () => {
 
     // Wait for orgs to load so org management buttons are visible
     const manageOrganizationMembersButton = await screen.findByText(
-      "ORG$MANAGE_ORGANIZATION_MEMBERS",
+      "ORG$ORGANIZATION_MEMBERS",
     );
     await userEvent.click(manageOrganizationMembersButton);
 
@@ -436,7 +436,7 @@ describe("UserContextMenu", () => {
 
     // Wait for orgs to load so org management buttons are visible
     const manageAccountButton = await screen.findByText(
-      "ORG$MANAGE_ORGANIZATION",
+      "COMMON$ORGANIZATIONS",
     );
     await userEvent.click(manageAccountButton);
 
@@ -474,12 +474,12 @@ describe("UserContextMenu", () => {
 
     // Wait for orgs to load so org management buttons are visible
     const manageOrganizationMembersButton = await screen.findByText(
-      "ORG$MANAGE_ORGANIZATION_MEMBERS",
+      "ORG$ORGANIZATION_MEMBERS",
     );
     await userEvent.click(manageOrganizationMembersButton);
     expect(onCloseMock).toHaveBeenCalledTimes(2);
 
-    const manageAccountButton = screen.getByText("ORG$MANAGE_ORGANIZATION");
+    const manageAccountButton = screen.getByText("COMMON$ORGANIZATIONS");
     await userEvent.click(manageAccountButton);
     expect(onCloseMock).toHaveBeenCalledTimes(3);
   });
@@ -512,12 +512,12 @@ describe("UserContextMenu", () => {
       // (they disappear when personal org is selected)
       await waitFor(() => {
         expect(
-          screen.queryByText("ORG$MANAGE_ORGANIZATION_MEMBERS"),
+          screen.queryByText("ORG$ORGANIZATION_MEMBERS"),
         ).not.toBeInTheDocument();
       });
 
       expect(
-        screen.queryByText("ORG$MANAGE_ORGANIZATION"),
+        screen.queryByText("COMMON$ORGANIZATIONS"),
       ).not.toBeInTheDocument();
     });
 

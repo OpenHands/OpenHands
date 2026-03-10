@@ -109,14 +109,14 @@ export function UserContextMenu({
               className={contextMenuListItemClassName}
             >
               <IoCardOutline className="text-white" size={14} />
-              {t(I18nKey.ORG$MANAGE_ORGANIZATION)}
+              {t(I18nKey.COMMON$ORGANIZATIONS)}
             </ContextMenuListItem>
             <ContextMenuListItem
               onClick={handleManageOrganizationMembersClick}
               className={contextMenuListItemClassName}
             >
               <FiUsers className="text-white shrink-0" size={14} />
-              {t(I18nKey.ORG$MANAGE_ORGANIZATION_MEMBERS)}
+              {t(I18nKey.ORG$ORGANIZATION_MEMBERS)}
             </ContextMenuListItem>
             <Divider className="my-1.5" />
           </div>
