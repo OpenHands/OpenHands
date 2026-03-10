@@ -105,7 +105,7 @@ async def on_conversation_update(
     """Webhook callback for when a conversation starts, pauses, resumes, or deletes."""
     # Swap the user context to whoever started the sandbox...
     if sandbox_info.created_by_user_id:
-        switch_user(request, sandbox_info.created_by_user_id)
+        await switch_user(request, sandbox_info.created_by_user_id)
     async with app_conversation_info_service_dependency(
         request
     ) as app_conversation_info_service:
@@ -151,7 +151,7 @@ async def on_event(
     """Webhook callback for when event stream events occur."""
     # Swap the user context to whoever started the sandbox...
     if sandbox_info.created_by_user_id:
-        switch_user(request, sandbox_info.created_by_user_id)
+        await switch_user(request, sandbox_info.created_by_user_id)
     async with (
         app_conversation_info_service_dependency(
             request
