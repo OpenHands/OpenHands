@@ -396,3 +396,44 @@ async def test_store_propagates_llm_settings_to_all_org_members(
             assert (
                 decrypted_key == 'new-shared-api-key'
             ), f'Expected llm_api_key to decrypt to new-shared-api-key for member {member.user_id}'
+
+
+@pytest.mark.asyncio
+async def test_store_updates_org_default_llm_settings(
+    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """When admin saves LLM settings, org's default_llm_model/base_url/max_iterations should be updated.
+
+    This test verifies that the Org table's default settings are updated so that
+    new members joining later will inherit the correct LLM configuration.
+    """
+    from sqlalchemy import select
+    from storage.org import Org
+
+    # Arrange
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = str(fixture['admin_user_id'])
+
+    store = SaasSettingsStore(admin_user_id, mock_config)
+
+    new_settings = DataSettings(
+        llm_model='anthropic/claude-sonnet-4',
+        llm_base_url='https://api.anthropic.com/v1',
+        max_iterations=75,
+        llm_api_key=SecretStr('test-api-key'),
+    )
+
+    # Act
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(new_settings)
+
+    # Assert - verify org's default fields were updated
+    with session_maker() as session:
+        result = session.execute(select(Org).where(Org.id == org_id))
+        org = result.scalars().first()
+
+        assert org is not None
+        assert org.default_llm_model == 'anthropic/claude-sonnet-4'
+        assert org.default_llm_base_url == 'https://api.anthropic.com/v1'
+        assert org.default_max_iterations == 75

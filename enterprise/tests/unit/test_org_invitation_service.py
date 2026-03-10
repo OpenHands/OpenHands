@@ -98,6 +98,11 @@ class TestAcceptInvitationEmailValidation:
 
         mock_keycloak_user_info = {'email': 'alice@example.com'}  # Email from Keycloak
 
+        mock_org = MagicMock()
+        mock_org.default_llm_model = 'test-model'
+        mock_org.default_llm_base_url = None
+        mock_org.default_max_iterations = None
+
         with (
             patch(
                 'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
@@ -122,6 +127,10 @@ class TestAcceptInvitationEmailValidation:
                 new_callable=AsyncMock,
             ) as mock_create_litellm,
             patch(
+                'server.services.org_invitation_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+            patch(
                 'server.services.org_invitation_service.OrgMemberStore.add_user_to_org',
                 new_callable=AsyncMock,
             ),
@@ -145,6 +154,7 @@ class TestAcceptInvitationEmailValidation:
             mock_settings = MagicMock()
             mock_settings.llm_api_key = SecretStr('test-key')
             mock_create_litellm.return_value = mock_settings
+            mock_get_org.return_value = mock_org
             mock_update_status.return_value = mock_invitation
 
             # Act - should not raise error because Keycloak email matches
@@ -214,6 +224,11 @@ class TestAcceptInvitationEmailValidation:
 
         mock_invitation.email = 'alice@example.com'  # Lowercase in invitation
 
+        mock_org = MagicMock()
+        mock_org.default_llm_model = 'test-model'
+        mock_org.default_llm_base_url = None
+        mock_org.default_max_iterations = None
+
         with (
             patch(
                 'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
@@ -235,6 +250,10 @@ class TestAcceptInvitationEmailValidation:
                 new_callable=AsyncMock,
             ) as mock_create_litellm,
             patch(
+                'server.services.org_invitation_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+            patch(
                 'server.services.org_invitation_service.OrgMemberStore.add_user_to_org',
                 new_callable=AsyncMock,
             ),
@@ -250,6 +269,7 @@ class TestAcceptInvitationEmailValidation:
             mock_settings = MagicMock()
             mock_settings.llm_api_key = SecretStr('test-key')
             mock_create_litellm.return_value = mock_settings
+            mock_get_org.return_value = mock_org
             mock_update_status.return_value = mock_invitation
 
             # Act - should not raise error because emails match case-insensitively
@@ -257,6 +277,75 @@ class TestAcceptInvitationEmailValidation:
 
             # Assert - invitation was accepted (update_invitation_status was called)
             mock_update_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_accept_invitation_inherits_org_llm_settings(self, mock_invitation):
+        """Test that new members inherit the organization's LLM settings when accepting invitation."""
+        # Arrange
+        user_id = UUID('87654321-4321-8765-4321-876543218765')
+        token = 'inv-test-token-12345'
+
+        mock_user = MagicMock()
+        mock_user.id = user_id
+        mock_user.email = 'alice@example.com'
+
+        mock_org = MagicMock()
+        mock_org.default_llm_model = 'claude-sonnet-4'
+        mock_org.default_llm_base_url = 'https://api.anthropic.com'
+        mock_org.default_max_iterations = 100
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
+                new_callable=AsyncMock,
+            ) as mock_get_invitation,
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
+            ) as mock_is_expired,
+            patch(
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_user,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+            patch(
+                'server.services.org_invitation_service.OrgService.create_litellm_integration',
+                new_callable=AsyncMock,
+            ) as mock_create_litellm,
+            patch(
+                'server.services.org_invitation_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org',
+                new_callable=AsyncMock,
+            ) as mock_add_user,
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
+                new_callable=AsyncMock,
+            ) as mock_update_status,
+        ):
+            mock_get_invitation.return_value = mock_invitation
+            mock_is_expired.return_value = False
+            mock_get_user.return_value = mock_user
+            mock_get_member.return_value = None
+            mock_settings = MagicMock()
+            mock_settings.llm_api_key = SecretStr('test-key')
+            mock_create_litellm.return_value = mock_settings
+            mock_get_org.return_value = mock_org
+            mock_update_status.return_value = mock_invitation
+
+            # Act
+            await OrgInvitationService.accept_invitation(token, user_id)
+
+            # Assert - verify add_user_to_org was called with org's LLM settings
+            mock_add_user.assert_called_once()
+            call_kwargs = mock_add_user.call_args.kwargs
+            assert call_kwargs['llm_model'] == 'claude-sonnet-4'
+            assert call_kwargs['llm_base_url'] == 'https://api.anthropic.com'
+            assert call_kwargs['max_iterations'] == 100
 
 
 class TestCreateInvitationsBatch:
