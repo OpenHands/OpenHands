@@ -4,6 +4,7 @@ This module tests that parent_conversation_id is correctly preserved when
 conversations are updated via the on_conversation_update webhook endpoint.
 """
 
+import contextlib
 from typing import AsyncGenerator
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -98,6 +99,24 @@ def mock_conversation_info() -> ConversationInfo:
     return conversation_info
 
 
+@pytest.fixture
+def mock_request():
+    """Create a mock FastAPI Request object."""
+    request = MagicMock()
+    request.state = MagicMock()
+    return request
+
+
+def create_service_context_manager(service):
+    """Create an async context manager that yields the given service."""
+
+    @contextlib.asynccontextmanager
+    async def _context_manager(request):
+        yield service
+
+    return _context_manager
+
+
 class TestOnConversationUpdateParentConversationId:
     """Test parent_conversation_id preservation in on_conversation_update."""
 
@@ -108,6 +127,7 @@ class TestOnConversationUpdateParentConversationId:
         app_conversation_info_service,
         sandbox_info,
         mock_conversation_info,
+        mock_request,
     ):
         """Test that parent_conversation_id is preserved when it exists in existing conversation.
 
@@ -137,16 +157,22 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Mock valid_conversation to return existing conversation
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            return_value=existing_conv,
+        # Mock valid_conversation and service dependency
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=existing_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                create_service_context_manager(app_conversation_info_service),
+            ),
         ):
             # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
+                request=mock_request,
                 sandbox_info=sandbox_info,
-                app_conversation_info_service=app_conversation_info_service,
             )
 
         # Assert
@@ -165,6 +191,7 @@ class TestOnConversationUpdateParentConversationId:
         app_conversation_info_service,
         sandbox_info,
         mock_conversation_info,
+        mock_request,
     ):
         """Test that parent_conversation_id remains None when it doesn't exist.
 
@@ -191,16 +218,22 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=None,
         )
 
-        # Mock valid_conversation to return existing conversation
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            return_value=existing_conv,
+        # Mock valid_conversation and service dependency
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=existing_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                create_service_context_manager(app_conversation_info_service),
+            ),
         ):
             # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
+                request=mock_request,
                 sandbox_info=sandbox_info,
-                app_conversation_info_service=app_conversation_info_service,
             )
 
         # Assert
@@ -218,6 +251,7 @@ class TestOnConversationUpdateParentConversationId:
         app_conversation_info_service,
         sandbox_info,
         mock_conversation_info,
+        mock_request,
     ):
         """Test that new conversations (stubs) have parent_conversation_id as None.
 
@@ -242,16 +276,22 @@ class TestOnConversationUpdateParentConversationId:
             created_by_user_id=sandbox_info.created_by_user_id,
         )
 
-        # Mock valid_conversation to return stub (as it would for new conversation)
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            return_value=stub_conv,
+        # Mock valid_conversation and service dependency
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=stub_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                create_service_context_manager(app_conversation_info_service),
+            ),
         ):
             # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
+                request=mock_request,
                 sandbox_info=sandbox_info,
-                app_conversation_info_service=app_conversation_info_service,
             )
 
         # Assert
@@ -270,6 +310,7 @@ class TestOnConversationUpdateParentConversationId:
         app_conversation_info_service,
         sandbox_info,
         mock_conversation_info,
+        mock_request,
     ):
         """Test that parent_conversation_id is preserved alongside other metadata.
 
@@ -302,16 +343,22 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Mock valid_conversation to return existing conversation
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            return_value=existing_conv,
+        # Mock valid_conversation and service dependency
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=existing_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                create_service_context_manager(app_conversation_info_service),
+            ),
         ):
             # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
+                request=mock_request,
                 sandbox_info=sandbox_info,
-                app_conversation_info_service=app_conversation_info_service,
             )
 
         # Assert
@@ -339,6 +386,7 @@ class TestOnConversationUpdateParentConversationId:
         app_conversation_info_service,
         sandbox_info,
         mock_conversation_info,
+        mock_request,
     ):
         """Test that parent_conversation_id remains stable across multiple updates.
 
@@ -379,16 +427,23 @@ class TestOnConversationUpdateParentConversationId:
                 return saved
             return initial_conv
 
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            side_effect=mock_valid_conv,
+        # Mock valid_conversation and service dependency
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                side_effect=mock_valid_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                create_service_context_manager(app_conversation_info_service),
+            ),
         ):
             # Act - Update multiple times
             for _ in range(3):
                 result = await on_conversation_update(
                     conversation_info=mock_conversation_info,
+                    request=mock_request,
                     sandbox_info=sandbox_info,
-                    app_conversation_info_service=app_conversation_info_service,
                 )
                 assert isinstance(result, Success)
 
@@ -406,6 +461,7 @@ class TestOnConversationUpdateParentConversationId:
         app_conversation_info_service,
         sandbox_info,
         mock_conversation_info,
+        mock_request,
     ):
         """Test that deleting conversations skips all updates including parent_conversation_id.
 
@@ -441,16 +497,22 @@ class TestOnConversationUpdateParentConversationId:
         # Set conversation to DELETING status
         mock_conversation_info.execution_status = ConversationExecutionStatus.DELETING
 
-        # Mock valid_conversation (though it won't be called for DELETING status)
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            return_value=existing_conv,
+        # Mock valid_conversation and service dependency
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=existing_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                create_service_context_manager(app_conversation_info_service),
+            ),
         ):
             # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
+                request=mock_request,
                 sandbox_info=sandbox_info,
-                app_conversation_info_service=app_conversation_info_service,
             )
 
         # Assert - Function returns success but doesn't update
@@ -471,6 +533,7 @@ class TestOnConversationUpdateParentConversationId:
         app_conversation_info_service,
         sandbox_info,
         mock_conversation_info,
+        mock_request,
     ):
         """Test that parent_conversation_id is preserved when title changes.
 
@@ -498,16 +561,22 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Mock valid_conversation to return existing conversation
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            return_value=existing_conv,
+        # Mock valid_conversation and service dependency
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=existing_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                create_service_context_manager(app_conversation_info_service),
+            ),
         ):
             # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
+                request=mock_request,
                 sandbox_info=sandbox_info,
-                app_conversation_info_service=app_conversation_info_service,
             )
 
         # Assert

@@ -445,6 +445,17 @@ class TestProcessStatsEvent:
 # ---------------------------------------------------------------------------
 
 
+def _create_service_context_manager(service):
+    """Create an async context manager that yields the given service."""
+    import contextlib
+
+    @contextlib.asynccontextmanager
+    async def _context_manager(request):
+        yield service
+
+    return _context_manager
+
+
 class TestOnEventStatsProcessing:
     """Test stats event processing in the on_event endpoint."""
 
@@ -497,6 +508,9 @@ class TestOnEventStatsProcessing:
             created_by_user_id='user_123',
         )
 
+        mock_request = MagicMock()
+        mock_request.state = MagicMock()
+
         mock_event_service = AsyncMock()
         mock_app_conversation_info_service = AsyncMock()
         mock_app_conversation_info_service.get_app_conversation_info.return_value = (
@@ -531,13 +545,20 @@ class TestOnEventStatsProcessing:
             patch(
                 'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
             ) as mock_callbacks,
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                _create_service_context_manager(mock_app_conversation_info_service),
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.event_service_dependency',
+                _create_service_context_manager(mock_event_service),
+            ),
         ):
             await on_event(
                 events=events,
                 conversation_id=conversation_id,
+                request=mock_request,
                 sandbox_info=mock_sandbox,
-                app_conversation_info_service=mock_app_conversation_info_service,
-                event_service=mock_event_service,
             )
 
             # Verify events were saved
@@ -582,6 +603,9 @@ class TestOnEventStatsProcessing:
             created_by_user_id='user_123',
         )
 
+        mock_request = MagicMock()
+        mock_request.state = MagicMock()
+
         mock_event_service = AsyncMock()
         mock_app_conversation_info_service = AsyncMock()
         mock_app_conversation_info_service.get_app_conversation_info.return_value = (
@@ -600,13 +624,20 @@ class TestOnEventStatsProcessing:
             patch(
                 'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
             ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                _create_service_context_manager(mock_app_conversation_info_service),
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.event_service_dependency',
+                _create_service_context_manager(mock_event_service),
+            ),
         ):
             await on_event(
                 events=events,
                 conversation_id=conversation_id,
+                request=mock_request,
                 sandbox_info=mock_sandbox,
-                app_conversation_info_service=mock_app_conversation_info_service,
-                event_service=mock_event_service,
             )
 
             # Verify stats update was NOT called
