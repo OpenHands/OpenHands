@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+from pydantic import SecretStr
 from server.routes.org_invitation_models import (
     EmailMismatchError,
 )
@@ -70,7 +71,7 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
             ) as mock_is_expired,
             patch(
-                'server.services.org_invitation_service.UserStore.get_user_by_id_async',
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -106,21 +107,23 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
             ) as mock_is_expired,
             patch(
-                'server.services.org_invitation_service.UserStore.get_user_by_id_async',
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
                 'server.services.org_invitation_service.TokenManager'
             ) as mock_token_manager_class,
             patch(
-                'server.services.org_invitation_service.OrgMemberStore.get_org_member'
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
                 'server.services.org_invitation_service.OrgService.create_litellm_integration',
                 new_callable=AsyncMock,
             ) as mock_create_litellm,
             patch(
-                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org'
+                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org',
+                new_callable=AsyncMock,
             ),
             patch(
                 'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
@@ -139,7 +142,9 @@ class TestAcceptInvitationEmailValidation:
             mock_token_manager_class.return_value = mock_token_manager
 
             mock_get_member.return_value = None  # Not already a member
-            mock_create_litellm.return_value = MagicMock(llm_api_key='test-key')
+            mock_settings = MagicMock()
+            mock_settings.llm_api_key = SecretStr('test-key')
+            mock_create_litellm.return_value = mock_settings
             mock_update_status.return_value = mock_invitation
 
             # Act - should not raise error because Keycloak email matches
@@ -172,7 +177,7 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
             ) as mock_is_expired,
             patch(
-                'server.services.org_invitation_service.UserStore.get_user_by_id_async',
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -218,18 +223,20 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
             ) as mock_is_expired,
             patch(
-                'server.services.org_invitation_service.UserStore.get_user_by_id_async',
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
-                'server.services.org_invitation_service.OrgMemberStore.get_org_member'
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
                 'server.services.org_invitation_service.OrgService.create_litellm_integration',
                 new_callable=AsyncMock,
             ) as mock_create_litellm,
             patch(
-                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org'
+                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org',
+                new_callable=AsyncMock,
             ),
             patch(
                 'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
@@ -240,7 +247,9 @@ class TestAcceptInvitationEmailValidation:
             mock_is_expired.return_value = False
             mock_get_user.return_value = mock_user
             mock_get_member.return_value = None
-            mock_create_litellm.return_value = MagicMock(llm_api_key='test-key')
+            mock_settings = MagicMock()
+            mock_settings.llm_api_key = SecretStr('test-key')
+            mock_create_litellm.return_value = mock_settings
             mock_update_status.return_value = mock_invitation
 
             # Act - should not raise error because emails match case-insensitively
@@ -324,10 +333,12 @@ class TestCreateInvitationsBatch:
             ),
             patch(
                 'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
                 'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                new_callable=AsyncMock,
                 return_value=mock_member_role,
             ),
             patch.object(
@@ -378,10 +389,12 @@ class TestCreateInvitationsBatch:
             ),
             patch(
                 'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
                 'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                new_callable=AsyncMock,
                 return_value=mock_member_role,
             ),
             patch.object(
@@ -445,10 +458,12 @@ class TestCreateInvitationsBatch:
             ),
             patch(
                 'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
                 'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                new_callable=AsyncMock,
                 return_value=None,  # Invalid role
             ),
         ):

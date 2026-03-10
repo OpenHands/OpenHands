@@ -19,9 +19,9 @@ from server.utils.conversation_callback_utils import (
     process_event,
     update_conversation_metadata,
 )
-from sqlalchemy import orm
+from sqlalchemy import select
 from storage.api_key_store import ApiKeyStore
-from storage.database import session_maker
+from storage.database import a_session_maker
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
@@ -59,7 +59,6 @@ from openhands.storage.locations import (
     get_conversation_event_filename,
     get_conversation_events_dir,
 )
-from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.http_session import httpx_verify_option
 from openhands.utils.import_utils import get_impl
 from openhands.utils.shutdown_listener import should_continue
@@ -166,8 +165,8 @@ class SaasNestedConversationManager(ConversationManager):
             }
 
         if user_id:
-            user_conversation_ids = await call_sync_from_async(
-                self._get_recent_conversation_ids_for_user, user_id
+            user_conversation_ids = await self._get_recent_conversation_ids_for_user(
+                user_id
             )
             conversation_ids = conversation_ids.intersection(user_conversation_ids)
 
@@ -392,38 +391,10 @@ class SaasNestedConversationManager(ConversationManager):
             await self._setup_nested_settings(client, api_url, settings)
             await self._setup_provider_tokens(client, api_url, settings)
             await self._setup_custom_secrets(client, api_url, settings.custom_secrets)  # type: ignore
-            await self._setup_experiment_config(client, api_url, sid, user_id)
             await self._create_nested_conversation(
                 client, api_url, sid, user_id, settings, initial_user_msg, replay_json
             )
             await self._wait_for_conversation_ready(client, api_url, sid)
-
-    async def _setup_experiment_config(
-        self, client: httpx.AsyncClient, api_url: str, sid: str, user_id: str
-    ):
-        # Prevent circular import
-        from openhands.experiments.experiment_manager import (
-            ExperimentConfig,
-            ExperimentManagerImpl,
-        )
-
-        config: OpenHandsConfig = ExperimentManagerImpl.run_config_variant_test(
-            user_id, sid, self.config
-        )
-
-        experiment_config = ExperimentConfig(
-            config={
-                'system_prompt_filename': config.get_agent_config(
-                    config.default_agent
-                ).system_prompt_filename
-            }
-        )
-
-        response = await client.post(
-            f'{api_url}/api/conversations/{sid}/exp-config',
-            json=experiment_config.model_dump(),
-        )
-        response.raise_for_status()
 
     async def _setup_nested_settings(
         self, client: httpx.AsyncClient, api_url: str, settings: Settings
@@ -643,19 +614,18 @@ class SaasNestedConversationManager(ConversationManager):
                     },
                 )
 
-    def _get_user_id_from_conversation(self, conversation_id: str) -> str:
+    async def _get_user_id_from_conversation(self, conversation_id: str) -> str:
         """
         Get user_id from conversation_id.
         """
 
-        with session_maker() as session:
-            conversation_metadata_saas = (
-                session.query(StoredConversationMetadataSaas)
-                .filter(
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(StoredConversationMetadataSaas).where(
                     StoredConversationMetadataSaas.conversation_id == conversation_id
                 )
-                .first()
             )
+            conversation_metadata_saas = result.scalars().first()
 
             if not conversation_metadata_saas:
                 raise ValueError(f'No conversation found {conversation_id}')
@@ -753,8 +723,8 @@ class SaasNestedConversationManager(ConversationManager):
             user_id_for_convo = user_id
             if not user_id_for_convo:
                 try:
-                    user_id_for_convo = await call_sync_from_async(
-                        self._get_user_id_from_conversation, conversation_id
+                    user_id_for_convo = await self._get_user_id_from_conversation(
+                        conversation_id
                     )
                 except Exception:
                     continue
@@ -995,23 +965,23 @@ class SaasNestedConversationManager(ConversationManager):
         }
         return conversation_ids
 
-    def _get_recent_conversation_ids_for_user(self, user_id: str) -> set[str]:
-        with session_maker() as session:
+    async def _get_recent_conversation_ids_for_user(self, user_id: str) -> set[str]:
+        async with a_session_maker() as session:
             # Only include conversations updated in the past week
             one_week_ago = datetime.now(UTC) - timedelta(days=7)
-            query = (
-                session.query(StoredConversationMetadata.conversation_id)
+            result = await session.execute(
+                select(StoredConversationMetadata.conversation_id)
                 .join(
                     StoredConversationMetadataSaas,
                     StoredConversationMetadata.conversation_id
                     == StoredConversationMetadataSaas.conversation_id,
                 )
-                .filter(
+                .where(
                     StoredConversationMetadataSaas.user_id == user_id,
                     StoredConversationMetadata.last_updated_at >= one_week_ago,
                 )
             )
-            user_conversation_ids = set(query)
+            user_conversation_ids = set(result.scalars().all())
             return user_conversation_ids
 
     async def _get_runtime(self, sid: str) -> dict | None:
@@ -1055,14 +1025,13 @@ class SaasNestedConversationManager(ConversationManager):
                 await asyncio.sleep(_POLLING_INTERVAL)
                 agent_loop_infos = await self.get_agent_loop_info()
 
-                with session_maker() as session:
-                    for agent_loop_info in agent_loop_infos:
-                        if agent_loop_info.status != ConversationStatus.RUNNING:
-                            continue
-                        try:
-                            await self._poll_agent_loop_events(agent_loop_info, session)
-                        except Exception as e:
-                            logger.exception(f'error_polling_events:{str(e)}')
+                for agent_loop_info in agent_loop_infos:
+                    if agent_loop_info.status != ConversationStatus.RUNNING:
+                        continue
+                    try:
+                        await self._poll_agent_loop_events(agent_loop_info)
+                    except Exception as e:
+                        logger.exception(f'error_polling_events:{str(e)}')
             except Exception as e:
                 try:
                     asyncio.get_running_loop()
@@ -1071,23 +1040,27 @@ class SaasNestedConversationManager(ConversationManager):
                     # Loop has been shut down, exit gracefully
                     return
 
-    async def _poll_agent_loop_events(
-        self, agent_loop_info: AgentLoopInfo, session: orm.Session
-    ):
+    async def _poll_agent_loop_events(self, agent_loop_info: AgentLoopInfo):
         """This method is typically only run in localhost, where the webhook callbacks from the remote runtime are unavailable"""
         if agent_loop_info.status != ConversationStatus.RUNNING:
             return
         conversation_id = agent_loop_info.conversation_id
-        conversation_metadata = (
-            session.query(StoredConversationMetadata)
-            .filter(StoredConversationMetadata.conversation_id == conversation_id)
-            .first()
-        )
-        conversation_metadata_saas = (
-            session.query(StoredConversationMetadataSaas)
-            .filter(StoredConversationMetadataSaas.conversation_id == conversation_id)
-            .first()
-        )
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(StoredConversationMetadata).where(
+                    StoredConversationMetadata.conversation_id == conversation_id
+                )
+            )
+            conversation_metadata = result.scalars().first()
+
+            result = await session.execute(
+                select(StoredConversationMetadataSaas).where(
+                    StoredConversationMetadataSaas.conversation_id == conversation_id
+                )
+            )
+            conversation_metadata_saas = result.scalars().first()
+
         if conversation_metadata is None or conversation_metadata_saas is None:
             # Conversation is running in different server
             return

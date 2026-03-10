@@ -12,6 +12,10 @@ from openhands.resolver.interfaces.bitbucket import (
     BitbucketIssueHandler,
     BitbucketPRHandler,
 )
+from openhands.resolver.interfaces.bitbucket_data_center import (
+    BitbucketDCIssueHandler,
+    BitbucketDCPRHandler,
+)
 from openhands.resolver.interfaces.forgejo import (
     ForgejoIssueHandler,
     ForgejoPRHandler,
@@ -80,6 +84,17 @@ class IssueHandlerFactory:
                     ),
                     self.llm_config,
                 )
+            elif self.platform == ProviderType.BITBUCKET_DATA_CENTER:
+                return ServiceContextIssue(
+                    BitbucketDCIssueHandler(
+                        self.owner,
+                        self.repo,
+                        self.token,
+                        self.username,
+                        self.base_domain,
+                    ),
+                    self.llm_config,
+                )
             elif self.platform == ProviderType.FORGEJO:
                 return ServiceContextIssue(
                     ForgejoIssueHandler(
@@ -139,6 +154,17 @@ class IssueHandlerFactory:
             elif self.platform == ProviderType.BITBUCKET:
                 return ServiceContextPR(
                     BitbucketPRHandler(
+                        self.owner,
+                        self.repo,
+                        self.token,
+                        self.username,
+                        self.base_domain,
+                    ),
+                    self.llm_config,
+                )
+            elif self.platform == ProviderType.BITBUCKET_DATA_CENTER:
+                return ServiceContextPR(
+                    BitbucketDCPRHandler(
                         self.owner,
                         self.repo,
                         self.token,

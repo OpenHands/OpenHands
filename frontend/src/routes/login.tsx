@@ -19,6 +19,7 @@ export default function LoginPage() {
     emailVerified,
     hasDuplicatedEmail,
     recaptchaBlocked,
+    wasRateLimited,
     emailVerificationModalOpen,
     setEmailVerificationModalOpen,
     userId,
@@ -83,6 +84,7 @@ export default function LoginPage() {
             setEmailVerificationModalOpen(false);
           }}
           userId={userId}
+          wasRateLimited={wasRateLimited}
         />
       )}
     </>

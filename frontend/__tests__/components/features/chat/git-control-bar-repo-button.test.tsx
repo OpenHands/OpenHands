@@ -32,6 +32,10 @@ vi.mock("#/icons/repo-forked.svg?react", () => ({
   default: () => <span data-testid="repo-forked-icon">forked</span>,
 }));
 
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => ({ data: { provider_tokens_set: {} } }),
+}));
+
 // Mock constructRepositoryUrl
 vi.mock("#/utils/utils", async (importOriginal) => {
   const actual = await importOriginal<typeof import("#/utils/utils")>();

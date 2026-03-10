@@ -24,6 +24,9 @@ const VALID_OSS_CONFIG: WebClientConfig = {
     enable_jira: false,
     enable_jira_dc: false,
     enable_linear: false,
+    hide_users_page: false,
+    hide_billing_page: false,
+    hide_integrations_page: false,
   },
   providers_configured: [],
   maintenance_start_time: null,
@@ -44,6 +47,9 @@ const VALID_SAAS_CONFIG: WebClientConfig = {
     enable_jira: false,
     enable_jira_dc: false,
     enable_linear: false,
+    hide_users_page: false,
+    hide_billing_page: false,
+    hide_integrations_page: false,
   },
   providers_configured: [],
   maintenance_start_time: null,
@@ -321,6 +327,7 @@ describe("Form submission", () => {
       github: { token: "test-token", host: "" },
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
+      bitbucket_data_center: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -344,6 +351,7 @@ describe("Form submission", () => {
       github: { token: "", host: "" },
       gitlab: { token: "test-token", host: "" },
       bitbucket: { token: "", host: "" },
+      bitbucket_data_center: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -367,6 +375,7 @@ describe("Form submission", () => {
       github: { token: "", host: "" },
       gitlab: { token: "", host: "" },
       bitbucket: { token: "test-token", host: "" },
+      bitbucket_data_center: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -392,6 +401,7 @@ describe("Form submission", () => {
       github: { token: "", host: "" },
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
+      bitbucket_data_center: { token: "", host: "" },
       azure_devops: { token: "test-token", host: "" },
       forgejo: { token: "", host: "" },
     });

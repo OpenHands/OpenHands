@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -16,8 +17,16 @@ class SourceType(str, Enum):
 
 
 class Message(BaseModel):
+    """Message model for incoming webhook payloads from integrations.
+
+    Note: This model is intended for INCOMING messages only.
+    For outgoing messages (e.g., sending comments to GitHub/GitLab),
+    pass strings directly to the send_message methods instead of
+    wrapping them in a Message object.
+    """
+
     source: SourceType
-    message: str | dict
+    message: dict[str, Any]
     ephemeral: bool = False
 
 

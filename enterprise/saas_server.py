@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
+    BITBUCKET_DATA_CENTER_HOST,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
     ENABLE_LINEAR,
@@ -27,7 +28,6 @@ from server.rate_limit import setup_rate_limit_handler  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
-from server.routes.debugging import add_debugging_routes  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
 from server.routes.event_webhook import event_webhook_router  # noqa: E402
 from server.routes.feedback import router as feedback_router  # noqa: E402
@@ -124,9 +124,6 @@ override_llm_models_dependency(base_app)
 base_app.include_router(invitation_router)  # Add routes for org invitation management
 base_app.include_router(invitation_accept_router)  # Add route for accepting invitations
 add_github_proxy_routes(base_app)
-add_debugging_routes(
-    base_app
-)  # Add diagnostic routes for testing and debugging (disabled in production)
 base_app.include_router(slack_router)
 if ENABLE_JIRA:
     base_app.include_router(jira_integration_router)
@@ -134,6 +131,12 @@ if ENABLE_JIRA_DC:
     base_app.include_router(jira_dc_integration_router)
 if ENABLE_LINEAR:
     base_app.include_router(linear_integration_router)
+if BITBUCKET_DATA_CENTER_HOST:
+    from server.routes.bitbucket_dc_proxy import (
+        router as bitbucket_dc_proxy_router,  # noqa: E402
+    )
+
+    base_app.include_router(bitbucket_dc_proxy_router)
 base_app.include_router(email_router)  # Add routes for email management
 base_app.include_router(feedback_router)  # Add routes for conversation feedback
 base_app.include_router(

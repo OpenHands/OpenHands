@@ -75,7 +75,9 @@ class TestVerifyWebhookConditions:
             resource_type, resource_id
         )
         mock_gitlab_service.check_webhook_exists_on_resource.assert_called_once_with(
-            resource_type, resource_id, GITLAB_WEBHOOK_URL
+            resource_type=resource_type,
+            resource_id=resource_id,
+            webhook_url=GITLAB_WEBHOOK_URL,
         )
         mock_webhook_store.delete_webhook.assert_not_called()
 

@@ -31,14 +31,21 @@ class ApiKeyStore:
         Args:
             user_id: The ID of the user to create the key for
             name: Optional name for the key
-            expires_at: Optional expiration date for the key
+            expires_at: Expiration datetime in UTC. Timezone info is stripped before
+                writing to the TIMESTAMP WITHOUT TIME ZONE column.
 
         Returns:
             The generated API key
         """
         api_key = self.generate_api_key()
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
+
+        # Column is TIMESTAMP WITHOUT TIME ZONE; strip tzinfo before writing.
+        if expires_at is not None and expires_at.tzinfo is not None:
+            expires_at = expires_at.replace(tzinfo=None)
 
         async with a_session_maker() as session:
             key_record = ApiKey(
@@ -64,9 +71,8 @@ class ApiKeyStore:
             if not key_record:
                 return None
 
-            # Check if the key has expired
+            # expires_at is stored as naive UTC; re-attach tzinfo for comparison.
             if key_record.expires_at:
-                # Handle timezone-naive datetime from database by assuming it's UTC
                 expires_at = key_record.expires_at
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=UTC)
@@ -79,7 +85,7 @@ class ApiKeyStore:
             await session.execute(
                 update(ApiKey)
                 .where(ApiKey.id == key_record.id)
-                .values(last_used_at=now)
+                .values(last_used_at=now.replace(tzinfo=None))
             )
             await session.commit()
 
@@ -115,7 +121,9 @@ class ApiKeyStore:
 
     async def list_api_keys(self, user_id: str) -> list[ApiKey]:
         """List all API keys for a user."""
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
 
         async with a_session_maker() as session:
@@ -128,7 +136,9 @@ class ApiKeyStore:
             return [key for key in keys if key.name != 'MCP_API_KEY']
 
     async def retrieve_mcp_api_key(self, user_id: str) -> str | None:
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
 
         async with a_session_maker() as session:

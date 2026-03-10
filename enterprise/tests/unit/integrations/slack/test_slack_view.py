@@ -263,7 +263,9 @@ class TestPausedSandboxResumption:
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('openhands.app_server.event_callback.util.ensure_running_sandbox')
     @patch('openhands.app_server.event_callback.util.get_agent_server_url_from_sandbox')
-    @patch.object(SlackUpdateExistingConversationView, '_get_instructions')
+    @patch.object(
+        SlackUpdateExistingConversationView, '_get_instructions', new_callable=AsyncMock
+    )
     async def test_paused_sandbox_resumption(
         self,
         mock_get_instructions,

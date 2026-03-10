@@ -2,6 +2,7 @@ import json
 import os
 import re
 import uuid
+from typing import cast
 
 import requests
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
@@ -269,7 +270,7 @@ async def create_linear_workspace(
 ):
     """Create a new Linear workspace registration."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
 
@@ -331,7 +332,7 @@ async def create_linear_workspace(
 async def create_workspace_link(request: Request, link_data: LinearLinkCreate):
     """Register a user mapping to a Linear workspace."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
 
@@ -520,8 +521,13 @@ async def linear_callback(request: Request, code: str, state: str):
 async def get_current_workspace_link(request: Request):
     """Get current user's Linear integration details."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User not authenticated',
+            )
 
         user = await linear_manager.integration_store.get_user_by_active_workspace(
             user_id
@@ -573,8 +579,13 @@ async def get_current_workspace_link(request: Request):
 async def unlink_workspace(request: Request):
     """Unlink user from Linear integration by setting status to inactive."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User not authenticated',
+            )
 
         user = await linear_manager.integration_store.get_user_by_active_workspace(
             user_id
@@ -629,7 +640,7 @@ async def validate_workspace_integration(request: Request, workspace_name: str):
                 detail='workspace_name can only contain alphanumeric characters, hyphens, underscores, and periods',
             )
 
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_email = await user_auth.get_user_email()
         if not user_email:
             raise HTTPException(

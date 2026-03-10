@@ -17,6 +17,7 @@ from server.routes.org_models import (
 )
 from storage.org_app_settings_store import OrgAppSettingsStore
 
+from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import Injector, InjectorState
 from openhands.app_server.user.user_context import UserContext
 from openhands.core.logger import openhands_logger as logger
@@ -39,8 +40,11 @@ class OrgAppSettingsService:
 
         Raises:
             OrgNotFoundError: If current organization is not found
+            AuthError: If user is not authenticated
         """
         user_id = await self.user_context.get_user_id()
+        if not user_id:
+            raise AuthError('User not authenticated')
 
         logger.info(
             'Getting organization app settings',
@@ -72,8 +76,11 @@ class OrgAppSettingsService:
 
         Raises:
             OrgNotFoundError: If current organization is not found
+            AuthError: If user is not authenticated
         """
         user_id = await self.user_context.get_user_id()
+        if not user_id:
+            raise AuthError('User not authenticated')
 
         logger.info(
             'Updating organization app settings',

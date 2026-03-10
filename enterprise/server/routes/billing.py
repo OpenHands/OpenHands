@@ -11,9 +11,10 @@ from integrations import stripe_service
 from pydantic import BaseModel
 from server.constants import STRIPE_API_KEY
 from server.logger import logger
+from sqlalchemy import select
 from starlette.datastructures import URL
 from storage.billing_session import BillingSession
-from storage.database import session_maker
+from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
 from storage.subscription_access import SubscriptionAccess
@@ -89,7 +90,9 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    user = await UserStore.get_user_by_id_async(user_id)
+    user = await UserStore.get_user_by_id(user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail='User not found')
     user_team_info = await LiteLlmManager.get_user_team_info(
         user_id, str(user.current_org_id)
     )
@@ -106,16 +109,17 @@ async def get_subscription_access(
     user_id: str = Depends(get_user_id),
 ) -> SubscriptionAccessResponse | None:
     """Get details of the currently valid subscription for the user."""
-    with session_maker() as session:
+    async with a_session_maker() as session:
         now = datetime.now(UTC)
-        subscription_access = (
-            session.query(SubscriptionAccess)
-            .filter(SubscriptionAccess.status == 'ACTIVE')
-            .filter(SubscriptionAccess.user_id == user_id)
-            .filter(SubscriptionAccess.start_at <= now)
-            .filter(SubscriptionAccess.end_at >= now)
-            .first()
+        result = await session.execute(
+            select(SubscriptionAccess).where(
+                SubscriptionAccess.status == 'ACTIVE',
+                SubscriptionAccess.user_id == user_id,
+                SubscriptionAccess.start_at <= now,
+                SubscriptionAccess.end_at >= now,
+            )
         )
+        subscription_access = result.scalar_one_or_none()
         if not subscription_access:
             return None
         return SubscriptionAccessResponse(
@@ -142,6 +146,11 @@ async def create_customer_setup_session(
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    if not customer_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Could not find or create customer for user',
+        )
     base_url = _get_base_url(request)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
@@ -163,6 +172,11 @@ async def create_checkout_session(
     await validate_billing_enabled()
     base_url = _get_base_url(request)
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    if not customer_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Could not find or create customer for user',
+        )
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
         line_items=[
@@ -197,7 +211,7 @@ async def create_checkout_session(
             'checkout_session_id': checkout_session.id,
         },
     )
-    with session_maker() as session:
+    async with a_session_maker() as session:
         billing_session = BillingSession(
             id=checkout_session.id,
             user_id=user_id,
@@ -206,7 +220,7 @@ async def create_checkout_session(
             price_code='NA',
         )
         session.add(billing_session)
-        session.commit()
+        await session.commit()
 
     return CreateBillingSessionResponse(redirect_url=checkout_session.url)
 
@@ -215,13 +229,14 @@ async def create_checkout_session(
 @billing_router.get('/success')
 async def success_callback(session_id: str, request: Request):
     # We can't use the auth cookie because of SameSite=strict
-    with session_maker() as session:
-        billing_session = (
-            session.query(BillingSession)
-            .filter(BillingSession.id == session_id)
-            .filter(BillingSession.status == 'in_progress')
-            .first()
+    async with a_session_maker() as session:
+        result = await session.execute(
+            select(BillingSession).where(
+                BillingSession.id == session_id,
+                BillingSession.status == 'in_progress',
+            )
         )
+        billing_session = result.scalar_one_or_none()
 
         if billing_session is None:
             # Hopefully this never happens - we get a redirect from stripe where the session does not exist
@@ -243,7 +258,9 @@ async def success_callback(session_id: str, request: Request):
             )
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-        user = await UserStore.get_user_by_id_async(billing_session.user_id)
+        user = await UserStore.get_user_by_id(billing_session.user_id)
+        if user is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail='User not found')
         user_team_info = await LiteLlmManager.get_user_team_info(
             billing_session.user_id, str(user.current_org_id)
         )
@@ -253,7 +270,8 @@ async def success_callback(session_id: str, request: Request):
             user_team_info, billing_session.user_id, str(user.current_org_id)
         )
 
-        org = session.query(Org).filter(Org.id == user.current_org_id).first()
+        result = await session.execute(select(Org).where(Org.id == user.current_org_id))
+        org = result.scalar_one_or_none()
         new_max_budget = max_budget + add_credits
 
         await LiteLlmManager.update_team_and_users_budget(
@@ -279,7 +297,7 @@ async def success_callback(session_id: str, request: Request):
                 'stripe_customer_id': stripe_session.customer,
             },
         )
-        session.commit()
+        await session.commit()
 
     return RedirectResponse(
         f'{_get_base_url(request)}settings/billing?checkout=success', status_code=302
@@ -289,13 +307,14 @@ async def success_callback(session_id: str, request: Request):
 # Callback endpoint for cancelled Stripe payments - updates billing session status
 @billing_router.get('/cancel')
 async def cancel_callback(session_id: str, request: Request):
-    with session_maker() as session:
-        billing_session = (
-            session.query(BillingSession)
-            .filter(BillingSession.id == session_id)
-            .filter(BillingSession.status == 'in_progress')
-            .first()
+    async with a_session_maker() as session:
+        result = await session.execute(
+            select(BillingSession).where(
+                BillingSession.id == session_id,
+                BillingSession.status == 'in_progress',
+            )
         )
+        billing_session = result.scalar_one_or_none()
         if billing_session:
             logger.info(
                 'stripe_checkout_cancel',
@@ -307,7 +326,7 @@ async def cancel_callback(session_id: str, request: Request):
             billing_session.status = 'cancelled'
             billing_session.updated_at = datetime.now(UTC)
             session.merge(billing_session)
-            session.commit()
+            await session.commit()
 
     return RedirectResponse(
         f'{_get_base_url(request)}settings/billing?checkout=cancel', status_code=302

@@ -1,6 +1,4 @@
-"""
-Store class for managing users.
-"""
+"""Store class for managing users."""
 
 import asyncio
 import uuid
@@ -16,8 +14,8 @@ from server.constants import (
 )
 from server.logger import logger
 from sqlalchemy import select, text
-from sqlalchemy.orm import joinedload
-from storage.database import a_session_maker, session_maker
+from sqlalchemy.orm import selectinload
+from storage.database import a_session_maker
 from storage.encrypt_utils import (
     decrypt_legacy_model,
     decrypt_legacy_value,
@@ -29,8 +27,6 @@ from storage.role_store import RoleStore
 from storage.user import User
 from storage.user_settings import UserSettings
 from utils.identity import resolve_display_name
-
-from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 
 # The max possible time to wait for another process to finish creating a user before retrying
 _REDIS_CREATE_TIMEOUT_SECONDS = 30
@@ -50,7 +46,7 @@ class UserStore:
         role_id: Optional[int] = None,
     ) -> User | None:
         """Create a new user."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # create personal org
             org = Org(
                 id=uuid.UUID(user_id),
@@ -87,7 +83,9 @@ class UserStore:
             user.email_verified = user_info.get('email_verified')
             session.add(user)
 
-            role = RoleStore.get_role_by_name('owner')
+            role = await RoleStore.get_role_by_name('owner')
+            if role is None:
+                raise ValueError('Owner role not found in database')
 
             from storage.org_member_store import OrgMemberStore
 
@@ -103,9 +101,9 @@ class UserStore:
                 **org_member_kwargs,
             )
             session.add(org_member)
-            session.commit()
-            session.refresh(user)
-            user.org_members  # load org_members
+            await session.commit()
+            await session.refresh(user)
+            await session.refresh(user, ['org_members'])  # load org_members
             return user
 
     @staticmethod
@@ -160,10 +158,7 @@ class UserStore:
         user_id: str,
         user_settings: UserSettings,
         user_info: dict,
-    ) -> User:
-        if not user_id or not user_settings:
-            return None
-
+    ) -> User | None:
         kwargs = decrypt_legacy_model(
             [
                 'llm_api_key',
@@ -174,19 +169,17 @@ class UserStore:
             user_settings,
         )
         decrypted_user_settings = UserSettings(**kwargs)
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # Check if user has completed billing sessions to enable BYOR export
             from storage.billing_session import BillingSession
 
-            has_completed_billing = (
-                session.query(BillingSession)
-                .filter(
+            result = await session.execute(
+                select(BillingSession).filter(
                     BillingSession.user_id == user_id,
                     BillingSession.status == 'completed',
                 )
-                .first()
-                is not None
             )
+            has_completed_billing = result.scalars().first() is not None
 
             # create personal org
             org = Org(
@@ -227,7 +220,7 @@ class UserStore:
                 'user_store:migrate_user:calling_stripe_migrate_customer',
                 extra={'user_id': user_id},
             )
-            await migrate_customer(session, user_id, org)
+            await migrate_customer(user_id, org)
             logger.debug(
                 'user_store:migrate_user:done_stripe_migrate_customer',
                 extra={'user_id': user_id},
@@ -264,11 +257,13 @@ class UserStore:
                 'user_store:migrate_user:calling_get_role_by_name',
                 extra={'user_id': user_id},
             )
-            role = await RoleStore.get_role_by_name_async('owner')
+            role = await RoleStore.get_role_by_name('owner')
             logger.debug(
                 'user_store:migrate_user:done_get_role_by_name',
                 extra={'user_id': user_id},
             )
+            if role is None:
+                raise ValueError('Owner role not found in database')
 
             from storage.org_member_store import OrgMemberStore
 
@@ -293,79 +288,78 @@ class UserStore:
 
             # Mark the old user_settings as migrated instead of deleting
             user_settings.already_migrated = True
-            session.merge(user_settings)
-            session.flush()
+            await session.merge(user_settings)
+            await session.flush()
             logger.debug(
                 'user_store:migrate_user:session_flush_complete',
                 extra={'user_id': user_id},
             )
 
+            user_uuid = uuid.UUID(user_id)
+
             # need to migrate conversation metadata
-            session.execute(
+            await session.execute(
                 text("""
                     INSERT INTO conversation_metadata_saas (conversation_id, user_id, org_id)
                     SELECT
                         conversation_id,
-                        :user_id,
-                        :user_id
+                        :user_uuid,
+                        :user_uuid
                     FROM conversation_metadata
-                    WHERE user_id = :user_id
+                    WHERE user_id = :user_id_text
                 """),
-                {'user_id': user_id},
+                {'user_uuid': user_uuid, 'user_id_text': user_id},
             )
 
-            # Update org_id for tables that had org_id added
-            user_uuid = uuid.UUID(user_id)
-
             # Update stripe_customers
-            session.execute(
+            await session.execute(
                 text(
                     'UPDATE stripe_customers SET org_id = :org_id WHERE keycloak_user_id = :user_id'
                 ),
-                {'org_id': user_uuid, 'user_id': user_uuid},
+                {'org_id': user_uuid, 'user_id': user_id},
             )
 
             # Update slack_users
-            session.execute(
+            await session.execute(
                 text(
                     'UPDATE slack_users SET org_id = :org_id WHERE keycloak_user_id = :user_id'
                 ),
-                {'org_id': user_uuid, 'user_id': user_uuid},
+                {'org_id': user_uuid, 'user_id': user_id},
             )
 
             # Update slack_conversation
-            session.execute(
+            await session.execute(
                 text(
                     'UPDATE slack_conversation SET org_id = :org_id WHERE keycloak_user_id = :user_id'
                 ),
-                {'org_id': user_uuid, 'user_id': user_uuid},
+                {'org_id': user_uuid, 'user_id': user_id},
             )
 
             # Update api_keys
-            session.execute(
+            await session.execute(
                 text('UPDATE api_keys SET org_id = :org_id WHERE user_id = :user_id'),
-                {'org_id': user_uuid, 'user_id': user_uuid},
+                {'org_id': user_uuid, 'user_id': user_id},
             )
 
             # Update custom_secrets
-            session.execute(
+            await session.execute(
                 text(
                     'UPDATE custom_secrets SET org_id = :org_id WHERE keycloak_user_id = :user_id'
                 ),
-                {'org_id': user_uuid, 'user_id': user_uuid},
+                {'org_id': user_uuid, 'user_id': user_id},
             )
 
             # Update billing_sessions
-            session.execute(
+            await session.execute(
                 text(
                     'UPDATE billing_sessions SET org_id = :org_id WHERE user_id = :user_id'
                 ),
-                {'org_id': user_uuid, 'user_id': user_uuid},
+                {'org_id': user_uuid, 'user_id': user_id},
             )
 
-            session.commit()
-            session.refresh(user)
-            user.org_members  # load org_members
+            await session.commit()
+            await session.refresh(user)
+            await session.refresh(user, ['org_members'])  # load org_members
             logger.debug(
                 'user_store:migrate_user:session_committed',
                 extra={'user_id': user_id},
@@ -374,8 +368,7 @@ class UserStore:
 
     @staticmethod
     async def downgrade_user(user_id: str) -> UserSettings | None:
-        """
-        This method can be removed once orgs is established - probably after Feb 15 2026
+        """This method can be removed once orgs is established - probably after Feb 15 2026
         Downgrade a migrated user back to the pre-migration state.
 
         This reverses the migrate_user operation:
@@ -406,14 +399,14 @@ class UserStore:
             extra={'user_id': user_id},
         )
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # Get the user and their org_member
-            user = (
-                session.query(User)
-                .options(joinedload(User.org_members))
+            result = await session.execute(
+                select(User)
+                .options(selectinload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
-                .first()
             )
+            user = result.scalars().first()
             if not user:
                 logger.warning(
                     'user_store:downgrade_user:user_not_found',
@@ -422,7 +415,10 @@ class UserStore:
                 return None
 
             # Get the user's personal org (org_id == user_id)
-            org = session.query(Org).filter(Org.id == uuid.UUID(user_id)).first()
+            result = await session.execute(
+                select(Org).filter(Org.id == uuid.UUID(user_id))
+            )
+            org = result.scalars().first()
             if not org:
                 logger.warning(
                     'user_store:downgrade_user:org_not_found',
@@ -431,9 +427,10 @@ class UserStore:
                 return None
 
             # Get org_members for this org - should only be one for personal orgs
-            org_members = (
-                session.query(OrgMember).filter(OrgMember.org_id == org.id).all()
+            result = await session.execute(
+                select(OrgMember).filter(OrgMember.org_id == org.id)
             )
+            org_members = result.scalars().all()
 
             if len(org_members) != 1:
                 logger.error(
@@ -449,14 +446,13 @@ class UserStore:
             org_member = org_members[0]
 
             # Get the user_settings (for migrated users)
-            user_settings = (
-                session.query(UserSettings)
-                .filter(
+            result = await session.execute(
+                select(UserSettings).filter(
                     UserSettings.keycloak_user_id == user_id,
                     UserSettings.already_migrated.is_(True),
                 )
-                .first()
             )
+            user_settings = result.scalars().first()
 
             # For new sign-ups after migration, user_settings won't exist
             # Fall back to getting data from org_members
@@ -487,7 +483,7 @@ class UserStore:
                     'user_store:downgrade_user:created_user_settings_from_org_member',
                     extra={'user_id': user_id},
                 )
-            session.flush()
+            await session.flush()
 
             # Call LiteLLM downgrade
             from storage.lite_llm_manager import LiteLlmManager
@@ -527,7 +523,7 @@ class UserStore:
             # Step 3: Copy user_id from conversation_metadata_saas to conversation_metadata
             # This ensures any conversations created after migration have their user_id
             # preserved in the original table before we delete the saas entries
-            session.execute(
+            await session.execute(
                 text("""
                     UPDATE conversation_metadata
                     SET user_id = :user_id
@@ -541,14 +537,14 @@ class UserStore:
             )
 
             # Step 4: Delete conversation_metadata_saas entries
-            session.execute(
+            await session.execute(
                 text('DELETE FROM conversation_metadata_saas WHERE user_id = :user_id'),
                 {'user_id': user_uuid},
             )
 
             # Step 5: Reset org_id columns in related tables
             # Reset stripe_customers
-            session.execute(
+            await session.execute(
                 text(
                     'UPDATE stripe_customers SET org_id = NULL WHERE org_id = :org_id'
                 ),
@@ -556,13 +552,13 @@ class UserStore:
             )
 
             # Reset slack_users
-            session.execute(
+            await session.execute(
                 text('UPDATE slack_users SET org_id = NULL WHERE org_id = :org_id'),
                 {'org_id': user_uuid},
             )
 
             # Reset slack_conversation
-            session.execute(
+            await session.execute(
                 text(
                     'UPDATE slack_conversation SET org_id = NULL WHERE org_id = :org_id'
                 ),
@@ -570,19 +566,19 @@ class UserStore:
             )
 
             # Reset api_keys
-            session.execute(
+            await session.execute(
                 text('UPDATE api_keys SET org_id = NULL WHERE org_id = :org_id'),
                 {'org_id': user_uuid},
             )
 
             # Reset custom_secrets
-            session.execute(
+            await session.execute(
                 text('UPDATE custom_secrets SET org_id = NULL WHERE org_id = :org_id'),
                 {'org_id': user_uuid},
             )
 
             # Reset billing_sessions
-            session.execute(
+            await session.execute(
                 text(
                     'UPDATE billing_sessions SET org_id = NULL WHERE org_id = :org_id'
                 ),
@@ -590,19 +586,19 @@ class UserStore:
             )
 
             # Step 6: Delete org_member entries for this org
-            session.execute(
+            await session.execute(
                 text('DELETE FROM org_member WHERE org_id = :org_id'),
                 {'org_id': user_uuid},
             )
 
             # Step 7: Delete the user entry
-            session.execute(
+            await session.execute(
                 text('DELETE FROM "user" WHERE id = :user_id'),
                 {'user_id': user_uuid},
             )
 
             # Delete the org entry
-            session.execute(
+            await session.execute(
                 text('DELETE FROM org WHERE id = :org_id'),
                 {'org_id': user_uuid},
             )
@@ -622,9 +618,9 @@ class UserStore:
                 if value is not None and not _is_legacy_value_encrypted(value):
                     setattr(user_settings, key, encrypt_legacy_value(value))
 
-            session.merge(user_settings)
+            await session.merge(user_settings)
 
-            session.commit()
+            await session.commit()
 
             logger.info(
                 'user_store:downgrade_user:complete',
@@ -633,88 +629,12 @@ class UserStore:
             return user_settings
 
     @staticmethod
-    def get_user_by_id(user_id: str) -> Optional[User]:
-        """Get user by Keycloak user ID (sync version).
-
-        Note: This method uses call_async_from_sync internally which creates a new
-        event loop. If you're already in an async context, use get_user_by_id_async
-        instead to avoid event loop conflicts.
-        """
-        with session_maker() as session:
-            user = (
-                session.query(User)
-                .options(joinedload(User.org_members))
-                .filter(User.id == uuid.UUID(user_id))
-                .first()
-            )
-            if user:
-                return user
-
-            # Check if we need to migrate from user_settings
-            while not call_async_from_sync(
-                UserStore._acquire_user_creation_lock, GENERAL_TIMEOUT, user_id
-            ):
-                # The user is already being created in another thread / process
-                logger.info(
-                    'user_store:create_default_settings:waiting_for_lock',
-                    extra={'user_id': user_id},
-                )
-                call_async_from_sync(
-                    asyncio.sleep, GENERAL_TIMEOUT, _RETRY_LOAD_DELAY_SECONDS
-                )
-
-            try:
-                # Check for user again as migration could have happened while trying to get the lock.
-                user = (
-                    session.query(User)
-                    .options(joinedload(User.org_members))
-                    .filter(User.id == uuid.UUID(user_id))
-                    .first()
-                )
-                if user:
-                    return user
-
-                user_settings = (
-                    session.query(UserSettings)
-                    .filter(
-                        UserSettings.keycloak_user_id == user_id,
-                        UserSettings.already_migrated.is_(False),
-                    )
-                    .first()
-                )
-                if user_settings:
-                    token_manager = TokenManager()
-                    user_info = call_async_from_sync(
-                        token_manager.get_user_info_from_user_id,
-                        GENERAL_TIMEOUT,
-                        user_id,
-                    )
-                    user = call_async_from_sync(
-                        UserStore.migrate_user,
-                        GENERAL_TIMEOUT,
-                        user_id,
-                        user_settings,
-                        user_info,
-                    )
-                    return user
-                else:
-                    return None
-            finally:
-                call_async_from_sync(
-                    UserStore._release_user_creation_lock, GENERAL_TIMEOUT, user_id
-                )
-
-    @staticmethod
-    async def get_user_by_id_async(user_id: str) -> Optional[User]:
-        """Get user by Keycloak user ID (async version).
-
-        This is the preferred method when calling from an async context as it
-        avoids event loop conflicts that can occur with the sync version.
-        """
+    async def get_user_by_id(user_id: str) -> Optional[User]:
+        """Get user by Keycloak user ID."""
         async with a_session_maker() as session:
             result = await session.execute(
                 select(User)
-                .options(joinedload(User.org_members))
+                .options(selectinload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
             )
             user = result.scalars().first()
@@ -725,7 +645,7 @@ class UserStore:
             while not await UserStore._acquire_user_creation_lock(user_id):
                 # The user is already being created in another thread / process
                 logger.info(
-                    'user_store:get_user_by_id_async:waiting_for_lock',
+                    'user_store:create_default_settings:waiting_for_lock',
                     extra={'user_id': user_id},
                 )
                 await asyncio.sleep(_RETRY_LOAD_DELAY_SECONDS)
@@ -734,17 +654,13 @@ class UserStore:
                 # Check for user again as migration could have happened while trying to get the lock.
                 result = await session.execute(
                     select(User)
-                    .options(joinedload(User.org_members))
+                    .options(selectinload(User.org_members))
                     .filter(User.id == uuid.UUID(user_id))
                 )
                 user = result.scalars().first()
                 if user:
                     return user
 
-                logger.info(
-                    'user_store:get_user_by_id_async:start_migration',
-                    extra={'user_id': user_id},
-                )
                 result = await session.execute(
                     select(UserSettings).filter(
                         UserSettings.keycloak_user_id == user_id,
@@ -755,10 +671,12 @@ class UserStore:
                 if user_settings:
                     token_manager = TokenManager()
                     user_info = await token_manager.get_user_info_from_user_id(user_id)
-                    logger.info(
-                        'user_store:get_user_by_id_async:calling_migrate_user',
-                        extra={'user_id': user_id},
-                    )
+                    if not user_info:
+                        logger.warning(
+                            'user_store:get_user_by_id:failed_to_get_user_info',
+                            extra={'user_id': user_id},
+                        )
+                        return None
                     user = await UserStore.migrate_user(
                         user_id,
                         user_settings,
@@ -771,8 +689,8 @@ class UserStore:
                 await UserStore._release_user_creation_lock(user_id)
 
     @staticmethod
-    async def get_user_by_email_async(email: str) -> Optional[User]:
-        """Get user by email address (async version).
+    async def get_user_by_email(email: str) -> Optional[User]:
+        """Get user by email address.
 
         This method looks up a user by their email address. Note that email
         addresses may not be unique across all users in rare cases.
@@ -789,19 +707,20 @@ class UserStore:
         async with a_session_maker() as session:
             result = await session.execute(
                 select(User)
-                .options(joinedload(User.org_members))
+                .options(selectinload(User.org_members))
                 .filter(User.email == email.lower().strip())
             )
             return result.scalars().first()
 
     @staticmethod
-    def list_users() -> list[User]:
+    async def list_users() -> list[User]:
         """List all users."""
-        with session_maker() as session:
-            return session.query(User).all()
+        async with a_session_maker() as session:
+            result = await session.execute(select(User))
+            return list(result.scalars().all())
 
     @staticmethod
-    def update_current_org(user_id: str, org_id: UUID) -> Optional[User]:
+    async def update_current_org(user_id: str, org_id: UUID) -> Optional[User]:
         """Update the user's current organization.
 
         Args:
@@ -811,19 +730,17 @@ class UserStore:
         Returns:
             User: The updated user object, or None if user not found
         """
-        with session_maker() as session:
-            user = (
-                session.query(User)
-                .filter(User.id == uuid.UUID(user_id))
-                .with_for_update()
-                .first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User).filter(User.id == uuid.UUID(user_id)).with_for_update()
             )
+            user = result.scalars().first()
             if not user:
                 return None
 
             user.current_org_id = org_id
-            session.commit()
-            session.refresh(user)
+            await session.commit()
+            await session.refresh(user)
             return user
 
     @staticmethod
@@ -971,12 +888,14 @@ class UserStore:
 
         from openhands.storage.data_models.settings import Settings
 
-        settings = Settings(language='en', enable_proactive_conversation_starters=True)
+        default_settings = Settings(
+            language='en', enable_proactive_conversation_starters=True
+        )
 
         from storage.lite_llm_manager import LiteLlmManager
 
         settings = await LiteLlmManager.create_entries(
-            org_id, user_id, settings, create_user
+            org_id, user_id, default_settings, create_user
         )
         if not settings:
             logger.info(
@@ -1099,8 +1018,7 @@ class UserStore:
     def _has_custom_settings(
         user_settings: UserSettings, old_user_version: int | None
     ) -> bool:
-        """
-        Check if user has custom LLM settings that should be preserved.
+        """Check if user has custom LLM settings that should be preserved.
         Returns True if user customized either model or base_url.
 
         Args:

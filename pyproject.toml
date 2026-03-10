@@ -21,10 +21,11 @@ dynamic = [ "version" ]
 
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
-  "aiohttp>=3.9,!=3.11.13",
+  "aiohttp>=3.13.3",
   "anthropic[vertex]",
   "anyio==4.9",
   "asyncpg>=0.30",
+  "authlib>=1.6.7",
   "bashlex>=0.18",
   "boto3",
   "browsergym-core==0.13.3",
@@ -33,7 +34,7 @@ dependencies = [
   "dirhash",
   "docker",
   "fastapi",
-  "fastmcp>=2.12.4",
+  "fastmcp>=3,<4",
   "google-api-python-client>=2.164",
   "google-auth-httplib2",
   "google-auth-oauthlib",
@@ -51,13 +52,14 @@ dependencies = [
   "libtmux>=0.46.2",
   "litellm!=1.64.4,!=1.67.*,>=1.74.3",
   "lmnr>=0.7.20",
+  "mcp>=1.25",
   "memory-profiler>=0.61",
   "numpy",
   "openai==2.8",
-  "openhands-aci==0.3.2",
-  "openhands-agent-server==1.11.5",
-  "openhands-sdk==1.11.5",
-  "openhands-tools==1.11.5",
+  "openhands-aci==0.3.3",
+  "openhands-agent-server==1.12",
+  "openhands-sdk==1.12",
+  "openhands-tools==1.12",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "pathspec>=0.12.1",
@@ -160,9 +162,10 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
+authlib = ">=1.6.7"                                # Pinned to fix CVE-2026-28802
 litellm = ">=1.74.3, !=1.64.4, !=1.67.*"           # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
 openai = "2.8.0"                                   # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
-aiohttp = ">=3.9.0,!=3.11.13"                      # Pin to avoid yanked version 3.11.13
+aiohttp = ">=3.13.3"                               # Pin to avoid CVE-2025-69223 (vulnerable versions < 3.13.3)
 google-genai = "*"                                 # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"              # For Google Sheets API
 google-auth-httplib2 = "*"                         # For Google Sheets authentication
@@ -198,7 +201,7 @@ opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
-openhands-aci = "0.3.2"
+openhands-aci = "0.3.3"
 python-socketio = "5.14.0"
 sse-starlette = "^3.0.2"
 psutil = "*"
@@ -207,7 +210,7 @@ prompt-toolkit = "^3.0.50"
 poetry = "^2.1.2"
 anyio = "4.9.0"
 pythonnet = "*"
-fastmcp = "^2.12.4"           # Note: 2.12.0+ has breaking auth API changes
+fastmcp = ">=3,<4"
 python-frontmatter = "^1.1.0"
 shellingham = "^1.5.4"
 # TODO: Should these go into the runtime group?
@@ -246,9 +249,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.11.5"
-openhands-agent-server = "1.11.5"
-openhands-tools = "1.11.5"
+openhands-sdk = "1.12"
+openhands-agent-server = "1.12"
+openhands-tools = "1.12"
 jwcrypto = ">=1.5.6"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"

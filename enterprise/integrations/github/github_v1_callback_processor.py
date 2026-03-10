@@ -3,8 +3,9 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from github import Auth, Github, GithubIntegration
-from integrations.utils import CONVERSATION_URL, get_summary_instruction
+from github import Auth, Github, GithubException, GithubIntegration
+from integrations.utils import get_summary_instruction
+from integrations.v1_utils import handle_callback_error
 from pydantic import Field
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
@@ -42,7 +43,6 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         event: Event,
     ) -> EventCallbackResult | None:
         """Process events for GitHub V1 integration."""
-
         # Only handle ConversationStateUpdateEvent
         if not isinstance(event, ConversationStateUpdateEvent):
             return None
@@ -78,25 +78,20 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.exception('[GitHub V1] Error processing callback: %s', e)
-
-            # Only try to post error to GitHub if we have basic requirements
-            try:
-                # Check if we have installation ID and credentials before posting
-                if (
-                    self.github_view_data.get('installation_id')
-                    and GITHUB_APP_CLIENT_ID
-                    and GITHUB_APP_PRIVATE_KEY
-                ):
-                    await self._post_summary_to_github(
-                        f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
-                        'for more information.'
-                    )
-            except Exception as post_error:
-                _logger.warning(
-                    '[GitHub V1] Failed to post error message to GitHub: %s', post_error
-                )
+            # Check if we have installation ID and credentials before posting
+            can_post_error = bool(
+                self.github_view_data.get('installation_id')
+                and GITHUB_APP_CLIENT_ID
+                and GITHUB_APP_PRIVATE_KEY
+            )
+            await handle_callback_error(
+                error=e,
+                conversation_id=conversation_id,
+                service_name='GitHub',
+                service_logger=_logger,
+                can_post_error=can_post_error,
+                post_error_func=self._post_summary_to_github,
+            )
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
@@ -137,19 +132,30 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         full_repo_name = self.github_view_data['full_repo_name']
         issue_number = self.github_view_data['issue_number']
 
-        if self.inline_pr_comment:
+        try:
+            if self.inline_pr_comment:
+                with Github(auth=Auth.Token(installation_token)) as github_client:
+                    repo = github_client.get_repo(full_repo_name)
+                    pr = repo.get_pull(issue_number)
+                    pr.create_review_comment_reply(
+                        comment_id=self.github_view_data.get('comment_id', ''),
+                        body=summary,
+                    )
+                return
+
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(full_repo_name)
-                pr = repo.get_pull(issue_number)
-                pr.create_review_comment_reply(
-                    comment_id=self.github_view_data.get('comment_id', ''), body=summary
+                issue = repo.get_issue(number=issue_number)
+                issue.create_comment(summary)
+        except GithubException as e:
+            if e.status == 410:
+                _logger.info(
+                    '[GitHub V1] Issue/PR %s#%s was deleted, skipping summary post',
+                    full_repo_name,
+                    issue_number,
                 )
-            return
-
-        with Github(auth=Auth.Token(installation_token)) as github_client:
-            repo = github_client.get_repo(full_repo_name)
-            issue = repo.get_issue(number=issue_number)
-            issue.create_comment(summary)
+            else:
+                raise
 
     # -------------------------------------------------------------------------
     # Agent / sandbox helpers
@@ -167,8 +173,8 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f'{agent_server_url.rstrip("/")}'
-            f'/api/conversations/{conversation_id}/ask_agent'
+            f"{agent_server_url.rstrip('/')}"
+            f"/api/conversations/{conversation_id}/ask_agent"
         )
         headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
@@ -230,8 +236,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
     # -------------------------------------------------------------------------
 
     async def _request_summary(self, conversation_id: UUID) -> str:
-        """
-        Ask the agent to produce a summary of its work and return the agent response.
+        """Ask the agent to produce a summary of its work and return the agent response.
 
         NOTE: This method now returns a string (the agent server's response text)
         and raises exceptions on errors. The wrapping into EventCallbackResult

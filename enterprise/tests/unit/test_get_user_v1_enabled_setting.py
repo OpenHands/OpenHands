@@ -1,7 +1,7 @@
 """Unit tests for get_user_v1_enabled_setting and is_v1_enabled_for_github_resolver functions."""
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from integrations.github.github_view import (
@@ -22,12 +22,12 @@ def mock_org():
 def mock_dependencies(mock_org):
     """Fixture that patches all the common dependencies."""
     with patch(
-        'integrations.utils.call_sync_from_async',
+        'integrations.utils.OrgStore.get_current_org_from_keycloak_user_id',
+        new_callable=AsyncMock,
         return_value=mock_org,
-    ) as mock_call_sync, patch('integrations.utils.OrgStore') as mock_org_store:
+    ) as mock_get_org:
         yield {
-            'call_sync': mock_call_sync,
-            'org_store': mock_org_store,
+            'get_org': mock_get_org,
             'org': mock_org,
         }
 
@@ -102,10 +102,7 @@ class TestGetUserV1EnabledSetting:
         assert result is True
 
         # Verify correct methods were called with correct parameters
-        mock_dependencies['call_sync'].assert_called_once_with(
-            mock_dependencies['org_store'].get_current_org_from_keycloak_user_id,
-            'test_user_123',
-        )
+        mock_dependencies['get_org'].assert_called_once_with('test_user_123')
 
     @pytest.mark.asyncio
     async def test_returns_user_setting_true(self, mock_dependencies):
@@ -124,8 +121,8 @@ class TestGetUserV1EnabledSetting:
     @pytest.mark.asyncio
     async def test_no_org_returns_false(self, mock_dependencies):
         """Test that the function returns False when no org is found."""
-        # Mock call_sync_from_async to return None (no org found)
-        mock_dependencies['call_sync'].return_value = None
+        # Mock get_current_org_from_keycloak_user_id to return None (no org found)
+        mock_dependencies['get_org'].return_value = None
 
         result = await get_user_v1_enabled_setting('test_user_123')
         assert result is False

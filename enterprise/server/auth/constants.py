@@ -40,6 +40,16 @@ ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
 )
 
 DUPLICATE_EMAIL_CHECK = os.getenv('DUPLICATE_EMAIL_CHECK', 'true') in ('1', 'true')
+BITBUCKET_DATA_CENTER_CLIENT_ID = os.getenv(
+    'BITBUCKET_DATA_CENTER_CLIENT_ID', ''
+).strip()
+BITBUCKET_DATA_CENTER_CLIENT_SECRET = os.getenv(
+    'BITBUCKET_DATA_CENTER_CLIENT_SECRET', ''
+).strip()
+BITBUCKET_DATA_CENTER_HOST = os.getenv('BITBUCKET_DATA_CENTER_HOST', '').strip()
+BITBUCKET_DATA_CENTER_TOKEN_URL = (
+    f'https://{BITBUCKET_DATA_CENTER_HOST}/rest/oauth2/latest/token'
+)
 
 # reCAPTCHA Enterprise
 RECAPTCHA_PROJECT_ID = os.getenv('RECAPTCHA_PROJECT_ID', '').strip()

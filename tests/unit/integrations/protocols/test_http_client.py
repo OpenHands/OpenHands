@@ -10,6 +10,7 @@ from pydantic import SecretStr
 from openhands.integrations.protocols.http_client import HTTPClient
 from openhands.integrations.service_types import (
     AuthenticationError,
+    ProviderTimeoutError,
     RateLimitError,
     RequestMethod,
     ResourceNotFoundError,
@@ -201,18 +202,24 @@ class TestHTTPClient:
         client = TestableHTTPClient()
         client.provider = 'test-provider'
 
-        # Test with different error types
-        errors = [
-            httpx.ConnectError('Connection failed'),
+        # Test with non-timeout error (should return UnknownException)
+        connect_error = httpx.ConnectError('Connection failed')
+        result = client.handle_http_error(connect_error)
+        assert isinstance(result, UnknownException)
+        assert 'HTTP error ConnectError' in str(result)
+
+        # Test with timeout errors (should return ProviderTimeoutError)
+        timeout_errors = [
             httpx.TimeoutException('Request timed out'),
             httpx.ReadTimeout('Read timeout'),
             httpx.WriteTimeout('Write timeout'),
         ]
 
-        for error in errors:
+        for error in timeout_errors:
             result = client.handle_http_error(error)
-            assert isinstance(result, UnknownException)
-            assert f'HTTP error {type(error).__name__}' in str(result)
+            assert isinstance(result, ProviderTimeoutError)
+            assert 'test-provider API request timed out' in str(result)
+            assert type(error).__name__ in str(result)
 
     def test_runtime_checkable(self):
         """Test that HTTPClient is runtime checkable."""

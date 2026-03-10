@@ -116,10 +116,8 @@ class GitHubDataCollector:
 
         return suffix
 
-    def _get_installation_access_token(self, installation_id: str) -> str:
-        token_data = self.github_integration.get_access_token(
-            installation_id  # type: ignore[arg-type]
-        )
+    def _get_installation_access_token(self, installation_id: int) -> str:
+        token_data = self.github_integration.get_access_token(installation_id)
         return token_data.token
 
     def _check_openhands_author(self, name, login) -> bool:
@@ -134,7 +132,7 @@ class GitHubDataCollector:
         )
 
     def _get_issue_comments(
-        self, installation_id: str, repo_name: str, issue_number: int, conversation_id
+        self, installation_id: int, repo_name: str, issue_number: int, conversation_id
     ) -> list[dict[str, Any]]:
         """
         Retrieve all comments from an issue until a comment with conversation_id is found
@@ -234,7 +232,7 @@ class GitHubDataCollector:
             f'[Github]: Saved issue #{issue_number} for {github_view.full_repo_name}'
         )
 
-    def _get_pr_commits(self, installation_id: str, repo_name: str, pr_number: int):
+    def _get_pr_commits(self, installation_id: int, repo_name: str, pr_number: int):
         commits = []
         installation_token = self._get_installation_access_token(installation_id)
         with Github(auth=Auth.Token(installation_token)) as github_client:
@@ -431,7 +429,7 @@ class GitHubDataCollector:
         - Num openhands review comments
         """
         pr_number = openhands_pr.pr_number
-        installation_id = openhands_pr.installation_id
+        installation_id = int(openhands_pr.installation_id)
         repo_id = openhands_pr.repo_id
 
         # Get installation token and create Github client
@@ -569,7 +567,7 @@ class GitHubDataCollector:
         openhands_helped_author = openhands_commit_count > 0
 
         # Update the PR with OpenHands statistics
-        update_success = store.update_pr_openhands_stats(
+        update_success = await store.update_pr_openhands_stats(
             repo_id=repo_id,
             pr_number=pr_number,
             original_updated_at=openhands_pr.updated_at,
@@ -612,7 +610,7 @@ class GitHubDataCollector:
         action = payload.get('action', '')
         return action == 'closed' and 'pull_request' in payload
 
-    def _track_closed_or_merged_pr(self, payload):
+    async def _track_closed_or_merged_pr(self, payload):
         """
         Track PR closed/merged event
         """
@@ -671,17 +669,17 @@ class GitHubDataCollector:
             num_general_comments=num_general_comments,
         )
 
-        store.insert_pr(pr)
+        await store.insert_pr(pr)
         logger.info(f'Tracked PR {status}: {repo_id}#{pr_number}')
 
-    def process_payload(self, message: Message):
+    async def process_payload(self, message: Message):
         if not COLLECT_GITHUB_INTERACTIONS:
             return
 
         raw_payload = message.message.get('payload', {})
 
         if self._is_pr_closed_or_merged(raw_payload):
-            self._track_closed_or_merged_pr(raw_payload)
+            await self._track_closed_or_merged_pr(raw_payload)
 
     async def save_data(self, github_view: ResolverViewInterface):
         if not COLLECT_GITHUB_INTERACTIONS:
