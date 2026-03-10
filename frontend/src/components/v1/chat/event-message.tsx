@@ -203,7 +203,11 @@ export function EventMessage({
   if (isActionEvent(event)) {
     return (
       <>
-        <ThoughtEventMessage event={event} actions={actions} />
+        <ThoughtEventMessage
+          event={event}
+          actions={actions}
+          isFromPlanningAgent={isFromPlanningAgent}
+        />
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
@@ -222,9 +226,13 @@ export function EventMessage({
         planPreviewEventIds &&
         shouldShowPlanPreview(event.id, planPreviewEventIds)
       ) {
+        // Show shine effect only if this is the last message AND agent is running
+        const isStreaming =
+          isLastMessage && curAgentState === AgentState.RUNNING;
         return (
           <PlanPreview
             planContent={planContent}
+            isStreaming={isStreaming}
             isBuildDisabled={isAgentRunning}
           />
         );
@@ -242,7 +250,11 @@ export function EventMessage({
     return (
       <>
         {correspondingAction && isActionEvent(correspondingAction) && (
-          <ThoughtEventMessage event={correspondingAction} actions={actions} />
+          <ThoughtEventMessage
+            event={correspondingAction}
+            actions={actions}
+            isFromPlanningAgent={isFromPlanningAgent}
+          />
         )}
         <GenericEventMessageWrapper
           event={event}

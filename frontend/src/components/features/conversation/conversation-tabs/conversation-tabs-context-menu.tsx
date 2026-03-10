@@ -12,8 +12,9 @@ import GitChanges from "#/icons/git_changes.svg?react";
 import VSCodeIcon from "#/icons/vscode.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import DoubleCheckIcon from "#/icons/double-check.svg?react";
+import { useTaskList } from "#/hooks/use-task-list";
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -30,9 +31,14 @@ export function ConversationTabsContextMenu({
   const { state, setUnpinnedTabs } =
     useConversationLocalStorageState(conversationId);
 
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
+  const { hasTaskList } = useTaskList();
 
   const tabConfig = [
+    {
+      tab: "planner",
+      icon: LessonPlanIcon,
+      i18nKey: I18nKey.COMMON$PLANNER,
+    },
     { tab: "editor", icon: GitChanges, i18nKey: I18nKey.COMMON$CHANGES },
     { tab: "vscode", icon: VSCodeIcon, i18nKey: I18nKey.COMMON$CODE },
     { tab: "terminal", icon: TerminalIcon, i18nKey: I18nKey.COMMON$TERMINAL },
@@ -40,11 +46,11 @@ export function ConversationTabsContextMenu({
     { tab: "browser", icon: GlobeIcon, i18nKey: I18nKey.COMMON$BROWSER },
   ];
 
-  if (shouldUsePlanningAgent) {
+  if (hasTaskList) {
     tabConfig.unshift({
-      tab: "planner",
-      icon: LessonPlanIcon,
-      i18nKey: I18nKey.COMMON$PLANNER,
+      tab: "tasklist",
+      icon: DoubleCheckIcon,
+      i18nKey: I18nKey.COMMON$TASK_LIST,
     });
   }
 

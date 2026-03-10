@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import time
 from dataclasses import dataclass
@@ -444,11 +445,19 @@ async def test_disconnect_from_stopped_with_stopped_remote():
     # Create a mock SIO with scan results for only remote_session1
     sio = get_mock_sio(scan_keys=[b'ohcnv:user1:remote_session1'])
 
-    # Mock the database connection to avoid actual database connections
-    db_mock = MagicMock()
-    db_session_mock = MagicMock()
-    db_mock.__enter__.return_value = db_session_mock
-    session_maker_mock = MagicMock(return_value=db_mock)
+    # Mock the async database session
+    mock_user = MagicMock()
+    mock_user.user_id = 'user1'
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_user
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    @contextlib.asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
 
     with (
         patch(
@@ -456,8 +465,8 @@ async def test_disconnect_from_stopped_with_stopped_remote():
             AsyncMock(),
         ),
         patch(
-            'server.clustered_conversation_manager.session_maker',
-            session_maker_mock,
+            'server.clustered_conversation_manager.a_session_maker',
+            mock_a_session_maker,
         ),
         patch('asyncio.create_task', MagicMock()),
     ):
@@ -483,11 +492,6 @@ async def test_disconnect_from_stopped_with_stopped_remote():
             conversation_manager._local_agent_loops_by_sid['local_session1'] = (
                 MagicMock()
             )
-
-            # Create a mock for the database query result
-            mock_user = MagicMock()
-            mock_user.user_id = 'user1'
-            db_session_mock.query.return_value.filter.return_value.first.return_value = mock_user
 
             # Mock the _handle_remote_conversation_stopped method with the correct signature
             conversation_manager._handle_remote_conversation_stopped = AsyncMock()

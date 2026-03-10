@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import status
 from fastapi.responses import JSONResponse
@@ -12,6 +13,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
+    AppConversation,
     AppConversationInfo,
     AppConversationPage,
     AppConversationStartRequest,
@@ -21,8 +23,14 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
+from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
 from openhands.microagent.microagent import KnowledgeMicroagent, RepoMicroagent
 from openhands.microagent.types import MicroagentMetadata, MicroagentType
+from openhands.runtime.runtime_status import RuntimeStatus
+from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.server.data_models.agent_loop_info import AgentLoopInfo
+from openhands.server.data_models.conversation_info import ConversationStatus
 from openhands.server.data_models.conversation_info_result_set import (
     ConversationInfoResultSet,
 )
@@ -32,7 +40,11 @@ from openhands.server.routes.conversation import (
     get_microagents,
 )
 from openhands.server.routes.manage_conversations import (
+    _RESUME_GRACE_PERIOD,
     UpdateConversationRequest,
+    _get_conversation_info,
+    _to_conversation_info,
+    get_conversation,
     search_conversations,
     update_conversation,
 )
@@ -48,8 +60,6 @@ from openhands.storage.data_models.conversation_metadata import (
 async def test_get_microagents():
     """Test the get_microagents function directly."""
     # Create mock microagents
-    from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
-
     repo_microagent = RepoMicroagent(
         name='test_repo',
         content='This is a test repo microagent',
@@ -1146,8 +1156,6 @@ async def test_add_message_empty_message():
 @pytest.mark.asyncio
 async def test_create_sub_conversation_with_planning_agent():
     """Test creating a sub-conversation from a parent conversation with planning agent."""
-    from uuid import uuid4
-
     parent_conversation_id = uuid4()
     user_id = 'test_user_456'
     sandbox_id = 'test_sandbox_123'
@@ -1459,3 +1467,222 @@ async def test_search_conversations_include_sub_conversations_with_other_filters
                 assert call_kwargs.get('include_sub_conversations') is True
                 assert call_kwargs.get('page_id') == 'test_v1_page_id'
                 assert call_kwargs.get('limit') == 50
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'sandbox_status,execution_status,server_uptime,server_error,expected_status,should_call_server',
+    [
+        # RUNNING sandbox, no execution_status, server responds within grace period -> STARTING
+        (SandboxStatus.RUNNING, None, 30, None, ConversationStatus.STARTING, True),
+        # RUNNING sandbox, no execution_status, server responds past grace period -> RUNNING
+        (
+            SandboxStatus.RUNNING,
+            None,
+            _RESUME_GRACE_PERIOD + 10,
+            None,
+            ConversationStatus.RUNNING,
+            True,
+        ),
+        # RUNNING sandbox, no execution_status, server unresponsive -> STARTING
+        (
+            SandboxStatus.RUNNING,
+            None,
+            None,
+            httpx.ConnectError('Connection refused'),
+            ConversationStatus.STARTING,
+            True,
+        ),
+        # RUNNING sandbox, WITH execution_status -> RUNNING, skip server check
+        (SandboxStatus.RUNNING, 'IDLE', None, None, ConversationStatus.RUNNING, False),
+        # Non-RUNNING sandbox -> STARTING, skip server check
+        (SandboxStatus.STARTING, None, None, None, ConversationStatus.STARTING, False),
+    ],
+    ids=[
+        'running_no_exec_status_within_grace_period',
+        'running_no_exec_status_past_grace_period',
+        'running_no_exec_status_server_unresponsive',
+        'running_with_exec_status_skips_check',
+        'non_running_skips_check',
+    ],
+)
+async def test_get_conversation_resume_status_handling(
+    sandbox_status,
+    execution_status,
+    server_uptime,
+    server_error,
+    expected_status,
+    should_call_server,
+):
+    """Test get_conversation handles resume status correctly for various scenarios."""
+    conversation_id = uuid4()
+
+    # Convert string execution_status to enum if provided
+    exec_status = None
+    if execution_status == 'IDLE':
+        exec_status = ConversationExecutionStatus.IDLE
+
+    mock_app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='test_user',
+        sandbox_id='test_sandbox',
+        sandbox_status=sandbox_status,
+        execution_status=exec_status,
+        conversation_url='https://sandbox.example.com/conversation',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_app_conversation_service = AsyncMock(spec=AppConversationService)
+    mock_app_conversation_service.get_app_conversation.return_value = (
+        mock_app_conversation
+    )
+    mock_conversation_store = AsyncMock(spec=ConversationStore)
+    mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+
+    if server_error:
+        mock_httpx_client.get.side_effect = server_error
+    elif server_uptime is not None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'uptime': server_uptime}
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.get.return_value = mock_response
+
+    result = await get_conversation(
+        conversation_id=str(conversation_id),
+        conversation_store=mock_conversation_store,
+        app_conversation_service=mock_app_conversation_service,
+        httpx_client=mock_httpx_client,
+    )
+
+    assert result is not None
+    assert result.status == expected_status
+
+    if should_call_server:
+        mock_httpx_client.get.assert_called_once_with(
+            'https://sandbox.example.com/server_info'
+        )
+    else:
+        mock_httpx_client.get.assert_not_called()
+
+
+# Tests for _to_conversation_info and _get_conversation_info sandbox_id mapping
+
+
+@pytest.mark.asyncio
+async def test_to_conversation_info_maps_sandbox_id():
+    """Test that _to_conversation_info correctly maps sandbox_id from V1 AppConversation."""
+    conversation_id = uuid4()
+    test_sandbox_id = 'test-sandbox-123'
+
+    # Create a mock V1 AppConversation with sandbox_id
+    mock_app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='test_user',
+        sandbox_id=test_sandbox_id,
+        sandbox_status=SandboxStatus.RUNNING,
+        execution_status=ConversationExecutionStatus.RUNNING,
+        conversation_url='https://sandbox.example.com/conversation',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        title='Test Conversation',
+        selected_repository='test/repo',
+        selected_branch='main',
+        git_provider='github',
+        trigger=ConversationTrigger.GUI,
+        sub_conversation_ids=[],
+        public=False,
+    )
+
+    result = _to_conversation_info(mock_app_conversation)
+
+    assert result is not None
+    assert result.conversation_id == conversation_id.hex
+    assert result.sandbox_id == test_sandbox_id
+    assert result.conversation_version == 'V1'
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_info_v0_has_null_sandbox_id():
+    """Test that _get_conversation_info returns null sandbox_id for V0 conversations."""
+    conversation_id = 'test-conversation-v0'
+
+    # Create mock V0 conversation metadata (no sandbox_id field)
+    mock_metadata = ConversationMetadata(
+        conversation_id=conversation_id,
+        user_id='test_user',
+        title='V0 Test Conversation',
+        selected_repository=None,
+        last_updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+    )
+
+    # Create mock agent_loop_info
+    mock_agent_loop_info = AgentLoopInfo(
+        conversation_id=conversation_id,
+        runtime_status=RuntimeStatus.READY,
+        status=ConversationStatus.STOPPED,
+        event_store=None,
+        url=None,
+        session_api_key=None,
+    )
+
+    result = await _get_conversation_info(
+        conversation=mock_metadata,
+        num_connections=0,
+        agent_loop_info=mock_agent_loop_info,
+    )
+
+    assert result is not None
+    assert result.sandbox_id is None
+    assert result.conversation_version == 'V0'
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_info_returns_all_fields():
+    """Test that _get_conversation_info returns all expected fields for V0 conversations."""
+    conversation_id = 'test-conversation-full'
+
+    # Create mock V0 conversation metadata
+    mock_metadata = ConversationMetadata(
+        conversation_id=conversation_id,
+        user_id='test_user',
+        title='Full Test Conversation',
+        selected_repository='test/repo',
+        selected_branch='main',
+        git_provider='github',
+        trigger=ConversationTrigger.GUI,
+        last_updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+        pr_number=[123],
+    )
+
+    # Create mock agent_loop_info
+    mock_agent_loop_info = AgentLoopInfo(
+        conversation_id=conversation_id,
+        runtime_status=RuntimeStatus.READY,
+        status=ConversationStatus.STOPPED,
+        event_store=None,
+        url='https://example.com/conversation',
+        session_api_key='test-key',
+    )
+
+    result = await _get_conversation_info(
+        conversation=mock_metadata,
+        num_connections=5,
+        agent_loop_info=mock_agent_loop_info,
+    )
+
+    assert result is not None
+    assert result.conversation_id == conversation_id
+    assert result.title == 'Full Test Conversation'
+    assert result.selected_repository == 'test/repo'
+    assert result.selected_branch == 'main'
+    assert result.git_provider == 'github'
+    assert result.trigger == ConversationTrigger.GUI
+    assert result.num_connections == 5
+    assert result.url == 'https://example.com/conversation'
+    assert result.session_api_key == 'test-key'
+    assert result.pr_number == [123]
+    assert result.sandbox_id is None  # V0 should have null sandbox_id
+    assert result.conversation_version == 'V0'

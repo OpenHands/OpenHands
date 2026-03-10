@@ -1323,3 +1323,58 @@ async def test_validate_workspace_update_permissions_no_current_link(mock_manage
 
     result = await _validate_workspace_update_permissions('user1', 'test-workspace')
     assert result == mock_workspace
+
+
+# Tests for OAuth URL encoding
+class TestJiraOAuthUrlEncoding:
+    """Tests to verify OAuth authorization URLs are properly URL-encoded."""
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.jira.get_user_auth')
+    @patch('server.routes.integration.jira.redis_client')
+    async def test_create_jira_workspace_url_encoding(
+        self, mock_redis, mock_get_auth, mock_request, mock_user_auth
+    ):
+        """Test that create_jira_workspace properly URL-encodes the authorization URL."""
+        mock_get_auth.return_value = mock_user_auth
+        mock_redis.setex.return_value = True
+        workspace_data = JiraWorkspaceCreate(
+            workspace_name='test-workspace',
+            webhook_secret='secret',
+            svc_acc_email='svc@test.com',
+            svc_acc_api_key='key',
+            is_active=True,
+        )
+
+        response = await create_jira_workspace(mock_request, workspace_data)
+        content = json.loads(response.body)
+
+        auth_url = content['authorizationUrl']
+        # Verify no raw spaces in the URL (spaces should be encoded as + or %20)
+        assert ' ' not in auth_url
+        # Verify scope parameter contains encoded scopes (+ is valid URL encoding for space)
+        assert 'scope=read%3Ame+read%3Ajira-user+read%3Ajira-work' in auth_url
+        # Verify redirect_uri is properly encoded
+        assert 'redirect_uri=https%3A%2F%2F' in auth_url
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.jira.get_user_auth')
+    @patch('server.routes.integration.jira.redis_client')
+    async def test_create_workspace_link_url_encoding(
+        self, mock_redis, mock_get_auth, mock_request, mock_user_auth
+    ):
+        """Test that create_workspace_link properly URL-encodes the authorization URL."""
+        mock_get_auth.return_value = mock_user_auth
+        mock_redis.setex.return_value = True
+        link_data = JiraLinkCreate(workspace_name='test-workspace')
+
+        response = await create_workspace_link(mock_request, link_data)
+        content = json.loads(response.body)
+
+        auth_url = content['authorizationUrl']
+        # Verify no raw spaces in the URL (spaces should be encoded as + or %20)
+        assert ' ' not in auth_url
+        # Verify scope parameter contains encoded scopes (+ is valid URL encoding for space)
+        assert 'scope=read%3Ame+read%3Ajira-user+read%3Ajira-work' in auth_url
+        # Verify redirect_uri is properly encoded
+        assert 'redirect_uri=https%3A%2F%2F' in auth_url

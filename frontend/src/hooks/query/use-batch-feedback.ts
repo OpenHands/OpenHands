@@ -38,7 +38,7 @@ export const useBatchFeedback = () => {
     enabled:
       runtimeIsReady &&
       !!conversationId &&
-      config?.APP_MODE === "saas" &&
+      config?.app_mode === "saas" &&
       !isV1Conversation,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes

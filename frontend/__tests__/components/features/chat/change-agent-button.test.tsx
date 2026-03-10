@@ -5,11 +5,6 @@ import { ChangeAgentButton } from "#/components/features/chat/change-agent-butto
 import { renderWithProviders } from "../../../../test-utils";
 import { useConversationStore } from "#/stores/conversation-store";
 
-// Mock feature flag to enable planning agent
-vi.mock("#/utils/feature-flags", () => ({
-  USE_PLANNING_AGENT: () => true,
-}));
-
 // Mock WebSocket status
 vi.mock("#/hooks/use-unified-websocket-status", () => ({
   useUnifiedWebSocketStatus: () => "CONNECTED",

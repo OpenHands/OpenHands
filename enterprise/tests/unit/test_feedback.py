@@ -1,5 +1,6 @@
 import sys
-from unittest.mock import MagicMock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -27,6 +28,7 @@ async def test_submit_feedback():
     """Test submitting feedback for a conversation."""
     # Create a mock database session
     mock_session = MagicMock()
+    mock_session.commit = AsyncMock()
 
     # Test data
     feedback_data = FeedbackRequest(
@@ -37,19 +39,13 @@ async def test_submit_feedback():
         metadata={'browser': 'Chrome', 'os': 'Windows'},
     )
 
-    # Mock session_maker and call_sync_from_async
-    with patch('server.routes.feedback.session_maker') as mock_session_maker, patch(
-        'server.routes.feedback.call_sync_from_async'
-    ) as mock_call_sync:
-        mock_session_maker.return_value.__enter__.return_value = mock_session
-        mock_session_maker.return_value.__exit__.return_value = None
+    # Create async context manager for a_session_maker
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
 
-        # Mock call_sync_from_async to execute the function
-        def mock_call_sync_side_effect(func):
-            return func()
-
-        mock_call_sync.side_effect = mock_call_sync_side_effect
-
+    # Mock a_session_maker
+    with patch('server.routes.feedback.a_session_maker', mock_a_session_maker):
         # Call the function
         result = await submit_conversation_feedback(feedback_data)
 
@@ -78,6 +74,7 @@ async def test_invalid_rating():
     """Test submitting feedback with an invalid rating."""
     # Create a mock database session
     mock_session = MagicMock()
+    mock_session.commit = AsyncMock()
 
     # Since Pydantic validation happens before our function is called,
     # we need to patch the validation to test our function's validation
@@ -95,14 +92,13 @@ async def test_invalid_rating():
         # Mock the validation to return our object
         mock_validate.return_value = feedback_data
 
-        # Mock session_maker and call_sync_from_async
-        with patch('server.routes.feedback.session_maker') as mock_session_maker, patch(
-            'server.routes.feedback.call_sync_from_async'
-        ) as mock_call_sync:
-            mock_session_maker.return_value.__enter__.return_value = mock_session
-            mock_session_maker.return_value.__exit__.return_value = None
-            mock_call_sync.return_value = None
+        # Create async context manager for a_session_maker
+        @asynccontextmanager
+        async def mock_a_session_maker():
+            yield mock_session
 
+        # Mock a_session_maker
+        with patch('server.routes.feedback.a_session_maker', mock_a_session_maker):
             # Call the function and expect an exception
             with pytest.raises(HTTPException) as excinfo:
                 await submit_conversation_feedback(feedback_data)

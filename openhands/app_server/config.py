@@ -205,6 +205,13 @@ def config_from_env() -> AppServerConfig:
                 docker_sandbox_kwargs['container_url_pattern'] = os.environ[
                     'SANDBOX_CONTAINER_URL_PATTERN'
                 ]
+            # Allow configuring sandbox startup grace period
+            # This is useful for slower machines or cloud environments where
+            # the agent-server container takes longer to initialize
+            if os.getenv('SANDBOX_STARTUP_GRACE_SECONDS'):
+                docker_sandbox_kwargs['startup_grace_seconds'] = int(
+                    os.environ['SANDBOX_STARTUP_GRACE_SECONDS']
+                )
             # Parse SANDBOX_VOLUMES and convert to VolumeMount objects
             # This is set by the CLI's --mount-cwd flag
             sandbox_volumes = os.getenv('SANDBOX_VOLUMES')
