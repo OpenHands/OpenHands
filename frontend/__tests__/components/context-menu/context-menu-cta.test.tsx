@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { ContextMenuCTA } from "#/components/features/context-menu/context-menu-cta";
 import { renderWithProviders } from "../../../test-utils";
 
@@ -15,7 +15,9 @@ describe("ContextMenuCTA", () => {
   it("should render the Learn more button with correct link", () => {
     renderWithProviders(<ContextMenuCTA />);
 
-    const learnMoreButton = screen.getByRole("button", { name: "CTA$LEARN_MORE" });
+    const learnMoreButton = screen.getByRole("button", {
+      name: "CTA$LEARN_MORE",
+    });
     expect(learnMoreButton).toBeInTheDocument();
 
     const link = learnMoreButton.closest("a");
@@ -24,55 +26,44 @@ describe("ContextMenuCTA", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("should have correct container dimensions via className", () => {
-    const { container } = renderWithProviders(<ContextMenuCTA />);
+  it("should have correct container styling", () => {
+    renderWithProviders(<ContextMenuCTA />);
 
-    const ctaContainer = container.firstChild as HTMLElement;
+    const ctaContainer = screen.getByTestId("context-menu-cta");
     expect(ctaContainer).toHaveClass("w-[286px]");
     expect(ctaContainer).toHaveClass("h-[449px]");
     expect(ctaContainer).toHaveClass("rounded-[6px]");
+    expect(ctaContainer).toHaveClass("cta-card-gradient");
   });
 
-  it("should have correct inner container dimensions", () => {
-    const { container } = renderWithProviders(<ContextMenuCTA />);
+  it("should have correct inner content container", () => {
+    renderWithProviders(<ContextMenuCTA />);
 
-    const innerContainer = container.querySelector(".w-\\[236px\\].h-\\[246px\\]");
-    expect(innerContainer).toBeInTheDocument();
-    expect(innerContainer).toHaveClass("gap-[11px]");
-    expect(innerContainer).toHaveClass("mt-[175px]");
-    expect(innerContainer).toHaveClass("ml-[25px]");
+    const contentContainer = screen.getByTestId("context-menu-cta-content");
+    expect(contentContainer).toBeInTheDocument();
+    expect(contentContainer).toHaveClass("flex");
+    expect(contentContainer).toHaveClass("flex-col");
+    expect(contentContainer).toHaveClass("gap-[11px]");
+    expect(contentContainer).toHaveClass("p-[25px]");
   });
 
   it("should render the stacked icon", () => {
-    const { container } = renderWithProviders(<ContextMenuCTA />);
+    renderWithProviders(<ContextMenuCTA />);
 
-    const icon = container.querySelector("svg");
+    const contentContainer = screen.getByTestId("context-menu-cta-content");
+    const icon = contentContainer.querySelector("svg");
     expect(icon).toBeInTheDocument();
     expect(icon).toHaveAttribute("width", "40");
     expect(icon).toHaveAttribute("height", "40");
   });
 
-  it("should have Learn more button with correct dimensions", () => {
+  it("should have Learn more button with correct styling", () => {
     renderWithProviders(<ContextMenuCTA />);
 
-    const learnMoreButton = screen.getByRole("button", { name: "CTA$LEARN_MORE" });
-    expect(learnMoreButton).toHaveClass("w-[111px]");
+    const learnMoreButton = screen.getByRole("button", {
+      name: "CTA$LEARN_MORE",
+    });
     expect(learnMoreButton).toHaveClass("h-[40px]");
     expect(learnMoreButton).toHaveClass("rounded-[4px]");
-  });
-
-  it("should have button container with correct styling", () => {
-    const { container } = renderWithProviders(<ContextMenuCTA />);
-
-    const buttonContainer = container.querySelector(".w-\\[236px\\].h-\\[40px\\].flex.justify-start");
-    expect(buttonContainer).toBeInTheDocument();
-  });
-
-  it("should apply gradient background style", () => {
-    const { container } = renderWithProviders(<ContextMenuCTA />);
-
-    const ctaContainer = container.firstChild as HTMLElement;
-    expect(ctaContainer.style.background).toContain("linear-gradient");
-    expect(ctaContainer.style.background).toContain("radial-gradient");
   });
 });

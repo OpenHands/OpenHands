@@ -18703,21 +18703,5 @@
     "tr": "Daha fazla bilgi",
     "de": "Mehr erfahren",
     "uk": "Дізнатися більше"
-  },
-  "CTA$SIGN_UP": {
-    "en": "Sign Up",
-    "ja": "サインアップ",
-    "zh-CN": "注册",
-    "zh-TW": "註冊",
-    "ko-KR": "가입하기",
-    "no": "Registrer deg",
-    "it": "Iscriviti",
-    "pt": "Inscrever-se",
-    "es": "Registrarse",
-    "ar": "سجل الآن",
-    "fr": "S'inscrire",
-    "tr": "Kaydol",
-    "de": "Anmelden",
-    "uk": "Зареєструватися"
   }
 }
