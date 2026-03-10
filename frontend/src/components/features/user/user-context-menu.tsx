@@ -109,7 +109,7 @@ export function UserContextMenu({
               className={contextMenuListItemClassName}
             >
               <IoCardOutline className="text-white" size={14} />
-              {t(I18nKey.COMMON$ORGANIZATIONS)}
+              {t(I18nKey.COMMON$ORGANIZATION)}
             </ContextMenuListItem>
             <ContextMenuListItem
               onClick={handleManageOrganizationMembersClick}

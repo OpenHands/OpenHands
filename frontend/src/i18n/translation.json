@@ -12579,6 +12579,22 @@
     "de": "Organisationen",
     "uk": "Організації"
   },
+  "COMMON$ORGANIZATION": {
+    "en": "Organization",
+    "ja": "組織",
+    "zh-CN": "组织",
+    "zh-TW": "組織",
+    "ko-KR": "조직",
+    "no": "Organisasjon",
+    "it": "Organizzazione",
+    "pt": "Organização",
+    "es": "Organización",
+    "ar": "المؤسسة",
+    "fr": "Organisation",
+    "tr": "Organizasyon",
+    "de": "Organisation",
+    "uk": "Організація"
+  },
   "COMMON$ADD_MICROAGENT": {
     "en": "Add Microagent",
     "ja": "マイクロエージェントを追加",
