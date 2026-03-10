@@ -3,7 +3,6 @@ from datetime import datetime
 
 from integrations.gitlab.gitlab_manager import GitlabManager
 from integrations.gitlab.gitlab_view import GitlabViewType
-from integrations.models import Message, SourceType
 from integrations.utils import (
     extract_summary_from_conversation_manager,
     get_summary_instruction,
@@ -14,7 +13,7 @@ from storage.conversation_callback import (
     ConversationCallback,
     ConversationCallbackProcessor,
 )
-from storage.database import session_maker
+from storage.database import a_session_maker
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
@@ -28,8 +27,7 @@ gitlab_manager = GitlabManager(token_manager)
 
 
 class GitlabCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to GitLab.
+    """Processor for sending conversation summaries to GitLab.
 
     This processor is used to send summaries of conversations to GitLab
     when agent state changes occur.
@@ -39,22 +37,18 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
     send_summary_instruction: bool = True
 
     async def _send_message_to_gitlab(self, message: str) -> None:
-        """
-        Send a message to GitLab.
+        """Send a message to GitLab.
 
         Args:
             message: The message content to send to GitLab
         """
         try:
-            # Create a message object for GitHub
-            message_obj = Message(source=SourceType.OPENHANDS, message=message)
-
             # Get the token manager
             token_manager = TokenManager()
             gitlab_manager = GitlabManager(token_manager)
 
-            # Send the message
-            await gitlab_manager.send_message(message_obj, self.gitlab_view)
+            # Send the message directly as a string
+            await gitlab_manager.send_message(message, self.gitlab_view)
 
             logger.info(
                 f'[GitLab] Sent summary message to {self.gitlab_view.full_repo_name}#{self.gitlab_view.issue_number}'
@@ -111,9 +105,9 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
                 self.send_summary_instruction = False
                 callback.set_processor(self)
                 callback.updated_at = datetime.now()
-                with session_maker() as session:
+                async with a_session_maker() as session:
                     session.merge(callback)
-                    session.commit()
+                    await session.commit()
                 return
 
             # Extract the summary from the event store
@@ -132,9 +126,9 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
             # Mark callback as completed status
             callback.status = CallbackStatus.COMPLETED
             callback.updated_at = datetime.now()
-            with session_maker() as session:
+            async with a_session_maker() as session:
                 session.merge(callback)
-                session.commit()
+                await session.commit()
 
         except Exception as e:
             logger.exception(

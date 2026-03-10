@@ -36,6 +36,21 @@ describe("EmailVerificationModal", () => {
     ).toBeInTheDocument();
   });
 
+  it("should render the rate limited message when wasRateLimited is true", () => {
+    // Arrange & Act
+    renderWithRouter(
+      <EmailVerificationModal onClose={mockOnClose} wasRateLimited />,
+    );
+
+    // Assert - should show the rate limited message instead of the default one
+    expect(
+      screen.getByText("AUTH$CHECK_INBOX_FOR_VERIFICATION_EMAIL"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("AUTH$PLEASE_CHECK_EMAIL_TO_VERIFY"),
+    ).not.toBeInTheDocument();
+  });
+
   it("should render the TermsAndPrivacyNotice component", () => {
     // Arrange & Act
     renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);

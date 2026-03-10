@@ -1181,6 +1181,24 @@ class TestDockerSandboxServiceInjector:
         assert injector.host_port == 4000
         assert injector.container_url_pattern == 'http://192.168.1.100:{port}'
 
+    def test_use_host_network_default_value(self):
+        """Test that use_host_network field defaults to False."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector()
+        assert injector.use_host_network is False
+
+    def test_use_host_network_can_be_enabled(self):
+        """Test that use_host_network field can be set to True."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(use_host_network=True)
+        assert injector.use_host_network is True
+
 
 class TestDockerSandboxServiceInjectorFromEnv:
     """Test cases for DockerSandboxServiceInjector environment variable configuration."""
@@ -1246,3 +1264,280 @@ class TestDockerSandboxServiceInjectorFromEnv:
             assert config.sandbox is not None
             assert config.sandbox.host_port == 4000
             assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'
+
+
+class TestDockerSandboxServiceHostNetwork:
+    """Test cases for DockerSandboxService with host network mode."""
+
+    @pytest.fixture
+    def service_with_host_network(
+        self, mock_sandbox_spec_service, mock_httpx_client, mock_docker_client
+    ):
+        """Create DockerSandboxService instance with host network enabled."""
+        return DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+                ExposedPort(
+                    name=VSCODE, description='VSCode server', container_port=8001
+                ),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            docker_client=mock_docker_client,
+            use_host_network=True,
+        )
+
+    @pytest.fixture
+    def mock_host_network_container(self):
+        """Create a mock container running with host network mode."""
+        container = MagicMock()
+        container.name = 'oh-test-abc123'
+        container.status = 'running'
+        container.image.tags = ['spec456']
+        container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=session_key_123',
+                    'OTHER_VAR=other_value',
+                ],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {
+                'NetworkMode': 'host',
+            },
+            'NetworkSettings': {
+                'Ports': None,
+            },
+        }
+        return container
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_with_host_network(
+        self, mock_urandom, mock_encodebytes, service_with_host_network
+    ):
+        """Test starting sandbox with host network mode."""
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=test_session_key',
+                    'TEST_VAR=test_value',
+                ],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'host'},
+            'NetworkSettings': {'Ports': None},
+        }
+
+        service_with_host_network.docker_client.containers.run.return_value = (
+            mock_container
+        )
+
+        with patch.object(
+            service_with_host_network, 'pause_old_sandboxes', return_value=[]
+        ):
+            result = await service_with_host_network.start_sandbox()
+
+        assert result is not None
+        assert result.id == 'oh-test-test_container_id'
+
+        call_args = service_with_host_network.docker_client.containers.run.call_args
+        assert call_args[1]['network_mode'] == 'host'
+        assert call_args[1]['ports'] is None
+        assert call_args[1]['extra_hosts'] is None
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_host_network_uses_container_ports(
+        self, mock_urandom, mock_encodebytes, service_with_host_network
+    ):
+        """Test that host network mode uses container ports directly in env vars."""
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key'],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'host'},
+            'NetworkSettings': {'Ports': None},
+        }
+
+        service_with_host_network.docker_client.containers.run.return_value = (
+            mock_container
+        )
+
+        with patch.object(
+            service_with_host_network, 'pause_old_sandboxes', return_value=[]
+        ):
+            await service_with_host_network.start_sandbox()
+
+        call_args = service_with_host_network.docker_client.containers.run.call_args
+        env_vars = call_args[1]['environment']
+        assert env_vars[AGENT_SERVER] == '8000'
+        assert env_vars[VSCODE] == '8001'
+
+    async def test_container_to_sandbox_info_host_network(
+        self, service_with_host_network, mock_host_network_container
+    ):
+        """Test conversion of host network container to SandboxInfo."""
+        result = await service_with_host_network._container_to_sandbox_info(
+            mock_host_network_container
+        )
+
+        assert result is not None
+        assert result.id == 'oh-test-abc123'
+        assert result.status == SandboxStatus.RUNNING
+        assert result.session_api_key == 'session_key_123'
+        assert len(result.exposed_urls) == 2
+
+        agent_url = next(url for url in result.exposed_urls if url.name == AGENT_SERVER)
+        assert agent_url.url == 'http://localhost:8000'
+        assert agent_url.port == 8000
+
+        vscode_url = next(url for url in result.exposed_urls if url.name == VSCODE)
+        assert (
+            vscode_url.url
+            == 'http://localhost:8001/?tkn=session_key_123&folder=/workspace'
+        )
+        assert vscode_url.port == 8001
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service._logger')
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_host_network_warns_multiple_sandboxes(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_logger,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test that warning is logged when use_host_network=True and max_num_sandboxes > 1."""
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key'],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'host'},
+            'NetworkSettings': {'Ports': None},
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service with host network AND max_num_sandboxes > 1
+        service = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,  # > 1
+            docker_client=mock_docker_client,
+            use_host_network=True,
+        )
+
+        with patch.object(service, 'pause_old_sandboxes', return_value=[]):
+            await service.start_sandbox()
+
+        # Verify warning was logged about port collision risk
+        mock_logger.warning.assert_called_once()
+        warning_message = mock_logger.warning.call_args[0][0]
+        assert (
+            'Host network mode is enabled with max_num_sandboxes > 1' in warning_message
+        )
+        assert 'port collision' in warning_message.lower()
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service._logger')
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_host_network_no_warning_single_sandbox(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_logger,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test that no warning is logged when use_host_network=True and max_num_sandboxes=1."""
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key'],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'host'},
+            'NetworkSettings': {'Ports': None},
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service with host network AND max_num_sandboxes = 1
+        service = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=1,  # = 1, no warning expected
+            docker_client=mock_docker_client,
+            use_host_network=True,
+        )
+
+        with patch.object(service, 'pause_old_sandboxes', return_value=[]):
+            await service.start_sandbox()
+
+        # Verify no warning was logged about port collision
+        mock_logger.warning.assert_not_called()

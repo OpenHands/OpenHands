@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 #!/usr/bin/env python3
 """Get git diff in a single git file for the closest git repo in the file system
 NOTE: Since this is run as a script, there should be no imports from project files!
@@ -5,6 +12,7 @@ NOTE: Since this is run as a script, there should be no imports from project fil
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -74,6 +82,11 @@ def get_valid_ref(repo_dir: str) -> str | None:
     return None
 
 
+def _make_git_show_cmd(ref: str, repo_relative_path: str) -> str:
+    """Return a git-show shell command with the ref:path argument safely quoted."""
+    return f'git show {shlex.quote(f"{ref}:{repo_relative_path}")}'
+
+
 def get_git_diff(relative_file_path: str) -> dict[str, str]:
     path = Path(os.getcwd(), relative_file_path).resolve()
     if os.path.getsize(path) > MAX_FILE_SIZE_FOR_GIT_DIFF:
@@ -82,13 +95,17 @@ def get_git_diff(relative_file_path: str) -> dict[str, str]:
     if not closest_git_repo:
         raise ValueError('no_repository')
     current_rev = get_valid_ref(str(closest_git_repo))
-    try:
-        original = run(
-            f'git show "{current_rev}:{path.relative_to(closest_git_repo)}"',
-            str(closest_git_repo),
-        )
-    except RuntimeError:
-        original = ''
+    original = ''
+    if current_rev is not None:
+        try:
+            original = run(
+                _make_git_show_cmd(
+                    current_rev, str(path.relative_to(closest_git_repo))
+                ),
+                str(closest_git_repo),
+            )
+        except RuntimeError:
+            pass
     try:
         with open(path, 'r') as f:
             modified = '\n'.join(f.read().splitlines())

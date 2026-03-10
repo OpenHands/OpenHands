@@ -34,11 +34,10 @@ class SaasConversationStore(ConversationStore):
     session_maker: sessionmaker
     org_id: UUID | None = None  # will be fetched automatically
 
-    def __init__(self, user_id: str, session_maker: sessionmaker):
+    def __init__(self, user_id: str, org_id: UUID, session_maker: sessionmaker):
         self.user_id = user_id
+        self.org_id = org_id
         self.session_maker = session_maker
-        user = UserStore.get_user_by_id(user_id)
-        self.org_id = user.current_org_id if user else None
 
     def _select_by_id(self, session, conversation_id: str):
         # Join StoredConversationMetadata with ConversationMetadataSaas to filter by user/org
@@ -232,7 +231,12 @@ class SaasConversationStore(ConversationStore):
 
     @classmethod
     async def get_instance(
-        cls, config: OpenHandsConfig, user_id: str | None
+        cls,
+        config: OpenHandsConfig,
+        user_id: str,  # type: ignore[override]
     ) -> ConversationStore:
-        # user_id should not be None in SaaS, should we raise?
-        return SaasConversationStore(str(user_id), session_maker)
+        # Use async version since callers now use asyncio.run_coroutine_threadsafe()
+        # to dispatch to the main event loop where asyncpg connections work properly.
+        user = await UserStore.get_user_by_id(user_id)
+        org_id = user.current_org_id if user else None
+        return SaasConversationStore(user_id, org_id, session_maker)

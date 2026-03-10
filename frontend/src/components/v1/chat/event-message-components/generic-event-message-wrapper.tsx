@@ -9,7 +9,6 @@ import {
 } from "../event-content-helpers/create-skill-ready-event";
 import { V1ConfirmationButtons } from "#/components/shared/buttons/v1-confirmation-buttons";
 import { ObservationResultStatus } from "../../../features/chat/event-content-helpers/get-observation-result";
-import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
@@ -27,13 +26,6 @@ export function GenericEventMessageWrapper({
     if (isObservationEvent(event)) {
       if (event.observation.kind === "TaskTrackerObservation") {
         return <div>{details}</div>;
-      }
-      if (event.observation.kind === "FinishObservation") {
-        return (
-          <MarkdownRenderer includeStandard includeHeadings>
-            {details as string}
-          </MarkdownRenderer>
-        );
       }
     }
   }

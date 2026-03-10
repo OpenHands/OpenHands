@@ -9,9 +9,9 @@ export function ConfigureAzureDevOpsAnchor() {
   const { data: config } = useConfig();
 
   const authUrl = useAuthUrl({
-    appMode: config?.APP_MODE ?? null,
+    appMode: config?.app_mode ?? null,
     identityProvider: "azure_devops",
-    authUrl: config?.AUTH_URL,
+    authUrl: config?.auth_url,
   });
 
   const handleOAuthFlow = () => {

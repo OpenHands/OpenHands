@@ -3,7 +3,6 @@ from datetime import datetime
 
 from integrations.github.github_manager import GithubManager
 from integrations.github.github_view import GithubViewType
-from integrations.models import Message, SourceType
 from integrations.utils import (
     extract_summary_from_conversation_manager,
     get_summary_instruction,
@@ -14,7 +13,6 @@ from storage.conversation_callback import (
     ConversationCallback,
     ConversationCallbackProcessor,
 )
-from storage.database import session_maker
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
@@ -36,16 +34,12 @@ class GithubCallbackProcessor(ConversationCallbackProcessor):
     send_summary_instruction: bool = True
 
     async def _send_message_to_github(self, message: str) -> None:
-        """
-        Send a message to GitHub.
+        """Send a message to GitHub.
 
         Args:
             message: The message content to send to GitHub
         """
         try:
-            # Create a message object for GitHub
-            message_obj = Message(source=SourceType.OPENHANDS, message=message)
-
             # Get the token manager
             token_manager = TokenManager()
 
@@ -54,8 +48,8 @@ class GithubCallbackProcessor(ConversationCallbackProcessor):
 
             github_manager = GithubManager(token_manager, GitHubDataCollector())
 
-            # Send the message
-            await github_manager.send_message(message_obj, self.github_view)
+            # Send the message directly as a string
+            await github_manager.send_message(message, self.github_view)
 
             logger.info(
                 f'[GitHub] Sent summary message to {self.github_view.full_repo_name}#{self.github_view.issue_number}'
@@ -108,13 +102,10 @@ class GithubCallbackProcessor(ConversationCallbackProcessor):
                     f'[GitHub] Sent summary instruction to conversation {conversation_id} {summary_event}'
                 )
 
-                # Update the processor state
+                # Update the processor state - the outer session will commit this
                 self.send_summary_instruction = False
                 callback.set_processor(self)
                 callback.updated_at = datetime.now()
-                with session_maker() as session:
-                    session.merge(callback)
-                    session.commit()
                 return
 
             # Extract the summary from the event store
@@ -130,14 +121,15 @@ class GithubCallbackProcessor(ConversationCallbackProcessor):
 
             logger.info(f'[GitHub] Summary sent for conversation {conversation_id}')
 
-            # Mark callback as completed status
+            # Mark callback as completed status - the outer session will commit this
             callback.status = CallbackStatus.COMPLETED
             callback.updated_at = datetime.now()
-            with session_maker() as session:
-                session.merge(callback)
-                session.commit()
 
         except Exception as e:
             logger.exception(
                 f'[GitHub] Error processing conversation callback: {str(e)}'
             )
+            # Mark callback as error to prevent infinite re-invocation
+            # The outer session will commit this
+            callback.status = CallbackStatus.ERROR
+            callback.updated_at = datetime.now()

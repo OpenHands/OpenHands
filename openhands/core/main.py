@@ -153,10 +153,11 @@ async def run_controller(
     # Add MCP tools to the agent
     if agent.config.enable_mcp:
         # Add OpenHands' MCP server by default
-        _, openhands_mcp_stdio_servers = (
-            OpenHandsMCPConfigImpl.create_default_mcp_server_config(
-                config.mcp_host, config, None
-            )
+        (
+            _,
+            openhands_mcp_stdio_servers,
+        ) = await OpenHandsMCPConfigImpl.create_default_mcp_server_config(
+            config.mcp_host, config, None
         )
         runtime.config.mcp.stdio_servers.extend(openhands_mcp_stdio_servers)
 
