@@ -190,12 +190,14 @@ class SaasSettingsStore(SettingsStore):
             # Map Settings fields to Org fields with 'default_' prefix
             # The generic loop above doesn't update these because Org uses
             # 'default_llm_model' not 'llm_model', etc.
-            if item.llm_model is not None:
-                org.default_llm_model = item.llm_model
-            if item.llm_base_url is not None:
-                org.default_llm_base_url = item.llm_base_url
-            if item.max_iterations is not None:
-                org.default_max_iterations = item.max_iterations
+            # Use exclude_unset to only update explicitly-set fields (allows clearing with null)
+            settings_data = item.model_dump(exclude_unset=True)
+            if 'llm_model' in settings_data:
+                org.default_llm_model = settings_data['llm_model']
+            if 'llm_base_url' in settings_data:
+                org.default_llm_base_url = settings_data['llm_base_url']
+            if 'max_iterations' in settings_data:
+                org.default_max_iterations = settings_data['max_iterations']
 
             # Propagate LLM settings to all org members
             # This ensures all members see the same LLM configuration when an admin saves
