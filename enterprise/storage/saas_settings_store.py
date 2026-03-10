@@ -187,6 +187,16 @@ class SaasSettingsStore(SettingsStore):
                     if hasattr(model, key):
                         setattr(model, key, value)
 
+            # Map Settings fields to Org fields with 'default_' prefix
+            # The generic loop above doesn't update these because Org uses
+            # 'default_llm_model' not 'llm_model', etc.
+            if item.llm_model is not None:
+                org.default_llm_model = item.llm_model
+            if item.llm_base_url is not None:
+                org.default_llm_base_url = item.llm_base_url
+            if item.max_iterations is not None:
+                org.default_max_iterations = item.max_iterations
+
             # Propagate LLM settings to all org members
             # This ensures all members see the same LLM configuration when an admin saves
             # Note: Concurrent saves by multiple admins will result in last-write-wins.
