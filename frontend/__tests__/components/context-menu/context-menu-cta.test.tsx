@@ -12,11 +12,16 @@ describe("ContextMenuCTA", () => {
     expect(screen.getByText("CTA$LEARN_MORE")).toBeInTheDocument();
   });
 
-  it("should render the Learn more button", () => {
+  it("should render the Learn more button with correct link", () => {
     renderWithProviders(<ContextMenuCTA />);
 
     const learnMoreButton = screen.getByRole("button", { name: "CTA$LEARN_MORE" });
     expect(learnMoreButton).toBeInTheDocument();
+
+    const link = learnMoreButton.closest("a");
+    expect(link).toHaveAttribute("href", "https://openhands.dev/enterprise/");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("should have correct container dimensions via className", () => {
@@ -38,11 +43,13 @@ describe("ContextMenuCTA", () => {
     expect(innerContainer).toHaveClass("ml-[25px]");
   });
 
-  it("should have an icon placeholder with correct dimensions", () => {
+  it("should render the stacked icon", () => {
     const { container } = renderWithProviders(<ContextMenuCTA />);
 
-    const iconPlaceholder = container.querySelector(".w-\\[40px\\].h-\\[40px\\]");
-    expect(iconPlaceholder).toBeInTheDocument();
+    const icon = container.querySelector("svg");
+    expect(icon).toBeInTheDocument();
+    expect(icon).toHaveAttribute("width", "40");
+    expect(icon).toHaveAttribute("height", "40");
   });
 
   it("should have Learn more button with correct dimensions", () => {
