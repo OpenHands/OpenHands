@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
+import { Card } from "#/ui/card";
 import { CardTitle } from "#/ui/card-title";
 import { Typography } from "#/ui/typography";
 import { BrandButton } from "../settings/brand-button";
@@ -10,12 +11,12 @@ export function ContextMenuCTA() {
   const { t } = useTranslation();
 
   return (
-    <div
-      data-testid="context-menu-cta"
+    <Card
+      testId="context-menu-cta"
+      variant="dark"
       className={cn(
         "w-[286px] h-[449px] rounded-[6px]",
-        "border border-[#24242499]",
-        "flex flex-col justify-end",
+        "flex-col justify-end",
         "cta-card-gradient",
       )}
     >
@@ -56,6 +57,6 @@ export function ContextMenuCTA() {
           </a>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

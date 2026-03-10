@@ -4,33 +4,14 @@ import { cn } from "#/utils/utils";
 
 const cardVariants = cva("flex", {
   variants: {
-    w: {
-      default: "w-auto",
-      full: "w-full",
-    },
-    h: {
-      default: "h-auto",
-      full: "h-full",
-      sm: "h-[263.5px]",
-    },
-    color: {
-      default: "bg-[#26282D]",
-    },
-    gap: {
-      default: "gap-[10px]",
-      lg: "gap-6",
-    },
-    border: {
-      none: "border-0",
-      default: "border border-[#727987] rounded-[12px] ",
+    variant: {
+      default: "relative bg-[#26282D] border border-[#727987] rounded-xl",
+      outlined: "relative bg-transparent border border-[#727987] rounded-xl",
+      dark: "relative bg-black border border-[#242424] rounded-2xl",
     },
   },
   defaultVariants: {
-    w: "full",
-    h: "default",
-    color: "default",
-    gap: "default",
-    border: "default",
+    variant: "default",
   },
 });
 
@@ -40,20 +21,11 @@ interface CardProps extends VariantProps<typeof cardVariants> {
   testId?: string;
 }
 
-export function Card({
-  children,
-  className,
-  testId,
-  w,
-  h,
-  color,
-  gap,
-  border,
-}: CardProps) {
+export function Card({ children, className, testId, variant }: CardProps) {
   return (
     <div
       data-testid={testId}
-      className={cn(cardVariants({ w, h, color, gap, border }), className)}
+      className={cn(cardVariants({ variant }), className)}
     >
       {children}
     </div>
