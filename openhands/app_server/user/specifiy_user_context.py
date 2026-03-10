@@ -1,3 +1,4 @@
+import contextlib
 from dataclasses import dataclass
 
 from fastapi import Request
@@ -54,3 +55,19 @@ def as_admin(request: Request):
         )
     setattr(request.state, USER_CONTEXT_ATTR, ADMIN)
     return ADMIN
+
+
+def switch_user(request: Request, user_id: str):
+    user_context = SpecifyUserContext(user_id)
+    setattr(request.state, USER_CONTEXT_ATTR, user_context)
+
+
+@contextlib.contextmanager
+def as_user(request: Request, user_id: str):
+    prev = getattr(request.state, USER_CONTEXT_ATTR, None)
+    user_context = SpecifyUserContext(user_id)
+    setattr(request.state, USER_CONTEXT_ATTR, user_context)
+    try:
+        yield
+    finally:
+        setattr(request.state, USER_CONTEXT_ATTR, prev)

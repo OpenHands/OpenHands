@@ -6,7 +6,7 @@ import logging
 import pkgutil
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import APIKeyHeader
 from jwt import InvalidTokenError
 from pydantic import SecretStr
@@ -37,6 +37,7 @@ from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
     as_admin,
+    switch_user,
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
@@ -99,78 +100,87 @@ async def valid_conversation(
 @router.post('/conversations')
 async def on_conversation_update(
     conversation_info: ConversationInfo,
+    request: Request,
     sandbox_info: SandboxInfo = Depends(valid_sandbox),
-    app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> Success:
     """Webhook callback for when a conversation starts, pauses, resumes, or deletes."""
-    existing = await valid_conversation(
-        conversation_info.id, sandbox_info, app_conversation_info_service
-    )
+    # Swap the user context to whoever started the sandbox...
+    if sandbox_info.created_by_user_id:
+        switch_user(request, sandbox_info.created_by_user_id)
+    async with app_conversation_info_service_dependency(request) as app_conversation_info_service:
+        existing = await valid_conversation(
+            conversation_info.id, sandbox_info, app_conversation_info_service
+        )
 
-    # If the conversation is being deleted, no action is required...
-    # Later we may consider deleting the conversation if it exists...
-    if conversation_info.execution_status == ConversationExecutionStatus.DELETING:
+        # If the conversation is being deleted, no action is required...
+        # Later we may consider deleting the conversation if it exists...
+        if conversation_info.execution_status == ConversationExecutionStatus.DELETING:
+            return Success()
+
+        app_conversation_info = AppConversationInfo(
+            id=conversation_info.id,
+            title=existing.title or f'Conversation {conversation_info.id.hex}',
+            sandbox_id=sandbox_info.id,
+            created_by_user_id=sandbox_info.created_by_user_id,
+            llm_model=conversation_info.agent.llm.model,
+            # Git parameters
+            selected_repository=existing.selected_repository,
+            selected_branch=existing.selected_branch,
+            git_provider=existing.git_provider,
+            trigger=existing.trigger,
+            pr_number=existing.pr_number,
+            # Preserve parent/child relationship and other metadata
+            parent_conversation_id=existing.parent_conversation_id,
+            metrics=conversation_info.stats.get_combined_metrics(),
+        )
+        await app_conversation_info_service.save_app_conversation_info(
+            app_conversation_info
+        )
+
         return Success()
-
-    app_conversation_info = AppConversationInfo(
-        id=conversation_info.id,
-        title=existing.title or f'Conversation {conversation_info.id.hex}',
-        sandbox_id=sandbox_info.id,
-        created_by_user_id=sandbox_info.created_by_user_id,
-        llm_model=conversation_info.agent.llm.model,
-        # Git parameters
-        selected_repository=existing.selected_repository,
-        selected_branch=existing.selected_branch,
-        git_provider=existing.git_provider,
-        trigger=existing.trigger,
-        pr_number=existing.pr_number,
-        # Preserve parent/child relationship and other metadata
-        parent_conversation_id=existing.parent_conversation_id,
-        metrics=conversation_info.stats.get_combined_metrics(),
-    )
-    await app_conversation_info_service.save_app_conversation_info(
-        app_conversation_info
-    )
-
-    return Success()
 
 
 @router.post('/events/{conversation_id}')
 async def on_event(
     events: list[Event],
     conversation_id: UUID,
+    request: Request,
     sandbox_info: SandboxInfo = Depends(valid_sandbox),
-    app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
-    event_service: EventService = event_service_dependency,
 ) -> Success:
     """Webhook callback for when event stream events occur."""
-    app_conversation_info = await valid_conversation(
-        conversation_id, sandbox_info, app_conversation_info_service
-    )
-
-    try:
-        # Save events...
-        await asyncio.gather(
-            *[event_service.save_event(conversation_id, event) for event in events]
+    # Swap the user context to whoever started the sandbox...
+    if sandbox_info.created_by_user_id:
+        switch_user(request, sandbox_info.created_by_user_id)
+    async with (
+        app_conversation_info_service_dependency(request) as app_conversation_info_service,
+        event_service_dependency(request) as event_service,
+    ):
+        app_conversation_info = await valid_conversation(
+            conversation_id, sandbox_info, app_conversation_info_service
         )
-
-        # Process stats events for V1 conversations
-        for event in events:
-            if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
-                await app_conversation_info_service.process_stats_event(
-                    event, conversation_id
-                )
-
-        asyncio.create_task(
-            _run_callbacks_in_bg_and_close(
-                conversation_id, app_conversation_info.created_by_user_id, events
+        try:
+            # Save events...
+            await asyncio.gather(
+                *[event_service.save_event(conversation_id, event) for event in events]
             )
-        )
 
-    except Exception:
-        _logger.exception('Error in webhook', stack_info=True)
+            # Process stats events for V1 conversations
+            for event in events:
+                if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
+                    await app_conversation_info_service.process_stats_event(
+                        event, conversation_id
+                    )
 
-    return Success()
+            asyncio.create_task(
+                _run_callbacks_in_bg_and_close(
+                    conversation_id, app_conversation_info.created_by_user_id, events
+                )
+            )
+
+        except Exception:
+            _logger.exception('Error in webhook', stack_info=True)
+
+        return Success()
 
 
 @router.get('/secrets')
