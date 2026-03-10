@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
 from openhands.server.routes.secrets import (
@@ -193,7 +194,8 @@ async def test_store_llm_settings_partial_update():
     For OpenAI models, this returns https://api.openai.com.
     """
     settings = Settings(
-        llm_model='gpt-4'  # Only updating model (not an openhands model)
+        llm_model='gpt-4',  # Only updating model (not an openhands model)
+        llm_base_url='',  # Explicitly cleared (e.g. basic mode save)
     )
 
     # Create existing settings
@@ -209,7 +211,69 @@ async def test_store_llm_settings_partial_update():
     assert result.llm_model == 'gpt-4'
     # For SecretStr objects, we need to compare the secret value
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
+    # llm_base_url was explicitly cleared (""), so auto-detection runs
     # OpenAI models: litellm.get_api_base() returns https://api.openai.com
+    assert result.llm_base_url == 'https://api.openai.com'
+
+
+@pytest.mark.asyncio
+async def test_store_llm_settings_mcp_update_preserves_base_url():
+    """Test that saving MCP config (without LLM fields) preserves existing base URL.
+
+    Regression test: When adding an MCP server, the frontend sends only mcp_config
+    and v1_enabled. This should not wipe out the existing llm_base_url.
+    """
+    # Simulate what the MCP add/update/delete mutations send: mcp_config but no LLM fields
+    settings = Settings(
+        mcp_config=MCPConfig(
+            stdio_servers=[
+                MCPStdioServerConfig(
+                    name='my-server',
+                    command='npx',
+                    args=['-y', '@my/mcp-server'],
+                    env={'API_TOKEN': 'secret123', 'ENDPOINT': 'https://example.com'},
+                )
+            ],
+        ),
+    )
+
+    # Create existing settings with a custom base URL
+    existing_settings = Settings(
+        llm_model='anthropic/claude-sonnet-4-5-20250929',
+        llm_api_key=SecretStr('existing-api-key'),
+        llm_base_url='https://my-custom-proxy.example.com',
+    )
+
+    result = await store_llm_settings(settings, existing_settings)
+
+    # All existing LLM settings should be preserved
+    assert result.llm_model == 'anthropic/claude-sonnet-4-5-20250929'
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
+    assert result.llm_base_url == 'https://my-custom-proxy.example.com'
+
+
+@pytest.mark.asyncio
+async def test_store_llm_settings_no_existing_base_url_uses_auto_detection():
+    """Test auto-detection kicks in only when there is no existing base URL.
+
+    When neither the incoming settings nor existing settings have a base URL,
+    auto-detection from litellm should be used.
+    """
+    settings = Settings(
+        llm_model='gpt-4'  # Not an openhands model
+    )
+
+    # Existing settings without a base URL
+    existing_settings = Settings(
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
+    )
+
+    result = await store_llm_settings(settings, existing_settings)
+
+    assert result.llm_model == 'gpt-4'
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
+    # No existing base URL, so auto-detection should set it
     assert result.llm_base_url == 'https://api.openai.com'
 
 

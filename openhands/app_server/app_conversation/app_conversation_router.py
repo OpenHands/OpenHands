@@ -507,10 +507,11 @@ async def get_conversation_skills(
             sandbox.sandbox_spec_id
         )
         if not sandbox_spec:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={'error': 'Sandbox spec not found'},
-            )
+            # TODO: This is a temporary work around for the fact that we don't store previous
+            # sandbox spec versions when updating OpenHands. When the SandboxSpecServices
+            # transition to truly multi sandbox spec model this should raise a 404 error
+            logger.warning('Sandbox spec not found - using default.')
+            sandbox_spec = await sandbox_spec_service.get_default_sandbox_spec()
 
         # Get the agent server URL
         if not sandbox.exposed_urls:

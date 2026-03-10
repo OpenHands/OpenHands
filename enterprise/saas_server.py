@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
+    BITBUCKET_DATA_CENTER_HOST,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
     ENABLE_LINEAR,
@@ -130,6 +131,12 @@ if ENABLE_JIRA_DC:
     base_app.include_router(jira_dc_integration_router)
 if ENABLE_LINEAR:
     base_app.include_router(linear_integration_router)
+if BITBUCKET_DATA_CENTER_HOST:
+    from server.routes.bitbucket_dc_proxy import (
+        router as bitbucket_dc_proxy_router,  # noqa: E402
+    )
+
+    base_app.include_router(bitbucket_dc_proxy_router)
 base_app.include_router(email_router)  # Add routes for email management
 base_app.include_router(feedback_router)  # Add routes for conversation feedback
 base_app.include_router(

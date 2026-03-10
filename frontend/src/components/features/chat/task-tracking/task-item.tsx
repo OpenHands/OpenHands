@@ -35,22 +35,16 @@ export function TaskItem({ task }: TaskItemProps) {
   const isDoneStatus = task.status === "done";
 
   return (
-    <div
-      className="flex gap-[14px] items-center px-4 py-2 w-full"
-      data-name="item"
-    >
+    <div className="flex gap-2 items-center w-full" data-name="item">
       <div className="shrink-0">{icon}</div>
-      <div className="flex flex-col items-start justify-center leading-[20px] text-nowrap whitespace-pre font-normal">
+      <div className="flex flex-col items-start justify-center leading-[16px] text-nowrap whitespace-pre font-normal">
         <Typography.Text
           className={cn(
-            "text-[12px] text-white",
-            isDoneStatus && "text-[#A3A3A3]",
+            "text-[12px]",
+            isDoneStatus ? "text-[#A3A3A3]" : "text-white",
           )}
         >
           {task.title}
-        </Typography.Text>
-        <Typography.Text className="text-[10px] text-[#A3A3A3] font-normal">
-          {t(I18nKey.TASK_TRACKING_OBSERVATION$TASK_ID)}: {task.id}
         </Typography.Text>
         {task.notes && (
           <Typography.Text className="text-[10px] text-[#A3A3A3]">

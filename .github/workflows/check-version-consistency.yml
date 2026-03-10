@@ -1,0 +1,122 @@
+name: Check Version Consistency
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check-version-consistency:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check version and Docker image tag consistency
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          import sys
+          import tomllib
+
+          errors = []
+          warnings = []
+
+          # ── 1. Extract the canonical version from pyproject.toml ──────────
+          with open("pyproject.toml", "rb") as f:
+              pyproject = tomllib.load(f)
+          version = pyproject["tool"]["poetry"]["version"]
+          major_minor = ".".join(version.split(".")[:2])
+          print(f"📦 pyproject.toml version: {version} (major.minor: {major_minor})")
+
+          # ── 2. Check frontend/package.json ────────────────────────────────
+          with open("frontend/package.json") as f:
+              pkg = json.load(f)
+          if pkg["version"] != version:
+              errors.append(
+                  f"frontend/package.json version is '{pkg['version']}', expected '{version}'"
+              )
+          else:
+              print(f"  ✔ frontend/package.json: {pkg['version']}")
+
+          # ── 3. Check frontend/package-lock.json (2 places) ───────────────
+          with open("frontend/package-lock.json") as f:
+              lock = json.load(f)
+          for key, val in [
+              ("root.version", lock.get("version")),
+              ('packages[""].version', lock.get("packages", {}).get("", {}).get("version")),
+          ]:
+              if val != version:
+                  errors.append(
+                      f"frontend/package-lock.json {key} is '{val}', expected '{version}'"
+                  )
+              else:
+                  print(f"  ✔ frontend/package-lock.json {key}: {val}")
+
+          # ── 4. Check compose files use agent-server images ─────────────────
+          # Both compose files should use ghcr.io/.../agent-server (not runtime).
+          # Agent-server tags use SDK version (e.g. "1.12.0-python") or commit
+          # hashes (e.g. "31536c8-python") — both are acceptable.
+          repo_pattern = re.compile(r"AGENT_SERVER_IMAGE_REPOSITORY[^}]*:-([^}]+)")
+          tag_pattern = re.compile(r"AGENT_SERVER_IMAGE_TAG:-([^}]+)")
+
+          for filepath in ["docker-compose.yml", "containers/dev/compose.yml"]:
+              try:
+                  with open(filepath) as f:
+                      content = f.read()
+              except FileNotFoundError:
+                  warnings.append(f"{filepath}: file not found")
+                  continue
+
+              repos = repo_pattern.findall(content)
+              tags = tag_pattern.findall(content)
+
+              if not repos:
+                  warnings.append(f"{filepath}: no AGENT_SERVER_IMAGE_REPOSITORY default found")
+              else:
+                  repo = repos[0]
+                  if "agent-server" not in repo:
+                      errors.append(
+                          f"{filepath}: AGENT_SERVER_IMAGE_REPOSITORY defaults to '{repo}', "
+                          f"expected an agent-server image (not runtime)"
+                      )
+                  else:
+                      print(f"  ✔ {filepath} image repository: {repo}")
+
+              if not tags:
+                  warnings.append(f"{filepath}: no AGENT_SERVER_IMAGE_TAG default found")
+              else:
+                  tag = tags[0]
+                  if not tag:
+                      errors.append(f"{filepath}: AGENT_SERVER_IMAGE_TAG default is empty")
+                  else:
+                      print(f"  ✔ {filepath} image tag: {tag}")
+
+          # ── 5. Report ─────────────────────────────────────────────────────
+          print()
+          if warnings:
+              print("⚠ Warnings:")
+              for w in warnings:
+                  print(f"  {w}")
+              print()
+
+          if errors:
+              print("❌ FAILED: Version inconsistencies found:\n")
+              for e in errors:
+                  print(f"  ✖ {e}")
+              print(
+                  "\nAll version numbers and Docker image tags must be consistent."
+                  "\nSee .agents/skills/update-sdk/SKILL.md for the full checklist."
+              )
+              sys.exit(1)
+          else:
+              print("✅ All version numbers and Docker image tags are consistent.")
+          PY
