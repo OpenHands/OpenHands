@@ -61,9 +61,7 @@ let queryClient: QueryClient;
 const renderManageOrg = () =>
   render(<RouteStub initialEntries={["/settings/org"]} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
   });
 
@@ -79,8 +77,8 @@ vi.mock("react-i18next", async () => {
     useTranslation: () => ({
       t: (key: string) => {
         const translations: Record<string, string> = {
-          "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
-          "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+          ORG$SELECT_ORGANIZATION_PLACEHOLDER: "Please select an organization",
+          ORG$PERSONAL_WORKSPACE: "Personal Workspace",
         };
         return translations[key] || key;
       },
@@ -149,7 +147,9 @@ describe("Manage Org Route", () => {
 
   beforeEach(() => {
     // Set Zustand store to a team org so clientLoader's org route protection allows access
-    useSelectedOrganizationStore.setState({ organizationId: MOCK_TEAM_ORG_ACME.id });
+    useSelectedOrganizationStore.setState({
+      organizationId: MOCK_TEAM_ORG_ACME.id,
+    });
     // Seed organizations into the module-level queryClient used by clientLoader
     mockQueryClient.setQueryData(["organizations"], {
       items: [MOCK_TEAM_ORG_ACME],
@@ -364,16 +364,6 @@ describe("Manage Org Route", () => {
 
         const amountInput = screen.getByTestId("amount-input");
         expect(amountInput).toHaveAttribute("step", "1");
-      });
-
-      it("should display correct placeholder text", async () => {
-        await openAddCreditsModal();
-
-        const amountInput = screen.getByTestId("amount-input");
-        expect(amountInput).toHaveAttribute(
-          "placeholder",
-          "PAYMENT$SPECIFY_AMOUNT_USD",
-        );
       });
     });
 

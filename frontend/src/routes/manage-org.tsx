@@ -90,7 +90,6 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
             name="amount"
             label={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
             type="number"
-            placeholder={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
             min={10}
             max={25000}
             step={1}
