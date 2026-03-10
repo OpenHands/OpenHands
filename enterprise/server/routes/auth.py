@@ -278,7 +278,7 @@ async def keycloak_callback(
                 raise
 
         verification_redirect_url = (
-            f'{web_url}login?email_verification_required=true&user_id={user_id}'
+            f'{web_url}/login?email_verification_required=true&user_id={user_id}'
         )
         if rate_limited:
             verification_redirect_url = f'{verification_redirect_url}&rate_limited=true'
@@ -440,7 +440,7 @@ async def keycloak_callback(
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:
         encoded_redirect_url = quote(redirect_url, safe='')
-        tos_redirect_url = f'{web_url}accept-tos?redirect_url={encoded_redirect_url}'
+        tos_redirect_url = f'{web_url}/accept-tos?redirect_url={encoded_redirect_url}'
         if invitation_token:
             tos_redirect_url = f'{tos_redirect_url}&invitation_success=true'
         response = RedirectResponse(tos_redirect_url, status_code=302)
