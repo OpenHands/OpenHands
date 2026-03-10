@@ -5,6 +5,7 @@ import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { InviteOrganizationMemberModal } from "#/components/features/org/invite-organization-member-modal";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
 vi.mock("react-router", () => ({
   useRevalidator: vi.fn(() => ({ revalidate: vi.fn() })),
@@ -118,5 +119,23 @@ describe("InviteOrganizationMemberModal", () => {
     });
 
     expect(onCloseMock).toHaveBeenCalledOnce();
+  });
+
+  it("should display an error toast when clicking add button with no emails added", async () => {
+    // Arrange
+    const displayErrorToastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+    const inviteMembersSpy = vi.spyOn(organizationService, "inviteMembers");
+    renderInviteOrganizationMemberModal();
+
+    // Act
+    const modal = screen.getByTestId("invite-modal");
+    const submitButton = within(modal).getByRole("button", { name: /add/i });
+    await userEvent.click(submitButton);
+
+    // Assert
+    expect(displayErrorToastSpy).toHaveBeenCalledWith(
+      "ORG$NO_EMAILS_ADDED_HINT",
+    );
+    expect(inviteMembersSpy).not.toHaveBeenCalled();
   });
 });

@@ -16483,6 +16483,22 @@
     "de": "Doppelte E-Mail-Adressen sind nicht erlaubt",
     "uk": "Дублікати електронних адрес не допускаються"
   },
+  "ORG$NO_EMAILS_ADDED_HINT": {
+    "en": "Please type emails and then press space.",
+    "ja": "メールアドレスを入力してからスペースを押してください。",
+    "zh-CN": "请输入邮箱然后按空格键。",
+    "zh-TW": "請輸入電子郵件然後按空白鍵。",
+    "ko-KR": "이메일을 입력한 후 스페이스바를 눌러주세요.",
+    "no": "Skriv inn e-post og trykk mellomrom.",
+    "it": "Digita le email e poi premi spazio.",
+    "pt": "Digite os e-mails e pressione espaço.",
+    "es": "Escriba los correos electrónicos y luego presione espacio.",
+    "ar": "يرجى كتابة البريد الإلكتروني ثم الضغط على مفتاح المسافة.",
+    "fr": "Veuillez saisir les e-mails puis appuyer sur espace.",
+    "tr": "Lütfen e-postaları yazın ve ardından boşluk tuşuna basın.",
+    "de": "Bitte geben Sie E-Mails ein und drücken Sie dann die Leertaste.",
+    "uk": "Будь ласка, введіть електронні адреси та натисніть пробіл."
+  },
   "ORG$ACCOUNT": {
     "en": "Account",
     "ja": "アカウント",

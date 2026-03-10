@@ -25,6 +25,7 @@ export function InviteOrganizationMemberModal({
 
   const handleSubmit = () => {
     if (emails.length === 0) {
+      displayErrorToast(t(I18nKey.ORG$NO_EMAILS_ADDED_HINT));
       return;
     }
 
