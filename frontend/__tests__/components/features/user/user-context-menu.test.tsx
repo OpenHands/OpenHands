@@ -140,7 +140,7 @@ describe("UserContextMenu", () => {
       screen.queryByText("ORG$ORGANIZATION_MEMBERS"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("COMMON$ORGANIZATIONS"),
+      screen.queryByText("COMMON$ORGANIZATION"),
     ).not.toBeInTheDocument();
   });
 
@@ -340,7 +340,7 @@ describe("UserContextMenu", () => {
     screen.getByTestId("org-selector");
     screen.getByText("ORG$INVITE_ORG_MEMBERS");
     screen.getByText("ORG$ORGANIZATION_MEMBERS");
-    screen.getByText("COMMON$ORGANIZATIONS");
+    screen.getByText("COMMON$ORGANIZATION");
   });
 
   it("should render additional context items when user is an owner", () => {
@@ -349,7 +349,7 @@ describe("UserContextMenu", () => {
     screen.getByTestId("org-selector");
     screen.getByText("ORG$INVITE_ORG_MEMBERS");
     screen.getByText("ORG$ORGANIZATION_MEMBERS");
-    screen.getByText("COMMON$ORGANIZATIONS");
+    screen.getByText("COMMON$ORGANIZATION");
   });
 
   it("should call the logout handler when Logout is clicked", async () => {
@@ -436,7 +436,7 @@ describe("UserContextMenu", () => {
 
     // Wait for orgs to load so org management buttons are visible
     const manageAccountButton = await screen.findByText(
-      "COMMON$ORGANIZATIONS",
+      "COMMON$ORGANIZATION",
     );
     await userEvent.click(manageAccountButton);
 
@@ -479,7 +479,7 @@ describe("UserContextMenu", () => {
     await userEvent.click(manageOrganizationMembersButton);
     expect(onCloseMock).toHaveBeenCalledTimes(2);
 
-    const manageAccountButton = screen.getByText("COMMON$ORGANIZATIONS");
+    const manageAccountButton = screen.getByText("COMMON$ORGANIZATION");
     await userEvent.click(manageAccountButton);
     expect(onCloseMock).toHaveBeenCalledTimes(3);
   });
@@ -517,7 +517,7 @@ describe("UserContextMenu", () => {
       });
 
       expect(
-        screen.queryByText("COMMON$ORGANIZATIONS"),
+        screen.queryByText("COMMON$ORGANIZATION"),
       ).not.toBeInTheDocument();
     });
 
