@@ -2006,10 +2006,7 @@ class TestLiveStatusAppConversationService:
             get_project_dir('/workspace/project', 'OpenHands/software-agent-sdk')
             == '/workspace/project/software-agent-sdk'
         )
-        assert (
-            get_project_dir('/w', 'org/repo-name')
-            == '/w/repo-name'
-        )
+        assert get_project_dir('/w', 'org/repo-name') == '/w/repo-name'
 
     def test_get_project_dir_without_repo(self):
         """get_project_dir returns working_dir unchanged when no repo selected."""
@@ -2038,9 +2035,7 @@ class TestLiveStatusAppConversationService:
         self.service._setup_secrets_for_git_providers = AsyncMock(
             return_value=mock_secrets
         )
-        self.service._configure_llm_and_mcp = AsyncMock(
-            return_value=(mock_llm, {})
-        )
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(mock_llm, {}))
         self.service._create_agent_with_context = Mock(return_value=mock_agent)
 
         captured = {}
@@ -2064,9 +2059,9 @@ class TestLiveStatusAppConversationService:
             selected_repository='OpenHands/software-agent-sdk',
         )
 
-        assert captured['workspace_working_dir'] == '/workspace/project/software-agent-sdk', (
-            'workspace.working_dir must point to the repo root, not the sandbox mount'
-        )
+        assert (
+            captured['workspace_working_dir'] == '/workspace/project/software-agent-sdk'
+        ), 'workspace.working_dir must point to the repo root, not the sandbox mount'
 
     @pytest.mark.asyncio
     async def test_build_request_no_repo_workspace_unchanged(self):

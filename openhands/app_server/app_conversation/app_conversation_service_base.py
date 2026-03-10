@@ -422,9 +422,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                         f'mv {PRE_COMMIT_HOOK} {PRE_COMMIT_LOCAL} &&'
                         f'chmod +x {PRE_COMMIT_LOCAL}'
                     )
-                    result = await workspace.execute_command(
-                        command, project_dir
-                    )
+                    result = await workspace.execute_command(command, project_dir)
                     if result.exit_code != 0:
                         _logger.error(
                             f'Failed to preserve existing pre-commit hook: {result.stderr}',
