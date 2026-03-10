@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createRoutesStub } from "react-router";
+import { createRoutesStub, useSearchParams } from "react-router";
 import LoginPage from "#/routes/login";
 import OptionService from "#/api/option-service/option-service.api";
 import AuthService from "#/api/auth-service/auth-service.api";
@@ -77,6 +77,29 @@ const RouterStub = createRoutesStub([
   {
     Component: LoginPage,
     path: "/login",
+  },
+]);
+
+function DestinationStub() {
+  const [params] = useSearchParams();
+  const loginMethod = params.get("login_method");
+  return (
+    <div data-testid="destination-page">
+      {loginMethod && (
+        <span data-testid="login-method-param">{loginMethod}</span>
+      )}
+    </div>
+  );
+}
+
+const RouterStubWithDestination = createRoutesStub([
+  {
+    Component: LoginPage,
+    path: "/login",
+  },
+  {
+    Component: DestinationStub,
+    path: "/settings",
   },
 ]);
 
@@ -282,7 +305,9 @@ describe("LoginPage", () => {
       await user.click(gitlabButton);
 
       // URL includes state parameter added by handleAuthRedirect
-      expect(window.location.href).toContain("https://gitlab.com/oauth/authorize");
+      expect(window.location.href).toContain(
+        "https://gitlab.com/oauth/authorize",
+      );
     });
 
     it("should redirect to Bitbucket auth URL when Bitbucket button is clicked", async () => {
@@ -342,6 +367,30 @@ describe("LoginPage", () => {
       await waitFor(
         () => {
           expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should preserve login_method param when redirecting authenticated users", async () => {
+      // Arrange
+      vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+      // Act
+      render(
+        <RouterStubWithDestination
+          initialEntries={["/login?returnTo=/settings&login_method=github"]}
+        />,
+        { wrapper: createWrapper() },
+      );
+
+      // Assert
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("destination-page")).toBeInTheDocument();
+          expect(screen.getByTestId("login-method-param")).toHaveTextContent(
+            "github",
+          );
         },
         { timeout: 2000 },
       );
@@ -552,10 +601,12 @@ describe("LoginPage", () => {
 
     it("should pass buildOAuthStateData to LoginContent for OAuth state encoding", async () => {
       const user = userEvent.setup();
-      const mockBuildOAuthStateData = vi.fn((baseState: Record<string, string>) => ({
-        ...baseState,
-        invitation_token: "inv-test-token-12345",
-      }));
+      const mockBuildOAuthStateData = vi.fn(
+        (baseState: Record<string, string>) => ({
+          ...baseState,
+          invitation_token: "inv-test-token-12345",
+        }),
+      );
 
       useInvitationMock.mockReturnValue({
         invitationToken: "inv-test-token-12345",
@@ -585,10 +636,12 @@ describe("LoginPage", () => {
 
     it("should include invitation token in OAuth state when invitation is present", async () => {
       const user = userEvent.setup();
-      const mockBuildOAuthStateData = vi.fn((baseState: Record<string, string>) => ({
-        ...baseState,
-        invitation_token: "inv-test-token-12345",
-      }));
+      const mockBuildOAuthStateData = vi.fn(
+        (baseState: Record<string, string>) => ({
+          ...baseState,
+          invitation_token: "inv-test-token-12345",
+        }),
+      );
 
       useInvitationMock.mockReturnValue({
         invitationToken: "inv-test-token-12345",
@@ -634,9 +687,14 @@ describe("LoginPage", () => {
         clearInvitation: vi.fn(),
       });
 
-      render(<RouterStub initialEntries={["/login?invitation_token=inv-url-token-67890"]} />, {
-        wrapper: createWrapper(),
-      });
+      render(
+        <RouterStub
+          initialEntries={["/login?invitation_token=inv-url-token-67890"]}
+        />,
+        {
+          wrapper: createWrapper(),
+        },
+      );
 
       await waitFor(() => {
         expect(screen.getByText("AUTH$INVITATION_PENDING")).toBeInTheDocument();

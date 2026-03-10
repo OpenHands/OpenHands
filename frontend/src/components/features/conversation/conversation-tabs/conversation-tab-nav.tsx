@@ -27,7 +27,7 @@ export function ConversationTabNav({
       data-testid={`conversation-tab-${tabValue}`}
       className={cn(
         "flex items-center gap-2 rounded-md cursor-pointer",
-        "pl-1.5 pr-2 py-1",
+        "pl-1.5 pr-2 py-1 lg:py-1.5",
         "text-[#9299AA] bg-[#0D0F11]",
         isActive && "bg-[#25272D] text-white",
         isActive
