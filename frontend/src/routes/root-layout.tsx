@@ -174,6 +174,7 @@ export default function MainApp() {
   }, [isAuthed, checkLoginMethodExists]);
 
   const isB1 = config.data?.APP_MODE === "b1";
+  const hideSidebar = searchParams.get("hideSidebar") === "true";
 
   const shouldRedirectToLogin =
     config.isLoading ||
@@ -219,12 +220,14 @@ export default function MainApp() {
       data-testid="root-layout"
       className={cn(
         "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base",
-        pathname === "/" ? "p-0" : "p-0 md:p-3 md:pl-0",
+        pathname === "/" && "p-0",
+        pathname !== "/" && hideSidebar && "p-0 md:p-3",
+        pathname !== "/" && !hideSidebar && "p-0 md:p-3 md:pl-0",
         isMobileDevice() && "overflow-hidden",
       )}
     >
       <title>{appTitle}</title>
-      <Sidebar />
+      {!hideSidebar && <Sidebar />}
 
       <div className="flex flex-col w-full h-[calc(100%-50px)] md:h-full gap-3">
         {config.data?.MAINTENANCE && (

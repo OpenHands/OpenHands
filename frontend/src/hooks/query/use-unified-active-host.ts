@@ -37,9 +37,11 @@ export const useUnifiedActiveHost = () => {
   const isV1Conversation = conversation?.conversation_version === "V1";
   const isEnvironmentConnection =
     conversation?.trigger === "connect_to_environment";
-  const environmentUrl = sessionStorage.getItem(
+  const sessionEnvironmentUrl = sessionStorage.getItem(
     `environment-url:${conversationId}`,
   );
+  const environmentUrl =
+    sessionEnvironmentUrl || conversation?.environment_url || null;
   const sandboxId = conversationConfig?.runtime_id;
 
   // For environment connections, use the environment URL directly
