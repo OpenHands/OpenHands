@@ -445,32 +445,15 @@ class TestProcessStatsEvent:
 # ---------------------------------------------------------------------------
 
 
-def _create_service_context_manager(service):
-    """Create an async context manager that yields the given service.
-
-    The new get_app_conversation_info_service and get_event_service functions
-    take (state, request=None) as arguments, where state is request.state.
-    """
-    import contextlib
-
-    @contextlib.asynccontextmanager
-    async def _context_manager(state, request=None):
-        yield service
-
-    return _context_manager
-
-
 class TestOnEventStatsProcessing:
     """Test stats event processing in the on_event endpoint."""
 
     @pytest.mark.asyncio
     async def test_on_event_processes_stats_events(self):
         """Test that on_event processes stats events."""
+        from unittest.mock import patch
+
         from openhands.app_server.event_callback.webhook_router import on_event
-        from openhands.app_server.sandbox.sandbox_models import (
-            SandboxInfo,
-            SandboxStatus,
-        )
 
         conversation_id = uuid4()
         sandbox_id = 'sandbox_123'
@@ -497,31 +480,14 @@ class TestOnEventStatsProcessing:
 
         events = [stats_event, other_event]
 
-        # Mock dependencies
-        mock_sandbox = SandboxInfo(
-            id=sandbox_id,
-            status=SandboxStatus.RUNNING,
-            session_api_key='test_key',
-            created_by_user_id='user_123',
-            sandbox_spec_id='spec_123',
-        )
-
         mock_app_conversation_info = AppConversationInfo(
             id=conversation_id,
             sandbox_id=sandbox_id,
             created_by_user_id='user_123',
         )
 
-        mock_request = MagicMock()
-        mock_request.state = MagicMock()
-        # Set user_context to None so switch_user doesn't try to await get_user_id()
-        mock_request.state.user_context = None
-
         mock_event_service = AsyncMock()
         mock_app_conversation_info_service = AsyncMock()
-        mock_app_conversation_info_service.get_app_conversation_info.return_value = (
-            mock_app_conversation_info
-        )
 
         # Set up process_stats_event to call update_conversation_statistics
         async def process_stats_event_side_effect(event, conversation_id):
@@ -539,51 +505,33 @@ class TestOnEventStatsProcessing:
             process_stats_event_side_effect
         )
 
-        with (
-            patch(
-                'openhands.app_server.event_callback.webhook_router.valid_sandbox',
-                return_value=mock_sandbox,
-            ),
-            patch(
-                'openhands.app_server.event_callback.webhook_router.valid_conversation',
-                return_value=mock_app_conversation_info,
-            ),
-            patch(
-                'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
-            ) as mock_callbacks,
-            patch(
-                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
-                _create_service_context_manager(mock_app_conversation_info_service),
-            ),
-            patch(
-                'openhands.app_server.event_callback.webhook_router.get_event_service',
-                _create_service_context_manager(mock_event_service),
-            ),
-        ):
+        with patch(
+            'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
+        ) as mock_callbacks:
+            # Call on_event directly with dependencies
             await on_event(
                 events=events,
                 conversation_id=conversation_id,
-                request=mock_request,
-                sandbox_info=mock_sandbox,
+                app_conversation_info=mock_app_conversation_info,
+                app_conversation_info_service=mock_app_conversation_info_service,
+                event_service=mock_event_service,
             )
 
-            # Verify events were saved
-            assert mock_event_service.save_event.call_count == 2
+        # Verify events were saved
+        assert mock_event_service.save_event.call_count == 2
 
-            # Verify stats event was processed
-            mock_app_conversation_info_service.update_conversation_statistics.assert_called_once()
+        # Verify stats event was processed
+        mock_app_conversation_info_service.update_conversation_statistics.assert_called_once()
 
-            # Verify callbacks were scheduled
-            mock_callbacks.assert_called_once()
+        # Verify callbacks were scheduled
+        mock_callbacks.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_on_event_skips_non_stats_events(self):
         """Test that on_event skips non-stats events."""
+        from unittest.mock import patch
+
         from openhands.app_server.event_callback.webhook_router import on_event
-        from openhands.app_server.sandbox.sandbox_models import (
-            SandboxInfo,
-            SandboxStatus,
-        )
         from openhands.events.action.message import MessageAction
 
         conversation_id = uuid4()
@@ -595,58 +543,26 @@ class TestOnEventStatsProcessing:
             MessageAction(content='test'),
         ]
 
-        mock_sandbox = SandboxInfo(
-            id=sandbox_id,
-            status=SandboxStatus.RUNNING,
-            session_api_key='test_key',
-            created_by_user_id='user_123',
-            sandbox_spec_id='spec_123',
-        )
-
         mock_app_conversation_info = AppConversationInfo(
             id=conversation_id,
             sandbox_id=sandbox_id,
             created_by_user_id='user_123',
         )
 
-        mock_request = MagicMock()
-        mock_request.state = MagicMock()
-        # Set user_context to None so switch_user doesn't try to await get_user_id()
-        mock_request.state.user_context = None
-
         mock_event_service = AsyncMock()
         mock_app_conversation_info_service = AsyncMock()
-        mock_app_conversation_info_service.get_app_conversation_info.return_value = (
-            mock_app_conversation_info
-        )
 
-        with (
-            patch(
-                'openhands.app_server.event_callback.webhook_router.valid_sandbox',
-                return_value=mock_sandbox,
-            ),
-            patch(
-                'openhands.app_server.event_callback.webhook_router.valid_conversation',
-                return_value=mock_app_conversation_info,
-            ),
-            patch(
-                'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
-            ),
-            patch(
-                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
-                _create_service_context_manager(mock_app_conversation_info_service),
-            ),
-            patch(
-                'openhands.app_server.event_callback.webhook_router.get_event_service',
-                _create_service_context_manager(mock_event_service),
-            ),
+        with patch(
+            'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
         ):
+            # Call on_event directly with dependencies
             await on_event(
                 events=events,
                 conversation_id=conversation_id,
-                request=mock_request,
-                sandbox_info=mock_sandbox,
+                app_conversation_info=mock_app_conversation_info,
+                app_conversation_info_service=mock_app_conversation_info_service,
+                event_service=mock_event_service,
             )
 
-            # Verify stats update was NOT called
-            mock_app_conversation_info_service.update_conversation_statistics.assert_not_called()
+        # Verify stats update was NOT called
+        mock_app_conversation_info_service.update_conversation_statistics.assert_not_called()
