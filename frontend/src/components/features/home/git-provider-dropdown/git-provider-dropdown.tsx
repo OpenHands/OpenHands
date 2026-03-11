@@ -51,6 +51,8 @@ export function GitProviderDropdown({
         return "GitLab";
       case "bitbucket":
         return "Bitbucket";
+      case "bitbucket_data_center":
+        return "Bitbucket Data Center";
       case "azure_devops":
         return "Azure DevOps";
       case "enterprise_sso":

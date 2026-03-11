@@ -19,7 +19,7 @@ class JiraDcViewInterface(ABC):
     conversation_id: str
 
     @abstractmethod
-    def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
+    async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Get initial instructions for the conversation."""
         pass
 

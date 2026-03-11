@@ -162,7 +162,7 @@ class DockerSandboxService(SandboxService):
                         ExposedUrl(
                             name=exposed_port.name,
                             url=url,
-                            port=host_port,
+                            port=exposed_port.container_port,
                         )
                     )
             else:
@@ -193,7 +193,7 @@ class DockerSandboxService(SandboxService):
                                     ExposedUrl(
                                         name=matching_port.name,
                                         url=url,
-                                        port=host_port,
+                                        port=matching_port.container_port,
                                     )
                                 )
 
@@ -230,7 +230,7 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                # If the server is
+                # If the server has exceeded the startup grace period, it's an error
                 if sandbox_info.created_at < utc_now() - timedelta(
                     seconds=self.startup_grace_seconds
                 ):
@@ -239,6 +239,10 @@ class DockerSandboxService(SandboxService):
                     )
                     sandbox_info.status = SandboxStatus.ERROR
                 else:
+                    _logger.debug(
+                        f'Sandbox server not yet available (still starting): '
+                        f'{app_server_url} : {exc}'
+                    )
                     sandbox_info.status = SandboxStatus.STARTING
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None
@@ -383,7 +387,7 @@ class DockerSandboxService(SandboxService):
             for exposed_port in self.exposed_ports:
                 host_port = self._find_unused_port()
                 port_mappings[exposed_port.container_port] = host_port
-                env_vars[exposed_port.name] = str(host_port)
+                env_vars[exposed_port.name] = str(exposed_port.container_port)
 
         # Prepare labels
         labels = {

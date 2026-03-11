@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
-import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
+import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
 import { Settings } from "#/types/settings";
 import { useIsAuthed } from "./use-is-authed";
 
@@ -22,7 +22,7 @@ const getSettingsQueryFn = async (): Promise<Settings> => {
 };
 
 export const useSettings = () => {
-  const isOnTosPage = useIsOnTosPage();
+  const isOnIntermediatePage = useIsOnIntermediatePage();
   const { data: userIsAuthenticated } = useIsAuthed();
 
   const query = useQuery({
@@ -35,7 +35,7 @@ export const useSettings = () => {
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
-    enabled: !isOnTosPage && !!userIsAuthenticated,
+    enabled: !isOnIntermediatePage && !!userIsAuthenticated,
     meta: {
       disableToast: true,
     },

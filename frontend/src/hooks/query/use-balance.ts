@@ -12,7 +12,7 @@ export const useBalance = () => {
     queryFn: BillingService.getBalance,
     enabled:
       !isOnTosPage &&
-      config?.APP_MODE === "saas" &&
-      config?.FEATURE_FLAGS?.ENABLE_BILLING,
+      config?.app_mode === "saas" &&
+      config?.feature_flags?.enable_billing,
   });
 };

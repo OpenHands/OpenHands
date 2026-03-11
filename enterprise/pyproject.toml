@@ -17,7 +17,6 @@ packages = [
   { include = "storage" },
   { include = "sync" },
   { include = "integrations" },
-  { include = "experiments" },
 ]
 
 [tool.poetry.dependencies]
@@ -44,6 +43,12 @@ httpx = "*"
 scikit-learn = "^1.7.0"
 shap = "^0.48.0"
 google-cloud-recaptcha-enterprise = "^1.24.0"
+# Dependencies previously only in Dockerfile, now managed via poetry.lock
+prometheus-client = "^0.24.0"
+pandas = "^2.2.0"
+numpy = "^2.2.0"
+mcp = "^1.10.0"
+pillow = "^12.1.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "0.8.3"

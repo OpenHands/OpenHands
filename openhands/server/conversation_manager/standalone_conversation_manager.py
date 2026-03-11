@@ -7,12 +7,15 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import asyncio
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 
 import socketio
+from pathspec import PathSpec
+from pathspec.patterns import GitWildMatchPattern
 
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -20,7 +23,7 @@ from openhands.core.exceptions import AgentRuntimeUnavailableError
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
 from openhands.core.schema.observation import ObservationType
-from openhands.events.action import MessageAction
+from openhands.events.action import FileReadAction, MessageAction
 from openhands.events.observation.commands import CmdOutputObservation
 from openhands.events.stream import EventStreamSubscriber, session_exists
 from openhands.llm.llm_registry import LLMRegistry
@@ -38,8 +41,7 @@ from openhands.storage.data_models.conversation_status import ConversationStatus
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
 from openhands.utils.async_utils import (
-    GENERAL_TIMEOUT,
-    call_async_from_sync,
+    call_sync_from_async,
     run_in_loop,
     wait_all,
 )
@@ -366,7 +368,11 @@ class StandaloneConversationManager(ConversationManager):
             session.agent_session.event_stream.subscribe(
                 EventStreamSubscriber.SERVER,
                 self._create_conversation_update_callback(
-                    user_id, sid, settings, session.llm_registry
+                    user_id,
+                    sid,
+                    settings,
+                    session.llm_registry,
+                    asyncio.get_running_loop(),
                 ),
                 UPDATED_AT_CALLBACK_ID,
             )
@@ -434,6 +440,136 @@ class StandaloneConversationManager(ConversationManager):
             return session.agent_session
         return None
 
+    async def list_files(self, sid: str, path: str | None = None) -> list[str]:
+        """List files in the workspace for a conversation.
+
+        Args:
+            sid: The session/conversation ID.
+            path: Optional path to list files from. If None, lists from workspace root.
+
+        Returns:
+            A list of file paths, filtered by .gitignore rules if present.
+
+        Raises:
+            ValueError: If the runtime is not available.
+        """
+        agent_session = self.get_agent_session(sid)
+        if not agent_session or not agent_session.runtime:
+            raise ValueError(f'Runtime not available for conversation {sid}')
+
+        runtime = agent_session.runtime
+        file_list = await call_sync_from_async(runtime.list_files, path)
+
+        # runtime.list_files returns relative filenames within the specified directory,
+        # so we need to join with the path to get paths relative to workspace root
+        if path:
+            file_list = [os.path.join(path, f) for f in file_list]
+
+        file_list = await self._filter_for_gitignore(runtime, file_list)
+        return file_list
+
+    async def _filter_for_gitignore(
+        self, runtime: Any, file_list: list[str]
+    ) -> list[str]:
+        """Filter file list based on root-level .gitignore rules.
+
+        Note: Only the .gitignore file at the workspace root is supported.
+        Nested .gitignore files in subdirectories are not processed.
+
+        Args:
+            runtime: The runtime to read the .gitignore file from.
+            file_list: List of file paths to filter.
+
+        Returns:
+            Filtered list of files excluding those matching .gitignore patterns.
+        """
+        try:
+            read_action = FileReadAction('.gitignore')
+            observation = await call_sync_from_async(runtime.run_action, read_action)
+            spec = PathSpec.from_lines(
+                GitWildMatchPattern, observation.content.splitlines()
+            )
+            file_list = [entry for entry in file_list if not spec.match_file(entry)]
+        except Exception as e:
+            logger.warning(f'Could not read .gitignore for filtering: {e}')
+        return file_list
+
+    async def select_file(self, sid: str, file: str) -> tuple[str | None, str | None]:
+        """Read a file from the workspace.
+
+        Args:
+            sid: The session/conversation ID.
+            file: The file path relative to the workspace root.
+
+        Returns:
+            A tuple of (content, error). If successful, content is the file content
+            and error is None. If failed, content is None and error is the error message.
+
+        Raises:
+            ValueError: If the runtime is not available.
+        """
+        from openhands.events.observation import ErrorObservation, FileReadObservation
+
+        agent_session = self.get_agent_session(sid)
+        if not agent_session or not agent_session.runtime:
+            raise ValueError(f'Runtime not available for conversation {sid}')
+
+        runtime = agent_session.runtime
+        file_path = os.path.join(runtime.config.workspace_mount_path_in_sandbox, file)
+        read_action = FileReadAction(file_path)
+
+        observation = await call_sync_from_async(runtime.run_action, read_action)
+
+        if isinstance(observation, FileReadObservation):
+            return observation.content, None
+        elif isinstance(observation, ErrorObservation):
+            if 'ERROR_BINARY_FILE' in observation.message:
+                return None, f'BINARY_FILE:{file}'
+            return None, str(observation)
+        else:
+            return None, f'Unexpected observation type: {type(observation)}'
+
+    async def upload_files(
+        self, sid: str, files: list[tuple[str, bytes]]
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        """Upload files to the workspace.
+
+        Args:
+            sid: The session/conversation ID.
+            files: List of (filename, content) tuples to upload.
+
+        Returns:
+            A tuple of (uploaded_files, skipped_files).
+
+        Raises:
+            ValueError: If the runtime is not available.
+        """
+        from openhands.events.action.files import FileWriteAction
+
+        agent_session = self.get_agent_session(sid)
+        if not agent_session or not agent_session.runtime:
+            raise ValueError(f'Runtime not available for conversation {sid}')
+
+        runtime = agent_session.runtime
+        uploaded_files: list[str] = []
+        skipped_files: list[dict[str, str]] = []
+
+        for filename, content in files:
+            file_path = os.path.join(
+                runtime.config.workspace_mount_path_in_sandbox, filename
+            )
+            try:
+                write_action = FileWriteAction(
+                    path=file_path,
+                    content=content.decode('utf-8', errors='replace'),
+                )
+                await call_sync_from_async(runtime.run_action, write_action)
+                uploaded_files.append(file_path)
+            except Exception as e:
+                skipped_files.append({'name': filename, 'reason': str(e)})
+
+        return uploaded_files, skipped_files
+
     async def _close_session(self, sid: str):
         logger.info(f'_close_session:{sid}', extra={'session_id': sid})
 
@@ -484,23 +620,28 @@ class StandaloneConversationManager(ConversationManager):
         conversation_id: str,
         settings: Settings,
         llm_registry: LLMRegistry,
+        loop: asyncio.AbstractEventLoop,
     ) -> Callable:
         def callback(event, *args, **kwargs):
-            call_async_from_sync(
-                self._update_conversation_for_event,
-                GENERAL_TIMEOUT,
-                user_id,
-                conversation_id,
-                settings,
-                llm_registry,
-                event,
-            )
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._update_conversation_for_event(
+                        user_id,
+                        conversation_id,
+                        settings,
+                        llm_registry,
+                        event,
+                    ),
+                    loop,
+                )
+            except Exception as e:
+                logger.error(f'Error in conversation update callback: {e}')
 
         return callback
 
     async def _update_conversation_for_event(
         self,
-        user_id: str,
+        user_id: str | None,
         conversation_id: str,
         settings: Settings,
         llm_registry: LLMRegistry,
