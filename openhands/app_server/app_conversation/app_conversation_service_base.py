@@ -95,9 +95,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
         self,
         sandbox: SandboxInfo,
         selected_repository: str | None,
-        working_dir: str,
+        project_dir: str,
         agent_server_url: str,
-        project_dir: str | None = None,
     ) -> list[Skill]:
         """Load skills from all sources via the agent-server.
 
@@ -112,10 +111,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
         Args:
             sandbox: SandboxInfo containing exposed URLs and agent-server URL
             selected_repository: Repository name or None
-            working_dir: Working directory path (sandbox base)
+            project_dir: Project root directory (resolved via get_project_dir).
             agent_server_url: Agent-server URL (required)
-            project_dir: Pre-computed project directory. If provided, skips
-                computing it from working_dir + selected_repository.
 
         Returns:
             List of merged Skill objects from all sources, or empty list on failure
@@ -132,10 +129,6 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
             # Build sandbox config (exposed URLs)
             sandbox_config = build_sandbox_config(sandbox)
-
-            # Determine project directory for project skills
-            if project_dir is None:
-                project_dir = get_project_dir(working_dir, selected_repository)
 
             # Single API call to agent-server for ALL skills
             all_skills = await load_skills_from_agent_server(
@@ -234,7 +227,6 @@ class AppConversationServiceBase(AppConversationService, ABC):
             selected_repository,
             project_dir,
             agent_server_url,
-            project_dir=project_dir,
         )
 
         # Update agent with skills
@@ -273,7 +265,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         await self.load_and_merge_all_skills(
             sandbox,
             task.request.selected_repository,
-            workspace.working_dir,
+            project_dir,
             agent_server_url,
         )
 
