@@ -161,6 +161,59 @@ class TestFilesystemEventServiceSearchEvents:
         assert hasattr(result, 'next_page_id')
         assert len(result.items) == 3
 
+    @pytest.mark.asyncio
+    async def test_search_events_limit(self, service: FilesystemEventService):
+        """Test that limit restricts returned items and sets next_page_id."""
+        conversation_id = uuid4()
+        events = [create_token_event() for _ in range(5)]
+
+        for event in events:
+            await service.save_event(conversation_id, event)
+
+        result = await service.search_events(conversation_id, limit=2)
+
+        assert len(result.items) == 2
+        assert result.next_page_id == '2'
+
+    @pytest.mark.asyncio
+    async def test_search_events_page_id(self, service: FilesystemEventService):
+        """Test that page_id returns items from correct offset."""
+        conversation_id = uuid4()
+        events = [create_token_event() for _ in range(5)]
+
+        for event in events:
+            await service.save_event(conversation_id, event)
+
+        first_page = await service.search_events(conversation_id, limit=2)
+        second_page = await service.search_events(
+            conversation_id, limit=2, page_id=first_page.next_page_id
+        )
+
+        assert len(first_page.items) == 2
+        assert len(second_page.items) == 2
+        assert first_page.items[0].id != second_page.items[0].id
+
+    @pytest.mark.asyncio
+    async def test_search_events_filter_with_limit(
+        self, service: FilesystemEventService
+    ):
+        """Test that limit and page_id work correctly with kind filter."""
+        conversation_id = uuid4()
+        token_events = [create_token_event() for _ in range(3)]
+        pause_events = [create_pause_event() for _ in range(2)]
+
+        for event in token_events + pause_events:
+            await service.save_event(conversation_id, event)
+
+        result = await service.search_events(
+            conversation_id, kind__eq='TokenEvent', limit=2
+        )
+
+        assert len(result.items) == 2
+        assert result.next_page_id == '2'
+        for item in result.items:
+            assert item.kind == 'TokenEvent'
+
 
 class TestFilesystemEventServiceIntegration:
     """Integration tests for FilesystemEventService."""
