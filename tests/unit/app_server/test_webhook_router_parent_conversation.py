@@ -115,10 +115,14 @@ def mock_request():
 
 
 def create_service_context_manager(service):
-    """Create an async context manager that yields the given service."""
+    """Create an async context manager that yields the given service.
+
+    The new get_app_conversation_info_service and get_event_service functions
+    take (state, request=None) as arguments, where state is request.state.
+    """
 
     @contextlib.asynccontextmanager
-    async def _context_manager(request):
+    async def _context_manager(state, request=None):
         yield service
 
     return _context_manager
@@ -171,7 +175,7 @@ class TestOnConversationUpdateParentConversationId:
                 return_value=existing_conv,
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 create_service_context_manager(app_conversation_info_service),
             ),
         ):
@@ -232,7 +236,7 @@ class TestOnConversationUpdateParentConversationId:
                 return_value=existing_conv,
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 create_service_context_manager(app_conversation_info_service),
             ),
         ):
@@ -290,7 +294,7 @@ class TestOnConversationUpdateParentConversationId:
                 return_value=stub_conv,
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 create_service_context_manager(app_conversation_info_service),
             ),
         ):
@@ -357,7 +361,7 @@ class TestOnConversationUpdateParentConversationId:
                 return_value=existing_conv,
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 create_service_context_manager(app_conversation_info_service),
             ),
         ):
@@ -441,7 +445,7 @@ class TestOnConversationUpdateParentConversationId:
                 side_effect=mock_valid_conv,
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 create_service_context_manager(app_conversation_info_service),
             ),
         ):
@@ -511,7 +515,7 @@ class TestOnConversationUpdateParentConversationId:
                 return_value=existing_conv,
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 create_service_context_manager(app_conversation_info_service),
             ),
         ):
@@ -575,7 +579,7 @@ class TestOnConversationUpdateParentConversationId:
                 return_value=existing_conv,
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 create_service_context_manager(app_conversation_info_service),
             ),
         ):

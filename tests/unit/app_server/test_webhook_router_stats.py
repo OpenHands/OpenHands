@@ -446,11 +446,15 @@ class TestProcessStatsEvent:
 
 
 def _create_service_context_manager(service):
-    """Create an async context manager that yields the given service."""
+    """Create an async context manager that yields the given service.
+
+    The new get_app_conversation_info_service and get_event_service functions
+    take (state, request=None) as arguments, where state is request.state.
+    """
     import contextlib
 
     @contextlib.asynccontextmanager
-    async def _context_manager(request):
+    async def _context_manager(state, request=None):
         yield service
 
     return _context_manager
@@ -548,11 +552,11 @@ class TestOnEventStatsProcessing:
                 'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
             ) as mock_callbacks,
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 _create_service_context_manager(mock_app_conversation_info_service),
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.event_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_event_service',
                 _create_service_context_manager(mock_event_service),
             ),
         ):
@@ -629,11 +633,11 @@ class TestOnEventStatsProcessing:
                 'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.app_conversation_info_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
                 _create_service_context_manager(mock_app_conversation_info_service),
             ),
             patch(
-                'openhands.app_server.event_callback.webhook_router.event_service_dependency',
+                'openhands.app_server.event_callback.webhook_router.get_event_service',
                 _create_service_context_manager(mock_event_service),
             ),
         ):
