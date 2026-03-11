@@ -99,6 +99,7 @@ export const useUnifiedGetGitChanges = () => {
 
   return {
     data: orderedChanges,
+    isFetching: result.isFetching,
     isLoading: result.isLoading,
     isSuccess: result.isSuccess,
     isError: result.isError,

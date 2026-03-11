@@ -8,6 +8,20 @@ import {
   ConversationTab,
 } from "#/stores/conversation-store";
 
+const { localStorageMock } = vi.hoisted(() => {
+  const store = new Map<string, string>();
+  const mock = {
+    getItem: vi.fn((key: string) => store.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => store.set(key, value)),
+    removeItem: vi.fn((key: string) => store.delete(key)),
+    clear: vi.fn(() => store.clear()),
+  };
+
+  vi.stubGlobal("localStorage", mock);
+
+  return { localStorageMock: mock };
+});
+
 // Mock useConversationId hook
 let mockConversationId = "test-conversation-id-123";
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -21,6 +35,7 @@ vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
   useUnifiedGetGitChanges: () => ({
     refetch: vi.fn(),
     data: [],
+    isFetching: false,
     isLoading: false,
   }),
 }));
@@ -104,6 +119,7 @@ describe("ConversationTabContent", () => {
   afterEach(() => {
     vi.clearAllMocks();
     queryClient.clear();
+    localStorageMock.clear();
   });
 
   describe("Rendering", () => {

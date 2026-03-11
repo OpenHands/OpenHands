@@ -31,6 +31,7 @@ describe("Changes Tab", () => {
   it("should show EmptyChangesMessage when there are no changes", () => {
     vi.mocked(useUnifiedGetGitChanges).mockReturnValue({
       data: [],
+      isFetching: false,
       isLoading: false,
       isSuccess: true,
       isError: false,
@@ -49,6 +50,7 @@ describe("Changes Tab", () => {
   it("should not show EmptyChangesMessage when there are changes", () => {
     vi.mocked(useUnifiedGetGitChanges).mockReturnValue({
       data: [{ path: "src/file.ts", status: "M" }],
+      isFetching: false,
       isLoading: false,
       isSuccess: true,
       isError: false,

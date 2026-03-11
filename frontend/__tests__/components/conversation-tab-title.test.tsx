@@ -11,6 +11,20 @@ import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-
 import { AgentState } from "#/types/agent-state";
 import { createChatMessage } from "#/services/chat-service";
 
+const { localStorageMock } = vi.hoisted(() => {
+  const store = new Map<string, string>();
+  const mock = {
+    getItem: vi.fn((key: string) => store.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => store.set(key, value)),
+    removeItem: vi.fn((key: string) => store.delete(key)),
+    clear: vi.fn(() => store.clear()),
+  };
+
+  vi.stubGlobal("localStorage", mock);
+
+  return { localStorageMock: mock };
+});
+
 // Mock the services that the hook depends on
 vi.mock("#/api/git-service/git-service.api");
 vi.mock("#/api/git-service/v1-git-service.api");
@@ -100,14 +114,13 @@ describe("ConversationTabTitle", () => {
   afterEach(() => {
     vi.clearAllMocks();
     queryClient.clear();
-    localStorage.clear();
+    localStorageMock.clear();
   });
 
-  const renderWithProviders = (ui: React.ReactElement) => {
-    return render(
+  const renderWithProviders = (ui: React.ReactElement) =>
+    render(
       <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
     );
-  };
 
   describe("Rendering", () => {
     it("should render the title", () => {
@@ -190,6 +203,7 @@ describe("ConversationTabTitle", () => {
         );
       });
     });
+
   });
 
   describe("Build Button", () => {
