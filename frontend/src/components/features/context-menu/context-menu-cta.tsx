@@ -15,7 +15,7 @@ export function ContextMenuCTA() {
       testId="context-menu-cta"
       variant="dark"
       className={cn(
-        "w-[286px] h-[449px] rounded-[6px]",
+        "w-[286px] min-h-[200px] h-full rounded-[6px]",
         "flex-col justify-end",
         "cta-card-gradient",
       )}
