@@ -554,6 +554,73 @@ class TestDockerSandboxService:
 
     @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
     @patch('os.urandom')
+    async def test_start_sandbox_with_docker_run_kwargs(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test that devices, cap_add, and security_opt are passed to container creation."""
+        # Setup
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value']
+            },
+            'NetworkSettings': {'Ports': {}},
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service with custom docker options
+        service_with_docker_options = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            docker_client=mock_docker_client,
+            devices=['/dev/kvm:/dev/kvm'],
+            cap_add=['SYS_ADMIN'],
+            security_opt=['seccomp=unconfined'],
+        )
+
+        with (
+            patch.object(
+                service_with_docker_options, '_find_unused_port', return_value=12345
+            ),
+            patch.object(
+                service_with_docker_options, 'pause_old_sandboxes', return_value=[]
+            ),
+        ):
+            # Execute
+            await service_with_docker_options.start_sandbox()
+
+        # Verify docker options were passed to container creation
+        mock_docker_client.containers.run.assert_called_once()
+        call_args = mock_docker_client.containers.run.call_args
+        assert call_args[1]['devices'] == ['/dev/kvm:/dev/kvm']
+        assert call_args[1]['cap_add'] == ['SYS_ADMIN']
+        assert call_args[1]['security_opt'] == ['seccomp=unconfined']
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
     async def test_start_sandbox_without_extra_hosts(
         self,
         mock_urandom,
@@ -1264,6 +1331,35 @@ class TestDockerSandboxServiceInjectorFromEnv:
             assert config.sandbox is not None
             assert config.sandbox.host_port == 4000
             assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'
+
+    def test_config_from_env_with_sandbox_docker_options(self):
+        """Test that SANDBOX_DOCKER_RUNTIME_KWARGS environment variable is respected."""
+        import json
+        import os
+        from unittest.mock import patch
+
+        docker_kwargs = {
+            'devices': ['/dev/kvm:/dev/kvm'],
+            'cap_add': ['SYS_ADMIN'],
+            'security_opt': ['seccomp=unconfined'],
+        }
+        env_vars = {
+            'SANDBOX_DOCKER_RUNTIME_KWARGS': json.dumps(docker_kwargs),
+        }
+
+        with patch.dict(os.environ, env_vars, clear=False):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            # Verify individual fields are set from the JSON
+            assert config.sandbox.devices == ['/dev/kvm:/dev/kvm']
+            assert config.sandbox.cap_add == ['SYS_ADMIN']
+            assert config.sandbox.security_opt == ['seccomp=unconfined']
 
 
 class TestDockerSandboxServiceHostNetwork:

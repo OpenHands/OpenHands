@@ -239,6 +239,22 @@ def config_from_env() -> AppServerConfig:
                         )
                 if mounts:
                     docker_sandbox_kwargs['mounts'] = mounts
+            # Parse SANDBOX_DOCKER_RUNTIME_KWARGS for custom docker run arguments
+            # This allows passing devices, cap_add, security_opt, etc.
+            if os.getenv('SANDBOX_DOCKER_RUNTIME_KWARGS'):
+                import json
+
+                docker_run_kwargs = json.loads(
+                    os.environ['SANDBOX_DOCKER_RUNTIME_KWARGS']
+                )
+                if 'devices' in docker_run_kwargs:
+                    docker_sandbox_kwargs['devices'] = docker_run_kwargs['devices']
+                if 'cap_add' in docker_run_kwargs:
+                    docker_sandbox_kwargs['cap_add'] = docker_run_kwargs['cap_add']
+                if 'security_opt' in docker_run_kwargs:
+                    docker_sandbox_kwargs['security_opt'] = docker_run_kwargs[
+                        'security_opt'
+                    ]
             config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
 
     if config.sandbox_spec is None:

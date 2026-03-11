@@ -85,6 +85,9 @@ class DockerSandboxService(SandboxService):
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
+    devices: list[str] = field(default_factory=list)
+    cap_add: list[str] = field(default_factory=list)
+    security_opt: list[str] = field(default_factory=list)
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -411,7 +414,7 @@ class DockerSandboxService(SandboxService):
 
         try:
             # Create and start the container
-            container = self.docker_client.containers.run(  # type: ignore[call-overload]
+            container = self.docker_client.containers.run(  # type: ignore[call-overload,misc]
                 image=sandbox_spec.id,
                 command=sandbox_spec.command,  # Use default command from image
                 remove=False,
@@ -433,6 +436,10 @@ class DockerSandboxService(SandboxService):
                 else None,
                 # Network mode: 'host' for host networking, None for default bridge
                 network_mode=network_mode,
+                # Additional docker run options for specialized use cases (e.g., KVM passthrough)
+                devices=self.devices or None,
+                cap_add=self.cap_add or None,
+                security_opt=self.security_opt or None,
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)
@@ -599,6 +606,31 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'is problematic. Configure via OH_SANDBOX_USE_HOST_NETWORK environment variable.'
         ),
     )
+    devices: list[str] = Field(
+        default_factory=list,
+        description=(
+            'List of device mappings to pass to the container. '
+            'Format: "host_device:container_device[:permissions]". '
+            'Example: ["/dev/kvm:/dev/kvm"]. '
+            'Configure via OH_SANDBOX_DEVICES_0, OH_SANDBOX_DEVICES_1, etc.'
+        ),
+    )
+    cap_add: list[str] = Field(
+        default_factory=list,
+        description=(
+            'List of Linux capabilities to add to the container. '
+            'Example: ["SYS_ADMIN", "NET_ADMIN"]. '
+            'Configure via OH_SANDBOX_CAP_ADD_0, OH_SANDBOX_CAP_ADD_1, etc.'
+        ),
+    )
+    security_opt: list[str] = Field(
+        default_factory=list,
+        description=(
+            'List of security options for the container. '
+            'Example: ["seccomp=unconfined", "apparmor=unconfined"]. '
+            'Configure via OH_SANDBOX_SECURITY_OPT_0, OH_SANDBOX_SECURITY_OPT_1, etc.'
+        ),
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -632,4 +664,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 extra_hosts=self.extra_hosts,
                 startup_grace_seconds=self.startup_grace_seconds,
                 use_host_network=self.use_host_network,
+                devices=self.devices,
+                cap_add=self.cap_add,
+                security_opt=self.security_opt,
             )
