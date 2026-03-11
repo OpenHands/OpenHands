@@ -7,6 +7,7 @@ import GitChanges from "#/icons/git_changes.svg?react";
 import VSCodeIcon from "#/icons/vscode.svg?react";
 import ThreeDotsVerticalIcon from "#/icons/three-dots-vertical.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { cn } from "#/utils/utils";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import { ConversationTabNav } from "./conversation-tab-nav";
@@ -17,6 +18,7 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
+import { useTaskList } from "#/hooks/use-task-list";
 
 export function ConversationTabs() {
   const { conversationId } = useConversationId();
@@ -26,6 +28,8 @@ export function ConversationTabs() {
 
   const { state: persistedState } =
     useConversationLocalStorageState(conversationId);
+
+  const { hasTaskList } = useTaskList();
 
   const {
     selectTab,
@@ -119,6 +123,18 @@ export function ConversationTabs() {
       label: t(I18nKey.COMMON$BROWSER),
     },
   ];
+
+  if (hasTaskList) {
+    tabs.unshift({
+      tabValue: "tasklist",
+      isActive: isTabActive("tasklist"),
+      icon: DoubleCheckIcon,
+      onClick: () => selectTab("tasklist"),
+      tooltipContent: t(I18nKey.COMMON$TASK_LIST),
+      tooltipAriaLabel: t(I18nKey.COMMON$TASK_LIST),
+      label: t(I18nKey.COMMON$TASK_LIST),
+    });
+  }
 
   // Filter out unpinned tabs
   const visibleTabs = tabs.filter(

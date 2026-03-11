@@ -84,12 +84,12 @@ describe("TaskTrackingObservationContent", () => {
     expect(taskItems).toHaveLength(3);
   });
 
-  it("displays task IDs and notes", () => {
+  it("does not display task IDs but displays notes", () => {
     render(<TaskTrackingObservationContent event={mockEvent} />);
 
-    expect(screen.getByText("ID: task-1")).toBeInTheDocument();
-    expect(screen.getByText("ID: task-2")).toBeInTheDocument();
-    expect(screen.getByText("ID: task-3")).toBeInTheDocument();
+    expect(screen.queryByText("ID: task-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("ID: task-2")).not.toBeInTheDocument();
+    expect(screen.queryByText("ID: task-3")).not.toBeInTheDocument();
 
     expect(screen.getByText("Notes: This is a test task")).toBeInTheDocument();
     expect(

@@ -16,8 +16,13 @@ const BrowserTab = lazy(() => import("#/routes/browser-tab"));
 const ServedTab = lazy(() => import("#/routes/served-tab"));
 const VSCodeTab = lazy(() => import("#/routes/vscode-tab"));
 const PlannerTab = lazy(() => import("#/routes/planner-tab"));
+const TaskListTab = lazy(() => import("#/routes/task-list-tab"));
 
 const TAB_CONFIG = {
+  tasklist: {
+    component: TaskListTab,
+    titleKey: I18nKey.COMMON$TASK_LIST,
+  },
   editor: {
     component: EditorTab,
     titleKey: I18nKey.COMMON$CHANGES,
