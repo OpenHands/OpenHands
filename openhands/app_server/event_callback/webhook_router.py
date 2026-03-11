@@ -1,16 +1,15 @@
 """Event Callback router for OpenHands App Server."""
 
 import asyncio
-from copy import copy
 import importlib
 import logging
 import pkgutil
+from copy import copy
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import APIKeyHeader
 from jwt import InvalidTokenError
-from openhands.app_server.event.event_service import EventService
 from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
@@ -29,8 +28,8 @@ from openhands.app_server.config import (
     get_sandbox_service,
 )
 from openhands.app_server.errors import AuthError
+from openhands.app_server.event.event_service import EventService
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
-from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.auth_user_context import AuthUserContext
@@ -39,7 +38,6 @@ from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
 )
-from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent
@@ -74,16 +72,22 @@ async def valid_sandbox(
     # Since we need access to all sandboxes, this is executed in the context of the admin.
     setattr(state, USER_CONTEXT_ATTR, ADMIN)
     async with get_sandbox_service(state) as sandbox_service:
-        sandbox_info = await sandbox_service.get_sandbox_by_session_api_key(session_api_key)
+        sandbox_info = await sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
+        )
         if sandbox_info is None:
             raise HTTPException(
-               status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
+                status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
             )
 
         # In SAAS Mode there is always a user, so we set the owner of the sandbox
         # as the current user (Validated by the session_api_key they provided)
         if sandbox_info.created_by_user_id:
-            setattr(request.state, USER_CONTEXT_ATTR, SpecifyUserContext(sandbox_info.created_by_user_id))
+            setattr(
+                request.state,
+                USER_CONTEXT_ATTR,
+                SpecifyUserContext(sandbox_info.created_by_user_id),
+            )
 
         return sandbox_info
 
@@ -165,10 +169,7 @@ async def on_event(
 
         # Process stats events for V1 conversations
         for event in events:
-            if (
-                isinstance(event, ConversationStateUpdateEvent)
-                and event.key == 'stats'
-            ):
+            if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
                 await app_conversation_info_service.process_stats_event(
                     event, conversation_id
                 )
