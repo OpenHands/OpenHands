@@ -510,6 +510,8 @@ class TestOnEventStatsProcessing:
 
         mock_request = MagicMock()
         mock_request.state = MagicMock()
+        # Set user_context to None so switch_user doesn't try to await get_user_id()
+        mock_request.state.user_context = None
 
         mock_event_service = AsyncMock()
         mock_app_conversation_info_service = AsyncMock()
@@ -605,6 +607,8 @@ class TestOnEventStatsProcessing:
 
         mock_request = MagicMock()
         mock_request.state = MagicMock()
+        # Set user_context to None so switch_user doesn't try to await get_user_id()
+        mock_request.state.user_context = None
 
         mock_event_service = AsyncMock()
         mock_app_conversation_info_service = AsyncMock()
