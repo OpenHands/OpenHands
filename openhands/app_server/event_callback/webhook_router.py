@@ -24,7 +24,9 @@ from openhands.app_server.config import (
     depends_event_service,
     depends_jwt_service,
     depends_sandbox_service,
+    get_app_conversation_info_service,
     get_event_callback_service,
+    get_event_service,
 )
 from openhands.app_server.errors import AuthError
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
@@ -106,8 +108,9 @@ async def on_conversation_update(
     # Swap the user context to whoever started the sandbox...
     if sandbox_info.created_by_user_id:
         await switch_user(request, sandbox_info.created_by_user_id)
-    async with app_conversation_info_service_dependency(
-        request
+
+    async with get_app_conversation_info_service(
+        request.state
     ) as app_conversation_info_service:
         existing = await valid_conversation(
             conversation_info.id, sandbox_info, app_conversation_info_service
@@ -153,10 +156,10 @@ async def on_event(
     if sandbox_info.created_by_user_id:
         await switch_user(request, sandbox_info.created_by_user_id)
     async with (
-        app_conversation_info_service_dependency(
-            request
+        get_app_conversation_info_service(
+            request.state
         ) as app_conversation_info_service,
-        event_service_dependency(request) as event_service,
+        get_event_service(request.state) as event_service,
     ):
         app_conversation_info = await valid_conversation(
             conversation_id, sandbox_info, app_conversation_info_service
