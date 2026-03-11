@@ -13,7 +13,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import JSON, Boolean, Column, DateTime, String
+from sqlalchemy import JSON, Boolean, Column, DateTime, String, select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -490,3 +490,107 @@ class TestRunScheduler:
         payload = _published_events[0].payload
         assert payload['automation_id'] == auto.id
         assert 'scheduled_time' in payload
+
+    @pytest.mark.asyncio
+    async def test_integrity_error_dedup_in_same_session(self, async_session_maker):
+        """Pre-inserted event with the same dedup_key triggers IntegrityError.
+
+        The savepoint should roll back only the duplicate insert; the scheduler
+        should return 0 without corrupting the session.
+        """
+        now = datetime.now(timezone.utc)
+        auto = _make_automation(
+            schedule='* * * * *',  # every minute — always due
+            last_triggered_at=now - timedelta(minutes=5),
+        )
+        # Pre-compute the dedup_key the scheduler will generate
+        scheduled_minute = now.strftime('%Y-%m-%dT%H:%MZ')
+        dedup_key = f'cron-{auto.id}-{scheduled_minute}'
+
+        # Pre-insert an event with the same dedup_key
+        existing_event = AutomationEvent(
+            source_type='cron',
+            payload={'automation_id': auto.id},
+            dedup_key=dedup_key,
+        )
+        async with async_session_maker() as session:
+            session.add(auto)
+            session.add(existing_event)
+            await session.commit()
+
+        # Scheduler tries to insert same dedup_key → IntegrityError
+        async with async_session_maker() as session:
+            count = await run_scheduler(session)
+
+        assert count == 0
+        # The _fake_publish_automation_event still appended to the tracking list
+        # before the flush raised IntegrityError; the important thing is the
+        # database only has the original event.
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(AutomationEvent).where(
+                    AutomationEvent.dedup_key == dedup_key
+                )
+            )
+            assert len(result.scalars().all()) == 1
+
+    @pytest.mark.asyncio
+    async def test_savepoint_preserves_other_automations_on_dedup(
+        self, async_session_maker
+    ):
+        """When one automation hits IntegrityError, others must not be rolled back.
+
+        This verifies the begin_nested() savepoint isolation: automation B's
+        event should be preserved even though automation A's insert fails.
+        """
+        now = datetime.now(timezone.utc)
+        auto_a = _make_automation(
+            schedule='* * * * *',
+            last_triggered_at=now - timedelta(minutes=5),
+        )
+        auto_b = _make_automation(
+            schedule='* * * * *',
+            last_triggered_at=now - timedelta(minutes=5),
+        )
+
+        # Pre-insert a conflicting event for automation A only
+        scheduled_minute = now.strftime('%Y-%m-%dT%H:%MZ')
+        dedup_key_a = f'cron-{auto_a.id}-{scheduled_minute}'
+        existing_event = AutomationEvent(
+            source_type='cron',
+            payload={'automation_id': auto_a.id},
+            dedup_key=dedup_key_a,
+        )
+        async with async_session_maker() as session:
+            session.add_all([auto_a, auto_b, existing_event])
+            await session.commit()
+
+        async with async_session_maker() as session:
+            count = await run_scheduler(session)
+
+        # Only automation B should have produced an event
+        assert count == 1
+
+        # Verify automation B's event was committed to the database
+        dedup_key_b = f'cron-{auto_b.id}-{scheduled_minute}'
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(AutomationEvent).where(
+                    AutomationEvent.dedup_key == dedup_key_b
+                )
+            )
+            assert len(result.scalars().all()) == 1
+
+        # Verify automation B's last_triggered_at was persisted
+        async with async_session_maker() as session:
+            result_b = await session.get(Automation, auto_b.id)
+            assert result_b.last_triggered_at is not None
+
+        # Verify automation A's last_triggered_at was NOT updated (savepoint rolled back)
+        async with async_session_maker() as session:
+            result_a = await session.get(Automation, auto_a.id)
+            ts = result_a.last_triggered_at
+            if ts is not None and ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            assert ts is not None
+            assert ts < now

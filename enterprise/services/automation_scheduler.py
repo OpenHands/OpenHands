@@ -52,6 +52,9 @@ async def run_scheduler(session: AsyncSession) -> int:
         try:
             events_created += await _process_automation(session, automation, now)
         except Exception:
+            # Broad catch is intentional: one broken automation must never prevent
+            # the rest of the scheduler run from completing.  The savepoint inside
+            # _process_automation ensures the outer session is not poisoned.
             logger.exception('Error processing automation %s', automation.id)
             continue
 
@@ -115,34 +118,35 @@ async def _process_automation(
         return 0
 
     # Automation is due — insert an event
+    automation_id = str(automation.id)
     scheduled_minute = now.strftime('%Y-%m-%dT%H:%MZ')
-    dedup_key = f'cron-{automation.id}-{scheduled_minute}'
+    dedup_key = f'cron-{automation_id}-{scheduled_minute}'
 
     try:
-        event = publish_automation_event(
-            session=session,
-            source_type='cron',
-            payload={
-                'automation_id': str(automation.id),
-                'scheduled_time': now.isoformat(),
-            },
-            dedup_key=dedup_key,
-            metadata={'cron_expression': schedule},
-        )
+        async with session.begin_nested():
+            event = publish_automation_event(
+                session=session,
+                source_type='cron',
+                payload={
+                    'automation_id': automation_id,
+                    'scheduled_time': now.isoformat(),
+                },
+                dedup_key=dedup_key,
+                metadata={'cron_expression': schedule},
+            )
+            automation.last_triggered_at = now
+            pg_notify_new_event(session, event.id)
+            await session.flush()
 
-        automation.last_triggered_at = now
-
-        pg_notify_new_event(session, event.id)
-
-        logger.info('Created cron event for automation %s', automation.id)
+        logger.info('Created cron event for automation %s', automation_id)
         return 1
 
     except IntegrityError:
-        # Dedup key collision — scheduler ran twice in the same minute
-        await session.rollback()
+        # Only the nested transaction (savepoint) is rolled back — events
+        # from previously-processed automations in the same run are preserved.
         logger.debug(
             'Dedup: event already exists for automation %s at %s',
-            automation.id,
+            automation_id,
             scheduled_minute,
         )
         return 0
