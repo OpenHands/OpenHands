@@ -106,14 +106,12 @@ class EventServiceBase(EventService, ABC):
                 reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC),
             )
 
-        start_offset = 0
-        next_page_id = None
-        if page_id:
-            start_offset = int(page_id)
-            paths = paths[start_offset:]
-        if len(paths) > limit:
-            paths = paths[:limit]
-            next_page_id = str(start_offset + limit)
+        start_offset = int(page_id) if page_id else 0
+        total = len(items)
+        items = items[start_offset : start_offset + limit]
+        next_page_id = (
+            str(start_offset + limit) if total > start_offset + limit else None
+        )
 
         return EventPage(items=items, next_page_id=next_page_id)
 
