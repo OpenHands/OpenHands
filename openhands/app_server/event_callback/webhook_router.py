@@ -4,7 +4,6 @@ import asyncio
 import importlib
 import logging
 import pkgutil
-from copy import copy
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -67,7 +66,7 @@ async def valid_sandbox(
         )
 
     # Create a copy of the state which will be used internally only for this operation
-    state = copy(request.state)
+    state = InjectorState({**request.state._state})
 
     # Since we need access to all sandboxes, this is executed in the context of the admin.
     setattr(state, USER_CONTEXT_ATTR, ADMIN)
