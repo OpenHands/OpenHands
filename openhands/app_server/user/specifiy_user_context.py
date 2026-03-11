@@ -54,17 +54,3 @@ def as_admin(request: Request):
         )
     setattr(request.state, USER_CONTEXT_ATTR, ADMIN)
     return ADMIN
-
-
-async def switch_user(request: Request, user_id: str):
-    """Change the user performing the current request. Typically used in contexts
-    like webhooks where admin is used initially to figure out which user is required."""
-    user_context = getattr(request.state, USER_CONTEXT_ATTR, None)
-    if (
-        user_context is not None
-        and user_context is not ADMIN
-        and (await user_context.get_user_id() != user_id)
-    ):
-        raise OpenHandsError('Conflicting user context already present!')
-    user_context = SpecifyUserContext(user_id)
-    setattr(request.state, USER_CONTEXT_ATTR, user_context)
