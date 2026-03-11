@@ -101,9 +101,16 @@ def mock_conversation_info() -> ConversationInfo:
 
 @pytest.fixture
 def mock_request():
-    """Create a mock FastAPI Request object."""
+    """Create a mock FastAPI Request object.
+
+    Sets user_context to None to simulate the initial admin context state
+    that webhooks start with before switch_user is called.
+    """
     request = MagicMock()
     request.state = MagicMock()
+    # Set user_context to None (or could use ADMIN) so switch_user doesn't
+    # try to await get_user_id() on a MagicMock
+    request.state.user_context = None
     return request
 
 
