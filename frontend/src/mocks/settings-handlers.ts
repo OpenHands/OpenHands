@@ -126,12 +126,6 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(null, { status: 400 });
   }),
 
-  http.post("/api/reset-settings", async () => {
-    await delay();
-    MOCK_USER_PREFERENCES.settings = { ...MOCK_DEFAULT_USER_SETTINGS };
-    return HttpResponse.json(null, { status: 200 });
-  }),
-
   http.post("/api/add-git-providers", async ({ request }) => {
     const body = await request.json();
 

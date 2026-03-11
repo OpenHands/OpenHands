@@ -362,6 +362,111 @@ async def test_disable_keycloak_user_exception_handling(token_manager):
         mock_admin.a_get_user.assert_called_once_with(user_id)
 
 
+class TestRefreshBitbucketDataCenterToken:
+    """Tests for the _refresh_bitbucket_data_center_token code path."""
+
+    @pytest.mark.asyncio
+    async def test_happy_path(self, token_manager):
+        """Credentials are sent in the POST body (not Basic auth); response is parsed."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            'access_token': 'new_bbs_access',
+            'refresh_token': 'new_bbs_refresh',
+            'expires_in': 3600,
+            'refresh_token_expires_in': 86400,
+        }
+
+        with (
+            patch(
+                'server.auth.token_manager.BITBUCKET_DATA_CENTER_HOST',
+                'bitbucket.example.com',
+            ),
+            patch(
+                'server.auth.token_manager.BITBUCKET_DATA_CENTER_TOKEN_URL',
+                'https://bitbucket.example.com/oauth2/token',
+            ),
+            patch(
+                'server.auth.token_manager.BITBUCKET_DATA_CENTER_CLIENT_ID',
+                'test_client_id',
+            ),
+            patch(
+                'server.auth.token_manager.BITBUCKET_DATA_CENTER_CLIENT_SECRET',
+                'test_client_secret',
+            ),
+            patch('httpx.AsyncClient') as mock_client_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await token_manager._refresh_bitbucket_data_center_token(
+                'old_refresh_token'
+            )
+
+        # Credentials are sent in the POST body, not in a Basic-auth header
+        mock_client.post.assert_called_once_with(
+            'https://bitbucket.example.com/oauth2/token',
+            data={
+                'client_id': 'test_client_id',
+                'client_secret': 'test_client_secret',
+                'refresh_token': 'old_refresh_token',
+                'grant_type': 'refresh_token',
+            },
+        )
+
+        # Response is parsed correctly
+        assert result['access_token'] == 'new_bbs_access'
+        assert result['refresh_token'] == 'new_bbs_refresh'
+
+    @pytest.mark.asyncio
+    async def test_empty_url_raises_value_error(self, token_manager):
+        """When BITBUCKET_DATA_CENTER_HOST is not set, ValueError is raised immediately."""
+        with patch('server.auth.token_manager.BITBUCKET_DATA_CENTER_HOST', ''):
+            with pytest.raises(ValueError, match='BITBUCKET_DATA_CENTER_HOST'):
+                await token_manager._refresh_bitbucket_data_center_token(
+                    'some_refresh_token'
+                )
+
+    @pytest.mark.asyncio
+    async def test_http_error_propagates(self, token_manager):
+        """When raise_for_status() raises, the exception propagates to the caller."""
+        import httpx
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            '401 Unauthorized',
+            request=MagicMock(),
+            response=MagicMock(status_code=401),
+        )
+
+        with (
+            patch(
+                'server.auth.token_manager.BITBUCKET_DATA_CENTER_HOST',
+                'bitbucket.example.com',
+            ),
+            patch(
+                'server.auth.token_manager.BITBUCKET_DATA_CENTER_TOKEN_URL',
+                'https://bitbucket.example.com/oauth2/token',
+            ),
+            patch('httpx.AsyncClient') as mock_client_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with pytest.raises(httpx.HTTPStatusError):
+                await token_manager._refresh_bitbucket_data_center_token(
+                    'old_refresh_token'
+                )
+
+
 class TestOrgTokenMethods:
     """Test cases for store_org_token and load_org_token methods."""
 

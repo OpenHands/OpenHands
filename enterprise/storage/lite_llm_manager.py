@@ -137,11 +137,23 @@ class LiteLlmManager:
                     client, keycloak_user_id, org_id, team_budget
                 )
 
+                # We delete the key if it already exists. In environments where multiple
+                # installations are using the same keycloak and litellm instance, this
+                # will mean other installations will have their key invalidated.
+                key_alias = get_openhands_cloud_key_alias(keycloak_user_id, org_id)
+                try:
+                    await LiteLlmManager._delete_key_by_alias(client, key_alias)
+                except httpx.HTTPStatusError as ex:
+                    if ex.status_code == 404:
+                        logger.debug(f'Key "{key_alias}" did not exist - continuing')
+                    else:
+                        raise
+
                 key = await LiteLlmManager._generate_key(
                     client,
                     keycloak_user_id,
                     org_id,
-                    get_openhands_cloud_key_alias(keycloak_user_id, org_id),
+                    key_alias,
                     None,
                 )
 

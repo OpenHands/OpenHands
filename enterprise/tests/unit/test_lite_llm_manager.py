@@ -180,11 +180,11 @@ class TestLiteLlmManager:
             assert result.llm_api_key.get_secret_value() == 'test-api-key'
             assert result.llm_base_url == 'http://test.com'
 
-            # Verify API calls were made (get_team + 3 posts)
+            # Verify API calls were made (get_team + 4 posts)
             assert mock_client.get.call_count == 1  # get_team
             assert (
-                mock_client.post.call_count == 3
-            )  # create_team, add_user_to_team, generate_key
+                mock_client.post.call_count == 4
+            )  # create_team, add_user_to_team, delete_key_by_alias, generate_key
 
     @pytest.mark.asyncio
     async def test_create_entries_inherits_existing_team_budget(
