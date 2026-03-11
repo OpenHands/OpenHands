@@ -138,7 +138,7 @@ uvloop==0.21.0
 vllm==0.8.4
 watchfiles==1.0.5
 websockets==15.0.1
-wheel==0.45.1
+wheel==0.46.2
 wrapt==1.17.2
 xformers==0.0.29.post2
 xgrammar==0.1.18
