@@ -7,8 +7,10 @@ from pydantic import BaseModel, field_validator
 from server.auth.constants import KEYCLOAK_CLIENT_ID
 from server.auth.keycloak_manager import get_keycloak_admin
 from server.auth.saas_user_auth import SaasUserAuth
+from server.constants import IS_LOCAL_ENV
 from server.routes.auth import set_response_cookie
 from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from server.utils.url_utils import get_web_url
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
@@ -87,7 +89,7 @@ async def update_email(
             response=response,
             keycloak_access_token=user_auth.access_token.get_secret_value(),
             keycloak_refresh_token=user_auth.refresh_token.get_secret_value(),
-            secure=False if request.url.hostname == 'localhost' else True,
+            secure=not IS_LOCAL_ENV,
             accepted_tos=user_auth.accepted_tos or False,
         )
 
@@ -156,8 +158,8 @@ async def verified_email(request: Request):
     await user_auth.refresh()  # refresh so access token has updated email
     user_auth.email_verified = True
     await UserStore.update_user_email(user_id=user_auth.user_id, email_verified=True)
-    scheme = 'http' if request.url.hostname == 'localhost' else 'https'
-    redirect_uri = f'{scheme}://{request.url.netloc}/settings/user'
+
+    redirect_uri = f'{get_web_url(request)}/settings/user'
     response = RedirectResponse(redirect_uri, status_code=302)
 
     # need to set auth cookie to the new tokens
@@ -180,11 +182,10 @@ async def verified_email(request: Request):
 
 async def verify_email(request: Request, user_id: str, is_auth_flow: bool = False):
     keycloak_admin = get_keycloak_admin()
-    scheme = 'http' if request.url.hostname == 'localhost' else 'https'
     if is_auth_flow:
-        redirect_uri = f'{scheme}://{request.url.netloc}/login?email_verified=true'
+        redirect_uri = f'{get_web_url(request)}/login?email_verified=true'
     else:
-        redirect_uri = f'{scheme}://{request.url.netloc}/api/email/verified'
+        redirect_uri = f'{get_web_url(request)}/api/email/verified'
     logger.info(f'Redirect URI: {redirect_uri}')
     await keycloak_admin.a_send_verify_email(
         user_id=user_id,
