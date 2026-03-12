@@ -11,6 +11,7 @@ from fastapi.responses import (
     RedirectResponse,
 )
 from integrations.models import Message, SourceType
+from integrations.slack.slack_errors import SlackError, SlackErrorCode
 from integrations.slack.slack_manager import SlackManager
 from integrations.utils import (
     HOST_URL,
@@ -31,12 +32,13 @@ from server.logger import logger
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.signature import SignatureVerifier
 from slack_sdk.web.async_client import AsyncWebClient
-from storage.database import session_maker
+from sqlalchemy import delete
+from storage.database import a_session_maker
 from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
 
-from openhands.integrations.service_types import ProviderType
+from openhands.integrations.service_types import ProviderTimeoutError, ProviderType
 from openhands.server.shared import config, sio
 
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
@@ -170,7 +172,7 @@ async def keycloak_callback(
         state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
     )
     slack_user_id = payload['slack_user_id']
-    bot_access_token = payload['bot_access_token']
+    bot_access_token: str | None = payload['bot_access_token']
     team_id = payload['team_id']
 
     # Retrieve the keycloak_user_id
@@ -195,8 +197,8 @@ async def keycloak_callback(
         )
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
-    keycloak_user_id = user_info['sub']
-    user = await UserStore.get_user_by_id_async(keycloak_user_id)
+    keycloak_user_id = user_info.sub
+    user = await UserStore.get_user_by_id(keycloak_user_id)
     if not user:
         return _html_response(
             title='Failed to authenticate.',
@@ -207,7 +209,7 @@ async def keycloak_callback(
     # These tokens are offline access tokens - store them!
     await token_manager.store_offline_token(keycloak_user_id, keycloak_refresh_token)
 
-    idp: str = user_info.get('identity_provider', ProviderType.GITHUB)
+    idp: str = user_info.identity_provider or ProviderType.GITHUB.value
     idp_type = 'oidc'
     if ':' in idp:
         idp, idp_type = idp.rsplit(':', 1)
@@ -218,9 +220,9 @@ async def keycloak_callback(
 
     # Retrieve bot token
     if team_id and bot_access_token:
-        slack_team_store.create_team(team_id, bot_access_token)
+        await slack_team_store.create_team(team_id, bot_access_token)
     else:
-        bot_access_token = slack_team_store.get_team_bot_token(team_id)
+        bot_access_token = await slack_team_store.get_team_bot_token(team_id)
 
     if not bot_access_token:
         logger.error(
@@ -239,15 +241,15 @@ async def keycloak_callback(
         slack_display_name=slack_display_name,
     )
 
-    with session_maker(expire_on_commit=False) as session:
+    async with a_session_maker(expire_on_commit=False) as session:
         # First delete any existing tokens
-        session.query(SlackUser).filter(
-            SlackUser.slack_user_id == slack_user_id
-        ).delete()
+        await session.execute(
+            delete(SlackUser).where(SlackUser.slack_user_id == slack_user_id)
+        )
 
         # Store the token
         session.add(slack_user)
-        session.commit()
+        await session.commit()
 
     message = Message(source=SourceType.SLACK, message=payload)
 
@@ -321,9 +323,129 @@ async def on_event(request: Request, background_tasks: BackgroundTasks):
     return JSONResponse({'success': True})
 
 
+@slack_router.post('/on-options-load')
+async def on_options_load(request: Request, background_tasks: BackgroundTasks):
+    """Handle external_select options loading (block_suggestion payload).
+
+    This endpoint is called by Slack when a user interacts with an external_select
+    element. It supports dynamic repository search with pagination.
+
+    The endpoint:
+    1. Authenticates the Slack user
+    2. Searches for repositories matching the user's query
+    3. Returns up to 100 options for the dropdown
+
+    Configuration: Set the Options Load URL in Slack App settings to:
+    https://your-domain/slack/on-options-load
+    """
+    if not SLACK_WEBHOOKS_ENABLED:
+        return JSONResponse({'options': []})
+
+    body = await request.body()
+    form = await request.form()
+    payload_str = form.get('payload')
+    if not payload_str:
+        logger.warning('slack_on_options_load: No payload in request')
+        return JSONResponse({'options': []})
+
+    payload = json.loads(payload_str)
+
+    logger.info('slack_on_options_load', extra={'payload': payload})
+
+    # Verify the signature
+    if not signature_verifier.is_valid(
+        body=body,
+        timestamp=request.headers.get('X-Slack-Request-Timestamp'),
+        signature=request.headers.get('X-Slack-Signature'),
+    ):
+        raise HTTPException(status_code=403, detail='invalid_request')
+
+    # Verify this is a block_suggestion payload
+    if payload.get('type') != 'block_suggestion':
+        logger.warning(
+            f"slack_on_options_load: Unexpected payload type: {payload.get('type')}"
+        )
+        return JSONResponse({'options': []})
+
+    slack_user_id = payload['user']['id']
+    search_value = payload.get('value', '')  # What user typed in the search box
+
+    # Authenticate user
+    slack_user, saas_user_auth = await slack_manager.authenticate_user(slack_user_id)
+
+    if not slack_user or not saas_user_auth:
+        # Send ephemeral message asking user to link their account
+        background_tasks.add_task(
+            slack_manager.handle_slack_error,
+            payload,
+            SlackError(
+                SlackErrorCode.USER_NOT_AUTHENTICATED,
+                message_kwargs={'login_link': _generate_login_link()},
+                log_context={'slack_user_id': slack_user_id},
+            ),
+        )
+        return JSONResponse({'options': []})
+
+    try:
+        # Search for repositories matching the query
+        # Limit to 20 repos for fast initial load. Users can search for repos
+        # not in this list using the type-ahead search functionality.
+        options = await slack_manager.search_repos_for_slack(
+            saas_user_auth, query=search_value, per_page=20
+        )
+
+        logger.info(
+            'slack_on_options_load_success',
+            extra={
+                'slack_user_id': slack_user_id,
+                'search_value': search_value,
+                'num_options': len(options),
+            },
+        )
+
+        return JSONResponse({'options': options})
+
+    except ProviderTimeoutError as e:
+        # Handle provider timeout with user notification
+        background_tasks.add_task(
+            slack_manager.handle_slack_error,
+            payload,
+            SlackError(
+                SlackErrorCode.PROVIDER_TIMEOUT,
+                log_context={'slack_user_id': slack_user_id, 'error': str(e)},
+            ),
+        )
+        return JSONResponse({'options': []})
+
+    except Exception as e:
+        logger.exception(
+            'slack_options_load_error',
+            extra={
+                'slack_user_id': slack_user_id,
+                'search_value': search_value,
+                'error': str(e),
+            },
+        )
+        # Notify user about the unexpected error with error code
+        background_tasks.add_task(
+            slack_manager.handle_slack_error,
+            payload,
+            SlackError(
+                SlackErrorCode.UNEXPECTED_ERROR,
+                log_context={'slack_user_id': slack_user_id, 'error': str(e)},
+            ),
+        )
+        return JSONResponse({'options': []})
+
+
 @slack_router.post('/on-form-interaction')
 async def on_form_interaction(request: Request, background_tasks: BackgroundTasks):
-    """We check the nonce to start a conversation"""
+    """Handle repository selection form submission.
+
+    When a user selects a repository from the external_select dropdown,
+    this endpoint passes the payload to the manager which retrieves the
+    original user message from Redis and starts the conversation.
+    """
     if not SLACK_WEBHOOKS_ENABLED:
         return JSONResponse({'success': 'slack_webhooks_disabled'})
 
@@ -333,7 +455,7 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
 
     logger.info('slack_on_form_interaction', extra={'payload': payload})
 
-    # First verify the signature
+    # Verify the signature
     if not signature_verifier.is_valid(
         body=body,
         timestamp=request.headers.get('X-Slack-Request-Timestamp'),
@@ -342,38 +464,14 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
         raise HTTPException(status_code=403, detail='invalid_request')
 
     assert payload['type'] == 'block_actions'
-    selected_repository = payload['actions'][0]['selected_option'][
-        'value'
-    ]  # Get the repository
-    if selected_repository == '-':
-        selected_repository = None
-    slack_user_id = payload['user']['id']
-    channel_id = payload['container']['channel_id']
-    team_id = payload['team']['id']
-    # Hack - get original message_ts from element name
-    attribs = payload['actions'][0]['action_id'].split('repository_select:')[-1]
-    message_ts, thread_ts = attribs.split(':')
-    thread_ts = None if thread_ts == 'None' else thread_ts
-    # Get the original message
-    # Get the text message
-    # Start the conversation
 
-    payload = {
-        'message_ts': message_ts,
-        'thread_ts': thread_ts,
-        'channel_id': channel_id,
-        'slack_user_id': slack_user_id,
-        'selected_repo': selected_repository,
-        'team_id': team_id,
-    }
-
-    message = Message(
-        source=SourceType.SLACK,
-        message=payload,
-    )
-
-    background_tasks.add_task(slack_manager.receive_message, message)
+    background_tasks.add_task(slack_manager.receive_form_interaction, payload)
     return JSONResponse({'success': True})
+
+
+def _generate_login_link(state: str = '') -> str:
+    """Generate the OAuth login link for Slack authentication."""
+    return authorize_url_generator.generate(state)
 
 
 def _html_response(title: str, description: str, status_code: int) -> HTMLResponse:

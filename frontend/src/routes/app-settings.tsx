@@ -215,7 +215,7 @@ function AppSettingsScreen() {
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
 
-          {config?.APP_MODE === "saas" && (
+          {config?.app_mode === "saas" && (
             <SettingsSwitch
               testId="enable-proactive-conversations-switch"
               name="enable-proactive-conversations-switch"
@@ -228,7 +228,7 @@ function AppSettingsScreen() {
             </SettingsSwitch>
           )}
 
-          {config?.APP_MODE === "saas" && (
+          {config?.app_mode === "saas" && (
             <SettingsSwitch
               testId="enable-solvability-analysis-switch"
               name="enable-solvability-analysis-switch"

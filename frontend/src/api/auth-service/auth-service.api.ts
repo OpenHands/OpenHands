@@ -1,6 +1,6 @@
 import { openHands } from "../open-hands-axios";
 import { AuthenticateResponse, GitHubAccessTokenResponse } from "./auth.types";
-import { GetConfigResponse } from "../option-service/option.types";
+import { WebClientConfig } from "../option-service/option.types";
 
 /**
  * Authentication service for handling all authentication-related API calls
@@ -12,7 +12,7 @@ class AuthService {
    * @returns Response with authentication status and user info if successful
    */
   static async authenticate(
-    appMode: GetConfigResponse["APP_MODE"],
+    appMode: WebClientConfig["app_mode"],
   ): Promise<boolean> {
     if (appMode === "oss") return true;
 
@@ -42,7 +42,7 @@ class AuthService {
    * Logout user from the application
    * @param appMode The application mode (saas or oss)
    */
-  static async logout(appMode: GetConfigResponse["APP_MODE"]): Promise<void> {
+  static async logout(appMode: WebClientConfig["app_mode"]): Promise<void> {
     const endpoint =
       appMode === "saas" ? "/api/logout" : "/api/unset-provider-tokens";
     await openHands.post(endpoint);

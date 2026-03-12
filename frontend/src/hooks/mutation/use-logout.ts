@@ -10,7 +10,7 @@ export const useLogout = () => {
   const { data: config } = useConfig();
 
   return useMutation({
-    mutationFn: () => AuthService.logout(config?.APP_MODE ?? "oss"),
+    mutationFn: () => AuthService.logout(config?.app_mode ?? "oss"),
     onSuccess: async () => {
       queryClient.removeQueries({ queryKey: ["tasks"] });
       queryClient.removeQueries({ queryKey: ["settings"] });
@@ -18,7 +18,7 @@ export const useLogout = () => {
       queryClient.removeQueries({ queryKey: ["secrets"] });
 
       // Clear login method and last page from local storage
-      if (config?.APP_MODE === "saas") {
+      if (config?.app_mode === "saas") {
         clearLoginData();
       }
 

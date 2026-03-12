@@ -110,6 +110,9 @@ lines.append(
     'OPENHANDS_BITBUCKET_SERVICE_CLS=integrations.bitbucket.bitbucket_service.SaaSBitBucketService'
 )
 lines.append(
+    'OPENHANDS_BITBUCKET_DATA_CENTER_SERVICE_CLS=integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
+)
+lines.append(
     'OPENHANDS_CONVERSATION_VALIDATOR_CLS=storage.saas_conversation_validator.SaasConversationValidator'
 )
 lines.append('POSTHOG_CLIENT_KEY=test')

@@ -108,13 +108,6 @@ class WebSession:
             EventStreamSubscriber.SERVER, self.on_event, self.sid
         )
         self.config = config
-
-        # Lazy import to avoid circular dependency
-        from openhands.experiments.experiment_manager import ExperimentManagerImpl
-
-        self.config = ExperimentManagerImpl.run_config_variant_test(
-            user_id, sid, self.config
-        )
         self.loop = asyncio.get_event_loop()
         self.user_id = user_id
 

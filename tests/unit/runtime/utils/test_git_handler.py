@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -36,7 +37,7 @@ class TestGitHandler(unittest.TestCase):
         self.git_handler.set_cwd(self.local_dir)
 
         self.git_handler.git_changes_cmd = f'python3 {git_changes.__file__}'
-        self.git_handler.git_diff_cmd = f'python3 {git_diff.__file__} "{{file_path}}"'
+        self.git_handler.git_diff_cmd = f'python3 {git_diff.__file__} {{file_path}}'
 
         # Set up the git repositories
         self._setup_git_repos()
@@ -292,3 +293,71 @@ class TestGitHandler(unittest.TestCase):
                 'modified': 'unchanged.txt\nLine 1\nLine 2\nLine 3',
             }
             assert diff == expected_diff
+
+    def test_get_git_diff_command_injection_is_sanitized(self):
+        """Verify that a malicious path does not execute injected shell commands."""
+        sentinel = os.path.join(self.test_dir, 'injected')
+        # A payload that would create the sentinel file if injection were possible
+        malicious_path = f'"; touch {sentinel}; echo "'
+
+        # get_git_diff should raise (no such file) rather than executing the payload
+        with self.assertRaises(ValueError):
+            self.git_handler.get_git_diff(malicious_path)
+
+        assert not os.path.exists(sentinel), (
+            'Shell injection succeeded: sentinel file was created'
+        )
+
+    def test_get_git_diff_no_cwd(self):
+        """Raises ValueError('no_dir_in_git_diff') when cwd has not been set."""
+        handler = GitHandler(
+            execute_shell_fn=self._execute_command,
+            create_file_fn=self._create_file,
+        )
+        with self.assertRaises(ValueError) as ctx:
+            handler.get_git_diff('some_file.txt')
+        assert str(ctx.exception) == 'no_dir_in_git_diff'
+
+    def test_get_git_diff_double_fallback_raises(self):
+        """Raises ValueError('error_in_git_diff') when cmd differs from GIT_DIFF_CMD and still fails."""
+        # Simulate being in fallback mode: cmd != GIT_DIFF_CMD but it still fails
+        self.git_handler.git_diff_cmd = 'non-existent-command {file_path}'
+        with self.assertRaises(ValueError) as ctx:
+            self.git_handler.get_git_diff('unchanged.txt')
+        assert str(ctx.exception) == 'error_in_git_diff'
+
+
+class TestGitShowCmdBuilder:
+    """Pure unit tests for _make_git_show_cmd — no filesystem or subprocess access."""
+
+    def test_plain_path(self):
+        cmd = git_diff._make_git_show_cmd('abc123', 'file.txt')
+        assert shlex.split(cmd) == ['git', 'show', 'abc123:file.txt']
+
+    def test_path_with_spaces(self):
+        cmd = git_diff._make_git_show_cmd('abc123', 'file with spaces.txt')
+        assert shlex.split(cmd) == ['git', 'show', 'abc123:file with spaces.txt']
+
+    def test_path_with_single_quote(self):
+        cmd = git_diff._make_git_show_cmd('abc123', "it's a test.txt")
+        assert shlex.split(cmd) == ['git', 'show', "abc123:it's a test.txt"]
+
+    def test_injection_attempt(self):
+        cmd = git_diff._make_git_show_cmd('abc123', '"; rm -rf /; echo "')
+        assert shlex.split(cmd) == ['git', 'show', 'abc123:"; rm -rf /; echo "']
+
+
+def test_get_git_diff_file_too_large():
+    """Raises ValueError('file_to_large') when the file exceeds the size limit."""
+    with patch('os.path.getsize', return_value=git_diff.MAX_FILE_SIZE_FOR_GIT_DIFF + 1):
+        with pytest.raises(ValueError, match='file_to_large'):
+            git_diff.get_git_diff('/nonexistent/path.txt')
+
+
+def test_get_git_diff_no_repository():
+    """Raises ValueError('no_repository') when the file is outside any git repository."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        file_path = os.path.join(tmp_dir, 'file.txt')
+        Path(file_path).write_text('content')
+        with pytest.raises(ValueError, match='no_repository'):
+            git_diff.get_git_diff(file_path)

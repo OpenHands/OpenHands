@@ -16,7 +16,8 @@ Optional environment variables:
 - KEYCLOAK_PROVIDER_NAME: Provider name for Keycloak
 - KEYCLOAK_CLIENT_ID: Client ID for Keycloak
 - KEYCLOAK_CLIENT_SECRET: Client secret for Keycloak
-- RESEND_FROM_EMAIL: Email address to use as the sender (default: "All Hands Team <contact@all-hands.dev>")
+- RESEND_FROM_EMAIL: Email address to use as the sender (default: "OpenHands Team <no-reply@welcome.openhands.dev>")
+- RESEND_REPLY_TO_EMAIL: Email address for replies (default: "contact@openhands.dev")
 - BATCH_SIZE: Number of users to process in each batch (default: 100)
 - MAX_RETRIES: Maximum number of retries for API calls (default: 3)
 - INITIAL_BACKOFF_SECONDS: Initial backoff time for retries (default: 1)
@@ -26,6 +27,7 @@ Optional environment variables:
 """
 
 import os
+import re
 import sys
 import time
 from typing import Any, Dict, List, Optional
@@ -34,6 +36,7 @@ import resend
 from keycloak.exceptions import KeycloakError
 from resend.exceptions import ResendError
 from server.auth.token_manager import get_keycloak_admin
+from storage.resend_synced_user_store import ResendSyncedUserStore
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -68,9 +71,6 @@ RATE_LIMIT = float(os.environ.get('RATE_LIMIT', '2'))  # Requests per second
 # Set up Resend API
 resend.api_key = RESEND_API_KEY
 
-print('resend module', resend)
-print('has contacts', hasattr(resend, 'Contacts'))
-
 
 class ResendSyncError(Exception):
     """Base exception for Resend sync errors."""
@@ -88,6 +88,31 @@ class ResendAPIError(ResendSyncError):
     """Exception for Resend API errors."""
 
     pass
+
+
+# Email validation regex pattern - matches standard email format
+# This pattern is intentionally strict to avoid Resend API validation errors
+# It rejects special characters like ! that some email providers technically allow
+# but Resend's API does not accept
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+
+def is_valid_email(email: Optional[str]) -> bool:
+    """Validate an email address format.
+
+    This uses a regex pattern that matches most valid email addresses
+    while rejecting addresses with special characters that Resend's API
+    does not accept (e.g., exclamation marks).
+
+    Args:
+        email: The email address to validate, or None.
+
+    Returns:
+        True if the email is valid, False otherwise (including for None).
+    """
+    if not email:
+        return False
+    return bool(EMAIL_REGEX.match(email))
 
 
 def get_keycloak_users(offset: int = 0, limit: int = 100) -> List[Dict[str, Any]]:
@@ -173,8 +198,6 @@ def get_resend_contacts(audience_id: str) -> Dict[str, Dict[str, Any]]:
     Raises:
         ResendAPIError: If the API call fails.
     """
-    print('getting resend contacts')
-    print('has resend contacts', hasattr(resend, 'Contacts'))
     try:
         contacts = resend.Contacts.list(audience_id).get('data', [])
         # Create a dictionary mapping email addresses to contact data for
@@ -229,6 +252,15 @@ def add_contact_to_resend(
         raise
 
 
+@retry(
+    stop=stop_after_attempt(MAX_RETRIES),
+    wait=wait_exponential(
+        multiplier=INITIAL_BACKOFF_SECONDS,
+        max=MAX_BACKOFF_SECONDS,
+        exp_base=BACKOFF_FACTOR,
+    ),
+    retry=retry_if_exception_type(ResendError),
+)
 def send_welcome_email(
     email: str,
     first_name: Optional[str] = None,
@@ -245,7 +277,7 @@ def send_welcome_email(
         The API response.
 
     Raises:
-        ResendError: If the API call fails.
+        ResendError: If the API call fails after retries.
     """
     try:
         # Prepare the recipient name
@@ -261,7 +293,10 @@ def send_welcome_email(
         # Prepare email parameters
         params = {
             'from': os.environ.get(
-                'RESEND_FROM_EMAIL', 'All Hands Team <contact@all-hands.dev>'
+                'RESEND_FROM_EMAIL', 'OpenHands Team <no-reply@welcome.openhands.dev>'
+            ),
+            'reply_to': os.environ.get(
+                'RESEND_REPLY_TO_EMAIL', 'contact@openhands.dev'
             ),
             'to': [email],
             'subject': 'Welcome to OpenHands Cloud',
@@ -271,13 +306,18 @@ def send_welcome_email(
                 <p>Thanks for joining OpenHands Cloud — we're excited to help you start building with the world's leading open source AI coding agent!</p>
                 <p><strong>Here are three quick ways to get started:</strong></p>
                 <ol>
-                    <li><a href="https://docs.all-hands.dev/usage/cloud/openhands-cloud#next-steps"><strong>Connect your Git repo</strong></a> – Link your <a href="https://docs.all-hands.dev/usage/cloud/github-installation">GitHub</a> or <a href="https://docs.all-hands.dev/usage/cloud/gitlab-installation">GitLab</a> repository in seconds so OpenHands can begin understanding your codebase and suggest tasks.</li>
-                    <li><a href="https://docs.all-hands.dev/usage/cloud/github-installation#working-on-github-issues-and-pull-requests-using-openhands"><strong>Use OpenHands on an issue or pull request</strong></a> – Label an issue with 'openhands' or mention @openhands on any PR comment to generate explanations, tests, refactors, or doc fixes tailored to the exact lines you're reviewing.</li>
-                    <li><a href="https://join.slack.com/t/openhands-ai/shared_invite/zt-34zm4j0gj-Qz5kRHoca8DFCbqXPS~f_A"><strong>Join the community</strong></a> – Drop into our Slack Community to share tips, feedback, and help shape the next features on our roadmap.</li>
+                    <li><a href="https://docs.openhands.dev/openhands/usage/cloud/openhands-cloud#next-steps"><strong>Connect your Git repo</strong></a> – Link your <a href="https://docs.openhands.dev/openhands/usage/cloud/github-installation">GitHub</a> or <a href="https://docs.openhands.dev/openhands/usage/cloud/gitlab-installation">GitLab</a> repository in seconds so OpenHands can begin understanding your codebase and suggest tasks.</li>
+                    <li><a href="https://docs.openhands.dev/openhands/usage/cloud/github-installation#working-on-github-issues-and-pull-requests-using-openhands"><strong>Use OpenHands on an issue or pull request</strong></a> – Label an issue with 'openhands' or mention @openhands on any PR comment to generate explanations, tests, refactors, or doc fixes tailored to the exact lines you're reviewing.</li>
+                    <li><a href="https://dub.sh/openhands"><strong>Join the community</strong></a> – Join our Slack Community to share tips, feedback, and help shape the next features on our roadmap.</li>
                 </ol>
                 <p>Have questions? Want to share feedback? Just reply to this email—we're here to help.</p>
                 <p>Happy coding!</p>
-                <p>The All Hands AI team</p>
+                <p>The OpenHands team</p>
+                <p>--</p>
+                <p>OpenHands</p>
+                <p>24 Oak Street</p>
+                <p>Cambridge MA 02139</p>
+                <p>https://openhands.dev</p>
             </div>
             """,
         }
@@ -291,8 +331,84 @@ def send_welcome_email(
         raise
 
 
+def _get_resend_synced_user_store() -> ResendSyncedUserStore:
+    """Get the ResendSyncedUserStore instance.
+
+    This is separated into a function to allow for easier testing/mocking.
+    """
+    from openhands.app_server.config import get_global_config
+
+    config = get_global_config()
+    db_session_injector = config.db_session
+    return ResendSyncedUserStore(session_maker=db_session_injector.get_session_maker())
+
+
+def _backfill_existing_resend_contacts(
+    synced_user_store: ResendSyncedUserStore,
+    audience_id: str,
+) -> int:
+    """Backfill the synced_users table with contacts already in Resend.
+
+    This ensures that users who were added to Resend before the tracking
+    table existed are properly recorded, preventing duplicate welcome emails.
+
+    Args:
+        synced_user_store: The store for tracking synced users.
+        audience_id: The Resend audience ID.
+
+    Returns:
+        The number of contacts backfilled.
+    """
+    logger.info('Starting backfill of existing Resend contacts...')
+
+    try:
+        resend_contacts = get_resend_contacts(audience_id)
+        logger.info(f'Found {len(resend_contacts)} contacts in Resend audience')
+
+        already_synced_emails = synced_user_store.get_synced_emails_for_audience(
+            audience_id
+        )
+        logger.info(
+            f'Found {len(already_synced_emails)} already synced emails in database'
+        )
+
+        backfilled_count = 0
+        for email in resend_contacts:
+            if email.lower() not in already_synced_emails:
+                synced_user_store.mark_user_synced(
+                    email=email,
+                    audience_id=audience_id,
+                    keycloak_user_id=None,  # We don't have this info during backfill
+                )
+                backfilled_count += 1
+                logger.debug(f'Backfilled existing Resend contact: {email}')
+
+        logger.info(
+            f'Backfill completed: {backfilled_count} contacts added to tracking'
+        )
+        return backfilled_count
+
+    except Exception:
+        logger.exception('Error during backfill of existing Resend contacts')
+        # Don't fail the entire sync if backfill fails - just log and continue
+        return 0
+
+
 def sync_users_to_resend():
-    """Sync users from Keycloak to Resend."""
+    """Sync users from Keycloak to Resend.
+
+    This function syncs users from Keycloak to a Resend audience. It tracks
+    which users have been synced in the database to ensure that:
+    1. Users are only added once (even across multiple sync runs)
+    2. Users who are manually deleted from Resend are not re-added
+
+    The tracking is done via the resend_synced_users table, which records
+    each email/audience_id combination that has been synced.
+
+    On first run (or when new contacts exist in Resend), it will backfill
+    the tracking table with existing Resend contacts to avoid sending
+    duplicate welcome emails.
+    """
     # Check required environment variables
     required_vars = {
         'RESEND_API_KEY': RESEND_API_KEY,
@@ -318,26 +434,35 @@ def sync_users_to_resend():
     )
 
     try:
+        # Get the store for tracking synced users
+        synced_user_store = _get_resend_synced_user_store()
+
+        # Backfill existing Resend contacts into our tracking table
+        # This ensures users already in Resend don't get duplicate welcome emails
+        backfilled_count = _backfill_existing_resend_contacts(
+            synced_user_store, RESEND_AUDIENCE_ID
+        )
+
         # Get the total number of users
         total_users = get_total_keycloak_users()
         logger.info(
             f'Found {total_users} users in Keycloak realm {KEYCLOAK_REALM_NAME}'
         )
 
-        # Get contacts from Resend
-        resend_contacts = get_resend_contacts(RESEND_AUDIENCE_ID)
-        logger.info(
-            f'Found {len(resend_contacts)} contacts in Resend audience '
-            f'{RESEND_AUDIENCE_ID}'
-        )
-
         # Stats
         stats = {
             'total_users': total_users,
-            'existing_contacts': len(resend_contacts),
+            'backfilled_contacts': backfilled_count,
+            'already_synced': 0,
             'added_contacts': 0,
+            'skipped_invalid_emails': 0,
             'errors': 0,
         }
+
+        synced_emails = synced_user_store.get_synced_emails_for_audience(
+            RESEND_AUDIENCE_ID
+        )
+        logger.info(f'Found {len(synced_emails)} already synced emails in database')
 
         # Process users in batches
         offset = 0
@@ -351,39 +476,65 @@ def sync_users_to_resend():
                     continue
 
                 email = email.lower()
-                if email in resend_contacts:
-                    logger.debug(f'User {email} already exists in Resend, skipping')
+
+                if email in synced_emails:
+                    logger.debug(
+                        f'User {email} was already synced to this audience, skipping'
+                    )
+                    stats['already_synced'] += 1
+                    continue
+
+                # Validate email format before attempting to add to Resend
+                if not is_valid_email(email):
+                    logger.warning(f'Skipping user with invalid email format: {email}')
+                    stats['skipped_invalid_emails'] += 1
+                    continue
+
+                first_name = user.get('first_name')
+                last_name = user.get('last_name')
+                keycloak_user_id = user.get('id')
+
+                # Mark as synced first (optimistic) to ensure consistency.
+                # If Resend API fails, we remove the record.
+                try:
+                    synced_user_store.mark_user_synced(
+                        email=email,
+                        audience_id=RESEND_AUDIENCE_ID,
+                        keycloak_user_id=keycloak_user_id,
+                    )
+                except Exception:
+                    logger.exception(f'Failed to mark user {email} as synced')
+                    stats['errors'] += 1
                     continue
 
                 try:
-                    first_name = user.get('first_name')
-                    last_name = user.get('last_name')
-
-                    # Add the contact to the Resend audience
                     add_contact_to_resend(
                         RESEND_AUDIENCE_ID, email, first_name, last_name
                     )
                     logger.info(f'Added user {email} to Resend')
-                    stats['added_contacts'] += 1
-
-                    # Sleep to respect rate limit after first API call
-                    time.sleep(1 / RATE_LIMIT)
-
-                    # Send a welcome email to the newly added contact
-                    try:
-                        send_welcome_email(email, first_name, last_name)
-                        logger.info(f'Sent welcome email to {email}')
-                    except Exception:
-                        logger.exception(
-                            f'Failed to send welcome email to {email}, but contact was added to audience'
-                        )
-                        # Continue with the sync process even if sending the welcome email fails
-
-                    # Sleep to respect rate limit after second API call
-                    time.sleep(1 / RATE_LIMIT)
                 except Exception:
                     logger.exception(f'Error adding user {email} to Resend')
+                    synced_user_store.remove_synced_user(email, RESEND_AUDIENCE_ID)
                     stats['errors'] += 1
+                    continue
+
+                synced_emails.add(email)
+                stats['added_contacts'] += 1
+
+                # Sleep to respect rate limit after first API call
+                time.sleep(1 / RATE_LIMIT)
+
+                # Send a welcome email to the newly added contact
+                try:
+                    send_welcome_email(email, first_name, last_name)
+                    logger.info(f'Sent welcome email to {email}')
+                except Exception:
+                    logger.exception(
+                        f'Failed to send welcome email to {email}, but contact was added to audience'
+                    )
+
+                # Sleep to respect rate limit after second API call
+                time.sleep(1 / RATE_LIMIT)
 
             offset += BATCH_SIZE
 

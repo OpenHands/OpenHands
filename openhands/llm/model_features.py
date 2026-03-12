@@ -93,10 +93,14 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     # Others
     'kimi-k2-0711-preview',
     'kimi-k2-instruct',
+    'kimi-k2.5',
     'qwen3-coder*',
     'qwen3-coder-480b-a35b-instruct',
     'deepseek-chat',
     'grok-code-fast-1',
+    # GLM series - verified via official docs and litellm config
+    'glm-4*',
+    'glm-5*',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [
@@ -111,11 +115,18 @@ REASONING_EFFORT_PATTERNS: list[str] = [
     'o4-mini-2025-04-16',
     'gemini-2.5-flash',
     'gemini-2.5-pro',
+    'gemini-3.1-pro*',
     'gpt-5*',
     # DeepSeek reasoning family
     'deepseek-r1-0528*',
     'claude-sonnet-4-5*',
+    'claude-sonnet-4-6*',
     'claude-haiku-4-5*',
+    # Kimi series - verified via litellm config
+    'kimi-k2.5',
+    # GLM series - verified via litellm config
+    'glm-4*',
+    'glm-5*',
 ]
 
 PROMPT_CACHE_PATTERNS: list[str] = [
@@ -129,6 +140,12 @@ PROMPT_CACHE_PATTERNS: list[str] = [
     'claude-3-opus-20240229',
     'claude-sonnet-4*',
     'claude-opus-4*',
+    'gemini-3.1-pro*',
+    # Kimi series - verified via litellm config
+    'kimi-k2.5',
+    # GLM series - verified via litellm config
+    'glm-4*',
+    'glm-5*',
 ]
 
 SUPPORTS_STOP_WORDS_FALSE_PATTERNS: list[str] = [

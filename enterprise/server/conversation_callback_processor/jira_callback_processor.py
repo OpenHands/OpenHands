@@ -37,8 +37,7 @@ class JiraCallbackProcessor(ConversationCallbackProcessor):
     workspace_name: str
 
     async def _send_comment_to_jira(self, message: str) -> None:
-        """
-        Send a comment to Jira issue.
+        """Send a comment to Jira issue.
 
         Args:
             message: The message content to send to Jira
@@ -59,8 +58,9 @@ class JiraCallbackProcessor(ConversationCallbackProcessor):
             # Decrypt API key
             api_key = jira_manager.token_manager.decrypt_text(workspace.svc_acc_api_key)
 
+            # Send comment directly as a string
             await jira_manager.send_message(
-                jira_manager.create_outgoing_message(msg=message),
+                message,
                 issue_key=self.issue_key,
                 jira_cloud_id=workspace.jira_cloud_id,
                 svc_acc_email=workspace.svc_acc_email,

@@ -1,0 +1,48 @@
+---
+name: PR Review by OpenHands
+
+on:
+    # TEMPORARY MITIGATION (Clinejection hardening)
+    #
+    # We temporarily avoid `pull_request_target` here. We'll restore it after the PR review
+    # workflow is fully hardened for untrusted execution.
+    pull_request:
+        types: [opened, ready_for_review, labeled, review_requested]
+
+permissions:
+    contents: read
+    pull-requests: write
+    issues: write
+
+jobs:
+    pr-review:
+        # Note: fork PRs will not have access to repository secrets under `pull_request`.
+        # Skip forks to avoid noisy failures until we restore a hardened `pull_request_target` flow.
+        if: |
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            (
+                (github.event.action == 'opened' && github.event.pull_request.draft == false) ||
+                github.event.action == 'ready_for_review' ||
+                (github.event.action == 'labeled' && github.event.label.name == 'review-this') ||
+                (
+                    github.event.action == 'review_requested' &&
+                    (
+                        github.event.requested_reviewer.login == 'openhands-agent' ||
+                        github.event.requested_reviewer.login == 'all-hands-bot'
+                    )
+                )
+            )
+        concurrency:
+            group: pr-review-${{ github.event.pull_request.number }}
+            cancel-in-progress: true
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Run PR Review
+              uses: OpenHands/extensions/plugins/pr-review@main
+              with:
+                  llm-model: litellm_proxy/claude-sonnet-4-5-20250929
+                  llm-base-url: https://llm-proxy.app.all-hands.dev
+                  review-style: roasted
+                  llm-api-key: ${{ secrets.LLM_API_KEY }}
+                  github-token: ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}
+                  lmnr-api-key: ${{ secrets.LMNR_SKILLS_API_KEY }}

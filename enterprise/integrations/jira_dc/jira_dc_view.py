@@ -36,7 +36,7 @@ class JiraDcNewConversationView(JiraDcViewInterface):
     selected_repo: str | None
     conversation_id: str
 
-    def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
+    async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Instructions passed when conversation is first initialized"""
 
         instructions_template = jinja_env.get_template('jira_dc_instructions.j2')
@@ -61,7 +61,7 @@ class JiraDcNewConversationView(JiraDcViewInterface):
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
         user_secrets = await self.saas_user_auth.get_secrets()
-        instructions, user_msg = self._get_instructions(jinja_env)
+        instructions, user_msg = await self._get_instructions(jinja_env)
 
         try:
             agent_loop_info = await create_new_conversation(
@@ -113,7 +113,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
     selected_repo: str | None
     conversation_id: str
 
-    def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
+    async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Instructions passed when conversation is first initialized"""
 
         user_msg_template = jinja_env.get_template('jira_dc_existing_conversation.j2')
@@ -155,6 +155,9 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
                 self.conversation_id, conversation_init_data, user_id
             )
 
+            if agent_loop_info.event_store is None:
+                raise StartingConvoException('Event store not available')
+
             final_agent_observation = get_final_agent_observation(
                 agent_loop_info.event_store
             )
@@ -167,7 +170,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
             if not agent_state or agent_state == AgentState.LOADING:
                 raise StartingConvoException('Conversation is still starting')
 
-            _, user_msg = self._get_instructions(jinja_env)
+            _, user_msg = await self._get_instructions(jinja_env)
             user_message_event = MessageAction(content=user_msg)
             await conversation_manager.send_event_to_conversation(
                 self.conversation_id, event_to_dict(user_message_event)
