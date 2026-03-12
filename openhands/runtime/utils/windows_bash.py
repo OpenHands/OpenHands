@@ -1016,9 +1016,12 @@ class WindowsPowershellSession:
                 ]  # Try to get text
                 return ErrorObservation(
                     content=(
-                        f'ERROR: Cannot execute multiple commands at once.\n'
-                        f'Please run each command separately OR chain them into a single command via PowerShell operators (e.g., ; or |).\n'
-                        f'Detected commands:\n' + "\n".join(f"({i + 1}) {cmd}" for i, cmd in enumerate(splited_cmds))
+                        'ERROR: Cannot execute multiple commands at once.\n'
+                        'Please run each command separately OR chain them into a single command via PowerShell operators (e.g., ; or |).\n'
+                        'Detected commands:\n'
+                        + '\n'.join(
+                            f'({i + 1}) {cmd}' for i, cmd in enumerate(splited_cmds)
+                        )
                     )
                 )
             elif statements.Count == 0 and not command.strip().startswith('#'):
