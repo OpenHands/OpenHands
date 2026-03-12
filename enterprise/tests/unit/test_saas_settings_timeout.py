@@ -11,17 +11,17 @@ from openhands.storage.data_models.settings import Settings as DataSettings
 from unittest.mock import patch
 
 with patch('storage.database.a_session_maker'):
-    from server.constants import (
+    from enterprise.server.constants import (
         LITE_LLM_API_URL,
     )
-    from storage.saas_settings_store import SaasSettingsStore
-    from storage.user_settings import UserSettings
+    from enterprise.storage.saas_settings_store import SaasSettingsStore
+    from enterprise.storage.user_settings import UserSettings
 
 
 @pytest.fixture
 def mock_config():
     config = patch('storage.saas_settings_store.OpenHandsConfig').return_value
-    config.jwt_secret = SecretStr('test_secret')
+    config.jwt_secret = SecretStr('test_secret_key')
     config.file_store = 'google_cloud'
     config.file_store_path = 'bucket'
     return config
@@ -46,10 +46,11 @@ def settings_store(async_session_maker, mock_config):
             if not user_settings:
                 # Return default settings
                 return Settings(
-                    llm_api_key=SecretStr('test_api_key'),
+                    llm_api_key=SecretStr('secret_key'),
                     llm_base_url='http://test.url',
                     agent='CodeActAgent',
                     language='en',
+                    timeout=None,  # Explicitly set timeout to None for enterprise
                 )
 
             # Decrypt and convert to Settings
