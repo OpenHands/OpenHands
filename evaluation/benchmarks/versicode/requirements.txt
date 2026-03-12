@@ -141,6 +141,6 @@ websockets==15.0.1
 wheel==0.46.2
 wrapt==1.17.2
 xformers==0.0.29.post2
-xgrammar==0.1.18
+xgrammar==0.1.32
 yarl==1.20.0
 zipp==3.21.0
