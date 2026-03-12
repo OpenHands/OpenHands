@@ -6,9 +6,16 @@ import { Typography } from "#/ui/typography";
 import { BrandButton } from "../settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import StackedIcon from "#/icons/stacked.svg?react";
+import { useTracking } from "#/hooks/use-tracking";
 
 export function ContextMenuCTA() {
   const { t } = useTranslation();
+  const { trackSaasSelfhostedInquiry } = useTracking();
+
+  const handleLearnMore = () => {
+    trackSaasSelfhostedInquiry({ location: "context_menu" });
+    window.open("https://openhands.dev/enterprise/", "_blank", "noopener");
+  };
 
   return (
     <Card
@@ -38,23 +45,18 @@ export function ContextMenuCTA() {
         </Typography.Text>
 
         <div className="flex mt-auto">
-          <a
-            href="https://openhands.dev/enterprise/"
-            target="_blank"
-            rel="noopener noreferrer"
+          <BrandButton
+            variant="primary"
+            type="button"
+            onClick={handleLearnMore}
+            className={cn(
+              "h-[40px] px-4 rounded-[4px]",
+              "bg-[#050505] border border-[#242424]",
+              "text-white hover:bg-[#0a0a0a]",
+            )}
           >
-            <BrandButton
-              variant="primary"
-              type="button"
-              className={cn(
-                "h-[40px] px-4 rounded-[4px]",
-                "bg-[#050505] border border-[#242424]",
-                "text-white hover:bg-[#0a0a0a]",
-              )}
-            >
-              {t(I18nKey.CTA$LEARN_MORE)}
-            </BrandButton>
-          </a>
+            {t(I18nKey.CTA$LEARN_MORE)}
+          </BrandButton>
         </div>
       </div>
     </Card>

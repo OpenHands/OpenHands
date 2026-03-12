@@ -122,6 +122,13 @@ export const useTracking = () => {
     });
   };
 
+  const trackSaasSelfhostedInquiry = ({ location }: { location: string }) => {
+    posthog.capture("saas_selfhosted_inquiry", {
+      location,
+      ...commonProperties,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -134,5 +141,6 @@ export const useTracking = () => {
     trackCreditLimitReached,
     trackAddTeamMembersButtonClick,
     trackOnboardingCompleted,
+    trackSaasSelfhostedInquiry,
   };
 };
