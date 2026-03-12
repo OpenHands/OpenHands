@@ -14,7 +14,7 @@ export function EnterpriseBanner() {
   const posthog = usePostHog();
 
   const handleLearnMore = () => {
-    posthog.capture("saas_selfhosted_inquiry");
+    posthog?.capture("saas_selfhosted_inquiry");
     window.open("https://openhands.dev/enterprise", "_blank", "noopener");
   };
 
