@@ -89,7 +89,7 @@ outlines==0.1.11
 outlines_core==0.1.26
 packaging==25.0
 partial-json-parser==0.2.1.1.post5
-pillow==11.2.1
+pillow==12.1.1
 prometheus-fastapi-instrumentator==7.1.0
 prometheus_client==0.21.1
 propcache==0.3.1
