@@ -5,7 +5,7 @@ description: Create a new external API data connector for the B1 framework. Use 
 
 # Create Data Connector
 
-Guides creation of external API connectors following the 4-file NestJS pattern used by the B1 framework. Produces a fully working `IDataConnector` implementation registered via `ConnectorModule.forRoot()`, plus blueprint DataSource objects.
+Guides creation of external API connectors following the 3-file NestJS pattern used by the B1 framework. Produces a fully working `IDataConnector` implementation registered via `ConnectorModule.forRoot()` in `app.module.ts`, plus blueprint DataSource objects.
 
 **Reference implementation:** `src/app-server-ts/src/api/spacex/` (read-only, public API, MongoDB-style POST body filtering).
 
@@ -257,7 +257,7 @@ private async getAccessToken(headers: Record<string, string>): Promise<string> {
 
 ---
 
-## Phase 4: Generate Backend Code (4-File Pattern)
+## Phase 4: Generate Backend Code (3-File Pattern)
 
 All files go under `src/app-server-ts/src/api/{provider}/`.
 
@@ -370,37 +370,31 @@ export class {Provider}Connector implements IDataConnector {
 - Wrap singleton responses in arrays for `IDataConnector` compliance
 - All 4 methods (`fetch`, `create`, `update`, `delete`) must be implemented — throw `MethodNotAllowedException` for unsupported operations
 
-### File 4: `{provider}.module.ts`
-
-```typescript
-import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
-import { ConnectorModule } from '@buildone/app-server-tslib/modules';
-import { {Provider}Connector } from './{provider}.connector';
-
-@Module({
-  imports: [
-    ConnectorModule.forRoot({
-      connectors: [{ provide: '{provider}', useClass: {Provider}Connector }],
-      imports: [HttpModule]
-    })
-  ]
-})
-export class {Provider}Module {}
-```
-
-**Key import:** `ConnectorModule` from `@buildone/app-server-tslib/modules`
-
-The `provide` string becomes the provider segment of the URL: `api/connector/{provider}/{object}/fetch`.
-
 ---
 
-## Phase 5: Register Module
+## Phase 5: Register Connector in `app.module.ts`
 
-Update `src/app-server-ts/src/api/api.module.ts`:
+All connectors are registered centrally in `src/app-server-ts/src/app.module.ts` via a single `ConnectorModule.forRoot()` call. Do **not** create separate module files per connector.
 
-1. Add import: `import { {Provider}Module } from './{provider}/{provider}.module';`
-2. Add `{Provider}Module` to both the `imports` and `exports` arrays.
+1. Add import: `import { {Provider}Connector } from './api/{provider}/{provider}.connector';`
+2. If `ConnectorModule.forRoot()` already exists in the `imports` array, add `{ provide: '{provider}', useClass: {Provider}Connector }` to the `connectors` array.
+3. If `ConnectorModule.forRoot()` does not exist yet, add it:
+
+```typescript
+import { ConnectorModule } from '@buildone/app-server-tslib/modules';
+import { HttpModule } from '@nestjs/axios';
+import { {Provider}Connector } from './api/{provider}/{provider}.connector';
+
+// In @Module imports:
+ConnectorModule.forRoot({
+  connectors: [
+    { provide: '{provider}', useClass: {Provider}Connector }
+  ],
+  imports: [HttpModule]
+}),
+```
+
+The `provide` string becomes the provider segment of the URL: `api/connector/{provider}/{object}/fetch`.
 
 ---
 
@@ -455,7 +449,7 @@ If requested:
 6. **Wrap singleton responses in arrays** — `IDataConnector.fetch()` must always return `unknown[]`.
 7. **Document unsupported operators** — add a comment in the filter file listing which B1 operators are not supported by the target API.
 8. **`resourceName` pattern:** `service/app/api/connector/{provider}/{resource}` — the `service/app/` prefix is required for DataSource blueprints.
-9. **One module per provider** — multiple resources are handled by the single connector class dispatching on the `object` parameter.
+9. **One connector class per provider** — multiple resources are handled by the single connector class dispatching on the `object` parameter. All connectors are registered in a single `ConnectorModule.forRoot()` in `app.module.ts`.
 10. **Never modify the SpaceX reference files** — they are the reference implementation, not a template to overwrite.
 
 ---
@@ -468,13 +462,13 @@ If requested:
 |-------|-----|
 | `Cannot find module '@buildone/app-server-tslib/...'` | Check import paths — use `/modules` for `IDataConnector`, `ConnectorModule`; use `/utils` for filter types |
 | `Class does not implement IDataConnector` | Ensure all 4 methods (`fetch`, `create`, `update`, `delete`) are implemented |
-| `Module not found` | Verify the module is imported in `api.module.ts` |
+| `Module not found` | Verify the connector is registered in `app.module.ts`'s `ConnectorModule.forRoot()` |
 
 ### Runtime Errors
 
 | Error | Fix |
 |-------|-----|
-| `404 on /api/connector/{provider}/{resource}/fetch` | Check `provide` string in module matches URL segment; verify module is in `api.module.ts` imports |
+| `404 on /api/connector/{provider}/{resource}/fetch` | Check `provide` string matches URL segment; verify connector is in `app.module.ts`'s `ConnectorModule.forRoot()` |
 | `MethodNotAllowedException` | Expected for read-only connectors on create/update/delete |
 | `ETIMEDOUT` | External API unreachable — check base URL and network access |
 
@@ -501,7 +495,6 @@ Reference files:
 - `src/app-server-ts/src/api/spacex/spacex.connector.ts`
 - `src/app-server-ts/src/api/spacex/spacex.filter.ts`
 - `src/app-server-ts/src/api/spacex/spacex.types.ts`
-- `src/app-server-ts/src/api/spacex/spacex.module.ts`
 
 ### Example 2: Token-Authenticated REST API (HubSpot Pattern)
 
@@ -528,8 +521,7 @@ Reference files:
 - `src/app-server-ts/src/api/spacex/spacex.connector.ts` — IDataConnector implementation
 - `src/app-server-ts/src/api/spacex/spacex.filter.ts` — MongoDB-style filter translation
 - `src/app-server-ts/src/api/spacex/spacex.types.ts` — type definitions and resource set
-- `src/app-server-ts/src/api/spacex/spacex.module.ts` — ConnectorModule.forRoot() registration
-- `src/app-server-ts/src/api/api.module.ts` — module import/export location
+- `src/app-server-ts/src/app.module.ts` — ConnectorModule.forRoot() registration location
 
 ### Framework Source
 - `IDataConnector` interface: `@buildone/app-server-tslib/modules`
