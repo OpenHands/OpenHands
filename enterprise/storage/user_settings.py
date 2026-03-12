@@ -1,10 +1,20 @@
 from server.constants import DEFAULT_BILLING_MARGIN
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Identity, Integer, String
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Identity,
+    Integer,
+    String,
+)
 from storage.base import Base
 
 
 class UserSettings(Base):  # type: ignore
     __tablename__ = 'user_settings'
+    __table_args__ = {'extend_existing': True}
     id = Column(Integer, Identity(), primary_key=True)
     keycloak_user_id = Column(String, nullable=True, index=True)
     language = Column(String, nullable=True)
