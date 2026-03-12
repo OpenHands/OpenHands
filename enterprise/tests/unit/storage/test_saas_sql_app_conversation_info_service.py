@@ -663,3 +663,131 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         admin_page = await admin_service.search_app_conversation_info()
         assert len(admin_page.items) == 5
+
+
+class TestSaasSQLAppConversationInfoServiceWebhookFallback:
+    """Test suite for webhook callback fallback using info.created_by_user_id."""
+
+    @pytest.mark.asyncio
+    async def test_save_with_admin_context_uses_created_by_user_id_fallback(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that save_app_conversation_info uses info.created_by_user_id when user_context returns None.
+
+        This is the key fix for SDK-created conversations: when the webhook endpoint
+        uses ADMIN context (user_id=None), the service should fall back to using
+        the created_by_user_id from the AppConversationInfo object.
+        """
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Create service with ADMIN context (user_id=None)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        # Create conversation info with created_by_user_id set (as would come from sandbox_info)
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),  # This should be used as fallback
+            sandbox_id='sandbox_webhook_test',
+            title='Webhook Created Conversation',
+        )
+
+        # Act: Save using ADMIN context
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Assert: SAAS metadata should be created with user_id from info.created_by_user_id
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None, 'SAAS metadata should be created'
+        assert (
+            saas_metadata.user_id == USER1_ID
+        ), 'user_id should match info.created_by_user_id'
+        assert saas_metadata.org_id == ORG1_ID, 'org_id should match user current org'
+
+    @pytest.mark.asyncio
+    async def test_save_with_admin_context_no_user_id_skips_saas_metadata(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that save_app_conversation_info skips SAAS metadata when both user_context and info have no user_id."""
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Create service with ADMIN context (user_id=None)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        # Create conversation info without created_by_user_id
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=None,  # No user_id available
+            sandbox_id='sandbox_no_user',
+            title='No User Conversation',
+        )
+
+        # Act: Save using ADMIN context with no user_id fallback
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Assert: SAAS metadata should NOT be created
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert (
+            saas_metadata is None
+        ), 'SAAS metadata should not be created without user_id'
+
+    @pytest.mark.asyncio
+    async def test_webhook_created_conversation_visible_to_user(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test end-to-end: conversation saved via webhook is visible to the owning user."""
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Save conversation using ADMIN context (simulating webhook)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_webhook_e2e',
+            title='E2E Webhook Conversation',
+        )
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Act: Query as the owning user
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        user1_page = await user1_service.search_app_conversation_info()
+
+        # Assert: User should see the webhook-created conversation
+        assert len(user1_page.items) == 1
+        assert user1_page.items[0].id == conv_id
+        assert user1_page.items[0].title == 'E2E Webhook Conversation'
