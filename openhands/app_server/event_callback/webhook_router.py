@@ -24,6 +24,7 @@ from openhands.app_server.config import (
     depends_event_service,
     depends_jwt_service,
     get_event_callback_service,
+    get_global_config,
     get_sandbox_service,
 )
 from openhands.app_server.errors import AuthError
@@ -40,6 +41,7 @@ from openhands.app_server.user.specifiy_user_context import (
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent
+from openhands.server.types import AppMode
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
@@ -49,6 +51,7 @@ router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()
 app_conversation_info_service_dependency = depends_app_conversation_info_service()
 jwt_dependency = depends_jwt_service()
+app_mode = get_global_config().app_mode
 _logger = logging.getLogger(__name__)
 
 
@@ -86,6 +89,13 @@ async def valid_sandbox(
                 request.state,
                 USER_CONTEXT_ATTR,
                 SpecifyUserContext(sandbox_info.created_by_user_id),
+            )
+        elif app_mode == AppMode.SAAS:
+            _logger.error(
+                'Sandbox had no user specified', extra={'sandbox_id': sandbox_info.id}
+            )
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, detail='Sandbox had no user specified'
             )
 
         return sandbox_info
