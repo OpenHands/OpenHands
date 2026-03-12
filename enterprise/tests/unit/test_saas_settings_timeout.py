@@ -10,7 +10,7 @@ from openhands.storage.data_models.settings import Settings as DataSettings
 # Mock the database module before importing
 from unittest.mock import patch
 
-with patch("storage.database.a_session_maker"):
+with patch('storage.database.a_session_maker'):
     from server.constants import (
         LITE_LLM_API_URL,
     )
@@ -20,16 +20,16 @@ with patch("storage.database.a_session_maker"):
 
 @pytest.fixture
 def mock_config():
-    config = patch("storage.saas_settings_store.OpenHandsConfig").return_value
-    config.jwt_secret = SecretStr("test_secret")
-    config.file_store = "google_cloud"
-    config.file_store_path = "bucket"
+    config = patch('storage.saas_settings_store.OpenHandsConfig').return_value
+    config.jwt_secret = SecretStr('test_secret')
+    config.file_store = 'google_cloud'
+    config.file_store_path = 'bucket'
     return config
 
 
 @pytest.fixture
 def settings_store(async_session_maker, mock_config):
-    store = SaasSettingsStore("5594c7b6-f959-4b81-92e9-b09c206f5081", mock_config)
+    store = SaasSettingsStore('5594c7b6-f959-4b81-92e9-b09c206f5081', mock_config)
     store.a_session_maker = async_session_maker
 
     # Patch the load method to read from UserSettings table directly (for testing)
@@ -46,23 +46,23 @@ def settings_store(async_session_maker, mock_config):
             if not user_settings:
                 # Return default settings
                 return Settings(
-                    llm_api_key=SecretStr("test_api_key"),
-                    llm_base_url="http://test.url",
-                    agent="CodeActAgent",
-                    language="en",
+                    llm_api_key=SecretStr('test_api_key'),
+                    llm_base_url='http://test.url',
+                    agent='CodeActAgent',
+                    language='en',
                 )
 
             # Decrypt and convert to Settings
             kwargs = {}
             for column in UserSettings.__table__.columns:
-                if column.name != "keycloak_user_id":
+                if column.name != 'keycloak_user_id':
                     value = getattr(user_settings, column.name, None)
                     if value is not None:
                         kwargs[column.name] = value
 
             store._decrypt_kwargs(kwargs)
             settings = Settings(**kwargs)
-            settings.email = "test@example.com"
+            settings.email = 'test@example.com'
             settings.email_verified = True
             return settings
 
@@ -70,15 +70,15 @@ def settings_store(async_session_maker, mock_config):
     async def patched_store(item):
         if item:
             # Make a copy of the item without email, email_verified, secrets_store, and timeout
-            item_dict = item.model_dump(context={"expose_secrets": True})
-            if "email" in item_dict:
-                del item_dict["email"]
-            if "email_verified" in item_dict:
-                del item_dict["email_verified"]
-            if "secrets_store" in item_dict:
-                del item_dict["secrets_store"]
-            if "timeout" in item_dict:
-                del item_dict["timeout"]
+            item_dict = item.model_dump(context={'expose_secrets': True})
+            if 'email' in item_dict:
+                del item_dict['email']
+            if 'email_verified' in item_dict:
+                del item_dict['email_verified']
+            if 'secrets_store' in item_dict:
+                del item_dict['secrets_store']
+            if 'timeout' in item_dict:
+                del item_dict['timeout']
 
             # Encrypt the data before storing
             store._encrypt_kwargs(item_dict)
@@ -101,7 +101,7 @@ def settings_store(async_session_maker, mock_config):
                             setattr(existing, key, value)
                     await session.merge(existing)
                 else:
-                    item_dict["keycloak_user_id"] = store.user_id
+                    item_dict['keycloak_user_id'] = store.user_id
                     settings = UserSettings(**item_dict)
                     session.add(settings)
                 await session.commit()
@@ -117,10 +117,10 @@ async def test_timeout_field_excluded_from_enterprise(settings_store):
     """Test that timeout field is excluded from enterprise settings storage."""
     # Create settings with timeout field
     settings = Settings(
-        llm_api_key=SecretStr("secret_key"),
+        llm_api_key=SecretStr('secret_key'),
         llm_base_url=LITE_LLM_API_URL,
-        agent="smith",
-        email="test@example.com",
+        agent='smith',
+        email='test@example.com',
         email_verified=True,
         timeout=60,  # Set a timeout value
     )
@@ -134,8 +134,8 @@ async def test_timeout_field_excluded_from_enterprise(settings_store):
     # Verify timeout is None (excluded from enterprise)
     assert loaded_settings is not None
     assert loaded_settings.timeout is None
-    assert loaded_settings.llm_api_key.get_secret_value() == "secret_key"
-    assert loaded_settings.agent == "smith"
+    assert loaded_settings.llm_api_key.get_secret_value() == 'secret_key'
+    assert loaded_settings.agent == 'smith'
 
 
 @pytest.mark.asyncio
@@ -143,36 +143,36 @@ async def test_timeout_filtering_logic_directly(settings_store):
     """Test the actual _encrypt_kwargs and _decrypt_kwargs timeout filtering logic."""
     # Create settings with timeout field and nested mcp_config with timeout
     settings = Settings(
-        llm_api_key=SecretStr("secret_key"),
+        llm_api_key=SecretStr('secret_key'),
         llm_base_url=LITE_LLM_API_URL,
-        agent="smith",
-        email="test@example.com",
+        agent='smith',
+        email='test@example.com',
         email_verified=True,
         timeout=60,  # Top-level timeout
     )
 
     # Test _encrypt_kwargs directly
-    settings_dict = settings.model_dump(context={"expose_secrets": True})
+    settings_dict = settings.model_dump(context={'expose_secrets': True})
 
     # Add nested mcp_config with timeout to test that it's not removed
-    if "mcp_config" not in settings_dict:
-        settings_dict["mcp_config"] = {}
-    settings_dict["mcp_config"]["timeout"] = 120  # Nested timeout should be preserved
+    if 'mcp_config' not in settings_dict:
+        settings_dict['mcp_config'] = {}
+    settings_dict['mcp_config']['timeout'] = 120  # Nested timeout should be preserved
 
     # Call _encrypt_kwargs directly
     settings_store._encrypt_kwargs(settings_dict)
 
     # Verify top-level timeout is removed but nested one is preserved
-    assert "timeout" not in settings_dict  # Top-level timeout removed
-    assert settings_dict["mcp_config"]["timeout"] == 120  # Nested timeout preserved
+    assert 'timeout' not in settings_dict  # Top-level timeout removed
+    assert settings_dict['mcp_config']['timeout'] == 120  # Nested timeout preserved
 
     # Test _decrypt_kwargs directly
     encrypted_settings = settings_dict.copy()
     settings_store._decrypt_kwargs(encrypted_settings)
 
     # Verify top-level timeout is removed but nested one is preserved
-    assert "timeout" not in encrypted_settings  # Top-level timeout removed
-    if "mcp_config" in encrypted_settings:
+    assert 'timeout' not in encrypted_settings  # Top-level timeout removed
+    if 'mcp_config' in encrypted_settings:
         assert (
-            encrypted_settings["mcp_config"]["timeout"] == 120
+            encrypted_settings['mcp_config']['timeout'] == 120
         )  # Nested timeout preserved

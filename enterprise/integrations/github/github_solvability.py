@@ -51,7 +51,7 @@ def fetch_github_issue_context(
         issue = repo.get_issue(github_view.issue_number)
         if issue.labels:
             labels = [label.name for label in issue.labels]
-            context_parts.append(f"Labels: {', '.join(labels)}")
+            context_parts.append(f'Labels: {", ".join(labels)}')
 
     for comment in github_view.previous_comments:
         context_parts.append(f'- {comment.author}: {comment.body}')

@@ -222,7 +222,7 @@ class JiraPayloadParser:
             missing.append('base_api_url (derived from issue.self)')
 
         if missing:
-            return JiraPayloadError(f"Missing required fields: {', '.join(missing)}")
+            return JiraPayloadError(f'Missing required fields: {", ".join(missing)}')
 
         return JiraPayloadSuccess(
             JiraWebhookPayload(

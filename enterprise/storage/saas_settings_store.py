@@ -33,7 +33,7 @@ from openhands.utils.llm import is_openhands_model
 class SaasSettingsStore(SettingsStore):
     user_id: str
     config: OpenHandsConfig
-    ENCRYPT_VALUES = ["llm_api_key", "llm_api_key_for_byor", "search_api_key"]
+    ENCRYPT_VALUES = ['llm_api_key', 'llm_api_key_for_byor', 'search_api_key']
 
     async def _get_user_settings_by_keycloak_id_async(
         self, keycloak_user_id: str, session=None
@@ -72,7 +72,7 @@ class SaasSettingsStore(SettingsStore):
     async def load(self) -> Settings | None:
         user = await UserStore.get_user_by_id(self.user_id)
         if not user:
-            logger.error(f"User not found for ID {self.user_id}")
+            logger.error(f'User not found for ID {self.user_id}')
             return None
 
         org_id = user.current_org_id
@@ -86,7 +86,7 @@ class SaasSettingsStore(SettingsStore):
         org = await OrgStore.get_org_by_id_async(org_id)
         if not org:
             logger.error(
-                f"Org not found for ID {org_id} as the current org for user {self.user_id}"
+                f'Org not found for ID {org_id} as the current org for user {self.user_id}'
             )
             return None
         kwargs = {
@@ -94,29 +94,29 @@ class SaasSettingsStore(SettingsStore):
                 normalized: getattr(org, c.name)
                 for c in Org.__table__.columns
                 if (
-                    normalized := c.name.removeprefix("_default_")
-                    .removeprefix("default_")
-                    .lstrip("_")
+                    normalized := c.name.removeprefix('_default_')
+                    .removeprefix('default_')
+                    .lstrip('_')
                 )
                 in Settings.model_fields
             },
             **{
                 normalized: getattr(user, c.name)
                 for c in User.__table__.columns
-                if (normalized := c.name.lstrip("_")) in Settings.model_fields
+                if (normalized := c.name.lstrip('_')) in Settings.model_fields
             },
         }
-        kwargs["llm_api_key"] = org_member.llm_api_key
+        kwargs['llm_api_key'] = org_member.llm_api_key
         if org_member.max_iterations:
-            kwargs["max_iterations"] = org_member.max_iterations
+            kwargs['max_iterations'] = org_member.max_iterations
         if org_member.llm_model:
-            kwargs["llm_model"] = org_member.llm_model
+            kwargs['llm_model'] = org_member.llm_model
         if org_member.llm_api_key_for_byor:
-            kwargs["llm_api_key_for_byor"] = org_member.llm_api_key_for_byor
+            kwargs['llm_api_key_for_byor'] = org_member.llm_api_key_for_byor
         if org_member.llm_base_url:
-            kwargs["llm_base_url"] = org_member.llm_base_url
+            kwargs['llm_base_url'] = org_member.llm_base_url
         if org.v1_enabled is None:
-            kwargs["v1_enabled"] = True
+            kwargs['v1_enabled'] = True
 
         settings = Settings(**kwargs)
         return settings
@@ -154,7 +154,7 @@ class SaasSettingsStore(SettingsStore):
                         logger.error(f'Failed to migrate user {self.user_id}')
                         return None
                 else:
-                    logger.error(f"User not found for ID {self.user_id}")
+                    logger.error(f'User not found for ID {self.user_id}')
                     return None
 
             org_id = user.current_org_id
@@ -171,7 +171,7 @@ class SaasSettingsStore(SettingsStore):
             org = result.scalars().first()
             if not org:
                 logger.error(
-                    f"Org not found for ID {org_id} as the current org for user {self.user_id}"
+                    f'Org not found for ID {org_id} as the current org for user {self.user_id}'
                 )
                 return None
 
@@ -181,10 +181,10 @@ class SaasSettingsStore(SettingsStore):
                     item, str(org_id), openhands_type=is_openhands_model(item.llm_model)
                 )
 
-            kwargs = item.model_dump(context={"expose_secrets": True})
+            kwargs = item.model_dump(context={'expose_secrets': True})
             # Filter out timeout field as it's not supported in enterprise
-            if "timeout" in kwargs:
-                del kwargs["timeout"]
+            if 'timeout' in kwargs:
+                del kwargs['timeout']
 
             for model in (user, org, org_member):
                 for key, value in kwargs.items():
@@ -235,7 +235,7 @@ class SaasSettingsStore(SettingsStore):
         config: OpenHandsConfig,
         user_id: str,  # type: ignore[override]
     ) -> SaasSettingsStore:
-        logger.debug(f"saas_settings_store.get_instance::{user_id}")
+        logger.debug(f'saas_settings_store.get_instance::{user_id}')
         return SaasSettingsStore(user_id, config)
 
     def _should_encrypt(self, key):
@@ -244,8 +244,8 @@ class SaasSettingsStore(SettingsStore):
     def _decrypt_kwargs(self, kwargs: dict, is_top_level: bool = True):
         fernet = self._fernet()
         # Filter out timeout field as it's not supported in enterprise (only top-level)
-        if is_top_level and "timeout" in kwargs:
-            del kwargs["timeout"]
+        if is_top_level and 'timeout' in kwargs:
+            del kwargs['timeout']
 
         for key, value in kwargs.items():
             try:
@@ -265,8 +265,8 @@ class SaasSettingsStore(SettingsStore):
     def _encrypt_kwargs(self, kwargs: dict, is_top_level: bool = True):
         fernet = self._fernet()
         # Filter out timeout field as it's not supported in enterprise (only at top level)
-        if is_top_level and "timeout" in kwargs:
-            del kwargs["timeout"]
+        if is_top_level and 'timeout' in kwargs:
+            del kwargs['timeout']
 
         for key, value in kwargs.items():
             if value is None:
@@ -288,7 +288,7 @@ class SaasSettingsStore(SettingsStore):
 
     def _fernet(self):
         if not self.config.jwt_secret:
-            raise ValueError("jwt_secret must be defined on config")
+            raise ValueError('jwt_secret must be defined on config')
         jwt_secret = self.config.jwt_secret.get_secret_value()
         fernet_key = b64encode(hashlib.sha256(jwt_secret.encode()).digest())
         return Fernet(fernet_key)
@@ -314,7 +314,7 @@ class SaasSettingsStore(SettingsStore):
                     self.user_id,
                     org_id,
                     None,
-                    {"type": "openhands"},
+                    {'type': 'openhands'},
                 )
             else:
                 # Must delete any existing key with the same alias first

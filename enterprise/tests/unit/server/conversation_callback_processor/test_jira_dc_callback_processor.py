@@ -125,11 +125,14 @@ async def test_call_sends_summary_to_jira_dc(
     )
     mock_jira_dc_manager.send_message = AsyncMock()
 
-    with patch(
-        'server.conversation_callback_processor.jira_dc_callback_processor.asyncio.create_task'
-    ) as mock_create_task, patch(
-        'server.conversation_callback_processor.jira_dc_callback_processor.conversation_manager'
-    ) as mock_conv_manager:
+    with (
+        patch(
+            'server.conversation_callback_processor.jira_dc_callback_processor.asyncio.create_task'
+        ) as mock_create_task,
+        patch(
+            'server.conversation_callback_processor.jira_dc_callback_processor.conversation_manager'
+        ) as mock_conv_manager,
+    ):
         await processor(callback, observation)
         mock_create_task.assert_called_once()
         # To ensure the coro is awaited in test
@@ -243,17 +246,21 @@ async def test_call_processes_relevant_states(processor, agent_state):
     callback = MagicMock(conversation_id='conv1')
     observation = AgentStateChangedObservation(agent_state=agent_state, content='')
 
-    with patch(
-        'server.conversation_callback_processor.jira_dc_callback_processor.get_summary_instruction',
-        return_value='Summarize this.',
-    ), patch(
-        'server.conversation_callback_processor.jira_dc_callback_processor.get_last_user_msg_from_conversation_manager',
-        new_callable=AsyncMock,
-        return_value=[MessageAction(content='Not a summary instruction')],
-    ), patch(
-        'server.conversation_callback_processor.jira_dc_callback_processor.conversation_manager',
-        new_callable=AsyncMock,
-    ) as mock_conv_manager:
+    with (
+        patch(
+            'server.conversation_callback_processor.jira_dc_callback_processor.get_summary_instruction',
+            return_value='Summarize this.',
+        ),
+        patch(
+            'server.conversation_callback_processor.jira_dc_callback_processor.get_last_user_msg_from_conversation_manager',
+            new_callable=AsyncMock,
+            return_value=[MessageAction(content='Not a summary instruction')],
+        ),
+        patch(
+            'server.conversation_callback_processor.jira_dc_callback_processor.conversation_manager',
+            new_callable=AsyncMock,
+        ) as mock_conv_manager,
+    ):
         await processor(callback, observation)
         mock_conv_manager.send_event_to_conversation.assert_called_once()
 
@@ -377,10 +384,13 @@ async def test_call_creates_background_task_for_sending(
     )
     mock_jira_dc_manager.send_message = AsyncMock()
 
-    with patch(
-        'server.conversation_callback_processor.jira_dc_callback_processor.asyncio.create_task'
-    ) as mock_create_task, patch(
-        'server.conversation_callback_processor.jira_dc_callback_processor.conversation_manager'
+    with (
+        patch(
+            'server.conversation_callback_processor.jira_dc_callback_processor.asyncio.create_task'
+        ) as mock_create_task,
+        patch(
+            'server.conversation_callback_processor.jira_dc_callback_processor.conversation_manager'
+        ),
     ):
         await processor(callback, observation)
 

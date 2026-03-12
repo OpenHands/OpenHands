@@ -183,11 +183,12 @@ class TestGetInstance:
         mock_user.current_org_id = UUID(user_id)
         mock_config = MagicMock(spec=OpenHandsConfig)
 
-        with patch(
-            'storage.saas_conversation_store.UserStore.get_user_by_id',
-            AsyncMock(return_value=mock_user),
-        ) as mock_async_get_user, patch(
-            'storage.saas_conversation_store.session_maker'
+        with (
+            patch(
+                'storage.saas_conversation_store.UserStore.get_user_by_id',
+                AsyncMock(return_value=mock_user),
+            ) as mock_async_get_user,
+            patch('storage.saas_conversation_store.session_maker'),
         ):
             # Act
             store = await SaasConversationStore.get_instance(mock_config, user_id)
@@ -204,10 +205,13 @@ class TestGetInstance:
         user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
         mock_config = MagicMock(spec=OpenHandsConfig)
 
-        with patch(
-            'storage.saas_conversation_store.UserStore.get_user_by_id',
-            AsyncMock(return_value=None),
-        ), patch('storage.saas_conversation_store.session_maker'):
+        with (
+            patch(
+                'storage.saas_conversation_store.UserStore.get_user_by_id',
+                AsyncMock(return_value=None),
+            ),
+            patch('storage.saas_conversation_store.session_maker'),
+        ):
             # Act
             store = await SaasConversationStore.get_instance(mock_config, user_id)
 

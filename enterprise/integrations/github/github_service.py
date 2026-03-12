@@ -21,7 +21,7 @@ class SaaSGitHubService(GitHubService):
         base_domain: str | None = None,
     ):
         logger.debug(
-            f'SaaSGitHubService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {'set' if external_auth_token else 'None'}, github_token {'set' if token else 'None'}, external_token_manager {external_token_manager}'
+            f'SaaSGitHubService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {"set" if external_auth_token else "None"}, github_token {"set" if token else "None"}, external_token_manager {external_token_manager}'
         )
         super().__init__(
             user_id=user_id,

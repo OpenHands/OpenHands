@@ -75,10 +75,13 @@ class TestIsV1EnabledForGithubResolver:
         """Test that the function properly reads the ENABLE_V1_GITHUB_RESOLVER environment variable."""
         mock_dependencies['org'].v1_enabled = True
 
-        with patch.dict(
-            os.environ, {'ENABLE_V1_GITHUB_RESOLVER': env_var_value}
-        ), patch('integrations.utils.os.getenv', return_value=env_var_value), patch(
-            'integrations.github.github_view.ENABLE_V1_GITHUB_RESOLVER', env_var_bool
+        with (
+            patch.dict(os.environ, {'ENABLE_V1_GITHUB_RESOLVER': env_var_value}),
+            patch('integrations.utils.os.getenv', return_value=env_var_value),
+            patch(
+                'integrations.github.github_view.ENABLE_V1_GITHUB_RESOLVER',
+                env_var_bool,
+            ),
         ):
             result = await is_v1_enabled_for_github_resolver('test_user_id')
             assert result is expected_result

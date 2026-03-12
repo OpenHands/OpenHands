@@ -308,7 +308,7 @@ async def create_linear_workspace(
             'response_type': 'code',
         }
 
-        auth_url = f"{LINEAR_AUTH_URL}?{'&'.join([f'{k}={v}' for k, v in auth_params.items()])}"
+        auth_url = f'{LINEAR_AUTH_URL}?{"&".join([f"{k}={v}" for k, v in auth_params.items()])}'
 
         return JSONResponse(
             content={
@@ -366,7 +366,7 @@ async def create_workspace_link(request: Request, link_data: LinearLinkCreate):
             'response_type': 'code',
         }
 
-        auth_url = f"{LINEAR_AUTH_URL}?{'&'.join([f'{k}={v}' for k, v in auth_params.items()])}"
+        auth_url = f'{LINEAR_AUTH_URL}?{"&".join([f"{k}={v}" for k, v in auth_params.items()])}'
 
         return JSONResponse(
             content={

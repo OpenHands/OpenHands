@@ -515,10 +515,13 @@ class TestInvokeConversationCallbacks:
         mock_context_manager, mock_session = create_mock_async_session([mock_callback])
 
         # Act
-        with patch(
-            'server.utils.conversation_callback_utils.a_session_maker',
-            mock_context_manager,
-        ), patch('server.utils.conversation_callback_utils.logger') as mock_logger:
+        with (
+            patch(
+                'server.utils.conversation_callback_utils.a_session_maker',
+                mock_context_manager,
+            ),
+            patch('server.utils.conversation_callback_utils.logger') as mock_logger,
+        ):
             from server.utils.conversation_callback_utils import (
                 invoke_conversation_callbacks,
             )

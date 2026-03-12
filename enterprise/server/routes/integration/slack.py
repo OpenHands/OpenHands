@@ -363,7 +363,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     # Verify this is a block_suggestion payload
     if payload.get('type') != 'block_suggestion':
         logger.warning(
-            f"slack_on_options_load: Unexpected payload type: {payload.get('type')}"
+            f'slack_on_options_load: Unexpected payload type: {payload.get("type")}'
         )
         return JSONResponse({'options': []})
 
