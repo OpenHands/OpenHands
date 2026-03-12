@@ -58,24 +58,13 @@ class SandboxService(ABC):
 
     @abstractmethod
     async def start_sandbox(
-        self,
-        sandbox_spec_id: str | None = None,
-        sandbox_id: str | None = None,
-        webhook_base_url: str | None = None,
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
         """Begin the process of starting a sandbox.
 
         Return the info on the new sandbox. If no spec is selected, use the default.
         If sandbox_id is provided, it will be used as the sandbox identifier instead
         of generating a random one.
-
-        Args:
-            sandbox_spec_id: Optional sandbox specification ID (e.g., container image)
-            sandbox_id: Optional sandbox ID to use instead of generating a random one
-            webhook_base_url: Optional base URL for webhook callbacks. When provided,
-                this URL will be used to configure the agent-server's webhook callback
-                endpoint. This allows the agent-server to notify this URL about
-                conversation lifecycle events.
         """
 
     @abstractmethod

@@ -327,22 +327,9 @@ class DockerSandboxService(SandboxService):
             return None
 
     async def start_sandbox(
-        self,
-        sandbox_spec_id: str | None = None,
-        sandbox_id: str | None = None,
-        webhook_base_url: str | None = None,
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
-        """Start a new sandbox.
-
-        Args:
-            sandbox_spec_id: Optional sandbox specification ID
-            sandbox_id: Optional sandbox ID to use instead of generating a random one
-            webhook_base_url: Optional base URL for webhook callbacks. Not used by
-                DockerSandboxService as it always uses host.docker.internal, but
-                accepted for interface consistency with SandboxService.
-        """
-        # Note: webhook_base_url is not used here because Docker sandboxes
-        # always use host.docker.internal to reach the host machine
+        """Start a new sandbox."""
         # Warn about port collision risk when using host network mode with multiple sandboxes
         if self.use_host_network and self.max_num_sandboxes > 1:
             _logger.warning(

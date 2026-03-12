@@ -303,7 +303,7 @@ class TestEnvironmentInitialization:
 
     @pytest.mark.asyncio
     async def test_init_environment_without_web_url(self, remote_sandbox_service):
-        """Test environment initialization without web_url and without webhook_base_url."""
+        """Test environment initialization without web_url."""
         # Setup
         remote_sandbox_service.web_url = None
         sandbox_spec = SandboxSpecInfo(
@@ -314,7 +314,7 @@ class TestEnvironmentInitialization:
         )
         sandbox_id = 'test-sandbox-123'
 
-        # Execute - no webhook_base_url provided
+        # Execute
         environment = await remote_sandbox_service._init_environment(
             sandbox_spec, sandbox_id
         )
@@ -326,61 +326,6 @@ class TestEnvironmentInitialization:
         # Worker port environment variables should still be set regardless of web_url
         assert environment[WORKER_1] == '12000'
         assert environment[WORKER_2] == '12001'
-
-    @pytest.mark.asyncio
-    async def test_init_environment_uses_webhook_base_url_fallback(
-        self, remote_sandbox_service
-    ):
-        """Test that webhook_base_url is used as fallback when web_url is not set."""
-        # Arrange
-        remote_sandbox_service.web_url = None
-        sandbox_spec = SandboxSpecInfo(
-            id='test-image',
-            command=['test'],
-            initial_env={'EXISTING_VAR': 'existing_value'},
-            working_dir='/workspace',
-        )
-        sandbox_id = 'test-sandbox-123'
-        webhook_base_url = 'http://localhost:3030'
-
-        # Act
-        environment = await remote_sandbox_service._init_environment(
-            sandbox_spec, sandbox_id, webhook_base_url=webhook_base_url
-        )
-
-        # Assert
-        assert (
-            environment[WEBHOOK_CALLBACK_VARIABLE]
-            == 'http://localhost:3030/api/v1/webhooks'
-        )
-        assert environment[ALLOW_CORS_ORIGINS_VARIABLE] == 'http://localhost:3030'
-
-    @pytest.mark.asyncio
-    async def test_init_environment_web_url_takes_precedence(
-        self, remote_sandbox_service
-    ):
-        """Test that web_url takes precedence over webhook_base_url."""
-        # Arrange - web_url is already set to 'https://web.example.com'
-        sandbox_spec = SandboxSpecInfo(
-            id='test-image',
-            command=['test'],
-            initial_env={},
-            working_dir='/workspace',
-        )
-        sandbox_id = 'test-sandbox-123'
-        webhook_base_url = 'http://localhost:3030'  # Should be ignored
-
-        # Act
-        environment = await remote_sandbox_service._init_environment(
-            sandbox_spec, sandbox_id, webhook_base_url=webhook_base_url
-        )
-
-        # Assert - web_url should be used, not webhook_base_url
-        assert (
-            environment[WEBHOOK_CALLBACK_VARIABLE]
-            == 'https://web.example.com/api/v1/webhooks'
-        )
-        assert environment[ALLOW_CORS_ORIGINS_VARIABLE] == 'https://web.example.com'
 
 
 class TestSandboxInfoConversion:

@@ -269,35 +269,17 @@ class RemoteSandboxService(SandboxService):
         return runtimes_by_id
 
     async def _init_environment(
-        self,
-        sandbox_spec: SandboxSpecInfo,
-        sandbox_id: str,
-        webhook_base_url: str | None = None,
+        self, sandbox_spec: SandboxSpecInfo, sandbox_id: str
     ) -> dict[str, str]:
-        """Initialize the environment variables for the sandbox.
-
-        Args:
-            sandbox_spec: The sandbox specification
-            sandbox_id: The sandbox ID
-            webhook_base_url: Optional base URL for webhook callbacks, typically
-                derived from the incoming request. Used as fallback when web_url
-                is not configured.
-        """
+        """Initialize the environment variables for the sandbox."""
         environment = sandbox_spec.initial_env.copy()
 
-        # Determine effective webhook URL: prefer configured web_url, fall back to
-        # request-derived webhook_base_url. This ensures webhook configuration works
-        # even when WEB_HOST environment variable is not set.
-        effective_webhook_url = self.web_url or webhook_base_url
-
-        # If a webhook URL is available, configure the agent server to call back
-        if effective_webhook_url:
-            environment[WEBHOOK_CALLBACK_VARIABLE] = (
-                f'{effective_webhook_url}/api/v1/webhooks'
-            )
-            # Set CORS settings to allow the agent-server to accept requests from
-            # the frontend when running on a remote machine
-            environment[ALLOW_CORS_ORIGINS_VARIABLE] = effective_webhook_url
+        # If a public facing url is defined, add a callback to the agent server environment.
+        if self.web_url:
+            environment[WEBHOOK_CALLBACK_VARIABLE] = f'{self.web_url}/api/v1/webhooks'
+            # We specify CORS settings only if there is a public facing url - otherwise
+            # we are probably in local development and the only url in use is localhost
+            environment[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
 
         # Add worker port environment variables so the agent knows which ports to use
         # for web applications. These match the ports exposed via the WORKER_1 and
@@ -460,10 +442,7 @@ class RemoteSandboxService(SandboxService):
         return await self._get_sandbox_by_session_api_key_legacy(session_api_key)
 
     async def start_sandbox(
-        self,
-        sandbox_spec_id: str | None = None,
-        sandbox_id: str | None = None,
-        webhook_base_url: str | None = None,
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
@@ -500,9 +479,7 @@ class RemoteSandboxService(SandboxService):
             self.db_session.add(stored_sandbox)
 
             # Prepare environment variables
-            environment = await self._init_environment(
-                sandbox_spec, sandbox_id, webhook_base_url=webhook_base_url
-            )
+            environment = await self._init_environment(sandbox_spec, sandbox_id)
 
             # Prepare start request
             start_request: dict[str, Any] = {

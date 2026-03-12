@@ -287,21 +287,9 @@ class ProcessSandboxService(SandboxService):
         return None
 
     async def start_sandbox(
-        self,
-        sandbox_spec_id: str | None = None,
-        sandbox_id: str | None = None,
-        webhook_base_url: str | None = None,
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
-        """Start a new sandbox.
-
-        Args:
-            sandbox_spec_id: Optional sandbox specification ID
-            sandbox_id: Optional sandbox ID to use instead of generating a random one
-            webhook_base_url: Optional base URL for webhook callbacks. Not used by
-                ProcessSandboxService but accepted for interface consistency.
-        """
-        # Note: webhook_base_url is not used here as process-based sandboxes
-        # are primarily for local development without webhook callbacks
+        """Start a new sandbox."""
         # Get sandbox spec
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()

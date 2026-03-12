@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from openhands.agent_server.models import Success
 from openhands.app_server.config import depends_sandbox_service
@@ -56,18 +56,10 @@ async def batch_get_sandboxes(
 
 @router.post('')
 async def start_sandbox(
-    request: Request,
     sandbox_spec_id: str | None = None,
     sandbox_service: SandboxService = sandbox_service_dependency,
 ) -> SandboxInfo:
-    # Derive webhook base URL from the incoming request so the agent-server
-    # can notify this Cloud instance about conversation lifecycle events
-    webhook_base_url = str(request.base_url).rstrip('/')
-
-    info = await sandbox_service.start_sandbox(
-        sandbox_spec_id=sandbox_spec_id,
-        webhook_base_url=webhook_base_url,
-    )
+    info = await sandbox_service.start_sandbox(sandbox_spec_id)
     return info
 
 

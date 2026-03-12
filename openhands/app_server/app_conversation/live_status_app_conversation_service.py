@@ -504,8 +504,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 else None
             )
             sandbox = await self.sandbox_service.start_sandbox(
-                sandbox_id=sandbox_id_str,
-                webhook_base_url=self.web_url,
+                sandbox_id=sandbox_id_str
             )
             task.sandbox_id = sandbox.id
         else:
