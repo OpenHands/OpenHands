@@ -13,7 +13,7 @@ export function ContextMenuCTA() {
   return (
     <Card
       testId="context-menu-cta"
-      variant="dark"
+      theme="dark"
       className={cn(
         "w-[286px] min-h-[200px] h-full rounded-[6px]",
         "flex-col justify-end",
