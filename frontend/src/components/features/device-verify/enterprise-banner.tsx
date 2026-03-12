@@ -17,7 +17,7 @@ export function EnterpriseBanner() {
   };
 
   return (
-    <div className="w-80 p-6 rounded-lg bg-gradient-to-b from-[#1a2744] to-[#0d1829] border border-[#2a3f5f]">
+    <div className="w-full max-w-md mx-auto lg:mx-0 lg:w-80 p-6 rounded-lg bg-gradient-to-b from-[#1a2744] to-[#0d1829] border border-[#2a3f5f]">
       {/* Self-Hosted Label */}
       <div className="flex justify-center mb-4">
         <div className="px-4 py-1 rounded-full bg-gradient-to-r from-[#1a4a6e] to-[#1a3a5e] border border-[#2a5a8e]">

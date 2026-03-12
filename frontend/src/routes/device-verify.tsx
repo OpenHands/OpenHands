@@ -145,10 +145,10 @@ export default function DeviceVerify() {
   // Show device authorization confirmation if user is authenticated and code is provided
   if (isAuthed && userCode) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex items-stretch gap-6">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="flex flex-col lg:flex-row items-stretch gap-6 w-full max-w-4xl">
           {/* Device Authorization Card */}
-          <div className="max-w-md w-full p-6 bg-card rounded-lg shadow-lg">
+          <div className="flex-1 min-w-0 max-w-md w-full mx-auto lg:mx-0 p-6 bg-card rounded-lg shadow-lg">
             <h1 className="text-2xl font-bold mb-4 text-center">
               Device Authorization Request
             </h1>
