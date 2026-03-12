@@ -334,7 +334,10 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         await super().save_app_conversation_info(info)
 
         # Get current user_id for SAAS metadata
+        # Fall back to info.created_by_user_id for webhook callbacks (which use ADMIN context)
         user_id_str = await self.user_context.get_user_id()
+        if not user_id_str and info.created_by_user_id:
+            user_id_str = info.created_by_user_id
         if user_id_str:
             # Convert string user_id to UUID
             user_id_uuid = UUID(user_id_str)
