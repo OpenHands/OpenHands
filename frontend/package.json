@@ -1,6 +1,6 @@
 {
   "name": "openhands-frontend",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -127,5 +127,8 @@
     "workerDirectory": [
       "public"
     ]
+  },
+  "overrides": {
+    "dompurify": "3.3.2"
   }
 }

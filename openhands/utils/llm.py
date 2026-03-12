@@ -22,12 +22,16 @@ OPENHANDS_MODELS = [
     'openhands/gpt-5.2',
     'openhands/minimax-m2.5',
     'openhands/gemini-3-pro-preview',
+    'openhands/gemini-3.1-pro-preview',
     'openhands/gemini-3-flash-preview',
     'openhands/deepseek-chat',
     'openhands/devstral-medium-2512',
     'openhands/kimi-k2-0711-preview',
+    'openhands/kimi-k2.5',
     'openhands/qwen3-coder-480b',
+    'openhands/qwen3-coder-next',
     'openhands/glm-4.7',
+    'openhands/glm-5',
 ]
 
 CLARIFAI_MODELS = [

@@ -28,6 +28,9 @@ class OrgMemberStore:
         role_id: int,
         llm_api_key: str,
         status: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        llm_base_url: Optional[str] = None,
+        max_iterations: Optional[int] = None,
     ) -> OrgMember:
         """Add a user to an organization with a specific role."""
         async with a_session_maker() as session:
@@ -37,6 +40,9 @@ class OrgMemberStore:
                 role_id=role_id,
                 llm_api_key=llm_api_key,
                 status=status,
+                llm_model=llm_model,
+                llm_base_url=llm_base_url,
+                max_iterations=max_iterations,
             )
             session.add(org_member)
             await session.commit()

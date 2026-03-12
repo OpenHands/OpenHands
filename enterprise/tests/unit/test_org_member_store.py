@@ -247,6 +247,43 @@ async def test_add_user_to_org(async_session_maker):
 
 
 @pytest.mark.asyncio
+async def test_add_user_to_org_with_llm_settings(async_session_maker):
+    """Test that add_user_to_org correctly sets inherited LLM settings from organization."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org-llm')
+        session.add(org)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id)
+        role = Role(name='member', rank=2)
+        session.add_all([user, role])
+        await session.commit()
+        org_id = org.id
+        user_id = user.id
+        role_id = role.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        org_member = await OrgMemberStore.add_user_to_org(
+            org_id=org_id,
+            user_id=user_id,
+            role_id=role_id,
+            llm_api_key='test-api-key',
+            status='active',
+            llm_model='claude-sonnet-4',
+            llm_base_url='https://api.example.com',
+            max_iterations=50,
+        )
+
+    # Assert
+    assert org_member is not None
+    assert org_member.llm_model == 'claude-sonnet-4'
+    assert org_member.llm_base_url == 'https://api.example.com'
+    assert org_member.max_iterations == 50
+
+
+@pytest.mark.asyncio
 async def test_update_user_role_in_org(async_session_maker):
     # Test updating user role in org
     async with async_session_maker() as session:

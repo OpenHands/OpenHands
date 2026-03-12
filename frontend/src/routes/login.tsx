@@ -19,6 +19,7 @@ export default function LoginPage() {
     emailVerified,
     hasDuplicatedEmail,
     recaptchaBlocked,
+    wasRateLimited,
     emailVerificationModalOpen,
     setEmailVerificationModalOpen,
     userId,
@@ -39,11 +40,18 @@ export default function LoginPage() {
   }, [config.isLoading, config.data?.app_mode, navigate]);
 
   // Redirect authenticated users away from login page
+  // Preserve login_method param so useAuthCallback can store it for auto-login
   React.useEffect(() => {
     if (!isAuthLoading && isAuthed) {
-      navigate(returnTo, { replace: true });
+      const loginMethod = searchParams.get("login_method");
+      let destination = returnTo;
+      if (loginMethod) {
+        const separator = returnTo.includes("?") ? "&" : "?";
+        destination = `${returnTo}${separator}login_method=${encodeURIComponent(loginMethod)}`;
+      }
+      navigate(destination, { replace: true });
     }
-  }, [isAuthed, isAuthLoading, navigate, returnTo]);
+  }, [isAuthed, isAuthLoading, navigate, returnTo, searchParams]);
 
   if (isAuthLoading || config.isLoading) {
     return (
@@ -83,6 +91,7 @@ export default function LoginPage() {
             setEmailVerificationModalOpen(false);
           }}
           userId={userId}
+          wasRateLimited={wasRateLimited}
         />
       )}
     </>
