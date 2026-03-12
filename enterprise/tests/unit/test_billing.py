@@ -48,7 +48,7 @@ def mock_checkout_request():
             'server': ('test.com', 80),
         }
     )
-    request._base_url = URL('http://test.com/')
+    request._url = URL('http://test.com/')
     return request
 
 
@@ -62,7 +62,7 @@ def mock_subscription_request():
             'server': ('test.com', 80),
         }
     )
-    request._base_url = URL('http://test.com/')
+    request._url = URL('http://test.com/')
     return request
 
 
@@ -264,7 +264,7 @@ async def test_create_checkout_session_success(
 async def test_success_callback_session_not_found(async_session_maker):
     """Test success callback when billing session is not found."""
     mock_request = Request(scope={'type': 'http'})
-    mock_request._base_url = URL('http://test.com/')
+    mock_request._url = URL('http://test.com/')
 
     with (
         patch('server.routes.billing.a_session_maker', async_session_maker),
@@ -281,7 +281,7 @@ async def test_success_callback_stripe_incomplete(
 ):
     """Test success callback when Stripe session is not complete."""
     mock_request = Request(scope={'type': 'http'})
-    mock_request._base_url = URL('http://test.com/')
+    mock_request._url = URL('http://test.com/')
 
     session_id = 'test_incomplete_session'
     async with async_session_maker() as session:
@@ -319,7 +319,7 @@ async def test_success_callback_stripe_incomplete(
 async def test_success_callback_success(async_session_maker, test_org, test_user):
     """Test successful payment completion and credit update."""
     mock_request = Request(scope={'type': 'http'})
-    mock_request._base_url = URL('http://test.com/')
+    mock_request._url = URL('http://test.com/')
 
     session_id = 'test_success_session'
     async with async_session_maker() as session:
@@ -391,7 +391,7 @@ async def test_success_callback_lite_llm_error(
 ):
     """Test handling of LiteLLM API errors during success callback."""
     mock_request = Request(scope={'type': 'http'})
-    mock_request._base_url = URL('http://test.com/')
+    mock_request._url = URL('http://test.com/')
 
     session_id = 'test_litellm_error_session'
     async with async_session_maker() as session:
@@ -445,7 +445,7 @@ async def test_success_callback_lite_llm_update_budget_error_rollback(
     the database transaction rolls back.
     """
     mock_request = Request(scope={'type': 'http'})
-    mock_request._base_url = URL('http://test.com/')
+    mock_request._url = URL('http://test.com/')
 
     session_id = 'test_budget_rollback_session'
     async with async_session_maker() as session:
@@ -502,7 +502,7 @@ async def test_success_callback_lite_llm_update_budget_error_rollback(
 async def test_cancel_callback_session_not_found(async_session_maker):
     """Test cancel callback when billing session is not found."""
     mock_request = Request(scope={'type': 'http'})
-    mock_request._base_url = URL('http://test.com/')
+    mock_request._url = URL('http://test.com/')
 
     with patch('server.routes.billing.a_session_maker', async_session_maker):
         response = await cancel_callback('nonexistent_session_id', mock_request)
@@ -517,7 +517,7 @@ async def test_cancel_callback_session_not_found(async_session_maker):
 async def test_cancel_callback_success(async_session_maker, test_org, test_user):
     """Test successful cancellation of billing session."""
     mock_request = Request(scope={'type': 'http'})
-    mock_request._base_url = URL('http://test.com/')
+    mock_request._url = URL('http://test.com/')
 
     session_id = 'test_cancel_session'
     async with async_session_maker() as session:
@@ -588,7 +588,7 @@ async def test_create_customer_setup_session_success():
             'headers': [],
         }
     )
-    mock_request._base_url = URL('http://test.com/')
+    mock_request._url = URL('http://test.com/')
 
     mock_customer_info = {'customer_id': 'mock-customer-id', 'org_id': 'mock-org-id'}
     mock_session = MagicMock()
@@ -613,6 +613,6 @@ async def test_create_customer_setup_session_success():
             customer='mock-customer-id',
             mode='setup',
             payment_method_types=['card'],
-            success_url='https://test.com/?setup=success',
-            cancel_url='https://test.com/',
+            success_url='https://test.com?setup=success',
+            cancel_url='https://test.com',
         )
