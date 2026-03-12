@@ -113,24 +113,6 @@ async def load_settings(
         )
 
 
-@app.post(
-    '/reset-settings',
-    responses={
-        410: {
-            'description': 'Reset settings functionality has been removed',
-            'model': dict,
-        }
-    },
-)
-async def reset_settings() -> JSONResponse:
-    """Resets user settings. (Deprecated)"""
-    logger.warning('Deprecated endpoint /api/reset-settings called by user')
-    return JSONResponse(
-        status_code=status.HTTP_410_GONE,
-        content={'error': 'Reset settings functionality has been removed.'},
-    )
-
-
 async def store_llm_settings(
     settings: Settings, existing_settings: Settings
 ) -> Settings:

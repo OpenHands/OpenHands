@@ -34,7 +34,7 @@ dependencies = [
   "dirhash",
   "docker",
   "fastapi",
-  "fastmcp>=2.12.4,<2.12.5",
+  "fastmcp>=3,<4",
   "google-api-python-client>=2.164",
   "google-auth-httplib2",
   "google-auth-oauthlib",
@@ -57,9 +57,9 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.3",
-  "openhands-agent-server==1.11.5",
-  "openhands-sdk==1.11.5",
-  "openhands-tools==1.11.5",
+  "openhands-agent-server==1.13",
+  "openhands-sdk==1.13",
+  "openhands-tools==1.13",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "pathspec>=0.12.1",
@@ -144,7 +144,7 @@ runtime = [
 
 [tool.poetry]
 name = "openhands-ai"
-version = "1.4.0"
+version = "1.5.0"
 description = "OpenHands: Code Less, Make More"
 authors = [ "OpenHands" ]
 license = "MIT"
@@ -210,8 +210,7 @@ prompt-toolkit = "^3.0.50"
 poetry = "^2.1.2"
 anyio = "4.9.0"
 pythonnet = "*"
-fastmcp = "^2.12.4"           # Note: 2.12.0+ has breaking auth API changes
-mcp = "^1.25.0"               # CVE-2025-66416 fix (DNS rebinding protection)
+fastmcp = ">=3,<4"
 python-frontmatter = "^1.1.0"
 shellingham = "^1.5.4"
 # TODO: Should these go into the runtime group?
@@ -250,9 +249,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.11.5"
-openhands-agent-server = "1.11.5"
-openhands-tools = "1.11.5"
+openhands-sdk = "1.13"
+openhands-agent-server = "1.13"
+openhands-tools = "1.13"
 jwcrypto = ">=1.5.6"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
