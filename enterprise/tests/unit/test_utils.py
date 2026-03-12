@@ -64,9 +64,9 @@ def test_markdown_to_jira_markup():
 
     for markdown, expected in test_cases:
         result = markdown_to_jira_markup(markdown)
-        assert result == expected, (
-            f'Failed for {repr(markdown)}: got {repr(result)}, expected {repr(expected)}'
-        )
+        assert (
+            result == expected
+        ), f'Failed for {repr(markdown)}: got {repr(result)}, expected {repr(expected)}'
 
 
 def test_infer_repo_from_message():
@@ -169,6 +169,6 @@ def test_infer_repo_from_message():
 
     for message, expected in test_cases:
         result = infer_repo_from_message(message)
-        assert result == expected, (
-            f'Failed for {repr(message)}: got {repr(result)}, expected {repr(expected)}'
-        )
+        assert (
+            result == expected
+        ), f'Failed for {repr(message)}: got {repr(result)}, expected {repr(expected)}'

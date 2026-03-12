@@ -1,14 +1,12 @@
 """Unit tests for timeout field handling in SaaS settings store."""
 
+# Mock the database module before importing
+from unittest.mock import patch
+
 import pytest
 from pydantic import SecretStr
 
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings
-from openhands.storage.data_models.settings import Settings as DataSettings
-
-# Mock the database module before importing
-from unittest.mock import patch
 
 with patch('storage.database.a_session_maker'):
     from enterprise.server.constants import (

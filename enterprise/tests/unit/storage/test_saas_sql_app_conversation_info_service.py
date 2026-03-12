@@ -396,17 +396,17 @@ class TestSaasSQLAppConversationInfoService:
 
         # User should NOT see org1's conversations after switching to org2
         page_in_org2 = await user1_service_org2.search_app_conversation_info()
-        assert len(page_in_org2.items) == 0, (
-            'User should not see conversations from org1 after switching to org2'
-        )
+        assert (
+            len(page_in_org2.items) == 0
+        ), 'User should not see conversations from org1 after switching to org2'
 
         # User should not be able to get the specific conversation from org1
         conv_from_org2 = await user1_service_org2.get_app_conversation_info(
             conv_in_org1.id
         )
-        assert conv_from_org2 is None, (
-            'User should not be able to access org1 conversation from org2'
-        )
+        assert (
+            conv_from_org2 is None
+        ), 'User should not be able to access org1 conversation from org2'
 
         # Now create a conversation in org2
         conv_in_org2 = AppConversationInfo(
@@ -523,15 +523,15 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         # ADMIN should see ALL conversations (unfiltered)
         admin_page = await admin_service.search_app_conversation_info()
-        assert len(admin_page.items) == 3, (
-            'ADMIN context should see all conversations without filtering'
-        )
+        assert (
+            len(admin_page.items) == 3
+        ), 'ADMIN context should see all conversations without filtering'
 
         # ADMIN count should return total count (3)
         admin_count = await admin_service.count_app_conversation_info()
-        assert admin_count == 3, (
-            'ADMIN context should count all conversations without filtering'
-        )
+        assert (
+            admin_count == 3
+        ), 'ADMIN context should count all conversations without filtering'
 
     @pytest.mark.asyncio
     async def test_admin_context_can_access_any_conversation(
@@ -601,12 +601,12 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         # For ADMIN, there should be no user_id or org_id filtering
         # The query should not contain filters for user_id or org_id
-        assert str(USER1_ID) not in query_str.replace('-', ''), (
-            'ADMIN context should not filter by user_id'
-        )
-        assert str(USER2_ID) not in query_str.replace('-', ''), (
-            'ADMIN context should not filter by user_id'
-        )
+        assert str(USER1_ID) not in query_str.replace(
+            '-', ''
+        ), 'ADMIN context should not filter by user_id'
+        assert str(USER2_ID) not in query_str.replace(
+            '-', ''
+        ), 'ADMIN context should not filter by user_id'
 
     @pytest.mark.asyncio
     async def test_regular_user_context_filters_correctly(

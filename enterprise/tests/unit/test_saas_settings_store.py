@@ -1,6 +1,5 @@
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
-import uuid
 
 import pytest
 from pydantic import SecretStr
@@ -380,25 +379,25 @@ async def test_store_propagates_llm_settings_to_all_org_members(
 
         for member in members:
             # Verify LLM model is updated
-            assert member.llm_model == 'new-shared-model/gpt-4', (
-                f'Expected llm_model to be updated for member {member.user_id}'
-            )
+            assert (
+                member.llm_model == 'new-shared-model/gpt-4'
+            ), f'Expected llm_model to be updated for member {member.user_id}'
 
             # Verify LLM base URL is updated
-            assert member.llm_base_url == 'http://new-shared-url.com', (
-                f'Expected llm_base_url to be updated for member {member.user_id}'
-            )
+            assert (
+                member.llm_base_url == 'http://new-shared-url.com'
+            ), f'Expected llm_base_url to be updated for member {member.user_id}'
 
             # Verify max_iterations is updated
-            assert member.max_iterations == 100, (
-                f'Expected max_iterations to be 100 for member {member.user_id}'
-            )
+            assert (
+                member.max_iterations == 100
+            ), f'Expected max_iterations to be 100 for member {member.user_id}'
 
             # Verify the API key is encrypted and decrypts to the correct value
             decrypted_key = decrypt_value(member._llm_api_key)
-            assert decrypted_key == 'new-shared-api-key', (
-                f'Expected llm_api_key to decrypt to new-shared-api-key for member {member.user_id}'
-            )
+            assert (
+                decrypted_key == 'new-shared-api-key'
+            ), f'Expected llm_api_key to decrypt to new-shared-api-key for member {member.user_id}'
 
 
 @pytest.mark.asyncio
