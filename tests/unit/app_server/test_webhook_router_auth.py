@@ -19,6 +19,7 @@ from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
 )
+from openhands.server.types import AppMode
 
 
 class MockRequestState:
@@ -177,6 +178,46 @@ class TestValidSandbox:
 
         # Verify user_context is NOT set on request.state
         assert USER_CONTEXT_ATTR not in mock_request.state._attributes
+
+    @pytest.mark.asyncio
+    async def test_valid_sandbox_no_user_context_when_no_user_id_raises_401_in_saas_mode(
+        self,
+    ):
+        """Test that user_context is not set when sandbox has no created_by_user_id."""
+        # Arrange
+        session_api_key = 'valid-api-key'
+        expected_sandbox = SandboxInfo(
+            id='sandbox-789',
+            status=SandboxStatus.RUNNING,
+            session_api_key=session_api_key,
+            created_by_user_id=None,  # No user ID
+            sandbox_spec_id='spec-789',
+        )
+
+        mock_sandbox_service = AsyncMock()
+        mock_sandbox_service.get_sandbox_by_session_api_key = AsyncMock(
+            return_value=expected_sandbox
+        )
+
+        mock_request = create_mock_request()
+
+        # Act
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.get_sandbox_service',
+                create_sandbox_service_context_manager(mock_sandbox_service),
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.app_mode',
+                AppMode.SAAS,
+            ),
+        ):
+            with pytest.raises(HTTPException) as excinfo:
+                await valid_sandbox(
+                    request=mock_request,
+                    session_api_key=session_api_key,
+                )
+            assert excinfo.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_valid_sandbox_without_api_key_raises_401(self):
