@@ -19,11 +19,11 @@ export function EnterpriseBanner() {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto lg:mx-0 lg:w-80 p-6 rounded-lg bg-gradient-to-b from-[#1a2744] to-[#0d1829] border border-[#2a3f5f]">
+    <div className="w-full max-w-md mx-auto lg:mx-0 lg:w-80 p-6 rounded-lg bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700">
       {/* Self-Hosted Label */}
       <div className="flex justify-center mb-4">
-        <div className="px-4 py-1 rounded-full bg-gradient-to-r from-[#1a4a6e] to-[#1a3a5e] border border-[#2a5a8e]">
-          <span className="text-xs font-medium text-[#4a9eff] tracking-wider uppercase">
+        <div className="px-4 py-1 rounded-full bg-gradient-to-r from-blue-900 to-blue-950 border border-blue-800">
+          <span className="text-xs font-medium text-blue-400 tracking-wider uppercase">
             {t(I18nKey.ENTERPRISE$SELF_HOSTED)}
           </span>
         </div>
@@ -44,7 +44,7 @@ export function EnterpriseBanner() {
         {ENTERPRISE_FEATURE_KEYS.map((featureKey) => (
           <li key={featureKey} className="flex items-center gap-2">
             <svg
-              className="w-4 h-4 text-[#4a9eff] flex-shrink-0"
+              className="w-4 h-4 text-blue-400 flex-shrink-0"
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -63,7 +63,7 @@ export function EnterpriseBanner() {
       <button
         type="button"
         onClick={handleLearnMore}
-        className="w-full py-2.5 px-4 rounded-lg bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-medium transition-colors"
+        className="w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
       >
         {t(I18nKey.ENTERPRISE$LEARN_MORE)}
       </button>
