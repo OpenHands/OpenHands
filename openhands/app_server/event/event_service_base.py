@@ -106,14 +106,15 @@ class EventServiceBase(EventService, ABC):
                 reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC),
             )
 
+        # Apply pagination to items (not paths)
         start_offset = 0
         next_page_id = None
         if page_id:
             start_offset = int(page_id)
-            paths = paths[start_offset:]
-        if len(paths) > limit:
-            paths = paths[:limit]
+            items = items[start_offset:]
+        if len(items) > limit:
             next_page_id = str(start_offset + limit)
+            items = items[:limit]
 
         return EventPage(items=items, next_page_id=next_page_id)
 
