@@ -1,33 +1,41 @@
-import { describe, it, expect } from "vitest";
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { ContextMenuCTA } from "#/components/features/context-menu/context-menu-cta";
-import { renderWithProviders } from "../../../test-utils";
+
+// Mock useTracking hook
+const mockTrackSaasSelfhostedInquiry = vi.fn();
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackSaasSelfhostedInquiry: mockTrackSaasSelfhostedInquiry,
+  }),
+}));
 
 describe("ContextMenuCTA", () => {
   it("should render the CTA component", () => {
-    renderWithProviders(<ContextMenuCTA />);
+    render(<ContextMenuCTA />);
 
     expect(screen.getByText("CTA$ENTERPRISE_TITLE")).toBeInTheDocument();
     expect(screen.getByText("CTA$ENTERPRISE_DESCRIPTION")).toBeInTheDocument();
     expect(screen.getByText("CTA$LEARN_MORE")).toBeInTheDocument();
   });
 
-  it("should render the Learn more button with correct link", () => {
-    renderWithProviders(<ContextMenuCTA />);
+  it("should call trackSaasSelfhostedInquiry with location 'context_menu' when Learn More is clicked", async () => {
+    const user = userEvent.setup();
+    render(<ContextMenuCTA />);
 
     const learnMoreButton = screen.getByRole("button", {
       name: "CTA$LEARN_MORE",
     });
-    expect(learnMoreButton).toBeInTheDocument();
+    await user.click(learnMoreButton);
 
-    const link = learnMoreButton.closest("a");
-    expect(link).toHaveAttribute("href", "https://openhands.dev/enterprise/");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
+      location: "context_menu",
+    });
   });
 
   it("should render the stacked icon", () => {
-    renderWithProviders(<ContextMenuCTA />);
+    render(<ContextMenuCTA />);
 
     const contentContainer = screen.getByTestId("context-menu-cta-content");
     const icon = contentContainer.querySelector("svg");
