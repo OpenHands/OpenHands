@@ -35,6 +35,7 @@ from storage.stored_conversation_metadata_saas import (
 from storage.stored_offline_token import StoredOfflineToken
 from storage.stripe_customer import StripeCustomer
 from storage.user import User
+from storage.user_settings import UserSettings  # noqa: F401
 
 
 @pytest.fixture
