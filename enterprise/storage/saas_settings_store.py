@@ -11,9 +11,10 @@ from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
+from storage.encrypt_utils import encrypt_value
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -185,6 +186,42 @@ class SaasSettingsStore(SettingsStore):
                 for key, value in kwargs.items():
                     if hasattr(model, key):
                         setattr(model, key, value)
+
+            # Map Settings fields to Org fields with 'default_' prefix
+            # The generic loop above doesn't update these because Org uses
+            # 'default_llm_model' not 'llm_model', etc.
+            # Use exclude_unset to only update explicitly-set fields (allows clearing with null)
+            settings_data = item.model_dump(exclude_unset=True)
+            if 'llm_model' in settings_data:
+                org.default_llm_model = settings_data['llm_model']
+            if 'llm_base_url' in settings_data:
+                org.default_llm_base_url = settings_data['llm_base_url']
+            if 'max_iterations' in settings_data:
+                org.default_max_iterations = settings_data['max_iterations']
+
+            # Propagate LLM settings to all org members
+            # This ensures all members see the same LLM configuration when an admin saves
+            # Note: Concurrent saves by multiple admins will result in last-write-wins.
+            # Consider adding optimistic locking if this becomes a problem.
+            member_update_values: dict = {}
+            if item.llm_model is not None:
+                member_update_values['llm_model'] = item.llm_model
+            if item.llm_base_url is not None:
+                member_update_values['llm_base_url'] = item.llm_base_url
+            if item.max_iterations is not None:
+                member_update_values['max_iterations'] = item.max_iterations
+            if item.llm_api_key is not None:
+                member_update_values['_llm_api_key'] = encrypt_value(
+                    item.llm_api_key.get_secret_value()
+                )
+
+            if member_update_values:
+                stmt = (
+                    update(OrgMember)
+                    .where(OrgMember.org_id == org_id)
+                    .values(**member_update_values)
+                )
+                await session.execute(stmt)
 
             await session.commit()
 

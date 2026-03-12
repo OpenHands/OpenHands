@@ -112,21 +112,15 @@ async def test_search_repositories_slash_query():
     query = 'PROJ/myrepo'
 
     mock_repo = _repo_dict('PROJ', slug='myrepo', name='My Repository')
-    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
         '_fetch_paginated_data',
         new=AsyncMock(return_value=[mock_repo]),
     ) as mock_fetch:
-        with patch.object(
-            svc,
-            '_make_request',
-            new=AsyncMock(return_value=(mock_default_branch, {})),
-        ):
-            repos = await svc.search_repositories(
-                query, 25, 'name', 'asc', False, AppMode.SAAS
-            )
+        repos = await svc.search_repositories(
+            query, 25, 'name', 'asc', False, AppMode.SAAS
+        )
 
     mock_fetch.assert_called_once_with(
         'https://host.example.com/rest/api/1.0/projects/PROJ/repos',
@@ -135,6 +129,7 @@ async def test_search_repositories_slash_query():
     )
     assert len(repos) == 1
     assert repos[0].full_name == 'PROJ/myrepo'
+    assert repos[0].main_branch is None
 
 
 @pytest.mark.asyncio
@@ -143,24 +138,19 @@ async def test_search_repositories_slash_query_filters_by_name():
     svc = make_service()
     matching = _repo_dict('PROJ', slug='proj-alpha', name='My Repository')
     non_matching = _repo_dict('PROJ', slug='proj-beta', name='Other Repo')
-    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
         '_fetch_paginated_data',
         new=AsyncMock(return_value=[matching, non_matching]),
     ):
-        with patch.object(
-            svc,
-            '_make_request',
-            new=AsyncMock(return_value=(mock_default_branch, {})),
-        ):
-            repos = await svc.search_repositories(
-                'PROJ/my repository', 25, 'name', 'asc', False, AppMode.SAAS
-            )
+        repos = await svc.search_repositories(
+            'PROJ/my repository', 25, 'name', 'asc', False, AppMode.SAAS
+        )
 
     assert len(repos) == 1
     assert repos[0].full_name == 'PROJ/proj-alpha'
+    assert repos[0].main_branch is None
 
 
 @pytest.mark.asyncio
@@ -169,24 +159,19 @@ async def test_search_repositories_slash_query_filters_by_slug():
     svc = make_service()
     matching = _repo_dict('PROJ', slug='my-repo', name='My Repository')
     non_matching = _repo_dict('PROJ', slug='other-repo', name='Other Repository')
-    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
         '_fetch_paginated_data',
         new=AsyncMock(return_value=[matching, non_matching]),
     ):
-        with patch.object(
-            svc,
-            '_make_request',
-            new=AsyncMock(return_value=(mock_default_branch, {})),
-        ):
-            repos = await svc.search_repositories(
-                'PROJ/my-repo', 25, 'name', 'asc', False, AppMode.SAAS
-            )
+        repos = await svc.search_repositories(
+            'PROJ/my-repo', 25, 'name', 'asc', False, AppMode.SAAS
+        )
 
     assert len(repos) == 1
     assert repos[0].full_name == 'PROJ/my-repo'
+    assert repos[0].main_branch is None
 
 
 # ── get_paginated_repos ───────────────────────────────────────────────────────
@@ -199,18 +184,18 @@ async def test_get_paginated_repos_parses_values():
         'values': [_repo_dict()],
         'isLastPage': True,
     }
-    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
         '_make_request',
-        side_effect=[(mock_response, {}), (mock_default_branch, {})],
+        return_value=(mock_response, {}),
     ):
         repos = await svc.get_paginated_repos(1, 25, 'name', 'PROJ')
 
     assert len(repos) == 1
     assert repos[0].full_name == 'PROJ/myrepo'
     assert repos[0].link_header == ''
+    assert repos[0].main_branch is None
 
 
 @pytest.mark.asyncio
@@ -221,17 +206,17 @@ async def test_get_paginated_repos_has_next_page():
         'isLastPage': False,
         'nextPageStart': 25,
     }
-    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
         '_make_request',
-        side_effect=[(mock_response, {}), (mock_default_branch, {})],
+        return_value=(mock_response, {}),
     ):
         repos = await svc.get_paginated_repos(1, 25, 'name', 'PROJ')
 
     assert len(repos) == 1
     assert 'rel="next"' in repos[0].link_header
+    assert repos[0].main_branch is None
 
 
 @pytest.mark.asyncio
@@ -241,17 +226,17 @@ async def test_get_paginated_repos_last_page():
         'values': [_repo_dict()],
         'isLastPage': True,
     }
-    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
         '_make_request',
-        side_effect=[(mock_response, {}), (mock_default_branch, {})],
+        return_value=(mock_response, {}),
     ):
         repos = await svc.get_paginated_repos(1, 25, 'name', 'PROJ')
 
     assert len(repos) == 1
     assert repos[0].link_header == ''
+    assert repos[0].main_branch is None
 
 
 @pytest.mark.asyncio
@@ -265,17 +250,17 @@ async def test_get_paginated_repos_filters_by_slug():
         ],
         'isLastPage': True,
     }
-    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
         '_make_request',
-        side_effect=[(mock_response, {}), (mock_default_branch, {})],
+        return_value=(mock_response, {}),
     ):
         repos = await svc.get_paginated_repos(1, 25, 'name', 'PROJ', query='my-repo')
 
     assert len(repos) == 1
     assert repos[0].full_name == 'PROJ/my-repo'
+    assert repos[0].main_branch is None
 
 
 @pytest.mark.asyncio
@@ -289,12 +274,11 @@ async def test_get_paginated_repos_filters_by_name():
         ],
         'isLastPage': True,
     }
-    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
         '_make_request',
-        side_effect=[(mock_response, {}), (mock_default_branch, {})],
+        return_value=(mock_response, {}),
     ):
         repos = await svc.get_paginated_repos(
             1, 25, 'name', 'PROJ', query='my repository'
@@ -302,6 +286,7 @@ async def test_get_paginated_repos_filters_by_name():
 
     assert len(repos) == 1
     assert repos[0].full_name == 'PROJ/proj-alpha'
+    assert repos[0].main_branch is None
 
 
 # ── get_all_repositories ──────────────────────────────────────────────────────
@@ -320,14 +305,14 @@ async def test_get_all_repositories_iterates_projects():
             return [_repo_dict('PROJ2', 'repo2')]
         return []
 
-    mock_default_branch = {'displayId': 'main'}
     with patch.object(svc, '_fetch_paginated_data', side_effect=fake_fetch):
-        with patch.object(svc, '_make_request', return_value=(mock_default_branch, {})):
-            repos = await svc.get_all_repositories('name', AppMode.SAAS)
+        repos = await svc.get_all_repositories('name', AppMode.SAAS)
 
     full_names = {r.full_name for r in repos}
     assert 'PROJ1/repo1' in full_names
     assert 'PROJ2/repo2' in full_names
+    for repo in repos:
+        assert repo.main_branch is None
 
 
 # ── get_installations ─────────────────────────────────────────────────────────
@@ -352,4 +337,4 @@ async def test_get_installations_returns_project_keys():
 async def _make_parsed_repo(svc, repo_dict):
     """Helper to create a parsed Repository from a repo dict (with mocked default branch)."""
     with patch.object(svc, '_make_request', return_value=({'displayId': 'main'}, {})):
-        return await svc._parse_repository(repo_dict)
+        return await svc._parse_repository(repo_dict, fetch_default_branch=True)

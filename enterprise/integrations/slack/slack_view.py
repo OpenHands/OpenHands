@@ -64,22 +64,6 @@ async def is_v1_enabled_for_slack_resolver(user_id: str) -> bool:
 
 
 @dataclass
-class SlackUnkownUserView(SlackMessageView):
-    """View for unauthenticated Slack users who haven't linked their account.
-
-    This view only contains the minimal fields needed to send a login link
-    message back to the user. It does not implement SlackViewInterface
-    because it cannot create conversations without user authentication.
-    """
-
-    bot_access_token: str
-    slack_user_id: str
-    channel_id: str
-    message_ts: str
-    thread_ts: str | None
-
-
-@dataclass
 class SlackNewConversationView(SlackViewInterface):
     bot_access_token: str
     user_msg: str
@@ -478,7 +462,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
             )
 
             # 6. Send the message to the agent server
-            url = f'{agent_server_url.rstrip("/")}/api/conversations/{UUID(self.conversation_id)}/events'
+            url = f"{agent_server_url.rstrip('/')}/api/conversations/{UUID(self.conversation_id)}/events"
 
             headers = {'X-Session-API-Key': running_sandbox.session_api_key}
             payload = send_message_request.model_dump()
@@ -576,13 +560,15 @@ class SlackFactory:
             raise Exception('Did not find slack team')
 
         # Determine if this is a known slack user by openhands
+        # Return SlackMessageView (not SlackViewInterface) for unauthenticated users
         if not slack_user or not saas_user_auth or not channel_id or not message_ts:
-            return SlackUnkownUserView(
+            return SlackMessageView(
                 bot_access_token=bot_access_token,
                 slack_user_id=slack_user_id,
                 channel_id=channel_id or '',
                 message_ts=message_ts or '',
                 thread_ts=thread_ts,
+                team_id=team_id,
             )
 
         # At this point, we've verified slack_user, saas_user_auth, channel_id, and message_ts are set
@@ -657,3 +643,11 @@ class SlackFactory:
                 team_id=team_id,
                 v1_enabled=False,
             )
+
+
+# Type alias for all authenticated Slack view types that can start conversations
+SlackViewType = (
+    SlackNewConversationView
+    | SlackNewConversationFromRepoFormView
+    | SlackUpdateExistingConversationView
+)
