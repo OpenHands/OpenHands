@@ -1,14 +1,16 @@
-/* eslint-disable i18next/no-literal-string */
+import { useTranslation } from "react-i18next";
 import { usePostHog } from "posthog-js/react";
+import { I18nKey } from "#/i18n/declaration";
 
-const ENTERPRISE_FEATURES = [
-  "Full data privacy & control",
-  "Custom deployment options",
-  "SSO & enterprise auth",
-  "Dedicated support",
+const ENTERPRISE_FEATURE_KEYS: I18nKey[] = [
+  I18nKey.ENTERPRISE$FEATURE_DATA_PRIVACY,
+  I18nKey.ENTERPRISE$FEATURE_DEPLOYMENT,
+  I18nKey.ENTERPRISE$FEATURE_SSO,
+  I18nKey.ENTERPRISE$FEATURE_SUPPORT,
 ];
 
 export function EnterpriseBanner() {
+  const { t } = useTranslation();
   const posthog = usePostHog();
 
   const handleLearnMore = () => {
@@ -22,25 +24,25 @@ export function EnterpriseBanner() {
       <div className="flex justify-center mb-4">
         <div className="px-4 py-1 rounded-full bg-gradient-to-r from-[#1a4a6e] to-[#1a3a5e] border border-[#2a5a8e]">
           <span className="text-xs font-medium text-[#4a9eff] tracking-wider uppercase">
-            Self-Hosted
+            {t(I18nKey.ENTERPRISE$SELF_HOSTED)}
           </span>
         </div>
       </div>
 
       {/* Title */}
       <h2 className="text-xl font-semibold text-white text-center mb-3">
-        OpenHands Enterprise
+        {t(I18nKey.ENTERPRISE$TITLE)}
       </h2>
 
       {/* Description */}
       <p className="text-sm text-gray-400 text-center mb-6">
-        Complete data control with your own self-hosted AI development platform.
+        {t(I18nKey.ENTERPRISE$DESCRIPTION)}
       </p>
 
       {/* Features List */}
       <ul className="space-y-3 mb-6">
-        {ENTERPRISE_FEATURES.map((feature) => (
-          <li key={feature} className="flex items-center gap-2">
+        {ENTERPRISE_FEATURE_KEYS.map((featureKey) => (
+          <li key={featureKey} className="flex items-center gap-2">
             <svg
               className="w-4 h-4 text-[#4a9eff] flex-shrink-0"
               fill="currentColor"
@@ -52,7 +54,7 @@ export function EnterpriseBanner() {
                 clipRule="evenodd"
               />
             </svg>
-            <span className="text-sm text-gray-300">{feature}</span>
+            <span className="text-sm text-gray-300">{t(featureKey)}</span>
           </li>
         ))}
       </ul>
@@ -63,7 +65,7 @@ export function EnterpriseBanner() {
         onClick={handleLearnMore}
         className="w-full py-2.5 px-4 rounded-lg bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-medium transition-colors"
       >
-        Learn More
+        {t(I18nKey.ENTERPRISE$LEARN_MORE)}
       </button>
     </div>
   );
