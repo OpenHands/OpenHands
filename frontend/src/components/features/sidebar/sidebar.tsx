@@ -77,7 +77,7 @@ export function Sidebar() {
             <div className="flex items-center justify-center">
               <OpenHandsLogoButton />
             </div>
-            <div>
+            <div className="flex items-center justify-center">
               <NewProjectButton disabled={settings?.email_verified === false} />
             </div>
             <ConversationPanelButton
