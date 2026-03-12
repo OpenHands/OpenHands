@@ -68,8 +68,8 @@ async def valid_sandbox(
             status.HTTP_401_UNAUTHORIZED, detail='X-Session-API-Key header is required'
         )
 
-    # Create a copy of the state which will be used internally only for this operation
-    state = InjectorState({**request.state._state})
+    # Create a state which will be used internally only for this operation
+    state = InjectorState()
 
     # Since we need access to all sandboxes, this is executed in the context of the admin.
     setattr(state, USER_CONTEXT_ATTR, ADMIN)
