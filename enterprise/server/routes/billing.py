@@ -11,8 +11,8 @@ from integrations import stripe_service
 from pydantic import BaseModel
 from server.constants import STRIPE_API_KEY
 from server.logger import logger
+from server.utils.url_utils import get_web_url
 from sqlalchemy import select
-from starlette.datastructures import URL
 from storage.billing_session import BillingSession
 from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager
@@ -151,7 +151,7 @@ async def create_customer_setup_session(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='Could not find or create customer for user',
         )
-    base_url = _get_base_url(request)
+    base_url = get_web_url(request)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
         mode='setup',
@@ -170,7 +170,7 @@ async def create_checkout_session(
     user_id: str = Depends(get_user_id),
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
-    base_url = _get_base_url(request)
+    base_url = get_web_url(request)
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
     if not customer_info:
         raise HTTPException(
@@ -198,8 +198,8 @@ async def create_checkout_session(
         saved_payment_method_options={
             'payment_method_save': 'enabled',
         },
-        success_url=f'{base_url}api/billing/success?session_id={{CHECKOUT_SESSION_ID}}',
-        cancel_url=f'{base_url}api/billing/cancel?session_id={{CHECKOUT_SESSION_ID}}',
+        success_url=f'{base_url}/api/billing/success?session_id={{CHECKOUT_SESSION_ID}}',
+        cancel_url=f'{base_url}/api/billing/cancel?session_id={{CHECKOUT_SESSION_ID}}',
     )
     logger.info(
         'created_stripe_checkout_session',
@@ -300,7 +300,7 @@ async def success_callback(session_id: str, request: Request):
         await session.commit()
 
     return RedirectResponse(
-        f'{_get_base_url(request)}settings/billing?checkout=success', status_code=302
+        f'{get_web_url(request)}/settings/billing?checkout=success', status_code=302
     )
 
 
@@ -325,17 +325,9 @@ async def cancel_callback(session_id: str, request: Request):
             )
             billing_session.status = 'cancelled'
             billing_session.updated_at = datetime.now(UTC)
-            session.merge(billing_session)
+            await session.merge(billing_session)
             await session.commit()
 
     return RedirectResponse(
-        f'{_get_base_url(request)}settings/billing?checkout=cancel', status_code=302
+        f'{get_web_url(request)}/settings/billing?checkout=cancel', status_code=302
     )
-
-
-def _get_base_url(request: Request) -> URL:
-    # Never send any part of the credit card process over a non secure connection
-    base_url = request.base_url
-    if base_url.hostname != 'localhost':
-        base_url = base_url.replace(scheme='https')
-    return base_url

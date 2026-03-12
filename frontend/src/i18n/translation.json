@@ -15891,6 +15891,38 @@
     "de": "Aufgaben",
     "uk": "Завдання"
   },
+  "COMMON$TASK_LIST": {
+    "en": "Task List",
+    "ja": "タスクリスト",
+    "zh-CN": "任务列表",
+    "zh-TW": "任務列表",
+    "ko-KR": "작업 목록",
+    "no": "Oppgaveliste",
+    "it": "Elenco attività",
+    "pt": "Lista de tarefas",
+    "es": "Lista de tareas",
+    "ar": "قائمة المهام",
+    "fr": "Liste des tâches",
+    "tr": "Görev listesi",
+    "de": "Aufgabenliste",
+    "uk": "Список завдань"
+  },
+  "COMMON$NO_TASKS": {
+    "en": "No tasks yet",
+    "ja": "タスクはまだありません",
+    "zh-CN": "暂无任务",
+    "zh-TW": "尚無任務",
+    "ko-KR": "아직 작업이 없습니다",
+    "no": "Ingen oppgaver ennå",
+    "it": "Nessuna attività",
+    "pt": "Nenhuma tarefa ainda",
+    "es": "Sin tareas aún",
+    "ar": "لا توجد مهام بعد",
+    "fr": "Aucune tâche pour le moment",
+    "tr": "Henüz görev yok",
+    "de": "Noch keine Aufgaben",
+    "uk": "Завдань поки немає"
+  },
   "COMMON$PLAN_MD": {
     "en": "Plan.md",
     "ja": "Plan.md",

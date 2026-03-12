@@ -366,6 +366,130 @@ describe("MainApp", () => {
     });
   });
 
+  describe("Re-authentication with stored login method", () => {
+    it("should show ReauthModal instead of redirecting to /login when login method exists", async () => {
+      // Arrange - user is unauthenticated but has a stored login method
+      vi.spyOn(AuthService, "authenticate").mockRejectedValue({
+        response: { status: 401 },
+        isAxiosError: true,
+      });
+
+      vi.stubGlobal("localStorage", {
+        getItem: vi.fn((key: string) => {
+          if (key === "openhands_login_method") {
+            return "github";
+          }
+          return null;
+        }),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      });
+
+      // Act
+      renderWithLoginStub(RouterStubWithLogin, ["/"]);
+
+      // Assert - should show ReauthModal (with "Logging back in" text), not redirect to /login
+      await waitFor(
+        () => {
+          expect(screen.getByText("AUTH$LOGGING_BACK_IN")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+
+      // Login page should NOT be shown when login method exists
+      expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+    });
+
+    it("should redirect to /login when no login method is stored", async () => {
+      // Arrange - user is unauthenticated and has no stored login method
+      vi.spyOn(AuthService, "authenticate").mockRejectedValue({
+        response: { status: 401 },
+        isAxiosError: true,
+      });
+
+      vi.stubGlobal("localStorage", {
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      });
+
+      // Act
+      renderWithLoginStub(RouterStubWithLogin, ["/"]);
+
+      // Assert - should redirect to /login
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+  });
+
+  describe("Loading states", () => {
+    it("should show loading spinner while config is loading without redirecting", async () => {
+      // Arrange - config never resolves (loading state)
+      vi.spyOn(OptionService, "getConfig").mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      vi.stubGlobal("localStorage", {
+        getItem: vi.fn((key: string) => {
+          if (key === "openhands_login_method") {
+            return "github";
+          }
+          return null;
+        }),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      });
+
+      // Act
+      renderWithLoginStub(RouterStubWithLogin, ["/"]);
+
+      // Assert - should show loading spinner
+      await waitFor(() => {
+        expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
+      });
+
+      // Should NOT redirect to login while loading
+      expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+    });
+
+    it("should show loading spinner while auth is loading without redirecting", async () => {
+      // Arrange - auth never resolves (loading state)
+      vi.spyOn(AuthService, "authenticate").mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      vi.stubGlobal("localStorage", {
+        getItem: vi.fn((key: string) => {
+          if (key === "openhands_login_method") {
+            return "github";
+          }
+          return null;
+        }),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      });
+
+      // Act
+      renderWithLoginStub(RouterStubWithLogin, ["/"]);
+
+      // Assert - should show loading spinner
+      await waitFor(() => {
+        expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
+      });
+
+      // Should NOT redirect to login while loading
+      expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+    });
+  });
+
   describe("Invitation URL Parameters", () => {
     beforeEach(() => {
       vi.spyOn(AuthService, "authenticate").mockRejectedValue({
