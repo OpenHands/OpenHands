@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { useSearchParams } from "react-router";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
+import { EnterpriseBanner } from "#/components/features/device-verify/enterprise-banner";
 
 export default function DeviceVerify() {
   const [searchParams] = useSearchParams();
@@ -145,62 +146,53 @@ export default function DeviceVerify() {
   if (isAuthed && userCode) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
-          <h1 className="text-2xl font-bold mb-4 text-center">
-            Device Authorization Request
-          </h1>
-          <div className="mb-6 p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground mb-2">Device Code:</p>
-            <p className="text-lg font-mono font-semibold text-center tracking-wider">
-              {userCode}
+        <div className="flex items-stretch gap-6">
+          {/* Device Authorization Card */}
+          <div className="max-w-md w-full p-6 bg-card rounded-lg shadow-lg">
+            <h1 className="text-2xl font-bold mb-4 text-center">
+              Device Authorization Request
+            </h1>
+            <div className="mb-6 p-4 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground mb-2 text-center">
+                DEVICE CODE
+              </p>
+              <p className="text-lg font-mono font-semibold text-center tracking-[0.3em]">
+                {userCode}
+              </p>
+            </div>
+            <div className="mb-6 p-4 bg-[#2a2520] border-l-2 border-[#d4a857] rounded-r-lg">
+              <p className="text-sm font-medium text-[#d4a857] mb-1">
+                Security Notice
+              </p>
+              <p className="text-sm text-gray-400">
+                Only authorize this device if you initiated this request from
+                your CLI or application.
+              </p>
+            </div>
+            <p className="text-muted-foreground mb-6 text-center">
+              Do you want to authorize this device to access your OpenHands
+              account?
             </p>
-          </div>
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-start">
-              <svg
-                className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => window.close()}
+                className="flex-1 px-4 py-2 border border-neutral-600 rounded-md hover:bg-muted text-gray-300"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z"
-                />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-yellow-800 mb-1">
-                  Security Notice
-                </p>
-                <p className="text-sm text-yellow-700">
-                  Only authorize this device if you initiated this request from
-                  your CLI or application.
-                </p>
-              </div>
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => processDeviceVerification(userCode)}
+                className="flex-1 px-4 py-2 bg-[#2563eb] text-white rounded-md hover:bg-[#1d4ed8]"
+              >
+                Authorize Device
+              </button>
             </div>
           </div>
-          <p className="text-muted-foreground mb-6 text-center">
-            Do you want to authorize this device to access your OpenHands
-            account?
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => window.close()}
-              className="flex-1 px-4 py-2 border border-input rounded-md hover:bg-muted"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => processDeviceVerification(userCode)}
-              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-            >
-              Authorize Device
-            </button>
-          </div>
+
+          {/* Enterprise Banner */}
+          <EnterpriseBanner />
         </div>
       </div>
     );
