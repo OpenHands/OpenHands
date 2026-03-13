@@ -163,35 +163,6 @@ jupyterlab = "*"
 notebook = "*"
 flake8 = "*"
 
-[tool.poetry.group.evaluation]
-optional = true
-
-[tool.poetry.group.evaluation.dependencies]
-streamlit = "*"
-whatthepatch = "*"
-retry = "*"
-evaluate = "*"
-visualswebench = { git = "https://github.com/luolin101/Visual-SWE-bench.git" }
-swegym = { git = "https://github.com/SWE-Gym/SWE-Bench-Package.git" }
-commit0 = "*"
-func_timeout = "*"
-sympy = "*"
-gdown = "*"
-matplotlib = "*"
-seaborn = "*"
-tabulate = "*"
-browsergym = "0.13.3"
-browsergym-webarena = "0.13.3"
-browsergym-miniwob = "0.13.3"
-browsergym-visualwebarena = "0.13.3"
-boto3-stubs = { extras = [ "s3" ], version = "^1.37.19" }
-# transitive dependency, pinned here to avoid conflicts
-pyarrow = "21.0.0"
-datasets = "*"
-joblib = "*"
-swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }
-multi-swe-bench = "0.1.2"
-
 [tool.poetry.group.testgeneval.dependencies]
 fuzzywuzzy = "^0.18.0"
 rouge = "^1.0.1"
