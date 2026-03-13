@@ -47,7 +47,7 @@
     "react-icons": "^5.5.0",
     "react-markdown": "^10.1.0",
     "react-router": "^7.12.0",
-    "react-syntax-highlighter": "^15.6.6",
+    "react-syntax-highlighter": "^16.1.1",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "sirv-cli": "^3.0.1",
