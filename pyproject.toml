@@ -22,6 +22,7 @@ dynamic = [ "version" ]
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
   "aiohttp>=3.13.3",
+  "orjson>=3.11.6",
   "anthropic[vertex]",
   "anyio==4.9",
   "asyncpg>=0.30",
@@ -163,6 +164,7 @@ include = [
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
 authlib = ">=1.6.7"                                # Pinned to fix CVE-2026-28802
+orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
 litellm = ">=1.74.3, !=1.64.4, !=1.67.*"           # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
 openai = "2.8.0"                                   # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
 aiohttp = ">=3.13.3"                               # Pin to avoid CVE-2025-69223 (vulnerable versions < 3.13.3)
