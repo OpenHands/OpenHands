@@ -128,10 +128,12 @@ async def valid_conversation(
 async def on_conversation_update(
     conversation_info: ConversationInfo,
     sandbox_info: SandboxInfo = Depends(valid_sandbox),
-    existing: AppConversationInfo = Depends(valid_conversation),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> Success:
     """Webhook callback for when a conversation starts, pauses, resumes, or deletes."""
+    existing = await valid_conversation(
+        conversation_info.id, sandbox_info, app_conversation_info_service
+    )
 
     # If the conversation is being deleted, no action is required...
     # Later we may consider deleting the conversation if it exists...
