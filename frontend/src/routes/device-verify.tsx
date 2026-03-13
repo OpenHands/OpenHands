@@ -5,6 +5,7 @@ import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { EnterpriseBanner } from "#/components/features/device-verify/enterprise-banner";
 import { I18nKey } from "#/i18n/declaration";
 import { H1 } from "#/ui/typography";
+import { PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 
 export default function DeviceVerify() {
   const { t } = useTranslation();
@@ -15,6 +16,7 @@ export default function DeviceVerify() {
     messageKey: I18nKey;
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const showEnterpriseBanner = PROJ_USER_JOURNEY();
 
   // Get user_code from URL parameters
   const userCode = searchParams.get("user_code");
@@ -148,9 +150,13 @@ export default function DeviceVerify() {
   if (isAuthed && userCode) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <div className="flex flex-col lg:flex-row items-stretch gap-6 w-full max-w-4xl">
+        <div
+          className={`flex flex-col lg:flex-row items-stretch gap-6 w-full ${showEnterpriseBanner ? "max-w-4xl" : "max-w-md"}`}
+        >
           {/* Device Authorization Card */}
-          <div className="flex-1 min-w-0 max-w-md w-full mx-auto lg:mx-0 p-6 bg-card rounded-lg shadow-lg">
+          <div
+            className={`flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg ${showEnterpriseBanner ? "lg:mx-0" : ""}`}
+          >
             <H1 className="text-2xl mb-4 text-center">
               {t(I18nKey.DEVICE$AUTHORIZATION_REQUEST)}
             </H1>
@@ -192,7 +198,7 @@ export default function DeviceVerify() {
           </div>
 
           {/* Enterprise Banner */}
-          <EnterpriseBanner />
+          {showEnterpriseBanner && <EnterpriseBanner />}
         </div>
       </div>
     );

@@ -235,7 +235,7 @@ describe("DeviceVerify", () => {
       });
     });
 
-    it("should include the EnterpriseBanner component", async () => {
+    it("should include the EnterpriseBanner component when feature flag is enabled", async () => {
       useIsAuthedMock.mockReturnValue({
         data: true,
         isLoading: false,
@@ -251,6 +251,39 @@ describe("DeviceVerify", () => {
       await waitFor(() => {
         expect(screen.getByText("ENTERPRISE$TITLE")).toBeInTheDocument();
       });
+    });
+
+    it("should not include the EnterpriseBanner and be center-aligned when feature flag is disabled", async () => {
+      PROJ_USER_JOURNEY_MOCK.mockReturnValue(false);
+      useIsAuthedMock.mockReturnValue({
+        data: true,
+        isLoading: false,
+      });
+
+      render(
+        <RouterStub initialEntries={["/device-verify?user_code=ABC-123"]} />,
+        {
+          wrapper: createWrapper(),
+        },
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("DEVICE$AUTHORIZATION_REQUEST"),
+        ).toBeInTheDocument();
+      });
+
+      // Banner should not be rendered
+      expect(screen.queryByText("ENTERPRISE$TITLE")).not.toBeInTheDocument();
+
+      // Container should use max-w-md (centered layout) instead of max-w-4xl
+      const container = document.querySelector(".max-w-md");
+      expect(container).toBeInTheDocument();
+      expect(document.querySelector(".max-w-4xl")).not.toBeInTheDocument();
+
+      // Authorization card should have mx-auto for centering
+      const authCard = container?.querySelector(".mx-auto");
+      expect(authCard).toBeInTheDocument();
     });
 
     it("should call window.close when cancel button is clicked", async () => {
