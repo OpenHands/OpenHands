@@ -11,15 +11,43 @@ vi.mock("posthog-js/react", () => ({
   }),
 }));
 
+const { PROJ_USER_JOURNEY_MOCK } = vi.hoisted(() => ({
+  PROJ_USER_JOURNEY_MOCK: vi.fn(() => true),
+}));
+
+vi.mock("#/utils/feature-flags", () => ({
+  PROJ_USER_JOURNEY: () => PROJ_USER_JOURNEY_MOCK(),
+}));
+
 describe("EnterpriseBanner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal("open", vi.fn());
+    PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  describe("Feature Flag", () => {
+    it("should not render when proj_user_journey feature flag is disabled", () => {
+      PROJ_USER_JOURNEY_MOCK.mockReturnValue(false);
+
+      const { container } = renderWithProviders(<EnterpriseBanner />);
+
+      expect(container.firstChild).toBeNull();
+      expect(screen.queryByText("ENTERPRISE$TITLE")).not.toBeInTheDocument();
+    });
+
+    it("should render when proj_user_journey feature flag is enabled", () => {
+      PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
+
+      renderWithProviders(<EnterpriseBanner />);
+
+      expect(screen.getByText("ENTERPRISE$TITLE")).toBeInTheDocument();
+    });
   });
 
   describe("Rendering", () => {

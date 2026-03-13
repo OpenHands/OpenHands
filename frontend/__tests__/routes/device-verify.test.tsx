@@ -5,11 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRoutesStub } from "react-router";
 import DeviceVerify from "#/routes/device-verify";
 
-const { useIsAuthedMock } = vi.hoisted(() => ({
+const { useIsAuthedMock, PROJ_USER_JOURNEY_MOCK } = vi.hoisted(() => ({
   useIsAuthedMock: vi.fn(() => ({
     data: false as boolean | undefined,
     isLoading: false,
   })),
+  PROJ_USER_JOURNEY_MOCK: vi.fn(() => true),
 }));
 
 vi.mock("#/hooks/query/use-is-authed", () => ({
@@ -20,6 +21,10 @@ vi.mock("posthog-js/react", () => ({
   usePostHog: () => ({
     capture: vi.fn(),
   }),
+}));
+
+vi.mock("#/utils/feature-flags", () => ({
+  PROJ_USER_JOURNEY: () => PROJ_USER_JOURNEY_MOCK(),
 }));
 
 const RouterStub = createRoutesStub([
@@ -61,6 +66,8 @@ describe("DeviceVerify", () => {
         }),
       ),
     );
+    // Enable feature flag by default
+    PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
   });
 
   afterEach(() => {
