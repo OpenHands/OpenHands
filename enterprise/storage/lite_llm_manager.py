@@ -32,9 +32,11 @@ UNLIMITED_BUDGET_SETTING = 1000000000.0
 try:
     DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', 0.0))
     if DEFAULT_INITIAL_BUDGET < 0:
-        raise ValueError(f"DEFAULT_INITIAL_BUDGET must be non-negative, got {DEFAULT_INITIAL_BUDGET}")
+        raise ValueError(
+            f'DEFAULT_INITIAL_BUDGET must be non-negative, got {DEFAULT_INITIAL_BUDGET}'
+        )
 except ValueError as e:
-    raise ValueError(f"Invalid DEFAULT_INITIAL_BUDGET environment variable: {e}") from e
+    raise ValueError(f'Invalid DEFAULT_INITIAL_BUDGET environment variable: {e}') from e
 
 
 def get_openhands_cloud_key_alias(keycloak_user_id: str, org_id: str) -> str:
