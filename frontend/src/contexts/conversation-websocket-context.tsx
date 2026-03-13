@@ -129,6 +129,27 @@ export function ConversationWebSocketProvider({
     conversationId: string;
   } | null>(null);
 
+  // Queue for messages sent before WebSocket connection is established
+  const pendingMessagesRef = useRef<V1SendMessageRequest[]>([]);
+
+  // Helper function to flush pending messages when connection opens
+  const flushPendingMessages = useCallback(
+    (socket: WebSocket | null) => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      const messages = pendingMessagesRef.current;
+      pendingMessagesRef.current = [];
+      for (const message of messages) {
+        try {
+          socket.send(JSON.stringify(message));
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to send message";
+          setErrorMessage(errorMessage);
+        }
+      }
+    },
+    [setErrorMessage],
+  );
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -677,13 +698,13 @@ export function ConversationWebSocketProvider({
     return {
       queryParams,
       reconnect: { enabled: true },
-      onOpen: async () => {
+      onOpen: async (event: Event) => {
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
         removeErrorMessage(); // Clear any previous error messages on successful connection
 
         // Flush any pending messages now that connection is established
-        flushPendingMessages(mainSocket);
+        flushPendingMessages(event.target as WebSocket);
 
         // Fetch expected event count for history loading detection
         if (conversationId && conversationUrl) {
@@ -748,13 +769,13 @@ export function ConversationWebSocketProvider({
     return {
       queryParams,
       reconnect: { enabled: true },
-      onOpen: async () => {
+      onOpen: async (event: Event) => {
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
         removeErrorMessage(); // Clear any previous error messages on successful connection
 
         // Flush any pending messages now that connection is established
-        flushPendingMessages(planningAgentSocket);
+        flushPendingMessages(event.target as WebSocket);
 
         // Fetch expected event count for history loading detection
         if (
@@ -818,7 +839,17 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
+  // V1 send message function via WebSocket
+  const sendMessage = useCallback(
+    async (message: V1SendMessageRequest) => {
+      const currentMode = useConversationStore.getState().conversationMode;
+      const currentSocket =
+        currentMode === "plan" ? planningAgentSocket : mainSocket;
 
+      if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
+        // Queue the message to be sent when connection opens
+        pendingMessagesRef.current.push(message);
+        return;
       }
 
       try {

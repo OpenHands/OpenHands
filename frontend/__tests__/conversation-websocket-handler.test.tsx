@@ -709,9 +709,9 @@ describe("Conversation WebSocket Handler", () => {
       }
 
       // Set up MSW to delay connection (simulate slow connection)
-      let connectionDeferred: { resolve: () => void } | null = null;
+      const deferred: { resolve: () => void } = { resolve: () => {} };
       const connectionPromise = new Promise<void>((resolve) => {
-        connectionDeferred = { resolve };
+        deferred.resolve = resolve;
       });
 
       mswServer.use(
@@ -748,7 +748,7 @@ describe("Conversation WebSocket Handler", () => {
       );
 
       // Now establish the connection
-      connectionDeferred?.resolve();
+      deferred.resolve();
 
       // Wait for connection to be established
       await waitFor(() => {
@@ -800,9 +800,9 @@ describe("Conversation WebSocket Handler", () => {
       }
 
       // Set up MSW to delay connection establishment
-      let connectionDeferred: { resolve: () => void } | null = null;
+      const deferred: { resolve: () => void } = { resolve: () => {} };
       const connectionPromise = new Promise<void>((resolve) => {
-        connectionDeferred = { resolve };
+        deferred.resolve = resolve;
       });
 
       mswServer.use(
@@ -834,7 +834,7 @@ describe("Conversation WebSocket Handler", () => {
       });
 
       // Now establish the connection
-      connectionDeferred?.resolve();
+      deferred.resolve();
 
       // Wait for connection to be established
       // The test passes if no errors occur and connection is established
