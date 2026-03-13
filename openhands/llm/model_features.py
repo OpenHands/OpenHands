@@ -101,6 +101,8 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     # GLM series - verified via official docs and litellm config
     'glm-4*',
     'glm-5*',
+    # MiniMax - verified via official docs (OpenAI-compatible API)
+    'minimax-m2.5*',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [

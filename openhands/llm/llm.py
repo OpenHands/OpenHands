@@ -141,6 +141,10 @@ class LLM(RetryMixin, DebugMixin):
                 f'Rewrote openhands/{model_name} to {self.config.model} with base URL {self.config.base_url}'
             )
 
+        # MiniMax constraint: temperature must be in (0.0, 1.0], cannot be 0
+        if 'minimax' in self.config.model.lower() and kwargs.get('temperature', 0) == 0:
+            kwargs['temperature'] = 1.0
+
         features = get_features(self.config.model)
         if features.supports_reasoning_effort:
             # For Gemini models, only map 'low' to optimized thinking budget

@@ -21,6 +21,7 @@ OPENHANDS_MODELS = [
     'openhands/gpt-5.2-codex',
     'openhands/gpt-5.2',
     'openhands/minimax-m2.5',
+    'openhands/minimax-m2.5-highspeed',
     'openhands/gemini-3-pro-preview',
     'openhands/gemini-3.1-pro-preview',
     'openhands/gemini-3-flash-preview',
