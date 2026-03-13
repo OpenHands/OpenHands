@@ -101,6 +101,72 @@ async def test_create_default_settings_with_litellm(mock_litellm_api):
     assert settings.llm_base_url == 'http://test.url'
 
 
+@pytest.mark.asyncio
+async def test_create_default_settings_v1_enabled_true_when_default_is_true(
+    mock_litellm_api,
+):
+    """
+    GIVEN: DEFAULT_V1_ENABLED is True
+    WHEN: create_default_settings is called
+    THEN: The default_settings.v1_enabled should be set to True
+    """
+    org_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+
+    # Track the settings passed to LiteLlmManager.create_entries
+    captured_settings = None
+
+    async def capture_create_entries(_org_id, _user_id, settings, _create_user):
+        nonlocal captured_settings
+        captured_settings = settings
+        return settings
+
+    with (
+        patch('storage.user_store.DEFAULT_V1_ENABLED', True),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.create_entries',
+            side_effect=capture_create_entries,
+        ),
+    ):
+        await UserStore.create_default_settings(org_id, user_id)
+
+    assert captured_settings is not None
+    assert captured_settings.v1_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_v1_enabled_false_when_default_is_false(
+    mock_litellm_api,
+):
+    """
+    GIVEN: DEFAULT_V1_ENABLED is False
+    WHEN: create_default_settings is called
+    THEN: The default_settings.v1_enabled should be set to False
+    """
+    org_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+
+    # Track the settings passed to LiteLlmManager.create_entries
+    captured_settings = None
+
+    async def capture_create_entries(_org_id, _user_id, settings, _create_user):
+        nonlocal captured_settings
+        captured_settings = settings
+        return settings
+
+    with (
+        patch('storage.user_store.DEFAULT_V1_ENABLED', False),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.create_entries',
+            side_effect=capture_create_entries,
+        ),
+    ):
+        await UserStore.create_default_settings(org_id, user_id)
+
+    assert captured_settings is not None
+    assert captured_settings.v1_enabled is False
+
+
 # --- Tests for get_user_by_id ---
 
 
