@@ -46,7 +46,7 @@ export function UserContextMenu({
   const { isPersonalOrg } = useOrgTypeAndAccess();
   const settingsNavItems = useSettingsNavItems();
   const shouldHideSelector = useShouldHideOrgSelector();
-  const isMobile = useBreakpoint();
+  const isMobile = useBreakpoint(768);
   const { data: config } = useConfig();
 
   // Filter out org routes since they're handled separately via buttons in this menu
@@ -60,7 +60,6 @@ export function UserContextMenu({
 
   // CTA only renders in SaaS desktop with feature flag enabled
   const showCta = isSaasMode && !isMobile && ENABLE_PROJ_USER_JOURNEY();
-
   const handleLogout = () => {
     logout();
     onClose();
