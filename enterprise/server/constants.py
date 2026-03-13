@@ -77,6 +77,7 @@ PERMITTED_CORS_ORIGINS = [
     )
 ]
 
+# Controls whether new orgs/users default to V1 API (env: DEFAULT_V1_ENABLED)
 DEFAULT_V1_ENABLED = os.getenv('DEFAULT_V1_ENABLED', '1').lower() in ('1', 'true')
 
 
