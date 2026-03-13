@@ -19,6 +19,11 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { AppSettingsInputsSkeleton } from "#/components/features/settings/app-settings/app-settings-inputs-skeleton";
 import { useConfig } from "#/hooks/query/use-config";
 import { parseMaxBudgetPerTask } from "#/utils/settings-utils";
+import { createPermissionGuard } from "#/utils/org/permission-guard";
+
+export const clientLoader = createPermissionGuard(
+  "manage_application_settings",
+);
 
 function AppSettingsScreen() {
   const posthog = usePostHog();

@@ -2097,6 +2097,120 @@ class TestLiveStatusAppConversationService:
 
         assert captured['workspace_working_dir'] == '/workspace/project'
 
+    @pytest.mark.asyncio
+    async def test_search_app_conversations_with_sandbox_id_filter(self):
+        """Test that search_app_conversations passes sandbox_id__eq to the info service.
+
+        This verifies that the sandbox_id filter is correctly propagated through
+        the service layer to the underlying info service.
+        """
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfoPage,
+        )
+
+        # Create test data with different sandbox IDs
+        sandbox_id_alpha = 'sandbox-alpha-123'
+        sandbox_id_beta = 'sandbox-beta-456'
+
+        conv_alpha = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=None,
+            sandbox_id=sandbox_id_alpha,
+            title='Alpha Conversation',
+        )
+        conv_beta = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=None,
+            sandbox_id=sandbox_id_beta,
+            title='Beta Conversation',
+        )
+
+        # Mock the info service to return filtered results based on sandbox_id__eq
+        async def mock_search(sandbox_id__eq=None, **kwargs):
+            if sandbox_id__eq == sandbox_id_alpha:
+                return AppConversationInfoPage(items=[conv_alpha])
+            elif sandbox_id__eq == sandbox_id_beta:
+                return AppConversationInfoPage(items=[conv_beta])
+            else:
+                return AppConversationInfoPage(items=[conv_alpha, conv_beta])
+
+        self.mock_app_conversation_info_service.search_app_conversation_info = (
+            AsyncMock(side_effect=mock_search)
+        )
+
+        # Mock sandbox service to return running status for sandbox lookups
+        self.mock_sandbox_service.batch_get_sandboxes = AsyncMock(return_value=[])
+
+        # Test filtering by sandbox_id_alpha
+        result = await self.service.search_app_conversations(
+            sandbox_id__eq=sandbox_id_alpha
+        )
+
+        # Verify the info service was called with the correct sandbox_id__eq
+        self.mock_app_conversation_info_service.search_app_conversation_info.assert_called()
+        call_kwargs = self.mock_app_conversation_info_service.search_app_conversation_info.call_args[
+            1
+        ]
+        assert call_kwargs.get('sandbox_id__eq') == sandbox_id_alpha
+
+        # Verify only alpha conversation is returned
+        assert len(result.items) == 1
+        assert result.items[0].sandbox_id == sandbox_id_alpha
+
+    @pytest.mark.asyncio
+    async def test_count_app_conversations_with_sandbox_id_filter(self):
+        """Test that count_app_conversations passes sandbox_id__eq to the info service.
+
+        This verifies that the sandbox_id filter is correctly propagated through
+        the service layer to the underlying info service for count operations.
+        """
+        sandbox_id = 'sandbox-count-test-789'
+
+        # Mock the info service to return count based on sandbox_id__eq
+        async def mock_count(sandbox_id__eq=None, **kwargs):
+            if sandbox_id__eq == sandbox_id:
+                return 3  # 3 conversations match this sandbox
+            else:
+                return 10  # 10 total conversations
+
+        self.mock_app_conversation_info_service.count_app_conversation_info = AsyncMock(
+            side_effect=mock_count
+        )
+
+        # Test counting with sandbox_id filter
+        result = await self.service.count_app_conversations(sandbox_id__eq=sandbox_id)
+
+        # Verify the info service was called with the correct sandbox_id__eq
+        self.mock_app_conversation_info_service.count_app_conversation_info.assert_called_once()
+        call_kwargs = self.mock_app_conversation_info_service.count_app_conversation_info.call_args[
+            1
+        ]
+        assert call_kwargs.get('sandbox_id__eq') == sandbox_id
+
+        # Verify filtered count is returned
+        assert result == 3
+
+    @pytest.mark.asyncio
+    async def test_search_app_conversations_sandbox_id_filter_returns_empty(self):
+        """Test that search with non-matching sandbox_id returns empty results."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfoPage,
+        )
+
+        # Mock the info service to return empty for non-matching sandbox
+        self.mock_app_conversation_info_service.search_app_conversation_info = (
+            AsyncMock(return_value=AppConversationInfoPage(items=[]))
+        )
+        self.mock_sandbox_service.batch_get_sandboxes = AsyncMock(return_value=[])
+
+        # Test filtering by non-existent sandbox_id
+        result = await self.service.search_app_conversations(
+            sandbox_id__eq='non-existent-sandbox'
+        )
+
+        # Verify empty results
+        assert len(result.items) == 0
+
 
 class TestPluginHandling:
     """Test cases for plugin-related functionality in LiveStatusAppConversationService."""
