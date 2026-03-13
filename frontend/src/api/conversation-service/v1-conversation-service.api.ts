@@ -253,7 +253,7 @@ class V1ConversationService {
 
   /**
    * Upload a single file to the V1 conversation workspace
-   * V1 API endpoint: POST /api/file/upload/{path}
+   * V1 API endpoint: POST /api/file/upload?path={path}
    *
    * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
    * @param sessionApiKey Session API key for authentication (required for V1)
@@ -269,10 +269,11 @@ class V1ConversationService {
   ): Promise<void> {
     // Default to /workspace/{filename} if no path provided (must be absolute)
     const uploadPath = path || `/workspace/${file.name}`;
-    const encodedPath = encodeURIComponent(uploadPath);
+    const params = new URLSearchParams();
+    params.append("path", uploadPath);
     const url = this.buildRuntimeUrl(
       conversationUrl,
-      `/api/file/upload/${encodedPath}`,
+      `/api/file/upload?${params.toString()}`,
     );
     const headers = buildSessionHeaders(sessionApiKey);
 
