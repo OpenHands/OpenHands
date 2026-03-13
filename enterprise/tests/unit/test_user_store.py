@@ -1311,88 +1311,17 @@ async def test_migrate_user_sql_multiple_conversations(async_session_maker):
             ), f'org_id should match: {row.org_id} vs {user_uuid_str}'
 
 
-# --- Tests for migrate_user v1_enabled default logic ---
-
-
-def test_migrate_user_v1_enabled_defaults_to_true_when_default_is_true():
-    """
-    GIVEN: DEFAULT_V1_ENABLED is True and org.v1_enabled is None (v0.62 migrated user)
-    WHEN: The migrate_user v1_enabled logic is applied
-    THEN: The org.v1_enabled should be set to True
-
-    This tests the specific logic added for migrated users:
-        if org.v1_enabled is None:
-            org.v1_enabled = DEFAULT_V1_ENABLED
-    """
-    # Create org with v1_enabled=None (simulating v0.62 user migration)
-    org = Org(id=uuid.uuid4(), name='test_org', v1_enabled=None)
-
-    # Simulate the logic from migrate_user
-    DEFAULT_V1_ENABLED = True
-    if org.v1_enabled is None:
-        org.v1_enabled = DEFAULT_V1_ENABLED
-
-    assert org.v1_enabled is True
-
-
-def test_migrate_user_v1_enabled_defaults_to_false_when_default_is_false():
-    """
-    GIVEN: DEFAULT_V1_ENABLED is False and org.v1_enabled is None (v0.62 migrated user)
-    WHEN: The migrate_user v1_enabled logic is applied
-    THEN: The org.v1_enabled should be set to False
-
-    This tests the specific logic added for migrated users:
-        if org.v1_enabled is None:
-            org.v1_enabled = DEFAULT_V1_ENABLED
-    """
-    # Create org with v1_enabled=None (simulating v0.62 user migration)
-    org = Org(id=uuid.uuid4(), name='test_org', v1_enabled=None)
-
-    # Simulate the logic from migrate_user
-    DEFAULT_V1_ENABLED = False
-    if org.v1_enabled is None:
-        org.v1_enabled = DEFAULT_V1_ENABLED
-
-    assert org.v1_enabled is False
-
-
-def test_migrate_user_v1_enabled_explicit_false_preserved():
-    """
-    GIVEN: DEFAULT_V1_ENABLED is True but org.v1_enabled is explicitly False
-    WHEN: The migrate_user v1_enabled logic is applied
-    THEN: The org.v1_enabled should stay False (explicit value wins)
-
-    This tests the specific logic added for migrated users:
-        if org.v1_enabled is None:
-            org.v1_enabled = DEFAULT_V1_ENABLED
-    """
-    # Create org with explicit v1_enabled=False
-    org = Org(id=uuid.uuid4(), name='test_org', v1_enabled=False)
-
-    # Simulate the logic from migrate_user
-    DEFAULT_V1_ENABLED = True
-    if org.v1_enabled is None:
-        org.v1_enabled = DEFAULT_V1_ENABLED
-
-    assert org.v1_enabled is False
-
-
-def test_migrate_user_v1_enabled_explicit_true_preserved():
-    """
-    GIVEN: DEFAULT_V1_ENABLED is False but org.v1_enabled is explicitly True
-    WHEN: The migrate_user v1_enabled logic is applied
-    THEN: The org.v1_enabled should stay True (explicit value wins)
-
-    This tests the specific logic added for migrated users:
-        if org.v1_enabled is None:
-            org.v1_enabled = DEFAULT_V1_ENABLED
-    """
-    # Create org with explicit v1_enabled=True
-    org = Org(id=uuid.uuid4(), name='test_org', v1_enabled=True)
-
-    # Simulate the logic from migrate_user
-    DEFAULT_V1_ENABLED = False
-    if org.v1_enabled is None:
-        org.v1_enabled = DEFAULT_V1_ENABLED
-
-    assert org.v1_enabled is True
+# Note: The v1_enabled logic in migrate_user follows the same pattern as OrgStore.create_org:
+#   if org.v1_enabled is None:
+#       org.v1_enabled = DEFAULT_V1_ENABLED
+#
+# This behavior is tested in test_org_store.py via:
+#   - test_create_org_v1_enabled_defaults_to_true_when_default_is_true
+#   - test_create_org_v1_enabled_defaults_to_false_when_default_is_false
+#   - test_create_org_v1_enabled_explicit_false_overrides_default_true
+#   - test_create_org_v1_enabled_explicit_true_overrides_default_false
+#
+# Testing migrate_user directly is impractical due to its complex raw SQL migration
+# statements that have SQLite/UUID compatibility issues in the test environment.
+# The SQL migration tests above (test_migrate_user_sql_type_handling, etc.) verify
+# the SQL operations work correctly with proper type handling.
