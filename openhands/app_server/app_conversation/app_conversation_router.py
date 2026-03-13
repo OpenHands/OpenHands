@@ -117,6 +117,10 @@ async def search_app_conversations(
         datetime | None,
         Query(title='Filter by updated_at less than this datetime'),
     ] = None,
+    sandbox_id__eq: Annotated[
+        str | None,
+        Query(title='Filter by exact sandbox_id'),
+    ] = None,
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -148,6 +152,7 @@ async def search_app_conversations(
         created_at__lt=created_at__lt,
         updated_at__gte=updated_at__gte,
         updated_at__lt=updated_at__lt,
+        sandbox_id__eq=sandbox_id__eq,
         page_id=page_id,
         limit=limit,
         include_sub_conversations=include_sub_conversations,
@@ -176,6 +181,10 @@ async def count_app_conversations(
         datetime | None,
         Query(title='Filter by updated_at less than this datetime'),
     ] = None,
+    sandbox_id__eq: Annotated[
+        str | None,
+        Query(title='Filter by exact sandbox_id'),
+    ] = None,
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
@@ -187,6 +196,7 @@ async def count_app_conversations(
         created_at__lt=created_at__lt,
         updated_at__gte=updated_at__gte,
         updated_at__lt=updated_at__lt,
+        sandbox_id__eq=sandbox_id__eq,
     )
 
 
