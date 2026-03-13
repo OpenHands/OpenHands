@@ -73,7 +73,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"
-            raise AuthError('User authentication required')
+            raise AuthError("User authentication required")
 
         user_id_uuid = UUID(user_id_str)
         query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
@@ -95,7 +95,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -108,7 +108,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -119,6 +119,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -141,6 +142,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         # Add sort order
@@ -198,6 +200,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ) -> int:
         """Count conversations matching the given filters with SAAS metadata."""
         query = (
@@ -207,7 +210,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
 
         # Apply user and organization filtering
@@ -220,6 +223,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         result = await self.db_session.execute(query)
@@ -234,13 +238,14 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ):
         """Apply filters to query that includes SAAS metadata."""
         # Apply the same filters as the base class
         conditions = []
         if title__contains is not None:
             conditions.append(
-                StoredConversationMetadata.title.like(f'%{title__contains}%')
+                StoredConversationMetadata.title.like(f"%{title__contains}%")
             )
 
         if created_at__gte is not None:
@@ -258,6 +263,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             conditions.append(
                 StoredConversationMetadata.last_updated_at < updated_at__lt
             )
+
+        if sandbox_id__eq is not None:
+            conditions.append(StoredConversationMetadata.sandbox_id == sandbox_id__eq)
 
         if conditions:
             query = query.where(*conditions)
