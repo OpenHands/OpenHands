@@ -84,7 +84,7 @@ bashlex = "^0.18"
 
 # Explicitly pinned packages for security
 pypdf = "^6.0.0"
-pillow = "^11.3.0"
+pillow = ">=11.3,<13.0"
 starlette = "^0.50.0"
 authlib = "^1.6.6"
 urllib3 = "^2.5.0"
