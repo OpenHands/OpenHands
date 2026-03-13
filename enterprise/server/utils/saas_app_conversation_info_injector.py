@@ -73,7 +73,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"
-            raise AuthError("User authentication required")
+            raise AuthError('User authentication required')
 
         user_id_uuid = UUID(user_id_str)
         query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
@@ -95,7 +95,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -108,7 +108,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -210,7 +210,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
 
         # Apply user and organization filtering
@@ -245,7 +245,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         conditions = []
         if title__contains is not None:
             conditions.append(
-                StoredConversationMetadata.title.like(f"%{title__contains}%")
+                StoredConversationMetadata.title.like(f'%{title__contains}%')
             )
 
         if created_at__gte is not None:
