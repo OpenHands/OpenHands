@@ -8559,6 +8559,38 @@
     "de": "Gedanke",
     "uk": "Думка"
   },
+  "OBSERVATION_MESSAGE$GLOB": {
+    "en": "Glob: <cmd>{{pattern}}</cmd>",
+    "ja": "Glob: <cmd>{{pattern}}</cmd>",
+    "zh-CN": "Glob: <cmd>{{pattern}}</cmd>",
+    "zh-TW": "Glob: <cmd>{{pattern}}</cmd>",
+    "ko-KR": "Glob: <cmd>{{pattern}}</cmd>",
+    "no": "Glob: <cmd>{{pattern}}</cmd>",
+    "it": "Glob: <cmd>{{pattern}}</cmd>",
+    "pt": "Glob: <cmd>{{pattern}}</cmd>",
+    "es": "Glob: <cmd>{{pattern}}</cmd>",
+    "ar": "Glob: <cmd>{{pattern}}</cmd>",
+    "fr": "Glob: <cmd>{{pattern}}</cmd>",
+    "tr": "Glob: <cmd>{{pattern}}</cmd>",
+    "de": "Glob: <cmd>{{pattern}}</cmd>",
+    "uk": "Glob: <cmd>{{pattern}}</cmd>"
+  },
+  "OBSERVATION_MESSAGE$GREP": {
+    "en": "Grep: <cmd>{{pattern}}</cmd>",
+    "ja": "Grep: <cmd>{{pattern}}</cmd>",
+    "zh-CN": "Grep: <cmd>{{pattern}}</cmd>",
+    "zh-TW": "Grep: <cmd>{{pattern}}</cmd>",
+    "ko-KR": "Grep: <cmd>{{pattern}}</cmd>",
+    "no": "Grep: <cmd>{{pattern}}</cmd>",
+    "it": "Grep: <cmd>{{pattern}}</cmd>",
+    "pt": "Grep: <cmd>{{pattern}}</cmd>",
+    "es": "Grep: <cmd>{{pattern}}</cmd>",
+    "ar": "Grep: <cmd>{{pattern}}</cmd>",
+    "fr": "Grep: <cmd>{{pattern}}</cmd>",
+    "tr": "Grep: <cmd>{{pattern}}</cmd>",
+    "de": "Grep: <cmd>{{pattern}}</cmd>",
+    "uk": "Grep: <cmd>{{pattern}}</cmd>"
+  },
   "OBSERVATION_MESSAGE$TASK_TRACKING_PLAN": {
     "en": "Agent updated the plan",
     "zh-CN": "代理更新了计划",
