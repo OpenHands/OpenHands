@@ -162,7 +162,7 @@ See the monthly OpenHands roadmap [here](https://github.com/orgs/OpenHands/proje
 
 ## 📜 License
 
-Distributed under the MIT License, with the exception of the `enterprise/` folder. See [`LICENSE`](./LICENSE) for more information.
+Distributed under the MIT License. See [`LICENSE`](./LICENSE) for more information.
 
 ## 🙏 Acknowledgements
 

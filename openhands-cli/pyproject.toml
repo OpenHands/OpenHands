@@ -29,7 +29,7 @@ scripts = { openhands = "openhands_cli.simple_main:main" }
 [dependency-groups]
 # Hatchling wheel target: include the package directory
 dev = [
-  "black>=23",
+  "black>=26.3.1",
   "flake8>=6",
   "gevent>=24.2.1,<26",
   "isort>=5",
@@ -98,6 +98,17 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
+
+[tool.uv]
+constraint-dependencies = [
+  "aiohttp>=3.13.3",
+  "fastmcp>=2.13.0",
+  "mcp>=1.23.0",
+  "pyasn1>=0.6.2",
+  "python-multipart>=0.0.22",
+  "starlette>=0.49.1",
+  "urllib3>=2.6.0",
+]
 
 # UNCOMMENT TO USE EXACT COMMIT FROM AGENT-SDK
 
