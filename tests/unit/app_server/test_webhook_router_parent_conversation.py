@@ -5,7 +5,7 @@ conversations are updated via the on_conversation_update webhook endpoint.
 """
 
 from typing import AsyncGenerator
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -118,7 +118,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Saved conversation retains the parent_conversation_id
         """
-        from unittest.mock import patch
 
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
@@ -176,7 +175,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Saved conversation has parent_conversation_id as None
         """
-        from unittest.mock import patch
 
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
@@ -230,7 +228,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - New conversation has parent_conversation_id as None
         """
-        from unittest.mock import patch
 
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
@@ -283,7 +280,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - All metadata including parent_conversation_id is preserved
         """
-        from unittest.mock import patch
 
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
@@ -353,7 +349,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Parent_conversation_id remains unchanged after all updates
         """
-        from unittest.mock import patch
 
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
@@ -421,7 +416,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Function returns early, no updates are made
         """
-        from unittest.mock import patch
 
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
@@ -486,7 +480,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Parent_conversation_id is preserved and title is generated
         """
-        from unittest.mock import patch
 
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
