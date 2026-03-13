@@ -242,6 +242,10 @@ class UserStore:
                 if hasattr(org, key):
                     setattr(org, key, value)
 
+            # Apply DEFAULT_V1_ENABLED for migrated orgs if v1_enabled was not set
+            if org.v1_enabled is None:
+                org.v1_enabled = DEFAULT_V1_ENABLED
+
             user_kwargs = UserStore.get_kwargs_from_user_settings(
                 decrypted_user_settings
             )
