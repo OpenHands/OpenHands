@@ -7,15 +7,23 @@ import { getActiveOrganizationUser } from "./permission-checks";
 import { PermissionKey, rolePermissions } from "./permissions";
 
 /**
- * Gets the appropriate fallback path for permission denied scenarios.
- * Respects feature flags to avoid redirecting to hidden pages.
+ * Helper to get config, using cache or fetching if needed.
  */
-async function getPermissionDeniedFallback(): Promise<string> {
+async function getConfig(): Promise<WebClientConfig | undefined> {
   let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
   if (!config) {
     config = await OptionService.getConfig();
     queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
   }
+  return config;
+}
+
+/**
+ * Gets the appropriate fallback path for permission denied scenarios.
+ * Respects feature flags to avoid redirecting to hidden pages.
+ */
+async function getPermissionDeniedFallback(): Promise<string> {
+  const config = await getConfig();
 
   const isSaas = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;
@@ -29,6 +37,8 @@ async function getPermissionDeniedFallback(): Promise<string> {
  * Creates a clientLoader guard that checks if the user has the required permission.
  * Redirects to the first available settings page if permission is denied.
  *
+ * In OSS mode, permission checks are bypassed since there are no user roles.
+ *
  * @param requiredPermission - The permission key to check
  * @param customRedirectPath - Optional custom path to redirect to (will still respect feature flags if not provided)
  * @returns A clientLoader function that can be exported from route files
@@ -36,6 +46,14 @@ async function getPermissionDeniedFallback(): Promise<string> {
 export const createPermissionGuard =
   (requiredPermission: PermissionKey, customRedirectPath?: string) =>
   async ({ request }: { request: Request }) => {
+    // Get config to check app_mode
+    const config = await getConfig();
+
+    // In OSS mode, skip permission checks - all settings are accessible
+    if (config?.app_mode === "oss") {
+      return null;
+    }
+
     const user = await getActiveOrganizationUser();
 
     const url = new URL(request.url);

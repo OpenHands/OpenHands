@@ -70,6 +70,11 @@ vi.mock("react-router", async (importActual) => ({
   }),
 }));
 
+// Mock useIsAuthed to return authenticated state
+vi.mock("#/hooks/query/use-is-authed", () => ({
+  useIsAuthed: () => ({ data: true }),
+}));
+
 const createMockUser = (
   overrides: Partial<OrganizationMember> = {},
 ): OrganizationMember => ({
@@ -575,11 +580,33 @@ describe("UserContextMenu", () => {
   });
 
   test("the user can change orgs", async () => {
+    // Mock SaaS mode and organizations for this test
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+          hide_users_page: false,
+          hide_billing_page: false,
+          hide_integrations_page: false,
+        },
+      }),
+    );
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+      items: INITIAL_MOCK_ORGS,
+      currentOrgId: INITIAL_MOCK_ORGS[0].id,
+    });
+
     const user = userEvent.setup();
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "member", onClose: onCloseMock, onOpenInviteModal: vi.fn });
 
-    const orgSelector = screen.getByTestId("org-selector");
+    // Wait for org selector to appear (it may take a moment for config to load)
+    const orgSelector = await screen.findByTestId("org-selector");
     expect(orgSelector).toBeInTheDocument();
 
     // Wait for organizations to load (indicated by org name appearing in the dropdown)

@@ -75,8 +75,10 @@ function LlmSettingsScreen() {
   const { data: me } = useMe();
   const { hasPermission } = usePermission(me?.role ?? "member");
 
-  // Determine if user is read-only (members can only view, owners and admins can edit)
-  const isReadOnly = !hasPermission("edit_llm_settings");
+  // In OSS mode, user has full access (no permission restrictions)
+  // In SaaS mode, check role-based permissions (members can only view, owners and admins can edit)
+  const isOssMode = config?.app_mode === "oss";
+  const isReadOnly = isOssMode ? false : !hasPermission("edit_llm_settings");
 
   const [view, setView] = React.useState<"basic" | "advanced">("basic");
 

@@ -21,6 +21,11 @@ vi.mock("#/hooks/query/use-is-authed", () => ({
   useIsAuthed: () => ({ data: true }),
 }));
 
+// Mock useConfig to return SaaS mode (organizations are a SaaS-only feature)
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => ({ data: { app_mode: "saas" } }),
+}));
+
 vi.mock("react-i18next", async () => {
   const actual =
     await vi.importActual<typeof import("react-i18next")>("react-i18next");

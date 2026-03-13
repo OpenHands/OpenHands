@@ -11,6 +11,16 @@ vi.mock("#/api/organization-service/organization-service.api", () => ({
   },
 }));
 
+// Mock useIsAuthed to return authenticated
+vi.mock("#/hooks/query/use-is-authed", () => ({
+  useIsAuthed: () => ({ data: true }),
+}));
+
+// Mock useConfig to return SaaS mode (organizations are a SaaS-only feature)
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => ({ data: { app_mode: "saas" } }),
+}));
+
 const mockGetOrganizations = vi.mocked(organizationService.getOrganizations);
 
 function createMinimalOrg(
