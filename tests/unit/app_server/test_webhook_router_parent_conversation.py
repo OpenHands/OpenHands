@@ -19,6 +19,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
+from openhands.app_server.event_callback.webhook_router import on_conversation_update
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
@@ -119,10 +120,6 @@ class TestOnConversationUpdateParentConversationId:
             - Saved conversation retains the parent_conversation_id
         """
 
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
-
         # Arrange
         parent_id = uuid4()
         conversation_id = mock_conversation_info.id
@@ -176,10 +173,6 @@ class TestOnConversationUpdateParentConversationId:
             - Saved conversation has parent_conversation_id as None
         """
 
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
-
         # Arrange
         conversation_id = mock_conversation_info.id
 
@@ -229,10 +222,6 @@ class TestOnConversationUpdateParentConversationId:
             - New conversation has parent_conversation_id as None
         """
 
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
-
         # Arrange
         conversation_id = mock_conversation_info.id
 
@@ -280,10 +269,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - All metadata including parent_conversation_id is preserved
         """
-
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -350,10 +335,6 @@ class TestOnConversationUpdateParentConversationId:
             - Parent_conversation_id remains unchanged after all updates
         """
 
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
-
         # Arrange
         parent_id = uuid4()
         conversation_id = mock_conversation_info.id
@@ -417,10 +398,6 @@ class TestOnConversationUpdateParentConversationId:
             - Function returns early, no updates are made
         """
 
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
-
         # Arrange
         parent_id = uuid4()
         conversation_id = mock_conversation_info.id
@@ -480,10 +457,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Parent_conversation_id is preserved and title is generated
         """
-
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
