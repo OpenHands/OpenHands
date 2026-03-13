@@ -22,7 +22,7 @@ export function ContextMenuCTA() {
       testId="context-menu-cta"
       theme="dark"
       className={cn(
-        "w-[286px] min-h-[200px] h-full rounded-[6px]",
+        "w-[286px] min-h-[200px] rounded-[6px]",
         "flex-col justify-end",
         "cta-card-gradient",
       )}
