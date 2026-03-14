@@ -56,6 +56,7 @@ from openhands.app_server.web_client.web_client_config_injector import (
 )
 from openhands.sdk.utils.models import OpenHandsModel
 from openhands.server.types import AppMode
+from openhands.utils.environment import StorageProvider, get_storage_provider
 
 
 def get_default_persistence_dir() -> Path:
@@ -140,6 +141,9 @@ def config_from_env() -> AppServerConfig:
     from openhands.app_server.app_conversation.sql_app_conversation_start_task_service import (  # noqa: E501
         SQLAppConversationStartTaskServiceInjector,
     )
+    from openhands.app_server.event.aws_event_service import (
+        AwsEventServiceInjector,
+    )
     from openhands.app_server.event.filesystem_event_service import (
         FilesystemEventServiceInjector,
     )
@@ -174,8 +178,18 @@ def config_from_env() -> AppServerConfig:
     config: AppServerConfig = from_env(AppServerConfig, 'OH')  # type: ignore
 
     if config.event is None:
-        if os.environ.get('FILE_STORE') == 'google_cloud':
-            # Legacy V0 google cloud storage configuration
+        provider = get_storage_provider()
+
+        if provider == StorageProvider.AWS:
+            # AWS S3 storage configuration
+            bucket_name = os.environ.get('FILE_STORE_PATH')
+            if not bucket_name:
+                raise ValueError(
+                    'FILE_STORE_PATH environment variable is required for S3 storage'
+                )
+            config.event = AwsEventServiceInjector(bucket_name=bucket_name)
+        elif provider == StorageProvider.GCP:
+            # Google Cloud storage configuration
             config.event = GoogleCloudEventServiceInjector(
                 bucket_name=os.environ.get('FILE_STORE_PATH')
             )

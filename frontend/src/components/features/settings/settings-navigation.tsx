@@ -5,7 +5,9 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
+import { OrgSelector } from "../org/org-selector";
 import { SettingsNavItem } from "#/constants/settings-nav";
+import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
@@ -19,6 +21,7 @@ export function SettingsNavigation({
   navigationItems,
 }: SettingsNavigationProps) {
   const { t } = useTranslation();
+  const shouldHideSelector = useShouldHideOrgSelector();
 
   return (
     <>
@@ -50,12 +53,14 @@ export function SettingsNavigation({
           <button
             type="button"
             onClick={onCloseMobileMenu}
-            className="md:hidden p-0.5 hover:bg-[#454545] rounded-md transition-colors cursor-pointer"
+            className="md:hidden p-0.5 hover:bg-tertiary rounded-md transition-colors cursor-pointer"
             aria-label="Close navigation menu"
           >
             <CloseIcon width={32} height={32} />
           </button>
         </div>
+
+        {!shouldHideSelector && <OrgSelector />}
 
         <div className="flex flex-col gap-2">
           {navigationItems.map(({ to, icon, text }) => (
@@ -66,14 +71,21 @@ export function SettingsNavigation({
               onClick={onCloseMobileMenu}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 p-1 sm:px-[14px] sm:py-2 rounded-md transition-colors",
-                  isActive ? "bg-[#454545]" : "hover:bg-[#454545]",
+                  "group flex items-center gap-3 p-1 sm:px-3.5 sm:py-2 rounded-md transition-all duration-200",
+                  isActive ? "bg-tertiary" : "hover:bg-tertiary",
                 )
               }
             >
-              {icon}
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
+              <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center">
+                {icon}
+              </span>
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <Typography.Text
+                  className={cn(
+                    "block truncate whitespace-nowrap text-modal-muted transition-all duration-300",
+                    "group-hover:translate-x-1 group-hover:text-white",
+                  )}
+                >
                   {t(text as I18nKey)}
                 </Typography.Text>
               </div>
