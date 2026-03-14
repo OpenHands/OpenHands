@@ -128,7 +128,12 @@ RUN \
     apt-get update && \
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    # Upgrade docker-compose to latest version to fix CVE-2025-68121 (Go crypto/tls vulnerability)
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; elif [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; fi && \
+    curl -SL "https://github.com/docker/compose/releases/download/v5.1.0/docker-compose-linux-${ARCH}" -o /usr/libexec/docker/cli-plugins/docker-compose && \
+    chmod +x /usr/libexec/docker/cli-plugins/docker-compose
 
 # Configure Docker daemon with MTU 1450 to prevent packet fragmentation issues
 RUN mkdir -p /etc/docker && \
