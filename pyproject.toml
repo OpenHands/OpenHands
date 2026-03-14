@@ -74,7 +74,7 @@ dependencies = [
   "psutil",
   "pybase62>=1",
   "pygithub>=2.5",
-  "pyjwt>=2.12.0",
+  "pyjwt>=2.12",
   "pylatexenc",
   "pypdf>=6.7.2",
   "python-docx",
