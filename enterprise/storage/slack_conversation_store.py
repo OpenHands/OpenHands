@@ -28,7 +28,7 @@ class SlackConversationStore:
         self, slack_converstion: SlackConversation
     ) -> None:
         async with a_session_maker() as session:
-            session.merge(slack_converstion)
+            await session.merge(slack_converstion)
             await session.commit()
 
     @classmethod
