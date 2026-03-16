@@ -22,7 +22,6 @@ export function EnterpriseBanner() {
 
   const handleLearnMore = () => {
     posthog?.capture("saas_selfhosted_inquiry");
-    window.open("https://openhands.dev/enterprise", "_blank", "noopener");
   };
 
   return (
@@ -55,14 +54,16 @@ export function EnterpriseBanner() {
       </ul>
 
       {/* Learn More Button */}
-      <button
-        type="button"
+      <a
+        href="https://openhands.dev/enterprise"
+        target="_blank"
+        rel="noopener noreferrer"
         onClick={handleLearnMore}
         aria-label={t(I18nKey.ENTERPRISE$LEARN_MORE_ARIA)}
-        className="w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+        className="block w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors text-center cursor-pointer"
       >
         {t(I18nKey.ENTERPRISE$LEARN_MORE)}
-      </button>
+      </a>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { EnterpriseBanner } from "#/components/features/device-verify/enterprise-banner";
@@ -22,13 +22,7 @@ vi.mock("#/utils/feature-flags", () => ({
 describe("EnterpriseBanner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal("open", vi.fn());
     PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
   });
 
   describe("Feature Flag", () => {
@@ -84,68 +78,41 @@ describe("EnterpriseBanner", () => {
       ).toBeInTheDocument();
     });
 
-    it("should render the learn more button", () => {
+    it("should render the learn more link", () => {
       renderWithProviders(<EnterpriseBanner />);
 
-      const button = screen.getByRole("button", {
+      const link = screen.getByRole("link", {
         name: "ENTERPRISE$LEARN_MORE_ARIA",
       });
-      expect(button).toBeInTheDocument();
-      expect(button).toHaveTextContent("ENTERPRISE$LEARN_MORE");
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveTextContent("ENTERPRISE$LEARN_MORE");
+      expect(link).toHaveAttribute("href", "https://openhands.dev/enterprise");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
     });
   });
 
-  describe("Learn More Button Interaction", () => {
-    it("should capture PostHog event when learn more button is clicked", async () => {
+  describe("Learn More Link Interaction", () => {
+    it("should capture PostHog event when learn more link is clicked", async () => {
       const user = userEvent.setup();
       renderWithProviders(<EnterpriseBanner />);
 
-      const button = screen.getByRole("button", {
+      const link = screen.getByRole("link", {
         name: "ENTERPRISE$LEARN_MORE_ARIA",
       });
-      await user.click(button);
+      await user.click(link);
 
       expect(mockCapture).toHaveBeenCalledWith("saas_selfhosted_inquiry");
     });
 
-    it("should open enterprise page in new tab when learn more button is clicked", async () => {
-      const user = userEvent.setup();
+    it("should have correct href attribute for opening in new tab", () => {
       renderWithProviders(<EnterpriseBanner />);
 
-      const button = screen.getByRole("button", {
+      const link = screen.getByRole("link", {
         name: "ENTERPRISE$LEARN_MORE_ARIA",
       });
-      await user.click(button);
-
-      expect(window.open).toHaveBeenCalledWith(
-        "https://openhands.dev/enterprise",
-        "_blank",
-        "noopener",
-      );
-    });
-
-    it("should capture PostHog event before opening the URL", async () => {
-      const user = userEvent.setup();
-      const callOrder: string[] = [];
-
-      mockCapture.mockImplementation(() => {
-        callOrder.push("capture");
-      });
-      vi.stubGlobal(
-        "open",
-        vi.fn(() => {
-          callOrder.push("open");
-        }),
-      );
-
-      renderWithProviders(<EnterpriseBanner />);
-
-      const button = screen.getByRole("button", {
-        name: "ENTERPRISE$LEARN_MORE_ARIA",
-      });
-      await user.click(button);
-
-      expect(callOrder).toEqual(["capture", "open"]);
+      expect(link).toHaveAttribute("href", "https://openhands.dev/enterprise");
+      expect(link).toHaveAttribute("target", "_blank");
     });
   });
 });
