@@ -13,32 +13,23 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.llm import bedrock
 
 # ---------------------------------------------------------------------------
-# Single source of truth for OpenHands-verified models.
+# The ``openhands-sdk`` package is the **single source of truth** for which
+# models are verified and how bare LiteLLM names map to providers.
 #
-# Self-hosted mode uses this list directly.  SaaS mode loads models from the
-# database (via ``get_openhands_models``), but the *shape* is the same:
-# ``["openhands/<model-name>", ...]``.
+# Self-hosted mode builds the ``openhands/…`` model list from the SDK's
+# ``VERIFIED_OPENHANDS_MODELS``.  SaaS mode overrides it with the database
+# (via ``get_openhands_models``).
 # ---------------------------------------------------------------------------
-OPENHANDS_MODELS = [
-    'openhands/claude-opus-4-6',
-    'openhands/claude-opus-4-5-20251101',
-    'openhands/claude-sonnet-4-6',
-    'openhands/claude-sonnet-4-5-20250929',
-    'openhands/gpt-5.2-codex',
-    'openhands/gpt-5.2',
-    'openhands/minimax-m2.5',
-    'openhands/gemini-3-pro-preview',
-    'openhands/gemini-3.1-pro-preview',
-    'openhands/gemini-3-flash-preview',
-    'openhands/deepseek-chat',
-    'openhands/devstral-medium-2512',
-    'openhands/kimi-k2-0711-preview',
-    'openhands/kimi-k2.5',
-    'openhands/qwen3-coder-480b',
-    'openhands/qwen3-coder-next',
-    'openhands/glm-4.7',
-    'openhands/glm-5',
-]
+from openhands.sdk.llm.utils.verified_models import (  # noqa: E402
+    VERIFIED_ANTHROPIC_MODELS as _SDK_ANTHROPIC,
+    VERIFIED_MISTRAL_MODELS as _SDK_MISTRAL,
+    VERIFIED_MODELS as _SDK_VERIFIED_MODELS,
+    VERIFIED_OPENHANDS_MODELS as _SDK_OPENHANDS,
+    VERIFIED_OPENAI_MODELS as _SDK_OPENAI,
+)
+
+# Build the ``openhands/…`` model list from the SDK.
+OPENHANDS_MODELS: list[str] = [f'openhands/{m}' for m in _SDK_OPENHANDS]
 
 CLARIFAI_MODELS = [
     'clarifai/openai.chat-completion.gpt-oss-120b',
@@ -57,48 +48,17 @@ CLARIFAI_MODELS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Provider-assignment tables.
+# Provider-assignment tables — derived from the SDK.
 #
 # LiteLLM returns some well-known models as *bare* names (e.g. ``gpt-5.2``
-# instead of ``openai/gpt-5.2``).  The backend uses these tables to assign
+# instead of ``openai/gpt-5.2``).  The backend uses these sets to assign
 # the canonical provider prefix *before* sending the list to the frontend.
-# This is the *single* place where the mapping is defined — the frontend no
-# longer carries its own copy.
 # ---------------------------------------------------------------------------
-VERIFIED_PROVIDERS: list[str] = [
-    'openhands',
-    'anthropic',
-    'openai',
-    'mistral',
-    'lemonade',
-    'clarifai',
-]
+VERIFIED_PROVIDERS: list[str] = list(_SDK_VERIFIED_MODELS.keys())
 
-# Bare model names that LiteLLM returns without the ``openai/`` prefix.
-_BARE_OPENAI_MODELS: set[str] = {
-    'gpt-5.2',
-    'gpt-5.2-codex',
-    'gpt-4o',
-    'gpt-4o-mini',
-}
-
-# Bare model names that LiteLLM returns without the ``anthropic/`` prefix.
-_BARE_ANTHROPIC_MODELS: set[str] = {
-    'claude-opus-4-6',
-    'claude-opus-4-5-20251101',
-    'claude-sonnet-4-5-20250929',
-    'claude-3-5-sonnet-20240620',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-7-sonnet-20250219',
-    'claude-sonnet-4-20250514',
-    'claude-opus-4-20250514',
-    'claude-opus-4-1-20250805',
-}
-
-# Bare model names that LiteLLM returns without the ``mistral/`` prefix.
-_BARE_MISTRAL_MODELS: set[str] = {
-    'devstral-medium-2512',
-}
+_BARE_OPENAI_MODELS: set[str] = set(_SDK_OPENAI)
+_BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
+_BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
 DEFAULT_OPENHANDS_MODEL = 'openhands/claude-opus-4-5-20251101'
 

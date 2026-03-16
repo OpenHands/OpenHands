@@ -48,7 +48,7 @@ def read_llm_models() -> dict:
             'openai/gpt-4-0613',
         ],
         'verified_models': [],
-        'verified_providers': ['openhands', 'anthropic', 'openai'],
+        'verified_providers': ['openhands', 'anthropic', 'openai', 'mistral', 'gemini', 'deepseek', 'moonshot', 'minimax'],
         'default_model': 'openhands/claude-opus-4-5-20251101',
     }
 
