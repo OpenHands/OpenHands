@@ -40,6 +40,7 @@ import type {
   V1SendMessageRequest,
 } from "#/api/conversation-service/v1-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
+import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
 import { isBudgetOrCreditError, trackError } from "#/utils/error-handler";
 import { useTracking } from "#/hooks/use-tracking";
@@ -56,9 +57,13 @@ export type V1_WebSocketConnectionState =
   | "CLOSED"
   | "CLOSING";
 
+interface SendMessageResult {
+  queued: boolean; // true if message was queued for later delivery, false if sent immediately
+}
+
 interface ConversationWebSocketContextType {
   connectionState: V1_WebSocketConnectionState;
-  sendMessage: (message: V1SendMessageRequest) => Promise<void>;
+  sendMessage: (message: V1SendMessageRequest) => Promise<SendMessageResult>;
   isLoadingHistory: boolean;
 }
 
@@ -129,15 +134,6 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
-
-  // Pending messages queue for when WebSocket is not connected
-  // This mirrors V0's pendingEventsRef pattern
-  // Each entry stores the message and the target mode (code/plan) at queue time
-  // IMPORTANT: This queue is cleared when switching conversations to prevent
-  // messages from being sent to the wrong conversation
-  const pendingMessagesRef = useRef<
-    { message: V1SendMessageRequest; targetMode: "code" | "plan" }[]
-  >([]);
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -316,8 +312,6 @@ export function ConversationWebSocketProvider({
     receivedEventCountRefMain.current = 0;
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
-    // Clear pending messages to prevent sending messages to wrong conversation
-    pendingMessagesRef.current = [];
   }, [conversationId]);
 
   const { data: preloadedEvents } = useConversationHistory(conversationId);
@@ -830,65 +824,53 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
-  // Flush pending messages for a specific mode when its socket is ready
-  const flushPendingMessages = useCallback(
-    (targetMode: "code" | "plan", socket: WebSocket) => {
-      if (socket.readyState !== WebSocket.OPEN) {
-        return;
-      }
-
-      // Filter and send messages for this mode, keep others in queue
-      const remaining: typeof pendingMessagesRef.current = [];
-      for (const entry of pendingMessagesRef.current) {
-        if (entry.targetMode === targetMode) {
-          try {
-            socket.send(JSON.stringify(entry.message));
-          } catch {
-            // Re-queue on failure
-            remaining.push(entry);
-          }
-        } else {
-          // Keep messages for other mode
-          remaining.push(entry);
-        }
-      }
-      pendingMessagesRef.current = remaining;
-    },
-    [],
-  );
-
   // V1 send message function via WebSocket
+  // Falls back to REST API queue when WebSocket is not connected
   const sendMessage = useCallback(
-    async (message: V1SendMessageRequest) => {
+    async (message: V1SendMessageRequest): Promise<SendMessageResult> => {
       const currentMode = useConversationStore.getState().conversationMode;
-      const targetMode = currentMode === "plan" ? "plan" : "code";
       const currentSocket =
         currentMode === "plan" ? planningAgentSocket : mainSocket;
 
       if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
-        // Queue message instead of throwing error
-        // eslint-disable-next-line no-console
-        console.log("WebSocket not connected, queuing message...");
-        pendingMessagesRef.current.push({ message, targetMode });
-        return;
-      }
+        // WebSocket not connected - queue message via REST API
+        // Message will be delivered automatically when conversation becomes ready
+        if (!conversationId) {
+          const error = new Error("No conversation ID available");
+          setErrorMessage(error.message);
+          throw error;
+        }
 
-      // Flush any pending messages for this mode first
-      flushPendingMessages(targetMode, currentSocket);
+        try {
+          await PendingMessageService.queueMessage(conversationId, {
+            role: "user",
+            content: message.content,
+          });
+          // Message queued successfully - it will be delivered when ready
+          // Return queued: true so caller knows not to show optimistic UI
+          return { queued: true };
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to queue message for delivery";
+          setErrorMessage(errorMessage);
+          throw error;
+        }
+      }
 
       try {
         // Send message through WebSocket as JSON
         currentSocket.send(JSON.stringify(message));
+        return { queued: false };
       } catch (error) {
-        // Queue on send failure
-        pendingMessagesRef.current.push({ message, targetMode });
         const errorMessage =
           error instanceof Error ? error.message : "Failed to send message";
         setErrorMessage(errorMessage);
         throw error;
       }
     },
-    [mainSocket, planningAgentSocket, setErrorMessage, flushPendingMessages],
+    [mainSocket, planningAgentSocket, setErrorMessage, conversationId],
   );
 
   // Track main socket state changes
@@ -948,20 +930,6 @@ export function ConversationWebSocketProvider({
       updateState();
     }
   }, [planningAgentSocket, planningAgentWsUrl]);
-
-  // Flush pending messages when main socket becomes OPEN
-  useEffect(() => {
-    if (mainConnectionState === "OPEN" && mainSocket) {
-      flushPendingMessages("code", mainSocket);
-    }
-  }, [mainConnectionState, mainSocket, flushPendingMessages]);
-
-  // Flush pending messages when planning socket becomes OPEN
-  useEffect(() => {
-    if (planningConnectionState === "OPEN" && planningAgentSocket) {
-      flushPendingMessages("plan", planningAgentSocket);
-    }
-  }, [planningConnectionState, planningAgentSocket, flushPendingMessages]);
 
   const contextValue = useMemo(
     () => ({ connectionState, sendMessage, isLoadingHistory }),

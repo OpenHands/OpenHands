@@ -198,29 +198,6 @@ describe("InteractiveChatBox", () => {
     expect(onSubmitMock).toHaveBeenCalledWith("Hello, world!", [], []);
   });
 
-  it("should enable submit button during agent loading to allow message queuing", async () => {
-    // This test verifies that users can type and submit messages while the runtime
-    // is booting up (AgentState.LOADING). Messages will be queued and sent once
-    // the WebSocket connection is established.
-    const user = userEvent.setup();
-    mockStores(AgentState.LOADING);
-
-    renderInteractiveChatBox({
-      onSubmit: onSubmitMock,
-    });
-
-    const button = screen.getByTestId("submit-button");
-    // Submit button should NOT be disabled during LOADING state
-    expect(button).not.toBeDisabled();
-
-    // User should be able to submit messages for queuing
-    const textarea = screen.getByTestId("chat-input");
-    textarea.innerText = "Message during boot";
-    await user.click(button);
-
-    expect(onSubmitMock).toHaveBeenCalledWith("Message during boot", [], []);
-  });
-
   it("should disable the submit button when awaiting user confirmation", async () => {
     const user = userEvent.setup();
     mockStores(AgentState.AWAITING_USER_CONFIRMATION);

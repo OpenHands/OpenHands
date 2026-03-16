@@ -142,9 +142,8 @@ export function InteractiveChatBox({ onSubmit }: InteractiveChatBoxProps) {
     handleSubmit(suggestion);
   };
 
-  // Note: AgentState.LOADING is intentionally NOT included here
-  // This allows users to type and submit messages during runtime boot
-  // Messages will be queued and sent once the WebSocket connection is established
+  // Allow users to submit messages during LOADING state - they will be
+  // queued server-side and delivered when the conversation becomes ready
   const isDisabled =
     curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
     isTaskPolling(subConversationTaskStatus);

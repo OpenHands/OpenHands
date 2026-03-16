@@ -59,6 +59,9 @@ from openhands.app_server.event_callback.event_callback_service import (
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
 )
+from openhands.app_server.pending_messages.pending_message_service import (
+    PendingMessageService,
+)
 from openhands.app_server.sandbox.docker_sandbox_service import DockerSandboxService
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -126,6 +129,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     sandbox_service: SandboxService
     sandbox_spec_service: SandboxSpecService
     jwt_service: JwtService
+    pending_message_service: PendingMessageService
     sandbox_startup_timeout: int
     sandbox_startup_poll_frequency: int
     httpx_client: httpx.AsyncClient
@@ -356,6 +360,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             task.status = AppConversationStartTaskStatus.READY
             task.app_conversation_id = info.id
             yield task
+
+            # Process any pending messages queued while waiting for conversation
+            if sandbox.session_api_key:
+                await self._process_pending_messages(
+                    task_id=task.id,
+                    conversation_id=info.id,
+                    agent_server_url=agent_server_url,
+                    session_api_key=sandbox.session_api_key,
+                )
 
         except Exception as exc:
             _logger.exception('Error starting conversation', stack_info=True)
@@ -1272,6 +1285,107 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             plugins=plugins,
         )
 
+    async def _process_pending_messages(
+        self,
+        task_id: UUID,
+        conversation_id: UUID,
+        agent_server_url: str,
+        session_api_key: str,
+    ) -> None:
+        """Process pending messages queued before conversation was ready.
+
+        Messages are delivered concurrently to the agent server. After processing,
+        all messages are deleted from the database regardless of success or failure.
+
+        Args:
+            task_id: The start task ID (may have been used as conversation_id initially)
+            conversation_id: The real conversation ID
+            agent_server_url: URL of the agent server
+            session_api_key: API key for authenticating with agent server
+        """
+        # Convert UUIDs to strings for the pending message service
+        # The frontend uses task-{uuid.hex} format (no hyphens), matching OpenHandsUUID serialization
+        task_id_str = f'task-{task_id.hex}'
+        # conversation_id uses standard format (with hyphens) for agent server API compatibility
+        conversation_id_str = str(conversation_id)
+
+        _logger.info(f'task_id={task_id_str} conversation_id={conversation_id_str}')
+
+        # First, update any messages that were queued with the task_id
+        updated_count = await self.pending_message_service.update_conversation_id(
+            old_conversation_id=task_id_str,
+            new_conversation_id=conversation_id_str,
+        )
+        _logger.info(f'updated_count={updated_count} ')
+        if updated_count > 0:
+            _logger.info(
+                f'Updated {updated_count} pending messages from task_id={task_id_str} '
+                f'to conversation_id={conversation_id_str}'
+            )
+
+        # Get all pending messages for this conversation
+        pending_messages = await self.pending_message_service.get_pending_messages(
+            conversation_id_str
+        )
+
+        if not pending_messages:
+            return
+
+        _logger.info(
+            f'Processing {len(pending_messages)} pending messages for '
+            f'conversation {conversation_id_str}'
+        )
+
+        async def deliver_message(msg):
+            """Deliver a single message, return (id, success, error)."""
+            try:
+                # Use the events endpoint which handles message sending
+                response = await self.httpx_client.post(
+                    f'{agent_server_url}/api/conversations/{conversation_id_str}/events',
+                    json={
+                        'role': msg.role,
+                        'content': msg.content,
+                        'run': True,
+                    },
+                    headers={'X-Session-API-Key': session_api_key},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                return (msg.id, True, None)
+            except Exception as e:
+                _logger.warning(f'Failed to deliver pending message {msg.id}: {e}')
+                return (msg.id, False, str(e))
+
+        # Process all messages concurrently
+        results = await asyncio.gather(
+            *[deliver_message(msg) for msg in pending_messages],
+            return_exceptions=True,
+        )
+
+        # Log any errors (but don't fail)
+        for result in results:
+            if isinstance(result, BaseException):
+                _logger.error(f'Unexpected error delivering pending message: {result}')
+            else:
+                msg_id, success, error = result  # type: ignore[misc]
+                if success:
+                    _logger.debug(f'Delivered pending message {msg_id}')
+                else:
+                    _logger.warning(
+                        f'Failed to deliver pending message {msg_id}: {error}'
+                    )
+
+        # Delete all pending messages after processing (regardless of success/failure)
+        deleted_count = (
+            await self.pending_message_service.delete_messages_for_conversation(
+                conversation_id_str
+            )
+        )
+        _logger.info(
+            f'Finished processing pending messages for conversation {conversation_id_str}. '
+            f'Deleted {deleted_count} messages.'
+        )
+
     async def update_agent_server_conversation_title(
         self,
         conversation_id: str,
@@ -1640,6 +1754,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             get_global_config,
             get_httpx_client,
             get_jwt_service,
+            get_pending_message_service,
             get_sandbox_service,
             get_sandbox_spec_service,
             get_user_context,
@@ -1659,6 +1774,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             get_event_service(state, request) as event_service,
             get_jwt_service(state, request) as jwt_service,
             get_httpx_client(state, request) as httpx_client,
+            get_pending_message_service(state, request) as pending_message_service,
         ):
             access_token_hard_timeout = None
             if self.access_token_hard_timeout:
@@ -1703,6 +1819,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 event_callback_service=event_callback_service,
                 event_service=event_service,
                 jwt_service=jwt_service,
+                pending_message_service=pending_message_service,
                 sandbox_startup_timeout=self.sandbox_startup_timeout,
                 sandbox_startup_poll_frequency=self.sandbox_startup_poll_frequency,
                 httpx_client=httpx_client,
