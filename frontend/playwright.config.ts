@@ -75,7 +75,7 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: "npm run dev:mock -- --port 3001",
+    command: "npm run dev:mock:saas -- --port 3001",
     url: "http://localhost:3001/",
     reuseExistingServer: !process.env.CI,
   },

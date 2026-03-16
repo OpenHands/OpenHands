@@ -85,7 +85,10 @@ export function IntegrationRow({
       : t(I18nKey.PROJECT_MANAGEMENT$CONFIGURE_BUTTON_LABEL);
 
   return (
-    <div className="flex items-center justify-between" data-testid={dataTestId}>
+    <div
+      className="flex items-center justify-between flex-wrap gap-2"
+      data-testid={dataTestId}
+    >
       <span className="font-medium">{platformName}</span>
       <div className="flex items-center gap-6">
         <ConfigureButton

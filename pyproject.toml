@@ -57,11 +57,12 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.3",
-  "openhands-agent-server==1.12",
-  "openhands-sdk==1.12",
-  "openhands-tools==1.12",
+  "openhands-agent-server==1.14",
+  "openhands-sdk==1.14",
+  "openhands-tools==1.14",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
+  "orjson>=3.11.6",
   "pathspec>=0.12.1",
   "pexpect",
   "pg8000>=1.31.5",
@@ -73,7 +74,7 @@ dependencies = [
   "psutil",
   "pybase62>=1",
   "pygithub>=2.5",
-  "pyjwt>=2.9",
+  "pyjwt>=2.12",
   "pylatexenc",
   "pypdf>=6.7.2",
   "python-docx",
@@ -144,7 +145,7 @@ runtime = [
 
 [tool.poetry]
 name = "openhands-ai"
-version = "1.4.0"
+version = "1.5.0"
 description = "OpenHands: Code Less, Make More"
 authors = [ "OpenHands" ]
 license = "MIT"
@@ -163,6 +164,7 @@ include = [
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
 authlib = ">=1.6.7"                                # Pinned to fix CVE-2026-28802
+orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
 litellm = ">=1.74.3, !=1.64.4, !=1.67.*"           # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
 openai = "2.8.0"                                   # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
 aiohttp = ">=3.13.3"                               # Pin to avoid CVE-2025-69223 (vulnerable versions < 3.13.3)
@@ -188,7 +190,7 @@ python-multipart = ">=0.0.22"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = "^0.12.1"
-pyjwt = "^2.9.0"
+pyjwt = "^2.12.0"
 dirhash = "*"
 tornado = ">=6.5"
 python-dotenv = "*"
@@ -249,9 +251,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.12"
-openhands-agent-server = "1.12"
-openhands-tools = "1.12"
+openhands-sdk = "1.14"
+openhands-agent-server = "1.14"
+openhands-tools = "1.14"
 jwcrypto = ">=1.5.6"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"

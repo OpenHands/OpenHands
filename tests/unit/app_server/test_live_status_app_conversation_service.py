@@ -6,7 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from pydantic import SecretStr
@@ -29,6 +29,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     ExposedUrl,
     SandboxInfo,
+    SandboxPage,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
@@ -42,6 +43,7 @@ from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+from openhands.storage.data_models.settings import SandboxGroupingStrategy
 
 # Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
 _ALLOW_SHORT_CONTEXT_WINDOWS = 'ALLOW_SHORT_CONTEXT_WINDOWS'
@@ -78,6 +80,7 @@ class TestLiveStatusAppConversationService:
         self.mock_event_callback_service = Mock()
         self.mock_event_service = Mock()
         self.mock_httpx_client = Mock()
+        self.mock_pending_message_service = Mock()
 
         # Create service instance
         self.service = LiveStatusAppConversationService(
@@ -90,8 +93,10 @@ class TestLiveStatusAppConversationService:
             sandbox_service=self.mock_sandbox_service,
             sandbox_spec_service=self.mock_sandbox_spec_service,
             jwt_service=self.mock_jwt_service,
+            pending_message_service=self.mock_pending_message_service,
             sandbox_startup_timeout=30,
             sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
             httpx_client=self.mock_httpx_client,
             web_url='https://test.example.com',
             openhands_provider_base_url='https://provider.example.com',
@@ -105,6 +110,8 @@ class TestLiveStatusAppConversationService:
         self.mock_user.llm_model = 'gpt-4'
         self.mock_user.llm_base_url = 'https://api.openai.com/v1'
         self.mock_user.llm_api_key = 'test_api_key'
+        # Use ADD_TO_ANY for tests to maintain old behavior
+        self.mock_user.sandbox_grouping_strategy = SandboxGroupingStrategy.ADD_TO_ANY
         self.mock_user.confirmation_mode = False
         self.mock_user.search_api_key = None  # Default to None
         self.mock_user.condenser_max_size = None  # Default to None
@@ -115,6 +122,10 @@ class TestLiveStatusAppConversationService:
         self.mock_sandbox = Mock(spec=SandboxInfo)
         self.mock_sandbox.id = uuid4()
         self.mock_sandbox.status = SandboxStatus.RUNNING
+
+        # Default mock for hooks loading - returns None (no hooks found)
+        # Tests that specifically test hooks loading can override this mock
+        self.service._load_hooks_from_workspace = AsyncMock(return_value=None)
 
     def test_apply_suggested_task_sets_prompt_and_trigger(self):
         """Test suggested task prompts populate initial message and trigger."""
@@ -172,6 +183,7 @@ class TestLiveStatusAppConversationService:
             with pytest.raises(ValueError, match='empty prompt'):
                 self.service._apply_suggested_task(request)
 
+    @pytest.mark.asyncio
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
@@ -1091,11 +1103,12 @@ class TestLiveStatusAppConversationService:
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {'test': StaticSecret(value='secret')}
+        test_conversation_id = uuid4()
 
         # Act
         result = await self.service._finalize_conversation_request(
             mock_agent,
-            None,
+            test_conversation_id,
             self.mock_user,
             workspace,
             None,
@@ -1108,7 +1121,7 @@ class TestLiveStatusAppConversationService:
 
         # Assert
         assert isinstance(result, StartConversationRequest)
-        assert isinstance(result.conversation_id, UUID)
+        assert result.conversation_id == test_conversation_id
 
     @pytest.mark.asyncio
     async def test_finalize_conversation_request_skills_loading_fails(self):
@@ -1130,6 +1143,8 @@ class TestLiveStatusAppConversationService:
         self.service._load_skills_and_update_agent = AsyncMock(
             side_effect=Exception('Skills loading failed')
         )
+
+        # Note: hooks loading is already mocked in setup_method() to return None
 
         # Act
         with patch(
@@ -1179,13 +1194,13 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
             initial_message=None,
             system_message_suffix='Test suffix',
             git_provider=ProviderType.GITHUB,
             working_dir='/test/dir',
             agent_type=AgentType.DEFAULT,
             llm_model='gpt-4',
-            conversation_id=None,
             remote_workspace=None,
             selected_repository='test/repo',
         )
@@ -1215,6 +1230,98 @@ class TestLiveStatusAppConversationService:
         self.service._finalize_conversation_request.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_find_running_sandbox_for_user_found(self):
+        """Test _find_running_sandbox_for_user when a running sandbox is found."""
+        # Arrange
+        user_id = 'test_user_123'
+        self.mock_user_context.get_user_id.return_value = user_id
+
+        # Create mock sandboxes
+        running_sandbox = Mock(spec=SandboxInfo)
+        running_sandbox.id = 'sandbox_1'
+        running_sandbox.status = SandboxStatus.RUNNING
+        running_sandbox.created_by_user_id = user_id
+
+        other_user_sandbox = Mock(spec=SandboxInfo)
+        other_user_sandbox.id = 'sandbox_2'
+        other_user_sandbox.status = SandboxStatus.RUNNING
+        other_user_sandbox.created_by_user_id = 'other_user'
+
+        paused_sandbox = Mock(spec=SandboxInfo)
+        paused_sandbox.id = 'sandbox_3'
+        paused_sandbox.status = SandboxStatus.PAUSED
+        paused_sandbox.created_by_user_id = user_id
+
+        # Mock sandbox service search
+        mock_page = Mock(spec=SandboxPage)
+        mock_page.items = [other_user_sandbox, running_sandbox, paused_sandbox]
+        mock_page.next_page_id = None
+        self.mock_sandbox_service.search_sandboxes = AsyncMock(return_value=mock_page)
+
+        # Act
+        result = await self.service._find_running_sandbox_for_user()
+
+        # Assert
+        assert result == running_sandbox
+        self.mock_user_context.get_user_id.assert_called_once()
+        self.mock_sandbox_service.search_sandboxes.assert_called_once_with(
+            page_id=None, limit=100
+        )
+
+    @pytest.mark.asyncio
+    async def test_find_running_sandbox_for_user_not_found(self):
+        """Test _find_running_sandbox_for_user when no running sandbox is found."""
+        # Arrange
+        user_id = 'test_user_123'
+        self.mock_user_context.get_user_id.return_value = user_id
+
+        # Create mock sandboxes (none running for this user)
+        other_user_sandbox = Mock(spec=SandboxInfo)
+        other_user_sandbox.id = 'sandbox_1'
+        other_user_sandbox.status = SandboxStatus.RUNNING
+        other_user_sandbox.created_by_user_id = 'other_user'
+
+        paused_sandbox = Mock(spec=SandboxInfo)
+        paused_sandbox.id = 'sandbox_2'
+        paused_sandbox.status = SandboxStatus.PAUSED
+        paused_sandbox.created_by_user_id = user_id
+
+        # Mock sandbox service search
+        mock_page = Mock(spec=SandboxPage)
+        mock_page.items = [other_user_sandbox, paused_sandbox]
+        mock_page.next_page_id = None
+        self.mock_sandbox_service.search_sandboxes = AsyncMock(return_value=mock_page)
+
+        # Act
+        result = await self.service._find_running_sandbox_for_user()
+
+        # Assert
+        assert result is None
+        self.mock_user_context.get_user_id.assert_called_once()
+        self.mock_sandbox_service.search_sandboxes.assert_called_once_with(
+            page_id=None, limit=100
+        )
+
+    @pytest.mark.asyncio
+    async def test_find_running_sandbox_for_user_exception_handling(self):
+        """Test _find_running_sandbox_for_user handles exceptions gracefully."""
+        # Arrange
+        self.mock_user_context.get_user_id.side_effect = Exception('User context error')
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service._logger'
+        ) as mock_logger:
+            result = await self.service._find_running_sandbox_for_user()
+
+        # Assert
+        assert result is None
+        mock_logger.warning.assert_called_once()
+        assert (
+            'Error finding running sandbox for user'
+            in mock_logger.warning.call_args[0][0]
+        )
+
     async def test_export_conversation_success(self):
         """Test successful download of conversation trajectory."""
         # Arrange
@@ -2052,6 +2159,7 @@ class TestLiveStatusAppConversationService:
 
         await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
             initial_message=None,
             system_message_suffix=None,
             git_provider=None,
@@ -2088,6 +2196,7 @@ class TestLiveStatusAppConversationService:
 
         await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
             initial_message=None,
             system_message_suffix=None,
             git_provider=None,
@@ -2096,6 +2205,120 @@ class TestLiveStatusAppConversationService:
         )
 
         assert captured['workspace_working_dir'] == '/workspace/project'
+
+    @pytest.mark.asyncio
+    async def test_search_app_conversations_with_sandbox_id_filter(self):
+        """Test that search_app_conversations passes sandbox_id__eq to the info service.
+
+        This verifies that the sandbox_id filter is correctly propagated through
+        the service layer to the underlying info service.
+        """
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfoPage,
+        )
+
+        # Create test data with different sandbox IDs
+        sandbox_id_alpha = 'sandbox-alpha-123'
+        sandbox_id_beta = 'sandbox-beta-456'
+
+        conv_alpha = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=None,
+            sandbox_id=sandbox_id_alpha,
+            title='Alpha Conversation',
+        )
+        conv_beta = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=None,
+            sandbox_id=sandbox_id_beta,
+            title='Beta Conversation',
+        )
+
+        # Mock the info service to return filtered results based on sandbox_id__eq
+        async def mock_search(sandbox_id__eq=None, **kwargs):
+            if sandbox_id__eq == sandbox_id_alpha:
+                return AppConversationInfoPage(items=[conv_alpha])
+            elif sandbox_id__eq == sandbox_id_beta:
+                return AppConversationInfoPage(items=[conv_beta])
+            else:
+                return AppConversationInfoPage(items=[conv_alpha, conv_beta])
+
+        self.mock_app_conversation_info_service.search_app_conversation_info = (
+            AsyncMock(side_effect=mock_search)
+        )
+
+        # Mock sandbox service to return running status for sandbox lookups
+        self.mock_sandbox_service.batch_get_sandboxes = AsyncMock(return_value=[])
+
+        # Test filtering by sandbox_id_alpha
+        result = await self.service.search_app_conversations(
+            sandbox_id__eq=sandbox_id_alpha
+        )
+
+        # Verify the info service was called with the correct sandbox_id__eq
+        self.mock_app_conversation_info_service.search_app_conversation_info.assert_called()
+        call_kwargs = self.mock_app_conversation_info_service.search_app_conversation_info.call_args[
+            1
+        ]
+        assert call_kwargs.get('sandbox_id__eq') == sandbox_id_alpha
+
+        # Verify only alpha conversation is returned
+        assert len(result.items) == 1
+        assert result.items[0].sandbox_id == sandbox_id_alpha
+
+    @pytest.mark.asyncio
+    async def test_count_app_conversations_with_sandbox_id_filter(self):
+        """Test that count_app_conversations passes sandbox_id__eq to the info service.
+
+        This verifies that the sandbox_id filter is correctly propagated through
+        the service layer to the underlying info service for count operations.
+        """
+        sandbox_id = 'sandbox-count-test-789'
+
+        # Mock the info service to return count based on sandbox_id__eq
+        async def mock_count(sandbox_id__eq=None, **kwargs):
+            if sandbox_id__eq == sandbox_id:
+                return 3  # 3 conversations match this sandbox
+            else:
+                return 10  # 10 total conversations
+
+        self.mock_app_conversation_info_service.count_app_conversation_info = AsyncMock(
+            side_effect=mock_count
+        )
+
+        # Test counting with sandbox_id filter
+        result = await self.service.count_app_conversations(sandbox_id__eq=sandbox_id)
+
+        # Verify the info service was called with the correct sandbox_id__eq
+        self.mock_app_conversation_info_service.count_app_conversation_info.assert_called_once()
+        call_kwargs = self.mock_app_conversation_info_service.count_app_conversation_info.call_args[
+            1
+        ]
+        assert call_kwargs.get('sandbox_id__eq') == sandbox_id
+
+        # Verify filtered count is returned
+        assert result == 3
+
+    @pytest.mark.asyncio
+    async def test_search_app_conversations_sandbox_id_filter_returns_empty(self):
+        """Test that search with non-matching sandbox_id returns empty results."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfoPage,
+        )
+
+        # Mock the info service to return empty for non-matching sandbox
+        self.mock_app_conversation_info_service.search_app_conversation_info = (
+            AsyncMock(return_value=AppConversationInfoPage(items=[]))
+        )
+        self.mock_sandbox_service.batch_get_sandboxes = AsyncMock(return_value=[])
+
+        # Test filtering by non-existent sandbox_id
+        result = await self.service.search_app_conversations(
+            sandbox_id__eq='non-existent-sandbox'
+        )
+
+        # Verify empty results
+        assert len(result.items) == 0
 
 
 class TestPluginHandling:
@@ -2115,6 +2338,7 @@ class TestPluginHandling:
         self.mock_event_callback_service = Mock()
         self.mock_event_service = Mock()
         self.mock_httpx_client = Mock()
+        self.mock_pending_message_service = Mock()
 
         # Create service instance
         self.service = LiveStatusAppConversationService(
@@ -2127,8 +2351,10 @@ class TestPluginHandling:
             sandbox_service=self.mock_sandbox_service,
             sandbox_spec_service=self.mock_sandbox_spec_service,
             jwt_service=self.mock_jwt_service,
+            pending_message_service=self.mock_pending_message_service,
             sandbox_startup_timeout=30,
             sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
             httpx_client=self.mock_httpx_client,
             web_url='https://test.example.com',
             openhands_provider_base_url='https://provider.example.com',
@@ -2612,11 +2838,12 @@ class TestPluginHandling:
 
         # Act
         await self.service._build_start_conversation_request_for_user(
-            self.mock_sandbox,
-            None,
-            None,
-            None,
-            '/workspace',
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/workspace',
             plugins=plugins,
         )
 
@@ -2640,11 +2867,12 @@ class TestPluginHandling:
 
         # Act
         await self.service._build_start_conversation_request_for_user(
-            self.mock_sandbox,
-            None,
-            None,
-            None,
-            '/workspace',
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/workspace',
         )
 
         # Assert
@@ -2923,3 +3151,278 @@ class TestAppConversationStartRequestWithPlugins:
         assert request.plugins[0].source == 'github:owner/plugin1'
         assert request.plugins[1].repo_path == 'plugins/sub'
         assert request.plugins[2].source == '/local/path'
+
+
+class TestLoadHooksFromWorkspace:
+    """Test cases for _load_hooks_from_workspace method."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        # Create mock dependencies
+        self.mock_user_context = Mock(spec=UserContext)
+        self.mock_jwt_service = Mock()
+        self.mock_sandbox_service = Mock()
+        self.mock_sandbox_spec_service = Mock()
+        self.mock_app_conversation_info_service = Mock()
+        self.mock_app_conversation_start_task_service = Mock()
+        self.mock_event_callback_service = Mock()
+        self.mock_event_service = Mock()
+        self.mock_httpx_client = AsyncMock()
+        self.mock_pending_message_service = Mock()
+
+        # Create service instance
+        self.service = LiveStatusAppConversationService(
+            init_git_in_empty_workspace=True,
+            user_context=self.mock_user_context,
+            app_conversation_info_service=self.mock_app_conversation_info_service,
+            app_conversation_start_task_service=self.mock_app_conversation_start_task_service,
+            event_callback_service=self.mock_event_callback_service,
+            event_service=self.mock_event_service,
+            sandbox_service=self.mock_sandbox_service,
+            sandbox_spec_service=self.mock_sandbox_spec_service,
+            jwt_service=self.mock_jwt_service,
+            pending_message_service=self.mock_pending_message_service,
+            sandbox_startup_timeout=30,
+            sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
+            httpx_client=self.mock_httpx_client,
+            web_url='https://test.example.com',
+            openhands_provider_base_url='https://provider.example.com',
+            access_token_hard_timeout=None,
+            app_mode='test',
+        )
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_success(self):
+        """Test loading hooks from workspace when hooks.json exists."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {'X-Session-API-Key': 'test-key'}
+
+        hooks_response = {
+            'hook_config': {
+                'stop': [
+                    {
+                        'matcher': '*',
+                        'hooks': [{'type': 'command', 'command': 'echo "stop hook"'}],
+                    }
+                ]
+            }
+        }
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = hooks_response
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace, '/workspace'
+        )
+
+        # Assert
+        assert result is not None
+        assert not result.is_empty()
+        self.mock_httpx_client.post.assert_called_once_with(
+            'http://agent-server:8000/api/hooks',
+            json={'project_dir': '/workspace'},
+            headers={
+                'Content-Type': 'application/json',
+                'X-Session-API-Key': 'test-key',
+            },
+            timeout=30.0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_file_not_found(self):
+        """Test loading hooks when hooks.json does not exist."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {}
+
+        # Agent server returns hook_config: None when file not found
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {'hook_config': None}
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace, '/workspace'
+        )
+
+        # Assert
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_empty_hooks(self):
+        """Test loading hooks when hooks.json is empty or has no hooks."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {}
+
+        # Agent server returns empty hook_config
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {'hook_config': {}}
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace, '/workspace'
+        )
+
+        # Assert
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_http_error(self):
+        """Test loading hooks when HTTP request fails."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {}
+
+        self.mock_httpx_client.post = AsyncMock(
+            side_effect=Exception('Connection error')
+        )
+
+        # Act
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace, '/workspace'
+        )
+
+        # Assert
+        assert result is None
+
+    def test_get_project_dir_for_hooks_with_selected_repository(self):
+        """Test get_project_dir_for_hooks with a selected repository."""
+        from openhands.app_server.app_conversation.hook_loader import (
+            get_project_dir_for_hooks,
+        )
+
+        result = get_project_dir_for_hooks(
+            '/workspace/project',
+            'OpenHands/software-agent-sdk',
+        )
+        assert result == '/workspace/project/software-agent-sdk'
+
+    def test_get_project_dir_for_hooks_without_selected_repository(self):
+        """Test get_project_dir_for_hooks without a selected repository."""
+        from openhands.app_server.app_conversation.hook_loader import (
+            get_project_dir_for_hooks,
+        )
+
+        result = get_project_dir_for_hooks('/workspace/project', None)
+        assert result == '/workspace/project'
+
+    def test_get_project_dir_for_hooks_with_empty_string(self):
+        """Test get_project_dir_for_hooks with empty string repository."""
+        from openhands.app_server.app_conversation.hook_loader import (
+            get_project_dir_for_hooks,
+        )
+
+        # Empty string should be treated as no repository
+        result = get_project_dir_for_hooks('/workspace/project', '')
+        assert result == '/workspace/project'
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_with_project_dir(self):
+        """Test loading hooks with a pre-resolved project_dir.
+
+        The caller is responsible for computing the project_dir (which
+        already includes the repo name when a repo is selected).
+        _load_hooks_from_workspace should use the project_dir as-is.
+        """
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {'X-Session-API-Key': 'test-key'}
+
+        hooks_response = {
+            'hook_config': {
+                'stop': [
+                    {
+                        'matcher': '*',
+                        'hooks': [{'type': 'command', 'command': 'echo "stop hook"'}],
+                    }
+                ]
+            }
+        }
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = hooks_response
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act - project_dir already includes repo name
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace,
+            '/workspace/project/software-agent-sdk',
+        )
+
+        # Assert
+        assert result is not None
+        assert not result.is_empty()
+        # The project_dir should be passed as-is without doubling
+        self.mock_httpx_client.post.assert_called_once_with(
+            'http://agent-server:8000/api/hooks',
+            json={'project_dir': '/workspace/project/software-agent-sdk'},
+            headers={
+                'Content-Type': 'application/json',
+                'X-Session-API-Key': 'test-key',
+            },
+            timeout=30.0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_base_dir(self):
+        """Test loading hooks with a base workspace directory (no repo selected)."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {'X-Session-API-Key': 'test-key'}
+
+        hooks_response = {
+            'hook_config': {
+                'stop': [
+                    {
+                        'matcher': '*',
+                        'hooks': [{'type': 'command', 'command': 'echo "stop hook"'}],
+                    }
+                ]
+            }
+        }
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = hooks_response
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act - no repo selected, project_dir is base working_dir
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace,
+            '/workspace/project',
+        )
+
+        # Assert
+        assert result is not None
+        self.mock_httpx_client.post.assert_called_once_with(
+            'http://agent-server:8000/api/hooks',
+            json={'project_dir': '/workspace/project'},
+            headers={
+                'Content-Type': 'application/json',
+                'X-Session-API-Key': 'test-key',
+            },
+            timeout=30.0,
+        )
