@@ -452,3 +452,65 @@ class TestSlackCallbackProcessor:
         assert 'message_ts' in callback.processor_json
         assert 'thread_ts' in callback.processor_json
         assert 'team_id' in callback.processor_json
+        # Verify summary_sent field is present (new field added to prevent duplicate messages)
+        assert 'summary_sent' in callback.processor_json
+
+    @patch(
+        'server.conversation_callback_processor.slack_callback_processor.get_summary_instruction'
+    )
+    @patch(
+        'server.conversation_callback_processor.slack_callback_processor.get_last_user_msg_from_conversation_manager'
+    )
+    async def test_call_with_summary_sent_flag(
+        self,
+        mock_get_last_user_msg,
+        mock_get_summary_instruction,
+        slack_callback_processor,
+        agent_state_changed_observation,
+        conversation_callback,
+    ):
+        """Test the __call__ method skips processing when summary_sent is True."""
+        # Setup - simulate that summary has already been sent
+        slack_callback_processor.summary_sent = True
+
+        # Call the method
+        await slack_callback_processor(
+            callback=conversation_callback,
+            observation=agent_state_changed_observation,
+        )
+
+        # Verify that no further processing was done
+        mock_get_summary_instruction.assert_not_called()
+        mock_get_last_user_msg.assert_not_called()
+        conversation_callback.set_processor.assert_not_called()
+
+    def test_summary_sent_field_serialization(self):
+        """Test that summary_sent field is correctly serialized and deserialized."""
+        # Create a processor with summary_sent=True
+        processor = SlackCallbackProcessor(
+            slack_user_id='test_user',
+            channel_id='test_channel',
+            message_ts='test_message_ts',
+            thread_ts='test_thread_ts',
+            team_id='test_team_id',
+            summary_sent=True,
+        )
+
+        # Serialize to JSON
+        json_data = processor.model_dump_json()
+
+        # Deserialize from JSON
+        deserialized_processor = SlackCallbackProcessor.model_validate_json(json_data)
+
+        # Verify summary_sent is preserved
+        assert deserialized_processor.summary_sent is True
+
+        # Test with summary_sent=False (default)
+        processor2 = SlackCallbackProcessor(
+            slack_user_id='test_user',
+            channel_id='test_channel',
+            message_ts='test_message_ts',
+            thread_ts='test_thread_ts',
+            team_id='test_team_id',
+        )
+        assert processor2.summary_sent is False

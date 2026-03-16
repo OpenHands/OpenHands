@@ -1,5 +1,7 @@
 import asyncio
 
+from datetime import datetime
+
 from integrations.models import Message, SourceType
 from integrations.slack.slack_manager import SlackManager
 from integrations.slack.slack_view import SlackFactory
@@ -10,9 +12,11 @@ from integrations.utils import (
 )
 from server.auth.token_manager import TokenManager
 from storage.conversation_callback import (
+    CallbackStatus,
     ConversationCallback,
     ConversationCallbackProcessor,
 )
+from storage.database import a_session_maker
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
@@ -38,6 +42,7 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
     thread_ts: str | None
     team_id: str
     last_user_msg_id: int | None = None
+    summary_sent: bool = False
 
     async def _send_message_to_slack(self, message: str) -> None:
         """Send a message to Slack.
@@ -99,6 +104,13 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
         try:
             logger.info(f'[Slack] Processing conversation {conversation_id}')
 
+            # Skip if summary has already been sent
+            if self.summary_sent:
+                logger.info(
+                    f'[Slack] Skipping conversation {conversation_id} - summary already sent'
+                )
+                return
+
             # Get the summary instruction
             summary_instruction = get_summary_instruction()
             summary_event = event_to_dict(MessageAction(content=summary_instruction))
@@ -157,6 +169,19 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
                 asyncio.create_task(self._send_message_to_slack(summary))
 
                 logger.info(f'[Slack] Summary sent for conversation {conversation_id}')
+
+                # Mark summary as sent and update callback status
+                self.summary_sent = True
+                callback.set_processor(self)
+                callback.status = CallbackStatus.COMPLETED
+                callback.updated_at = datetime.now()
+                async with a_session_maker() as session:
+                    session.merge(callback)
+                    await session.commit()
+
+                logger.info(
+                    f'[Slack] Marked callback as COMPLETED for conversation {conversation_id}'
+                )
                 return
 
             # Add the summary instruction to the event stream
