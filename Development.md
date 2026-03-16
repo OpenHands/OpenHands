@@ -126,6 +126,14 @@ WSL2 with Ubuntu is recommended. The setup is similar to Linux, with a few WSL-s
 
 ### 1. Install WSL2
 
+**Option A: Windows 11 (Microsoft Store)**
+The easiest way on Windows 11:
+1. Open the **Microsoft Store** app
+2. Search for **"Ubuntu 22.04 LTS"** or **"Ubuntu"**
+3. Click **Install**
+4. Launch Ubuntu from the Start menu
+
+**Option B: PowerShell**
 ```powershell
 # Run this in PowerShell as Administrator
 wsl --install -d Ubuntu-22.04
