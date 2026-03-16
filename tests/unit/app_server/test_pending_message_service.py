@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from openhands.agent_server.models import TextContent
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
 )
@@ -57,9 +58,9 @@ def service(async_session) -> SQLPendingMessageService:
 
 
 @pytest.fixture
-def sample_content() -> list[dict]:
+def sample_content() -> list[TextContent]:
     """Create sample message content for testing."""
-    return [{'type': 'text', 'text': 'Hello, this is a test message'}]
+    return [TextContent(text='Hello, this is a test message')]
 
 
 class TestSQLPendingMessageService:
@@ -69,7 +70,7 @@ class TestSQLPendingMessageService:
     async def test_add_message_creates_message_with_correct_data(
         self,
         service: SQLPendingMessageService,
-        sample_content: list[dict],
+        sample_content: list[TextContent],
     ):
         """Test that add_message creates a message with the expected fields."""
         # Arrange
@@ -91,7 +92,9 @@ class TestSQLPendingMessageService:
         messages = await service.get_pending_messages(conversation_id)
         assert len(messages) == 1
         assert messages[0].conversation_id == conversation_id
-        assert messages[0].content == sample_content
+        assert len(messages[0].content) == 1
+        assert isinstance(messages[0].content[0], TextContent)
+        assert messages[0].content[0].text == sample_content[0].text
         assert messages[0].role == 'user'
         assert messages[0].created_at is not None
 
@@ -99,7 +102,7 @@ class TestSQLPendingMessageService:
     async def test_add_message_returns_correct_queue_position(
         self,
         service: SQLPendingMessageService,
-        sample_content: list[dict],
+        sample_content: list[TextContent],
     ):
         """Test that queue position increments correctly for each message."""
         # Arrange
@@ -124,9 +127,9 @@ class TestSQLPendingMessageService:
         # Arrange
         conversation_id = f'task-{uuid4().hex}'
         contents = [
-            [{'type': 'text', 'text': 'First message'}],
-            [{'type': 'text', 'text': 'Second message'}],
-            [{'type': 'text', 'text': 'Third message'}],
+            [TextContent(text='First message')],
+            [TextContent(text='Second message')],
+            [TextContent(text='Third message')],
         ]
 
         for content in contents:
@@ -137,9 +140,9 @@ class TestSQLPendingMessageService:
 
         # Assert
         assert len(messages) == 3
-        assert messages[0].content[0]['text'] == 'First message'
-        assert messages[1].content[0]['text'] == 'Second message'
-        assert messages[2].content[0]['text'] == 'Third message'
+        assert messages[0].content[0].text == 'First message'
+        assert messages[1].content[0].text == 'Second message'
+        assert messages[2].content[0].text == 'Third message'
 
     @pytest.mark.asyncio
     async def test_get_pending_messages_returns_empty_list_when_none_exist(
@@ -160,7 +163,7 @@ class TestSQLPendingMessageService:
     async def test_count_pending_messages_returns_correct_count(
         self,
         service: SQLPendingMessageService,
-        sample_content: list[dict],
+        sample_content: list[TextContent],
     ):
         """Test that count_pending_messages returns the correct number."""
         # Arrange
@@ -189,7 +192,7 @@ class TestSQLPendingMessageService:
     async def test_delete_messages_for_conversation_removes_all_messages(
         self,
         service: SQLPendingMessageService,
-        sample_content: list[dict],
+        sample_content: list[TextContent],
     ):
         """Test that delete_messages_for_conversation removes all messages and returns count."""
         # Arrange
@@ -229,7 +232,7 @@ class TestSQLPendingMessageService:
     async def test_update_conversation_id_updates_all_matching_messages(
         self,
         service: SQLPendingMessageService,
-        sample_content: list[dict],
+        sample_content: list[TextContent],
     ):
         """Test that update_conversation_id updates all messages with the old ID."""
         # Arrange
@@ -292,8 +295,8 @@ class TestSQLPendingMessageService:
         conv1 = f'task-{uuid4().hex}'
         conv2 = f'task-{uuid4().hex}'
 
-        await service.add_message(conv1, [{'type': 'text', 'text': 'Conv1 msg'}])
-        await service.add_message(conv2, [{'type': 'text', 'text': 'Conv2 msg'}])
+        await service.add_message(conv1, [TextContent(text='Conv1 msg')])
+        await service.add_message(conv2, [TextContent(text='Conv2 msg')])
 
         # Act
         messages1 = await service.get_pending_messages(conv1)
@@ -302,5 +305,5 @@ class TestSQLPendingMessageService:
         # Assert
         assert len(messages1) == 1
         assert len(messages2) == 1
-        assert messages1[0].content[0]['text'] == 'Conv1 msg'
-        assert messages2[0].content[0]['text'] == 'Conv2 msg'
+        assert messages1[0].content[0].text == 'Conv1 msg'
+        assert messages2[0].content[0].text == 'Conv2 msg'

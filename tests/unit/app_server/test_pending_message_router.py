@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException, status
 
+from openhands.agent_server.models import TextContent
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
 )
@@ -46,7 +47,7 @@ class TestQueuePendingMessage:
         """Test that a valid message is queued successfully."""
         # Arrange
         conversation_id = f'task-{uuid4().hex}'
-        content = [{'type': 'text', 'text': 'Hello, world!'}]
+        raw_content = [{'type': 'text', 'text': 'Hello, world!'}]
         expected_response = PendingMessageResponse(
             id=str(uuid4()),
             queued=True,
@@ -56,7 +57,7 @@ class TestQueuePendingMessage:
             add_message_return=expected_response,
             count_pending_messages_return=0,
         )
-        mock_request = _make_mock_request({'content': content, 'role': 'user'})
+        mock_request = _make_mock_request({'content': raw_content, 'role': 'user'})
 
         # Act
         result = await queue_pending_message(
@@ -67,17 +68,20 @@ class TestQueuePendingMessage:
 
         # Assert
         assert result == expected_response
-        mock_service.add_message.assert_called_once_with(
-            conversation_id=conversation_id,
-            content=content,
-            role='user',
-        )
+        mock_service.add_message.assert_called_once()
+        call_kwargs = mock_service.add_message.call_args.kwargs
+        assert call_kwargs['conversation_id'] == conversation_id
+        assert call_kwargs['role'] == 'user'
+        # Content should be parsed into typed objects
+        assert len(call_kwargs['content']) == 1
+        assert isinstance(call_kwargs['content'][0], TextContent)
+        assert call_kwargs['content'][0].text == 'Hello, world!'
 
     async def test_uses_default_role_when_not_provided(self):
         """Test that 'user' role is used by default."""
         # Arrange
         conversation_id = f'task-{uuid4().hex}'
-        content = [{'type': 'text', 'text': 'Test message'}]
+        raw_content = [{'type': 'text', 'text': 'Test message'}]
         expected_response = PendingMessageResponse(
             id=str(uuid4()),
             queued=True,
@@ -87,7 +91,7 @@ class TestQueuePendingMessage:
             add_message_return=expected_response,
             count_pending_messages_return=0,
         )
-        mock_request = _make_mock_request({'content': content})
+        mock_request = _make_mock_request({'content': raw_content})
 
         # Act
         await queue_pending_message(
@@ -97,11 +101,11 @@ class TestQueuePendingMessage:
         )
 
         # Assert
-        mock_service.add_message.assert_called_once_with(
-            conversation_id=conversation_id,
-            content=content,
-            role='user',
-        )
+        mock_service.add_message.assert_called_once()
+        call_kwargs = mock_service.add_message.call_args.kwargs
+        assert call_kwargs['conversation_id'] == conversation_id
+        assert call_kwargs['role'] == 'user'
+        assert isinstance(call_kwargs['content'][0], TextContent)
 
     async def test_returns_400_for_invalid_json_body(self):
         """Test that invalid JSON body returns 400 Bad Request."""
@@ -180,9 +184,9 @@ class TestQueuePendingMessage:
         """Test that exceeding rate limit returns 429 Too Many Requests."""
         # Arrange
         conversation_id = f'task-{uuid4().hex}'
-        content = [{'type': 'text', 'text': 'Test message'}]
+        raw_content = [{'type': 'text', 'text': 'Test message'}]
         mock_service = _make_mock_service(count_pending_messages_return=10)
-        mock_request = _make_mock_request({'content': content})
+        mock_request = _make_mock_request({'content': raw_content})
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
@@ -199,7 +203,7 @@ class TestQueuePendingMessage:
         """Test that 9 existing messages still allows adding one more."""
         # Arrange
         conversation_id = f'task-{uuid4().hex}'
-        content = [{'type': 'text', 'text': 'Test message'}]
+        raw_content = [{'type': 'text', 'text': 'Test message'}]
         expected_response = PendingMessageResponse(
             id=str(uuid4()),
             queued=True,
@@ -209,7 +213,7 @@ class TestQueuePendingMessage:
             add_message_return=expected_response,
             count_pending_messages_return=9,
         )
-        mock_request = _make_mock_request({'content': content})
+        mock_request = _make_mock_request({'content': raw_content})
 
         # Act
         result = await queue_pending_message(
