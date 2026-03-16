@@ -136,7 +136,11 @@ async def _valid_sandbox_from_session_key(
 
 async def _get_user_context(sandbox_info: SandboxInfo) -> AuthUserContext:
     """Build an ``AuthUserContext`` for the sandbox owner."""
-    assert sandbox_info.created_by_user_id
+    if not sandbox_info.created_by_user_id:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail='Sandbox has no associated user',
+        )
     user_auth = await get_user_auth_for_user(sandbox_info.created_by_user_id)
     return AuthUserContext(user_auth=user_auth)
 

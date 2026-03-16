@@ -349,9 +349,17 @@ The sandbox settings API allows SDK-created conversations to inherit the user's 
 (LLM config, secrets) securely via `LookupSecret`. Raw secret values only flow SaaS→sandbox,
 never through the SDK client.
 
-#### Endpoints (in `openhands/app_server/user/sdk_settings_router.py`):
-- `GET /sandboxes/{id}/settings/llm` → LLM config with api_key as LookupSecret dict
-- `GET /sandboxes/{id}/settings/llm-key` → raw API key (called FROM sandbox)
+#### User Credentials with Exposed Secrets (in `openhands/app_server/user/user_router.py`):
+- `GET /api/v1/users/me?expose_secrets=true` → Full user settings with unmasked secrets (e.g., `llm_api_key`)
+- `GET /api/v1/users/me` → Full user settings (secrets masked, Bearer only)
+
+Auth requirements for `expose_secrets=true`:
+- Bearer token (proves user identity via `OPENHANDS_API_KEY`)
+- `X-Session-API-Key` header (proves caller has an active sandbox owned by the authenticated user)
+
+Called by `workspace.get_llm()` in the SDK to retrieve LLM config with the API key.
+
+#### Sandbox-Scoped Secrets Endpoints (in `openhands/app_server/sandbox/sandbox_router.py`):
 - `GET /sandboxes/{id}/settings/secrets` → list secret names (no values)
 - `GET /sandboxes/{id}/settings/secrets/{name}` → raw secret value (called FROM sandbox)
 

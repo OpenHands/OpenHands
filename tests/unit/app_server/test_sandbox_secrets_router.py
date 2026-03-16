@@ -1,16 +1,19 @@
-"""Unit tests for the sandbox settings endpoints and /users/me expose_secrets.
+"""Unit + integration tests for the sandbox settings endpoints and /users/me expose_secrets.
 
 Tests:
 - GET /api/v1/users/me?expose_secrets=true
 - GET /api/v1/sandboxes/{sandbox_id}/settings/secrets
 - GET /api/v1/sandboxes/{sandbox_id}/settings/secrets/{secret_name}
 - Shared session_auth.validate_session_key()
+- Integration tests exercising the real auth validation stack via HTTP
 """
 
+import contextlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from openhands.app_server.sandbox.sandbox_models import (
@@ -57,6 +60,16 @@ def _patch_sandbox_service(return_sandbox: SandboxInfo | None):
         'openhands.app_server.sandbox.session_auth.get_sandbox_service',
     )
     return ctx, mock_sandbox_service
+
+
+def _create_sandbox_service_context_manager(sandbox_service):
+    """Create an async context manager that yields the given sandbox service."""
+
+    @contextlib.asynccontextmanager
+    async def _context_manager(state, request=None):
+        yield sandbox_service
+
+    return _context_manager
 
 
 # ---------------------------------------------------------------------------
@@ -366,3 +379,274 @@ class TestGetSecretValue:
                 )
 
         assert exc_info.value.status_code == 404
+
+
+# ===========================================================================
+# Integration tests — real HTTP requests through real auth validation logic.
+#
+# Only the data layer (sandbox service, user context) is mocked.
+# The session key validation, ownership checks, and FastAPI routing are REAL.
+# ===========================================================================
+
+
+def _build_integration_test_app(
+    mock_user_context: AsyncMock | None = None,
+) -> FastAPI:
+    """Build a minimal FastAPI app with the real user and sandbox routers.
+
+    The ``depends_user_context`` dependency is overridden with a mock, but the
+    session key validation logic in ``validate_session_key`` and
+    ``_validate_session_key_ownership`` runs unmodified.
+
+    Router-level dependencies (e.g. ``check_session_api_key`` from ``SESSION_API_KEY``
+    env var) are overridden to no-ops so we can exercise the endpoint-level auth logic
+    in isolation.
+    """
+    from openhands.app_server.sandbox.sandbox_router import (
+        router as sandbox_router,
+    )
+    from openhands.app_server.user.user_router import router as user_router
+    from openhands.server.dependencies import check_session_api_key
+
+    app = FastAPI()
+
+    # Disable router-level auth (SESSION_API_KEY check) — we're testing the
+    # endpoint-level session key validation, not the router middleware.
+    app.dependency_overrides[check_session_api_key] = lambda: None
+
+    if mock_user_context is not None:
+        from openhands.app_server.user.user_router import user_dependency
+
+        app.dependency_overrides[user_dependency.dependency] = lambda: mock_user_context
+
+    app.include_router(user_router, prefix='/api/v1')
+    app.include_router(sandbox_router, prefix='/api/v1')
+    return app
+
+
+class TestExposeSecretsIntegration:
+    """Integration tests for /users/me?expose_secrets=true via real HTTP.
+
+    These tests exercise the full auth validation stack:
+    - validate_session_key (real)
+    - _validate_session_key_ownership (real)
+    - ownership check (real)
+    Only the data layer (sandbox service lookup, user context) is mocked.
+    """
+
+    def test_expose_secrets_without_session_key_returns_401(self):
+        """Bearer token alone cannot expose secrets (no X-Session-API-Key)."""
+        mock_user_ctx = AsyncMock()
+        mock_user_ctx.get_user_info = AsyncMock(
+            return_value=UserInfo(id=USER_ID, llm_api_key=SecretStr('sk-secret-123'))
+        )
+        mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
+
+        app = _build_integration_test_app(mock_user_ctx)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.get('/api/v1/users/me', params={'expose_secrets': 'true'})
+
+        assert response.status_code == 401
+        assert 'X-Session-API-Key' in response.json()['detail']
+
+    def test_expose_secrets_with_invalid_session_key_returns_401(self):
+        """Invalid session key (no matching sandbox) is rejected."""
+        mock_user_ctx = AsyncMock()
+        mock_user_ctx.get_user_info = AsyncMock(
+            return_value=UserInfo(id=USER_ID, llm_api_key=SecretStr('sk-secret-123'))
+        )
+        mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
+
+        mock_sandbox_svc = AsyncMock()
+        mock_sandbox_svc.get_sandbox_by_session_api_key = AsyncMock(return_value=None)
+
+        app = _build_integration_test_app(mock_user_ctx)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        with patch(
+            'openhands.app_server.sandbox.session_auth.get_sandbox_service',
+            _create_sandbox_service_context_manager(mock_sandbox_svc),
+        ):
+            response = client.get(
+                '/api/v1/users/me',
+                params={'expose_secrets': 'true'},
+                headers={'X-Session-API-Key': 'bogus-key'},
+            )
+
+        assert response.status_code == 401
+        assert 'Invalid session API key' in response.json()['detail']
+
+    def test_expose_secrets_with_wrong_user_returns_403(self):
+        """Session key from a different user's sandbox is rejected."""
+        mock_user_ctx = AsyncMock()
+        mock_user_ctx.get_user_info = AsyncMock(
+            return_value=UserInfo(id='user-A', llm_api_key=SecretStr('sk-secret-123'))
+        )
+        mock_user_ctx.get_user_id = AsyncMock(return_value='user-A')
+
+        # Sandbox owned by user-B
+        sandbox_b = _make_sandbox_info(user_id='user-B')
+        mock_sandbox_svc = AsyncMock()
+        mock_sandbox_svc.get_sandbox_by_session_api_key = AsyncMock(
+            return_value=sandbox_b
+        )
+
+        app = _build_integration_test_app(mock_user_ctx)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        with patch(
+            'openhands.app_server.sandbox.session_auth.get_sandbox_service',
+            _create_sandbox_service_context_manager(mock_sandbox_svc),
+        ):
+            response = client.get(
+                '/api/v1/users/me',
+                params={'expose_secrets': 'true'},
+                headers={'X-Session-API-Key': 'stolen-key'},
+            )
+
+        assert response.status_code == 403
+        assert 'does not belong' in response.json()['detail']
+
+    def test_expose_secrets_valid_dual_auth_returns_200_unmasked(self):
+        """Valid Bearer + valid session key owned by same user → 200 with secrets."""
+        mock_user_ctx = AsyncMock()
+        mock_user_ctx.get_user_info = AsyncMock(
+            return_value=UserInfo(
+                id=USER_ID,
+                llm_model='anthropic/claude-sonnet-4-20250514',
+                llm_api_key=SecretStr('sk-real-secret'),
+                llm_base_url='https://litellm.example.com',
+            )
+        )
+        mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
+
+        sandbox = _make_sandbox_info(user_id=USER_ID)
+        mock_sandbox_svc = AsyncMock()
+        mock_sandbox_svc.get_sandbox_by_session_api_key = AsyncMock(
+            return_value=sandbox
+        )
+
+        app = _build_integration_test_app(mock_user_ctx)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        with patch(
+            'openhands.app_server.sandbox.session_auth.get_sandbox_service',
+            _create_sandbox_service_context_manager(mock_sandbox_svc),
+        ):
+            response = client.get(
+                '/api/v1/users/me',
+                params={'expose_secrets': 'true'},
+                headers={'X-Session-API-Key': 'valid-key'},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body['llm_api_key'] == 'sk-real-secret'
+        assert body['llm_model'] == 'anthropic/claude-sonnet-4-20250514'
+        assert body['llm_base_url'] == 'https://litellm.example.com'
+
+    def test_default_masks_secrets_via_http(self):
+        """Without expose_secrets, secrets are masked even via real HTTP."""
+        mock_user_ctx = AsyncMock()
+        mock_user_ctx.get_user_info = AsyncMock(
+            return_value=UserInfo(
+                id=USER_ID, llm_api_key=SecretStr('sk-should-be-masked')
+            )
+        )
+
+        app = _build_integration_test_app(mock_user_ctx)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.get('/api/v1/users/me')
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body['llm_api_key'] == '**********'
+
+
+class TestSandboxSecretsIntegration:
+    """Integration tests for sandbox-scoped secrets endpoints via real HTTP.
+
+    The session key validation in ``_valid_sandbox_from_session_key`` runs
+    unmodified — only the sandbox service (database) is mocked.
+    """
+
+    def test_secrets_list_without_session_key_returns_401(self):
+        """Missing X-Session-API-Key on secrets endpoint is rejected."""
+        app = _build_integration_test_app()
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.get(f'/api/v1/sandboxes/{SANDBOX_ID}/settings/secrets')
+
+        assert response.status_code == 401
+        assert 'X-Session-API-Key' in response.json()['detail']
+
+    def test_secrets_list_with_invalid_session_key_returns_401(self):
+        """Invalid session key on secrets endpoint is rejected."""
+        app = _build_integration_test_app()
+        client = TestClient(app, raise_server_exceptions=False)
+
+        mock_sandbox_svc = AsyncMock()
+        mock_sandbox_svc.get_sandbox_by_session_api_key = AsyncMock(return_value=None)
+
+        with patch(
+            'openhands.app_server.sandbox.session_auth.get_sandbox_service',
+            _create_sandbox_service_context_manager(mock_sandbox_svc),
+        ):
+            response = client.get(
+                f'/api/v1/sandboxes/{SANDBOX_ID}/settings/secrets',
+                headers={'X-Session-API-Key': 'bogus'},
+            )
+
+        assert response.status_code == 401
+        assert 'Invalid session API key' in response.json()['detail']
+
+    def test_secrets_list_with_mismatched_sandbox_id_returns_403(self):
+        """Session key maps to a different sandbox than the URL path → 403."""
+        app = _build_integration_test_app()
+        client = TestClient(app, raise_server_exceptions=False)
+
+        # Session key maps to sandbox "other-sandbox", but URL says SANDBOX_ID
+        other_sandbox = _make_sandbox_info(sandbox_id='other-sandbox')
+        mock_sandbox_svc = AsyncMock()
+        mock_sandbox_svc.get_sandbox_by_session_api_key = AsyncMock(
+            return_value=other_sandbox
+        )
+
+        with patch(
+            'openhands.app_server.sandbox.session_auth.get_sandbox_service',
+            _create_sandbox_service_context_manager(mock_sandbox_svc),
+        ):
+            response = client.get(
+                f'/api/v1/sandboxes/{SANDBOX_ID}/settings/secrets',
+                headers={'X-Session-API-Key': 'valid-key'},
+            )
+
+        assert response.status_code == 403
+        assert 'does not match' in response.json()['detail']
+
+    def test_sandbox_without_user_returns_401_for_secret_value(self):
+        """Sandbox with no owning user → 401 when fetching a secret value."""
+        app = _build_integration_test_app()
+        client = TestClient(app, raise_server_exceptions=False)
+
+        # Sandbox exists but has no owning user
+        sandbox_no_user = _make_sandbox_info(user_id=None)
+        mock_sandbox_svc = AsyncMock()
+        mock_sandbox_svc.get_sandbox_by_session_api_key = AsyncMock(
+            return_value=sandbox_no_user
+        )
+
+        with patch(
+            'openhands.app_server.sandbox.session_auth.get_sandbox_service',
+            _create_sandbox_service_context_manager(mock_sandbox_svc),
+        ):
+            response = client.get(
+                f'/api/v1/sandboxes/{SANDBOX_ID}/settings/secrets/MY_SECRET',
+                headers={'X-Session-API-Key': 'valid-key'},
+            )
+
+        # _get_user_context raises 401 because created_by_user_id is None
+        assert response.status_code == 401
+        assert 'no associated user' in response.json()['detail']
