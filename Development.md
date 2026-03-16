@@ -166,7 +166,7 @@ After installation, restart your computer and open Ubuntu.
 
 ### 2. Install Prerequisites (in WSL Ubuntu)
 
-Follow [Step 1 from the Linux setup](#1-install-prerequisites) to install system dependencies, Python 3.12, Node.js, and Poetry. Skip the Docker installation — Docker is provided through Docker Desktop below.
+Follow [Step 1 from the Linux setup](#1-install-prerequisites-1) to install system dependencies, Python 3.12, Node.js, and Poetry. Skip the Docker installation — Docker is provided through Docker Desktop below.
 
 ### 3. Configure Docker for WSL2
 
