@@ -49,6 +49,7 @@ repos:
           # OpenHands package in repo root
           - ./
           - stripe==11.5.0
+          - sqlalchemy[asyncio]>=2.0
           - pygithub==2.6.1
         # Use -p (package) to avoid dual module name conflict when using MYPYPATH
         # MYPYPATH=enterprise allows resolving bare imports like "from integrations.xxx"
