@@ -1,11 +1,11 @@
 """Models for pending message queue functionality."""
 
 from datetime import datetime
-from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from openhands.agent_server.models import ImageContent, TextContent
 from openhands.agent_server.utils import utc_now
 
 
@@ -20,7 +20,7 @@ class PendingMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     conversation_id: str  # Can be task-{uuid} or real conversation UUID
     role: str = 'user'
-    content: list[dict[str, Any]]  # List of TextContent/ImageContent as dicts
+    content: list[TextContent | ImageContent]
     created_at: datetime = Field(default_factory=utc_now)
 
 

@@ -1488,44 +1488,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             f'conversation {conversation_id_str}'
         )
 
-        async def deliver_message(msg):
-            """Deliver a single message, return (id, success, error)."""
+        # Process messages sequentially to preserve order
+        for msg in pending_messages:
             try:
+                # Serialize content objects to JSON-compatible dicts
+                content_json = [item.model_dump() for item in msg.content]
                 # Use the events endpoint which handles message sending
                 response = await self.httpx_client.post(
                     f'{agent_server_url}/api/conversations/{conversation_id_str}/events',
                     json={
                         'role': msg.role,
-                        'content': msg.content,
+                        'content': content_json,
                         'run': True,
                     },
                     headers={'X-Session-API-Key': session_api_key},
                     timeout=30.0,
                 )
                 response.raise_for_status()
-                return (msg.id, True, None)
+                _logger.debug(f'Delivered pending message {msg.id}')
             except Exception as e:
                 _logger.warning(f'Failed to deliver pending message {msg.id}: {e}')
-                return (msg.id, False, str(e))
-
-        # Process all messages concurrently
-        results = await asyncio.gather(
-            *[deliver_message(msg) for msg in pending_messages],
-            return_exceptions=True,
-        )
-
-        # Log any errors (but don't fail)
-        for result in results:
-            if isinstance(result, BaseException):
-                _logger.error(f'Unexpected error delivering pending message: {result}')
-            else:
-                msg_id, success, error = result  # type: ignore[misc]
-                if success:
-                    _logger.debug(f'Delivered pending message {msg_id}')
-                else:
-                    _logger.warning(
-                        f'Failed to deliver pending message {msg_id}: {error}'
-                    )
 
         # Delete all pending messages after processing (regardless of success/failure)
         deleted_count = (

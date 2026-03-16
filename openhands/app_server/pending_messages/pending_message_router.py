@@ -3,7 +3,9 @@
 import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import TypeAdapter, ValidationError
 
+from openhands.agent_server.models import ImageContent, TextContent
 from openhands.app_server.config import depends_pending_message_service
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
@@ -14,6 +16,9 @@ from openhands.app_server.pending_messages.pending_message_service import (
 from openhands.server.dependencies import get_dependencies
 
 logger = logging.getLogger(__name__)
+
+# Type adapter for validating content from request
+_content_type_adapter = TypeAdapter(list[TextContent | ImageContent])
 
 # Create router with authentication dependencies
 router = APIRouter(
@@ -59,13 +64,22 @@ async def queue_pending_message(
             detail='Invalid request body',
         )
 
-    content = body.get('content')
+    raw_content = body.get('content')
     role = body.get('role', 'user')
 
-    if not content or not isinstance(content, list):
+    if not raw_content or not isinstance(raw_content, list):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='content must be a non-empty list',
+        )
+
+    # Validate and parse content into typed objects
+    try:
+        content = _content_type_adapter.validate_python(raw_content)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Invalid content format: {e}',
         )
 
     # Rate limit: max 10 pending messages per conversation

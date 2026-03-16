@@ -2,12 +2,14 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 from fastapi import Request
+from pydantic import TypeAdapter
 from sqlalchemy import JSON, Column, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openhands.agent_server.models import ImageContent, TextContent
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessage,
     PendingMessageResponse,
@@ -15,6 +17,9 @@ from openhands.app_server.pending_messages.pending_message_models import (
 from openhands.app_server.services.injector import Injector, InjectorState
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
+
+# Type adapter for deserializing content from JSON
+_content_type_adapter = TypeAdapter(list[TextContent | ImageContent])
 
 
 class StoredPendingMessage(Base):  # type: ignore
@@ -33,7 +38,10 @@ class PendingMessageService(ABC):
 
     @abstractmethod
     async def add_message(
-        self, conversation_id: str, content: list[dict[str, Any]], role: str = 'user'
+        self,
+        conversation_id: str,
+        content: list[TextContent | ImageContent],
+        role: str = 'user',
     ) -> PendingMessageResponse:
         """Queue a message for delivery when conversation becomes ready."""
 
@@ -66,7 +74,10 @@ class SQLPendingMessageService(PendingMessageService):
     db_session: AsyncSession
 
     async def add_message(
-        self, conversation_id: str, content: list[dict[str, Any]], role: str = 'user'
+        self,
+        conversation_id: str,
+        content: list[TextContent | ImageContent],
+        role: str = 'user',
     ) -> PendingMessageResponse:
         """Queue a message for delivery when conversation becomes ready."""
         # Create the pending message
@@ -83,12 +94,15 @@ class SQLPendingMessageService(PendingMessageService):
         result = await self.db_session.execute(count_stmt)
         position = result.scalar() or 0
 
+        # Serialize content to JSON-compatible format for storage
+        content_json = [item.model_dump() for item in content]
+
         # Store in database
         stored_message = StoredPendingMessage(
             id=str(pending_message.id),
             conversation_id=conversation_id,
             role=role,
-            content=content,
+            content=content_json,
             created_at=pending_message.created_at,
         )
         self.db_session.add(stored_message)
@@ -115,7 +129,7 @@ class SQLPendingMessageService(PendingMessageService):
                 id=msg.id,
                 conversation_id=msg.conversation_id,
                 role=msg.role,
-                content=msg.content,
+                content=_content_type_adapter.validate_python(msg.content),
                 created_at=msg.created_at,
             )
             for msg in stored_messages

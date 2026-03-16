@@ -1,6 +1,6 @@
 """Enterprise injector for PendingMessageService with SAAS filtering."""
 
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
@@ -8,6 +8,7 @@ from sqlalchemy import select
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
 
+from openhands.agent_server.models import ImageContent, TextContent
 from openhands.app_server.errors import AuthError
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
@@ -98,7 +99,10 @@ class SaasSQLPendingMessageService(SQLPendingMessageService):
                 raise AuthError('Conversation belongs to a different organization')
 
     async def add_message(
-        self, conversation_id: str, content: list[dict[str, Any]], role: str = 'user'
+        self,
+        conversation_id: str,
+        content: list[TextContent | ImageContent],
+        role: str = 'user',
     ) -> PendingMessageResponse:
         """Queue a message with ownership validation.
 
