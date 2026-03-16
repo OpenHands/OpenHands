@@ -8431,6 +8431,38 @@
     "tr": "Görevleri yönetiyor",
     "uk": "Керування завданнями"
   },
+  "ACTION_MESSAGE$GREP": {
+    "en": "Search in files: <cmd>{{pattern}}</cmd>",
+    "ja": "ファイル内検索: <cmd>{{pattern}}</cmd>",
+    "zh-CN": "在文件中搜索: <cmd>{{pattern}}</cmd>",
+    "zh-TW": "在檔案中搜尋: <cmd>{{pattern}}</cmd>",
+    "ko-KR": "파일 내 검색: <cmd>{{pattern}}</cmd>",
+    "no": "Søk i filer: <cmd>{{pattern}}</cmd>",
+    "it": "Cerca nei file: <cmd>{{pattern}}</cmd>",
+    "pt": "Pesquisar em arquivos: <cmd>{{pattern}}</cmd>",
+    "es": "Buscar en archivos: <cmd>{{pattern}}</cmd>",
+    "ar": "البحث داخل الملفات: <cmd>{{pattern}}</cmd>",
+    "fr": "Rechercher dans les fichiers: <cmd>{{pattern}}</cmd>",
+    "tr": "Dosyalarda ara: <cmd>{{pattern}}</cmd>",
+    "de": "In Dateien suchen: <cmd>{{pattern}}</cmd>",
+    "uk": "Пошук у файлах: <cmd>{{pattern}}</cmd>"
+  },
+  "ACTION_MESSAGE$GLOB": {
+    "en": "Search files: <cmd>{{pattern}}</cmd>",
+    "ja": "ファイル検索: <cmd>{{pattern}}</cmd>",
+    "zh-CN": "搜索文件: <cmd>{{pattern}}</cmd>",
+    "zh-TW": "搜尋檔案: <cmd>{{pattern}}</cmd>",
+    "ko-KR": "파일 검색: <cmd>{{pattern}}</cmd>",
+    "no": "Søk filer: <cmd>{{pattern}}</cmd>",
+    "it": "Cerca file: <cmd>{{pattern}}</cmd>",
+    "pt": "Pesquisar arquivos: <cmd>{{pattern}}</cmd>",
+    "es": "Buscar archivos: <cmd>{{pattern}}</cmd>",
+    "ar": "البحث في الملفات: <cmd>{{pattern}}</cmd>",
+    "fr": "Rechercher des fichiers: <cmd>{{pattern}}</cmd>",
+    "tr": "Dosya ara: <cmd>{{pattern}}</cmd>",
+    "de": "Dateien suchen: <cmd>{{pattern}}</cmd>",
+    "uk": "Пошук файлів: <cmd>{{pattern}}</cmd>"
+  },
   "OBSERVATION_MESSAGE$RUN": {
     "en": "Ran <cmd>{{command}}</cmd>",
     "zh-CN": "运行 <cmd>{{command}}</cmd>",
