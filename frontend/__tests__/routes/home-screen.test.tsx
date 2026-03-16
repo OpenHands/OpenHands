@@ -621,7 +621,7 @@ describe("HomepageCTA visibility", () => {
 
     getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
 
-    // Mock localStorage to enable the PROJ_USER_JOURNEY feature flag
+    // Mock localStorage to enable the PROJ_USER_JOURNEY feature flag (CTA dismissal also uses localStorage)
     vi.stubGlobal("localStorage", {
       getItem: vi.fn((key: string) => {
         if (key === "FEATURE_PROJ_USER_JOURNEY") {
@@ -629,13 +629,6 @@ describe("HomepageCTA visibility", () => {
         }
         return null;
       }),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    });
-
-    vi.stubGlobal("sessionStorage", {
-      getItem: vi.fn(() => null),
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
@@ -757,10 +750,13 @@ describe("HomepageCTA visibility", () => {
     expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
   });
 
-  it("should not show HomepageCTA when dismissed in session storage", async () => {
-    // Override sessionStorage to mark CTA as dismissed
-    vi.stubGlobal("sessionStorage", {
+  it("should not show HomepageCTA when dismissed in local storage", async () => {
+    // Override localStorage to mark CTA as dismissed while keeping the feature flag enabled
+    vi.stubGlobal("localStorage", {
       getItem: vi.fn((key: string) => {
+        if (key === "FEATURE_PROJ_USER_JOURNEY") {
+          return "true";
+        }
         if (key === "homepage-cta-dismissed") {
           return "true";
         }

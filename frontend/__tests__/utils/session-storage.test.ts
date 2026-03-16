@@ -6,7 +6,7 @@ import {
 
 describe("session-storage CTA utilities", () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
   });
 
   describe("isCTADismissed", () => {
@@ -15,28 +15,28 @@ describe("session-storage CTA utilities", () => {
     });
 
     it("returns true when CTA has been dismissed", () => {
-      sessionStorage.setItem("homepage-cta-dismissed", "true");
+      localStorage.setItem("homepage-cta-dismissed", "true");
       expect(isCTADismissed("homepage")).toBe(true);
     });
 
     it("returns false when storage value is not 'true'", () => {
-      sessionStorage.setItem("homepage-cta-dismissed", "false");
+      localStorage.setItem("homepage-cta-dismissed", "false");
       expect(isCTADismissed("homepage")).toBe(false);
 
-      sessionStorage.setItem("homepage-cta-dismissed", "invalid");
+      localStorage.setItem("homepage-cta-dismissed", "invalid");
       expect(isCTADismissed("homepage")).toBe(false);
     });
   });
 
   describe("setCTADismissed", () => {
-    it("sets the CTA as dismissed in session storage", () => {
+    it("sets the CTA as dismissed in local storage", () => {
       setCTADismissed("homepage");
-      expect(sessionStorage.getItem("homepage-cta-dismissed")).toBe("true");
+      expect(localStorage.getItem("homepage-cta-dismissed")).toBe("true");
     });
 
     it("generates correct key for homepage location", () => {
       setCTADismissed("homepage");
-      expect(sessionStorage.getItem("homepage-cta-dismissed")).toBe("true");
+      expect(localStorage.getItem("homepage-cta-dismissed")).toBe("true");
     });
   });
 
@@ -45,15 +45,15 @@ describe("session-storage CTA utilities", () => {
       setCTADismissed("homepage");
 
       // Verify key exists with correct format
-      expect(sessionStorage.getItem("homepage-cta-dismissed")).toBe("true");
+      expect(localStorage.getItem("homepage-cta-dismissed")).toBe("true");
 
       // Verify other keys don't exist
-      expect(sessionStorage.getItem("cta-dismissed")).toBeNull();
-      expect(sessionStorage.getItem("homepage")).toBeNull();
+      expect(localStorage.getItem("cta-dismissed")).toBeNull();
+      expect(localStorage.getItem("homepage")).toBeNull();
     });
   });
 
-  describe("persistence within session", () => {
+  describe("persistence across tabs", () => {
     it("dismissed state persists across multiple reads", () => {
       setCTADismissed("homepage");
 

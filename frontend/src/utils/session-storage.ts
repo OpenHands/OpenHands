@@ -1,16 +1,16 @@
 // CTA locations that can be dismissed
 export type CTALocation = "homepage";
 
-// Generate session storage key for a CTA location
+// Generate storage key for a CTA location
 const getCTAKey = (location: CTALocation): string =>
   `${location}-cta-dismissed`;
 
 /**
- * Set a CTA as dismissed in session storage
+ * Set a CTA as dismissed in local storage (persists across tabs)
  * @param location The CTA location to dismiss
  */
 export const setCTADismissed = (location: CTALocation): void => {
-  sessionStorage.setItem(getCTAKey(location), "true");
+  localStorage.setItem(getCTAKey(location), "true");
 };
 
 /**
@@ -19,4 +19,4 @@ export const setCTADismissed = (location: CTALocation): void => {
  * @returns true if dismissed, false otherwise
  */
 export const isCTADismissed = (location: CTALocation): boolean =>
-  sessionStorage.getItem(getCTAKey(location)) === "true";
+  localStorage.getItem(getCTAKey(location)) === "true";

@@ -29,7 +29,7 @@ export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
   };
 
   return (
-    <Card theme="dark" className={cn("w-full max-w-[320px] cta-card-gradient")}>
+    <Card theme="dark" className={cn("w-[320px] cta-card-gradient")}>
       <button
         type="button"
         onClick={handleClose}
@@ -45,13 +45,13 @@ export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
         <CloseIcon width={16} height={16} />
       </button>
 
-      <div className="p-5 pr-12 flex flex-col gap-4">
+      <div className="p-6 flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <CardTitle className="font-inter font-semibold text-xl leading-7 tracking-normal">
+          <CardTitle className="font-inter font-semibold text-xl leading-7 tracking-normal text-[#FAFAFA]">
             {t(I18nKey.CTA$ENTERPRISE_TITLE)}
           </CardTitle>
 
-          <Typography.Text className="font-inter font-normal text-sm leading-5 tracking-normal text-white/60">
+          <Typography.Text className="font-inter font-normal text-sm leading-5 tracking-normal text-[#8C8C8C]">
             {t(I18nKey.CTA$ENTERPRISE_DESCRIPTION)}
           </Typography.Text>
         </div>
@@ -60,7 +60,7 @@ export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
           type="button"
           variant="primary"
           onClick={handleLearnMore}
-          className="h-10 rounded border border-[#242424] bg-[#050505] px-4 py-2 text-white hover:bg-[#1a1a1a] hover:opacity-100"
+          className="w-fit h-10 rounded border border-[#242424] bg-[#050505] px-4 py-2 text-white hover:bg-[#1a1a1a] hover:opacity-100"
         >
           {t(I18nKey.CTA$LEARN_MORE)}
         </BrandButton>
