@@ -60,7 +60,7 @@ export function EnterpriseBanner() {
         rel="noopener noreferrer"
         onClick={handleLearnMore}
         aria-label={t(I18nKey.ENTERPRISE$LEARN_MORE_ARIA)}
-        className="block w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors text-center cursor-pointer"
+        className="block w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors text-center"
       >
         {t(I18nKey.ENTERPRISE$LEARN_MORE)}
       </a>
