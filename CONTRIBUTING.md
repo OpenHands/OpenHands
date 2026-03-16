@@ -24,7 +24,7 @@ We believe in the power of open source to democratize access to cutting-edge AI 
 - **Configuration**: `make setup-config`
 - **Run locally**: `make run`
 
-Full details in our [Development Guide](https://github.com/OpenHands/OpenHands/blob/main/Development.md).
+Full details in our [Development Guide](./Development.md).
 
 ### Find Your First Issue
 
