@@ -29,6 +29,15 @@ KEY_VERIFICATION_TIMEOUT = 5.0
 # A very large number to represent "unlimited" until LiteLLM fixes their unlimited update bug.
 UNLIMITED_BUDGET_SETTING = 1000000000.0
 
+try:
+    DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', 0.0))
+    if DEFAULT_INITIAL_BUDGET < 0:
+        raise ValueError(
+            f'DEFAULT_INITIAL_BUDGET must be non-negative, got {DEFAULT_INITIAL_BUDGET}'
+        )
+except ValueError as e:
+    raise ValueError(f'Invalid DEFAULT_INITIAL_BUDGET environment variable: {e}') from e
+
 
 def get_openhands_cloud_key_alias(keycloak_user_id: str, org_id: str) -> str:
     """Generate the key alias for OpenHands Cloud managed keys."""
@@ -101,7 +110,7 @@ class LiteLlmManager:
             ) as client:
                 # Check if team already exists and get its budget
                 # New users joining existing orgs should inherit the team's budget
-                team_budget = 0.0
+                team_budget: float = DEFAULT_INITIAL_BUDGET
                 try:
                     existing_team = await LiteLlmManager._get_team(client, org_id)
                     if existing_team:
