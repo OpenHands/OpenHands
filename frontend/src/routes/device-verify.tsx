@@ -155,16 +155,16 @@ export default function DeviceVerify() {
         >
           {/* Device Authorization Card */}
           <div
-            className={`flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg ${showEnterpriseBanner ? "lg:mx-0" : ""}`}
+            className={`flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg border border-neutral-700 ${showEnterpriseBanner ? "lg:mx-0" : ""}`}
           >
             <H1 className="text-2xl mb-4 text-center">
               {t(I18nKey.DEVICE$AUTHORIZATION_REQUEST)}
             </H1>
-            <div className="mb-6 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground mb-2 text-center">
+            <div className="mb-6 p-4 bg-neutral-900 rounded-lg border border-neutral-700">
+              <p className="text-xs text-neutral-500 mb-2 text-center uppercase tracking-wider">
                 {t(I18nKey.DEVICE$CODE_LABEL)}
               </p>
-              <p className="text-lg font-mono font-semibold text-center tracking-[0.3em]">
+              <p className="text-xl font-mono font-semibold text-center tracking-[0.3em]">
                 {userCode}
               </p>
             </div>
