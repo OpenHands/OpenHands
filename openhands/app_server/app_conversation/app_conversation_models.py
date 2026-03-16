@@ -16,6 +16,10 @@ from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+from openhands.storage.data_models.settings import SandboxGroupingStrategy
+
+# Re-export SandboxGroupingStrategy for backward compatibility
+__all__ = ['SandboxGroupingStrategy']
 
 
 class AgentType(Enum):

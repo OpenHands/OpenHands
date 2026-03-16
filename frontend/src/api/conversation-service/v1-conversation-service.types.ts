@@ -119,6 +119,11 @@ export interface V1AppConversation {
   public?: boolean;
 }
 
+export interface V1AppConversationPage {
+  items: V1AppConversation[];
+  next_page_id: string | null;
+}
+
 export interface Skill {
   name: string;
   type: "repo" | "knowledge" | "agentskills";

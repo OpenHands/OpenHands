@@ -6,7 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from pydantic import SecretStr
@@ -29,6 +29,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     ExposedUrl,
     SandboxInfo,
+    SandboxPage,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
@@ -42,6 +43,7 @@ from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+from openhands.storage.data_models.settings import SandboxGroupingStrategy
 
 # Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
 _ALLOW_SHORT_CONTEXT_WINDOWS = 'ALLOW_SHORT_CONTEXT_WINDOWS'
@@ -92,6 +94,7 @@ class TestLiveStatusAppConversationService:
             jwt_service=self.mock_jwt_service,
             sandbox_startup_timeout=30,
             sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
             httpx_client=self.mock_httpx_client,
             web_url='https://test.example.com',
             openhands_provider_base_url='https://provider.example.com',
@@ -105,6 +108,8 @@ class TestLiveStatusAppConversationService:
         self.mock_user.llm_model = 'gpt-4'
         self.mock_user.llm_base_url = 'https://api.openai.com/v1'
         self.mock_user.llm_api_key = 'test_api_key'
+        # Use ADD_TO_ANY for tests to maintain old behavior
+        self.mock_user.sandbox_grouping_strategy = SandboxGroupingStrategy.ADD_TO_ANY
         self.mock_user.confirmation_mode = False
         self.mock_user.search_api_key = None  # Default to None
         self.mock_user.condenser_max_size = None  # Default to None
@@ -1091,11 +1096,12 @@ class TestLiveStatusAppConversationService:
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {'test': StaticSecret(value='secret')}
+        test_conversation_id = uuid4()
 
         # Act
         result = await self.service._finalize_conversation_request(
             mock_agent,
-            None,
+            test_conversation_id,
             self.mock_user,
             workspace,
             None,
@@ -1108,7 +1114,7 @@ class TestLiveStatusAppConversationService:
 
         # Assert
         assert isinstance(result, StartConversationRequest)
-        assert isinstance(result.conversation_id, UUID)
+        assert result.conversation_id == test_conversation_id
 
     @pytest.mark.asyncio
     async def test_finalize_conversation_request_skills_loading_fails(self):
@@ -1179,13 +1185,13 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
             initial_message=None,
             system_message_suffix='Test suffix',
             git_provider=ProviderType.GITHUB,
             working_dir='/test/dir',
             agent_type=AgentType.DEFAULT,
             llm_model='gpt-4',
-            conversation_id=None,
             remote_workspace=None,
             selected_repository='test/repo',
         )
@@ -1215,6 +1221,98 @@ class TestLiveStatusAppConversationService:
         self.service._finalize_conversation_request.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_find_running_sandbox_for_user_found(self):
+        """Test _find_running_sandbox_for_user when a running sandbox is found."""
+        # Arrange
+        user_id = 'test_user_123'
+        self.mock_user_context.get_user_id.return_value = user_id
+
+        # Create mock sandboxes
+        running_sandbox = Mock(spec=SandboxInfo)
+        running_sandbox.id = 'sandbox_1'
+        running_sandbox.status = SandboxStatus.RUNNING
+        running_sandbox.created_by_user_id = user_id
+
+        other_user_sandbox = Mock(spec=SandboxInfo)
+        other_user_sandbox.id = 'sandbox_2'
+        other_user_sandbox.status = SandboxStatus.RUNNING
+        other_user_sandbox.created_by_user_id = 'other_user'
+
+        paused_sandbox = Mock(spec=SandboxInfo)
+        paused_sandbox.id = 'sandbox_3'
+        paused_sandbox.status = SandboxStatus.PAUSED
+        paused_sandbox.created_by_user_id = user_id
+
+        # Mock sandbox service search
+        mock_page = Mock(spec=SandboxPage)
+        mock_page.items = [other_user_sandbox, running_sandbox, paused_sandbox]
+        mock_page.next_page_id = None
+        self.mock_sandbox_service.search_sandboxes = AsyncMock(return_value=mock_page)
+
+        # Act
+        result = await self.service._find_running_sandbox_for_user()
+
+        # Assert
+        assert result == running_sandbox
+        self.mock_user_context.get_user_id.assert_called_once()
+        self.mock_sandbox_service.search_sandboxes.assert_called_once_with(
+            page_id=None, limit=100
+        )
+
+    @pytest.mark.asyncio
+    async def test_find_running_sandbox_for_user_not_found(self):
+        """Test _find_running_sandbox_for_user when no running sandbox is found."""
+        # Arrange
+        user_id = 'test_user_123'
+        self.mock_user_context.get_user_id.return_value = user_id
+
+        # Create mock sandboxes (none running for this user)
+        other_user_sandbox = Mock(spec=SandboxInfo)
+        other_user_sandbox.id = 'sandbox_1'
+        other_user_sandbox.status = SandboxStatus.RUNNING
+        other_user_sandbox.created_by_user_id = 'other_user'
+
+        paused_sandbox = Mock(spec=SandboxInfo)
+        paused_sandbox.id = 'sandbox_2'
+        paused_sandbox.status = SandboxStatus.PAUSED
+        paused_sandbox.created_by_user_id = user_id
+
+        # Mock sandbox service search
+        mock_page = Mock(spec=SandboxPage)
+        mock_page.items = [other_user_sandbox, paused_sandbox]
+        mock_page.next_page_id = None
+        self.mock_sandbox_service.search_sandboxes = AsyncMock(return_value=mock_page)
+
+        # Act
+        result = await self.service._find_running_sandbox_for_user()
+
+        # Assert
+        assert result is None
+        self.mock_user_context.get_user_id.assert_called_once()
+        self.mock_sandbox_service.search_sandboxes.assert_called_once_with(
+            page_id=None, limit=100
+        )
+
+    @pytest.mark.asyncio
+    async def test_find_running_sandbox_for_user_exception_handling(self):
+        """Test _find_running_sandbox_for_user handles exceptions gracefully."""
+        # Arrange
+        self.mock_user_context.get_user_id.side_effect = Exception('User context error')
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service._logger'
+        ) as mock_logger:
+            result = await self.service._find_running_sandbox_for_user()
+
+        # Assert
+        assert result is None
+        mock_logger.warning.assert_called_once()
+        assert (
+            'Error finding running sandbox for user'
+            in mock_logger.warning.call_args[0][0]
+        )
+
     async def test_export_conversation_success(self):
         """Test successful download of conversation trajectory."""
         # Arrange
@@ -2052,6 +2150,7 @@ class TestLiveStatusAppConversationService:
 
         await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
             initial_message=None,
             system_message_suffix=None,
             git_provider=None,
@@ -2088,6 +2187,7 @@ class TestLiveStatusAppConversationService:
 
         await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
             initial_message=None,
             system_message_suffix=None,
             git_provider=None,
@@ -2243,6 +2343,7 @@ class TestPluginHandling:
             jwt_service=self.mock_jwt_service,
             sandbox_startup_timeout=30,
             sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
             httpx_client=self.mock_httpx_client,
             web_url='https://test.example.com',
             openhands_provider_base_url='https://provider.example.com',
@@ -2726,11 +2827,12 @@ class TestPluginHandling:
 
         # Act
         await self.service._build_start_conversation_request_for_user(
-            self.mock_sandbox,
-            None,
-            None,
-            None,
-            '/workspace',
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/workspace',
             plugins=plugins,
         )
 
@@ -2754,11 +2856,12 @@ class TestPluginHandling:
 
         # Act
         await self.service._build_start_conversation_request_for_user(
-            self.mock_sandbox,
-            None,
-            None,
-            None,
-            '/workspace',
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/workspace',
         )
 
         # Assert
