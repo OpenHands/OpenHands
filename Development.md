@@ -25,7 +25,7 @@ Select your operating system to see the specific setup instructions:
 
 You'll need the following installed:
 
-- **Python 3.12** — We recommend installing via [Homebrew](https://brew.sh/). See the [official Homebrew Python docs](https://docs.brew.sh/Homebrew-and-Python) for setup details. Make sure `python3.12` is available in your PATH (the `make build` step will verify this).
+- **Python 3.12** — `brew install python@3.12` (see the [official Homebrew Python docs](https://docs.brew.sh/Homebrew-and-Python) for details). Make sure `python3.12` is available in your PATH (the `make build` step will verify this).
 - **Node.js >= 22** — `brew install node`
 - **Poetry >= 1.8** — `brew install poetry`
 - **Docker Desktop** — `brew install --cask docker`
@@ -84,7 +84,10 @@ sudo apt update
 # Install system dependencies
 sudo apt install -y build-essential curl netcat software-properties-common
 
-# Install Python 3.12 (required — add deadsnakes PPA if on Ubuntu 22.04 or older)
+# Install Python 3.12
+# Ubuntu 24.04+ and Debian 13+ ship with Python 3.12 — skip the PPA step if
+# python3.12 --version already works on your system.
+# The deadsnakes PPA is Ubuntu-only and needed for Ubuntu 22.04 or older:
 sudo add-apt-repository -y ppa:deadsnakes/ppa
 sudo apt update
 sudo apt install -y python3.12 python3.12-dev python3.12-venv
@@ -100,8 +103,15 @@ curl -sSL https://install.python-poetry.org | python3 -
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
-# Install Docker (see https://docs.docker.com/engine/install/ubuntu/ for full guide)
-sudo apt install -y docker.io docker-compose-v2
+# Install Docker
+# Follow the official guide: https://docs.docker.com/engine/install/ubuntu/
+# Quick version:
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker $USER
 # Log out and back in for Docker group changes to take effect
 ```
@@ -156,29 +166,7 @@ After installation, restart your computer and open Ubuntu.
 
 ### 2. Install Prerequisites (in WSL Ubuntu)
 
-```bash
-# Update package list
-sudo apt update
-
-# Install system dependencies
-sudo apt install -y build-essential curl netcat software-properties-common
-
-# Install Python 3.12 (required — add deadsnakes PPA if on Ubuntu 22.04 or older)
-sudo add-apt-repository -y ppa:deadsnakes/ppa
-sudo apt update
-sudo apt install -y python3.12 python3.12-dev python3.12-venv
-
-# Install Node.js 22.x
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-
-# Install Poetry
-curl -sSL https://install.python-poetry.org | python3 -
-
-# Add Poetry to your PATH
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
+Follow [Step 1 from the Linux setup](#1-install-prerequisites) to install system dependencies, Python 3.12, Node.js, and Poetry. Skip the Docker installation — Docker is provided through Docker Desktop below.
 
 ### 3. Configure Docker for WSL2
 

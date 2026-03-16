@@ -34,10 +34,10 @@ Full details in our [Development Guide](https://github.com/OpenHands/OpenHands/b
 
 ## Understanding the Codebase
 
-- **[Frontend](https://github.com/OpenHands/OpenHands/tree/main/frontend/README.md)** - React application
-- **[Backend](https://github.com/OpenHands/OpenHands/tree/main/openhands/README.md)** - Python core
-- **[Agents](https://github.com/OpenHands/OpenHands/tree/main/openhands/agenthub/README.md)** - AI agent implementations
-- **[Runtime](https://github.com/OpenHands/OpenHands/tree/main/openhands/runtime/README.md)** - Execution environments
+- **[Frontend](./frontend/README.md)** - React application
+- **[Backend](./openhands/README.md)** - Python core
+- **[Agents](./openhands/agenthub/README.md)** - AI agent implementations
+- **[Runtime](./openhands/runtime/README.md)** - Execution environments
 - **[Evaluation](https://github.com/OpenHands/benchmarks)** - Testing and benchmarks
 
 ## What Can You Build?
@@ -48,7 +48,7 @@ Full details in our [Development Guide](https://github.com/OpenHands/OpenHands/b
 - Mobile responsiveness
 - Component libraries
 
-For bigger changes, join the #eng-ui-ux channel in [Slack](https://openhands.dev/joinslack) first.
+For bigger changes, join the #proj-gui channel in [Slack](https://openhands.dev/joinslack) first.
 
 ### Agent Development
 - Prompt engineering
@@ -124,28 +124,6 @@ For example, a PR title could be:
 - Include screenshots for UI changes
 - If your changes are user-facing (e.g. a new feature in the UI, a change in behavior, or a bugfix),
   please include a short message that we can add to our changelog
-
-## License
-
-OpenHands is released under the **MIT License**:
-
-### You Can
-- Use OpenHands for any purpose, including commercial projects
-- Modify the code to fit your needs
-- Share your modifications
-- Distribute or sell copies
-
-### You Must
-- Include the original copyright notice and license text
-- Preserve the license in any substantial portions you use
-
-### No Warranty
-- OpenHands is provided "as is" without warranty
-- Contributors are not liable for any damages
-
-Full license text: [LICENSE](https://github.com/OpenHands/OpenHands/blob/main/LICENSE)
-
-Note: Content in the `enterprise/` directory has a separate license. See `enterprise/LICENSE`.
 
 ## Need Help?
 
