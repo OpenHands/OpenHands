@@ -9,14 +9,21 @@ const MOBILE_BREAKPOINT = 1024;
  *
  * This replaces useWindowSize() for breakpoint detection, avoiding
  * unnecessary re-renders during drag resize.
+ *
+ * Note: Returns false (desktop) during SSR to avoid hydration mismatch,
+ * then updates to the correct value after mount.
  */
 export function useBreakpoint(breakpoint: number = MOBILE_BREAKPOINT): boolean {
-  const [isMobile, setIsMobile] = useState(
-    () => window.innerWidth <= breakpoint,
-  );
-  const isMobileRef = useRef(isMobile);
+  // Start with false (desktop) during SSR to avoid hydration mismatch
+  const [isMobile, setIsMobile] = useState(false);
+  const isMobileRef = useRef(false);
 
   useEffect(() => {
+    // Update initial value after hydration
+    const initialIsMobile = window.innerWidth <= breakpoint;
+    isMobileRef.current = initialIsMobile;
+    setIsMobile(initialIsMobile);
+
     function handleResize() {
       const newIsMobile = window.innerWidth <= breakpoint;
       if (newIsMobile !== isMobileRef.current) {
