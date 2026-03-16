@@ -18175,7 +18175,6 @@
     "tr": "Bitir",
     "uk": "Завершити"
   },
-<<<<<<< APP-886/home-page-cta
   "CTA$ENTERPRISE_TITLE": {
     "en": "Get OpenHands for Enterprise",
     "ja": "エンタープライズ向けOpenHandsを入手",
@@ -18223,7 +18222,7 @@
     "tr": "Daha fazla bilgi",
     "de": "Mehr erfahren",
     "uk": "Дізнатися більше"
-=======
+  },
   "ENTERPRISE$SELF_HOSTED": {
     "en": "Self-Hosted",
     "ja": "セルフホスト",
@@ -18703,6 +18702,5 @@
     "es": "Por favor, inicia sesión para autorizar tu dispositivo.",
     "tr": "Cihazınızı yetkilendirmek için lütfen giriş yapın.",
     "uk": "Будь ласка, увійдіть, щоб авторизувати свій пристрій."
->>>>>>> main
   }
 }
