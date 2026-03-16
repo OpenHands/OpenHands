@@ -123,6 +123,10 @@ class TestLiveStatusAppConversationService:
         self.mock_sandbox.id = uuid4()
         self.mock_sandbox.status = SandboxStatus.RUNNING
 
+        # Default mock for hooks loading - returns None (no hooks found)
+        # Tests that specifically test hooks loading can override this mock
+        self.service._load_hooks_from_workspace = AsyncMock(return_value=None)
+
     def test_apply_suggested_task_sets_prompt_and_trigger(self):
         """Test suggested task prompts populate initial message and trigger."""
         suggested_task = SuggestedTask(
@@ -179,6 +183,7 @@ class TestLiveStatusAppConversationService:
             with pytest.raises(ValueError, match='empty prompt'):
                 self.service._apply_suggested_task(request)
 
+    @pytest.mark.asyncio
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
@@ -1138,6 +1143,8 @@ class TestLiveStatusAppConversationService:
         self.service._load_skills_and_update_agent = AsyncMock(
             side_effect=Exception('Skills loading failed')
         )
+
+        # Note: hooks loading is already mocked in setup_method() to return None
 
         # Act
         with patch(
@@ -3144,3 +3151,275 @@ class TestAppConversationStartRequestWithPlugins:
         assert request.plugins[0].source == 'github:owner/plugin1'
         assert request.plugins[1].repo_path == 'plugins/sub'
         assert request.plugins[2].source == '/local/path'
+
+
+class TestLoadHooksFromWorkspace:
+    """Test cases for _load_hooks_from_workspace method."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        # Create mock dependencies
+        self.mock_user_context = Mock(spec=UserContext)
+        self.mock_jwt_service = Mock()
+        self.mock_sandbox_service = Mock()
+        self.mock_sandbox_spec_service = Mock()
+        self.mock_app_conversation_info_service = Mock()
+        self.mock_app_conversation_start_task_service = Mock()
+        self.mock_event_callback_service = Mock()
+        self.mock_event_service = Mock()
+        self.mock_httpx_client = AsyncMock()
+
+        # Create service instance
+        self.service = LiveStatusAppConversationService(
+            init_git_in_empty_workspace=True,
+            user_context=self.mock_user_context,
+            app_conversation_info_service=self.mock_app_conversation_info_service,
+            app_conversation_start_task_service=self.mock_app_conversation_start_task_service,
+            event_callback_service=self.mock_event_callback_service,
+            event_service=self.mock_event_service,
+            sandbox_service=self.mock_sandbox_service,
+            sandbox_spec_service=self.mock_sandbox_spec_service,
+            jwt_service=self.mock_jwt_service,
+            sandbox_startup_timeout=30,
+            sandbox_startup_poll_frequency=1,
+            httpx_client=self.mock_httpx_client,
+            web_url='https://test.example.com',
+            openhands_provider_base_url='https://provider.example.com',
+            access_token_hard_timeout=None,
+            app_mode='test',
+        )
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_success(self):
+        """Test loading hooks from workspace when hooks.json exists."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {'X-Session-API-Key': 'test-key'}
+
+        hooks_response = {
+            'hook_config': {
+                'stop': [
+                    {
+                        'matcher': '*',
+                        'hooks': [{'type': 'command', 'command': 'echo "stop hook"'}],
+                    }
+                ]
+            }
+        }
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = hooks_response
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace, '/workspace'
+        )
+
+        # Assert
+        assert result is not None
+        assert not result.is_empty()
+        self.mock_httpx_client.post.assert_called_once_with(
+            'http://agent-server:8000/api/hooks',
+            json={'project_dir': '/workspace'},
+            headers={
+                'Content-Type': 'application/json',
+                'X-Session-API-Key': 'test-key',
+            },
+            timeout=30.0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_file_not_found(self):
+        """Test loading hooks when hooks.json does not exist."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {}
+
+        # Agent server returns hook_config: None when file not found
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {'hook_config': None}
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace, '/workspace'
+        )
+
+        # Assert
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_empty_hooks(self):
+        """Test loading hooks when hooks.json is empty or has no hooks."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {}
+
+        # Agent server returns empty hook_config
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {'hook_config': {}}
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace, '/workspace'
+        )
+
+        # Assert
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_http_error(self):
+        """Test loading hooks when HTTP request fails."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {}
+
+        self.mock_httpx_client.post = AsyncMock(
+            side_effect=Exception('Connection error')
+        )
+
+        # Act
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace, '/workspace'
+        )
+
+        # Assert
+        assert result is None
+
+    def test_get_project_dir_for_hooks_with_selected_repository(self):
+        """Test get_project_dir_for_hooks with a selected repository."""
+        from openhands.app_server.app_conversation.hook_loader import (
+            get_project_dir_for_hooks,
+        )
+
+        result = get_project_dir_for_hooks(
+            '/workspace/project',
+            'OpenHands/software-agent-sdk',
+        )
+        assert result == '/workspace/project/software-agent-sdk'
+
+    def test_get_project_dir_for_hooks_without_selected_repository(self):
+        """Test get_project_dir_for_hooks without a selected repository."""
+        from openhands.app_server.app_conversation.hook_loader import (
+            get_project_dir_for_hooks,
+        )
+
+        result = get_project_dir_for_hooks('/workspace/project', None)
+        assert result == '/workspace/project'
+
+    def test_get_project_dir_for_hooks_with_empty_string(self):
+        """Test get_project_dir_for_hooks with empty string repository."""
+        from openhands.app_server.app_conversation.hook_loader import (
+            get_project_dir_for_hooks,
+        )
+
+        # Empty string should be treated as no repository
+        result = get_project_dir_for_hooks('/workspace/project', '')
+        assert result == '/workspace/project'
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_with_project_dir(self):
+        """Test loading hooks with a pre-resolved project_dir.
+
+        The caller is responsible for computing the project_dir (which
+        already includes the repo name when a repo is selected).
+        _load_hooks_from_workspace should use the project_dir as-is.
+        """
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {'X-Session-API-Key': 'test-key'}
+
+        hooks_response = {
+            'hook_config': {
+                'stop': [
+                    {
+                        'matcher': '*',
+                        'hooks': [{'type': 'command', 'command': 'echo "stop hook"'}],
+                    }
+                ]
+            }
+        }
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = hooks_response
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act - project_dir already includes repo name
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace,
+            '/workspace/project/software-agent-sdk',
+        )
+
+        # Assert
+        assert result is not None
+        assert not result.is_empty()
+        # The project_dir should be passed as-is without doubling
+        self.mock_httpx_client.post.assert_called_once_with(
+            'http://agent-server:8000/api/hooks',
+            json={'project_dir': '/workspace/project/software-agent-sdk'},
+            headers={
+                'Content-Type': 'application/json',
+                'X-Session-API-Key': 'test-key',
+            },
+            timeout=30.0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_load_hooks_from_workspace_base_dir(self):
+        """Test loading hooks with a base workspace directory (no repo selected)."""
+        # Arrange
+        mock_remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        mock_remote_workspace.host = 'http://agent-server:8000'
+        mock_remote_workspace._headers = {'X-Session-API-Key': 'test-key'}
+
+        hooks_response = {
+            'hook_config': {
+                'stop': [
+                    {
+                        'matcher': '*',
+                        'hooks': [{'type': 'command', 'command': 'echo "stop hook"'}],
+                    }
+                ]
+            }
+        }
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = hooks_response
+        mock_response.raise_for_status = Mock()
+
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        # Act - no repo selected, project_dir is base working_dir
+        result = await self.service._load_hooks_from_workspace(
+            mock_remote_workspace,
+            '/workspace/project',
+        )
+
+        # Assert
+        assert result is not None
+        self.mock_httpx_client.post.assert_called_once_with(
+            'http://agent-server:8000/api/hooks',
+            json={'project_dir': '/workspace/project'},
+            headers={
+                'Content-Type': 'application/json',
+                'X-Session-API-Key': 'test-key',
+            },
+            timeout=30.0,
+        )

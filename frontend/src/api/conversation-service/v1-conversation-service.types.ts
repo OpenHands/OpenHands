@@ -135,6 +135,27 @@ export interface GetSkillsResponse {
   skills: Skill[];
 }
 
+export interface HookDefinition {
+  type: string; // 'command' or 'prompt'
+  command: string;
+  timeout: number;
+  async?: boolean;
+}
+
+export interface HookMatcher {
+  matcher: string; // Pattern: '*', exact match, or regex
+  hooks: HookDefinition[];
+}
+
+export interface HookEvent {
+  event_type: string; // e.g., 'stop', 'pre_tool_use', 'post_tool_use'
+  matchers: HookMatcher[];
+}
+
+export interface GetHooksResponse {
+  hooks: HookEvent[];
+}
+
 // Runtime conversation types (from agent server)
 export interface V1RuntimeConversationStats {
   usage_to_metrics: Record<string, V1RuntimeMetrics>;

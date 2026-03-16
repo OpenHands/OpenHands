@@ -78,7 +78,6 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
-  onDisconnect,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -86,7 +85,6 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: V1AppConversation[];
   subConversationIds?: string[];
-  onDisconnect?: () => void;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -714,13 +712,10 @@ export function ConversationWebSocketProvider({
           }
         }
       },
-      onClose: (event: CloseEvent) => {
+      onClose: () => {
         setMainConnectionState("CLOSED");
-        // Trigger silent recovery on unexpected disconnect
-        // Do NOT show error message - recovery happens automatically
-        if (event.code !== 1000 && hasConnectedRefMain.current) {
-          onDisconnect?.();
-        }
+        // Recovery is handled by useSandboxRecovery on tab focus/page refresh
+        // No error message needed - silent recovery provides better UX
       },
       onError: () => {
         setMainConnectionState("CLOSED");
@@ -738,7 +733,6 @@ export function ConversationWebSocketProvider({
     sessionApiKey,
     conversationId,
     conversationUrl,
-    onDisconnect,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -785,13 +779,10 @@ export function ConversationWebSocketProvider({
           }
         }
       },
-      onClose: (event: CloseEvent) => {
+      onClose: () => {
         setPlanningConnectionState("CLOSED");
-        // Trigger silent recovery on unexpected disconnect
-        // Do NOT show error message - recovery happens automatically
-        if (event.code !== 1000 && hasConnectedRefPlanning.current) {
-          onDisconnect?.();
-        }
+        // Recovery is handled by useSandboxRecovery on tab focus/page refresh
+        // No error message needed - silent recovery provides better UX
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
@@ -808,7 +799,6 @@ export function ConversationWebSocketProvider({
     removeErrorMessage,
     sessionApiKey,
     subConversations,
-    onDisconnect,
   ]);
 
   // Only attempt WebSocket connection when we have a valid URL
