@@ -35,7 +35,7 @@ Full details in our [Development Guide](./Development.md).
 ## Understanding the Codebase
 
 - **[Frontend](./frontend/README.md)** - React application
-- **[Backend](./openhands/README.md)** - Python core
+- **[App Server (V1)](./openhands/app_server/README.md)** - Current FastAPI application server and REST API modules
 - **[Agents](./openhands/agenthub/README.md)** - AI agent implementations
 - **[Runtime](./openhands/runtime/README.md)** - Execution environments
 - **[Evaluation](https://github.com/OpenHands/benchmarks)** - Testing and benchmarks

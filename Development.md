@@ -69,6 +69,8 @@ make start-backend  # Backend only on port 3000
 make start-frontend # Frontend only on port 3001
 ```
 
+These targets serve the current OpenHands V1 API by default. In the codebase, `make start-backend` runs `openhands.server.listen:app`, and that app includes the `openhands/app_server` V1 routes unless `ENABLE_V1=0`.
+
 ---
 
 ## Linux Setup
@@ -345,11 +347,10 @@ make help
 - [/Development.md](./Development.md) (this file): Comprehensive guide for developers working on OpenHands
 - [/CONTRIBUTING.md](./CONTRIBUTING.md): Guidelines for contributing to the project, including code style and PR process
 - [DOC_STYLE_GUIDE.md](https://github.com/OpenHands/docs/blob/main/openhands/DOC_STYLE_GUIDE.md): Standards for writing and maintaining project documentation
-- [/openhands/README.md](./openhands/README.md): Details about the backend Python implementation
+- [/openhands/app_server/README.md](./openhands/app_server/README.md): Current V1 application server implementation and REST API modules
 - [/frontend/README.md](./frontend/README.md): Frontend React application setup and development guide
 - [/containers/README.md](./containers/README.md): Information about Docker containers and deployment
 - [/tests/unit/README.md](./tests/unit/README.md): Guide to writing and running unit tests
 - [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks): Documentation for the evaluation framework and benchmarks
 - [/skills/README.md](./skills/README.md): Information about the skills architecture and implementation
-- [/openhands/server/README.md](./openhands/server/README.md): Server implementation details and API documentation
 - [/openhands/runtime/README.md](./openhands/runtime/README.md): Documentation for the runtime environment and execution model
