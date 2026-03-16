@@ -90,21 +90,40 @@ These are evaluated based on:
 
 Discuss major changes in [GitHub issues](https://github.com/OpenHands/OpenHands/issues) or [Slack](https://openhands.dev/joinslack) first.
 
-## Pull Request Guidelines
+## Sending Pull Requests to OpenHands
 
-### Title Format
-- `feat: Add new agent capability`
-- `fix: Resolve memory leak in runtime`
-- `docs: Update installation guide`
-- `style: Fix code formatting`
-- `refactor: Simplify authentication logic`
-- `test: Add unit tests for parser`
+You'll need to fork our repository to send us a Pull Request. You can learn more
+about how to fork a GitHub repo and open a PR with your changes in [this article](https://medium.com/swlh/forks-and-pull-requests-how-to-contribute-to-github-repos-8843fac34ce8).
 
-### Description
+You may also check out previous PRs in the [PR list](https://github.com/OpenHands/OpenHands/pulls).
+
+### Pull Request Title Format
+
+As described [here](https://github.com/commitizen/conventional-commit-types/blob/master/index.json), a valid PR title should begin with one of the following prefixes:
+
+- `feat`: A new feature
+- `fix`: A bug fix
+- `docs`: Documentation only changes
+- `style`: Changes that do not affect the meaning of the code (white space, formatting, missing semicolons, etc.)
+- `refactor`: A code change that neither fixes a bug nor adds a feature
+- `perf`: A code change that improves performance
+- `test`: Adding missing tests or correcting existing tests
+- `build`: Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)
+- `ci`: Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs)
+- `chore`: Other changes that don't modify src or test files
+- `revert`: Reverts a previous commit
+
+For example, a PR title could be:
+- `refactor: modify package path`
+- `feat(frontend): xxxx`, where `(frontend)` means that this PR mainly focuses on the frontend component.
+
+### Pull Request Description
+
 - Explain what the PR does and why
 - Link to related issues
 - Include screenshots for UI changes
-- Add changelog entry for user-facing changes
+- If your changes are user-facing (e.g. a new feature in the UI, a change in behavior, or a bugfix),
+  please include a short message that we can add to our changelog
 
 ## License
 

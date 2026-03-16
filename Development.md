@@ -13,7 +13,9 @@ Select your operating system to see the specific setup instructions:
 - [macOS](#macos-setup)
 - [Linux](#linux-setup)
 - [Windows WSL](#windows-wsl-setup)
+- [Dev Container](#dev-container)
 - [Developing in Docker](#developing-in-docker)
+- [No sudo access?](#develop-without-sudo-access)
 
 ---
 
@@ -37,9 +39,24 @@ make build
 
 ### 3. Configure the Language Model
 
+OpenHands supports a diverse array of Language Models (LMs) through the powerful [litellm](https://docs.litellm.ai) library.
+
+To configure the LM of your choice, run:
+
 ```bash
 make setup-config
 ```
+
+This command will prompt you to enter the LLM API key, model name, and other variables ensuring that OpenHands is
+tailored to your specific needs. Note that the model name will apply only when you run headless. If you use the UI,
+please set the model in the UI.
+
+Note: If you have previously run OpenHands using the docker command, you may have already set some environment
+variables in your terminal. The final configurations are set from highest to lowest priority:
+Environment variables > config.toml variables > default variables
+
+**Note on Alternative Models:**
+See [our documentation](https://docs.openhands.dev/usage/llms) for recommended models.
 
 ### 4. Run the Application
 
@@ -96,6 +113,8 @@ make build
 ```
 
 ### 3. Configure the Language Model
+
+See the [macOS section above](#3-configure-the-language-model) for full details on LLM configuration, config priority, and alternative models.
 
 ```bash
 make setup-config
@@ -179,6 +198,8 @@ make build
 
 ### 5. Configure the Language Model
 
+See the [macOS section above](#3-configure-the-language-model) for full details on LLM configuration, config priority, and alternative models.
+
 ```bash
 make setup-config
 ```
@@ -195,6 +216,19 @@ make start-frontend # Frontend only on port 3001
 ```
 
 Access the frontend at `http://localhost:3001` from your Windows browser.
+
+---
+
+## Dev Container
+
+There is a [dev container](https://containers.dev/) available which provides a
+pre-configured environment with all the necessary dependencies installed if you
+are using a [supported editor or tool](https://containers.dev/supporting). For
+example, if you are using Visual Studio Code (VS Code) with the
+[Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+extension installed, you can open the project in a dev container by using the
+_Dev Container: Reopen in Container_ command from the Command Palette
+(Ctrl+Shift+P).
 
 ---
 
@@ -223,6 +257,24 @@ If you don't have `make` installed, run:
 ```bash
 cd ./containers/dev
 ./dev.sh
+```
+
+---
+
+## Develop without sudo access
+
+If you want to develop without system admin/sudo access to upgrade/install `Python` and/or `NodeJS`, you can use
+`conda` or `mamba` to manage the packages for you:
+
+```bash
+# Download and install Mamba (a faster version of conda)
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+bash Miniforge3-$(uname)-$(uname -m).sh
+
+# Install Python 3.12, nodejs, and poetry
+mamba install python=3.12
+mamba install conda-forge::nodejs
+mamba install conda-forge::poetry
 ```
 
 ---
@@ -301,9 +353,15 @@ make help
 
 ## Key Documentation Resources
 
-- [/README.md](./README.md): Main project overview and basic setup
-- [/CONTRIBUTING.md](./CONTRIBUTING.md): Contributing guidelines and PR process
-- [/frontend/README.md](./frontend/README.md): Frontend React development
-- [/openhands/README.md](./openhands/README.md): Backend Python implementation
-- [/containers/README.md](./containers/README.md): Docker container information
-- [/tests/unit/README.md](./tests/unit/README.md): Unit testing guide
+- [/README.md](./README.md): Main project overview, features, and basic setup instructions
+- [/Development.md](./Development.md) (this file): Comprehensive guide for developers working on OpenHands
+- [/CONTRIBUTING.md](./CONTRIBUTING.md): Guidelines for contributing to the project, including code style and PR process
+- [DOC_STYLE_GUIDE.md](https://github.com/OpenHands/docs/blob/main/openhands/DOC_STYLE_GUIDE.md): Standards for writing and maintaining project documentation
+- [/openhands/README.md](./openhands/README.md): Details about the backend Python implementation
+- [/frontend/README.md](./frontend/README.md): Frontend React application setup and development guide
+- [/containers/README.md](./containers/README.md): Information about Docker containers and deployment
+- [/tests/unit/README.md](./tests/unit/README.md): Guide to writing and running unit tests
+- [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks): Documentation for the evaluation framework and benchmarks
+- [/skills/README.md](./skills/README.md): Information about the skills architecture and implementation
+- [/openhands/server/README.md](./openhands/server/README.md): Server implementation details and API documentation
+- [/openhands/runtime/README.md](./openhands/runtime/README.md): Documentation for the runtime environment and execution model
