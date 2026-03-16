@@ -38,9 +38,18 @@ describe("ModelSelector", () => {
     },
   };
 
+  const verifiedModels = ["gpt-4o", "gpt-4o-mini"];
+  const verifiedProviders = ["openai"];
+
   it("should display the provider selector", async () => {
     const user = userEvent.setup();
-    render(<ModelSelector models={models} />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+      />,
+    );
 
     const selector = screen.getByLabelText("LLM Provider");
     expect(selector).toBeInTheDocument();
@@ -55,7 +64,13 @@ describe("ModelSelector", () => {
 
   it("should disable the model selector if the provider is not selected", async () => {
     const user = userEvent.setup();
-    render(<ModelSelector models={models} />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+      />,
+    );
 
     const modelSelector = screen.getByLabelText("LLM Model");
     expect(modelSelector).toBeDisabled();
@@ -71,7 +86,13 @@ describe("ModelSelector", () => {
 
   it("should display the model selector", async () => {
     const user = userEvent.setup();
-    render(<ModelSelector models={models} />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+      />,
+    );
 
     const providerSelector = screen.getByLabelText("LLM Provider");
     await user.click(providerSelector);
@@ -101,7 +122,13 @@ describe("ModelSelector", () => {
 
   it("should call onModelChange when the model is changed", async () => {
     const user = userEvent.setup();
-    render(<ModelSelector models={models} />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+      />,
+    );
 
     const providerSelector = screen.getByLabelText("LLM Provider");
     const modelSelector = screen.getByLabelText("LLM Model");
@@ -128,7 +155,14 @@ describe("ModelSelector", () => {
   });
 
   it("should have a default value if passed", async () => {
-    render(<ModelSelector models={models} currentModel="azure/ada" />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+        currentModel="azure/ada"
+      />,
+    );
 
     expect(screen.getByLabelText("LLM Provider")).toHaveValue("Azure");
     expect(screen.getByLabelText("LLM Model")).toHaveValue("ada");
