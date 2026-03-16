@@ -151,7 +151,7 @@ export default function DeviceVerify() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div
-          className={`flex flex-col lg:flex-row items-stretch gap-6 w-full ${showEnterpriseBanner ? "max-w-4xl" : "max-w-md"}`}
+          className={`flex flex-col lg:flex-row items-center lg:items-start gap-6 w-full ${showEnterpriseBanner ? "max-w-4xl" : "max-w-md"}`}
         >
           {/* Device Authorization Card */}
           <div

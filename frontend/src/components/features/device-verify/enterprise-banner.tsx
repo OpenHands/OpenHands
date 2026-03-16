@@ -25,10 +25,10 @@ export function EnterpriseBanner() {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto lg:mx-0 lg:w-80 p-6 rounded-lg bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700">
+    <div className="w-full max-w-md mx-auto lg:mx-0 lg:w-80 p-6 rounded-lg bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700 h-fit">
       {/* Self-Hosted Label */}
       <div className="flex justify-center mb-4">
-        <div className="px-4 py-1 rounded-full bg-gradient-to-r from-blue-900 to-blue-950 border border-blue-800">
+        <div className="px-8 py-0.5 rounded-full bg-gradient-to-r from-blue-900 to-blue-950 border border-blue-800">
           <Text className="text-xs font-medium text-blue-400 tracking-wider uppercase">
             {t(I18nKey.ENTERPRISE$SELF_HOSTED)}
           </Text>
