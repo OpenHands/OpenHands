@@ -6,201 +6,297 @@ If you wish to contribute your changes, check out the
 on how to clone and setup the project initially before moving on. Otherwise,
 you can clone the OpenHands project directly.
 
-## Start the Server for Development
+## Choose Your Setup
 
-### 1. Requirements
+Select your operating system to see the specific setup instructions:
 
-- Linux, Mac OS, or [WSL on Windows](https://learn.microsoft.com/en-us/windows/wsl/install) [Ubuntu >= 22.04]
-- [Docker](https://docs.docker.com/engine/install/) (For those on MacOS, make sure to allow the default Docker socket to be used from advanced settings!)
-- [Python](https://www.python.org/downloads/) = 3.12
-- [NodeJS](https://nodejs.org/en/download/package-manager) >= 22.x
-- [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer) >= 1.8
-- OS-specific dependencies:
-  - Ubuntu: build-essential => `sudo apt-get install build-essential python3.12-dev`
-  - WSL: netcat => `sudo apt-get install netcat`
+- [macOS](#macos-setup)
+- [Linux](#linux-setup)
+- [Windows WSL](#windows-wsl-setup)
+- [Developing in Docker](#developing-in-docker)
 
-Make sure you have all these dependencies installed before moving on to `make build`.
+---
 
-#### Dev container
+## macOS Setup
 
-There is a [dev container](https://containers.dev/) available which provides a
-pre-configured environment with all the necessary dependencies installed if you
-are using a [supported editor or tool](https://containers.dev/supporting). For
-example, if you are using Visual Studio Code (VS Code) with the
-[Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-extension installed, you can open the project in a dev container by using the
-_Dev Container: Reopen in Container_ command from the Command Palette
-(Ctrl+Shift+P).
+### 1. Install Prerequisites
 
-#### Develop without sudo access
-
-If you want to develop without system admin/sudo access to upgrade/install `Python` and/or `NodeJS`, you can use
-`conda` or `mamba` to manage the packages for you:
+If you're starting fresh on a new Mac, run these commands in your terminal:
 
 ```bash
-# Download and install Mamba (a faster version of conda)
-curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
-bash Miniforge3-$(uname)-$(uname -m).sh
+# Install Homebrew (if you don't have it)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Install Python 3.12, nodejs, and poetry
-mamba install python=3.12
-mamba install conda-forge::nodejs
-mamba install conda-forge::poetry
+# Install Xcode CLI tools (required for building some dependencies)
+xcode-select --install
+
+# Install Python 3.12, Node.js, and Poetry via Homebrew
+brew install python@3.12 node poetry
+
+# Ensure Python 3.12 is available
+# Add to ~/.zshrc if needed: export PATH="/usr/local/opt/python@3.12/bin:$PATH"
+
+# Install Docker Desktop
+# Download from: https://www.docker.com/products/docker-desktop
+# After installing, go to Docker Desktop > Settings > General
+# Enable: "Allow the default Docker socket to be used"
 ```
 
-### 2. Build and Setup The Environment
-
-Begin by building the project which includes setting up the environment and installing dependencies. This step ensures
-that OpenHands is ready to run on your system:
+### 2. Build and Setup the Environment
 
 ```bash
 make build
 ```
 
-### 3. Configuring the Language Model
-
-OpenHands supports a diverse array of Language Models (LMs) through the powerful [litellm](https://docs.litellm.ai) library.
-
-To configure the LM of your choice, run:
+### 3. Configure the Language Model
 
 ```bash
 make setup-config
 ```
 
-This command will prompt you to enter the LLM API key, model name, and other variables ensuring that OpenHands is
-tailored to your specific needs. Note that the model name will apply only when you run headless. If you use the UI,
-please set the model in the UI.
-
-Note: If you have previously run OpenHands using the docker command, you may have already set some environment
-variables in your terminal. The final configurations are set from highest to lowest priority:
-Environment variables > config.toml variables > default variables
-
-**Note on Alternative Models:**
-See [our documentation](https://docs.openhands.dev/usage/llms) for recommended models.
-
-### 4. Running the application
-
-#### Option A: Run the Full Application
-
-Once the setup is complete, this command starts both the backend and frontend servers, allowing you to interact with OpenHands:
+### 4. Run the Application
 
 ```bash
+# Run both backend and frontend
 make run
+
+# Or run separately:
+make start-backend  # Backend only on port 3000
+make start-frontend # Frontend only on port 3001
 ```
 
-#### Option B: Individual Server Startup
+---
 
-- **Start the Backend Server:** If you prefer, you can start the backend server independently to focus on
-  backend-related tasks or configurations.
+## Linux Setup
 
-  ```bash
-  make start-backend
-  ```
+This guide covers Ubuntu/Debian. For other distributions, adapt the package manager commands accordingly.
 
-- **Start the Frontend Server:** Similarly, you can start the frontend server on its own to work on frontend-related
-  components or interface enhancements.
-  ```bash
-  make start-frontend
-  ```
-
-### 5. Running OpenHands with OpenHands
-
-You can use OpenHands to develop and improve OpenHands itself! This is a powerful way to leverage AI assistance for contributing to the project.
-
-#### Quick Start
-
-1. **Build and run OpenHands:**
-
-   ```bash
-   export INSTALL_DOCKER=0
-   export RUNTIME=local
-   make build && make run
-   ```
-
-2. **Access the interface:**
-
-   - Local development: http://localhost:3001
-   - Remote/cloud environments: Use the appropriate external URL
-
-3. **Configure for external access (if needed):**
-   ```bash
-   # For external access (e.g., cloud environments)
-   make run FRONTEND_PORT=12000 FRONTEND_HOST=0.0.0.0 BACKEND_HOST=0.0.0.0
-   ```
-
-### 6. LLM Debugging
-
-If you encounter any issues with the Language Model (LM) or you're simply curious, export DEBUG=1 in the environment and restart the backend.
-OpenHands will log the prompts and responses in the logs/llm/CURRENT_DATE directory, allowing you to identify the causes.
-
-### 7. Help
-
-Need help or info on available targets and commands? Use the help command for all the guidance you need with OpenHands.
+### 1. Install Prerequisites
 
 ```bash
-make help
+# Update package list
+sudo apt update
+
+# Install system dependencies
+sudo apt install -y build-essential python3.12-dev python3.12-venv netcat curl
+
+# Install Node.js 22.x
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install Poetry
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Install Docker
+# See: https://docs.docker.com/engine/install/
+# For Ubuntu: https://docs.docker.com/engine/install/ubuntu/
+sudo apt install -y docker.io docker-compose
+sudo usermod -aG docker $USER
+# Log out and back in for Docker group changes to take effect
 ```
 
-### 8. Testing
-
-To run tests, refer to the following:
-
-#### Unit tests
+### 2. Build and Setup the Environment
 
 ```bash
-poetry run pytest ./tests/unit/test_*.py
+make build
 ```
 
-### 9. Add or update dependency
+### 3. Configure the Language Model
 
-1. Add your dependency in `pyproject.toml` or use `poetry add xxx`.
-2. Update the poetry.lock file via `poetry lock --no-update`.
+```bash
+make setup-config
+```
 
-### 10. Use existing Docker image
+### 4. Run the Application
 
-To reduce build time (e.g., if no changes were made to the client-runtime component), you can use an existing Docker
-container image by setting the SANDBOX_RUNTIME_CONTAINER_IMAGE environment variable to the desired Docker image.
+```bash
+# Run both backend and frontend
+make run
 
-Example: `export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/openhands/runtime:1.2-nikolaik`
+# Or run separately:
+make start-backend  # Backend only on port 3000
+make start-frontend # Frontend only on port 3001
+```
 
-## Develop inside Docker container
+---
 
-TL;DR
+## Windows WSL Setup
+
+WSL2 with Ubuntu is recommended. The setup is similar to Linux, with a few WSL-specific considerations.
+
+### 1. Install WSL2
+
+```powershell
+# Run this in PowerShell as Administrator
+wsl --install -d Ubuntu-22.04
+```
+
+After installation, restart your computer and open Ubuntu.
+
+### 2. Install Prerequisites (in WSL Ubuntu)
+
+```bash
+# Update package list
+sudo apt update
+
+# Install system dependencies
+sudo apt install -y build-essential python3.12-dev python3.12-venv netcat curl
+
+# Install Node.js 22.x
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install Poetry
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Add Poetry to your PATH if needed
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### 3. Configure Docker for WSL2
+
+1. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop)
+2. Open Docker Desktop > Settings > General
+3. Enable: "Use the WSL 2 based engine"
+4. Go to Settings > Resources > WSL Integration
+5. Enable integration with your Ubuntu distribution
+
+**Important:** Keep your project files in the WSL filesystem (e.g., `~/workspace/openhands`), not in `/mnt/c`. Files accessed via `/mnt/c` will be significantly slower.
+
+### 4. Build and Setup the Environment
+
+```bash
+make build
+```
+
+### 5. Configure the Language Model
+
+```bash
+make setup-config
+```
+
+### 6. Run the Application
+
+```bash
+# Run both backend and frontend
+make run
+
+# Or run separately:
+make start-backend  # Backend only on port 3000
+make start-frontend # Frontend only on port 3001
+```
+
+Access the frontend at `http://localhost:3001` from your Windows browser.
+
+---
+
+## Developing in Docker
+
+If you don't want to install dependencies on your host machine, you can develop inside a Docker container.
+
+### Quick Start
 
 ```bash
 make docker-dev
 ```
 
-See more details [here](./containers/dev/README.md).
+For more details, see the [dev container documentation](./containers/dev/README.md).
 
-If you are just interested in running `OpenHands` without installing all the required tools on your host.
+### Alternative: Docker Run
+
+If you just want to run OpenHands without setting up a dev environment:
 
 ```bash
 make docker-run
 ```
 
-If you do not have `make` on your host, run:
+If you don't have `make` installed, run:
 
 ```bash
 cd ./containers/dev
 ./dev.sh
 ```
 
-You do need [Docker](https://docs.docker.com/engine/install/) installed on your host though.
+---
+
+## Running OpenHands with OpenHands
+
+You can use OpenHands to develop and improve OpenHands itself!
+
+### Quick Start
+
+```bash
+export INSTALL_DOCKER=0
+export RUNTIME=local
+make build && make run
+```
+
+Access the interface at:
+- Local development: http://localhost:3001
+- Remote/cloud environments: Use the appropriate external URL
+
+For external access:
+```bash
+make run FRONTEND_PORT=12000 FRONTEND_HOST=0.0.0.0 BACKEND_HOST=0.0.0.0
+```
+
+---
+
+## LLM Debugging
+
+If you encounter issues with the Language Model, enable debug logging:
+
+```bash
+export DEBUG=1
+# Restart the backend
+make start-backend
+```
+
+Logs will be saved to `logs/llm/CURRENT_DATE/` for troubleshooting.
+
+---
+
+## Testing
+
+### Unit Tests
+
+```bash
+poetry run pytest ./tests/unit/test_*.py
+```
+
+---
+
+## Adding Dependencies
+
+1. Add your dependency in `pyproject.toml` or use `poetry add xxx`
+2. Update the lock file: `poetry lock --no-update`
+
+---
+
+## Using Existing Docker Images
+
+To reduce build time, you can use an existing runtime image:
+
+```bash
+export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/openhands/runtime:1.2-nikolaik
+```
+
+---
+
+## Help
+
+```bash
+make help
+```
+
+---
 
 ## Key Documentation Resources
 
-Here's a guide to the important documentation files in the repository:
-
-- [/README.md](./README.md): Main project overview, features, and basic setup instructions
-- [/Development.md](./Development.md) (this file): Comprehensive guide for developers working on OpenHands
-- [/CONTRIBUTING.md](./CONTRIBUTING.md): Guidelines for contributing to the project, including code style and PR process
-- [DOC_STYLE_GUIDE.md](https://github.com/OpenHands/docs/blob/main/openhands/DOC_STYLE_GUIDE.md): Standards for writing and maintaining project documentation
-- [/openhands/README.md](./openhands/README.md): Details about the backend Python implementation
-- [/frontend/README.md](./frontend/README.md): Frontend React application setup and development guide
-- [/containers/README.md](./containers/README.md): Information about Docker containers and deployment
-- [/tests/unit/README.md](./tests/unit/README.md): Guide to writing and running unit tests
-- [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks): Documentation for the evaluation framework and benchmarks
-- [/skills/README.md](./skills/README.md): Information about the skills architecture and implementation
-- [/openhands/server/README.md](./openhands/server/README.md): Server implementation details and API documentation
-- [/openhands/runtime/README.md](./openhands/runtime/README.md): Documentation for the runtime environment and execution model
+- [/README.md](./README.md): Main project overview and basic setup
+- [/CONTRIBUTING.md](./CONTRIBUTING.md): Contributing guidelines and PR process
+- [/frontend/README.md](./frontend/README.md): Frontend React development
+- [/openhands/README.md](./openhands/README.md): Backend Python implementation
+- [/containers/README.md](./containers/README.md): Docker container information
+- [/tests/unit/README.md](./tests/unit/README.md): Unit testing guide
