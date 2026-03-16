@@ -21,26 +21,13 @@ Select your operating system to see the specific setup instructions:
 
 ### 1. Install Prerequisites
 
-If you're starting fresh on a new Mac, run these commands in your terminal:
+You'll need the following installed:
 
-```bash
-# Install Xcode CLI tools (required for building some dependencies)
-xcode-select --install
-
-# Install Homebrew (if you don't have it)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Install Python 3.12, Node.js, and Poetry via Homebrew
-brew install python@3.12 node poetry
-
-# Ensure Python 3.12 is available
-# Add to ~/.zshrc if needed: export PATH="/usr/local/opt/python@3.12/bin:$PATH"
-
-# Install Docker Desktop
-# Download from: https://www.docker.com/products/docker-desktop
-# After installing, go to Docker Desktop > Settings > General
-# Enable: "Allow the default Docker socket to be used"
-```
+- **Python 3.12** — We recommend installing via [Homebrew](https://brew.sh/). See the [official Homebrew Python docs](https://docs.brew.sh/Homebrew-and-Python) for setup details. Make sure `python3.12` is available in your PATH (the `make build` step will verify this).
+- **Node.js >= 22** — `brew install node`
+- **Poetry >= 1.8** — `brew install poetry`
+- **Docker Desktop** — `brew install --cask docker`
+  - After installing, open Docker Desktop → **Settings → Advanced** → Enable **"Allow the default Docker socket to be used"**
 
 ### 2. Build and Setup the Environment
 
@@ -78,7 +65,12 @@ This guide covers Ubuntu/Debian. For other distributions, adapt the package mana
 sudo apt update
 
 # Install system dependencies
-sudo apt install -y build-essential python3.12-dev python3.12-venv netcat curl
+sudo apt install -y build-essential curl netcat software-properties-common
+
+# Install Python 3.12 (required — add deadsnakes PPA if on Ubuntu 22.04 or older)
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.12 python3.12-dev python3.12-venv
 
 # Install Node.js 22.x
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -87,10 +79,12 @@ sudo apt install -y nodejs
 # Install Poetry
 curl -sSL https://install.python-poetry.org | python3 -
 
-# Install Docker
-# See: https://docs.docker.com/engine/install/
-# For Ubuntu: https://docs.docker.com/engine/install/ubuntu/
-sudo apt install -y docker.io docker-compose
+# Add Poetry to your PATH
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Install Docker (see https://docs.docker.com/engine/install/ubuntu/ for full guide)
+sudo apt install -y docker.io docker-compose-v2
 sudo usermod -aG docker $USER
 # Log out and back in for Docker group changes to take effect
 ```
@@ -148,7 +142,12 @@ After installation, restart your computer and open Ubuntu.
 sudo apt update
 
 # Install system dependencies
-sudo apt install -y build-essential python3.12-dev python3.12-venv netcat curl
+sudo apt install -y build-essential curl netcat software-properties-common
+
+# Install Python 3.12 (required — add deadsnakes PPA if on Ubuntu 22.04 or older)
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.12 python3.12-dev python3.12-venv
 
 # Install Node.js 22.x
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -157,7 +156,7 @@ sudo apt install -y nodejs
 # Install Poetry
 curl -sSL https://install.python-poetry.org | python3 -
 
-# Add Poetry to your PATH if needed
+# Add Poetry to your PATH
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
