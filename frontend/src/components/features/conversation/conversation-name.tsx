@@ -233,6 +233,7 @@ export function ConversationName() {
         <ConfirmStopModal
           onConfirm={handleConfirmStop}
           onCancel={() => setConfirmStopModalVisible(false)}
+          sandboxId={conversation?.sandbox_id ?? null}
         />
       )}
     </>

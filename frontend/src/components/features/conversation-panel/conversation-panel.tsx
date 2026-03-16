@@ -44,6 +44,9 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     React.useState<string | null>(null);
   const [selectedConversationVersion, setSelectedConversationVersion] =
     React.useState<"V0" | "V1" | undefined>(undefined);
+  const [selectedSandboxId, setSelectedSandboxId] = React.useState<
+    string | null
+  >(null);
   const [openContextMenuId, setOpenContextMenuId] = React.useState<
     string | null
   >(null);
@@ -85,10 +88,12 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const handleStopConversation = (
     conversationId: string,
     version?: "V0" | "V1",
+    sandboxId?: string | null,
   ) => {
     setConfirmStopModalVisible(true);
     setSelectedConversationId(conversationId);
     setSelectedConversationVersion(version);
+    setSelectedSandboxId(sandboxId ?? null);
   };
 
   const handleConversationTitleChange = async (
@@ -185,6 +190,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
               handleStopConversation(
                 project.conversation_id,
                 project.conversation_version,
+                project.sandbox_id,
               )
             }
             onChangeTitle={(title) =>
@@ -238,6 +244,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
             setConfirmStopModalVisible(false);
           }}
           onCancel={() => setConfirmStopModalVisible(false)}
+          sandboxId={selectedSandboxId}
         />
       )}
 
