@@ -4,7 +4,9 @@ Thanks for your interest in contributing to OpenHands! We're building the future
 
 ## Our Vision
 
-We believe AI and AI agents will fundamentally change how we build software. We're committed to making these powerful technologies accessible to everyone through open source.
+The OpenHands community is built around the belief that AI and AI agents are going to fundamentally change the way we build software. If this is true, we should do everything we can to make sure that the benefits provided by such powerful technology are accessible to everyone.
+
+We believe in the power of open source to democratize access to cutting-edge AI technology. Just as the internet transformed how we share information, we envision a world where AI-powered development tools are available to every developer, regardless of their background or resources.
 
 ## Getting Started
 
