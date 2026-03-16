@@ -24,11 +24,11 @@ Select your operating system to see the specific setup instructions:
 If you're starting fresh on a new Mac, run these commands in your terminal:
 
 ```bash
-# Install Homebrew (if you don't have it)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
 # Install Xcode CLI tools (required for building some dependencies)
 xcode-select --install
+
+# Install Homebrew (if you don't have it)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Install Python 3.12, Node.js, and Poetry via Homebrew
 brew install python@3.12 node poetry
