@@ -74,7 +74,7 @@ dependencies = [
   "psutil",
   "pybase62>=1",
   "pygithub>=2.5",
-  "pyjwt>=2.9",
+  "pyjwt>=2.12",
   "pylatexenc",
   "pypdf>=6.7.2",
   "python-docx",
@@ -190,7 +190,7 @@ python-multipart = ">=0.0.22"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = "^0.12.1"
-pyjwt = "^2.9.0"
+pyjwt = "^2.12.0"
 dirhash = "*"
 tornado = ">=6.5"
 python-dotenv = "*"
