@@ -8,7 +8,7 @@ import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { useSubmitOnboarding } from "#/hooks/mutation/use-submit-onboarding";
 import { useTracking } from "#/hooks/use-tracking";
-import { ENABLE_ONBOARDING, IS_SELF_HOSTED } from "#/utils/feature-flags";
+import { ENABLE_ONBOARDING } from "#/utils/feature-flags";
 import { cn } from "#/utils/utils";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { useConfig } from "#/hooks/query/use-config";
@@ -29,9 +29,7 @@ export const clientLoader = async () => {
 type OnboardingAnswers = Record<string, string | string[]>;
 
 function getOnboardingAppMode(): OnboardingAppMode {
-  if (IS_SELF_HOSTED()) {
-    return "self-hosted";
-  }
+  // TODO: query for app mode (saas or self hosted super user)
   return "saas";
 }
 
