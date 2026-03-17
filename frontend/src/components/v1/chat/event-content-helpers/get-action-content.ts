@@ -21,6 +21,8 @@ import {
   BrowserListTabsAction,
   BrowserSwitchTabAction,
   BrowserCloseTabAction,
+  GlobAction,
+  GrepAction,
 } from "#/types/v1/core/base/action";
 
 const getRiskText = (risk: SecurityRisk) => {
@@ -38,6 +40,28 @@ const getRiskText = (risk: SecurityRisk) => {
 };
 
 const getNoContentActionContent = (): string => "";
+
+// Grep/Glob search actions
+const getSearchActionContent = (
+  event: ActionEvent<GlobAction | GrepAction>,
+): string => {
+  const { action } = event;
+  const parts: string[] = [];
+  if (action.pattern) {
+    parts.push(`**Pattern:** \`${action.pattern}\``);
+  }
+  if (action.path) {
+    parts.push(`**Path:** \`${action.path}\``);
+  }
+  if ("include" in action && action.include) {
+    parts.push(`**Include:** \`${action.include}\``);
+  }
+  const { summary } = event as { summary?: string };
+  if (summary) {
+    parts.push(`**Summary:** ${summary}`);
+  }
+  return parts.length > 0 ? parts.join("\n") : getNoContentActionContent();
+};
 
 // File Editor Actions
 const getFileEditorActionContent = (
@@ -227,6 +251,12 @@ export const getActionContent = (event: ActionEvent): string => {
     case "BrowserSwitchTabAction":
     case "BrowserCloseTabAction":
       return getBrowserActionContent(action);
+
+    case "GrepAction":
+    case "GlobAction":
+      return getSearchActionContent(
+        event as ActionEvent<GlobAction | GrepAction>,
+      );
 
     default:
       return getDefaultEventContent(event);
