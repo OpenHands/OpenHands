@@ -143,7 +143,14 @@ curl -s -o /dev/null -w "%{http_code}" https://ohpr-<PR>-<random>.staging.all-ha
 
 ## Running E2E Tests Against Staging
 
-**Critical: Feature deployments have their own Keycloak instance.** API keys from `app.all-hands.dev` or `$OPENHANDS_API_KEY` will NOT work. You need a test API key for the specific feature deployment. The user must provide one, or you log in via the feature deployment's browser UI.
+**Critical: Feature deployments have their own Keycloak instance.** API keys from `app.all-hands.dev` or `$OPENHANDS_API_KEY` will NOT work. You need a test API key issued by the specific feature deployment's Keycloak.
+
+**You (the agent) cannot obtain this key yourself** — the feature environment requires interactive browser login with credentials you do not have. You must **ask the user** to:
+1. Log in to the feature deployment at `https://ohpr-<PR>-<random>.staging.all-hands.dev` in their browser
+2. Generate a test API key from the UI
+3. Provide the key to you so you can proceed with e2e testing
+
+Do **not** attempt to log in via the browser or guess credentials. Wait for the user to supply the key before running any e2e tests.
 
 ```python
 from openhands.workspace import OpenHandsCloudWorkspace
@@ -183,7 +190,7 @@ Comment on **both PRs** with pass/fail summary and link to logs.
 
 | Gotcha | Details |
 |--------|---------|
-| **Feature env auth is isolated** | Each `ohpr-*` deployment has its own Keycloak. Production API keys don't work. |
+| **Feature env auth is isolated** | Each `ohpr-*` deployment has its own Keycloak. Production API keys don't work. Agents cannot log in — you must ask the user to provide a test API key from the feature deployment's UI. |
 | **Two SHAs in deploy.yaml** | `OPENHANDS_SHA` and `OPENHANDS_RUNTIME_IMAGE_TAG` must both be updated. The runtime tag is `<sha>-nikolaik`. |
 | **Enterprise image must exist** | The Docker CI job on the OpenHands PR must succeed before you can deploy. If it hasn't run, push an empty commit to trigger it. |
 | **DNS propagation** | First deployment of a new branch takes 1-2 min for DNS. Subsequent deploys are instant. |
