@@ -105,7 +105,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         - Public skills (from OpenHands/skills GitHub repo)
         - User skills (from ~/.openhands/skills/)
         - Organization skills (from {org}/.openhands repo)
-        - Project/repo skills (from workspace .openhands/skills/)
+        - Project/repo skills (from repo .agents/skills/, .openhands/microagents/, and legacy .openhands/skills/)
         - Sandbox skills (from exposed URLs)
 
         Args:
@@ -405,7 +405,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         # Check if there's an existing pre-commit hook
         with tempfile.TemporaryFile(mode='w+t') as temp_file:
             result = await workspace.file_download(PRE_COMMIT_HOOK, str(temp_file))
-            if result.get('success'):
+            if result.success:
                 _logger.info('Preserving existing pre-commit hook')
                 # an existing pre-commit hook exists
                 if 'This hook was installed by OpenHands' not in temp_file.read():

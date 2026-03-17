@@ -126,12 +126,14 @@ export function ConversationWebSocketProvider({
   const receivedEventCountRefMain = useRef(0);
   const receivedEventCountRefPlanning = useRef(0);
 
-  // Track the latest PlanningFileEditorObservation event during history replay
-  // We'll only call the API once after history loading completes
+  // Track the latest PlanningFileEditorObservation for Plan.md during history replay
   const latestPlanningFileEventRef = useRef<{
     path: string;
     conversationId: string;
   } | null>(null);
+
+  const isPlanFilePath = (path: string | null): boolean =>
+    path?.toUpperCase().endsWith("PLAN.MD") ?? false;
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -612,37 +614,39 @@ export function ConversationWebSocketProvider({
             appendOutput(textContent);
           }
 
-          // Handle PlanningFileEditorObservation events - read and update plan content
+          // Handle PlanningFileEditorObservation - only update plan for Plan.md
           if (isPlanningFileEditorObservationEvent(event)) {
-            const planningAgentConversation = subConversations?.[0];
-            const planningConversationId = planningAgentConversation?.id;
+            const { path } = event.observation;
+            if (isPlanFilePath(path)) {
+              const planningAgentConversation = subConversations?.[0];
+              const planningConversationId = planningAgentConversation?.id;
 
-            if (planningConversationId && event.observation.path) {
-              // During history replay, track the latest event but don't call API
-              // After history loading completes, we'll call the API once with the latest event
-              if (isLoadingHistoryPlanning) {
-                latestPlanningFileEventRef.current = {
-                  path: event.observation.path,
-                  conversationId: planningConversationId,
-                };
-              } else {
-                // History loading is complete - this is a new real-time event
-                // Call the API immediately for real-time updates
-                readConversationFile(
-                  {
+              if (planningConversationId && path) {
+                if (isLoadingHistoryPlanning) {
+                  latestPlanningFileEventRef.current = {
+                    path,
                     conversationId: planningConversationId,
-                    filePath: event.observation.path,
-                  },
-                  {
-                    onSuccess: (fileContent) => {
-                      setPlanContent(fileContent);
+                  };
+                } else {
+                  readConversationFile(
+                    {
+                      conversationId: planningConversationId,
+                      filePath: path,
                     },
-                    onError: (error) => {
-                      // eslint-disable-next-line no-console
-                      console.warn("Failed to read conversation file:", error);
+                    {
+                      onSuccess: (fileContent) => {
+                        setPlanContent(fileContent);
+                      },
+                      onError: (error) => {
+                        // eslint-disable-next-line no-console
+                        console.warn(
+                          "Failed to read conversation file:",
+                          error,
+                        );
+                      },
                     },
-                  },
-                );
+                  );
+                }
               }
             }
           }

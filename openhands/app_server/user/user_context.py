@@ -35,8 +35,16 @@ class UserContext(ABC):
         """
 
     @abstractmethod
-    async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
-        """Get the latest tokens for all provider types"""
+    async def get_provider_tokens(
+        self, as_env_vars: bool = False
+    ) -> PROVIDER_TOKEN_TYPE | dict[str, str] | None:
+        """Get the latest tokens for all provider types.
+
+        Args:
+            as_env_vars: When True, return a ``dict[str, str]`` mapping env
+                var names (e.g. ``github_token``) to plain-text token values.
+                When False (default), return the raw provider token mapping.
+        """
 
     @abstractmethod
     async def get_latest_token(self, provider_type: ProviderType) -> str | None:
