@@ -33,6 +33,10 @@ from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
     EventCallbackServiceInjector,
 )
+from openhands.app_server.pending_messages.pending_message_service import (
+    PendingMessageService,
+    PendingMessageServiceInjector,
+)
 from openhands.app_server.sandbox.sandbox_service import (
     SandboxService,
     SandboxServiceInjector,
@@ -114,6 +118,7 @@ class AppServerConfig(OpenHandsModel):
     app_conversation_info: AppConversationInfoServiceInjector | None = None
     app_conversation_start_task: AppConversationStartTaskServiceInjector | None = None
     app_conversation: AppConversationServiceInjector | None = None
+    pending_message: PendingMessageServiceInjector | None = None
     user: UserContextInjector | None = None
     jwt: JwtServiceInjector | None = None
     httpx: HttpxClientInjector = Field(default_factory=HttpxClientInjector)
@@ -280,6 +285,13 @@ def config_from_env() -> AppServerConfig:
             tavily_api_key=tavily_api_key
         )
 
+    if config.pending_message is None:
+        from openhands.app_server.pending_messages.pending_message_service import (
+            SQLPendingMessageServiceInjector,
+        )
+
+        config.pending_message = SQLPendingMessageServiceInjector()
+
     if config.user is None:
         config.user = AuthUserContextInjector()
 
@@ -358,6 +370,14 @@ def get_app_conversation_service(
     return injector.context(state, request)
 
 
+def get_pending_message_service(
+    state: InjectorState, request: Request | None = None
+) -> AsyncContextManager[PendingMessageService]:
+    injector = get_global_config().pending_message
+    assert injector is not None
+    return injector.context(state, request)
+
+
 def get_user_context(
     state: InjectorState, request: Request | None = None
 ) -> AsyncContextManager[UserContext]:
@@ -429,6 +449,12 @@ def depends_app_conversation_start_task_service():
 
 def depends_app_conversation_service():
     injector = get_global_config().app_conversation
+    assert injector is not None
+    return Depends(injector.depends)
+
+
+def depends_pending_message_service():
+    injector = get_global_config().pending_message
     assert injector is not None
     return Depends(injector.depends)
 

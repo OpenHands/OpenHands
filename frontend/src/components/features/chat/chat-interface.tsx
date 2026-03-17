@@ -190,8 +190,14 @@ export function ChatInterface() {
     const prompt =
       uploadedFiles.length > 0 ? `${content}\n\n${filePrompt}` : content;
 
-    send(createChatMessage(prompt, imageUrls, uploadedFiles, timestamp));
-    setOptimisticUserMessage(content);
+    const result = await send(
+      createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
+    );
+    // Only show optimistic UI if message was sent immediately via WebSocket
+    // If queued for later delivery, the message will appear when actually delivered
+    if (!result.queued) {
+      setOptimisticUserMessage(content);
+    }
     setMessageToSend("");
   };
 

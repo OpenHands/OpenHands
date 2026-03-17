@@ -11,6 +11,7 @@ import {
   CondensationSummaryEvent,
   ConversationStateUpdateEvent,
   ConversationErrorEvent,
+  HookExecutionEvent,
   PauseEvent,
 } from "./events/index";
 
@@ -26,6 +27,8 @@ export type OpenHandsEvent =
   | UserRejectObservation
   | AgentErrorEvent
   | SystemPromptEvent
+  // Hook events
+  | HookExecutionEvent
   // Conversation management events
   | CondensationEvent
   | CondensationRequestEvent
