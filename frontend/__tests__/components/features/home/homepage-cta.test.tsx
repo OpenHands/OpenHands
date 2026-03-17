@@ -23,8 +23,8 @@ vi.mock("react-i18next", async () => {
   };
 });
 
-// Mock session storage
-vi.mock("#/utils/session-storage", () => ({
+// Mock local storage
+vi.mock("#/utils/local-storage", () => ({
   setCTADismissed: vi.fn(),
 }));
 
@@ -36,7 +36,7 @@ vi.mock("#/hooks/use-tracking", () => ({
   }),
 }));
 
-import { setCTADismissed } from "#/utils/session-storage";
+import { setCTADismissed } from "#/utils/local-storage";
 
 describe("HomepageCTA", () => {
   const mockSetShouldShowCTA = vi.fn();
@@ -64,10 +64,10 @@ describe("HomepageCTA", () => {
       ).toBeInTheDocument();
     });
 
-    it("renders the Learn More button", () => {
+    it("renders the Learn More link", () => {
       renderHomepageCTA();
-      const button = screen.getByRole("button", { name: "Learn More" });
-      expect(button).toBeInTheDocument();
+      const link = screen.getByRole("link", { name: "Learn More" });
+      expect(link).toBeInTheDocument();
     });
 
     it("renders the close button with correct aria-label", () => {
@@ -117,34 +117,29 @@ describe("HomepageCTA", () => {
     });
   });
 
-  describe("Learn More button behavior", () => {
+  describe("Learn More link behavior", () => {
     it("calls trackSaasSelfhostedInquiry with location 'home_page' when clicked", async () => {
       const user = userEvent.setup();
       renderHomepageCTA();
 
-      const learnMoreButton = screen.getByRole("button", { name: "Learn More" });
-      await user.click(learnMoreButton);
+      const learnMoreLink = screen.getByRole("link", { name: "Learn More" });
+      await user.click(learnMoreLink);
 
       expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
         location: "home_page",
       });
     });
 
-    it("opens enterprise page in new tab when clicked", async () => {
-      const user = userEvent.setup();
-      const mockWindowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
+    it("has correct href and target attributes", () => {
       renderHomepageCTA();
 
-      const learnMoreButton = screen.getByRole("button", { name: "Learn More" });
-      await user.click(learnMoreButton);
-
-      expect(mockWindowOpen).toHaveBeenCalledWith(
+      const learnMoreLink = screen.getByRole("link", { name: "Learn More" });
+      expect(learnMoreLink).toHaveAttribute(
+        "href",
         "https://openhands.dev/enterprise/",
-        "_blank",
-        "noopener",
       );
-
-      mockWindowOpen.mockRestore();
+      expect(learnMoreLink).toHaveAttribute("target", "_blank");
+      expect(learnMoreLink).toHaveAttribute("rel", "noopener noreferrer");
     });
   });
 
@@ -155,10 +150,10 @@ describe("HomepageCTA", () => {
       expect(closeButton).not.toHaveAttribute("tabindex", "-1");
     });
 
-    it("Learn More button is focusable", () => {
+    it("Learn More link is focusable", () => {
       renderHomepageCTA();
-      const learnMoreButton = screen.getByRole("button", { name: "Learn More" });
-      expect(learnMoreButton).not.toHaveAttribute("tabindex", "-1");
+      const learnMoreLink = screen.getByRole("link", { name: "Learn More" });
+      expect(learnMoreLink).not.toHaveAttribute("tabindex", "-1");
     });
   });
 });
