@@ -119,6 +119,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -141,6 +142,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         # Add sort order
@@ -198,6 +200,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ) -> int:
         """Count conversations matching the given filters with SAAS metadata."""
         query = (
@@ -220,6 +223,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         result = await self.db_session.execute(query)
@@ -234,6 +238,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ):
         """Apply filters to query that includes SAAS metadata."""
         # Apply the same filters as the base class
@@ -258,6 +263,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             conditions.append(
                 StoredConversationMetadata.last_updated_at < updated_at__lt
             )
+
+        if sandbox_id__eq is not None:
+            conditions.append(StoredConversationMetadata.sandbox_id == sandbox_id__eq)
 
         if conditions:
             query = query.where(*conditions)
@@ -334,7 +342,10 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         await super().save_app_conversation_info(info)
 
         # Get current user_id for SAAS metadata
+        # Fall back to info.created_by_user_id for webhook callbacks (which use ADMIN context)
         user_id_str = await self.user_context.get_user_id()
+        if not user_id_str and info.created_by_user_id:
+            user_id_str = info.created_by_user_id
         if user_id_str:
             # Convert string user_id to UUID
             user_id_uuid = UUID(user_id_str)

@@ -25,10 +25,10 @@ class SlackConversationStore:
             return result.scalar_one_or_none()
 
     async def create_slack_conversation(
-        self, slack_converstion: SlackConversation
+        self, slack_conversation: SlackConversation
     ) -> None:
         async with a_session_maker() as session:
-            session.merge(slack_converstion)
+            await session.merge(slack_conversation)
             await session.commit()
 
     @classmethod

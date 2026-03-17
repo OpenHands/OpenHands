@@ -28,6 +28,7 @@ from storage.org import Org
 from storage.org_invitation import OrgInvitation  # noqa: F401
 from storage.org_member import OrgMember
 from storage.role import Role
+from storage.slack_conversation import SlackConversation  # noqa: F401
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import (
     StoredConversationMetadataSaas,

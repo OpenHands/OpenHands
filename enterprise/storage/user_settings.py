@@ -27,6 +27,7 @@ class UserSettings(Base):  # type: ignore
     )
     sandbox_base_container_image = Column(String, nullable=True)
     sandbox_runtime_container_image = Column(String, nullable=True)
+    sandbox_grouping_strategy = Column(String, nullable=True)
     user_version = Column(Integer, nullable=False, default=0)
     accepted_tos = Column(DateTime, nullable=True)
     mcp_config = Column(JSON, nullable=True)

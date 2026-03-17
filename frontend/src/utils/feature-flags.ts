@@ -18,5 +18,9 @@ export const VSCODE_IN_NEW_TAB = () => loadFeatureFlag("VSCODE_IN_NEW_TAB");
 export const ENABLE_TRAJECTORY_REPLAY = () =>
   loadFeatureFlag("TRAJECTORY_REPLAY");
 export const ENABLE_ONBOARDING = () => loadFeatureFlag("ENABLE_ONBOARDING");
+export const ENABLE_SANDBOX_GROUPING = () =>
+  loadFeatureFlag("SANDBOX_GROUPING");
 export const ENABLE_PROJ_USER_JOURNEY = () =>
   loadFeatureFlag("PROJ_USER_JOURNEY");
+// Alias for backwards compatibility
+export const PROJ_USER_JOURNEY = ENABLE_PROJ_USER_JOURNEY;

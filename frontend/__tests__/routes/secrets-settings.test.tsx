@@ -3,12 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub, Outlet } from "react-router";
-import SecretsSettingsScreen from "#/routes/secrets-settings";
+import SecretsSettingsScreen, { clientLoader } from "#/routes/secrets-settings";
 import { SecretsService } from "#/api/secrets-service";
 import { GetSecretsResponse } from "#/api/secrets-service.types";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { OrganizationMember } from "#/types/org";
+import * as orgStore from "#/stores/selected-organization-store";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 
 const MOCK_GET_SECRETS_RESPONSE: GetSecretsResponse["custom_secrets"] = [
   {
@@ -64,6 +67,75 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("clientLoader permission checks", () => {
+  const createMockUser = (
+    overrides: Partial<OrganizationMember> = {},
+  ): OrganizationMember => ({
+    org_id: "org-1",
+    user_id: "user-1",
+    email: "test@example.com",
+    role: "member",
+    llm_api_key: "",
+    max_iterations: 100,
+    llm_model: "gpt-4",
+    llm_api_key_for_byor: null,
+    llm_base_url: "",
+    status: "active",
+    ...overrides,
+  });
+
+  const seedActiveUser = (user: Partial<OrganizationMember>) => {
+    orgStore.useSelectedOrganizationStore.setState({ organizationId: "org-1" });
+    vi.spyOn(organizationService, "getMe").mockResolvedValue(
+      createMockUser(user),
+    );
+  };
+
+  it("should export a clientLoader for route protection", () => {
+    // This test verifies the clientLoader is exported (for consistency with other routes)
+    expect(clientLoader).toBeDefined();
+    expect(typeof clientLoader).toBe("function");
+  });
+
+  it("should allow members to access secrets settings (all roles have manage_secrets)", async () => {
+    // Arrange
+    seedActiveUser({ role: "member" });
+
+    const RouterStub = createRoutesStub([
+      {
+        Component: SecretsSettingsScreen,
+        loader: clientLoader,
+        path: "/settings/secrets",
+      },
+      {
+        Component: () => <div data-testid="user-settings-screen" />,
+        path: "/settings/user",
+      },
+    ]);
+
+    // Act
+    render(<RouterStub initialEntries={["/settings/secrets"]} />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider
+          client={
+            new QueryClient({
+              defaultOptions: { queries: { retry: false } },
+            })
+          }
+        >
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    // Assert - should stay on secrets settings page (not redirected)
+    await waitFor(() => {
+      expect(screen.getByTestId("secrets-settings-screen")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("user-settings-screen")).not.toBeInTheDocument();
+  });
 });
 
 describe("Content", () => {
