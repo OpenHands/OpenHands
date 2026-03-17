@@ -40,7 +40,7 @@ then re-run the command to ensure it passes. Common issues include:
 Backend:
 - Located in the `openhands` directory
 - The current V1 application server lives in `openhands/app_server/`. `make start-backend` still launches `openhands.server.listen:app`, which includes the V1 routes by default unless `ENABLE_V1=0`.
-- For V1 web-app docs, LLM setup should point users to the Settings UI. `make setup-config` is mainly for headless/CLI workflows, not the primary web-app LLM path.
+- For V1 web-app docs, LLM setup should point users to the Settings UI.
 - Testing:
   - All tests are in `tests/unit/test_*.py`
   - To test new code, run `poetry run pytest tests/unit/test_xxx.py` where `xxx` is the appropriate file for the current functionality
