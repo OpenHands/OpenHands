@@ -41,19 +41,13 @@ make build
 
 OpenHands supports a diverse array of Language Models (LMs) through the powerful [litellm](https://docs.litellm.ai) library.
 
-To configure the LM of your choice, run:
+For the V1 web app, start OpenHands and configure your model and API key in the Settings UI.
+
+If you are running headless or CLI workflows, you can prepare local defaults with:
 
 ```bash
 make setup-config
 ```
-
-This command will prompt you to enter the LLM API key, model name, and other variables ensuring that OpenHands is
-tailored to your specific needs. Note that the model name will apply only when you run headless. If you use the UI,
-please set the model in the UI.
-
-Note: If you have previously run OpenHands using the docker command, you may have already set some environment
-variables in your terminal. The final configurations are set from highest to lowest priority:
-Environment variables > config.toml variables > default variables
 
 **Note on Alternative Models:**
 See [our documentation](https://docs.openhands.dev/usage/llms) for recommended models.
@@ -126,11 +120,7 @@ make build
 
 ### 3. Configure the Language Model
 
-See the [macOS section above](#3-configure-the-language-model) for full details on LLM configuration, config priority, and alternative models.
-
-```bash
-make setup-config
-```
+See the [macOS section above](#3-configure-the-language-model) for the current V1 guidance: configure your model and API key in the Settings UI for the web app, and use `make setup-config` only for headless or CLI workflows.
 
 ### 4. Run the Application
 
@@ -188,11 +178,7 @@ make build
 
 ### 5. Configure the Language Model
 
-See the [macOS section above](#3-configure-the-language-model) for full details on LLM configuration, config priority, and alternative models.
-
-```bash
-make setup-config
-```
+See the [macOS section above](#3-configure-the-language-model) for the current V1 guidance: configure your model and API key in the Settings UI for the web app, and use `make setup-config` only for headless or CLI workflows.
 
 ### 6. Run the Application
 
