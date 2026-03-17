@@ -94,12 +94,13 @@ export function Dropdown({
     });
 
   return (
-    <div className={cn("relative w-full", className)} data-testid={testId}>
+    <div className="relative w-full" data-testid={testId}>
       <div
         className={cn(
           "bg-tertiary border border-[#717888] rounded w-full p-2",
           "flex items-center gap-2",
           isDisabled && "cursor-not-allowed opacity-60",
+          className,
         )}
       >
         <DropdownInput

@@ -82,7 +82,7 @@ export function UserContextMenu({
 
   return (
     <ContextMenuContainer testId="user-context-menu" onClose={onClose}>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 w-[248px]">
         <h3 className="text-lg font-semibold text-white">
           {t(I18nKey.ORG$ACCOUNT)}
         </h3>

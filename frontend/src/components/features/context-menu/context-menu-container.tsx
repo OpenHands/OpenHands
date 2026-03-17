@@ -29,8 +29,7 @@ export function ContextMenuContainer({
         "context-menu-box-shadow",
         // Positioning
         "right-0 md:right-auto md:left-full md:bottom-0",
-        // Width - 600px on desktop
-        "md:w-[600px]",
+        "w-fit",
         className,
       )}
     >
