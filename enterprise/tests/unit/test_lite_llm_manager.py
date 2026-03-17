@@ -239,6 +239,16 @@ class TestLiteLlmManager:
         mock_404_response = MagicMock()
         mock_404_response.status_code = 404
         mock_404_response.is_success = False
+        mock_404_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message='Not Found', request=MagicMock(), response=mock_404_response
+        )
+
+        # Mock user exists check response
+        mock_user_exists_response = MagicMock()
+        mock_user_exists_response.is_success = True
+        mock_user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
 
         mock_token_manager = MagicMock()
         mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
@@ -246,12 +256,8 @@ class TestLiteLlmManager:
         )
 
         mock_client = AsyncMock()
-        mock_client.get.return_value = mock_404_response
-        mock_client.get.return_value.raise_for_status.side_effect = (
-            httpx.HTTPStatusError(
-                message='Not Found', request=MagicMock(), response=mock_404_response
-            )
-        )
+        # First GET is for _get_team (404), second GET is for _user_exists (success)
+        mock_client.get.side_effect = [mock_404_response, mock_user_exists_response]
         mock_client.post.return_value = mock_response
 
         mock_client_class = MagicMock()
@@ -274,8 +280,8 @@ class TestLiteLlmManager:
             assert result.llm_api_key.get_secret_value() == 'test-api-key'
             assert result.llm_base_url == 'http://test.com'
 
-            # Verify API calls were made (get_team + 4 posts)
-            assert mock_client.get.call_count == 1  # get_team
+            # Verify API calls were made (get_team + user_exists + 4 posts)
+            assert mock_client.get.call_count == 2  # get_team + user_exists
             assert (
                 mock_client.post.call_count == 4
             )  # create_team, add_user_to_team, delete_key_by_alias, generate_key
@@ -294,13 +300,21 @@ class TestLiteLlmManager:
         }
         mock_team_response.raise_for_status = MagicMock()
 
+        # Mock user exists check response
+        mock_user_exists_response = MagicMock()
+        mock_user_exists_response.is_success = True
+        mock_user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
+
         mock_token_manager = MagicMock()
         mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
             return_value={'email': 'test@example.com'}
         )
 
         mock_client = AsyncMock()
-        mock_client.get.return_value = mock_team_response
+        # First GET is for _get_team (success), second GET is for _user_exists (success)
+        mock_client.get.side_effect = [mock_team_response, mock_user_exists_response]
         mock_client.post.return_value = mock_response
 
         mock_client_class = MagicMock()
@@ -320,8 +334,8 @@ class TestLiteLlmManager:
             assert result is not None
 
             # Verify _get_team was called first
-            mock_client.get.assert_called_once()
-            get_call_url = mock_client.get.call_args[0][0]
+            assert mock_client.get.call_count == 2  # get_team + user_exists
+            get_call_url = mock_client.get.call_args_list[0][0][0]
             assert 'team/info' in get_call_url
             assert 'test-org-id' in get_call_url
 
@@ -349,13 +363,16 @@ class TestLiteLlmManager:
             return_value={'email': 'test@example.com'}
         )
 
+        # Mock user exists check response
+        mock_user_exists_response = MagicMock()
+        mock_user_exists_response.is_success = True
+        mock_user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
+
         mock_client = AsyncMock()
-        mock_client.get.return_value = mock_404_response
-        mock_client.get.return_value.raise_for_status.side_effect = (
-            httpx.HTTPStatusError(
-                message='Not Found', request=MagicMock(), response=mock_404_response
-            )
-        )
+        # First GET is for _get_team (404), second GET is for _user_exists (success)
+        mock_client.get.side_effect = [mock_404_response, mock_user_exists_response]
         mock_client.post.return_value = mock_response
 
         mock_client_class = MagicMock()
@@ -393,6 +410,16 @@ class TestLiteLlmManager:
         mock_404_response = MagicMock()
         mock_404_response.status_code = 404
         mock_404_response.is_success = False
+        mock_404_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message='Not Found', request=MagicMock(), response=mock_404_response
+        )
+
+        # Mock user exists check response
+        mock_user_exists_response = MagicMock()
+        mock_user_exists_response.is_success = True
+        mock_user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
 
         mock_token_manager = MagicMock()
         mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
@@ -400,12 +427,8 @@ class TestLiteLlmManager:
         )
 
         mock_client = AsyncMock()
-        mock_client.get.return_value = mock_404_response
-        mock_client.get.return_value.raise_for_status.side_effect = (
-            httpx.HTTPStatusError(
-                message='Not Found', request=MagicMock(), response=mock_404_response
-            )
-        )
+        # First GET is for _get_team (404), second GET is for _user_exists (success)
+        mock_client.get.side_effect = [mock_404_response, mock_user_exists_response]
         mock_client.post.return_value = mock_response
 
         mock_client_class = MagicMock()
