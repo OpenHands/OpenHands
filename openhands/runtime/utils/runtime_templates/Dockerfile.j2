@@ -45,7 +45,15 @@ RUN apt-get update && \
         libasound2-plugins libatomic1 && \
     (apt-get install -y --no-install-recommends libgl1 || apt-get install -y --no-install-recommends libgl1-mesa-glx) && \
         # Install Docker dependencies
-    apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release
+    apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release && \
+    # Security upgrade: patch ImageMagick CVEs (CVE-2026-25897, CVE-2026-25968, CVE-2026-26284, et al.)
+    (apt-get install -y --no-install-recommends --only-upgrade \
+        imagemagick imagemagick-7-common imagemagick-7.q16 \
+        libmagickcore-7-arch-config libmagickcore-7-headers \
+        libmagickcore-7.q16-10 libmagickcore-7.q16-10-extra \
+        libmagickcore-7.q16-dev libmagickcore-dev \
+        libmagickwand-7-headers libmagickwand-7.q16-10 \
+        libmagickwand-7.q16-dev libmagickwand-dev || true)
 {% endif %}
 
 {% if (('ubuntu' in base_image) or ('mswebench' in base_image)) %}
