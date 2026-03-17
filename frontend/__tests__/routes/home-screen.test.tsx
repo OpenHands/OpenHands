@@ -670,10 +670,10 @@ describe("HomepageCTA visibility", () => {
 
     await screen.findByTestId("home-screen");
 
-    const ctaButton = await screen.findByRole("button", {
+    const ctaLink = await screen.findByRole("link", {
       name: "CTA$LEARN_MORE",
     });
-    expect(ctaButton).toBeInTheDocument();
+    expect(ctaLink).toBeInTheDocument();
   });
 
   it("should not show HomepageCTA in OSS mode even with feature flag enabled", async () => {
