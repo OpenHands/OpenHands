@@ -87,30 +87,9 @@ Find the correct image tag:
 
 ### B2. Pin SDK packages to the commit in the OpenHands PR
 
-In the `OpenHands` repo PR, update 3 files + regenerate 3 lock files (see the `update-sdk` skill for full details):
+In the `OpenHands` repo PR, pin all 3 SDK packages (`openhands-sdk`, `openhands-agent-server`, `openhands-tools`) to the unreleased commit and update the agent-server image tag. This involves editing 3 files and regenerating 3 lock files.
 
-**`pyproject.toml`** — pin all 3 SDK packages in **both** `dependencies` and `[tool.poetry.dependencies]`:
-```toml
-# dependencies array (PEP 508)
-"openhands-sdk @ git+https://github.com/OpenHands/software-agent-sdk.git@<COMMIT>#subdirectory=openhands-sdk",
-"openhands-agent-server @ git+https://github.com/OpenHands/software-agent-sdk.git@<COMMIT>#subdirectory=openhands-agent-server",
-"openhands-tools @ git+https://github.com/OpenHands/software-agent-sdk.git@<COMMIT>#subdirectory=openhands-tools",
-
-# [tool.poetry.dependencies]
-openhands-sdk = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "<COMMIT>", subdirectory = "openhands-sdk" }
-openhands-agent-server = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "<COMMIT>", subdirectory = "openhands-agent-server" }
-openhands-tools = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "<COMMIT>", subdirectory = "openhands-tools" }
-```
-
-**`openhands/app_server/sandbox/sandbox_spec_service.py`** — use the SDK's merge-commit SHA:
-```python
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:<merge-commit-sha>-python'
-```
-
-**Regenerate lock files:**
-```bash
-poetry lock && uv lock && cd enterprise && poetry lock && cd ..
-```
+Follow the **`update-sdk` skill** → "Development: Pin SDK to an Unreleased Commit" section for the full procedure and file-by-file instructions.
 
 ### B3. Wait for the OpenHands enterprise image to build
 
