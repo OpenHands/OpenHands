@@ -357,6 +357,9 @@ class TestLiteLlmManager:
         mock_404_response = MagicMock()
         mock_404_response.status_code = 404
         mock_404_response.is_success = False
+        mock_404_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message='Not Found', request=MagicMock(), response=mock_404_response
+        )
 
         mock_token_manager = MagicMock()
         mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
