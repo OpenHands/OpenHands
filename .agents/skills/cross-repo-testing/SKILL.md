@@ -176,11 +176,13 @@ python examples/02_remote_agent_server/10_cloud_workspace_saas_credentials.py
 
 ### Recording results
 
-Push test output to the SDK PR's `.pr/logs/` directory:
+Both repos support a `.pr/` directory for temporary PR artifacts (design docs, test logs, scripts). These files are automatically removed when the PR is approved — see `.github/workflows/pr-artifacts.yml` and the "PR-Specific Artifacts" section in each repo's `AGENTS.md`.
+
+Push test output to the `.pr/logs/` directory of whichever repo you're working in:
 ```bash
-cd software-agent-sdk
+mkdir -p .pr/logs
 python test_script.py 2>&1 | tee .pr/logs/<test_name>.log
-git add -f .pr/logs/<test_name>.log .pr/README.md
+git add -f .pr/logs/
 git commit -m "docs: add e2e test results" && git push
 ```
 
