@@ -14,6 +14,7 @@ import type {
   V1AppConversation,
   V1AppConversationPage,
   GetSkillsResponse,
+  GetHooksResponse,
   V1RuntimeConversationInfo,
 } from "./v1-conversation-service.types";
 
@@ -396,6 +397,18 @@ class V1ConversationService {
   static async getSkills(conversationId: string): Promise<GetSkillsResponse> {
     const { data } = await openHands.get<GetSkillsResponse>(
       `/api/v1/app-conversations/${conversationId}/skills`,
+    );
+    return data;
+  }
+
+  /**
+   * Get all hooks associated with a V1 conversation
+   * @param conversationId The conversation ID
+   * @returns The available hooks associated with the conversation
+   */
+  static async getHooks(conversationId: string): Promise<GetHooksResponse> {
+    const { data } = await openHands.get<GetHooksResponse>(
+      `/api/v1/app-conversations/${conversationId}/hooks`,
     );
     return data;
   }

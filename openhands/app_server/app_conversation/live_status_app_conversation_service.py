@@ -7,7 +7,7 @@ import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, Sequence
+from typing import Any, AsyncGenerator, Sequence, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -46,6 +46,9 @@ from openhands.app_server.app_conversation.app_conversation_service_base import 
 from openhands.app_server.app_conversation.app_conversation_start_task_service import (
     AppConversationStartTaskService,
 )
+from openhands.app_server.app_conversation.hook_loader import (
+    load_hooks_from_agent_server,
+)
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
@@ -58,6 +61,9 @@ from openhands.app_server.event_callback.event_callback_service import (
 )
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
+)
+from openhands.app_server.pending_messages.pending_message_service import (
+    PendingMessageService,
 )
 from openhands.app_server.sandbox.docker_sandbox_service import DockerSandboxService
 from openhands.app_server.sandbox.sandbox_models import (
@@ -78,9 +84,10 @@ from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
-from openhands.integrations.provider import ProviderType
+from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import SuggestedTask
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
@@ -127,6 +134,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     sandbox_service: SandboxService
     sandbox_spec_service: SandboxSpecService
     jwt_service: JwtService
+    pending_message_service: PendingMessageService
     sandbox_startup_timeout: int
     sandbox_startup_poll_frequency: int
     max_num_conversations_per_sandbox: int
@@ -308,6 +316,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             body_json = start_conversation_request.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
+            # Log hook_config to verify it's being passed
+            hook_config_in_request = body_json.get('hook_config')
+            _logger.debug(
+                f'Sending StartConversationRequest with hook_config: '
+                f'{hook_config_in_request}'
+            )
             response = await self.httpx_client.post(
                 f'{agent_server_url}/api/conversations',
                 json=body_json,
@@ -372,6 +386,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             task.status = AppConversationStartTaskStatus.READY
             task.app_conversation_id = info.id
             yield task
+
+            # Process any pending messages queued while waiting for conversation
+            if sandbox.session_api_key:
+                await self._process_pending_messages(
+                    task_id=task.id,
+                    conversation_id=info.id,
+                    agent_server_url=agent_server_url,
+                    session_api_key=sandbox.session_api_key,
+                )
 
         except Exception as exc:
             _logger.exception('Error starting conversation', stack_info=True)
@@ -814,7 +837,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         secrets = await self.user_context.get_secrets()
 
         # Get all provider tokens from user authentication
-        provider_tokens = await self.user_context.get_provider_tokens()
+        provider_tokens = cast(
+            PROVIDER_TOKEN_TYPE | None,
+            await self.user_context.get_provider_tokens(),
+        )
         if not provider_tokens:
             return secrets
 
@@ -1282,6 +1308,46 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             run=initial_message.run,
         )
 
+    async def _load_hooks_from_workspace(
+        self,
+        remote_workspace: AsyncRemoteWorkspace,
+        project_dir: str,
+    ) -> HookConfig | None:
+        """Load hooks from .openhands/hooks.json in the remote workspace.
+
+        This enables project-level hooks to be automatically loaded when starting
+        a conversation, similar to how OpenHands-CLI loads hooks from the workspace.
+
+        Uses the agent-server's /api/hooks endpoint, consistent with how skills
+        are loaded via /api/skills.
+
+        Args:
+            remote_workspace: AsyncRemoteWorkspace for accessing the agent server
+            project_dir: Project root directory path in the sandbox. This should
+                already be the resolved project directory (e.g.,
+                {working_dir}/{repo_name} when a repo is selected).
+
+        Returns:
+            HookConfig if hooks.json exists and is valid, None otherwise.
+            Returns None in the following cases:
+            - hooks.json file does not exist
+            - hooks.json contains invalid JSON
+            - hooks.json contains an empty hooks configuration
+            - Agent server is unreachable or returns an error
+
+        Note:
+            This method implements graceful degradation - if hooks cannot be loaded
+            for any reason, it returns None rather than raising an exception. This
+            ensures that conversation startup is not blocked by hook loading failures.
+            Errors are logged as warnings for debugging purposes.
+        """
+        return await load_hooks_from_agent_server(
+            agent_server_url=remote_workspace.host,
+            session_api_key=remote_workspace._headers.get('X-Session-API-Key'),
+            project_dir=project_dir,
+            httpx_client=self.httpx_client,
+        )
+
     async def _finalize_conversation_request(
         self,
         agent: Agent,
@@ -1321,6 +1387,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         agent = self._update_agent_with_llm_metadata(agent, conversation_id, user.id)
 
         # Load and merge skills if remote workspace is available
+        hook_config: HookConfig | None = None
         if remote_workspace:
             try:
                 agent = await self._load_skills_and_update_agent(
@@ -1329,6 +1396,28 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             except Exception as e:
                 _logger.warning(f'Failed to load skills: {e}', exc_info=True)
                 # Continue without skills - don't fail conversation startup
+
+            # Load hooks from workspace (.openhands/hooks.json)
+            # Note: working_dir is already the resolved project_dir
+            # (includes repo name when a repo is selected), so we pass
+            # it directly without appending the repo name again.
+            try:
+                _logger.debug(
+                    f'Attempting to load hooks from workspace: '
+                    f'project_dir={working_dir}'
+                )
+                hook_config = await self._load_hooks_from_workspace(
+                    remote_workspace, working_dir
+                )
+                if hook_config:
+                    _logger.debug(
+                        f'Successfully loaded hooks: {hook_config.model_dump()}'
+                    )
+                else:
+                    _logger.debug('No hooks found in workspace')
+            except Exception as e:
+                _logger.warning(f'Failed to load hooks: {e}', exc_info=True)
+                # Continue without hooks - don't fail conversation startup
 
         # Incorporate plugin parameters into initial message if specified
         final_initial_message = self._construct_initial_message_with_plugin_params(
@@ -1358,6 +1447,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             initial_message=final_initial_message,
             secrets=secrets,
             plugins=sdk_plugins,
+            hook_config=hook_config,
         )
 
     async def _build_start_conversation_request_for_user(
@@ -1422,6 +1512,89 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             selected_repository,
             project_dir,
             plugins=plugins,
+        )
+
+    async def _process_pending_messages(
+        self,
+        task_id: UUID,
+        conversation_id: UUID,
+        agent_server_url: str,
+        session_api_key: str,
+    ) -> None:
+        """Process pending messages queued before conversation was ready.
+
+        Messages are delivered concurrently to the agent server. After processing,
+        all messages are deleted from the database regardless of success or failure.
+
+        Args:
+            task_id: The start task ID (may have been used as conversation_id initially)
+            conversation_id: The real conversation ID
+            agent_server_url: URL of the agent server
+            session_api_key: API key for authenticating with agent server
+        """
+        # Convert UUIDs to strings for the pending message service
+        # The frontend uses task-{uuid.hex} format (no hyphens), matching OpenHandsUUID serialization
+        task_id_str = f'task-{task_id.hex}'
+        # conversation_id uses standard format (with hyphens) for agent server API compatibility
+        conversation_id_str = str(conversation_id)
+
+        _logger.info(f'task_id={task_id_str} conversation_id={conversation_id_str}')
+
+        # First, update any messages that were queued with the task_id
+        updated_count = await self.pending_message_service.update_conversation_id(
+            old_conversation_id=task_id_str,
+            new_conversation_id=conversation_id_str,
+        )
+        _logger.info(f'updated_count={updated_count} ')
+        if updated_count > 0:
+            _logger.info(
+                f'Updated {updated_count} pending messages from task_id={task_id_str} '
+                f'to conversation_id={conversation_id_str}'
+            )
+
+        # Get all pending messages for this conversation
+        pending_messages = await self.pending_message_service.get_pending_messages(
+            conversation_id_str
+        )
+
+        if not pending_messages:
+            return
+
+        _logger.info(
+            f'Processing {len(pending_messages)} pending messages for '
+            f'conversation {conversation_id_str}'
+        )
+
+        # Process messages sequentially to preserve order
+        for msg in pending_messages:
+            try:
+                # Serialize content objects to JSON-compatible dicts
+                content_json = [item.model_dump() for item in msg.content]
+                # Use the events endpoint which handles message sending
+                response = await self.httpx_client.post(
+                    f'{agent_server_url}/api/conversations/{conversation_id_str}/events',
+                    json={
+                        'role': msg.role,
+                        'content': content_json,
+                        'run': True,
+                    },
+                    headers={'X-Session-API-Key': session_api_key},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                _logger.debug(f'Delivered pending message {msg.id}')
+            except Exception as e:
+                _logger.warning(f'Failed to deliver pending message {msg.id}: {e}')
+
+        # Delete all pending messages after processing (regardless of success/failure)
+        deleted_count = (
+            await self.pending_message_service.delete_messages_for_conversation(
+                conversation_id_str
+            )
+        )
+        _logger.info(
+            f'Finished processing pending messages for conversation {conversation_id_str}. '
+            f'Deleted {deleted_count} messages.'
         )
 
     async def update_agent_server_conversation_title(
@@ -1796,6 +1969,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             get_global_config,
             get_httpx_client,
             get_jwt_service,
+            get_pending_message_service,
             get_sandbox_service,
             get_sandbox_spec_service,
             get_user_context,
@@ -1815,6 +1989,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             get_event_service(state, request) as event_service,
             get_jwt_service(state, request) as jwt_service,
             get_httpx_client(state, request) as httpx_client,
+            get_pending_message_service(state, request) as pending_message_service,
         ):
             access_token_hard_timeout = None
             if self.access_token_hard_timeout:
@@ -1859,6 +2034,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 event_callback_service=event_callback_service,
                 event_service=event_service,
                 jwt_service=jwt_service,
+                pending_message_service=pending_message_service,
                 sandbox_startup_timeout=self.sandbox_startup_timeout,
                 sandbox_startup_poll_frequency=self.sandbox_startup_poll_frequency,
                 max_num_conversations_per_sandbox=self.max_num_conversations_per_sandbox,
