@@ -34,6 +34,6 @@ export BACKEND_HOST="0.0.0.0"
 export SANDBOX_USER_ID=$(id -u)
 export WORKSPACE_BASE=${WORKSPACE_BASE:-$OPENHANDS_WORKSPACE/workspace}
 
-docker compose run --rm --service-ports "$@" dev
+docker compose run --rm --service-ports --user "$(id -u):$(id -g)" "$@" dev
 
 ##
