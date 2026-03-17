@@ -22,5 +22,3 @@ export const ENABLE_SANDBOX_GROUPING = () =>
   loadFeatureFlag("SANDBOX_GROUPING");
 export const ENABLE_PROJ_USER_JOURNEY = () =>
   loadFeatureFlag("PROJ_USER_JOURNEY");
-// Alias for backwards compatibility
-export const PROJ_USER_JOURNEY = ENABLE_PROJ_USER_JOURNEY;
