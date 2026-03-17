@@ -11,23 +11,23 @@ vi.mock("posthog-js/react", () => ({
   }),
 }));
 
-const { PROJ_USER_JOURNEY_MOCK } = vi.hoisted(() => ({
-  PROJ_USER_JOURNEY_MOCK: vi.fn(() => true),
+const { ENABLE_PROJ_USER_JOURNEY_MOCK } = vi.hoisted(() => ({
+  ENABLE_PROJ_USER_JOURNEY_MOCK: vi.fn(() => true),
 }));
 
 vi.mock("#/utils/feature-flags", () => ({
-  PROJ_USER_JOURNEY: () => PROJ_USER_JOURNEY_MOCK(),
+  ENABLE_PROJ_USER_JOURNEY: () => ENABLE_PROJ_USER_JOURNEY_MOCK(),
 }));
 
 describe("EnterpriseBanner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
+    ENABLE_PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
   });
 
   describe("Feature Flag", () => {
     it("should not render when proj_user_journey feature flag is disabled", () => {
-      PROJ_USER_JOURNEY_MOCK.mockReturnValue(false);
+      ENABLE_PROJ_USER_JOURNEY_MOCK.mockReturnValue(false);
 
       const { container } = renderWithProviders(<EnterpriseBanner />);
 
@@ -36,7 +36,7 @@ describe("EnterpriseBanner", () => {
     });
 
     it("should render when proj_user_journey feature flag is enabled", () => {
-      PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
+      ENABLE_PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
 
       renderWithProviders(<EnterpriseBanner />);
 
