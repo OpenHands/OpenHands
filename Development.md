@@ -120,7 +120,7 @@ make build
 
 ### 3. Configure the Language Model
 
-See the [macOS section above](#3-configure-the-language-model) for the current V1 guidance: configure your model and API key in the Settings UI for the web app, and use `make setup-config` only for headless or CLI workflows.
+See the [macOS section above](#3-configure-the-language-model) for guidance: configure your model and API key in the Settings UI.
 
 ### 4. Run the Application
 
