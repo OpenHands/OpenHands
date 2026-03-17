@@ -11,11 +11,15 @@ from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
-from openhands.integrations.service_types import ProviderType
+from openhands.integrations.service_types import ProviderType, SuggestedTask
 from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+from openhands.storage.data_models.settings import SandboxGroupingStrategy
+
+# Re-export SandboxGroupingStrategy for backward compatibility
+__all__ = ['SandboxGroupingStrategy']
 
 
 class AgentType(Enum):
@@ -150,6 +154,7 @@ class AppConversationStartRequest(OpenHandsModel):
     selected_repository: str | None = None
     selected_branch: str | None = None
     git_provider: ProviderType | None = None
+    suggested_task: SuggestedTask | None = None
     title: str | None = None
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
@@ -169,7 +174,15 @@ class AppConversationStartRequest(OpenHandsModel):
 
 
 class AppConversationUpdateRequest(BaseModel):
-    public: bool
+    """Request model for updating conversation metadata.
+
+    All fields are optional - only provided fields will be updated.
+    """
+
+    public: bool | None = None
+    selected_repository: str | None = None
+    selected_branch: str | None = None
+    git_provider: ProviderType | None = None
 
 
 class AppConversationStartTaskStatus(Enum):
@@ -229,3 +242,32 @@ class SkillResponse(BaseModel):
     type: Literal['repo', 'knowledge', 'agentskills']
     content: str
     triggers: list[str] = []
+
+
+class HookDefinitionResponse(BaseModel):
+    """Response model for a single hook definition."""
+
+    type: str  # 'command' or 'prompt'
+    command: str
+    timeout: int = 60
+    async_: bool = Field(default=False, serialization_alias='async')
+
+
+class HookMatcherResponse(BaseModel):
+    """Response model for a hook matcher."""
+
+    matcher: str  # Pattern: '*', exact match, or regex
+    hooks: list[HookDefinitionResponse] = []
+
+
+class HookEventResponse(BaseModel):
+    """Response model for hooks of a specific event type."""
+
+    event_type: str  # e.g., 'stop', 'pre_tool_use', 'post_tool_use'
+    matchers: list[HookMatcherResponse] = []
+
+
+class GetHooksResponse(BaseModel):
+    """Response model for hooks endpoint."""
+
+    hooks: list[HookEventResponse] = []

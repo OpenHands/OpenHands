@@ -14,7 +14,6 @@ from integrations.solvability.models.summary import SolvabilitySummary
 from integrations.utils import ENABLE_SOLVABILITY_ANALYSIS
 from pydantic import ValidationError
 from server.config import get_config
-from storage.database import session_maker
 from storage.saas_settings_store import SaasSettingsStore
 
 from openhands.core.config import LLMConfig
@@ -90,7 +89,6 @@ async def summarize_issue_solvability(
     # Grab the user's information so we can load their LLM configuration
     store = SaasSettingsStore(
         user_id=github_view.user_info.keycloak_user_id,
-        session_maker=session_maker,
         config=get_config(),
     )
 
@@ -106,6 +104,11 @@ async def summarize_issue_solvability(
     if not getattr(user_settings, 'enable_solvability_analysis', False):
         raise ValueError(
             f'Solvability analysis disabled for user {github_view.user_info.user_id}'
+        )
+
+    if user_settings.llm_api_key is None:
+        raise ValueError(
+            f'[Solvability] No LLM API key found for user {github_view.user_info.user_id}'
         )
 
     try:

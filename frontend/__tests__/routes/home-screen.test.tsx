@@ -21,6 +21,9 @@ const { DEFAULT_FEATURE_FLAGS, useIsAuthedMock, useConfigMock } = vi.hoisted(
       enable_jira: false,
       enable_jira_dc: false,
       enable_linear: false,
+      hide_users_page: false,
+      hide_billing_page: false,
+      hide_integrations_page: false,
     };
 
     return {
@@ -538,7 +541,7 @@ describe("Settings 404", () => {
   });
 });
 
-describe("Setup Payment modal", () => {
+describe("New user welcome toast", () => {
   const getConfigSpy = vi.spyOn(OptionService, "getConfig");
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
@@ -590,7 +593,7 @@ describe("Setup Payment modal", () => {
     vi.unstubAllGlobals();
   });
 
-  it("should only render if SaaS mode and is new user", async () => {
+  it("should not show the setup payment modal (removed) in SaaS mode for new users", async () => {
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
       is_new_user: true,
@@ -600,9 +603,9 @@ describe("Setup Payment modal", () => {
 
     await screen.findByTestId("root-layout");
 
-    const setupPaymentModal = await screen.findByTestId(
-      "proceed-to-stripe-button",
-    );
-    expect(setupPaymentModal).toBeInTheDocument();
+    // SetupPaymentModal was removed; verify it no longer renders
+    expect(
+      screen.queryByTestId("proceed-to-stripe-button"),
+    ).not.toBeInTheDocument();
   });
 });

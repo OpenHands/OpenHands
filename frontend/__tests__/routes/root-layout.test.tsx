@@ -42,6 +42,15 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
 }));
 
+vi.mock("#/hooks/use-invitation", () => ({
+  useInvitation: () => ({
+    invitationToken: null,
+    hasInvitation: false,
+    buildOAuthStateData: (baseState: Record<string, string>) => baseState,
+    clearInvitation: vi.fn(),
+  }),
+}));
+
 function LoginStub() {
   const [searchParams] = useSearchParams();
   const emailVerificationRequired =
@@ -172,6 +181,9 @@ describe("MainApp", () => {
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
       },
     });
 
@@ -348,6 +360,194 @@ describe("MainApp", () => {
           expect(returnToElement.textContent).toBe(
             "/oauth/device/verify?user_code=F9XN6BKU",
           );
+        },
+        { timeout: 2000 },
+      );
+    });
+  });
+
+  describe("Re-authentication with stored login method", () => {
+    it("should show ReauthModal instead of redirecting to /login when login method exists", async () => {
+      // Arrange - user is unauthenticated but has a stored login method
+      vi.spyOn(AuthService, "authenticate").mockRejectedValue({
+        response: { status: 401 },
+        isAxiosError: true,
+      });
+
+      vi.stubGlobal("localStorage", {
+        getItem: vi.fn((key: string) => {
+          if (key === "openhands_login_method") {
+            return "github";
+          }
+          return null;
+        }),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      });
+
+      // Act
+      renderWithLoginStub(RouterStubWithLogin, ["/"]);
+
+      // Assert - should show ReauthModal (with "Logging back in" text), not redirect to /login
+      await waitFor(
+        () => {
+          expect(screen.getByText("AUTH$LOGGING_BACK_IN")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+
+      // Login page should NOT be shown when login method exists
+      expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+    });
+
+    it("should redirect to /login when no login method is stored", async () => {
+      // Arrange - user is unauthenticated and has no stored login method
+      vi.spyOn(AuthService, "authenticate").mockRejectedValue({
+        response: { status: 401 },
+        isAxiosError: true,
+      });
+
+      vi.stubGlobal("localStorage", {
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      });
+
+      // Act
+      renderWithLoginStub(RouterStubWithLogin, ["/"]);
+
+      // Assert - should redirect to /login
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+  });
+
+  describe("Loading states", () => {
+    it("should show loading spinner while config is loading without redirecting", async () => {
+      // Arrange - config never resolves (loading state)
+      vi.spyOn(OptionService, "getConfig").mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      vi.stubGlobal("localStorage", {
+        getItem: vi.fn((key: string) => {
+          if (key === "openhands_login_method") {
+            return "github";
+          }
+          return null;
+        }),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      });
+
+      // Act
+      renderWithLoginStub(RouterStubWithLogin, ["/"]);
+
+      // Assert - should show loading spinner
+      await waitFor(() => {
+        expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
+      });
+
+      // Should NOT redirect to login while loading
+      expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+    });
+
+    it("should show loading spinner while auth is loading without redirecting", async () => {
+      // Arrange - auth never resolves (loading state)
+      vi.spyOn(AuthService, "authenticate").mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      vi.stubGlobal("localStorage", {
+        getItem: vi.fn((key: string) => {
+          if (key === "openhands_login_method") {
+            return "github";
+          }
+          return null;
+        }),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      });
+
+      // Act
+      renderWithLoginStub(RouterStubWithLogin, ["/"]);
+
+      // Assert - should show loading spinner
+      await waitFor(() => {
+        expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
+      });
+
+      // Should NOT redirect to login while loading
+      expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Invitation URL Parameters", () => {
+    beforeEach(() => {
+      vi.spyOn(AuthService, "authenticate").mockRejectedValue({
+        response: { status: 401 },
+        isAxiosError: true,
+      });
+    });
+
+    it("should redirect to login when email_mismatch=true is in query params", async () => {
+      renderMainApp(["/?email_mismatch=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect to login when invitation_success=true is in query params", async () => {
+      renderMainApp(["/?invitation_success=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect to login when invitation_expired=true is in query params", async () => {
+      renderMainApp(["/?invitation_expired=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect to login when invitation_invalid=true is in query params", async () => {
+      renderMainApp(["/?invitation_invalid=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect to login when already_member=true is in query params", async () => {
+      renderMainApp(["/?already_member=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
         },
         { timeout: 2000 },
       );

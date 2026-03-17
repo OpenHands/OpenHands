@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
+    BITBUCKET_DATA_CENTER_HOST,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
     ENABLE_LINEAR,
@@ -27,7 +28,6 @@ from server.rate_limit import setup_rate_limit_handler  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
-from server.routes.debugging import add_debugging_routes  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
 from server.routes.event_webhook import event_webhook_router  # noqa: E402
 from server.routes.feedback import router as feedback_router  # noqa: E402
@@ -38,14 +38,27 @@ from server.routes.integration.linear import linear_integration_router  # noqa: 
 from server.routes.integration.slack import slack_router  # noqa: E402
 from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
+from server.routes.org_invitations import (  # noqa: E402
+    accept_router as invitation_accept_router,
+)
+from server.routes.org_invitations import (  # noqa: E402
+    invitation_router,
+)
 from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
+from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
 from server.sharing.shared_conversation_router import (  # noqa: E402
     router as shared_conversation_router,
 )
 from server.sharing.shared_event_router import (  # noqa: E402
     router as shared_event_router,
+)
+from server.verified_models.verified_model_router import (  # noqa: E402
+    api_router as verified_models_router,
+)
+from server.verified_models.verified_model_router import (  # noqa: E402
+    override_llm_models_dependency,
 )
 
 from openhands.server.app import app as base_app  # noqa: E402
@@ -70,6 +83,7 @@ base_app.include_router(api_router)  # Add additional route for github auth
 base_app.include_router(oauth_router)  # Add additional route for oauth callback
 base_app.include_router(oauth_device_router)  # Add OAuth 2.0 Device Flow routes
 base_app.include_router(saas_user_router)  # Add additional route SAAS user calls
+base_app.include_router(user_app_settings_router)  # Add routes for user app settings
 base_app.include_router(
     billing_router
 )  # Add routes for credit management and Stripe payment integration
@@ -99,10 +113,17 @@ if GITLAB_APP_CLIENT_ID:
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(org_router)  # Add routes for organization management
+base_app.include_router(
+    verified_models_router
+)  # Add routes for verified models management
+
+# Override the default LLM models implementation with SaaS version
+# This must happen after all routers are included
+override_llm_models_dependency(base_app)
+
+base_app.include_router(invitation_router)  # Add routes for org invitation management
+base_app.include_router(invitation_accept_router)  # Add route for accepting invitations
 add_github_proxy_routes(base_app)
-add_debugging_routes(
-    base_app
-)  # Add diagnostic routes for testing and debugging (disabled in production)
 base_app.include_router(slack_router)
 if ENABLE_JIRA:
     base_app.include_router(jira_integration_router)
@@ -110,6 +131,12 @@ if ENABLE_JIRA_DC:
     base_app.include_router(jira_dc_integration_router)
 if ENABLE_LINEAR:
     base_app.include_router(linear_integration_router)
+if BITBUCKET_DATA_CENTER_HOST:
+    from server.routes.bitbucket_dc_proxy import (
+        router as bitbucket_dc_proxy_router,  # noqa: E402
+    )
+
+    base_app.include_router(bitbucket_dc_proxy_router)
 base_app.include_router(email_router)  # Add routes for email management
 base_app.include_router(feedback_router)  # Add routes for conversation feedback
 base_app.include_router(

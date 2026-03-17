@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
-import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
+import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
 import { Settings } from "#/types/settings";
 import { useIsAuthed } from "./use-is-authed";
 
@@ -18,11 +18,14 @@ const getSettingsQueryFn = async (): Promise<Settings> => {
     git_user_email: settings.git_user_email || DEFAULT_SETTINGS.git_user_email,
     is_new_user: false,
     v1_enabled: settings.v1_enabled ?? DEFAULT_SETTINGS.v1_enabled,
+    sandbox_grouping_strategy:
+      settings.sandbox_grouping_strategy ??
+      DEFAULT_SETTINGS.sandbox_grouping_strategy,
   };
 };
 
 export const useSettings = () => {
-  const isOnTosPage = useIsOnTosPage();
+  const isOnIntermediatePage = useIsOnIntermediatePage();
   const { data: userIsAuthenticated } = useIsAuthed();
 
   const query = useQuery({
@@ -35,7 +38,7 @@ export const useSettings = () => {
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
-    enabled: !isOnTosPage && !!userIsAuthenticated,
+    enabled: !isOnIntermediatePage && !!userIsAuthenticated,
     meta: {
       disableToast: true,
     },

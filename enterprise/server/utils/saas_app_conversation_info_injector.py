@@ -22,11 +22,70 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
+from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import ADMIN
 
 
 class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
-    """Extended SQLAppConversationInfoService with user-based filtering and SAAS metadata handling."""
+    """Extended SQLAppConversationInfoService with user and organization-based filtering and SAAS metadata handling."""
+
+    async def _get_current_user(self) -> User | None:
+        """Get the current user using the existing db_session.
+
+        Uses self.db_session to avoid opening a separate database session.
+
+        Returns:
+            User object or None if no user_id is available
+        """
+        user_id_str = await self.user_context.get_user_id()
+        if not user_id_str:
+            return None
+
+        user_id_uuid = UUID(user_id_str)
+        result = await self.db_session.execute(
+            select(User).where(User.id == user_id_uuid)
+        )
+        return result.scalars().first()
+
+    async def _apply_user_and_org_filter(self, query):
+        """Apply user_id and org_id filters to ensure conversation isolation.
+
+        Filters conversations by:
+        - user_id: Only show conversations belonging to the current user
+        - org_id: Only show conversations belonging to the user's current organization
+
+        Args:
+            query: SQLAlchemy query to apply filters to
+
+        Returns:
+            Query with user and organization filters applied
+
+        Raises:
+            AuthError: If no user_id is available (secure default: deny access)
+        """
+        # For internal operations such as getting a conversation by session_api_key
+        # we need a mode that does not have filtering. The dependency `as_admin()`
+        # is used to enable it
+        if self.user_context == ADMIN:
+            return query
+
+        user_id_str = await self.user_context.get_user_id()
+        if not user_id_str:
+            # Secure default: no user means no access, not "show everything"
+            raise AuthError('User authentication required')
+
+        user_id_uuid = UUID(user_id_str)
+        query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
+
+        # Filter by organization ID to ensure conversations are isolated per organization
+        user = await self._get_current_user()
+        if user and user.current_org_id is not None:
+            query = query.where(
+                StoredConversationMetadataSaas.org_id == user.current_org_id
+            )
+
+        return query
 
     async def _secure_select(self):
         query = (
@@ -38,13 +97,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             )
             .where(StoredConversationMetadata.conversation_version == 'V1')
         )
-
-        user_id_str = await self.user_context.get_user_id()
-        if user_id_str:
-            user_id_uuid = UUID(user_id_str)
-            query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
-
-        return query
+        return await self._apply_user_and_org_filter(query)
 
     async def _secure_select_with_saas_metadata(self):
         """Select query that includes SAAS metadata for retrieving user_id."""
@@ -57,13 +110,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             )
             .where(StoredConversationMetadata.conversation_version == 'V1')
         )
-
-        user_id_str = await self.user_context.get_user_id()
-        if user_id_str:
-            user_id_uuid = UUID(user_id_str)
-            query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
-
-        return query
+        return await self._apply_user_and_org_filter(query)
 
     async def search_app_conversation_info(
         self,
@@ -72,6 +119,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -94,6 +142,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         # Add sort order
@@ -151,25 +200,21 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ) -> int:
         """Count conversations matching the given filters with SAAS metadata."""
         query = (
             select(func.count(StoredConversationMetadata.conversation_id))
-            .select_from(
-                StoredConversationMetadata.join(
-                    StoredConversationMetadataSaas,
-                    StoredConversationMetadata.conversation_id
-                    == StoredConversationMetadataSaas.conversation_id,
-                )
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
             )
             .where(StoredConversationMetadata.conversation_version == 'V1')
         )
 
-        # Apply user filtering
-        user_id_str = await self.user_context.get_user_id()
-        if user_id_str:
-            user_id_uuid = UUID(user_id_str)
-            query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
+        # Apply user and organization filtering
+        query = await self._apply_user_and_org_filter(query)
 
         query = self._apply_filters_with_saas_metadata(
             query=query,
@@ -178,6 +223,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         result = await self.db_session.execute(query)
@@ -192,6 +238,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ):
         """Apply filters to query that includes SAAS metadata."""
         # Apply the same filters as the base class
@@ -216,6 +263,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             conditions.append(
                 StoredConversationMetadata.last_updated_at < updated_at__lt
             )
+
+        if sandbox_id__eq is not None:
+            conditions.append(StoredConversationMetadata.sandbox_id == sandbox_id__eq)
 
         if conditions:
             query = query.where(*conditions)
@@ -292,7 +342,10 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         await super().save_app_conversation_info(info)
 
         # Get current user_id for SAAS metadata
+        # Fall back to info.created_by_user_id for webhook callbacks (which use ADMIN context)
         user_id_str = await self.user_context.get_user_id()
+        if not user_id_str and info.created_by_user_id:
+            user_id_str = info.created_by_user_id
         if user_id_str:
             # Convert string user_id to UUID
             user_id_uuid = UUID(user_id_str)

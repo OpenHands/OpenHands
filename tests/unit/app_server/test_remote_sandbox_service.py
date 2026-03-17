@@ -22,7 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.remote_sandbox_service import (
     ALLOW_CORS_ORIGINS_VARIABLE,
-    POD_STATUS_MAPPING,
     STATUS_MAPPING,
     WEBHOOK_CALLBACK_VARIABLE,
     RemoteSandboxService,
@@ -98,7 +97,6 @@ def remote_sandbox_service(
 def create_runtime_data(
     session_id: str = 'test-sandbox-123',
     status: str = 'running',
-    pod_status: str = 'ready',
     url: str = 'https://sandbox.example.com',
     session_api_key: str = 'test-session-key',
     runtime_id: str = 'runtime-456',
@@ -107,7 +105,6 @@ def create_runtime_data(
     return {
         'session_id': session_id,
         'status': status,
-        'pod_status': pod_status,
         'url': url,
         'session_api_key': session_api_key,
         'runtime_id': runtime_id,
@@ -119,6 +116,7 @@ def create_stored_sandbox(
     user_id: str = 'test-user-123',
     spec_id: str = 'test-image:latest',
     created_at: datetime | None = None,
+    session_api_key_hash: str | None = None,
 ) -> StoredRemoteSandbox:
     """Helper function to create StoredRemoteSandbox for testing."""
     if created_at is None:
@@ -128,6 +126,7 @@ def create_stored_sandbox(
         id=sandbox_id,
         created_by_user_id=user_id,
         sandbox_spec_id=spec_id,
+        session_api_key_hash=session_api_key_hash,
         created_at=created_at,
     )
 
@@ -186,24 +185,11 @@ class TestStatusMapping:
     """Test cases for status mapping functionality."""
 
     @pytest.mark.asyncio
-    async def test_get_sandbox_status_from_runtime_with_pod_status(
+    async def test_get_sandbox_status_from_runtime_with_status(
         self, remote_sandbox_service
     ):
-        """Test status mapping using pod_status."""
-        runtime_data = create_runtime_data(pod_status='ready')
-
-        status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
-
-        assert status == SandboxStatus.RUNNING
-
-    @pytest.mark.asyncio
-    async def test_get_sandbox_status_from_runtime_fallback_to_status(
-        self, remote_sandbox_service
-    ):
-        """Test status mapping fallback to status field."""
-        runtime_data = create_runtime_data(
-            pod_status='unknown_pod_status', status='running'
-        )
+        """Test status mapping using status field."""
+        runtime_data = create_runtime_data(status='running')
 
         status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
 
@@ -223,32 +209,22 @@ class TestStatusMapping:
         self, remote_sandbox_service
     ):
         """Test status mapping with unknown status values."""
-        runtime_data = create_runtime_data(
-            pod_status='unknown_pod', status='unknown_status'
-        )
+        runtime_data = create_runtime_data(status='unknown_status')
 
         status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
 
         assert status == SandboxStatus.MISSING
 
     @pytest.mark.asyncio
-    async def test_pod_status_mapping_coverage(self, remote_sandbox_service):
-        """Test all pod status mappings are handled correctly."""
-        test_cases = [
-            ('ready', SandboxStatus.RUNNING),
-            ('pending', SandboxStatus.STARTING),
-            ('running', SandboxStatus.STARTING),
-            ('failed', SandboxStatus.ERROR),
-            ('unknown', SandboxStatus.ERROR),
-            ('crashloopbackoff', SandboxStatus.ERROR),
-        ]
+    async def test_get_sandbox_status_from_runtime_empty_status(
+        self, remote_sandbox_service
+    ):
+        """Test status mapping with empty status field."""
+        runtime_data = create_runtime_data(status='')
 
-        for pod_status, expected_status in test_cases:
-            runtime_data = create_runtime_data(pod_status=pod_status)
-            status = remote_sandbox_service._get_sandbox_status_from_runtime(
-                runtime_data
-            )
-            assert status == expected_status, f'Failed for pod_status: {pod_status}'
+        status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
+
+        assert status == SandboxStatus.MISSING
 
     @pytest.mark.asyncio
     async def test_status_mapping_coverage(self, remote_sandbox_service):
@@ -262,8 +238,24 @@ class TestStatusMapping:
         ]
 
         for status, expected_status in test_cases:
-            # Use empty pod_status to force fallback to status field
-            runtime_data = create_runtime_data(pod_status='', status=status)
+            runtime_data = create_runtime_data(status=status)
+            result = remote_sandbox_service._get_sandbox_status_from_runtime(
+                runtime_data
+            )
+            assert result == expected_status, f'Failed for status: {status}'
+
+    @pytest.mark.asyncio
+    async def test_status_mapping_case_insensitive(self, remote_sandbox_service):
+        """Test that status mapping is case-insensitive."""
+        test_cases = [
+            ('RUNNING', SandboxStatus.RUNNING),
+            ('Running', SandboxStatus.RUNNING),
+            ('PAUSED', SandboxStatus.PAUSED),
+            ('Starting', SandboxStatus.STARTING),
+        ]
+
+        for status, expected_status in test_cases:
+            runtime_data = create_runtime_data(status=status)
             result = remote_sandbox_service._get_sandbox_status_from_runtime(
                 runtime_data
             )
@@ -334,7 +326,7 @@ class TestSandboxInfoConversion:
         """Test conversion to SandboxInfo with running runtime."""
         # Setup
         stored_sandbox = create_stored_sandbox()
-        runtime_data = create_runtime_data(status='running', pod_status='ready')
+        runtime_data = create_runtime_data(status='running')
 
         # Execute
         sandbox_info = remote_sandbox_service._to_sandbox_info(
@@ -361,7 +353,7 @@ class TestSandboxInfoConversion:
         """Test conversion to SandboxInfo with starting runtime."""
         # Setup
         stored_sandbox = create_stored_sandbox()
-        runtime_data = create_runtime_data(status='running', pod_status='pending')
+        runtime_data = create_runtime_data(status='starting')
 
         # Execute
         sandbox_info = remote_sandbox_service._to_sandbox_info(
@@ -398,7 +390,7 @@ class TestSandboxLifecycle:
         """Test successful sandbox start."""
         # Setup
         mock_response = MagicMock()
-        mock_response.json.return_value = create_runtime_data()
+        mock_response.json.return_value = create_runtime_data(status='running')
         remote_sandbox_service.httpx_client.request.return_value = mock_response
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
 
@@ -412,9 +404,7 @@ class TestSandboxLifecycle:
 
         # Verify
         assert sandbox_info.id == 'test-sandbox-123'
-        assert (
-            sandbox_info.status == SandboxStatus.STARTING
-        )  # pod_status is 'pending' by default
+        assert sandbox_info.status == SandboxStatus.RUNNING
         remote_sandbox_service.pause_old_sandboxes.assert_called_once_with(
             9
         )  # max_num_sandboxes - 1
@@ -994,39 +984,276 @@ class TestErrorHandling:
         assert result is False
 
 
+class TestGetSandboxBySessionApiKey:
+    """Test cases for get_sandbox_by_session_api_key functionality."""
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_with_hash(
+        self, remote_sandbox_service
+    ):
+        """Test finding sandbox by session API key using stored hash."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Setup
+        session_api_key = 'test-session-key'
+        expected_hash = _hash_session_api_key(session_api_key)
+        stored_sandbox = create_stored_sandbox(session_api_key_hash=expected_hash)
+        runtime_data = create_runtime_data(session_api_key=session_api_key)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = stored_sandbox
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
+        )
+
+        # Verify
+        assert result is not None
+        assert result.id == 'test-sandbox-123'
+        assert result.session_api_key == session_api_key
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_not_found(
+        self, remote_sandbox_service
+    ):
+        """Test finding sandbox when no matching hash exists and legacy fallback fails."""
+        # Setup - no hash match
+        mock_result_no_hash = MagicMock()
+        mock_result_no_hash.scalar_one_or_none.return_value = None
+
+        # Setup - legacy fallback: /list API fails, then no stored sandboxes
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = Exception('API error')
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        mock_result_legacy = MagicMock()
+        mock_result_legacy.scalars.return_value.all.return_value = []
+
+        remote_sandbox_service.db_session.execute = AsyncMock(
+            side_effect=[mock_result_no_hash, mock_result_legacy]
+        )
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            'unknown-key'
+        )
+
+        # Verify
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_legacy_via_list_api(
+        self, remote_sandbox_service
+    ):
+        """Test legacy fallback finding sandbox via /list API and backfilling hash."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Setup
+        session_api_key = 'test-session-key'
+        stored_sandbox = create_stored_sandbox(
+            session_api_key_hash=None
+        )  # Legacy sandbox
+        runtime_data = create_runtime_data(session_api_key=session_api_key)
+
+        # First call returns None (no hash match)
+        mock_result_no_match = MagicMock()
+        mock_result_no_match.scalar_one_or_none.return_value = None
+
+        # Legacy fallback: /list API returns the runtime
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {'runtimes': [runtime_data]}
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        # Query for sandbox by session_id returns the stored sandbox
+        mock_result_sandbox = MagicMock()
+        mock_result_sandbox.scalar_one_or_none.return_value = stored_sandbox
+
+        remote_sandbox_service.db_session.execute = AsyncMock(
+            side_effect=[mock_result_no_match, mock_result_sandbox]
+        )
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
+        )
+
+        # Verify
+        assert result is not None
+        assert result.id == 'test-sandbox-123'
+        # Verify the hash was backfilled
+        expected_hash = _hash_session_api_key(session_api_key)
+        assert stored_sandbox.session_api_key_hash == expected_hash
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_legacy_via_runtime_check(
+        self, remote_sandbox_service
+    ):
+        """Test legacy fallback checking each sandbox's runtime when /list API fails."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Setup
+        session_api_key = 'test-session-key'
+        stored_sandbox = create_stored_sandbox(
+            session_api_key_hash=None
+        )  # Legacy sandbox
+        runtime_data = create_runtime_data(session_api_key=session_api_key)
+
+        # First call returns None (no hash match)
+        mock_result_no_match = MagicMock()
+        mock_result_no_match.scalar_one_or_none.return_value = None
+
+        # Legacy fallback: /list API fails
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = Exception('API error')
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        # Get all stored sandboxes returns the legacy sandbox
+        mock_result_all = MagicMock()
+        mock_result_all.scalars.return_value.all.return_value = [stored_sandbox]
+
+        remote_sandbox_service.db_session.execute = AsyncMock(
+            side_effect=[mock_result_no_match, mock_result_all]
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
+        )
+
+        # Verify
+        assert result is not None
+        assert result.id == 'test-sandbox-123'
+        # Verify the hash was backfilled
+        expected_hash = _hash_session_api_key(session_api_key)
+        assert stored_sandbox.session_api_key_hash == expected_hash
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_runtime_error(
+        self, remote_sandbox_service
+    ):
+        """Test handling runtime error when getting sandbox."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Setup
+        session_api_key = 'test-session-key'
+        expected_hash = _hash_session_api_key(session_api_key)
+        stored_sandbox = create_stored_sandbox(session_api_key_hash=expected_hash)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = stored_sandbox
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=Exception('Runtime error')
+        )
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
+        )
+
+        # Verify - should still return sandbox info, just with None runtime
+        assert result is not None
+        assert result.id == 'test-sandbox-123'
+        assert result.status == SandboxStatus.MISSING  # No runtime means MISSING
+
+
 class TestUtilityFunctions:
     """Test cases for utility functions."""
 
-    def test_build_service_url(self):
-        """Test _build_service_url function."""
+    def test_build_service_url_subdomain_mode(self):
+        """Test _build_service_url function with subdomain-based routing."""
         from openhands.app_server.sandbox.remote_sandbox_service import (
             _build_service_url,
         )
 
-        # Test HTTPS URL
-        result = _build_service_url('https://sandbox.example.com/path', 'vscode')
+        # Test HTTPS URL with path (subdomain mode)
+        result = _build_service_url(
+            'https://sandbox.example.com/path', 'vscode', 'runtime-123'
+        )
         assert result == 'https://vscode-sandbox.example.com/path'
 
-        # Test HTTP URL
-        result = _build_service_url('http://localhost:8000', 'work-1')
-        assert result == 'http://work-1-localhost:8000'
+        # Test HTTP URL without path (subdomain mode)
+        result = _build_service_url(
+            'http://localhost:8000', 'work-1', 'different-runtime'
+        )
+        assert result == 'http://work-1-localhost:8000/'
+
+        # Test URL with empty path (subdomain mode)
+        result = _build_service_url('https://sandbox.example.com', 'work-2', 'some-id')
+        assert result == 'https://work-2-sandbox.example.com/'
+
+    def test_build_service_url_path_mode(self):
+        """Test _build_service_url function with path-based routing."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _build_service_url,
+        )
+
+        # Test path-based routing where URL path starts with /{runtime_id}
+        result = _build_service_url(
+            'https://sandbox.example.com/runtime-123', 'vscode', 'runtime-123'
+        )
+        assert result == 'https://sandbox.example.com/runtime-123/vscode'
+
+        # Test path-based routing with work-1
+        result = _build_service_url(
+            'https://sandbox.example.com/my-runtime-id', 'work-1', 'my-runtime-id'
+        )
+        assert result == 'https://sandbox.example.com/my-runtime-id/work-1'
+
+        # Test path-based routing with work-2
+        result = _build_service_url(
+            'http://localhost:8080/abc-xyz-123', 'work-2', 'abc-xyz-123'
+        )
+        assert result == 'http://localhost:8080/abc-xyz-123/work-2'
+
+    def test_hash_session_api_key(self):
+        """Test _hash_session_api_key function."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Test that same input always produces same hash
+        key = 'test-session-api-key'
+        hash1 = _hash_session_api_key(key)
+        hash2 = _hash_session_api_key(key)
+        assert hash1 == hash2
+
+        # Test that different inputs produce different hashes
+        key2 = 'another-session-api-key'
+        hash3 = _hash_session_api_key(key2)
+        assert hash1 != hash3
+
+        # Test that hash is a 64-character hex string (SHA-256)
+        assert len(hash1) == 64
+        assert all(c in '0123456789abcdef' for c in hash1)
 
 
 class TestConstants:
     """Test cases for constants and mappings."""
-
-    def test_pod_status_mapping_completeness(self):
-        """Test that POD_STATUS_MAPPING covers expected statuses."""
-        expected_statuses = [
-            'ready',
-            'pending',
-            'running',
-            'failed',
-            'unknown',
-            'crashloopbackoff',
-        ]
-        for status in expected_statuses:
-            assert status in POD_STATUS_MAPPING, f'Missing pod status: {status}'
 
     def test_status_mapping_completeness(self):
         """Test that STATUS_MAPPING covers expected statuses."""

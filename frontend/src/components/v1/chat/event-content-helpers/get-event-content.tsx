@@ -162,6 +162,22 @@ const getObservationEventTitle = (event: OpenHandsEvent): React.ReactNode => {
     case "ThinkObservation":
       observationKey = "OBSERVATION_MESSAGE$THINK";
       break;
+    case "GlobObservation":
+      observationKey = "OBSERVATION_MESSAGE$GLOB";
+      observationValues = {
+        pattern: event.observation.pattern
+          ? trimText(event.observation.pattern, 50)
+          : "",
+      };
+      break;
+    case "GrepObservation":
+      observationKey = "OBSERVATION_MESSAGE$GREP";
+      observationValues = {
+        pattern: event.observation.pattern
+          ? trimText(event.observation.pattern, 50)
+          : "",
+      };
+      break;
     default:
       // For unknown observations, use the type name
       return observationType.replace("Observation", "").toUpperCase();

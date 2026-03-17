@@ -1,8 +1,10 @@
 import asyncio
+import hashlib
 import logging
 import os
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Union
+from urllib.parse import urlparse
 from uuid import UUID
 
 import base62
@@ -51,14 +53,6 @@ from openhands.sdk.utils.paging import page_iterator
 
 _logger = logging.getLogger(__name__)
 polling_task: asyncio.Task | None = None
-POD_STATUS_MAPPING = {
-    'ready': SandboxStatus.RUNNING,
-    'pending': SandboxStatus.STARTING,
-    'running': SandboxStatus.STARTING,
-    'failed': SandboxStatus.ERROR,
-    'unknown': SandboxStatus.ERROR,
-    'crashloopbackoff': SandboxStatus.ERROR,
-}
 STATUS_MAPPING = {
     'running': SandboxStatus.RUNNING,
     'paused': SandboxStatus.PAUSED,
@@ -70,6 +64,11 @@ AGENT_SERVER_PORT = 60000
 VSCODE_PORT = 60001
 WORKER_1_PORT = 12000
 WORKER_2_PORT = 12001
+
+
+def _hash_session_api_key(session_api_key: str) -> str:
+    """Hash a session API key using SHA-256."""
+    return hashlib.sha256(session_api_key.encode()).hexdigest()
 
 
 class StoredRemoteSandbox(Base):  # type: ignore
@@ -84,6 +83,7 @@ class StoredRemoteSandbox(Base):  # type: ignore
     id = Column(String, primary_key=True)
     created_by_user_id = Column(String, nullable=True, index=True)
     sandbox_spec_id = Column(String, index=True)  # shadows runtime['image']
+    session_api_key_hash = Column(String, nullable=True, index=True)
     created_at = Column(UtcDateTime, server_default=func.now(), index=True)
 
 
@@ -135,12 +135,13 @@ class RemoteSandboxService(SandboxService):
                 exposed_urls = []
                 url = runtime.get('url', None)
                 if url:
+                    runtime_id = runtime['runtime_id']
                     exposed_urls.append(
                         ExposedUrl(name=AGENT_SERVER, url=url, port=AGENT_SERVER_PORT)
                     )
                     vscode_url = (
-                        _build_service_url(url, 'vscode')
-                        + f'/?tkn={session_api_key}&folder=%2Fworkspace%2Fproject'
+                        _build_service_url(url, 'vscode', runtime_id)
+                        + f'?tkn={session_api_key}&folder=%2Fworkspace%2Fproject'
                     )
                     exposed_urls.append(
                         ExposedUrl(name=VSCODE, url=vscode_url, port=VSCODE_PORT)
@@ -148,14 +149,14 @@ class RemoteSandboxService(SandboxService):
                     exposed_urls.append(
                         ExposedUrl(
                             name=WORKER_1,
-                            url=_build_service_url(url, 'work-1'),
+                            url=_build_service_url(url, 'work-1', runtime_id),
                             port=WORKER_1_PORT,
                         )
                     )
                     exposed_urls.append(
                         ExposedUrl(
                             name=WORKER_2,
-                            url=_build_service_url(url, 'work-2'),
+                            url=_build_service_url(url, 'work-2', runtime_id),
                             port=WORKER_2_PORT,
                         )
                     )
@@ -179,28 +180,22 @@ class RemoteSandboxService(SandboxService):
     def _get_sandbox_status_from_runtime(
         self, runtime: dict[str, Any] | None
     ) -> SandboxStatus:
-        """Derive a SandboxStatus from the runtime info. The legacy logic for getting
-        the status of a runtime is inconsistent. It is divided between a "status" which
-        cannot be trusted (It sometimes returns  "running" for cases when the pod is
-        still starting) and a "pod_status" which is not returned for list
-        operations."""
+        """Derive a SandboxStatus from the runtime info.
+
+        The status field is now the source of truth for sandbox status. It accounts
+        for both pod readiness and ingress availability, making it more reliable than
+        pod_status which only reflected pod state.
+        """
         if not runtime:
             return SandboxStatus.MISSING
 
-        status = None
-        pod_status = (runtime.get('pod_status') or '').lower()
-        if pod_status:
-            status = POD_STATUS_MAPPING.get(pod_status, None)
+        runtime_status = runtime.get('status')
+        if runtime_status:
+            status = STATUS_MAPPING.get(runtime_status.lower(), None)
+            if status is not None:
+                return status
 
-        # If we failed to get the status from the pod status, fall back to status
-        if status is None:
-            runtime_status = runtime.get('status')
-            if runtime_status:
-                status = STATUS_MAPPING.get(runtime_status.lower(), None)
-
-        if status is None:
-            return SandboxStatus.MISSING
-        return status
+        return SandboxStatus.MISSING
 
     async def _secure_select(self):
         query = select(StoredRemoteSandbox)
@@ -343,12 +338,14 @@ class RemoteSandboxService(SandboxService):
 
         return self._to_sandbox_info(stored_sandbox, runtime)
 
-    async def get_sandbox_by_session_api_key(
+    async def _get_sandbox_by_session_api_key_legacy(
         self, session_api_key: str
     ) -> Union[SandboxInfo, None]:
-        """Get a single sandbox by session API key."""
-        # TODO: We should definitely refactor this and store the session_api_key in
-        # the v1_remote_sandbox table
+        """Legacy method to get sandbox by session API key via runtime API.
+
+        This is the fallback for sandboxes created before the session_api_key_hash
+        column was added. It calls the remote runtime API which is less efficient.
+        """
         try:
             response = await self._send_runtime_api_request(
                 'GET',
@@ -366,6 +363,10 @@ class RemoteSandboxService(SandboxService):
                     sandbox = result.scalar_one_or_none()
                     if sandbox is None:
                         raise ValueError('sandbox_not_found')
+                    # Backfill the hash for future lookups (Auto committed at end of request)
+                    sandbox.session_api_key_hash = _hash_session_api_key(
+                        session_api_key
+                    )
                     return self._to_sandbox_info(sandbox, runtime)
         except Exception:
             _logger.exception(
@@ -382,12 +383,49 @@ class RemoteSandboxService(SandboxService):
             try:
                 runtime = await self._get_runtime(stored_sandbox.id)
                 if runtime and runtime.get('session_api_key') == session_api_key:
+                    # Backfill the hash for future lookups (Auto committed at end of request)
+                    stored_sandbox.session_api_key_hash = _hash_session_api_key(
+                        session_api_key
+                    )
                     return self._to_sandbox_info(stored_sandbox, runtime)
             except Exception:
                 # Continue checking other sandboxes if one fails
                 continue
 
         return None
+
+    async def get_sandbox_by_session_api_key(
+        self, session_api_key: str
+    ) -> Union[SandboxInfo, None]:
+        """Get a single sandbox by session API key.
+
+        Uses the stored session_api_key_hash for efficient database lookup instead
+        of calling the remote runtime API. Falls back to legacy API-based lookup
+        for sandboxes created before the hash column was added.
+        """
+        session_api_key_hash = _hash_session_api_key(session_api_key)
+
+        # First try to find sandbox by hash in the database
+        stmt = await self._secure_select()
+        stmt = stmt.where(
+            StoredRemoteSandbox.session_api_key_hash == session_api_key_hash
+        )
+        result = await self.db_session.execute(stmt)
+        stored_sandbox = result.scalar_one_or_none()
+
+        if stored_sandbox:
+            try:
+                runtime = await self._get_runtime(stored_sandbox.id)
+                return self._to_sandbox_info(stored_sandbox, runtime)
+            except Exception:
+                _logger.exception(
+                    f'Error getting runtime for sandbox {stored_sandbox.id}',
+                    stack_info=True,
+                )
+                return self._to_sandbox_info(stored_sandbox, None)
+
+        # Fallback for sandboxes created before the hash column was added
+        return await self._get_sandbox_by_session_api_key_legacy(session_api_key)
 
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
@@ -455,8 +493,16 @@ class RemoteSandboxService(SandboxService):
             response.raise_for_status()
             runtime_data = response.json()
 
-            # Hack - result doesn't contain this
-            runtime_data['pod_status'] = 'pending'
+            # Store the session_api_key hash for efficient lookups
+            session_api_key = runtime_data.get('session_api_key')
+            if session_api_key:
+                stored_sandbox.session_api_key_hash = _hash_session_api_key(
+                    session_api_key
+                )
+
+            # Log runtime assignment for observability
+            runtime_id = runtime_data.get('runtime_id', 'unknown')
+            _logger.info(f'Started sandbox {sandbox_id} with runtime_id={runtime_id}')
 
             return self._to_sandbox_info(stored_sandbox, runtime_data)
 
@@ -602,9 +648,21 @@ class RemoteSandboxService(SandboxService):
         return results
 
 
-def _build_service_url(url: str, service_name: str):
-    scheme, host_and_path = url.split('://')
-    return scheme + '://' + service_name + '-' + host_and_path
+def _build_service_url(url: str, service_name: str, runtime_id: str) -> str:
+    """Build a service URL for the given service name.
+
+    Handles both path-based and subdomain-based routing:
+    - Path mode (url path starts with /{runtime_id}): returns {scheme}://{netloc}/{runtime_id}/{service_name}
+    - Subdomain mode: returns {scheme}://{service_name}-{netloc}{path}
+    """
+    parsed = urlparse(url)
+    scheme, netloc, path = parsed.scheme, parsed.netloc, parsed.path or '/'
+    # Path mode if runtime_url path starts with /{id}
+    path_mode = path.startswith(f'/{runtime_id}')
+    if path_mode:
+        return f'{scheme}://{netloc}/{runtime_id}/{service_name}'
+    else:
+        return f'{scheme}://{service_name}-{netloc}{path}'
 
 
 async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):

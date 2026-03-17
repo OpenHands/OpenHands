@@ -8,10 +8,13 @@ from dataclasses import dataclass
 
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
+from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from sqlalchemy.orm import joinedload, sessionmaker
-from storage.database import session_maker
+from sqlalchemy import select, update
+from sqlalchemy.orm import joinedload
+from storage.database import a_session_maker
+from storage.encrypt_utils import encrypt_value
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -23,26 +26,24 @@ from storage.user_store import UserStore
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings
 from openhands.storage.settings.settings_store import SettingsStore
-from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.llm import is_openhands_model
 
 
 @dataclass
 class SaasSettingsStore(SettingsStore):
     user_id: str
-    session_maker: sessionmaker
     config: OpenHandsConfig
     ENCRYPT_VALUES = ['llm_api_key', 'llm_api_key_for_byor', 'search_api_key']
 
-    def _get_user_settings_by_keycloak_id(
+    async def _get_user_settings_by_keycloak_id_async(
         self, keycloak_user_id: str, session=None
     ) -> UserSettings | None:
         """
-        Get UserSettings by keycloak_user_id.
+        Get UserSettings by keycloak_user_id (async version).
 
         Args:
             keycloak_user_id: The keycloak user ID to search for
-            session: Optional existing database session. If not provided, creates a new one.
+            session: Optional existing async database session. If not provided, creates a new one.
 
         Returns:
             UserSettings object if found, None otherwise
@@ -50,40 +51,39 @@ class SaasSettingsStore(SettingsStore):
         if not keycloak_user_id:
             return None
 
-        def _get_settings():
-            if session:
-                # Use provided session
-                return (
-                    session.query(UserSettings)
-                    .filter(UserSettings.keycloak_user_id == keycloak_user_id)
-                    .first()
+        if session:
+            # Use provided session
+            result = await session.execute(
+                select(UserSettings).filter(
+                    UserSettings.keycloak_user_id == keycloak_user_id
                 )
-            else:
-                # Create new session
-                with self.session_maker() as new_session:
-                    return (
-                        new_session.query(UserSettings)
-                        .filter(UserSettings.keycloak_user_id == keycloak_user_id)
-                        .first()
+            )
+            return result.scalars().first()
+        else:
+            # Create new session
+            async with a_session_maker() as new_session:
+                result = await new_session.execute(
+                    select(UserSettings).filter(
+                        UserSettings.keycloak_user_id == keycloak_user_id
                     )
-
-        return _get_settings()
+                )
+                return result.scalars().first()
 
     async def load(self) -> Settings | None:
-        user = await call_sync_from_async(UserStore.get_user_by_id, self.user_id)
+        user = await UserStore.get_user_by_id(self.user_id)
         if not user:
             logger.error(f'User not found for ID {self.user_id}')
             return None
 
         org_id = user.current_org_id
-        org_member: OrgMember = None
+        org_member: OrgMember | None = None
         for om in user.org_members:
             if om.org_id == org_id:
                 org_member = om
                 break
         if not org_member or not org_member.llm_api_key:
             return None
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id_async(org_id)
         if not org:
             logger.error(
                 f'Org not found for ID {org_id} as the current org for user {self.user_id}'
@@ -117,36 +117,52 @@ class SaasSettingsStore(SettingsStore):
             kwargs['llm_base_url'] = org_member.llm_base_url
         if org.v1_enabled is None:
             kwargs['v1_enabled'] = True
+        # Apply default if sandbox_grouping_strategy is None in the database
+        if kwargs.get('sandbox_grouping_strategy') is None:
+            kwargs.pop('sandbox_grouping_strategy', None)
 
         settings = Settings(**kwargs)
         return settings
 
     async def store(self, item: Settings):
-        with self.session_maker() as session:
+        async with a_session_maker() as session:
             if not item:
                 return None
-            user = (
-                session.query(User)
+            result = await session.execute(
+                select(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(self.user_id))
-            ).first()
+            )
+            user = result.scalars().first()
 
             if not user:
                 # Check if we need to migrate from user_settings
                 user_settings = None
-                with session_maker() as session:
-                    user_settings = self._get_user_settings_by_keycloak_id(
-                        self.user_id, session
+                async with a_session_maker() as new_session:
+                    user_settings = await self._get_user_settings_by_keycloak_id_async(
+                        self.user_id, new_session
                     )
                 if user_settings:
-                    user = await UserStore.migrate_user(self.user_id, user_settings)
+                    token_manager = TokenManager()
+                    user_info = await token_manager.get_user_info_from_user_id(
+                        self.user_id
+                    )
+                    if not user_info:
+                        logger.error(f'User info not found for ID {self.user_id}')
+                        return None
+                    user = await UserStore.migrate_user(
+                        self.user_id, user_settings, user_info
+                    )
+                    if not user:
+                        logger.error(f'Failed to migrate user {self.user_id}')
+                        return None
                 else:
                     logger.error(f'User not found for ID {self.user_id}')
                     return None
 
             org_id = user.current_org_id
 
-            org_member: OrgMember = None
+            org_member: OrgMember | None = None
             for om in user.org_members:
                 if om.org_id == org_id:
                     org_member = om
@@ -154,7 +170,8 @@ class SaasSettingsStore(SettingsStore):
             if not org_member or not org_member.llm_api_key:
                 return None
 
-            org: Org = session.query(Org).filter(Org.id == org_id).first()
+            result = await session.execute(select(Org).filter(Org.id == org_id))
+            org = result.scalars().first()
             if not org:
                 logger.error(
                     f'Org not found for ID {org_id} as the current org for user {self.user_id}'
@@ -173,7 +190,43 @@ class SaasSettingsStore(SettingsStore):
                     if hasattr(model, key):
                         setattr(model, key, value)
 
-            session.commit()
+            # Map Settings fields to Org fields with 'default_' prefix
+            # The generic loop above doesn't update these because Org uses
+            # 'default_llm_model' not 'llm_model', etc.
+            # Use exclude_unset to only update explicitly-set fields (allows clearing with null)
+            settings_data = item.model_dump(exclude_unset=True)
+            if 'llm_model' in settings_data:
+                org.default_llm_model = settings_data['llm_model']
+            if 'llm_base_url' in settings_data:
+                org.default_llm_base_url = settings_data['llm_base_url']
+            if 'max_iterations' in settings_data:
+                org.default_max_iterations = settings_data['max_iterations']
+
+            # Propagate LLM settings to all org members
+            # This ensures all members see the same LLM configuration when an admin saves
+            # Note: Concurrent saves by multiple admins will result in last-write-wins.
+            # Consider adding optimistic locking if this becomes a problem.
+            member_update_values: dict = {}
+            if item.llm_model is not None:
+                member_update_values['llm_model'] = item.llm_model
+            if item.llm_base_url is not None:
+                member_update_values['llm_base_url'] = item.llm_base_url
+            if item.max_iterations is not None:
+                member_update_values['max_iterations'] = item.max_iterations
+            if item.llm_api_key is not None:
+                member_update_values['_llm_api_key'] = encrypt_value(
+                    item.llm_api_key.get_secret_value()
+                )
+
+            if member_update_values:
+                stmt = (
+                    update(OrgMember)
+                    .where(OrgMember.org_id == org_id)
+                    .values(**member_update_values)
+                )
+                await session.execute(stmt)
+
+            await session.commit()
 
     @classmethod
     async def get_instance(
@@ -182,7 +235,7 @@ class SaasSettingsStore(SettingsStore):
         user_id: str,  # type: ignore[override]
     ) -> SaasSettingsStore:
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
-        return SaasSettingsStore(user_id, session_maker, config)
+        return SaasSettingsStore(user_id, config)
 
     def _should_encrypt(self, key):
         return key in self.ENCRYPT_VALUES
@@ -246,7 +299,6 @@ class SaasSettingsStore(SettingsStore):
             org_id,
             openhands_type=openhands_type,
         ):
-            generated_key = None
             if openhands_type:
                 generated_key = await LiteLlmManager.generate_key(
                     self.user_id,
@@ -265,14 +317,8 @@ class SaasSettingsStore(SettingsStore):
                     None,
                 )
 
-            if generated_key:
-                item.llm_api_key = SecretStr(generated_key)
-                logger.info(
-                    'saas_settings_store:store:generated_openhands_key',
-                    extra={'user_id': self.user_id},
-                )
-            else:
-                logger.warning(
-                    'saas_settings_store:store:failed_to_generate_openhands_key',
-                    extra={'user_id': self.user_id},
-                )
+            item.llm_api_key = SecretStr(generated_key)
+            logger.info(
+                'saas_settings_store:store:generated_openhands_key',
+                extra={'user_id': self.user_id},
+            )

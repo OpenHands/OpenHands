@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createRoutesStub } from "react-router";
+import { createRoutesStub, useSearchParams } from "react-router";
 import LoginPage from "#/routes/login";
 import OptionService from "#/api/option-service/option-service.api";
 import AuthService from "#/api/auth-service/auth-service.api";
@@ -57,10 +57,49 @@ vi.mock("#/hooks/use-tracking", () => ({
   }),
 }));
 
+const { useInvitationMock, buildOAuthStateDataMock } = vi.hoisted(() => ({
+  useInvitationMock: vi.fn(() => ({
+    invitationToken: null as string | null,
+    hasInvitation: false,
+    buildOAuthStateData: (baseState: Record<string, string>) => baseState,
+    clearInvitation: vi.fn(),
+  })),
+  buildOAuthStateDataMock: vi.fn(
+    (baseState: Record<string, string>) => baseState,
+  ),
+}));
+
+vi.mock("#/hooks/use-invitation", () => ({
+  useInvitation: () => useInvitationMock(),
+}));
+
 const RouterStub = createRoutesStub([
   {
     Component: LoginPage,
     path: "/login",
+  },
+]);
+
+function DestinationStub() {
+  const [params] = useSearchParams();
+  const loginMethod = params.get("login_method");
+  return (
+    <div data-testid="destination-page">
+      {loginMethod && (
+        <span data-testid="login-method-param">{loginMethod}</span>
+      )}
+    </div>
+  );
+}
+
+const RouterStubWithDestination = createRoutesStub([
+  {
+    Component: LoginPage,
+    path: "/login",
+  },
+  {
+    Component: DestinationStub,
+    path: "/settings",
   },
 ]);
 
@@ -99,6 +138,9 @@ describe("LoginPage", () => {
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
       },
     });
 
@@ -163,6 +205,9 @@ describe("LoginPage", () => {
           enable_jira: false,
           enable_jira_dc: false,
           enable_linear: false,
+          hide_users_page: false,
+          hide_billing_page: false,
+          hide_integrations_page: false,
         },
       });
 
@@ -199,6 +244,9 @@ describe("LoginPage", () => {
           enable_jira: false,
           enable_jira_dc: false,
           enable_linear: false,
+          hide_users_page: false,
+          hide_billing_page: false,
+          hide_integrations_page: false,
         },
       });
 
@@ -234,7 +282,8 @@ describe("LoginPage", () => {
       });
       await user.click(githubButton);
 
-      expect(window.location.href).toBe(mockUrl);
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain(mockUrl);
     });
 
     it("should redirect to GitLab auth URL when GitLab button is clicked", async () => {
@@ -255,7 +304,10 @@ describe("LoginPage", () => {
       });
       await user.click(gitlabButton);
 
-      expect(window.location.href).toBe("https://gitlab.com/oauth/authorize");
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain(
+        "https://gitlab.com/oauth/authorize",
+      );
     });
 
     it("should redirect to Bitbucket auth URL when Bitbucket button is clicked", async () => {
@@ -282,7 +334,8 @@ describe("LoginPage", () => {
       });
       await user.click(bitbucketButton);
 
-      expect(window.location.href).toBe(
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain(
         "https://bitbucket.org/site/oauth2/authorize",
       );
     });
@@ -319,6 +372,30 @@ describe("LoginPage", () => {
       );
     });
 
+    it("should preserve login_method param when redirecting authenticated users", async () => {
+      // Arrange
+      vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+      // Act
+      render(
+        <RouterStubWithDestination
+          initialEntries={["/login?returnTo=/settings&login_method=github"]}
+        />,
+        { wrapper: createWrapper() },
+      );
+
+      // Assert
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("destination-page")).toBeInTheDocument();
+          expect(screen.getByTestId("login-method-param")).toHaveTextContent(
+            "github",
+          );
+        },
+        { timeout: 2000 },
+      );
+    });
+
     it("should redirect OSS mode users to home", async () => {
       // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
@@ -330,6 +407,9 @@ describe("LoginPage", () => {
           enable_jira: false,
           enable_jira_dc: false,
           enable_linear: false,
+          hide_users_page: false,
+          hide_billing_page: false,
+          hide_integrations_page: false,
         },
       });
 
@@ -476,6 +556,148 @@ describe("LoginPage", () => {
         expect(
           screen.getByTestId("terms-and-privacy-notice"),
         ).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("Invitation Flow", () => {
+    it("should display invitation pending message when hasInvitation is true", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("AUTH$INVITATION_PENDING")).toBeInTheDocument();
+      });
+    });
+
+    it("should not display invitation pending message when hasInvitation is false", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: null,
+        hasInvitation: false,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("login-content")).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByText("AUTH$INVITATION_PENDING"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should pass buildOAuthStateData to LoginContent for OAuth state encoding", async () => {
+      const user = userEvent.setup();
+      const mockBuildOAuthStateData = vi.fn(
+        (baseState: Record<string, string>) => ({
+          ...baseState,
+          invitation_token: "inv-test-token-12345",
+        }),
+      );
+
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: mockBuildOAuthStateData,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+      });
+
+      const githubButton = screen.getByRole("button", {
+        name: "GITHUB$CONNECT_TO_GITHUB",
+      });
+      await user.click(githubButton);
+
+      // buildOAuthStateData should have been called during the OAuth redirect
+      expect(mockBuildOAuthStateData).toHaveBeenCalled();
+    });
+
+    it("should include invitation token in OAuth state when invitation is present", async () => {
+      const user = userEvent.setup();
+      const mockBuildOAuthStateData = vi.fn(
+        (baseState: Record<string, string>) => ({
+          ...baseState,
+          invitation_token: "inv-test-token-12345",
+        }),
+      );
+
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: mockBuildOAuthStateData,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+      });
+
+      const githubButton = screen.getByRole("button", {
+        name: "GITHUB$CONNECT_TO_GITHUB",
+      });
+      await user.click(githubButton);
+
+      // Verify the redirect URL contains the state with invitation token
+      await waitFor(() => {
+        expect(window.location.href).toContain("state=");
+      });
+
+      // Decode and verify the state contains invitation_token
+      const url = new URL(window.location.href);
+      const state = url.searchParams.get("state");
+      if (state) {
+        const decodedState = JSON.parse(atob(state));
+        expect(decodedState.invitation_token).toBe("inv-test-token-12345");
+      }
+    });
+
+    it("should handle login with invitation_token URL parameter", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-url-token-67890",
+        hasInvitation: true,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(
+        <RouterStub
+          initialEntries={["/login?invitation_token=inv-url-token-67890"]}
+        />,
+        {
+          wrapper: createWrapper(),
+        },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("AUTH$INVITATION_PENDING")).toBeInTheDocument();
       });
     });
   });

@@ -1,6 +1,7 @@
 import { ConversationTrigger } from "../open-hands.types";
-import { Provider } from "#/types/settings";
 import { V1SandboxStatus } from "../sandbox-service/sandbox-service.types";
+import { Provider } from "#/types/settings";
+import { SuggestedTask } from "#/utils/types";
 
 // V1 Metrics Types
 export interface V1TokenUsage {
@@ -47,6 +48,7 @@ export interface V1AppConversationStartRequest {
   selected_repository?: string | null;
   selected_branch?: string | null;
   git_provider?: Provider | null;
+  suggested_task?: SuggestedTask | null;
   title?: string | null;
   trigger?: ConversationTrigger | null;
   pr_number?: number[];
@@ -117,6 +119,11 @@ export interface V1AppConversation {
   public?: boolean;
 }
 
+export interface V1AppConversationPage {
+  items: V1AppConversation[];
+  next_page_id: string | null;
+}
+
 export interface Skill {
   name: string;
   type: "repo" | "knowledge" | "agentskills";
@@ -126,6 +133,27 @@ export interface Skill {
 
 export interface GetSkillsResponse {
   skills: Skill[];
+}
+
+export interface HookDefinition {
+  type: string; // 'command' or 'prompt'
+  command: string;
+  timeout: number;
+  async?: boolean;
+}
+
+export interface HookMatcher {
+  matcher: string; // Pattern: '*', exact match, or regex
+  hooks: HookDefinition[];
+}
+
+export interface HookEvent {
+  event_type: string; // e.g., 'stop', 'pre_tool_use', 'post_tool_use'
+  matchers: HookMatcher[];
+}
+
+export interface GetHooksResponse {
+  hooks: HookEvent[];
 }
 
 // Runtime conversation types (from agent server)

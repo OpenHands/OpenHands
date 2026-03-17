@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { FaUserShield } from "react-icons/fa";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import GitHubLogo from "#/assets/branding/github-logo.svg?react";
@@ -21,6 +22,10 @@ export interface LoginContentProps {
   emailVerified?: boolean;
   hasDuplicatedEmail?: boolean;
   recaptchaBlocked?: boolean;
+  hasInvitation?: boolean;
+  buildOAuthStateData?: (
+    baseStateData: Record<string, string>,
+  ) => Record<string, string>;
 }
 
 export function LoginContent({
@@ -31,6 +36,8 @@ export function LoginContent({
   emailVerified = false,
   hasDuplicatedEmail = false,
   recaptchaBlocked = false,
+  hasInvitation = false,
+  buildOAuthStateData,
 }: LoginContentProps) {
   const { t } = useTranslation();
   const { trackLoginButtonClick } = useTracking();
@@ -53,37 +60,54 @@ export function LoginContent({
     authUrl,
   });
 
+  const bitbucketDataCenterAuthUrl = useAuthUrl({
+    appMode: appMode || null,
+    identityProvider: "bitbucket_data_center",
+    authUrl,
+  });
+
+  const enterpriseSsoAuthUrl = useAuthUrl({
+    appMode: appMode || null,
+    identityProvider: "enterprise_sso",
+    authUrl,
+  });
+
   const handleAuthRedirect = async (
     redirectUrl: string,
     provider: Provider,
   ) => {
     trackLoginButtonClick({ provider });
 
-    if (!config?.recaptcha_site_key || !recaptchaReady) {
-      // No reCAPTCHA or token generation failed - redirect normally
-      window.location.href = redirectUrl;
-      return;
+    const url = new URL(redirectUrl);
+    const currentState =
+      url.searchParams.get("state") || window.location.origin;
+
+    // Build base state data
+    let stateData: Record<string, string> = {
+      redirect_url: currentState,
+    };
+
+    // Add invitation token if present
+    if (buildOAuthStateData) {
+      stateData = buildOAuthStateData(stateData);
     }
 
-    // If reCAPTCHA is configured, encode token in OAuth state
-    try {
-      const token = await executeRecaptcha("LOGIN");
-      if (token) {
-        const url = new URL(redirectUrl);
-        const currentState =
-          url.searchParams.get("state") || window.location.origin;
-
-        // Encode state with reCAPTCHA token for backend verification
-        const stateData = {
-          redirect_url: currentState,
-          recaptcha_token: token,
-        };
-        url.searchParams.set("state", btoa(JSON.stringify(stateData)));
-        window.location.href = url.toString();
+    // If reCAPTCHA is configured, add token to state
+    if (config?.recaptcha_site_key && recaptchaReady) {
+      try {
+        const token = await executeRecaptcha("LOGIN");
+        if (token) {
+          stateData.recaptcha_token = token;
+        }
+      } catch (err) {
+        displayErrorToast(t(I18nKey.AUTH$RECAPTCHA_BLOCKED));
+        return;
       }
-    } catch (err) {
-      displayErrorToast(t(I18nKey.AUTH$RECAPTCHA_BLOCKED));
     }
+
+    // Encode state and redirect
+    url.searchParams.set("state", btoa(JSON.stringify(stateData)));
+    window.location.href = url.toString();
   };
 
   const handleGitHubAuth = () => {
@@ -104,6 +128,18 @@ export function LoginContent({
     }
   };
 
+  const handleBitbucketDataCenterAuth = () => {
+    if (bitbucketDataCenterAuthUrl) {
+      handleAuthRedirect(bitbucketDataCenterAuthUrl, "bitbucket_data_center");
+    }
+  };
+
+  const handleEnterpriseSsoAuth = () => {
+    if (enterpriseSsoAuthUrl) {
+      handleAuthRedirect(enterpriseSsoAuthUrl, "enterprise_sso");
+    }
+  };
+
   const showGithub =
     providersConfigured &&
     providersConfigured.length > 0 &&
@@ -116,6 +152,14 @@ export function LoginContent({
     providersConfigured &&
     providersConfigured.length > 0 &&
     providersConfigured.includes("bitbucket");
+  const showBitbucketDataCenter =
+    providersConfigured &&
+    providersConfigured.length > 0 &&
+    providersConfigured.includes("bitbucket_data_center");
+  const showEnterpriseSso =
+    providersConfigured &&
+    providersConfigured.length > 0 &&
+    providersConfigured.includes("enterprise_sso");
 
   const noProvidersConfigured =
     !providersConfigured || providersConfigured.length === 0;
@@ -123,6 +167,14 @@ export function LoginContent({
   const buttonBaseClasses =
     "w-[301.5px] h-10 rounded p-2 flex items-center justify-center cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed";
   const buttonLabelClasses = "text-sm font-medium leading-5 px-1";
+
+  const shouldShownHelperText =
+    emailVerified ||
+    hasDuplicatedEmail ||
+    recaptchaBlocked ||
+    hasInvitation ||
+    showBitbucket;
+
   return (
     <div
       className="flex flex-col items-center w-full gap-12.5"
@@ -136,20 +188,34 @@ export function LoginContent({
         {t(I18nKey.AUTH$LETS_GET_STARTED)}
       </h1>
 
-      {emailVerified && (
-        <p className="text-sm text-muted-foreground text-center">
-          {t(I18nKey.AUTH$EMAIL_VERIFIED_PLEASE_LOGIN)}
-        </p>
-      )}
-      {hasDuplicatedEmail && (
-        <p className="text-sm text-danger text-center">
-          {t(I18nKey.AUTH$DUPLICATE_EMAIL_ERROR)}
-        </p>
-      )}
-      {recaptchaBlocked && (
-        <p className="text-sm text-danger text-center max-w-125">
-          {t(I18nKey.AUTH$RECAPTCHA_BLOCKED)}
-        </p>
+      {shouldShownHelperText && (
+        <div className="flex flex-col items-center gap-3">
+          {emailVerified && (
+            <p className="text-sm text-muted-foreground text-center">
+              {t(I18nKey.AUTH$EMAIL_VERIFIED_PLEASE_LOGIN)}
+            </p>
+          )}
+          {hasDuplicatedEmail && (
+            <p className="text-sm text-danger text-center">
+              {t(I18nKey.AUTH$DUPLICATE_EMAIL_ERROR)}
+            </p>
+          )}
+          {recaptchaBlocked && (
+            <p className="text-sm text-danger text-center max-w-125">
+              {t(I18nKey.AUTH$RECAPTCHA_BLOCKED)}
+            </p>
+          )}
+          {hasInvitation && (
+            <p className="text-sm text-muted-foreground text-center">
+              {t(I18nKey.AUTH$INVITATION_PENDING)}
+            </p>
+          )}
+          {showBitbucket && (
+            <p className="text-sm text-white text-center max-w-125">
+              {t(I18nKey.AUTH$BITBUCKET_SIGNUP_DISABLED)}
+            </p>
+          )}
+        </div>
       )}
 
       <div className="flex flex-col items-center gap-3">
@@ -194,6 +260,34 @@ export function LoginContent({
                 <BitbucketLogo width={14} height={14} className="shrink-0" />
                 <span className={buttonLabelClasses}>
                   {t(I18nKey.BITBUCKET$CONNECT_TO_BITBUCKET)}
+                </span>
+              </button>
+            )}
+
+            {showBitbucketDataCenter && (
+              <button
+                type="button"
+                onClick={handleBitbucketDataCenterAuth}
+                className={`${buttonBaseClasses} bg-[#2684FF] text-white`}
+              >
+                <BitbucketLogo width={14} height={14} className="shrink-0" />
+                <span className={buttonLabelClasses}>
+                  {t(
+                    I18nKey.BITBUCKET_DATA_CENTER$CONNECT_TO_BITBUCKET_DATA_CENTER,
+                  )}
+                </span>
+              </button>
+            )}
+
+            {showEnterpriseSso && (
+              <button
+                type="button"
+                onClick={handleEnterpriseSsoAuth}
+                className={`${buttonBaseClasses} bg-[#374151] text-white`}
+              >
+                <FaUserShield size={14} className="shrink-0" />
+                <span className={buttonLabelClasses}>
+                  {t(I18nKey.ENTERPRISE_SSO$CONNECT_TO_ENTERPRISE_SSO)}
                 </span>
               </button>
             )}

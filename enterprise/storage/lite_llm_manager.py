@@ -10,7 +10,6 @@ import httpx
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import (
-    DEFAULT_INITIAL_BUDGET,
     LITE_LLM_API_KEY,
     LITE_LLM_API_URL,
     LITE_LLM_TEAM_ID,
@@ -30,6 +29,15 @@ KEY_VERIFICATION_TIMEOUT = 5.0
 # A very large number to represent "unlimited" until LiteLLM fixes their unlimited update bug.
 UNLIMITED_BUDGET_SETTING = 1000000000.0
 
+try:
+    DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', 0.0))
+    if DEFAULT_INITIAL_BUDGET < 0:
+        raise ValueError(
+            f'DEFAULT_INITIAL_BUDGET must be non-negative, got {DEFAULT_INITIAL_BUDGET}'
+        )
+except ValueError as e:
+    raise ValueError(f'Invalid DEFAULT_INITIAL_BUDGET environment variable: {e}') from e
+
 
 def get_openhands_cloud_key_alias(keycloak_user_id: str, org_id: str) -> str:
     """Generate the key alias for OpenHands Cloud managed keys."""
@@ -43,6 +51,34 @@ def get_byor_key_alias(keycloak_user_id: str, org_id: str) -> str:
 
 class LiteLlmManager:
     """Manage LiteLLM interactions."""
+
+    @staticmethod
+    def get_budget_from_team_info(
+        user_team_info: dict | None, user_id: str, org_id: str
+    ) -> tuple[float, float]:
+        """Extract max_budget and spend from user team info.
+
+        For personal orgs (user_id == org_id), uses litellm_budget_table.max_budget.
+        For team orgs, uses max_budget_in_team (populated by get_user_team_info).
+
+        Args:
+            user_team_info: The response from get_user_team_info
+            user_id: The user's ID
+            org_id: The organization's ID
+
+        Returns:
+            Tuple of (max_budget, spend)
+        """
+        if not user_team_info:
+            return 0, 0
+        spend = user_team_info.get('spend', 0)
+        if user_id == org_id:
+            max_budget = (user_team_info.get('litellm_budget_table') or {}).get(
+                'max_budget', 0
+            )
+        else:
+            max_budget = user_team_info.get('max_budget_in_team') or 0
+        return max_budget, spend
 
     @staticmethod
     async def create_entries(
@@ -72,8 +108,33 @@ class LiteLlmManager:
                     'x-goog-api-key': LITE_LLM_API_KEY,
                 }
             ) as client:
+                # Check if team already exists and get its budget
+                # New users joining existing orgs should inherit the team's budget
+                team_budget: float = DEFAULT_INITIAL_BUDGET
+                try:
+                    existing_team = await LiteLlmManager._get_team(client, org_id)
+                    if existing_team:
+                        team_info = existing_team.get('team_info', {})
+                        team_budget = team_info.get('max_budget', 0.0) or 0.0
+                        logger.info(
+                            'LiteLlmManager:create_entries:existing_team_budget',
+                            extra={
+                                'org_id': org_id,
+                                'user_id': keycloak_user_id,
+                                'team_budget': team_budget,
+                            },
+                        )
+                except httpx.HTTPStatusError as e:
+                    # Team doesn't exist yet (404) - this is expected for first user
+                    if e.response.status_code != 404:
+                        raise
+                    logger.info(
+                        'LiteLlmManager:create_entries:no_existing_team',
+                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                    )
+
                 await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
+                    client, keycloak_user_id, org_id, team_budget
                 )
 
                 if create_user:
@@ -82,14 +143,26 @@ class LiteLlmManager:
                     )
 
                 await LiteLlmManager._add_user_to_team(
-                    client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
+                    client, keycloak_user_id, org_id, team_budget
                 )
+
+                # We delete the key if it already exists. In environments where multiple
+                # installations are using the same keycloak and litellm instance, this
+                # will mean other installations will have their key invalidated.
+                key_alias = get_openhands_cloud_key_alias(keycloak_user_id, org_id)
+                try:
+                    await LiteLlmManager._delete_key_by_alias(client, key_alias)
+                except httpx.HTTPStatusError as ex:
+                    if ex.status_code == 404:
+                        logger.debug(f'Key "{key_alias}" did not exist - continuing')
+                    else:
+                        raise
 
                 key = await LiteLlmManager._generate_key(
                     client,
                     keycloak_user_id,
                     org_id,
-                    get_openhands_cloud_key_alias(keycloak_user_id, org_id),
+                    key_alias,
                     None,
                 )
 
@@ -264,14 +337,13 @@ class LiteLlmManager:
                             get_openhands_cloud_key_alias(keycloak_user_id, org_id),
                             None,
                         )
-                        if new_key:
-                            logger.info(
-                                'LiteLlmManager:migrate_lite_llm_entries:generated_new_key',
-                                extra={'org_id': org_id, 'user_id': keycloak_user_id},
-                            )
-                            # Update user_settings with the new key so it gets stored in org_member
-                            user_settings.llm_api_key = SecretStr(new_key)
-                            user_settings.llm_api_key_for_byor = SecretStr(new_key)
+                        logger.info(
+                            'LiteLlmManager:migrate_lite_llm_entries:generated_new_key',
+                            extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                        )
+                        # Update user_settings with the new key so it gets stored in org_member
+                        user_settings.llm_api_key = SecretStr(new_key)
+                        user_settings.llm_api_key_for_byor = SecretStr(new_key)
 
         logger.info(
             'LiteLlmManager:migrate_lite_llm_entries:complete',
@@ -894,20 +966,30 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
-        team_info = await LiteLlmManager._get_team(client, team_id)
-        if not team_info:
+        team_response = await LiteLlmManager._get_team(client, team_id)
+        if not team_response:
             return None
 
         # Filter team_memberships based on team_id and keycloak_user_id
         user_membership = next(
             (
                 membership
-                for membership in team_info.get('team_memberships', [])
+                for membership in team_response.get('team_memberships', [])
                 if membership.get('user_id') == keycloak_user_id
                 and membership.get('team_id') == team_id
             ),
             None,
         )
+
+        if not user_membership:
+            return None
+
+        # For team orgs (user_id != team_id), include team-level budget info
+        # The team's max_budget and spend are shared across all members
+        if keycloak_user_id != team_id:
+            team_info = team_response.get('team_info', {})
+            user_membership['max_budget_in_team'] = team_info.get('max_budget')
+            user_membership['spend'] = team_info.get('spend', 0)
 
         return user_membership
 
@@ -989,10 +1071,9 @@ class LiteLlmManager:
         team_id: str | None,
         key_alias: str | None,
         metadata: dict | None,
-    ) -> str | None:
+    ) -> str:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
-            logger.warning('LiteLLM API configuration not found')
-            return None
+            raise ValueError('LiteLLM API configuration not found')
         json_data: dict[str, Any] = {
             'user_id': keycloak_user_id,
             'models': [],
@@ -1109,7 +1190,7 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
-        user = await UserStore.get_user_by_id_async(keycloak_user_id)
+        user = await UserStore.get_user_by_id(keycloak_user_id)
         if not user:
             return {}
 

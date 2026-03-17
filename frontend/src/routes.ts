@@ -7,6 +7,7 @@ import {
 
 export default [
   route("login", "routes/login.tsx"),
+  route("onboarding", "routes/onboarding-form.tsx"),
   layout("routes/root-layout.tsx", [
     index("routes/home.tsx"),
     route("accept-tos", "routes/accept-tos.tsx"),
@@ -19,6 +20,8 @@ export default [
       route("billing", "routes/billing.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
       route("api-keys", "routes/api-keys.tsx"),
+      route("org-members", "routes/manage-organization-members.tsx"),
+      route("org", "routes/manage-org.tsx"),
     ]),
     route("conversations/:conversationId", "routes/conversation.tsx"),
     route("microagent-management", "routes/microagent-management.tsx"),

@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import asyncio
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from integrations.gitlab.webhook_installation import (
     BreakLoopException,
@@ -15,7 +17,9 @@ from storage.gitlab_webhook_store import GitlabWebhookStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
-from openhands.integrations.service_types import GitService
+
+if TYPE_CHECKING:
+    from integrations.gitlab.gitlab_service import SaaSGitLabService
 
 CHUNK_SIZE = 100
 
@@ -35,7 +39,7 @@ class VerifyWebhookStatus:
 
     async def check_if_webhook_already_exists_on_resource(
         self,
-        gitlab_service: type[GitService],
+        gitlab_service: SaaSGitLabService,
         resource_type: GitLabResourceType,
         resource_id: str,
         webhook_store: GitlabWebhookStore,
@@ -44,14 +48,13 @@ class VerifyWebhookStatus:
         """
         Check whether webhook already exists on resource
         """
-        from integrations.gitlab.gitlab_service import SaaSGitLabService
-
-        gitlab_service = cast(type[SaaSGitLabService], gitlab_service)
         (
             does_webhook_exist_on_resource,
             status,
         ) = await gitlab_service.check_webhook_exists_on_resource(
-            resource_type, resource_id, GITLAB_WEBHOOK_URL
+            resource_type=resource_type,
+            resource_id=resource_id,
+            webhook_url=GITLAB_WEBHOOK_URL,
         )
 
         logger.info(
@@ -75,7 +78,7 @@ class VerifyWebhookStatus:
 
     async def verify_conditions_are_met(
         self,
-        gitlab_service: type[GitService],
+        gitlab_service: SaaSGitLabService,
         resource_type: GitLabResourceType,
         resource_id: str,
         webhook_store: GitlabWebhookStore,
@@ -92,7 +95,7 @@ class VerifyWebhookStatus:
 
     async def create_new_webhook(
         self,
-        gitlab_service: type[GitService],
+        gitlab_service: SaaSGitLabService,
         resource_type: GitLabResourceType,
         resource_id: str,
         webhook_store: GitlabWebhookStore,
@@ -165,12 +168,12 @@ class VerifyWebhookStatus:
                     webhook
                 )
 
-                gitlab_service_impl = GitLabServiceImpl(external_auth_id=user_id)
+                # GitLabServiceImpl returns SaaSGitLabService in enterprise context
+                from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-                if not isinstance(gitlab_service_impl, SaaSGitLabService):
-                    raise Exception('Only SaaSGitLabService is supported')
-                # Cast needed when mypy can see OpenHands
-                gitlab_service = cast(type[SaaSGitLabService], gitlab_service_impl)
+                gitlab_service = cast(
+                    SaaSGitLabService, GitLabServiceImpl(external_auth_id=user_id)
+                )
 
                 await self.verify_conditions_are_met(
                     gitlab_service=gitlab_service,

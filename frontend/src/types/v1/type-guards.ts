@@ -20,6 +20,7 @@ import {
   ConversationStateUpdateEventStats,
   ConversationErrorEvent,
 } from "./core/events/conversation-state-event";
+import { HookExecutionEvent } from "./core/events/hook-execution-event";
 import { SystemPromptEvent } from "./core/events/system-event";
 import type { OpenHandsParsedEvent } from "../core/index";
 
@@ -42,7 +43,8 @@ export function isBaseEvent(value: unknown): value is BaseEvent {
     typeof value.source === "string" &&
     (value.source === "agent" ||
       value.source === "user" ||
-      value.source === "environment")
+      value.source === "environment" ||
+      value.source === "hook")
   );
 }
 
@@ -190,6 +192,14 @@ export const isConversationErrorEvent = (
   event: OpenHandsEvent,
 ): event is ConversationErrorEvent =>
   "kind" in event && event.kind === "ConversationErrorEvent";
+
+/**
+ * Type guard function to check if an event is a hook execution event
+ */
+export const isHookExecutionEvent = (
+  event: OpenHandsEvent,
+): event is HookExecutionEvent =>
+  "kind" in event && event.kind === "HookExecutionEvent";
 
 // =============================================================================
 // TEMPORARY COMPATIBILITY TYPE GUARDS

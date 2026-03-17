@@ -10,7 +10,9 @@ window.scrollTo = vi.fn();
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
   observe = vi.fn();
+
   unobserve = vi.fn();
+
   disconnect = vi.fn();
 }
 
@@ -28,6 +30,10 @@ vi.mock("react-i18next", async (importOriginal) => ({
 
 vi.mock("#/hooks/use-is-on-tos-page", () => ({
   useIsOnTosPage: () => false,
+}));
+
+vi.mock("#/hooks/use-is-on-intermediate-page", () => ({
+  useIsOnIntermediatePage: () => false,
 }));
 
 // Import the Zustand mock to enable automatic store resets

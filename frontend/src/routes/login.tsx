@@ -4,6 +4,7 @@ import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { useConfig } from "#/hooks/query/use-config";
 import { useGitHubAuthUrl } from "#/hooks/use-github-auth-url";
 import { useEmailVerification } from "#/hooks/use-email-verification";
+import { useInvitation } from "#/hooks/use-invitation";
 import { LoginContent } from "#/components/features/auth/login-content";
 import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
 
@@ -18,10 +19,13 @@ export default function LoginPage() {
     emailVerified,
     hasDuplicatedEmail,
     recaptchaBlocked,
+    wasRateLimited,
     emailVerificationModalOpen,
     setEmailVerificationModalOpen,
     userId,
   } = useEmailVerification();
+
+  const { hasInvitation, buildOAuthStateData } = useInvitation();
 
   const gitHubAuthUrl = useGitHubAuthUrl({
     appMode: config.data?.app_mode || null,
@@ -36,11 +40,18 @@ export default function LoginPage() {
   }, [config.isLoading, config.data?.app_mode, navigate]);
 
   // Redirect authenticated users away from login page
+  // Preserve login_method param so useAuthCallback can store it for auto-login
   React.useEffect(() => {
     if (!isAuthLoading && isAuthed) {
-      navigate(returnTo, { replace: true });
+      const loginMethod = searchParams.get("login_method");
+      let destination = returnTo;
+      if (loginMethod) {
+        const separator = returnTo.includes("?") ? "&" : "?";
+        destination = `${returnTo}${separator}login_method=${encodeURIComponent(loginMethod)}`;
+      }
+      navigate(destination, { replace: true });
     }
-  }, [isAuthed, isAuthLoading, navigate, returnTo]);
+  }, [isAuthed, isAuthLoading, navigate, returnTo, searchParams]);
 
   if (isAuthLoading || config.isLoading) {
     return (
@@ -69,6 +80,8 @@ export default function LoginPage() {
           emailVerified={emailVerified}
           hasDuplicatedEmail={hasDuplicatedEmail}
           recaptchaBlocked={recaptchaBlocked}
+          hasInvitation={hasInvitation}
+          buildOAuthStateData={buildOAuthStateData}
         />
       </main>
 
@@ -78,6 +91,7 @@ export default function LoginPage() {
             setEmailVerificationModalOpen(false);
           }}
           userId={userId}
+          wasRateLimited={wasRateLimited}
         />
       )}
     </>

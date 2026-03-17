@@ -6,8 +6,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from server.utils.url_utils import get_web_url
 from storage.api_key_store import ApiKeyStore
-from storage.database import session_maker
 from storage.device_code_store import DeviceCodeStore
 
 from openhands.core.logger import openhands_logger as logger
@@ -54,7 +54,7 @@ class DeviceTokenErrorResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 oauth_device_router = APIRouter(prefix='/oauth/device')
-device_code_store = DeviceCodeStore(session_maker)
+device_code_store = DeviceCodeStore()
 
 
 # ---------------------------------------------------------------------------
@@ -90,11 +90,11 @@ async def device_authorization(
 ) -> DeviceAuthorizationResponse:
     """Start device flow by generating device and user codes."""
     try:
-        device_code_entry = device_code_store.create_device_code(
+        device_code_entry = await device_code_store.create_device_code(
             expires_in=DEVICE_CODE_EXPIRES_IN,
         )
 
-        base_url = str(http_request.base_url).rstrip('/')
+        base_url = get_web_url(http_request)
         verification_uri = f'{base_url}/oauth/device/verify'
         verification_uri_complete = (
             f'{verification_uri}?user_code={device_code_entry.user_code}'
@@ -125,7 +125,7 @@ async def device_authorization(
 async def device_token(device_code: str = Form(...)):
     """Poll for a token until the user authorizes or the code expires."""
     try:
-        device_code_entry = device_code_store.get_by_device_code(device_code)
+        device_code_entry = await device_code_store.get_by_device_code(device_code)
 
         if not device_code_entry:
             return _oauth_error(
@@ -138,7 +138,9 @@ async def device_token(device_code: str = Form(...)):
         is_too_fast, current_interval = device_code_entry.check_rate_limit()
         if is_too_fast:
             # Update poll time and increase interval
-            device_code_store.update_poll_time(device_code, increase_interval=True)
+            await device_code_store.update_poll_time(
+                device_code, increase_interval=True
+            )
             logger.warning(
                 'Client polling too fast, returning slow_down error',
                 extra={
@@ -154,7 +156,7 @@ async def device_token(device_code: str = Form(...)):
             )
 
         # Update poll time for successful rate limit check
-        device_code_store.update_poll_time(device_code, increase_interval=False)
+        await device_code_store.update_poll_time(device_code, increase_interval=False)
 
         if device_code_entry.is_expired():
             return _oauth_error(
@@ -181,7 +183,7 @@ async def device_token(device_code: str = Form(...)):
             # Retrieve the specific API key for this device using the user_code
             api_key_store = ApiKeyStore.get_instance()
             device_key_name = f'{API_KEY_NAME} ({device_code_entry.user_code})'
-            device_api_key = api_key_store.retrieve_api_key_by_name(
+            device_api_key = await api_key_store.retrieve_api_key_by_name(
                 device_code_entry.keycloak_user_id, device_key_name
             )
 
@@ -238,7 +240,7 @@ async def device_verification_authenticated(
             )
 
         # Validate device code
-        device_code_entry = device_code_store.get_by_user_code(user_code)
+        device_code_entry = await device_code_store.get_by_user_code(user_code)
         if not device_code_entry:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -252,7 +254,7 @@ async def device_verification_authenticated(
             )
 
         # First, authorize the device code
-        success = device_code_store.authorize_device_code(
+        success = await device_code_store.authorize_device_code(
             user_code=user_code,
             user_id=user_id,
         )
@@ -289,7 +291,7 @@ async def device_verification_authenticated(
             # Clean up: revert the device authorization since API key creation failed
             # This prevents the device from being in an authorized state without an API key
             try:
-                device_code_store.deny_device_code(user_code)
+                await device_code_store.deny_device_code(user_code)
                 logger.info(
                     'Reverted device authorization due to API key creation failure',
                     extra={'user_code': user_code, 'user_id': user_id},

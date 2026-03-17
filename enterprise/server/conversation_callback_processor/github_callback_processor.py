@@ -3,7 +3,6 @@ from datetime import datetime
 
 from integrations.github.github_manager import GithubManager
 from integrations.github.github_view import GithubViewType
-from integrations.models import Message, SourceType
 from integrations.utils import (
     extract_summary_from_conversation_manager,
     get_summary_instruction,
@@ -35,16 +34,12 @@ class GithubCallbackProcessor(ConversationCallbackProcessor):
     send_summary_instruction: bool = True
 
     async def _send_message_to_github(self, message: str) -> None:
-        """
-        Send a message to GitHub.
+        """Send a message to GitHub.
 
         Args:
             message: The message content to send to GitHub
         """
         try:
-            # Create a message object for GitHub
-            message_obj = Message(source=SourceType.OPENHANDS, message=message)
-
             # Get the token manager
             token_manager = TokenManager()
 
@@ -53,8 +48,8 @@ class GithubCallbackProcessor(ConversationCallbackProcessor):
 
             github_manager = GithubManager(token_manager, GitHubDataCollector())
 
-            # Send the message
-            await github_manager.send_message(message_obj, self.github_view)
+            # Send the message directly as a string
+            await github_manager.send_message(message, self.github_view)
 
             logger.info(
                 f'[GitHub] Sent summary message to {self.github_view.full_repo_name}#{self.github_view.issue_number}'

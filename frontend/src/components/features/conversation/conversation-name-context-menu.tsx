@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { useWindowSize } from "@uidotdev/usehooks";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
 import { cn } from "#/utils/utils";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
@@ -35,6 +35,7 @@ interface ConversationNameContextMenuProps {
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onShowHooks?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onExportConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onTogglePublic?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -52,6 +53,7 @@ export function ConversationNameContextMenu({
   onDisplayCost,
   onShowAgentTools,
   onShowSkills,
+  onShowHooks,
   onExportConversation,
   onDownloadViaVSCode,
   onTogglePublic,
@@ -60,7 +62,7 @@ export function ConversationNameContextMenu({
   shareUrl,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
-  const { width } = useWindowSize();
+  const isMobile = useBreakpoint();
 
   const { t } = useTranslation();
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
@@ -77,11 +79,9 @@ export function ConversationNameContextMenu({
 
   const hasDownload = Boolean(onDownloadViaVSCode || onDownloadConversation);
   const hasExport = Boolean(onExportConversation);
-  const hasTools = Boolean(onShowAgentTools || onShowSkills);
+  const hasTools = Boolean(onShowAgentTools || onShowSkills || onShowHooks);
   const hasInfo = Boolean(onDisplayCost);
   const hasControl = Boolean(onStop || onDelete);
-
-  const isMobile = width && width <= 1024;
 
   return (
     <ContextMenu
@@ -116,6 +116,20 @@ export function ConversationNameContextMenu({
           <ConversationNameContextMenuIconText
             icon={<RobotIcon width={16} height={16} />}
             text={t(I18nKey.CONVERSATION$SHOW_SKILLS)}
+            className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
+          />
+        </ContextMenuListItem>
+      )}
+
+      {onShowHooks && (
+        <ContextMenuListItem
+          testId="show-hooks-button"
+          onClick={onShowHooks}
+          className={contextMenuListItemClassName}
+        >
+          <ConversationNameContextMenuIconText
+            icon={<ToolsIcon width={16} height={16} />}
+            text={t(I18nKey.CONVERSATION$SHOW_HOOKS)}
             className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
           />
         </ContextMenuListItem>

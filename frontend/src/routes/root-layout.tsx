@@ -17,17 +17,17 @@ import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
-import { SetupPaymentModal } from "#/components/features/payment/setup-payment-modal";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
-import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
+import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
 import { useAutoLogin } from "#/hooks/use-auto-login";
 import { useAuthCallback } from "#/hooks/use-auth-callback";
 import { useReoTracking } from "#/hooks/use-reo-tracking";
 import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
+import { useAutoSelectOrganization } from "#/hooks/use-auto-select-organization";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { AlertBanner } from "#/components/features/alerts/alert-banner";
-import { cn, isMobileDevice } from "#/utils/utils";
+import { cn } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
 
@@ -69,7 +69,7 @@ export default function MainApp() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
-  const isOnTosPage = useIsOnTosPage();
+  const isOnIntermediatePage = useIsOnIntermediatePage();
   const { data: settings } = useSettings();
   const { migrateUserConsent } = useMigrateUserConsent();
   const { t } = useTranslation();
@@ -96,26 +96,29 @@ export default function MainApp() {
   // Sync PostHog opt-in/out state with backend setting on mount
   useSyncPostHogConsent();
 
-  React.useEffect(() => {
-    // Don't change language when on TOS page
-    if (!isOnTosPage && settings?.language) {
-      i18n.changeLanguage(settings.language);
-    }
-  }, [settings?.language, isOnTosPage]);
+  // Auto-select the first organization when none is selected
+  useAutoSelectOrganization();
 
   React.useEffect(() => {
-    // Don't show consent form when on TOS page
-    if (!isOnTosPage) {
+    // Don't change language when on intermediate pages (TOS, profile questions)
+    if (!isOnIntermediatePage && settings?.language) {
+      i18n.changeLanguage(settings.language);
+    }
+  }, [settings?.language, isOnIntermediatePage]);
+
+  React.useEffect(() => {
+    // Don't show consent form when on intermediate pages
+    if (!isOnIntermediatePage) {
       const consentFormModalIsOpen =
         settings?.user_consents_to_analytics === null;
 
       setConsentFormIsOpen(consentFormModalIsOpen);
     }
-  }, [settings, isOnTosPage]);
+  }, [settings, isOnIntermediatePage]);
 
   React.useEffect(() => {
-    // Don't migrate user consent when on TOS page
-    if (!isOnTosPage) {
+    // Don't migrate user consent when on intermediate pages
+    if (!isOnIntermediatePage) {
       // Migrate user consent to the server if it was previously stored in localStorage
       migrateUserConsent({
         handleAnalyticsWasPresentInLocalStorage: () => {
@@ -123,7 +126,7 @@ export default function MainApp() {
         },
       });
     }
-  }, [isOnTosPage]);
+  }, [isOnIntermediatePage]);
 
   React.useEffect(() => {
     if (settings?.is_new_user && config.data?.app_mode === "saas") {
@@ -173,14 +176,17 @@ export default function MainApp() {
     setLoginMethodExists(checkLoginMethodExists());
   }, [isAuthed, checkLoginMethodExists]);
 
+  // Show loading spinner while config or auth is loading
+  const isLoading = config.isLoading || isAuthLoading;
+
+  // Only decide to redirect AFTER loading completes
   const shouldRedirectToLogin =
-    config.isLoading ||
-    isAuthLoading ||
-    (!isAuthed &&
-      !isAuthError &&
-      !isOnTosPage &&
-      config.data?.app_mode === "saas" &&
-      !loginMethodExists);
+    !isLoading &&
+    !isAuthed &&
+    !isAuthError &&
+    !isOnIntermediatePage &&
+    config.data?.app_mode === "saas" &&
+    !loginMethodExists;
 
   React.useEffect(() => {
     if (shouldRedirectToLogin) {
@@ -197,7 +203,8 @@ export default function MainApp() {
     }
   }, [shouldRedirectToLogin, pathname, searchParams, navigate]);
 
-  if (shouldRedirectToLogin) {
+  // Show loading spinner while loading OR when about to redirect
+  if (isLoading || shouldRedirectToLogin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
         <LoadingSpinner size="large" />
@@ -209,7 +216,7 @@ export default function MainApp() {
     !isAuthed &&
     !isAuthError &&
     !isFetchingAuth &&
-    !isOnTosPage &&
+    !isOnIntermediatePage &&
     config.data?.app_mode === "saas" &&
     loginMethodExists;
 
@@ -217,9 +224,8 @@ export default function MainApp() {
     <div
       data-testid="root-layout"
       className={cn(
-        "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base",
+        "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden",
         pathname === "/" ? "p-0" : "p-0 md:p-3 md:pl-0",
-        isMobileDevice() && "overflow-hidden",
       )}
     >
       <title>{appTitle}</title>
@@ -256,10 +262,6 @@ export default function MainApp() {
           }}
         />
       )}
-
-      {config.data?.feature_flags.enable_billing &&
-        config.data?.app_mode === "saas" &&
-        settings?.is_new_user && <SetupPaymentModal />}
     </div>
   );
 }

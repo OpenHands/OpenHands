@@ -116,14 +116,14 @@ export function AlertBanner({
     <div
       data-testid="alert-banner"
       className={cn(
-        "bg-primary text-[#0D0F11] p-4 rounded",
+        "bg-[#0D0F11] border border-primary text-white p-4 rounded",
         "flex flex-row items-center justify-between m-1",
         pathname === "/" && "mt-3 mr-3",
       )}
     >
       <div className="flex items-center">
         <div className="flex-shrink-0">
-          <FaTriangleExclamation className="text-white align-middle" />
+          <FaTriangleExclamation className="text-primary align-middle" />
         </div>
         <div className="ml-3 flex flex-col gap-1">{renderMessages()}</div>
       </div>
