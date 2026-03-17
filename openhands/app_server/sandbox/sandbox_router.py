@@ -149,14 +149,26 @@ async def _get_user_context(sandbox_info: SandboxInfo) -> AuthUserContext:
 async def list_secret_names(
     sandbox_info: SandboxInfo = Depends(_valid_sandbox_from_session_key),
 ) -> SecretNamesResponse:
-    """List available secret names (no raw values)."""
-    user_context = await _get_user_context(sandbox_info)
-    secret_sources = await user_context.get_secrets()
+    """List available secret names (no raw values).
 
-    items = [
-        SecretNameItem(name=name, description=source.description)
-        for name, source in secret_sources.items()
-    ]
+    Includes both custom secrets and provider tokens (e.g. github_token).
+    """
+    user_context = await _get_user_context(sandbox_info)
+
+    items: list[SecretNameItem] = []
+
+    # Custom secrets
+    secret_sources = await user_context.get_secrets()
+    for name, source in secret_sources.items():
+        items.append(SecretNameItem(name=name, description=source.description))
+
+    # Provider tokens (github_token, gitlab_token, etc.)
+    provider_env_vars = await user_context.get_provider_tokens(as_env_vars=True)
+    for env_key in provider_env_vars:
+        items.append(
+            SecretNameItem(name=env_key, description=f'{env_key} provider token')
+        )
+
     return SecretNamesResponse(secrets=items)
 
 
@@ -167,17 +179,25 @@ async def get_secret_value(
 ) -> Response:
     """Return a single secret value as plain text.
 
-    Called by ``LookupSecret`` inside the sandbox.
+    Called by ``LookupSecret`` inside the sandbox. Checks custom secrets
+    first, then falls back to provider tokens — always resolving the
+    latest token at call time.
     """
     user_context = await _get_user_context(sandbox_info)
+
+    # Check custom secrets first
     secret_sources = await user_context.get_secrets()
-
     source = secret_sources.get(secret_name)
-    if source is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Secret not found')
+    if source is not None:
+        value = source.get_value()
+        if value is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Secret has no value')
+        return Response(content=value, media_type='text/plain')
 
-    value = source.get_value()
-    if value is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Secret has no value')
+    # Fall back to provider tokens (resolved fresh per request)
+    provider_env_vars = await user_context.get_provider_tokens(as_env_vars=True)
+    token_value = provider_env_vars.get(secret_name)
+    if token_value is not None:
+        return Response(content=token_value, media_type='text/plain')
 
-    return Response(content=value, media_type='text/plain')
+    raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Secret not found')

@@ -26,11 +26,14 @@ from openhands.app_server.sandbox.sandbox_router import (
     list_secret_names,
 )
 from openhands.app_server.sandbox.session_auth import validate_session_key
+from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.user.user_router import (
     _validate_session_key_ownership,
     get_current_user,
 )
+from openhands.integrations.provider import ProviderHandler, ProviderToken
+from openhands.integrations.service_types import ProviderType
 from openhands.sdk.secret import StaticSecret
 
 SANDBOX_ID = 'sb-test-123'
@@ -274,6 +277,7 @@ class TestListSecretNames:
         ) as mock_ctx:
             ctx = AsyncMock()
             ctx.get_secrets = AsyncMock(return_value=secrets)
+            ctx.get_provider_tokens = AsyncMock(return_value={})
             mock_ctx.return_value = ctx
 
             result = await list_secret_names(sandbox_info=sandbox_info)
@@ -297,6 +301,7 @@ class TestListSecretNames:
         ) as mock_ctx:
             ctx = AsyncMock()
             ctx.get_secrets = AsyncMock(return_value={})
+            ctx.get_provider_tokens = AsyncMock(return_value={})
             mock_ctx.return_value = ctx
 
             result = await list_secret_names(sandbox_info=sandbox_info)
@@ -328,6 +333,7 @@ class TestGetSecretValue:
         ) as mock_ctx:
             ctx = AsyncMock()
             ctx.get_secrets = AsyncMock(return_value=secrets)
+            ctx.get_provider_tokens = AsyncMock(return_value={})
             mock_ctx.return_value = ctx
 
             response = await get_secret_value(
@@ -339,15 +345,15 @@ class TestGetSecretValue:
         assert response.media_type == 'text/plain'
 
     async def test_returns_404_for_unknown_secret(self):
-        """404 when requested secret doesn't exist."""
-        secrets = {}
+        """404 when requested secret doesn't exist in custom secrets or provider tokens."""
         sandbox_info = _make_sandbox_info()
 
         with patch(
             'openhands.app_server.sandbox.sandbox_router._get_user_context'
         ) as mock_ctx:
             ctx = AsyncMock()
-            ctx.get_secrets = AsyncMock(return_value=secrets)
+            ctx.get_secrets = AsyncMock(return_value={})
+            ctx.get_provider_tokens = AsyncMock(return_value={})
             mock_ctx.return_value = ctx
 
             with pytest.raises(HTTPException) as exc_info:
@@ -370,6 +376,7 @@ class TestGetSecretValue:
         ) as mock_ctx:
             ctx = AsyncMock()
             ctx.get_secrets = AsyncMock(return_value=secrets)
+            ctx.get_provider_tokens = AsyncMock(return_value={})
             mock_ctx.return_value = ctx
 
             with pytest.raises(HTTPException) as exc_info:
@@ -650,3 +657,131 @@ class TestSandboxSecretsIntegration:
         # _get_user_context raises 401 because created_by_user_id is None
         assert response.status_code == 401
         assert 'no associated user' in response.json()['detail']
+
+
+# ---------------------------------------------------------------------------
+# Provider tokens in sandbox secrets endpoints
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestProviderTokensInEndpoints:
+    """Verify that sandbox secrets endpoints include provider tokens resolved lazily."""
+
+    async def test_get_provider_tokens_as_env_vars(self):
+        """get_provider_tokens(as_env_vars=True) returns fresh values keyed by env name."""
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value={
+                ProviderType.GITHUB: ProviderToken(token=SecretStr('ghp_test123')),
+                ProviderType.GITLAB: ProviderToken(token=SecretStr('glpat-test456')),
+            }
+        )
+
+        ctx = AuthUserContext(user_auth=mock_user_auth)
+        result = await ctx.get_provider_tokens(as_env_vars=True)
+
+        gh_key = ProviderHandler.get_provider_env_key(ProviderType.GITHUB)
+        gl_key = ProviderHandler.get_provider_env_key(ProviderType.GITLAB)
+        assert result[gh_key] == 'ghp_test123'
+        assert result[gl_key] == 'glpat-test456'
+
+    async def test_empty_provider_tokens_excluded(self):
+        """Provider tokens with empty token values are excluded."""
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value={
+                ProviderType.GITHUB: ProviderToken(token=SecretStr('')),
+            }
+        )
+
+        ctx = AuthUserContext(user_auth=mock_user_auth)
+        result = await ctx.get_provider_tokens(as_env_vars=True)
+
+        gh_key = ProviderHandler.get_provider_env_key(ProviderType.GITHUB)
+        assert gh_key not in result
+
+    async def test_none_provider_tokens_returns_empty(self):
+        """get_provider_tokens(as_env_vars=True) with None tokens yields empty dict."""
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_provider_tokens = AsyncMock(return_value=None)
+
+        ctx = AuthUserContext(user_auth=mock_user_auth)
+        result = await ctx.get_provider_tokens(as_env_vars=True)
+        assert result == {}
+
+    async def test_list_secret_names_includes_provider_tokens(self):
+        """list_secret_names returns both custom secrets and provider token names."""
+        custom_secrets = {
+            'MY_KEY': StaticSecret(
+                value=SecretStr('my-value'), description='custom key'
+            ),
+        }
+        gh_key = ProviderHandler.get_provider_env_key(ProviderType.GITHUB)
+        provider_env_vars = {gh_key: 'ghp_test123'}
+
+        sandbox_info = _make_sandbox_info()
+
+        with patch(
+            'openhands.app_server.sandbox.sandbox_router._get_user_context'
+        ) as mock_ctx:
+            ctx = AsyncMock()
+            ctx.get_secrets = AsyncMock(return_value=custom_secrets)
+            ctx.get_provider_tokens = AsyncMock(return_value=provider_env_vars)
+            mock_ctx.return_value = ctx
+
+            result = await list_secret_names(sandbox_info=sandbox_info)
+
+        names = {s.name for s in result.secrets}
+        assert 'MY_KEY' in names
+        assert gh_key in names
+        assert len(result.secrets) == 2
+
+    async def test_get_secret_value_resolves_provider_token(self):
+        """get_secret_value falls back to provider tokens when not in custom secrets."""
+        gh_key = ProviderHandler.get_provider_env_key(ProviderType.GITHUB)
+        sandbox_info = _make_sandbox_info()
+
+        with patch(
+            'openhands.app_server.sandbox.sandbox_router._get_user_context'
+        ) as mock_ctx:
+            ctx = AsyncMock()
+            ctx.get_secrets = AsyncMock(return_value={})
+            ctx.get_provider_tokens = AsyncMock(
+                return_value={gh_key: 'ghp_fresh_token'}
+            )
+            mock_ctx.return_value = ctx
+
+            response = await get_secret_value(
+                secret_name=gh_key, sandbox_info=sandbox_info
+            )
+
+        assert response.body == b'ghp_fresh_token'
+        assert response.media_type == 'text/plain'
+
+    async def test_custom_secret_takes_priority_over_provider_token(self):
+        """If a custom secret has the same name, it takes priority."""
+        gh_key = ProviderHandler.get_provider_env_key(ProviderType.GITHUB)
+        sandbox_info = _make_sandbox_info()
+
+        with patch(
+            'openhands.app_server.sandbox.sandbox_router._get_user_context'
+        ) as mock_ctx:
+            ctx = AsyncMock()
+            ctx.get_secrets = AsyncMock(
+                return_value={
+                    gh_key: StaticSecret(
+                        value=SecretStr('custom-override'),
+                        description='user override',
+                    )
+                }
+            )
+            # Provider token should NOT be called since custom secret matches
+            ctx.get_provider_tokens = AsyncMock(return_value={gh_key: 'provider-value'})
+            mock_ctx.return_value = ctx
+
+            response = await get_secret_value(
+                secret_name=gh_key, sandbox_info=sandbox_info
+            )
+
+        assert response.body == b'custom-override'
