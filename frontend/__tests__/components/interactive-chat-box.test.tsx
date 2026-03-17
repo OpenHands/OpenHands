@@ -198,9 +198,9 @@ describe("InteractiveChatBox", () => {
     expect(onSubmitMock).toHaveBeenCalledWith("Hello, world!", [], []);
   });
 
-  it("should disable the submit button when agent is loading", async () => {
+  it("should disable the submit button when awaiting user confirmation", async () => {
     const user = userEvent.setup();
-    mockStores(AgentState.LOADING);
+    mockStores(AgentState.AWAITING_USER_CONFIRMATION);
 
     renderInteractiveChatBox({
       onSubmit: onSubmitMock,
