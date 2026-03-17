@@ -2,7 +2,6 @@ import { useTranslation } from "react-i18next";
 import { Card } from "#/ui/card";
 import { CardTitle } from "#/ui/card-title";
 import { Typography } from "#/ui/typography";
-import { BrandButton } from "../settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import StackedIcon from "#/icons/stacked.svg?react";
@@ -12,9 +11,8 @@ export function LoginCTA() {
   const { t } = useTranslation();
   const { trackSaasSelfhostedInquiry } = useTracking();
 
-  const handleLearnMore = () => {
+  const handleLearnMoreClick = () => {
     trackSaasSelfhostedInquiry({ location: "login_page" });
-    window.open("https://openhands.dev/enterprise/", "_blank", "noopener");
   };
 
   return (
@@ -46,14 +44,21 @@ export function LoginCTA() {
         </ul>
 
         <div className={cn("h-10 flex justify-start")}>
-          <BrandButton
-            variant="primary"
-            type="button"
-            onClick={handleLearnMore}
-            className="w-[111px] h-10 rounded bg-[#050505] border border-[#242424] text-white hover:bg-[#0a0a0a]"
+          <a
+            href="https://openhands.dev/enterprise/"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleLearnMoreClick}
+            className={cn(
+              "inline-flex items-center justify-center",
+              "h-10 px-4 rounded",
+              "bg-[#050505] border border-[#242424]",
+              "text-white hover:bg-[#0a0a0a]",
+              "font-semibold text-sm",
+            )}
           >
             {t(I18nKey.CTA$LEARN_MORE)}
-          </BrandButton>
+          </a>
         </div>
       </div>
     </Card>

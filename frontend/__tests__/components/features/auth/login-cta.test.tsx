@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { LoginCTA } from "#/components/features/auth/login-cta";
 
@@ -12,14 +12,7 @@ vi.mock("#/hooks/use-tracking", () => ({
 }));
 
 describe("LoginCTA", () => {
-  const mockWindowOpen = vi.fn();
-
-  beforeEach(() => {
-    vi.stubGlobal("open", mockWindowOpen);
-  });
-
   afterEach(() => {
-    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -40,30 +33,28 @@ describe("LoginCTA", () => {
     expect(screen.getByText("CTA$FEATURE_SUPPORT")).toBeInTheDocument();
   });
 
-  it("should open enterprise page in new tab when Learn More button is clicked", async () => {
-    const user = userEvent.setup();
+  it("should render Learn More as a link with correct href and target", () => {
     render(<LoginCTA />);
 
-    const learnMoreButton = screen.getByRole("button", {
+    const learnMoreLink = screen.getByRole("link", {
       name: "CTA$LEARN_MORE",
     });
-    await user.click(learnMoreButton);
-
-    expect(mockWindowOpen).toHaveBeenCalledWith(
+    expect(learnMoreLink).toHaveAttribute(
+      "href",
       "https://openhands.dev/enterprise/",
-      "_blank",
-      "noopener",
     );
+    expect(learnMoreLink).toHaveAttribute("target", "_blank");
+    expect(learnMoreLink).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("should call trackSaasSelfhostedInquiry with location 'login_page' when Learn More is clicked", async () => {
     const user = userEvent.setup();
     render(<LoginCTA />);
 
-    const learnMoreButton = screen.getByRole("button", {
+    const learnMoreLink = screen.getByRole("link", {
       name: "CTA$LEARN_MORE",
     });
-    await user.click(learnMoreButton);
+    await user.click(learnMoreLink);
 
     expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
       location: "login_page",
