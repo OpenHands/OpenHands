@@ -7,7 +7,7 @@ import { GitRepository } from "#/types/git";
 import { NewConversation } from "#/components/features/home/new-conversation/new-conversation";
 import { RecentConversations } from "#/components/features/home/recent-conversations/recent-conversations";
 import { HomepageCTA } from "#/components/features/home/homepage-cta";
-import { isCTADismissed } from "#/utils/session-storage";
+import { isCTADismissed } from "#/utils/local-storage";
 import { useConfig } from "#/hooks/query/use-config";
 import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 

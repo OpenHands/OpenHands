@@ -6,7 +6,7 @@ import { Typography } from "#/ui/typography";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
-import { setCTADismissed } from "#/utils/session-storage";
+import { setCTADismissed } from "#/utils/local-storage";
 import { useTracking } from "#/hooks/use-tracking";
 import CloseIcon from "#/icons/close.svg?react";
 
