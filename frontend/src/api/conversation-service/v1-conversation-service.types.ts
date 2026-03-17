@@ -119,6 +119,11 @@ export interface V1AppConversation {
   public?: boolean;
 }
 
+export interface V1AppConversationPage {
+  items: V1AppConversation[];
+  next_page_id: string | null;
+}
+
 export interface Skill {
   name: string;
   type: "repo" | "knowledge" | "agentskills";
@@ -128,6 +133,27 @@ export interface Skill {
 
 export interface GetSkillsResponse {
   skills: Skill[];
+}
+
+export interface HookDefinition {
+  type: string; // 'command' or 'prompt'
+  command: string;
+  timeout: number;
+  async?: boolean;
+}
+
+export interface HookMatcher {
+  matcher: string; // Pattern: '*', exact match, or regex
+  hooks: HookDefinition[];
+}
+
+export interface HookEvent {
+  event_type: string; // e.g., 'stop', 'pre_tool_use', 'post_tool_use'
+  matchers: HookMatcher[];
+}
+
+export interface GetHooksResponse {
+  hooks: HookEvent[];
 }
 
 // Runtime conversation types (from agent server)

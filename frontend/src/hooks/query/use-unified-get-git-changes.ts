@@ -27,7 +27,7 @@ export const useUnifiedGetGitChanges = () => {
 
   // Calculate git path based on selected repository
   const gitPath = React.useMemo(
-    () => getGitPath(selectedRepository),
+    () => getGitPath(conversationId, selectedRepository),
     [selectedRepository],
   );
 

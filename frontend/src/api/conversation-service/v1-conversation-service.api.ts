@@ -12,7 +12,9 @@ import type {
   V1AppConversationStartTask,
   V1AppConversationStartTaskPage,
   V1AppConversation,
+  V1AppConversationPage,
   GetSkillsResponse,
+  GetHooksResponse,
   V1RuntimeConversationInfo,
 } from "./v1-conversation-service.types";
 
@@ -253,7 +255,7 @@ class V1ConversationService {
 
   /**
    * Upload a single file to the V1 conversation workspace
-   * V1 API endpoint: POST /api/file/upload/{path}
+   * V1 API endpoint: POST /api/file/upload?path={path}
    *
    * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
    * @param sessionApiKey Session API key for authentication (required for V1)
@@ -269,10 +271,11 @@ class V1ConversationService {
   ): Promise<void> {
     // Default to /workspace/{filename} if no path provided (must be absolute)
     const uploadPath = path || `/workspace/${file.name}`;
-    const encodedPath = encodeURIComponent(uploadPath);
+    const params = new URLSearchParams();
+    params.append("path", uploadPath);
     const url = this.buildRuntimeUrl(
       conversationUrl,
-      `/api/file/upload/${encodedPath}`,
+      `/api/file/upload?${params.toString()}`,
     );
     const headers = buildSessionHeaders(sessionApiKey);
 
@@ -399,6 +402,18 @@ class V1ConversationService {
   }
 
   /**
+   * Get all hooks associated with a V1 conversation
+   * @param conversationId The conversation ID
+   * @returns The available hooks associated with the conversation
+   */
+  static async getHooks(conversationId: string): Promise<GetHooksResponse> {
+    const { data } = await openHands.get<GetHooksResponse>(
+      `/api/v1/app-conversations/${conversationId}/hooks`,
+    );
+    return data;
+  }
+
+  /**
    * Get conversation info directly from the runtime for a V1 conversation
    * Uses the custom runtime URL from the conversation
    *
@@ -422,6 +437,28 @@ class V1ConversationService {
       headers,
     });
     return data;
+  }
+
+  /**
+   * Search for V1 conversations by sandbox ID
+   *
+   * @param sandboxId The sandbox ID to filter by
+   * @param limit Maximum number of results (default: 100)
+   * @returns Array of conversations in the specified sandbox
+   */
+  static async searchConversationsBySandboxId(
+    sandboxId: string,
+    limit: number = 100,
+  ): Promise<V1AppConversation[]> {
+    const params = new URLSearchParams();
+    params.append("sandbox_id__eq", sandboxId);
+    params.append("limit", limit.toString());
+
+    const { data } = await openHands.get<V1AppConversationPage>(
+      `/api/v1/app-conversations/search?${params.toString()}`,
+    );
+
+    return data.items;
   }
 }
 

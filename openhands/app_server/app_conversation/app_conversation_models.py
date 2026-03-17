@@ -16,6 +16,10 @@ from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+from openhands.storage.data_models.settings import SandboxGroupingStrategy
+
+# Re-export SandboxGroupingStrategy for backward compatibility
+__all__ = ['SandboxGroupingStrategy']
 
 
 class AgentType(Enum):
@@ -238,3 +242,32 @@ class SkillResponse(BaseModel):
     type: Literal['repo', 'knowledge', 'agentskills']
     content: str
     triggers: list[str] = []
+
+
+class HookDefinitionResponse(BaseModel):
+    """Response model for a single hook definition."""
+
+    type: str  # 'command' or 'prompt'
+    command: str
+    timeout: int = 60
+    async_: bool = Field(default=False, serialization_alias='async')
+
+
+class HookMatcherResponse(BaseModel):
+    """Response model for a hook matcher."""
+
+    matcher: str  # Pattern: '*', exact match, or regex
+    hooks: list[HookDefinitionResponse] = []
+
+
+class HookEventResponse(BaseModel):
+    """Response model for hooks of a specific event type."""
+
+    event_type: str  # e.g., 'stop', 'pre_tool_use', 'post_tool_use'
+    matchers: list[HookMatcherResponse] = []
+
+
+class GetHooksResponse(BaseModel):
+    """Response model for hooks endpoint."""
+
+    hooks: list[HookEventResponse] = []

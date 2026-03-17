@@ -404,7 +404,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         # Check if there's an existing pre-commit hook
         with tempfile.TemporaryFile(mode='w+t') as temp_file:
-            result = workspace.file_download(PRE_COMMIT_HOOK, str(temp_file))
+            result = await workspace.file_download(PRE_COMMIT_HOOK, str(temp_file))
             if result.get('success'):
                 _logger.info('Preserving existing pre-commit hook')
                 # an existing pre-commit hook exists
