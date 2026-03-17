@@ -342,3 +342,30 @@ To add a new LLM model to OpenHands, you need to update multiple files across bo
 - Models appear in CLI provider selection based on the verified arrays
 - The `organize_models_and_providers` function groups models by provider
 - Default model selection prioritizes verified models for each provider
+
+### Sandbox Settings API (SDK Credential Inheritance)
+
+The sandbox settings API allows SDK-created conversations to inherit the user's SaaS credentials
+(LLM config, secrets) securely via `LookupSecret`. Raw secret values only flow SaaS→sandbox,
+never through the SDK client.
+
+#### User Credentials with Exposed Secrets (in `openhands/app_server/user/user_router.py`):
+- `GET /api/v1/users/me?expose_secrets=true` → Full user settings with unmasked secrets (e.g., `llm_api_key`)
+- `GET /api/v1/users/me` → Full user settings (secrets masked, Bearer only)
+
+Auth requirements for `expose_secrets=true`:
+- Bearer token (proves user identity via `OPENHANDS_API_KEY`)
+- `X-Session-API-Key` header (proves caller has an active sandbox owned by the authenticated user)
+
+Called by `workspace.get_llm()` in the SDK to retrieve LLM config with the API key.
+
+#### Sandbox-Scoped Secrets Endpoints (in `openhands/app_server/sandbox/sandbox_router.py`):
+- `GET /sandboxes/{id}/settings/secrets` → list secret names (no values)
+- `GET /sandboxes/{id}/settings/secrets/{name}` → raw secret value (called FROM sandbox)
+
+#### Auth: `X-Session-API-Key` header, validated via `SandboxService.get_sandbox_by_session_api_key()`
+
+#### Related SDK code (in `software-agent-sdk` repo):
+- `openhands/sdk/llm/llm.py`: `LLM.api_key` accepts `SecretSource` (including `LookupSecret`)
+- `openhands/workspace/cloud/workspace.py`: `get_llm()` and `get_secrets()` return LookupSecret-backed objects
+- Tests: `tests/sdk/llm/test_llm_secret_source_api_key.py`, `tests/workspace/test_cloud_workspace_sdk_settings.py`

@@ -23,7 +23,11 @@ type ActionOnlyType =
 
 type ObservationOnlyType = "Browser";
 
-type ActionEventType = `${ActionOnlyType}Action` | `${EventType}Action`;
+type ActionEventType =
+  | `${ActionOnlyType}Action`
+  | `${EventType}Action`
+  | "GlobAction"
+  | "GrepAction";
 type ObservationEventType =
   | `${ObservationOnlyType}Observation`
   | `${EventType}Observation`
