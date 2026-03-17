@@ -48,7 +48,15 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release && \
     # Security upgrade: patch OpenSSL CVEs (CVE-2025-15467, CVE-2025-69419, CVE-2025-69421, et al.)
     (apt-get install -y --no-install-recommends --only-upgrade \
-        openssl openssl-provider-legacy libssl3t64 || true)
+        openssl openssl-provider-legacy libssl3t64 || true) && \
+    # Security upgrade: patch ImageMagick CVEs (CVE-2026-25897, CVE-2026-25968, CVE-2026-26284, et al.)
+    (apt-get install -y --no-install-recommends --only-upgrade \
+        imagemagick imagemagick-7-common imagemagick-7.q16 \
+        libmagickcore-7-arch-config libmagickcore-7-headers \
+        libmagickcore-7.q16-10 libmagickcore-7.q16-10-extra \
+        libmagickcore-7.q16-dev libmagickcore-dev \
+        libmagickwand-7-headers libmagickwand-7.q16-10 \
+        libmagickwand-7.q16-dev libmagickwand-dev || true)
 {% endif %}
 
 {% if (('ubuntu' in base_image) or ('mswebench' in base_image)) %}
