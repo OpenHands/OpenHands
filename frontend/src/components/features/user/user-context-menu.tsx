@@ -26,7 +26,7 @@ import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 
 // Shared className for context menu list items in the user context menu
 const contextMenuListItemClassName = cn(
-  "flex items-center gap-2 p-2 h-auto hover:bg-white/10 hover:text-white rounded",
+  "flex items-center gap-2 p-2 h-auto hover:bg-white/10 hover:text-white rounded text-xs",
 );
 
 interface UserContextMenuProps {
@@ -100,7 +100,7 @@ export function UserContextMenu({
                 onClick={handleInviteMemberClick}
                 className={contextMenuListItemClassName}
               >
-                <IoPersonAddOutline className="text-white" size={14} />
+                <IoPersonAddOutline className="text-white" size={16} />
                 {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
               </ContextMenuListItem>
 
@@ -110,14 +110,14 @@ export function UserContextMenu({
                 onClick={handleManageAccountClick}
                 className={contextMenuListItemClassName}
               >
-                <IoCardOutline className="text-white" size={14} />
+                <IoCardOutline className="text-white" size={16} />
                 {t(I18nKey.COMMON$ORGANIZATION)}
               </ContextMenuListItem>
               <ContextMenuListItem
                 onClick={handleManageOrganizationMembersClick}
                 className={contextMenuListItemClassName}
               >
-                <FiUsers className="text-white shrink-0" size={14} />
+                <FiUsers className="text-white shrink-0" size={16} />
                 {t(I18nKey.ORG$ORGANIZATION_MEMBERS)}
               </ContextMenuListItem>
               <Divider className="my-1.5" />
@@ -130,12 +130,12 @@ export function UserContextMenu({
                 key={item.to}
                 to={item.to}
                 onClick={onClose}
-                className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full"
+                className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full text-xs"
               >
                 {React.cloneElement(item.icon, {
                   className: "text-white",
-                  width: 14,
-                  height: 14,
+                  width: 16,
+                  height: 16,
                 } as React.SVGProps<SVGSVGElement>)}
                 {t(item.text)}
               </Link>
@@ -150,9 +150,9 @@ export function UserContextMenu({
               target="_blank"
               rel="noopener noreferrer"
               onClick={onClose}
-              className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full"
+              className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full text-xs"
             >
-              <DocumentIcon className="text-white" width={14} height={14} />
+              <DocumentIcon className="text-white" width={16} height={16} />
               {t(I18nKey.SIDEBAR$DOCS)}
             </a>
 
@@ -160,7 +160,7 @@ export function UserContextMenu({
               onClick={handleLogout}
               className={contextMenuListItemClassName}
             >
-              <IoLogOutOutline className="text-white" size={14} />
+              <IoLogOutOutline className="text-white" size={16} />
               {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
             </ContextMenuListItem>
           </div>

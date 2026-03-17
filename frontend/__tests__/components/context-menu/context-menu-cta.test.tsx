@@ -24,14 +24,28 @@ describe("ContextMenuCTA", () => {
     const user = userEvent.setup();
     render(<ContextMenuCTA />);
 
-    const learnMoreButton = screen.getByRole("button", {
+    const learnMoreLink = screen.getByRole("link", {
       name: "CTA$LEARN_MORE",
     });
-    await user.click(learnMoreButton);
+    await user.click(learnMoreLink);
 
     expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
       location: "context_menu",
     });
+  });
+
+  it("should render Learn More as a link with correct href and target", () => {
+    render(<ContextMenuCTA />);
+
+    const learnMoreLink = screen.getByRole("link", {
+      name: "CTA$LEARN_MORE",
+    });
+    expect(learnMoreLink).toHaveAttribute(
+      "href",
+      "https://openhands.dev/enterprise/",
+    );
+    expect(learnMoreLink).toHaveAttribute("target", "_blank");
+    expect(learnMoreLink).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("should render the stacked icon", () => {

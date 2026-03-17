@@ -18,6 +18,7 @@ interface DropdownProps {
   defaultValue?: DropdownOption;
   onChange?: (item: DropdownOption | null) => void;
   testId?: string;
+  className?: string;
 }
 
 export function Dropdown({
@@ -30,6 +31,7 @@ export function Dropdown({
   defaultValue,
   onChange,
   testId,
+  className,
 }: DropdownProps) {
   const [inputValue, setInputValue] = useState(defaultValue?.label ?? "");
   const [searchTerm, setSearchTerm] = useState("");
@@ -92,7 +94,7 @@ export function Dropdown({
     });
 
   return (
-    <div className="relative w-full" data-testid={testId}>
+    <div className={cn("relative w-full", className)} data-testid={testId}>
       <div
         className={cn(
           "bg-tertiary border border-[#717888] rounded w-full p-2",

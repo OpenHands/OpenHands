@@ -3,7 +3,6 @@ import { cn } from "#/utils/utils";
 import { Card } from "#/ui/card";
 import { CardTitle } from "#/ui/card-title";
 import { Typography } from "#/ui/typography";
-import { BrandButton } from "../settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import StackedIcon from "#/icons/stacked.svg?react";
 import { useTracking } from "#/hooks/use-tracking";
@@ -12,9 +11,8 @@ export function ContextMenuCTA() {
   const { t } = useTranslation();
   const { trackSaasSelfhostedInquiry } = useTracking();
 
-  const handleLearnMore = () => {
+  const handleLearnMoreClick = () => {
     trackSaasSelfhostedInquiry({ location: "context_menu" });
-    window.open("https://openhands.dev/enterprise/", "_blank", "noopener");
   };
 
   return (
@@ -45,18 +43,21 @@ export function ContextMenuCTA() {
         </Typography.Text>
 
         <div className="flex mt-auto">
-          <BrandButton
-            variant="primary"
-            type="button"
-            onClick={handleLearnMore}
+          <a
+            href="https://openhands.dev/enterprise/"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleLearnMoreClick}
             className={cn(
+              "inline-flex items-center justify-center",
               "h-[40px] px-4 rounded-[4px]",
               "bg-[#050505] border border-[#242424]",
               "text-white hover:bg-[#0a0a0a]",
+              "font-semibold text-sm",
             )}
           >
             {t(I18nKey.CTA$LEARN_MORE)}
-          </BrandButton>
+          </a>
         </div>
       </div>
     </Card>
