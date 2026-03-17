@@ -1,6 +1,6 @@
 import { Trans } from "react-i18next";
 import React from "react";
-import { OpenHandsEvent, ObservationEvent } from "#/types/v1/core";
+import { OpenHandsEvent, ObservationEvent, ActionEvent } from "#/types/v1/core";
 import { isActionEvent, isObservationEvent } from "#/types/v1/type-guards";
 import { MonoComponent } from "../../../features/chat/mono-component";
 import { PathComponent } from "../../../features/chat/path-component";
@@ -37,11 +37,66 @@ const createTitleFromKey = (
   );
 };
 
+const cleanSummary = (summary?: string | null): string =>
+  summary?.trim().replace(/\s+/g, " ") || "";
+
+const createSummaryTitle = (
+  summary: string,
+  detail?: React.ReactNode,
+): React.ReactNode => (
+  <>
+    <span>{summary}</span>
+    {detail ? (
+      <span className="font-normal text-neutral-400">: {detail}</span>
+    ) : null}
+  </>
+);
+
+const getSummaryTitleForActionEvent = (
+  event: ActionEvent,
+): React.ReactNode | null => {
+  const summary = cleanSummary(event.summary);
+  if (!summary) {
+    return null;
+  }
+
+  switch (event.action.kind) {
+    case "ExecuteBashAction":
+    case "TerminalAction": {
+      const command = trimText(event.action.command, 80);
+      if (!command) {
+        return createSummaryTitle(summary);
+      }
+      return createSummaryTitle(
+        summary,
+        <span className="font-mono">$ {command}</span>,
+      );
+    }
+    case "FileEditorAction":
+    case "StrReplaceEditorAction": {
+      const operation = event.action.command === "view" ? "Reading" : "Editing";
+      return createSummaryTitle(
+        summary,
+        <>
+          {operation} <span className="font-mono">{event.action.path}</span>
+        </>,
+      );
+    }
+    default:
+      return createSummaryTitle(summary);
+  }
+};
+
 // Action Event Processing
 const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
   // Early return if not an action event
   if (!isActionEvent(event)) {
     return "";
+  }
+
+  const summaryTitle = getSummaryTitleForActionEvent(event);
+  if (summaryTitle) {
+    return summaryTitle;
   }
 
   const actionType = event.action.kind;
@@ -127,10 +182,20 @@ const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
 };
 
 // Observation Event Processing
-const getObservationEventTitle = (event: OpenHandsEvent): React.ReactNode => {
+const getObservationEventTitle = (
+  event: OpenHandsEvent,
+  correspondingAction?: ActionEvent,
+): React.ReactNode => {
   // Early return if not an observation event
   if (!isObservationEvent(event)) {
     return "";
+  }
+
+  if (correspondingAction) {
+    const summaryTitle = getSummaryTitleForActionEvent(correspondingAction);
+    if (summaryTitle) {
+      return summaryTitle;
+    }
   }
 
   const observationType = event.observation.kind;
@@ -208,7 +273,10 @@ const getObservationEventTitle = (event: OpenHandsEvent): React.ReactNode => {
   return observationType;
 };
 
-export const getEventContent = (event: OpenHandsEvent | SkillReadyEvent) => {
+export const getEventContent = (
+  event: OpenHandsEvent | SkillReadyEvent,
+  correspondingAction?: ActionEvent,
+) => {
   let title: React.ReactNode = "";
   let details: string | React.ReactNode = "";
 
@@ -226,7 +294,7 @@ export const getEventContent = (event: OpenHandsEvent | SkillReadyEvent) => {
     title = getActionEventTitle(event);
     details = getActionContent(event);
   } else if (isObservationEvent(event)) {
-    title = getObservationEventTitle(event);
+    title = getObservationEventTitle(event, correspondingAction);
 
     // For TaskTrackerObservation, use React component instead of markdown
     if (event.observation.kind === "TaskTrackerObservation") {
