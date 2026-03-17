@@ -3,10 +3,9 @@ import { Dispatch, SetStateAction } from "react";
 import { Card } from "#/ui/card";
 import { CardTitle } from "#/ui/card-title";
 import { Typography } from "#/ui/typography";
-import { BrandButton } from "#/components/features/settings/brand-button";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
-import { setCTADismissed } from "#/utils/session-storage";
+import { setCTADismissed } from "#/utils/local-storage";
 import { useTracking } from "#/hooks/use-tracking";
 import CloseIcon from "#/icons/close.svg?react";
 
@@ -23,13 +22,12 @@ export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
     setShouldShowCTA(false);
   };
 
-  const handleLearnMore = () => {
+  const handleLearnMoreClick = () => {
     trackSaasSelfhostedInquiry({ location: "home_page" });
-    window.open("https://openhands.dev/enterprise/", "_blank", "noopener");
   };
 
   return (
-    <Card theme="dark" className={cn("w-full max-w-[320px] cta-card-gradient")}>
+    <Card theme="dark" className={cn("w-[320px] cta-card-gradient")}>
       <button
         type="button"
         onClick={handleClose}
@@ -45,25 +43,32 @@ export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
         <CloseIcon width={16} height={16} />
       </button>
 
-      <div className="p-5 pr-12 flex flex-col gap-4">
+      <div className="p-6 flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <CardTitle className="font-inter font-semibold text-xl leading-7 tracking-normal">
+          <CardTitle className="font-inter font-semibold text-xl leading-7 tracking-normal text-[#FAFAFA]">
             {t(I18nKey.CTA$ENTERPRISE_TITLE)}
           </CardTitle>
 
-          <Typography.Text className="font-inter font-normal text-sm leading-5 tracking-normal text-white/60">
+          <Typography.Text className="font-inter font-normal text-sm leading-5 tracking-normal text-[#8C8C8C]">
             {t(I18nKey.CTA$ENTERPRISE_DESCRIPTION)}
           </Typography.Text>
         </div>
 
-        <BrandButton
-          type="button"
-          variant="primary"
-          onClick={handleLearnMore}
-          className="h-10 rounded border border-[#242424] bg-[#050505] px-4 py-2 text-white hover:bg-[#1a1a1a] hover:opacity-100"
+        <a
+          href="https://openhands.dev/enterprise/"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleLearnMoreClick}
+          className={cn(
+            "inline-flex items-center justify-center",
+            "w-fit h-10 px-4 rounded",
+            "bg-[#050505] border border-[#242424]",
+            "text-white hover:bg-[#1a1a1a]",
+            "font-semibold text-sm",
+          )}
         >
           {t(I18nKey.CTA$LEARN_MORE)}
-        </BrandButton>
+        </a>
       </div>
     </Card>
   );
