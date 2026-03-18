@@ -4,6 +4,7 @@ import secrets
 import string
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy import select, update
 from storage.api_key import ApiKey
@@ -11,6 +12,14 @@ from storage.database import a_session_maker
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
+
+
+@dataclass
+class ApiKeyValidationResult:
+    """Result of API key validation containing user and organization info."""
+
+    user_id: str
+    org_id: UUID | None  # None for legacy API keys without org binding
 
 
 @dataclass
@@ -60,8 +69,13 @@ class ApiKeyStore:
 
         return api_key
 
-    async def validate_api_key(self, api_key: str) -> str | None:
-        """Validate an API key and return the associated user_id if valid."""
+    async def validate_api_key(self, api_key: str) -> ApiKeyValidationResult | None:
+        """Validate an API key and return the associated user_id and org_id if valid.
+
+        Returns:
+            ApiKeyValidationResult if the key is valid, None otherwise.
+            The org_id may be None for legacy API keys that weren't bound to an organization.
+        """
         now = datetime.now(UTC)
 
         async with a_session_maker() as session:
@@ -89,7 +103,9 @@ class ApiKeyStore:
             )
             await session.commit()
 
-            return key_record.user_id
+            return ApiKeyValidationResult(
+                user_id=key_record.user_id, org_id=key_record.org_id
+            )
 
     async def delete_api_key(self, api_key: str) -> bool:
         """Delete an API key by the key value."""

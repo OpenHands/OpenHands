@@ -1,4 +1,5 @@
 import time
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
@@ -457,9 +458,11 @@ async def test_get_instance_no_auth(mock_request):
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_success():
-    """Test successful authentication from bearer token."""
+    """Test successful authentication from bearer token sets user_id and api_key_org_id."""
+    # Arrange
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
+    test_org_id = uuid.uuid4()
 
     # Create a valid offline token (refresh token)
     offline_token = jwt.encode(
@@ -468,12 +471,20 @@ async def test_saas_user_auth_from_bearer_success():
         algorithm='HS256',
     )
 
+    # Create mock validation result with user_id and org_id
+    mock_validation_result = MagicMock()
+    mock_validation_result.user_id = 'test_user_id'
+    mock_validation_result.org_id = test_org_id
+
+    # Act
     with (
         patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
         patch('server.auth.saas_user_auth.token_manager') as mock_token_manager,
     ):
         mock_api_key_store = MagicMock()
-        mock_api_key_store.validate_api_key = AsyncMock(return_value='test_user_id')
+        mock_api_key_store.validate_api_key = AsyncMock(
+            return_value=mock_validation_result
+        )
         mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
 
         mock_token_manager.load_offline_token = AsyncMock(return_value=offline_token)
@@ -483,11 +494,13 @@ async def test_saas_user_auth_from_bearer_success():
 
         result = await saas_user_auth_from_bearer(mock_request)
 
-        assert isinstance(result, SaasUserAuth)
-        assert result.user_id == 'test_user_id'
-        mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
-        mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
-        mock_token_manager.refresh.assert_called_once_with(offline_token)
+    # Assert
+    assert isinstance(result, SaasUserAuth)
+    assert result.user_id == 'test_user_id'
+    assert result.api_key_org_id == test_org_id
+    mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
+    mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
+    mock_token_manager.refresh.assert_called_once_with(offline_token)
 
 
 @pytest.mark.asyncio
