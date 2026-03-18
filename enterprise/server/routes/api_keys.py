@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 from storage.api_key import ApiKey
 from storage.api_key_store import ApiKeyStore
@@ -11,7 +11,8 @@ from storage.org_service import OrgService
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_id
+from openhands.server.user_auth import get_user_auth, get_user_id
+from openhands.server.user_auth.user_auth import AuthType
 
 
 # Helper functions for BYOR API key management
@@ -150,6 +151,16 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class CurrentApiKeyResponse(BaseModel):
+    """Response model for the current API key endpoint."""
+
+    id: int
+    name: str | None
+    org_id: str
+    user_id: str
+    auth_type: str
+
+
 def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
     """Convert an ApiKey model to an ApiKeyResponse."""
     return ApiKeyResponse(
@@ -260,6 +271,49 @@ async def delete_api_key(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to delete API key',
         )
+
+
+@api_router.get('/current', tags=['Keys'])
+async def get_current_api_key(
+    request: Request,
+    user_id: str = Depends(get_user_id),
+) -> CurrentApiKeyResponse:
+    """Get information about the currently authenticated API key.
+
+    This endpoint returns metadata about the API key used for the current request,
+    including the org_id associated with the key. This is useful for API key
+    callers who need to know which organization context their key operates in.
+
+    Returns 400 if not authenticated via API key (e.g., using cookie auth).
+    """
+    user_auth = await get_user_auth(request)
+
+    # Check if authenticated via API key
+    if user_auth.get_auth_type() != AuthType.BEARER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='This endpoint requires API key authentication. Not available for cookie-based auth.',
+        )
+
+    # Access API key context fields via getattr for type safety
+    # These fields are only present on SaasUserAuth when authenticated via API key
+    api_key_org_id = getattr(user_auth, 'api_key_org_id', None)
+    api_key_id = getattr(user_auth, 'api_key_id', None)
+    api_key_name = getattr(user_auth, 'api_key_name', None)
+
+    if api_key_org_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='API key organization context not available',
+        )
+
+    return CurrentApiKeyResponse(
+        id=api_key_id,
+        name=api_key_name,
+        org_id=str(api_key_org_id),
+        user_id=user_id,
+        auth_type='bearer',
+    )
 
 
 @api_router.get('/llm/byor', tags=['Keys'])

@@ -28,11 +28,13 @@ class SaasConversationValidator(ConversationValidator):
 
             # Validate the API key and get the user_id
             api_key_store = ApiKeyStore.get_instance()
-            user_id = await api_key_store.validate_api_key(api_key)
+            validation_result = await api_key_store.validate_api_key(api_key)
 
-            if not user_id:
+            if not validation_result:
                 logger.warning('Invalid API key')
                 return None
+
+            user_id = validation_result.user_id
 
             # Get the offline token for the user
             offline_token = await token_manager.load_offline_token(user_id)
