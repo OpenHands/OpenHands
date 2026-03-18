@@ -287,6 +287,54 @@ class TestSQLAppConversationInfoService:
         assert results == []
 
     @pytest.mark.asyncio
+    async def test_count_conversations_by_sandbox_id(
+        self,
+        service: SQLAppConversationInfoService,
+    ):
+        """Test count by sandbox_id: only delete sandbox when no conversation uses it."""
+        base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        shared_sandbox = 'shared_sandbox_1'
+        other_sandbox = 'other_sandbox'
+        for i in range(3):
+            info = AppConversationInfo(
+                id=uuid4(),
+                created_by_user_id=None,
+                sandbox_id=shared_sandbox,
+                selected_repository='https://github.com/test/repo',
+                selected_branch='main',
+                git_provider=ProviderType.GITHUB,
+                title=f'Conversation {i}',
+                trigger=ConversationTrigger.GUI,
+                pr_number=[],
+                llm_model='gpt-4',
+                metrics=None,
+                created_at=base_time,
+                updated_at=base_time,
+            )
+            await service.save_app_conversation_info(info)
+        for i in range(2):
+            info = AppConversationInfo(
+                id=uuid4(),
+                created_by_user_id=None,
+                sandbox_id=other_sandbox,
+                selected_repository='https://github.com/test/repo',
+                selected_branch='main',
+                git_provider=ProviderType.GITHUB,
+                title=f'Other {i}',
+                trigger=ConversationTrigger.GUI,
+                pr_number=[],
+                llm_model='gpt-4',
+                metrics=None,
+                created_at=base_time,
+                updated_at=base_time,
+            )
+            await service.save_app_conversation_info(info)
+
+        assert await service.count_conversations_by_sandbox_id(shared_sandbox) == 3
+        assert await service.count_conversations_by_sandbox_id(other_sandbox) == 2
+        assert await service.count_conversations_by_sandbox_id('no_such_sandbox') == 0
+
+    @pytest.mark.asyncio
     async def test_search_conversation_info_no_filters(
         self,
         service: SQLAppConversationInfoService,

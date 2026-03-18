@@ -121,15 +121,21 @@ class AppConversationService(ABC):
         """
 
     @abstractmethod
-    async def delete_app_conversation(self, conversation_id: UUID) -> bool:
+    async def delete_app_conversation(
+        self, conversation_id: UUID, skip_agent_server_delete: bool = False
+    ) -> bool:
         """Delete a V1 conversation and all its associated data.
 
         Args:
             conversation_id: The UUID of the conversation to delete.
+            skip_agent_server_delete: If True, skip the agent server DELETE call.
+                This should be set when the sandbox is shared with other
+                conversations (e.g. created via /new) to avoid destabilizing
+                the shared runtime.
 
         This method should:
         1. Delete the conversation from the database
-        2. Call the agent server to delete the conversation
+        2. Call the agent server to delete the conversation (unless skipped)
         3. Clean up any related data
 
         Returns True if the conversation was deleted successfully, False otherwise.
