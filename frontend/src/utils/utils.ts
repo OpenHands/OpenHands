@@ -811,14 +811,9 @@ export function getStatusText({
       return t(I18nKey.CONVERSATION$READY);
     }
 
-    // Format status text: "WAITING_FOR_SANDBOX" -> "Waiting for sandbox"
-    return (
-      taskDetail ||
-      taskStatus
-        .toLowerCase()
-        .replace(/_/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase())
-    );
+    // Use translation for known task statuses (e.g., "WAITING_FOR_SANDBOX" -> t("COMMON$WAITING_FOR_SANDBOX"))
+    const translationKey = `COMMON$${taskStatus}`;
+    return taskDetail || t(translationKey);
   }
 
   if (isStartingStatus) {
