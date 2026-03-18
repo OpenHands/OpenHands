@@ -142,7 +142,7 @@ async def get_or_create_api_key_for_user(
         HTTPException: 403 if user is not a member of the specified org
     """
     # Validate service API key
-    await validate_service_api_key(x_service_api_key)
+    service_id = await validate_service_api_key(x_service_api_key)
 
     # Validate path and body user_id match
     if user_id != request.user_id:
@@ -203,6 +203,16 @@ async def get_or_create_api_key_for_user(
             detail='Failed to get or create API key',
         )
 
+    logger.info(
+        'Service created API key for user',
+        extra={
+            'service_id': service_id,
+            'user_id': request.user_id,
+            'org_id': str(request.org_id),
+            'key_name': request.name,
+        },
+    )
+
     return CreateUserApiKeyResponse(
         key=api_key,
         user_id=request.user_id,
@@ -225,7 +235,7 @@ async def delete_user_api_key(
 
     Args:
         user_id: The user ID
-        key_name: The name of the key to delete
+        key_name: The name of the key to delete (without __SYSTEM__: prefix)
         x_service_api_key: Service API key header for authentication
 
     Returns:
@@ -240,8 +250,11 @@ async def delete_user_api_key(
 
     api_key_store = ApiKeyStore.get_instance()
 
-    # Delete the key by name
-    success = await api_key_store.delete_api_key_by_name(user_id, key_name)
+    # Delete the key by name (wrap with system key prefix since service creates system keys)
+    system_key_name = api_key_store.make_system_key_name(key_name)
+    success = await api_key_store.delete_api_key_by_name(
+        user_id, system_key_name, allow_system=True
+    )
 
     if not success:
         raise HTTPException(

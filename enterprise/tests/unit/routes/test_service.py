@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 from server.routes.service import (
     CreateUserApiKeyRequest,
+    delete_user_api_key,
     get_or_create_api_key_for_user,
     validate_service_api_key,
 )
@@ -240,3 +241,85 @@ class TestGetOrCreateApiKeyForUser:
 
         assert exc_info.value.status_code == 500
         assert 'Failed to get or create API key' in exc_info.value.detail
+
+
+class TestDeleteUserApiKey:
+    """Test cases for delete_user_api_key endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_successful_delete(self):
+        """Test successful deletion of a system API key."""
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.make_system_key_name.return_value = '__SYSTEM__:automation'
+        mock_api_key_store.delete_api_key_by_name = AsyncMock(return_value=True)
+
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+            with patch(
+                'server.routes.service.ApiKeyStore.get_instance'
+            ) as mock_get_store:
+                mock_get_store.return_value = mock_api_key_store
+
+                response = await delete_user_api_key(
+                    user_id='user-123',
+                    key_name='automation',
+                    x_service_api_key='test-key',
+                )
+
+        assert response == {'message': 'API key deleted successfully'}
+
+        # Verify the store was called with correct arguments
+        mock_api_key_store.make_system_key_name.assert_called_once_with('automation')
+        mock_api_key_store.delete_api_key_by_name.assert_called_once_with(
+            'user-123', '__SYSTEM__:automation', allow_system=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_delete_key_not_found(self):
+        """Test error when key to delete is not found."""
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.make_system_key_name.return_value = '__SYSTEM__:nonexistent'
+        mock_api_key_store.delete_api_key_by_name = AsyncMock(return_value=False)
+
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+            with patch(
+                'server.routes.service.ApiKeyStore.get_instance'
+            ) as mock_get_store:
+                mock_get_store.return_value = mock_api_key_store
+
+                with pytest.raises(HTTPException) as exc_info:
+                    await delete_user_api_key(
+                        user_id='user-123',
+                        key_name='nonexistent',
+                        x_service_api_key='test-key',
+                    )
+
+        assert exc_info.value.status_code == 404
+        assert 'not found' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_delete_invalid_service_key(self):
+        """Test error when service API key is invalid."""
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_user_api_key(
+                    user_id='user-123',
+                    key_name='automation',
+                    x_service_api_key='wrong-key',
+                )
+
+        assert exc_info.value.status_code == 401
+        assert 'Invalid service API key' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_delete_missing_service_key(self):
+        """Test error when service API key header is missing."""
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_user_api_key(
+                    user_id='user-123',
+                    key_name='automation',
+                    x_service_api_key=None,
+                )
+
+        assert exc_info.value.status_code == 401
+        assert 'X-Service-API-Key header is required' in exc_info.value.detail

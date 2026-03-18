@@ -316,8 +316,19 @@ class ApiKeyStore:
             key_record = result.scalars().first()
             return key_record.key if key_record else None
 
-    async def delete_api_key_by_name(self, user_id: str, name: str) -> bool:
-        """Delete an API key by name for a specific user."""
+    async def delete_api_key_by_name(
+        self, user_id: str, name: str, allow_system: bool = False
+    ) -> bool:
+        """Delete an API key by name for a specific user.
+
+        Args:
+            user_id: The ID of the user whose key to delete
+            name: The name of the key to delete
+            allow_system: If False (default), system keys cannot be deleted
+
+        Returns:
+            True if the key was deleted, False if not found or is a protected system key
+        """
         async with a_session_maker() as session:
             result = await session.execute(
                 select(ApiKey).filter(ApiKey.user_id == user_id, ApiKey.name == name)
@@ -325,6 +336,14 @@ class ApiKeyStore:
             key_record = result.scalars().first()
 
             if not key_record:
+                return False
+
+            # Protect system keys from deletion unless explicitly allowed
+            if self.is_system_key_name(key_record.name) and not allow_system:
+                logger.warning(
+                    'Attempted to delete system API key',
+                    extra={'user_id': user_id, 'key_name': name},
+                )
                 return False
 
             await session.delete(key_record)
