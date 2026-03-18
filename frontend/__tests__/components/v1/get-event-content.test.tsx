@@ -68,6 +68,19 @@ describe("getEventContent", () => {
     expect(screen.queryByText("$ git status")).not.toBeInTheDocument();
   });
 
+  it("falls back to command-based title when summary is missing", () => {
+    const actionWithoutSummary = { ...terminalActionEvent, summary: undefined };
+    const { title } = getEventContent(actionWithoutSummary);
+
+    render(<>{title}</>);
+
+    // Without i18n loaded, the translation key renders as the raw key
+    expect(screen.getByText("ACTION_MESSAGE$RUN")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Check repository status"),
+    ).not.toBeInTheDocument();
+  });
+
   it("reuses the action summary as the full paired observation title", () => {
     const { title } = getEventContent(
       terminalObservationEvent,

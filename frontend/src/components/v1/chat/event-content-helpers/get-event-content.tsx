@@ -37,16 +37,11 @@ const createTitleFromKey = (
   );
 };
 
-const cleanSummary = (summary?: string | null): string =>
-  summary?.trim().replace(/\s+/g, " ") || "";
-
-const createSummaryTitle = (summary: string): React.ReactNode => summary;
-
 const getSummaryTitleForActionEvent = (
   event: ActionEvent,
 ): React.ReactNode | null => {
-  const summary = cleanSummary(event.summary);
-  return summary ? createSummaryTitle(summary) : null;
+  const summary = event.summary?.trim().replace(/\s+/g, " ") || "";
+  return summary || null;
 };
 
 // Action Event Processing
