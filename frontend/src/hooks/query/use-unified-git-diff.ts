@@ -34,7 +34,7 @@ export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
 
     const gitPath = getGitPath(conversationId, selectedRepository);
     return `${gitPath}/${config.filePath}`;
-  }, [isV1Conversation, selectedRepository, config.filePath]);
+  }, [isV1Conversation, conversationId, selectedRepository, config.filePath]);
 
   return useQuery({
     queryKey: [
