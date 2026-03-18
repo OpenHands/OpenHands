@@ -27,6 +27,7 @@ from server.middleware import SetAuthCookieMiddleware  # noqa: E402
 from server.rate_limit import setup_rate_limit_handler  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
+from server.routes.service import service_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
 from server.routes.event_webhook import event_webhook_router  # noqa: E402
@@ -112,6 +113,7 @@ if GITLAB_APP_CLIENT_ID:
     base_app.include_router(gitlab_integration_router)
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
+base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
 base_app.include_router(
     verified_models_router
