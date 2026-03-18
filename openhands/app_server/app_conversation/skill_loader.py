@@ -33,21 +33,6 @@ class ExposedUrlConfig(BaseModel):
     port: int
 
 
-WORK_HOSTS_SKILL_FOOTER = """
-When starting a web server, use the corresponding ports via environment variables:
-- $WORKER_1 for the first port
-- $WORKER_2 for the second port
-
-**CRITICAL: You MUST enable CORS and bind to 0.0.0.0.** Without CORS headers, the App tab cannot detect your server and will show an empty state.
-
-Example (Flask):
-```python
-from flask_cors import CORS
-CORS(app)
-app.run(host='0.0.0.0', port=int(os.environ.get('WORKER_1', 12000)))
-```"""
-
-
 class SandboxConfig(BaseModel):
     """Sandbox configuration for agent-server API request."""
 
