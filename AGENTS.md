@@ -36,6 +36,40 @@ then re-run the command to ensure it passes. Common issues include:
 - Be especially careful with `git reset --hard` after staging files, as it will remove accidentally staged files
 - When remote has new changes, use `git fetch upstream && git rebase upstream/<branch>` on the same branch
 
+## PR-Specific Artifacts (`.pr/` directory)
+
+When working on a PR that requires design documents, scripts meant for development-only, or other temporary artifacts that should NOT be merged to main, store them in a `.pr/` directory at the repository root.
+
+### Usage
+
+```
+.pr/
+├── design.md       # Design decisions and architecture notes
+├── analysis.md     # Investigation or debugging notes
+├── logs/           # Test output or CI logs for reviewer reference
+└── notes.md        # Any other PR-specific content
+```
+
+### How It Works
+
+1. **Notification**: When `.pr/` exists, a comment is posted to the PR conversation alerting reviewers
+2. **Auto-cleanup**: When the PR is approved, the `.pr/` directory is automatically removed via `.github/workflows/pr-artifacts.yml`
+3. **Fork PRs**: Auto-cleanup cannot push to forks, so manual removal is required before merging
+
+### Important Notes
+
+- Do NOT put anything in `.pr/` that needs to be preserved after merge
+- The `.pr/` check passes (green ✅) during development — it only posts a notification, not a blocking error
+- For fork PRs: You must manually remove `.pr/` before the PR can be merged
+
+### When to Use
+
+- Complex refactoring that benefits from written design rationale
+- Debugging sessions where you want to document your investigation
+- E2E test results or logs that demonstrate a cross-repo feature works
+- Feature implementations that need temporary planning docs
+- Any analysis that helps reviewers understand the PR but isn't needed long-term
+
 ## Repository Structure
 Backend:
 - Located in the `openhands` directory

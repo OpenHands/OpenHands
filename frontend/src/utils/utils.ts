@@ -838,7 +838,7 @@ interface GetStatusTextArgs {
  *   isStartingStatus: false,
  *   isStopStatus: false,
  *   curAgentState: AgentState.RUNNING
- * }) // Returns "Waiting For Sandbox"
+ * }) // Returns "Waiting for sandbox"
  */
 export function getStatusText({
   isPausing = false,
@@ -866,13 +866,13 @@ export function getStatusText({
       return t(I18nKey.CONVERSATION$READY);
     }
 
-    // Format status text: "WAITING_FOR_SANDBOX" -> "Waiting for sandbox"
+    // Format status text with sentence case: "WAITING_FOR_SANDBOX" -> "Waiting for sandbox"
     return (
       taskDetail ||
       taskStatus
         .toLowerCase()
         .replace(/_/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase())
+        .replace(/^\w/, (c) => c.toUpperCase())
     );
   }
 
