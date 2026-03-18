@@ -38,7 +38,9 @@ class TestApiKeyStoreSystemKeys:
 
     def test_make_system_key_name(self, api_key_store):
         """Test system key name generation."""
-        assert api_key_store.make_system_key_name('automation') == '__SYSTEM__:automation'
+        assert (
+            api_key_store.make_system_key_name('automation') == '__SYSTEM__:automation'
+        )
         assert api_key_store.make_system_key_name('test-key') == '__SYSTEM__:test-key'
 
     @pytest.mark.asyncio
@@ -62,9 +64,7 @@ class TestApiKeyStoreSystemKeys:
 
         # Verify the key was created in the database
         async with async_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).filter(ApiKey.key == api_key)
-            )
+            result = await session.execute(select(ApiKey).filter(ApiKey.key == api_key))
             key_record = result.scalars().first()
             assert key_record is not None
             assert key_record.user_id == user_id
@@ -203,7 +203,9 @@ class TestApiKeyStoreSystemKeys:
         mock_user.current_org_id = org_id
 
         with patch('storage.api_key_store.a_session_maker', async_session_maker):
-            with patch('storage.api_key_store.UserStore.get_user_by_id', new_callable=AsyncMock) as mock_get_user:
+            with patch(
+                'storage.api_key_store.UserStore.get_user_by_id', new_callable=AsyncMock
+            ) as mock_get_user:
                 mock_get_user.return_value = mock_user
                 keys = await api_key_store.list_api_keys(user_id)
 
@@ -233,15 +235,15 @@ class TestApiKeyStoreSystemKeys:
 
         with patch('storage.api_key_store.a_session_maker', async_session_maker):
             # Attempt to delete without allow_system flag
-            result = await api_key_store.delete_api_key_by_id(key_id, allow_system=False)
+            result = await api_key_store.delete_api_key_by_id(
+                key_id, allow_system=False
+            )
 
         assert result is False
 
         # Verify the key still exists
         async with async_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).filter(ApiKey.id == key_id)
-            )
+            result = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
             key_record = result.scalars().first()
             assert key_record is not None
 
@@ -273,9 +275,7 @@ class TestApiKeyStoreSystemKeys:
 
         # Verify the key was deleted
         async with async_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).filter(ApiKey.id == key_id)
-            )
+            result = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
             key_record = result.scalars().first()
             assert key_record is None
 
@@ -301,14 +301,14 @@ class TestApiKeyStoreSystemKeys:
 
         with patch('storage.api_key_store.a_session_maker', async_session_maker):
             # Delete without allow_system flag - should work for regular keys
-            result = await api_key_store.delete_api_key_by_id(key_id, allow_system=False)
+            result = await api_key_store.delete_api_key_by_id(
+                key_id, allow_system=False
+            )
 
         assert result is True
 
         # Verify the key was deleted
         async with async_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).filter(ApiKey.id == key_id)
-            )
+            result = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
             key_record = result.scalars().first()
             assert key_record is None

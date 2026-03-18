@@ -229,7 +229,9 @@ class ApiKeyStore:
 
             return True
 
-    async def delete_api_key_by_id(self, key_id: int, allow_system: bool = False) -> bool:
+    async def delete_api_key_by_id(
+        self, key_id: int, allow_system: bool = False
+    ) -> bool:
         """Delete an API key by its ID.
 
         Args:
@@ -281,7 +283,8 @@ class ApiKeyStore:
             keys = result.scalars().all()
             # Filter out system keys and MCP_API_KEY
             return [
-                key for key in keys
+                key
+                for key in keys
                 if key.name != 'MCP_API_KEY' and not self.is_system_key_name(key.name)
             ]
 

@@ -73,7 +73,9 @@ async def validate_service_api_key(
         HTTPException: 503 if service auth is not configured
     """
     if not AUTOMATIONS_SERVICE_API_KEY:
-        logger.warning('Service authentication not configured (AUTOMATIONS_SERVICE_API_KEY not set)')
+        logger.warning(
+            'Service authentication not configured (AUTOMATIONS_SERVICE_API_KEY not set)'
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail='Service authentication not configured',

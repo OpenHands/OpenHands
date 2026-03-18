@@ -5,9 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
-
 from server.routes.service import (
-    AUTOMATIONS_SERVICE_API_KEY,
     CreateUserApiKeyRequest,
     get_or_create_api_key_for_user,
     validate_service_api_key,
@@ -20,14 +18,18 @@ class TestValidateServiceApiKey:
     @pytest.mark.asyncio
     async def test_valid_service_key(self):
         """Test validation with valid service API key."""
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'):
+        with patch(
+            'server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'
+        ):
             result = await validate_service_api_key('test-service-key')
         assert result == 'automations-service'
 
     @pytest.mark.asyncio
     async def test_missing_service_key(self):
         """Test validation with missing service API key header."""
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'):
+        with patch(
+            'server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await validate_service_api_key(None)
         assert exc_info.value.status_code == 401
@@ -36,7 +38,9 @@ class TestValidateServiceApiKey:
     @pytest.mark.asyncio
     async def test_invalid_service_key(self):
         """Test validation with invalid service API key."""
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'):
+        with patch(
+            'server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await validate_service_api_key('wrong-key')
         assert exc_info.value.status_code == 401
@@ -122,7 +126,9 @@ class TestGetOrCreateApiKeyForUser:
     async def test_user_not_found(self, valid_request):
         """Test error when user doesn't exist."""
         with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
-            with patch('server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock) as mock_get_user:
+            with patch(
+                'server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock
+            ) as mock_get_user:
                 mock_get_user.return_value = None
                 with pytest.raises(HTTPException) as exc_info:
                     await get_or_create_api_key_for_user(
@@ -139,8 +145,13 @@ class TestGetOrCreateApiKeyForUser:
         mock_user = MagicMock()
 
         with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
-            with patch('server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock) as mock_get_user:
-                with patch('server.routes.service.OrgMemberStore.get_org_member', new_callable=AsyncMock) as mock_get_member:
+            with patch(
+                'server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock
+            ) as mock_get_user:
+                with patch(
+                    'server.routes.service.OrgMemberStore.get_org_member',
+                    new_callable=AsyncMock,
+                ) as mock_get_member:
                     mock_get_user.return_value = mock_user
                     mock_get_member.return_value = None
                     with pytest.raises(HTTPException) as exc_info:
@@ -163,9 +174,16 @@ class TestGetOrCreateApiKeyForUser:
         )
 
         with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
-            with patch('server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock) as mock_get_user:
-                with patch('server.routes.service.OrgMemberStore.get_org_member', new_callable=AsyncMock) as mock_get_member:
-                    with patch('server.routes.service.ApiKeyStore.get_instance') as mock_get_store:
+            with patch(
+                'server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock
+            ) as mock_get_user:
+                with patch(
+                    'server.routes.service.OrgMemberStore.get_org_member',
+                    new_callable=AsyncMock,
+                ) as mock_get_member:
+                    with patch(
+                        'server.routes.service.ApiKeyStore.get_instance'
+                    ) as mock_get_store:
                         mock_get_user.return_value = mock_user
                         mock_get_member.return_value = mock_org_member
                         mock_get_store.return_value = mock_api_key_store
@@ -199,9 +217,16 @@ class TestGetOrCreateApiKeyForUser:
         )
 
         with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
-            with patch('server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock) as mock_get_user:
-                with patch('server.routes.service.OrgMemberStore.get_org_member', new_callable=AsyncMock) as mock_get_member:
-                    with patch('server.routes.service.ApiKeyStore.get_instance') as mock_get_store:
+            with patch(
+                'server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock
+            ) as mock_get_user:
+                with patch(
+                    'server.routes.service.OrgMemberStore.get_org_member',
+                    new_callable=AsyncMock,
+                ) as mock_get_member:
+                    with patch(
+                        'server.routes.service.ApiKeyStore.get_instance'
+                    ) as mock_get_store:
                         mock_get_user.return_value = mock_user
                         mock_get_member.return_value = mock_org_member
                         mock_get_store.return_value = mock_api_key_store
