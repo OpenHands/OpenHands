@@ -6943,6 +6943,38 @@
     "de": "LLM-Nutzung wird zu Anbieterpreisen ohne Aufschlag abgerechnet.",
     "uk": "Використання LLM оплачується за тарифами провайдерів без надбавки."
   },
+  "SETTINGS$LLM_ADMIN_INFO": {
+    "en": "The LLM settings configured below will apply to all users of the organization.",
+    "ja": "以下に設定されたLLM設定は、組織のすべてのユーザーに適用されます。",
+    "zh-CN": "以下配置的LLM设置将应用于组织的所有用户。",
+    "zh-TW": "以下配置的LLM設定將適用於組織的所有用戶。",
+    "ko-KR": "아래에 구성된 LLM 설정은 조직의 모든 사용자에게 적용됩니다.",
+    "no": "LLM-innstillingene som er konfigurert nedenfor, vil gjelde for alle brukere i organisasjonen.",
+    "it": "Le impostazioni LLM configurate di seguito si applicheranno a tutti gli utenti dell'organizzazione.",
+    "pt": "As configurações de LLM configuradas abaixo serão aplicadas a todos os usuários da organização.",
+    "es": "La configuración de LLM configurada a continuación se aplicará a todos los usuarios de la organización.",
+    "ar": "ستنطبق إعدادات LLM المكونة أدناه على جميع مستخدمي المؤسسة.",
+    "fr": "Les paramètres LLM configurés ci-dessous s'appliqueront à tous les utilisateurs de l'organisation.",
+    "tr": "Aşağıda yapılandırılan LLM ayarları, kuruluştaki tüm kullanıcılara uygulanacaktır.",
+    "de": "Die unten konfigurierten LLM-Einstellungen gelten für alle Benutzer der Organisation.",
+    "uk": "Налаштування LLM, налаштовані нижче, будуть застосовані до всіх користувачів організації."
+  },
+  "SETTINGS$LLM_MEMBER_INFO": {
+    "en": "LLM settings are managed by your organization's administrator.",
+    "ja": "LLM設定は組織の管理者によって管理されています。",
+    "zh-CN": "LLM设置由您的组织管理员管理。",
+    "zh-TW": "LLM設定由您的組織管理員管理。",
+    "ko-KR": "LLM 설정은 조직 관리자가 관리합니다.",
+    "no": "LLM-innstillinger administreres av organisasjonens administrator.",
+    "it": "Le impostazioni LLM sono gestite dall'amministratore della tua organizzazione.",
+    "pt": "As configurações de LLM são gerenciadas pelo administrador da sua organização.",
+    "es": "La configuración de LLM es administrada por el administrador de su organización.",
+    "ar": "يتم إدارة إعدادات LLM بواسطة مسؤول مؤسستك.",
+    "fr": "Les paramètres LLM sont gérés par l'administrateur de votre organisation.",
+    "tr": "LLM ayarları kuruluşunuzun yöneticisi tarafından yönetilmektedir.",
+    "de": "LLM-Einstellungen werden vom Administrator Ihrer Organisation verwaltet.",
+    "uk": "Налаштування LLM керуються адміністратором вашої організації."
+  },
   "SETTINGS$SEE_PRICING_DETAILS": {
     "en": "See pricing details.",
     "ja": "価格詳細を見る。",

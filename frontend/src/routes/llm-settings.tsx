@@ -31,6 +31,7 @@ import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
 import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -74,11 +75,34 @@ function LlmSettingsScreen() {
   const { data: config } = useConfig();
   const { data: me } = useMe();
   const { hasPermission } = usePermission(me?.role ?? "member");
+  const { isPersonalOrg, isTeamOrg } = useOrgTypeAndAccess();
 
   // In OSS mode, user has full access (no permission restrictions)
   // In SaaS mode, check role-based permissions (members can only view, owners and admins can edit)
   const isOssMode = config?.app_mode === "oss";
   const isReadOnly = isOssMode ? false : !hasPermission("edit_llm_settings");
+
+  // Determine the contextual info message based on workspace type and role
+  const getLlmSettingsInfoMessage = (): I18nKey | null => {
+    // No message in OSS mode (no organization context)
+    if (isOssMode) return null;
+
+    // No message for personal workspaces
+    if (isPersonalOrg) return null;
+
+    // Team org - show appropriate message based on role
+    if (isTeamOrg) {
+      const role = me?.role ?? "member";
+      if (role === "admin" || role === "owner") {
+        return I18nKey.SETTINGS$LLM_ADMIN_INFO;
+      }
+      return I18nKey.SETTINGS$LLM_MEMBER_INFO;
+    }
+
+    return null;
+  };
+
+  const llmInfoMessage = getLlmSettingsInfoMessage();
 
   const [view, setView] = React.useState<"basic" | "advanced">("basic");
 
@@ -504,6 +528,14 @@ function LlmSettingsScreen() {
         className="flex flex-col h-full justify-between"
       >
         <div className="flex flex-col gap-6">
+          {llmInfoMessage && (
+            <p
+              data-testid="llm-settings-info-message"
+              className="text-sm text-tertiary-alt"
+            >
+              {t(llmInfoMessage)}
+            </p>
+          )}
           <SettingsSwitch
             testId="advanced-settings-switch"
             defaultIsToggled={view === "advanced"}
