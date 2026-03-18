@@ -28,8 +28,6 @@ service_router = APIRouter(prefix='/api/service', tags=['Service'])
 class CreateUserApiKeyRequest(BaseModel):
     """Request model for creating an API key on behalf of a user."""
 
-    user_id: str
-    org_id: UUID
     name: str  # Required - used to identify the key
 
     @field_validator('name')
@@ -110,9 +108,10 @@ async def service_health() -> dict:
     }
 
 
-@service_router.post('/users/{user_id}/api-keys')
+@service_router.post('/users/{user_id}/orgs/{org_id}/api-keys')
 async def get_or_create_api_key_for_user(
     user_id: str,
+    org_id: UUID,
     request: CreateUserApiKeyRequest,
     x_service_api_key: str | None = Header(default=None, alias='X-Service-API-Key'),
 ) -> CreateUserApiKeyResponse:
@@ -128,8 +127,9 @@ async def get_or_create_api_key_for_user(
     - Never expire
 
     Args:
-        user_id: The user ID (must match request body user_id)
-        request: Request body containing user_id, org_id, and name (required)
+        user_id: The user ID
+        org_id: The organization ID
+        request: Request body containing name (required)
         x_service_api_key: Service API key header for authentication
 
     Returns:
@@ -137,47 +137,37 @@ async def get_or_create_api_key_for_user(
 
     Raises:
         HTTPException: 401 if service key is invalid
-        HTTPException: 400 if user_id in path doesn't match body
         HTTPException: 404 if user not found
         HTTPException: 403 if user is not a member of the specified org
     """
     # Validate service API key
     service_id = await validate_service_api_key(x_service_api_key)
 
-    # Validate path and body user_id match
-    if user_id != request.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='user_id in path must match user_id in request body',
-        )
-
     # Verify user exists
-    user = await UserStore.get_user_by_id(request.user_id)
+    user = await UserStore.get_user_by_id(user_id)
     if not user:
         logger.warning(
             'Service attempted to create key for non-existent user',
-            extra={'user_id': request.user_id},
+            extra={'user_id': user_id},
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f'User {request.user_id} not found',
+            detail=f'User {user_id} not found',
         )
 
     # Verify user is a member of the specified org
-    org_member = await OrgMemberStore.get_org_member(
-        request.org_id, UUID(request.user_id)
-    )
+    org_member = await OrgMemberStore.get_org_member(org_id, UUID(user_id))
     if not org_member:
         logger.warning(
             'Service attempted to create key for user not in org',
             extra={
-                'user_id': request.user_id,
-                'org_id': str(request.org_id),
+                'user_id': user_id,
+                'org_id': str(org_id),
             },
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f'User {request.user_id} is not a member of org {request.org_id}',
+            detail=f'User {user_id} is not a member of org {org_id}',
         )
 
     # Get or create the system API key
@@ -185,16 +175,16 @@ async def get_or_create_api_key_for_user(
 
     try:
         api_key = await api_key_store.get_or_create_system_api_key(
-            user_id=request.user_id,
-            org_id=request.org_id,
+            user_id=user_id,
+            org_id=org_id,
             name=request.name,
         )
     except Exception as e:
         logger.exception(
             'Failed to get or create system API key',
             extra={
-                'user_id': request.user_id,
-                'org_id': str(request.org_id),
+                'user_id': user_id,
+                'org_id': str(org_id),
                 'error': str(e),
             },
         )
@@ -207,23 +197,24 @@ async def get_or_create_api_key_for_user(
         'Service created API key for user',
         extra={
             'service_id': service_id,
-            'user_id': request.user_id,
-            'org_id': str(request.org_id),
+            'user_id': user_id,
+            'org_id': str(org_id),
             'key_name': request.name,
         },
     )
 
     return CreateUserApiKeyResponse(
         key=api_key,
-        user_id=request.user_id,
-        org_id=str(request.org_id),
+        user_id=user_id,
+        org_id=str(org_id),
         name=request.name,
     )
 
 
-@service_router.delete('/users/{user_id}/api-keys/{key_name}')
+@service_router.delete('/users/{user_id}/orgs/{org_id}/api-keys/{key_name}')
 async def delete_user_api_key(
     user_id: str,
+    org_id: UUID,
     key_name: str,
     x_service_api_key: str | None = Header(default=None, alias='X-Service-API-Key'),
 ) -> dict:
@@ -235,6 +226,7 @@ async def delete_user_api_key(
 
     Args:
         user_id: The user ID
+        org_id: The organization ID
         key_name: The name of the key to delete (without __SYSTEM__: prefix)
         x_service_api_key: Service API key header for authentication
 
@@ -253,13 +245,16 @@ async def delete_user_api_key(
     # Delete the key by name (wrap with system key prefix since service creates system keys)
     system_key_name = api_key_store.make_system_key_name(key_name)
     success = await api_key_store.delete_api_key_by_name(
-        user_id, system_key_name, allow_system=True
+        user_id=user_id,
+        org_id=org_id,
+        name=system_key_name,
+        allow_system=True,
     )
 
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f'API key with name "{key_name}" not found for user {user_id}',
+            detail=f'API key with name "{key_name}" not found for user {user_id} in org {org_id}',
         )
 
     logger.info(
@@ -267,6 +262,7 @@ async def delete_user_api_key(
         extra={
             'service_id': service_id,
             'user_id': user_id,
+            'org_id': str(org_id),
             'key_name': key_name,
         },
     )

@@ -317,22 +317,30 @@ class ApiKeyStore:
             return key_record.key if key_record else None
 
     async def delete_api_key_by_name(
-        self, user_id: str, name: str, allow_system: bool = False
+        self,
+        user_id: str,
+        name: str,
+        org_id: UUID | None = None,
+        allow_system: bool = False,
     ) -> bool:
         """Delete an API key by name for a specific user.
 
         Args:
             user_id: The ID of the user whose key to delete
             name: The name of the key to delete
+            org_id: Optional organization ID to filter by (required for system keys)
             allow_system: If False (default), system keys cannot be deleted
 
         Returns:
             True if the key was deleted, False if not found or is a protected system key
         """
         async with a_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).filter(ApiKey.user_id == user_id, ApiKey.name == name)
-            )
+            # Build the query filters
+            filters = [ApiKey.user_id == user_id, ApiKey.name == name]
+            if org_id is not None:
+                filters.append(ApiKey.org_id == org_id)
+
+            result = await session.execute(select(ApiKey).filter(*filters))
             key_record = result.scalars().first()
 
             if not key_record:
