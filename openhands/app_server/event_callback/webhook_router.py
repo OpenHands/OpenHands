@@ -6,7 +6,7 @@ import logging
 import pkgutil
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import APIKeyHeader
 from jwt import InvalidTokenError
 from pydantic import SecretStr
@@ -23,61 +23,87 @@ from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_event_service,
     depends_jwt_service,
-    depends_sandbox_service,
     get_event_callback_service,
+    get_global_config,
+    get_sandbox_service,
 )
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
-from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.specifiy_user_context import (
+    ADMIN,
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
-    as_admin,
 )
-from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent
+from openhands.server.types import AppMode
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
-sandbox_service_dependency = depends_sandbox_service()
 event_service_dependency = depends_event_service()
 app_conversation_info_service_dependency = depends_app_conversation_info_service()
 jwt_dependency = depends_jwt_service()
+app_mode = get_global_config().app_mode
 _logger = logging.getLogger(__name__)
 
 
 async def valid_sandbox(
-    user_context: UserContext = Depends(as_admin),
+    request: Request,
     session_api_key: str = Depends(
         APIKeyHeader(name='X-Session-API-Key', auto_error=False)
     ),
-    sandbox_service: SandboxService = sandbox_service_dependency,
 ) -> SandboxInfo:
+    """Use a session api key for validation, and get a sandbox. Subsequent actions
+    are executed in the context of the owner of the sandbox"""
     if not session_api_key:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail='X-Session-API-Key header is required'
         )
 
-    sandbox_info = await sandbox_service.get_sandbox_by_session_api_key(session_api_key)
-    if sandbox_info is None:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
+    # Create a state which will be used internally only for this operation
+    state = InjectorState()
+
+    # Since we need access to all sandboxes, this is executed in the context of the admin.
+    setattr(state, USER_CONTEXT_ATTR, ADMIN)
+    async with get_sandbox_service(state) as sandbox_service:
+        sandbox_info = await sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
         )
-    return sandbox_info
+        if sandbox_info is None:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
+            )
+
+        # In SAAS Mode there is always a user, so we set the owner of the sandbox
+        # as the current user (Validated by the session_api_key they provided)
+        if sandbox_info.created_by_user_id:
+            setattr(
+                request.state,
+                USER_CONTEXT_ATTR,
+                SpecifyUserContext(sandbox_info.created_by_user_id),
+            )
+        elif app_mode == AppMode.SAAS:
+            _logger.error(
+                'Sandbox had no user specified', extra={'sandbox_id': sandbox_info.id}
+            )
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, detail='Sandbox had no user specified'
+            )
+
+        return sandbox_info
 
 
 async def valid_conversation(
     conversation_id: UUID,
-    sandbox_info: SandboxInfo,
+    sandbox_info: SandboxInfo = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> AppConversationInfo:
     app_conversation_info = (
@@ -90,9 +116,11 @@ async def valid_conversation(
             sandbox_id=sandbox_info.id,
             created_by_user_id=sandbox_info.created_by_user_id,
         )
+
+    # Sanity check - Make sure that the conversation and sandbox were created by the same user
     if app_conversation_info.created_by_user_id != sandbox_info.created_by_user_id:
-        # Make sure that the conversation and sandbox were created by the same user
         raise AuthError()
+
     return app_conversation_info
 
 
@@ -139,15 +167,11 @@ async def on_conversation_update(
 async def on_event(
     events: list[Event],
     conversation_id: UUID,
-    sandbox_info: SandboxInfo = Depends(valid_sandbox),
+    app_conversation_info: AppConversationInfo = Depends(valid_conversation),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
     event_service: EventService = event_service_dependency,
 ) -> Success:
     """Webhook callback for when event stream events occur."""
-    app_conversation_info = await valid_conversation(
-        conversation_id, sandbox_info, app_conversation_info_service
-    )
-
     try:
         # Save events...
         await asyncio.gather(

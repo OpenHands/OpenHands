@@ -99,7 +99,7 @@ async def list_user_orgs(
 
     try:
         # Fetch user to get current_org_id
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
         current_org_id = (
             str(user.current_org_id) if user and user.current_org_id else None
         )
@@ -781,7 +781,7 @@ async def get_org_members(
         )
 
         if not success:
-            error_map = {
+            error_map: dict[str | None, tuple[int, str]] = {
                 'not_a_member': (
                     status.HTTP_403_FORBIDDEN,
                     'You are not a member of this organization',
@@ -790,9 +790,14 @@ async def get_org_members(
                     status.HTTP_400_BAD_REQUEST,
                     'Invalid page_id format',
                 ),
+                None: (
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'An error occurred',
+                ),
             }
             status_code, detail = error_map.get(
-                error_code, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+                error_code,
+                (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred'),
             )
             raise HTTPException(status_code=status_code, detail=detail)
 
@@ -900,7 +905,7 @@ async def remove_org_member(
         )
 
         if not success:
-            error_map = {
+            error_map: dict[str | None, tuple[int, str]] = {
                 'not_a_member': (
                     status.HTTP_403_FORBIDDEN,
                     'You are not a member of this organization',
@@ -925,9 +930,14 @@ async def remove_org_member(
                     status.HTTP_500_INTERNAL_SERVER_ERROR,
                     'Failed to remove member',
                 ),
+                None: (
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'An error occurred',
+                ),
             }
             status_code, detail = error_map.get(
-                error, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+                error,
+                (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred'),
             )
             raise HTTPException(status_code=status_code, detail=detail)
 

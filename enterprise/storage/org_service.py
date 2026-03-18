@@ -25,6 +25,7 @@ from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.storage.data_models.settings import Settings
 
 
 class OrgService:
@@ -46,7 +47,7 @@ class OrgService:
             raise OrgNameExistsError(name)
 
     @staticmethod
-    async def create_litellm_integration(org_id: UUID, user_id: str) -> dict:
+    async def create_litellm_integration(org_id: UUID, user_id: str) -> Settings:
         """
         Create LiteLLM team integration for the organization.
 
@@ -55,7 +56,7 @@ class OrgService:
             user_id: User ID who will own the organization
 
         Returns:
-            dict: LiteLLM settings object
+            Settings: LiteLLM settings object
 
         Raises:
             LiteLLMIntegrationError: If LiteLLM integration fails
@@ -116,7 +117,7 @@ class OrgService:
         )
 
     @staticmethod
-    def apply_litellm_settings_to_org(org: Org, settings: dict) -> None:
+    def apply_litellm_settings_to_org(org: Org, settings: Settings) -> None:
         """
         Apply LiteLLM settings to organization entity.
 
@@ -150,7 +151,7 @@ class OrgService:
         org_id: UUID,
         user_id: str,
         role_id: int,
-        settings: dict,
+        settings: Settings,
     ) -> OrgMember:
         """
         Create an organization member entity.
@@ -875,7 +876,7 @@ class OrgService:
         Returns:
             bool: True if BYOR export is enabled, False otherwise
         """
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
         if not user or not user.current_org_id:
             return False
 
@@ -929,7 +930,7 @@ class OrgService:
 
         # Step 3: Update user's current_org_id
         try:
-            updated_user = UserStore.update_current_org(user_id, org_id)
+            updated_user = await UserStore.update_current_org(user_id, org_id)
             if not updated_user:
                 raise OrgDatabaseError('User not found')
 

@@ -41,7 +41,7 @@ from openhands.app_server.config import (
     depends_httpx_client,
     depends_sandbox_service,
 )
-from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.app_server.sandbox.sandbox_models import AGENT_SERVER, SandboxStatus
 from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.services.db_session_injector import set_db_session_keep_open
 from openhands.app_server.services.httpx_client_injector import (
@@ -60,7 +60,6 @@ from openhands.events.observation import (
     AgentStateChangedObservation,
     NullObservation,
 )
-from openhands.experiments.experiment_manager import ExperimentConfig
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
@@ -109,7 +108,6 @@ from openhands.storage.data_models.conversation_metadata import (
 from openhands.storage.data_models.conversation_status import ConversationStatus
 from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
-from openhands.storage.locations import get_experiment_config_filename
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import wait_all
 from openhands.utils.conversation_summary import get_default_conversation_title
@@ -616,7 +614,7 @@ async def _try_delete_v1_conversation(
 
             # Delete the sandbox in the background
             asyncio.create_task(
-                _delete_sandbox_and_close_connections(
+                _finalize_delete_and_close_connections(
                     sandbox_service,
                     app_conversation_info.sandbox_id,
                     db_session,
@@ -630,14 +628,18 @@ async def _try_delete_v1_conversation(
     return result
 
 
-async def _delete_sandbox_and_close_connections(
+async def _finalize_delete_and_close_connections(
     sandbox_service: SandboxService,
     sandbox_id: str,
     db_session: AsyncSession,
     httpx_client: httpx.AsyncClient,
 ):
     try:
-        await sandbox_service.delete_sandbox(sandbox_id)
+        num_conversations_in_sandbox = await _get_num_conversations_in_sandbox(
+            sandbox_service, sandbox_id, httpx_client
+        )
+        if num_conversations_in_sandbox == 0:
+            await sandbox_service.delete_sandbox(sandbox_id)
         await db_session.commit()
     finally:
         await asyncio.gather(
@@ -646,6 +648,28 @@ async def _delete_sandbox_and_close_connections(
                 httpx_client.aclose(),
             ]
         )
+
+
+async def _get_num_conversations_in_sandbox(
+    sandbox_service: SandboxService,
+    sandbox_id: str,
+    httpx_client: httpx.AsyncClient,
+) -> int:
+    try:
+        sandbox = await sandbox_service.get_sandbox(sandbox_id)
+        if not sandbox or not sandbox.exposed_urls:
+            return 0
+        agent_server_url = next(
+            u for u in sandbox.exposed_urls if u.name == AGENT_SERVER
+        )
+        response = await httpx_client.get(
+            f'{agent_server_url.url}/api/conversations/count',
+            headers={'X-Session-API-Key': sandbox.session_api_key},
+        )
+        result = int(response.content)
+        return result
+    except Exception:
+        return 0
 
 
 async def _delete_v0_conversation(conversation_id: str, user_id: str | None) -> bool:
@@ -1238,32 +1262,6 @@ async def update_conversation(
             },
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
-
-@app.post('/conversations/{conversation_id}/exp-config')
-def add_experiment_config_for_conversation(
-    exp_config: ExperimentConfig,
-    conversation_id: str = Depends(validate_conversation_id),
-) -> bool:
-    exp_config_filepath = get_experiment_config_filename(conversation_id)
-    exists = False
-    try:
-        file_store.read(exp_config_filepath)
-        exists = True
-    except FileNotFoundError:
-        pass
-
-    # Don't modify again if it already exists
-    if exists:
-        return False
-
-    try:
-        file_store.write(exp_config_filepath, exp_config.model_dump_json())
-    except Exception as e:
-        logger.info(f'Failed to write experiment config for {conversation_id}: {e}')
-        return True
-
-    return False
 
 
 def _parse_combined_page_id(page_id: str | None) -> tuple[str | None, str | None]:

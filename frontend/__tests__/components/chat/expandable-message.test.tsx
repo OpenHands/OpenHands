@@ -113,7 +113,7 @@ describe("ExpandableMessage", () => {
 
   it("should render the out of credits message when the user is out of credits", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    // @ts-expect-error - We only care about the app_mode and feature_flags fields
+    // @ts-expect-error - partial mock for testing
     getConfigSpy.mockResolvedValue({
       app_mode: "saas",
       feature_flags: {
@@ -122,6 +122,9 @@ describe("ExpandableMessage", () => {
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
       },
     });
     const RouterStub = createRoutesStub([

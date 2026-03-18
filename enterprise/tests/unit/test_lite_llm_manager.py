@@ -2,7 +2,9 @@
 Unit tests for LiteLlmManager class.
 """
 
+import importlib
 import os
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -19,6 +21,98 @@ from storage.lite_llm_manager import (
 from storage.user_settings import UserSettings
 
 from openhands.server.settings import Settings
+
+
+class TestDefaultInitialBudget:
+    """Test cases for DEFAULT_INITIAL_BUDGET configuration."""
+
+    @pytest.fixture(autouse=True)
+    def restore_module_state(self):
+        """Ensure module is properly restored after each test."""
+        # Save original module if it exists
+        original_module = sys.modules.get('storage.lite_llm_manager')
+
+        yield
+
+        # Restore module state after each test
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        # Clear the env vars
+        os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
+        os.environ.pop('ENABLE_BILLING', None)
+
+        # Restore original module or reimport fresh
+        if original_module is not None:
+            sys.modules['storage.lite_llm_manager'] = original_module
+        else:
+            importlib.import_module('storage.lite_llm_manager')
+
+    def test_default_initial_budget_none_when_billing_disabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET is None when billing is disabled."""
+        # Temporarily remove the module so we can reimport with different env vars
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        # Ensure billing is disabled (default) and reimport
+        os.environ.pop('ENABLE_BILLING', None)
+        os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
+        module = importlib.import_module('storage.lite_llm_manager')
+        assert module.DEFAULT_INITIAL_BUDGET is None
+
+    def test_default_initial_budget_defaults_to_zero_when_billing_enabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET defaults to 0.0 when billing is enabled."""
+        # Temporarily remove the module so we can reimport with different env vars
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        # Enable billing and reimport
+        os.environ['ENABLE_BILLING'] = 'true'
+        os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
+        module = importlib.import_module('storage.lite_llm_manager')
+        assert module.DEFAULT_INITIAL_BUDGET == 0.0
+
+    def test_default_initial_budget_uses_env_var_when_billing_enabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET uses value from environment variable when billing enabled."""
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        os.environ['ENABLE_BILLING'] = 'true'
+        os.environ['DEFAULT_INITIAL_BUDGET'] = '100.0'
+        module = importlib.import_module('storage.lite_llm_manager')
+        assert module.DEFAULT_INITIAL_BUDGET == 100.0
+
+    def test_default_initial_budget_ignores_env_var_when_billing_disabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET returns None when billing disabled, ignoring env var."""
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        os.environ.pop('ENABLE_BILLING', None)  # billing disabled by default
+        os.environ['DEFAULT_INITIAL_BUDGET'] = '100.0'
+        module = importlib.import_module('storage.lite_llm_manager')
+        assert module.DEFAULT_INITIAL_BUDGET is None
+
+    def test_default_initial_budget_rejects_invalid_value(self):
+        """Test that DEFAULT_INITIAL_BUDGET raises ValueError for invalid values."""
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        os.environ['ENABLE_BILLING'] = 'true'
+        os.environ['DEFAULT_INITIAL_BUDGET'] = 'abc'
+        with pytest.raises(ValueError) as exc_info:
+            importlib.import_module('storage.lite_llm_manager')
+        assert 'Invalid DEFAULT_INITIAL_BUDGET' in str(exc_info.value)
+
+    def test_default_initial_budget_rejects_negative_value(self):
+        """Test that DEFAULT_INITIAL_BUDGET raises ValueError for negative values."""
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        os.environ['ENABLE_BILLING'] = 'true'
+        os.environ['DEFAULT_INITIAL_BUDGET'] = '-10.0'
+        with pytest.raises(ValueError) as exc_info:
+            importlib.import_module('storage.lite_llm_manager')
+        assert 'must be non-negative' in str(exc_info.value)
 
 
 class TestLiteLlmManager:
@@ -180,11 +274,11 @@ class TestLiteLlmManager:
             assert result.llm_api_key.get_secret_value() == 'test-api-key'
             assert result.llm_base_url == 'http://test.com'
 
-            # Verify API calls were made (get_team + 3 posts)
+            # Verify API calls were made (get_team + 4 posts)
             assert mock_client.get.call_count == 1  # get_team
             assert (
-                mock_client.post.call_count == 3
-            )  # create_team, add_user_to_team, generate_key
+                mock_client.post.call_count == 4
+            )  # create_team, add_user_to_team, delete_key_by_alias, generate_key
 
     @pytest.mark.asyncio
     async def test_create_entries_inherits_existing_team_budget(
@@ -242,10 +336,10 @@ class TestLiteLlmManager:
             assert add_user_call[1]['json']['max_budget_in_team'] == 30.0
 
     @pytest.mark.asyncio
-    async def test_create_entries_new_org_uses_zero_budget(
+    async def test_create_entries_new_org_uses_default_initial_budget(
         self, mock_settings, mock_response
     ):
-        """Test that create_entries uses budget=0 for new org (team doesn't exist)."""
+        """Test that create_entries uses DEFAULT_INITIAL_BUDGET for new org."""
         mock_404_response = MagicMock()
         mock_404_response.status_code = 404
         mock_404_response.is_success = False
@@ -273,6 +367,7 @@ class TestLiteLlmManager:
             patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'),
             patch('storage.lite_llm_manager.TokenManager', mock_token_manager),
             patch('httpx.AsyncClient', mock_client_class),
+            patch('storage.lite_llm_manager.DEFAULT_INITIAL_BUDGET', 0.0),
         ):
             result = await LiteLlmManager.create_entries(
                 'test-org-id', 'test-user-id', mock_settings, create_user=False
@@ -280,15 +375,66 @@ class TestLiteLlmManager:
 
             assert result is not None
 
-            # Verify _create_team was called with budget=0
+            # Verify _create_team was called with DEFAULT_INITIAL_BUDGET (0.0)
             create_team_call = mock_client.post.call_args_list[0]
             assert 'team/new' in create_team_call[0][0]
             assert create_team_call[1]['json']['max_budget'] == 0.0
 
-            # Verify _add_user_to_team was called with budget=0
+            # Verify _add_user_to_team was called with DEFAULT_INITIAL_BUDGET (0.0)
             add_user_call = mock_client.post.call_args_list[1]
             assert 'team/member_add' in add_user_call[0][0]
             assert add_user_call[1]['json']['max_budget_in_team'] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_create_entries_new_org_uses_custom_default_budget(
+        self, mock_settings, mock_response
+    ):
+        """Test that create_entries uses custom DEFAULT_INITIAL_BUDGET for new org."""
+        mock_404_response = MagicMock()
+        mock_404_response.status_code = 404
+        mock_404_response.is_success = False
+
+        mock_token_manager = MagicMock()
+        mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
+            return_value={'email': 'test@example.com'}
+        )
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_404_response
+        mock_client.get.return_value.raise_for_status.side_effect = (
+            httpx.HTTPStatusError(
+                message='Not Found', request=MagicMock(), response=mock_404_response
+            )
+        )
+        mock_client.post.return_value = mock_response
+
+        mock_client_class = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        custom_budget = 50.0
+        with (
+            patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}),
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'),
+            patch('storage.lite_llm_manager.TokenManager', mock_token_manager),
+            patch('httpx.AsyncClient', mock_client_class),
+            patch('storage.lite_llm_manager.DEFAULT_INITIAL_BUDGET', custom_budget),
+        ):
+            result = await LiteLlmManager.create_entries(
+                'test-org-id', 'test-user-id', mock_settings, create_user=False
+            )
+
+            assert result is not None
+
+            # Verify _create_team was called with custom DEFAULT_INITIAL_BUDGET
+            create_team_call = mock_client.post.call_args_list[0]
+            assert 'team/new' in create_team_call[0][0]
+            assert create_team_call[1]['json']['max_budget'] == custom_budget
+
+            # Verify _add_user_to_team was called with custom DEFAULT_INITIAL_BUDGET
+            add_user_call = mock_client.post.call_args_list[1]
+            assert 'team/member_add' in add_user_call[0][0]
+            assert add_user_call[1]['json']['max_budget_in_team'] == custom_budget
 
     @pytest.mark.asyncio
     async def test_create_entries_propagates_non_404_errors(self, mock_settings):
@@ -1100,9 +1246,7 @@ class TestLiteLlmManager:
                     mock_org_member.org_id = 'test-ord-id'
                     mock_org_member.llm_api_key = 'test-api-key'
                     mock_user.org_members = [mock_org_member]
-                    mock_user_store.get_user_by_id_async = AsyncMock(
-                        return_value=mock_user
-                    )
+                    mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
                     result = await LiteLlmManager._get_key_info(
                         mock_http_client, 'test-ord-id', 'test-user-id'
@@ -1118,7 +1262,7 @@ class TestLiteLlmManager:
         with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
             with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
                 with patch('storage.user_store.UserStore') as mock_user_store:
-                    mock_user_store.get_user_by_id_async = AsyncMock(return_value=None)
+                    mock_user_store.get_user_by_id = AsyncMock(return_value=None)
 
                     result = await LiteLlmManager._get_key_info(
                         mock_http_client, 'test-ord-id', 'test-user-id'
@@ -1355,9 +1499,13 @@ class TestLiteLlmManager:
 
                 result1 = await LiteLlmManager._get_team(mock_client, 'team_id')
                 result2 = await LiteLlmManager._get_user(mock_client, 'user_id')
-                result3 = await LiteLlmManager._generate_key(
-                    mock_client, 'user_id', 'team_id', 'alias', {}
-                )
+                # _generate_key raises ValueError when config is missing
+                with pytest.raises(
+                    ValueError, match='LiteLLM API configuration not found'
+                ):
+                    await LiteLlmManager._generate_key(
+                        mock_client, 'user_id', 'team_id', 'alias', {}
+                    )
                 result4 = await LiteLlmManager._get_user_team_info(
                     mock_client, 'user_id', 'team_id'
                 )
@@ -1368,7 +1516,6 @@ class TestLiteLlmManager:
                 # Methods that return None when config is missing
                 assert result1 is None
                 assert result2 is None
-                assert result3 is None
                 assert result4 is None
                 assert result5 is None
 

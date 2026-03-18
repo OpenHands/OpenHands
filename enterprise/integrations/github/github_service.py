@@ -122,13 +122,37 @@ class SaaSGitHubService(GitHubService):
             raise Exception(f'No node_id found for repository {repo_id}')
         return node_id
 
+    async def _get_external_auth_id(self) -> str | None:
+        """Get or fetch external_auth_id from Keycloak token if not already set."""
+        if self.external_auth_id:
+            return self.external_auth_id
+
+        if self.external_auth_token:
+            try:
+                user_info = await self.token_manager.get_user_info(
+                    self.external_auth_token.get_secret_value()
+                )
+                self.external_auth_id = user_info.sub
+                logger.info(
+                    f'Determined external_auth_id from Keycloak token: {self.external_auth_id}'
+                )
+                return self.external_auth_id
+            except Exception as e:
+                logger.warning(
+                    f'Could not determine external_auth_id from token: {e}',
+                    exc_info=True,
+                )
+        return None
+
     async def get_paginated_repos(self, page, per_page, sort, installation_id):
         repositories = await super().get_paginated_repos(
             page, per_page, sort, installation_id
         )
-        asyncio.create_task(
-            store_repositories_in_db(repositories, self.external_auth_id)
-        )
+        external_auth_id = await self._get_external_auth_id()
+        if external_auth_id:
+            asyncio.create_task(
+                store_repositories_in_db(repositories, external_auth_id)
+            )
         return repositories
 
     async def get_all_repositories(
@@ -136,8 +160,10 @@ class SaaSGitHubService(GitHubService):
     ) -> list[Repository]:
         repositories = await super().get_all_repositories(sort, app_mode)
         # Schedule the background task without awaiting it
-        asyncio.create_task(
-            store_repositories_in_db(repositories, self.external_auth_id)
-        )
+        external_auth_id = await self._get_external_auth_id()
+        if external_auth_id:
+            asyncio.create_task(
+                store_repositories_in_db(repositories, external_auth_id)
+            )
         # Return repositories immediately
         return repositories

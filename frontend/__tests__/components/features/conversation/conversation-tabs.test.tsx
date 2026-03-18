@@ -4,7 +4,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { ConversationTabs } from "#/components/features/conversation/conversation-tabs/conversation-tabs";
-import { ConversationTabsContextMenu } from "#/components/features/conversation/conversation-tabs/conversation-tabs-context-menu";
 import { useConversationStore } from "#/stores/conversation-store";
 
 const TASK_CONVERSATION_ID = "task-ec03fb2ab8604517b24af632b058c2fd";
@@ -14,6 +13,14 @@ let mockConversationId = TASK_CONVERSATION_ID;
 
 vi.mock("#/hooks/use-conversation-id", () => ({
   useConversationId: () => ({ conversationId: mockConversationId }),
+}));
+
+let mockHasTaskList = false;
+vi.mock("#/hooks/use-task-list", () => ({
+  useTaskList: () => ({
+    hasTaskList: mockHasTaskList,
+    taskList: [],
+  }),
 }));
 
 const createWrapper = (conversationId: string) => {
@@ -31,6 +38,7 @@ describe("ConversationTabs localStorage behavior", () => {
     localStorage.clear();
     vi.resetAllMocks();
     mockConversationId = TASK_CONVERSATION_ID;
+    mockHasTaskList = false;
     useConversationStore.setState({
       selectedTab: null,
       isRightPanelShown: false,
@@ -70,47 +78,6 @@ describe("ConversationTabs localStorage behavior", () => {
       expect(parsed).toHaveProperty("selectedTab");
       expect(parsed).toHaveProperty("rightPanelShown");
       expect(parsed).toHaveProperty("unpinnedTabs");
-    });
-
-    it("should store unpinned tabs in consolidated key via context menu", async () => {
-      mockConversationId = REAL_CONVERSATION_ID;
-      const user = userEvent.setup();
-
-      render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
-
-      const terminalItem = screen.getByText("COMMON$TERMINAL");
-      await user.click(terminalItem);
-
-      const consolidatedKey = `conversation-state-${REAL_CONVERSATION_ID}`;
-      const storedState = localStorage.getItem(consolidatedKey);
-      expect(storedState).not.toBeNull();
-
-      const parsed = JSON.parse(storedState!);
-      expect(parsed.unpinnedTabs).toContain("terminal");
-    });
-
-    it("should hide a tab after unpinning it from context menu", async () => {
-      mockConversationId = REAL_CONVERSATION_ID;
-      const user = userEvent.setup();
-
-      render(
-        <>
-          <ConversationTabs />
-          <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />
-        </>,
-        { wrapper: createWrapper(REAL_CONVERSATION_ID) },
-      );
-
-      expect(
-        screen.getByTestId("conversation-tab-terminal"),
-      ).toBeInTheDocument();
-
-      const terminalItem = screen.getByText("COMMON$TERMINAL");
-      await user.click(terminalItem);
-
-      expect(
-        screen.queryByTestId("conversation-tab-terminal"),
-      ).not.toBeInTheDocument();
     });
   });
 
@@ -203,6 +170,39 @@ describe("ConversationTabs localStorage behavior", () => {
         localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("browser");
+    });
+  });
+
+  describe("tasklist tab", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      mockHasTaskList = true;
+    });
+
+    it("should show tasklist tab when hasTaskList is true", () => {
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.getByTestId("conversation-tab-tasklist"),
+      ).toBeInTheDocument();
+    });
+
+    it("should select tasklist tab when clicked", async () => {
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tasklistTab = screen.getByTestId("conversation-tab-tasklist");
+      await user.click(tasklistTab);
+
+      const { selectedTab, hasRightPanelToggled } =
+        useConversationStore.getState();
+      expect(selectedTab).toBe("tasklist");
+      expect(hasRightPanelToggled).toBe(true);
     });
   });
 });

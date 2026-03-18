@@ -56,7 +56,7 @@ class OrgMemberService:
             raise RoleNotFoundError(org_member.role_id)
 
         # Get user email
-        user = await UserStore.get_user_by_id_async(str(user_id))
+        user = await UserStore.get_user_by_id(str(user_id))
         email = user.email if user and user.email else ''
 
         return MeResponse.from_org_member(org_member, role, email)
@@ -218,10 +218,10 @@ class OrgMemberService:
             return False, 'removal_failed'
 
         # Update user's current_org_id if it points to the org they were removed from
-        user = await UserStore.get_user_by_id_async(str(target_user_id))
+        user = await UserStore.get_user_by_id(str(target_user_id))
         if user and user.current_org_id == org_id:
             # Set current_org_id to personal workspace (org.id == user.id)
-            UserStore.update_current_org(str(target_user_id), target_user_id)
+            await UserStore.update_current_org(str(target_user_id), target_user_id)
 
         # If database removal succeeded, also remove from LiteLLM team
         try:
@@ -308,7 +308,7 @@ class OrgMemberService:
 
         # If no role change requested, return current state
         if new_role_name is None:
-            user = await UserStore.get_user_by_id_async(str(target_user_id))
+            user = await UserStore.get_user_by_id(str(target_user_id))
             return OrgMemberResponse(
                 user_id=str(target_membership.user_id),
                 email=user.email if user else None,
@@ -347,7 +347,7 @@ class OrgMemberService:
             raise MemberUpdateError('Failed to update member')
 
         # Get user email for response
-        user = await UserStore.get_user_by_id_async(str(target_user_id))
+        user = await UserStore.get_user_by_id(str(target_user_id))
 
         return OrgMemberResponse(
             user_id=str(updated_member.user_id),

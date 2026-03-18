@@ -7,14 +7,27 @@ import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
+import { cn } from "#/utils/utils";
 
 function PlannerTab() {
   const { t } = useTranslation();
-  const { scrollRef: scrollContainerRef, onChatBodyScroll } = useScrollToBottom(
-    React.useRef<HTMLDivElement>(null),
-  );
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const {
+    scrollRef: scrollContainerRef,
+    onChatBodyScroll,
+    autoScroll,
+    scrollDomToBottom,
+  } = useScrollToBottom(scrollRef);
 
-  const { planContent } = useConversationStore();
+  const { planContent, conversationMode } = useConversationStore();
+
+  // Auto-scroll to bottom when plan content changes
+  React.useEffect(() => {
+    if (autoScroll) {
+      scrollDomToBottom();
+    }
+  }, [planContent, autoScroll, scrollDomToBottom]);
+  const isPlanMode = conversationMode === "plan";
   const { handlePlanClick } = useHandlePlanClick();
 
   if (planContent !== null && planContent !== undefined) {
@@ -40,7 +53,13 @@ function PlannerTab() {
       <button
         type="button"
         onClick={handlePlanClick}
-        className="flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px] hover:cursor-pointer hover:opacity-80"
+        disabled={isPlanMode}
+        className={cn(
+          "flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px]",
+          isPlanMode
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:cursor-pointer hover:opacity-80",
+        )}
       >
         {t(I18nKey.COMMON$CREATE_A_PLAN)}
       </button>

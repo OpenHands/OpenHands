@@ -8,11 +8,13 @@ from dataclasses import dataclass
 
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
+from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
+from storage.encrypt_utils import encrypt_value
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -68,13 +70,13 @@ class SaasSettingsStore(SettingsStore):
                 return result.scalars().first()
 
     async def load(self) -> Settings | None:
-        user = await UserStore.get_user_by_id_async(self.user_id)
+        user = await UserStore.get_user_by_id(self.user_id)
         if not user:
             logger.error(f'User not found for ID {self.user_id}')
             return None
 
         org_id = user.current_org_id
-        org_member: OrgMember = None
+        org_member: OrgMember | None = None
         for om in user.org_members:
             if om.org_id == org_id:
                 org_member = om
@@ -115,6 +117,9 @@ class SaasSettingsStore(SettingsStore):
             kwargs['llm_base_url'] = org_member.llm_base_url
         if org.v1_enabled is None:
             kwargs['v1_enabled'] = True
+        # Apply default if sandbox_grouping_strategy is None in the database
+        if kwargs.get('sandbox_grouping_strategy') is None:
+            kwargs.pop('sandbox_grouping_strategy', None)
 
         settings = Settings(**kwargs)
         return settings
@@ -138,14 +143,26 @@ class SaasSettingsStore(SettingsStore):
                         self.user_id, new_session
                     )
                 if user_settings:
-                    user = await UserStore.migrate_user(self.user_id, user_settings)
+                    token_manager = TokenManager()
+                    user_info = await token_manager.get_user_info_from_user_id(
+                        self.user_id
+                    )
+                    if not user_info:
+                        logger.error(f'User info not found for ID {self.user_id}')
+                        return None
+                    user = await UserStore.migrate_user(
+                        self.user_id, user_settings, user_info
+                    )
+                    if not user:
+                        logger.error(f'Failed to migrate user {self.user_id}')
+                        return None
                 else:
                     logger.error(f'User not found for ID {self.user_id}')
                     return None
 
             org_id = user.current_org_id
 
-            org_member: OrgMember = None
+            org_member: OrgMember | None = None
             for om in user.org_members:
                 if om.org_id == org_id:
                     org_member = om
@@ -172,6 +189,42 @@ class SaasSettingsStore(SettingsStore):
                 for key, value in kwargs.items():
                     if hasattr(model, key):
                         setattr(model, key, value)
+
+            # Map Settings fields to Org fields with 'default_' prefix
+            # The generic loop above doesn't update these because Org uses
+            # 'default_llm_model' not 'llm_model', etc.
+            # Use exclude_unset to only update explicitly-set fields (allows clearing with null)
+            settings_data = item.model_dump(exclude_unset=True)
+            if 'llm_model' in settings_data:
+                org.default_llm_model = settings_data['llm_model']
+            if 'llm_base_url' in settings_data:
+                org.default_llm_base_url = settings_data['llm_base_url']
+            if 'max_iterations' in settings_data:
+                org.default_max_iterations = settings_data['max_iterations']
+
+            # Propagate LLM settings to all org members
+            # This ensures all members see the same LLM configuration when an admin saves
+            # Note: Concurrent saves by multiple admins will result in last-write-wins.
+            # Consider adding optimistic locking if this becomes a problem.
+            member_update_values: dict = {}
+            if item.llm_model is not None:
+                member_update_values['llm_model'] = item.llm_model
+            if item.llm_base_url is not None:
+                member_update_values['llm_base_url'] = item.llm_base_url
+            if item.max_iterations is not None:
+                member_update_values['max_iterations'] = item.max_iterations
+            if item.llm_api_key is not None:
+                member_update_values['_llm_api_key'] = encrypt_value(
+                    item.llm_api_key.get_secret_value()
+                )
+
+            if member_update_values:
+                stmt = (
+                    update(OrgMember)
+                    .where(OrgMember.org_id == org_id)
+                    .values(**member_update_values)
+                )
+                await session.execute(stmt)
 
             await session.commit()
 
@@ -246,7 +299,6 @@ class SaasSettingsStore(SettingsStore):
             org_id,
             openhands_type=openhands_type,
         ):
-            generated_key = None
             if openhands_type:
                 generated_key = await LiteLlmManager.generate_key(
                     self.user_id,
@@ -265,14 +317,8 @@ class SaasSettingsStore(SettingsStore):
                     None,
                 )
 
-            if generated_key:
-                item.llm_api_key = SecretStr(generated_key)
-                logger.info(
-                    'saas_settings_store:store:generated_openhands_key',
-                    extra={'user_id': self.user_id},
-                )
-            else:
-                logger.warning(
-                    'saas_settings_store:store:failed_to_generate_openhands_key',
-                    extra={'user_id': self.user_id},
-                )
+            item.llm_api_key = SecretStr(generated_key)
+            logger.info(
+                'saas_settings_store:store:generated_openhands_key',
+                extra={'user_id': self.user_id},
+            )

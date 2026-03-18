@@ -35,9 +35,9 @@ def mock_check_idp():
 
 @pytest.fixture
 def mock_user_store():
-    """Mock UserStore.get_user_by_id_async to return None by default."""
+    """Mock UserStore.get_user_by_id to return None by default."""
     with patch(
-        'server.routes.user.UserStore.get_user_by_id_async',
+        'server.routes.user.UserStore.get_user_by_id',
         new_callable=AsyncMock,
         return_value=None,
     ) as mock_fn:

@@ -169,14 +169,14 @@ async def test_exists(session_maker):
 class TestGetInstance:
     """Tests for SaasConversationStore.get_instance method.
 
-    The get_instance method uses async UserStore.get_user_by_id_async because
+    The get_instance method uses async UserStore.get_user_by_id because
     callers now use asyncio.run_coroutine_threadsafe() to dispatch to the main
     event loop where asyncpg connections work properly.
     """
 
     @pytest.mark.asyncio
     async def test_get_instance_uses_async_get_user_by_id(self):
-        """Verify get_instance calls the async get_user_by_id_async for proper event loop handling."""
+        """Verify get_instance calls the async get_user_by_id for proper event loop handling."""
         # Arrange
         user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
         mock_user = MagicMock(spec=User)
@@ -184,7 +184,7 @@ class TestGetInstance:
         mock_config = MagicMock(spec=OpenHandsConfig)
 
         with patch(
-            'storage.saas_conversation_store.UserStore.get_user_by_id_async',
+            'storage.saas_conversation_store.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ) as mock_async_get_user, patch(
             'storage.saas_conversation_store.session_maker'
@@ -205,7 +205,7 @@ class TestGetInstance:
         mock_config = MagicMock(spec=OpenHandsConfig)
 
         with patch(
-            'storage.saas_conversation_store.UserStore.get_user_by_id_async',
+            'storage.saas_conversation_store.UserStore.get_user_by_id',
             AsyncMock(return_value=None),
         ), patch('storage.saas_conversation_store.session_maker'):
             # Act

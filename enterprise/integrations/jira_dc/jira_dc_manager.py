@@ -353,7 +353,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             logger.error(f'[Jira DC] Error in is_job_requested: {str(e)}')
             return False
 
-    async def start_job(self, jira_dc_view: JiraDcViewInterface):
+    async def start_job(self, jira_dc_view: JiraDcViewInterface) -> None:
         """Start a Jira DC job/conversation."""
         # Import here to prevent circular import
         from server.conversation_callback_processor.jira_dc_callback_processor import (

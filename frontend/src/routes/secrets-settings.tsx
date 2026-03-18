@@ -12,6 +12,9 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { GetSecretsResponse } from "#/api/secrets-service.types";
 import { I18nKey } from "#/i18n/declaration";
+import { createPermissionGuard } from "#/utils/org/permission-guard";
+
+export const clientLoader = createPermissionGuard("manage_secrets");
 
 function SecretsSettingsScreen() {
   const queryClient = useQueryClient();

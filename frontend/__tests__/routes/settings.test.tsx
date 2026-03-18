@@ -1,9 +1,33 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
 import SettingsScreen, { clientLoader } from "#/routes/settings";
+import { getFirstAvailablePath } from "#/utils/settings-utils";
 import OptionService from "#/api/option-service/option-service.api";
+import { OrganizationMember } from "#/types/org";
+import { organizationService } from "#/api/organization-service/organization-service.api";
+import { MOCK_PERSONAL_ORG, MOCK_TEAM_ORG_ACME } from "#/mocks/org-handlers";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import { WebClientFeatureFlags } from "#/api/option-service/option.types";
+import { createMockWebClientConfig } from "#/mocks/settings-handlers";
+
+// Module-level mocks using vi.hoisted
+const { handleLogoutMock, mockQueryClient } = vi.hoisted(() => ({
+  handleLogoutMock: vi.fn(),
+  mockQueryClient: (() => {
+    const { QueryClient } = require("@tanstack/react-query");
+    return new QueryClient();
+  })(),
+}));
+
+vi.mock("#/hooks/use-app-logout", () => ({
+  useAppLogout: vi.fn().mockReturnValue({ handleLogout: handleLogoutMock }),
+}));
+
+vi.mock("#/query-client-config", () => ({
+  queryClient: mockQueryClient,
+}));
 
 // Mock the i18next hook
 vi.mock("react-i18next", async () => {
@@ -22,7 +46,9 @@ vi.mock("react-i18next", async () => {
           SETTINGS$NAV_SECRETS: "Secrets",
           SETTINGS$NAV_MCP: "MCP",
           SETTINGS$NAV_USER: "User",
+          SETTINGS$NAV_BILLING: "Billing",
           SETTINGS$TITLE: "Settings",
+          COMMON$LANGUAGE_MODEL_LLM: "LLM",
         };
         return translations[key] || key;
       },
@@ -34,32 +60,43 @@ vi.mock("react-i18next", async () => {
 });
 
 describe("Settings Screen", () => {
-  const { handleLogoutMock, mockQueryClient } = vi.hoisted(() => ({
-    handleLogoutMock: vi.fn(),
-    mockQueryClient: (() => {
-      const { QueryClient } = require("@tanstack/react-query");
-      return new QueryClient();
-    })(),
-  }));
+  const createMockUser = (
+    overrides: Partial<OrganizationMember> = {},
+  ): OrganizationMember => ({
+    org_id: "org-1",
+    user_id: "user-1",
+    email: "test@example.com",
+    role: "member",
+    llm_api_key: "",
+    max_iterations: 100,
+    llm_model: "gpt-4",
+    llm_api_key_for_byor: null,
+    llm_base_url: "",
+    status: "active",
+    ...overrides,
+  });
 
-  vi.mock("#/hooks/use-app-logout", () => ({
-    useAppLogout: vi.fn().mockReturnValue({ handleLogout: handleLogoutMock }),
-  }));
-
-  vi.mock("#/query-client-config", () => ({
-    queryClient: mockQueryClient,
-  }));
+  const seedActiveUser = (user: Partial<OrganizationMember>) => {
+    useSelectedOrganizationStore.setState({ organizationId: "org-1" });
+    vi.spyOn(organizationService, "getMe").mockResolvedValue(
+      createMockUser(user),
+    );
+  };
 
   const RouterStub = createRoutesStub([
     {
       Component: SettingsScreen,
       // @ts-expect-error - custom loader
-      clientLoader,
+      loader: clientLoader,
       path: "/settings",
       children: [
         {
           Component: () => <div data-testid="llm-settings-screen" />,
           path: "/settings",
+        },
+        {
+          Component: () => <div data-testid="user-settings-screen" />,
+          path: "/settings/user",
         },
         {
           Component: () => <div data-testid="git-settings-screen" />,
@@ -76,6 +113,15 @@ describe("Settings Screen", () => {
         {
           Component: () => <div data-testid="api-keys-settings-screen" />,
           path: "/settings/api-keys",
+        },
+        {
+          Component: () => <div data-testid="org-members-settings-screen" />,
+          path: "/settings/org-members",
+          handle: { hideTitle: true },
+        },
+        {
+          Component: () => <div data-testid="organization-settings-screen" />,
+          path: "/settings/org",
         },
       ],
     },
@@ -122,11 +168,21 @@ describe("Settings Screen", () => {
   });
 
   it("should render the saas navbar", async () => {
-    const saasConfig = { app_mode: "saas" };
+    const saasConfig = {
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: true,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+      },
+    };
 
     // Clear any existing query data and set the config
     mockQueryClient.clear();
     mockQueryClient.setQueryData(["web-client-config"], saasConfig);
+    seedActiveUser({ role: "admin" });
 
     const sectionsToInclude = [
       "llm", // LLM settings are now always shown in SaaS mode
@@ -142,6 +198,9 @@ describe("Settings Screen", () => {
     renderSettingsScreen();
 
     const navbar = await screen.findByTestId("settings-navbar");
+    await waitFor(() => {
+      expect(within(navbar).getByText("Billing")).toBeInTheDocument();
+    });
     sectionsToInclude.forEach((section) => {
       const sectionElement = within(navbar).getByText(section, {
         exact: false, // case insensitive
@@ -192,4 +251,826 @@ describe("Settings Screen", () => {
   });
 
   it.todo("should not be able to access oss-only routes in saas mode");
+
+  describe("Personal org vs team org visibility", () => {
+    it("should not show Organization and Organization Members settings items when personal org is selected", async () => {
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      vi.spyOn(organizationService, "getMe").mockResolvedValue({
+        org_id: "1",
+        user_id: "99",
+        email: "me@test.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      renderSettingsScreen();
+
+      const navbar = await screen.findByTestId("settings-navbar");
+
+      // Organization and Organization Members should NOT be visible for personal org
+      expect(
+        within(navbar).queryByText("Organization Members"),
+      ).not.toBeInTheDocument();
+      expect(
+        within(navbar).queryByText("Organization"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should not show Billing settings item when team org is selected", async () => {
+      // Set up SaaS mode (which has Billing in nav items)
+      mockQueryClient.clear();
+      mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
+      // Pre-select the team org in the query client and Zustand store
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
+      useSelectedOrganizationStore.setState({ organizationId: "2" });
+
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
+      vi.spyOn(organizationService, "getMe").mockResolvedValue({
+        org_id: "2",
+        user_id: "99",
+        email: "me@test.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      renderSettingsScreen();
+
+      const navbar = await screen.findByTestId("settings-navbar");
+
+      // Wait for orgs to load, then verify Billing is hidden for team orgs
+      await waitFor(() => {
+        expect(
+          within(navbar).queryByText("Billing", { exact: false }),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("should not allow direct URL access to /settings/org when personal org is selected", async () => {
+      // Set up orgs in query client so clientLoader can access them
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      // Use Zustand store instead of query client for selected org ID
+      // This is the correct pattern - the query client key ["selected_organization"] is never set in production
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      vi.spyOn(organizationService, "getMe").mockResolvedValue({
+        org_id: "1",
+        user_id: "99",
+        email: "me@test.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      renderSettingsScreen("/settings/org");
+
+      // Should redirect away from org settings for personal org
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("organization-settings-screen"),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("should not allow direct URL access to /settings/org-members when personal org is selected", async () => {
+      // Set up config and organizations in query client so clientLoader can access them
+      mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      // Use Zustand store for selected org ID
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+      // Mock getMe so getActiveOrganizationUser returns admin
+      vi.spyOn(organizationService, "getMe").mockResolvedValue(
+        createMockUser({ role: "admin", org_id: "1" }),
+      );
+
+      // Act: Call clientLoader directly with the REAL route path (as defined in routes.ts)
+      const request = new Request("http://localhost/settings/org-members");
+      // @ts-expect-error - test only needs request and params, not full loader args
+      const result = await clientLoader({ request, params: {} });
+
+      // Assert: Should redirect away from org-members settings for personal org
+      expect(result).not.toBeNull();
+      expect(result).toBeInstanceOf(Response);
+      const response = result as Response;
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe("/settings");
+    });
+
+    it("should not allow direct URL access to /settings/billing when team org is selected", async () => {
+      // Set up orgs in query client so clientLoader can access them
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
+      // Use Zustand store instead of query client for selected org ID
+      useSelectedOrganizationStore.setState({ organizationId: "2" });
+
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
+      vi.spyOn(organizationService, "getMe").mockResolvedValue({
+        org_id: "1",
+        user_id: "99",
+        email: "me@test.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      renderSettingsScreen("/settings/billing");
+
+      // Should redirect away from billing settings for team org
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("billing-settings-screen"),
+        ).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("enable_billing feature flag", () => {
+    it("should show billing navigation item when enable_billing is true", async () => {
+      // Arrange
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      getConfigSpy.mockResolvedValue(
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            enable_billing: true, // When enable_billing is true, billing nav is shown
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+          },
+        }),
+      );
+
+      mockQueryClient.clear();
+      // Set up personal org (billing is only shown for personal orgs, not team orgs)
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      vi.spyOn(organizationService, "getMe").mockResolvedValue({
+        org_id: "1",
+        user_id: "99",
+        email: "me@test.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      // Act
+      renderSettingsScreen();
+
+      // Assert
+      const navbar = await screen.findByTestId("settings-navbar");
+      await waitFor(() => {
+        expect(within(navbar).getByText("Billing")).toBeInTheDocument();
+      });
+
+      getConfigSpy.mockRestore();
+    });
+
+    it("should hide billing navigation item when enable_billing is false", async () => {
+      // Arrange
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      getConfigSpy.mockResolvedValue(
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            enable_billing: false, // When enable_billing is false, billing nav is hidden
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+          },
+        }),
+      );
+
+      mockQueryClient.clear();
+
+      // Act
+      renderSettingsScreen();
+
+      // Assert
+      const navbar = await screen.findByTestId("settings-navbar");
+      expect(within(navbar).queryByText("Billing")).not.toBeInTheDocument();
+
+      getConfigSpy.mockRestore();
+    });
+  });
+
+  describe("clientLoader reads org ID from Zustand store", () => {
+    beforeEach(() => {
+      mockQueryClient.clear();
+      useSelectedOrganizationStore.setState({ organizationId: null });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("should redirect away from /settings/org when personal org is selected in Zustand store", async () => {
+      // Arrange: Set up config and organizations in query client
+      mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+
+      // Set org ID ONLY in Zustand store (not in query client)
+      // This tests that clientLoader reads from the correct source
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+      // Mock getMe so getActiveOrganizationUser returns admin
+      vi.spyOn(organizationService, "getMe").mockResolvedValue(
+        createMockUser({ role: "admin", org_id: "1" }),
+      );
+
+      // Act: Call clientLoader directly
+      const request = new Request("http://localhost/settings/org");
+      // @ts-expect-error - test only needs request and params, not full loader args
+      const result = await clientLoader({ request, params: {} });
+
+      // Assert: Should redirect away from org settings for personal org
+      expect(result).not.toBeNull();
+      // In React Router, redirect returns a Response object
+      expect(result).toBeInstanceOf(Response);
+      const response = result as Response;
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe("/settings");
+    });
+
+    it("should redirect away from /settings/billing when team org is selected in Zustand store", async () => {
+      // Arrange: Set up config and organizations in query client
+      mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
+
+      // Set org ID ONLY in Zustand store (not in query client)
+      useSelectedOrganizationStore.setState({ organizationId: "2" });
+
+      // Mock getMe so getActiveOrganizationUser returns admin
+      vi.spyOn(organizationService, "getMe").mockResolvedValue(
+        createMockUser({ role: "admin", org_id: "2" }),
+      );
+
+      // Act: Call clientLoader directly
+      const request = new Request("http://localhost/settings/billing");
+      // @ts-expect-error - test only needs request and params, not full loader args
+      const result = await clientLoader({ request, params: {} });
+
+      // Assert: Should redirect away from billing settings for team org
+      expect(result).not.toBeNull();
+      expect(result).toBeInstanceOf(Response);
+      const response = result as Response;
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe("/settings/user");
+    });
+  });
+
+  describe("hide page feature flags", () => {
+    beforeEach(() => {
+      // Set up as personal org admin so billing is accessible
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+      vi.spyOn(organizationService, "getMe").mockResolvedValue({
+        org_id: "1",
+        user_id: "99",
+        email: "me@test.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+    });
+
+    it("should hide users page in navbar when hide_users_page is true", async () => {
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true, // Enable billing so it's not hidden by isBillingHidden
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+          hide_users_page: true,
+          hide_billing_page: false,
+          hide_integrations_page: false,
+        },
+      };
+
+      mockQueryClient.clear();
+      mockQueryClient.setQueryData(["web-client-config"], saasConfig);
+      // Set up personal org so billing is visible
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+      // Pre-populate user data in cache so useMe() returns admin role immediately
+      mockQueryClient.setQueryData(["organizations", "1", "me"], createMockUser({ role: "admin", org_id: "1" }));
+
+      renderSettingsScreen();
+
+      const navbar = await screen.findByTestId("settings-navbar");
+      expect(
+        within(navbar).queryByText("User", { exact: false }),
+      ).not.toBeInTheDocument();
+      // Other pages should still be visible
+      expect(
+        within(navbar).getByText("Integrations", { exact: false }),
+      ).toBeInTheDocument();
+      expect(
+        within(navbar).getByText("Billing", { exact: false }),
+      ).toBeInTheDocument();
+    });
+
+    it("should hide billing page in navbar when hide_billing_page is true", async () => {
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+          hide_users_page: false,
+          hide_billing_page: true,
+          hide_integrations_page: false,
+        },
+      };
+
+      mockQueryClient.clear();
+      mockQueryClient.setQueryData(["web-client-config"], saasConfig);
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+      renderSettingsScreen();
+
+      const navbar = await screen.findByTestId("settings-navbar");
+      expect(
+        within(navbar).queryByText("Billing", { exact: false }),
+      ).not.toBeInTheDocument();
+      // Other pages should still be visible
+      expect(
+        within(navbar).getByText("User", { exact: false }),
+      ).toBeInTheDocument();
+      expect(
+        within(navbar).getByText("Integrations", { exact: false }),
+      ).toBeInTheDocument();
+    });
+
+    it("should hide integrations page in navbar when hide_integrations_page is true", async () => {
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+          hide_users_page: false,
+          hide_billing_page: false,
+          hide_integrations_page: true,
+        },
+      };
+
+      mockQueryClient.clear();
+      mockQueryClient.setQueryData(["web-client-config"], saasConfig);
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+      // Pre-populate user data in cache so useMe() returns admin role immediately
+      mockQueryClient.setQueryData(["organizations", "1", "me"], createMockUser({ role: "admin", org_id: "1" }));
+
+      renderSettingsScreen();
+
+      const navbar = await screen.findByTestId("settings-navbar");
+      expect(
+        within(navbar).queryByText("Integrations", { exact: false }),
+      ).not.toBeInTheDocument();
+      // Other pages should still be visible
+      expect(
+        within(navbar).getByText("User", { exact: false }),
+      ).toBeInTheDocument();
+      expect(
+        within(navbar).getByText("Billing", { exact: false }),
+      ).toBeInTheDocument();
+    });
+
+    it("should hide multiple pages when multiple flags are true", async () => {
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+          hide_users_page: true,
+          hide_billing_page: true,
+          hide_integrations_page: true,
+        },
+      };
+
+      mockQueryClient.clear();
+      mockQueryClient.setQueryData(["web-client-config"], saasConfig);
+
+      renderSettingsScreen();
+
+      const navbar = await screen.findByTestId("settings-navbar");
+      expect(
+        within(navbar).queryByText("User", { exact: false }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(navbar).queryByText("Billing", { exact: false }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(navbar).queryByText("Integrations", { exact: false }),
+      ).not.toBeInTheDocument();
+      // Other pages should still be visible
+      expect(
+        within(navbar).getByText("Application", { exact: false }),
+      ).toBeInTheDocument();
+      expect(
+        within(navbar).getByText("LLM", { exact: false }),
+      ).toBeInTheDocument();
+    });
+
+    it("should hide integrations page in OSS mode when hide_integrations_page is true", async () => {
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+          hide_users_page: false,
+          hide_billing_page: false,
+          hide_integrations_page: true,
+        },
+      };
+
+      mockQueryClient.clear();
+      mockQueryClient.setQueryData(["web-client-config"], ossConfig);
+
+      renderSettingsScreen();
+
+      const navbar = await screen.findByTestId("settings-navbar");
+      expect(
+        within(navbar).queryByText("Integrations", { exact: false }),
+      ).not.toBeInTheDocument();
+      // Other OSS pages should still be visible
+      expect(
+        within(navbar).getByText("LLM", { exact: false }),
+      ).toBeInTheDocument();
+      expect(
+        within(navbar).getByText("Application", { exact: false }),
+      ).toBeInTheDocument();
+    });
+  });
+});
+
+describe("getFirstAvailablePath", () => {
+  const baseFeatureFlags: WebClientFeatureFlags = {
+    enable_billing: false,
+    hide_llm_settings: false,
+    enable_jira: false,
+    enable_jira_dc: false,
+    enable_linear: false,
+    hide_users_page: false,
+    hide_billing_page: false,
+    hide_integrations_page: false,
+  };
+
+  describe("SaaS mode", () => {
+    it("should return /settings/user when no pages are hidden", () => {
+      const result = getFirstAvailablePath(true, baseFeatureFlags);
+      expect(result).toBe("/settings/user");
+    });
+
+    it("should return /settings/integrations when users page is hidden", () => {
+      const flags = { ...baseFeatureFlags, hide_users_page: true };
+      const result = getFirstAvailablePath(true, flags);
+      expect(result).toBe("/settings/integrations");
+    });
+
+    it("should return /settings/app when users and integrations are hidden", () => {
+      const flags = {
+        ...baseFeatureFlags,
+        hide_users_page: true,
+        hide_integrations_page: true,
+      };
+      const result = getFirstAvailablePath(true, flags);
+      expect(result).toBe("/settings/app");
+    });
+
+    it("should return /settings/app when users, integrations, and LLM settings are hidden", () => {
+      const flags = {
+        ...baseFeatureFlags,
+        hide_users_page: true,
+        hide_integrations_page: true,
+        hide_llm_settings: true,
+      };
+      const result = getFirstAvailablePath(true, flags);
+      expect(result).toBe("/settings/app");
+    });
+
+    it("should return /settings/app when users, integrations, LLM, and billing are hidden", () => {
+      const flags = {
+        ...baseFeatureFlags,
+        hide_users_page: true,
+        hide_integrations_page: true,
+        hide_llm_settings: true,
+        hide_billing_page: true,
+      };
+      // /settings/app is never hidden, so it should return that
+      const result = getFirstAvailablePath(true, flags);
+      expect(result).toBe("/settings/app");
+    });
+
+    it("should handle undefined feature flags", () => {
+      const result = getFirstAvailablePath(true, undefined);
+      expect(result).toBe("/settings/user");
+    });
+  });
+
+  describe("OSS mode", () => {
+    it("should return /settings when no pages are hidden", () => {
+      const result = getFirstAvailablePath(false, baseFeatureFlags);
+      expect(result).toBe("/settings");
+    });
+
+    it("should return /settings/mcp when LLM settings is hidden", () => {
+      const flags = { ...baseFeatureFlags, hide_llm_settings: true };
+      const result = getFirstAvailablePath(false, flags);
+      expect(result).toBe("/settings/mcp");
+    });
+
+    it("should return /settings/mcp when LLM settings and integrations are hidden", () => {
+      const flags = {
+        ...baseFeatureFlags,
+        hide_llm_settings: true,
+        hide_integrations_page: true,
+      };
+      const result = getFirstAvailablePath(false, flags);
+      expect(result).toBe("/settings/mcp");
+    });
+
+    it("should handle undefined feature flags", () => {
+      const result = getFirstAvailablePath(false, undefined);
+      expect(result).toBe("/settings");
+    });
+  });
+});
+
+describe("clientLoader redirect behavior", () => {
+  const createMockRequest = (pathname: string) => ({
+    request: new Request(`http://localhost${pathname}`),
+  });
+
+  beforeEach(() => {
+    mockQueryClient.clear();
+  });
+
+  it("should redirect from /settings/user to first available page when hide_users_page is true", async () => {
+    const config = {
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+        hide_users_page: true,
+        hide_billing_page: false,
+        hide_integrations_page: false,
+      },
+    };
+    mockQueryClient.setQueryData(["web-client-config"], config);
+
+    const result = await clientLoader(
+      createMockRequest("/settings/user") as any,
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.status).toBe(302);
+    expect(result?.headers.get("Location")).toBe("/settings/integrations");
+  });
+
+  it("should redirect from /settings/billing to first available page when hide_billing_page is true", async () => {
+    const config = {
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: true,
+        hide_integrations_page: false,
+      },
+    };
+    mockQueryClient.setQueryData(["web-client-config"], config);
+
+    const result = await clientLoader(
+      createMockRequest("/settings/billing") as any,
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.status).toBe(302);
+    expect(result?.headers.get("Location")).toBe("/settings/user");
+  });
+
+  it("should redirect from /settings/integrations to first available page when hide_integrations_page is true", async () => {
+    const config = {
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: true,
+      },
+    };
+    mockQueryClient.setQueryData(["web-client-config"], config);
+
+    const result = await clientLoader(
+      createMockRequest("/settings/integrations") as any,
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.status).toBe(302);
+    expect(result?.headers.get("Location")).toBe("/settings/user");
+  });
+
+  it("should redirect from /settings to /settings/app when LLM, users, and integrations are all hidden", async () => {
+    const config = {
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: true,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+        hide_users_page: true,
+        hide_billing_page: false,
+        hide_integrations_page: true,
+      },
+    };
+    mockQueryClient.setQueryData(["web-client-config"], config);
+
+    const result = await clientLoader(createMockRequest("/settings") as any);
+
+    expect(result).toBeDefined();
+    expect(result?.status).toBe(302);
+    expect(result?.headers.get("Location")).toBe("/settings/app");
+  });
+
+  it("should redirect from /settings to /settings/mcp in OSS mode when LLM settings is hidden", async () => {
+    const config = {
+      app_mode: "oss",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: true,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
+      },
+    };
+    mockQueryClient.setQueryData(["web-client-config"], config);
+
+    const result = await clientLoader(createMockRequest("/settings") as any);
+
+    expect(result).toBeDefined();
+    expect(result?.status).toBe(302);
+    expect(result?.headers.get("Location")).toBe("/settings/mcp");
+  });
+
+  it("should not redirect when accessing a non-hidden page", async () => {
+    const config = {
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+        hide_users_page: true,
+        hide_billing_page: true,
+        hide_integrations_page: true,
+      },
+    };
+    mockQueryClient.setQueryData(["web-client-config"], config);
+
+    // /settings/app is never hidden
+    const result = await clientLoader(
+      createMockRequest("/settings/app") as any,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("should redirect from /settings/integrations in OSS mode when hide_integrations_page is true", async () => {
+    const config = {
+      app_mode: "oss",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: true,
+      },
+    };
+    mockQueryClient.setQueryData(["web-client-config"], config);
+
+    const result = await clientLoader(
+      createMockRequest("/settings/integrations") as any,
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.status).toBe(302);
+    // In OSS mode, first available is /settings (LLM)
+    expect(result?.headers.get("Location")).toBe("/settings");
+  });
 });

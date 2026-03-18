@@ -24,7 +24,7 @@ class SaasSecretsStore(SecretsStore):
     async def load(self) -> Secrets | None:
         if not self.user_id:
             return None
-        user = await UserStore.get_user_by_id_async(self.user_id)
+        user = await UserStore.get_user_by_id(self.user_id)
         org_id = user.current_org_id if user else None
 
         async with a_session_maker() as session:
@@ -52,7 +52,7 @@ class SaasSecretsStore(SecretsStore):
             return Secrets(custom_secrets=kwargs)  # type: ignore[arg-type]
 
     async def store(self, item: Secrets):
-        user = await UserStore.get_user_by_id_async(self.user_id)
+        user = await UserStore.get_user_by_id(self.user_id)
         if user is None:
             raise ValueError(f'User not found: {self.user_id}')
         org_id = user.current_org_id
@@ -133,9 +133,7 @@ class SaasSecretsStore(SecretsStore):
     async def get_instance(
         cls,
         config: OpenHandsConfig,
-        user_id: str | None,
+        user_id: str,  # type: ignore[override]
     ) -> SaasSecretsStore:
-        if not user_id:
-            raise Exception('SaasSecretsStore cannot be constructed with no user_id')
         logger.debug(f'saas_secrets_store.get_instance::{user_id}')
         return SaasSecretsStore(user_id, config)

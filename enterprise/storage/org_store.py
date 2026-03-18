@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import UUID
 
 from server.constants import (
+    DEFAULT_V1_ENABLED,
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
@@ -36,6 +37,8 @@ class OrgStore:
             org = Org(**kwargs)
             org.org_version = ORG_SETTINGS_VERSION
             org.default_llm_model = get_default_litellm_model()
+            if org.v1_enabled is None:
+                org.v1_enabled = DEFAULT_V1_ENABLED
             session.add(org)
             await session.commit()
             await session.refresh(org)
@@ -292,7 +295,7 @@ class OrgStore:
                     text("""
                     DELETE FROM app_conversation_start_task
                     WHERE app_conversation_id IN (
-                        SELECT conversation_id FROM conversation_metadata_saas WHERE org_id = :org_id
+                        SELECT conversation_id::uuid FROM conversation_metadata_saas WHERE org_id = :org_id
                     )
                     """),
                     {'org_id': str(org_id)},
@@ -352,13 +355,13 @@ class OrgStore:
                 # Batch update: reassign current_org_id to an alternative org for all affected users
                 await session.execute(
                     text("""
-                        UPDATE user
+                        UPDATE "user"
                         SET current_org_id = (
                             SELECT om.org_id FROM org_member om
-                            WHERE om.user_id = user.id AND om.org_id != :org_id
+                            WHERE om.user_id = "user".id AND om.org_id != :org_id
                             LIMIT 1
                         )
-                        WHERE user.current_org_id = :org_id
+                        WHERE "user".current_org_id = :org_id
                     """),
                     {'org_id': str(org_id)},
                 )

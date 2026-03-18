@@ -56,7 +56,29 @@ def test_generate_api_key(api_key_store):
 
 
 @pytest.mark.asyncio
-@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+async def test_create_api_key_strips_timezone_from_expires_at(
+    mock_get_user, api_key_store, async_session_maker, mock_user
+):
+    """Timezone-aware expires_at must be stored as naive UTC without shifting the value."""
+    user_id = str(uuid.uuid4())
+    aware_expiry = datetime.now(UTC) + timedelta(days=30)
+    mock_get_user.return_value = mock_user
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        key = await api_key_store.create_api_key(user_id, expires_at=aware_expiry)
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(ApiKey).filter(ApiKey.key == key))
+        record = result.scalars().first()
+
+    assert record.expires_at is not None
+    assert record.expires_at.tzinfo is None
+    assert record.expires_at == aware_expiry.replace(tzinfo=None)
+
+
+@pytest.mark.asyncio
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_create_api_key(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):
@@ -324,7 +346,7 @@ async def test_delete_api_key_by_id(api_key_store, async_session_maker):
 
 
 @pytest.mark.asyncio
-@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_list_api_keys(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):
@@ -377,7 +399,7 @@ async def test_list_api_keys(
 
 
 @pytest.mark.asyncio
-@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_retrieve_mcp_api_key(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):
@@ -416,7 +438,7 @@ async def test_retrieve_mcp_api_key(
 
 
 @pytest.mark.asyncio
-@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_retrieve_mcp_api_key_not_found(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):

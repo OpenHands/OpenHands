@@ -10,16 +10,22 @@ export const VERIFIED_PROVIDERS = [
 export const VERIFIED_MODELS = [
   "claude-opus-4-6",
   "claude-opus-4-5-20251101",
+  "claude-sonnet-4-6",
   "claude-sonnet-4-5-20250929",
   "gpt-5.2-codex",
   "gpt-5.2",
   "minimax-m2.5",
   "gemini-3-pro-preview",
+  "gemini-3.1-pro-preview",
   "gemini-3-flash-preview",
   "deepseek-chat",
   "devstral-medium-2512",
   "kimi-k2-0711-preview",
+  "kimi-k2.5",
   "qwen3-coder-480b",
+  "qwen3-coder-next",
+  "glm-4.7",
+  "glm-5",
 ];
 
 // LiteLLM does not return OpenAI models with the provider, so we list them here to set them ourselves for consistency
@@ -54,15 +60,21 @@ export const VERIFIED_MISTRAL_MODELS = ["devstral-medium-2512"];
 export const VERIFIED_OPENHANDS_MODELS = [
   "claude-opus-4-6",
   "claude-opus-4-5-20251101",
+  "claude-sonnet-4-6",
   "claude-sonnet-4-5-20250929",
   "gpt-5.2-codex",
   "gpt-5.2",
   "minimax-m2.5",
   "gemini-3-pro-preview",
+  "gemini-3.1-pro-preview",
   "gemini-3-flash-preview",
   "devstral-medium-2512",
   "kimi-k2-0711-preview",
+  "kimi-k2.5",
   "qwen3-coder-480b",
+  "qwen3-coder-next",
+  "glm-4.7",
+  "glm-5",
 ];
 
 // Default model for OpenHands provider
