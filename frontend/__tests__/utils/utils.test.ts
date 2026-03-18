@@ -69,7 +69,7 @@ describe("getStatusText", () => {
       t,
     });
 
-    expect(result).toBe(t(I18nKey.COMMON$WAITING_FOR_SANDBOX));
+    expect(result).toBe("Waiting for sandbox");
   });
 
   it("returns task detail when task status is ERROR and detail exists", () => {
