@@ -58,16 +58,16 @@ const terminalObservationEvent: ObservationEvent = {
 };
 
 describe("getEventContent", () => {
-  it("uses the action summary as the action title", () => {
+  it("uses the action summary as the full action title", () => {
     const { title } = getEventContent(terminalActionEvent);
 
     render(<>{title}</>);
 
     expect(screen.getByText("Check repository status")).toBeInTheDocument();
-    expect(screen.getByText("$ git status")).toBeInTheDocument();
+    expect(screen.queryByText("$ git status")).not.toBeInTheDocument();
   });
 
-  it("reuses the action summary when rendering the paired observation", () => {
+  it("reuses the action summary as the full paired observation title", () => {
     const { title } = getEventContent(
       terminalObservationEvent,
       terminalActionEvent,
@@ -76,6 +76,6 @@ describe("getEventContent", () => {
     render(<>{title}</>);
 
     expect(screen.getByText("Check repository status")).toBeInTheDocument();
-    expect(screen.getByText("$ git status")).toBeInTheDocument();
+    expect(screen.queryByText("$ git status")).not.toBeInTheDocument();
   });
 });

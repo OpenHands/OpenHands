@@ -40,51 +40,13 @@ const createTitleFromKey = (
 const cleanSummary = (summary?: string | null): string =>
   summary?.trim().replace(/\s+/g, " ") || "";
 
-const createSummaryTitle = (
-  summary: string,
-  detail?: React.ReactNode,
-): React.ReactNode => (
-  <>
-    <span>{summary}</span>
-    {detail ? (
-      <span className="font-normal text-neutral-400">: {detail}</span>
-    ) : null}
-  </>
-);
+const createSummaryTitle = (summary: string): React.ReactNode => summary;
 
 const getSummaryTitleForActionEvent = (
   event: ActionEvent,
 ): React.ReactNode | null => {
   const summary = cleanSummary(event.summary);
-  if (!summary) {
-    return null;
-  }
-
-  switch (event.action.kind) {
-    case "ExecuteBashAction":
-    case "TerminalAction": {
-      const command = trimText(event.action.command, 80);
-      if (!command) {
-        return createSummaryTitle(summary);
-      }
-      return createSummaryTitle(
-        summary,
-        <span className="font-mono">$ {command}</span>,
-      );
-    }
-    case "FileEditorAction":
-    case "StrReplaceEditorAction": {
-      const operation = event.action.command === "view" ? "Reading" : "Editing";
-      return createSummaryTitle(
-        summary,
-        <>
-          {operation} <span className="font-mono">{event.action.path}</span>
-        </>,
-      );
-    }
-    default:
-      return createSummaryTitle(summary);
-  }
+  return summary ? createSummaryTitle(summary) : null;
 };
 
 // Action Event Processing
