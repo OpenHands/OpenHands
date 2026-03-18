@@ -11,6 +11,13 @@ import { GitRepository } from "#/types/git";
 import { RepoConnector } from "#/components/features/home/repo-connector";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 const renderRepoConnector = () => {
   const mockRepoSelection = vi.fn();
   const RouterStub = createRoutesStub([

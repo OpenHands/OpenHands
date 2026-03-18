@@ -8,6 +8,13 @@ import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(),
 }));

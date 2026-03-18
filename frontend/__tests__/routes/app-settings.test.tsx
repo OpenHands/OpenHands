@@ -9,6 +9,13 @@ import { AvailableLanguages } from "#/i18n";
 import * as CaptureConsent from "#/utils/handle-capture-consent";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 const renderAppSettingsScreen = () =>
   render(<AppSettingsScreen />, {
     wrapper: ({ children }) => (

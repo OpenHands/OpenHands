@@ -5,6 +5,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import SettingsService from "#/api/settings-service/settings-service.api";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 describe("AnalyticsConsentFormModal", () => {
   it("should call saveUserSettings with consent", async () => {
     const user = userEvent.setup();

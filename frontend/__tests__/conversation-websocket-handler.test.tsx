@@ -41,6 +41,14 @@ import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV1Event } from "#/types/v1/type-guards";
 
+// Mock useSelectedOrganizationId to avoid data router dependency
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 // Mock useUserConversation to return V1 conversation data
 vi.mock("#/hooks/query/use-user-conversation", () => ({
   useUserConversation: vi.fn(() => ({

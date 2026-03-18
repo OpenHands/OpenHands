@@ -8,6 +8,13 @@ import {
   useWsClient,
 } from "#/context/ws-client-provider";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 describe("Propagate error message", () => {
   it("should do nothing when no message was passed from server", () => {
     updateStatusWhenErrorMessagePresent(null);

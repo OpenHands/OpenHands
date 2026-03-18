@@ -4,6 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 describe("useSaveSettings", () => {
   it("should send an empty string for llm_api_key if an empty string is passed, otherwise undefined", async () => {
     const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");

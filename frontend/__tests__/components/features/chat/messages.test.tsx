@@ -11,6 +11,13 @@ import { OpenHandsObservation } from "#/types/core/observations";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { Conversation } from "#/api/open-hands.types";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 vi.mock("react-router", () => ({
   useParams: () => ({ conversationId: "123" }),
 }));

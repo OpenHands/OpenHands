@@ -6,6 +6,13 @@ import AcceptTOS from "#/routes/accept-tos";
 import * as CaptureConsent from "#/utils/handle-capture-consent";
 import { openHands } from "#/api/open-hands-axios";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 // Mock the react-router hooks
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),

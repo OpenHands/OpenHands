@@ -11,6 +11,13 @@ import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { WebClientConfig } from "#/api/option-service/option.types";
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({
+    organizationId: "test-org-id",
+    setOrganizationId: vi.fn(),
+  }),
+}));
+
 // Helper to create mock config with sensible defaults
 const createMockConfig = (
   overrides: Omit<Partial<WebClientConfig>, "feature_flags"> & {
