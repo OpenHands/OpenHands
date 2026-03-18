@@ -31,6 +31,8 @@ class LocalFileStore(FileStore):
         try:
             with open(temp_path, mode) as f:
                 f.write(contents)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(temp_path, full_path)
         except Exception:
             if os.path.exists(temp_path):
