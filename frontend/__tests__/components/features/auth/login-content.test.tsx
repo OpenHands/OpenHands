@@ -15,6 +15,7 @@ vi.mock("#/hooks/use-auth-url", () => ({
       bitbucket: "https://bitbucket.org/site/oauth2/authorize",
       bitbucket_data_center:
         "https://bitbucket-dc.example.com/site/oauth2/authorize",
+      enterprise_sso: "https://auth.example.com/realms/test/protocol/openid-connect/auth",
     };
     if (config.appMode === "saas") {
       return urls[config.identityProvider] || null;
@@ -48,9 +49,17 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+// Mock feature flags - we'll control the return value in each test
+const mockEnableProjUserJourney = vi.fn(() => true);
+vi.mock("#/utils/feature-flags", () => ({
+  ENABLE_PROJ_USER_JOURNEY: () => mockEnableProjUserJourney(),
+}));
+
 describe("LoginContent", () => {
   beforeEach(() => {
     vi.stubGlobal("location", { href: "" });
+    // Reset mock to return true by default
+    mockEnableProjUserJourney.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -115,6 +124,74 @@ describe("LoginContent", () => {
     expect(
       screen.queryByRole("button", { name: "GITLAB$CONNECT_TO_GITLAB" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("should display Enterprise SSO button when configured", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          authUrl="https://auth.example.com"
+          providersConfigured={["enterprise_sso"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /ENTERPRISE_SSO\$CONNECT_TO_ENTERPRISE_SSO/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("should display Enterprise SSO alongside other providers when all configured", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          authUrl="https://auth.example.com"
+          providersConfigured={["github", "gitlab", "bitbucket", "enterprise_sso"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "GITLAB$CONNECT_TO_GITLAB" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /BITBUCKET\$CONNECT_TO_BITBUCKET/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /ENTERPRISE_SSO\$CONNECT_TO_ENTERPRISE_SSO/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("should redirect to Enterprise SSO auth URL when Enterprise SSO button is clicked", async () => {
+    const user = userEvent.setup();
+    const mockUrl = "https://auth.example.com/realms/test/protocol/openid-connect/auth";
+
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          authUrl="https://auth.example.com"
+          providersConfigured={["enterprise_sso"]}
+        />
+      </MemoryRouter>,
+    );
+
+    const enterpriseSsoButton = screen.getByRole("button", {
+      name: /ENTERPRISE_SSO\$CONNECT_TO_ENTERPRISE_SSO/i,
+    });
+    await user.click(enterpriseSsoButton);
+
+    await waitFor(() => {
+      expect(window.location.href).toContain(mockUrl);
+    });
   });
 
   it("should display message when no providers are configured", () => {
@@ -203,6 +280,65 @@ describe("LoginContent", () => {
     );
 
     expect(screen.getByTestId("terms-and-privacy-notice")).toBeInTheDocument();
+  });
+
+  it("should display the enterprise LoginCTA component when appMode is saas and feature flag enabled", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("login-cta")).toBeInTheDocument();
+  });
+
+  it("should not display the enterprise LoginCTA component when appMode is oss even with feature flag enabled", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="oss"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
+  });
+
+  it("should not display the enterprise LoginCTA component when appMode is null", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode={null}
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
+  });
+
+  it("should not display the enterprise LoginCTA component when feature flag is disabled", () => {
+    // Disable the feature flag
+    mockEnableProjUserJourney.mockReturnValue(false);
+
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
   });
 
   it("should display invitation pending message when hasInvitation is true", () => {

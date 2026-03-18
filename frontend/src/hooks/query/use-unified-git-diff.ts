@@ -32,7 +32,7 @@ export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
   const absoluteFilePath = React.useMemo(() => {
     if (!isV1Conversation) return config.filePath;
 
-    const gitPath = getGitPath(selectedRepository);
+    const gitPath = getGitPath(conversationId, selectedRepository);
     return `${gitPath}/${config.filePath}`;
   }, [isV1Conversation, selectedRepository, config.filePath]);
 

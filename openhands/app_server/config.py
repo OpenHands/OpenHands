@@ -33,6 +33,10 @@ from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
     EventCallbackServiceInjector,
 )
+from openhands.app_server.pending_messages.pending_message_service import (
+    PendingMessageService,
+    PendingMessageServiceInjector,
+)
 from openhands.app_server.sandbox.sandbox_service import (
     SandboxService,
     SandboxServiceInjector,
@@ -56,6 +60,7 @@ from openhands.app_server.web_client.web_client_config_injector import (
 )
 from openhands.sdk.utils.models import OpenHandsModel
 from openhands.server.types import AppMode
+from openhands.utils.environment import StorageProvider, get_storage_provider
 
 
 def get_default_persistence_dir() -> Path:
@@ -113,6 +118,7 @@ class AppServerConfig(OpenHandsModel):
     app_conversation_info: AppConversationInfoServiceInjector | None = None
     app_conversation_start_task: AppConversationStartTaskServiceInjector | None = None
     app_conversation: AppConversationServiceInjector | None = None
+    pending_message: PendingMessageServiceInjector | None = None
     user: UserContextInjector | None = None
     jwt: JwtServiceInjector | None = None
     httpx: HttpxClientInjector = Field(default_factory=HttpxClientInjector)
@@ -139,6 +145,9 @@ def config_from_env() -> AppServerConfig:
     )
     from openhands.app_server.app_conversation.sql_app_conversation_start_task_service import (  # noqa: E501
         SQLAppConversationStartTaskServiceInjector,
+    )
+    from openhands.app_server.event.aws_event_service import (
+        AwsEventServiceInjector,
     )
     from openhands.app_server.event.filesystem_event_service import (
         FilesystemEventServiceInjector,
@@ -174,8 +183,18 @@ def config_from_env() -> AppServerConfig:
     config: AppServerConfig = from_env(AppServerConfig, 'OH')  # type: ignore
 
     if config.event is None:
-        if os.environ.get('FILE_STORE') == 'google_cloud':
-            # Legacy V0 google cloud storage configuration
+        provider = get_storage_provider()
+
+        if provider == StorageProvider.AWS:
+            # AWS S3 storage configuration
+            bucket_name = os.environ.get('FILE_STORE_PATH')
+            if not bucket_name:
+                raise ValueError(
+                    'FILE_STORE_PATH environment variable is required for S3 storage'
+                )
+            config.event = AwsEventServiceInjector(bucket_name=bucket_name)
+        elif provider == StorageProvider.GCP:
+            # Google Cloud storage configuration
             config.event = GoogleCloudEventServiceInjector(
                 bucket_name=os.environ.get('FILE_STORE_PATH')
             )
@@ -266,6 +285,13 @@ def config_from_env() -> AppServerConfig:
             tavily_api_key=tavily_api_key
         )
 
+    if config.pending_message is None:
+        from openhands.app_server.pending_messages.pending_message_service import (
+            SQLPendingMessageServiceInjector,
+        )
+
+        config.pending_message = SQLPendingMessageServiceInjector()
+
     if config.user is None:
         config.user = AuthUserContextInjector()
 
@@ -344,6 +370,14 @@ def get_app_conversation_service(
     return injector.context(state, request)
 
 
+def get_pending_message_service(
+    state: InjectorState, request: Request | None = None
+) -> AsyncContextManager[PendingMessageService]:
+    injector = get_global_config().pending_message
+    assert injector is not None
+    return injector.context(state, request)
+
+
 def get_user_context(
     state: InjectorState, request: Request | None = None
 ) -> AsyncContextManager[UserContext]:
@@ -415,6 +449,12 @@ def depends_app_conversation_start_task_service():
 
 def depends_app_conversation_service():
     injector = get_global_config().app_conversation
+    assert injector is not None
+    return Depends(injector.depends)
+
+
+def depends_pending_message_service():
+    injector = get_global_config().pending_message
     assert injector is not None
     return Depends(injector.depends)
 

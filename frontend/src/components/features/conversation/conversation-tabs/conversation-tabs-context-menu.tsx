@@ -13,6 +13,8 @@ import VSCodeIcon from "#/icons/vscode.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import DoubleCheckIcon from "#/icons/double-check.svg?react";
+import { useTaskList } from "#/hooks/use-task-list";
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -29,6 +31,8 @@ export function ConversationTabsContextMenu({
   const { state, setUnpinnedTabs } =
     useConversationLocalStorageState(conversationId);
 
+  const { hasTaskList } = useTaskList();
+
   const tabConfig = [
     {
       tab: "planner",
@@ -41,6 +45,14 @@ export function ConversationTabsContextMenu({
     { tab: "served", icon: ServerIcon, i18nKey: I18nKey.COMMON$APP },
     { tab: "browser", icon: GlobeIcon, i18nKey: I18nKey.COMMON$BROWSER },
   ];
+
+  if (hasTaskList) {
+    tabConfig.unshift({
+      tab: "tasklist",
+      icon: DoubleCheckIcon,
+      i18nKey: I18nKey.COMMON$TASK_LIST,
+    });
+  }
 
   if (!isOpen) return null;
 
