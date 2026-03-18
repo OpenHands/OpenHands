@@ -533,7 +533,6 @@ class TestGetCurrentApiKey:
         org_id = uuid.uuid4()
         mock_request = MagicMock()
 
-        # Use real SaasUserAuth instance for proper isinstance check
         user_auth = SaasUserAuth(
             refresh_token=SecretStr('mock-token'),
             user_id=user_id,
@@ -582,7 +581,6 @@ class TestGetCurrentApiKey:
         user_id = 'user-123'
         mock_request = MagicMock()
 
-        # Use real SaasUserAuth instance for proper isinstance check
         user_auth = SaasUserAuth(
             refresh_token=SecretStr('mock-token'),
             user_id=user_id,

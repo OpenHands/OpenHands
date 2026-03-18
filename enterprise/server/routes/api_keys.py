@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
@@ -296,25 +297,21 @@ async def get_current_api_key(
             detail='This endpoint requires API key authentication. Not available for cookie-based auth.',
         )
 
-    # Type narrow to SaasUserAuth for proper type safety
-    if not isinstance(user_auth, SaasUserAuth):
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Unexpected auth type for API key authentication',
-        )
+    # In SaaS context, bearer auth always produces SaasUserAuth
+    saas_user_auth = cast(SaasUserAuth, user_auth)
 
-    if user_auth.api_key_org_id is None:
+    if saas_user_auth.api_key_org_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='This API key was created before organization support. Please regenerate your API key to use this endpoint.',
         )
 
     return CurrentApiKeyResponse(
-        id=user_auth.api_key_id,
-        name=user_auth.api_key_name,
-        org_id=str(user_auth.api_key_org_id),
+        id=saas_user_auth.api_key_id,
+        name=saas_user_auth.api_key_name,
+        org_id=str(saas_user_auth.api_key_org_id),
         user_id=user_id,
-        auth_type=user_auth.auth_type.value,
+        auth_type=saas_user_auth.auth_type.value,
     )
 
 
