@@ -791,3 +791,202 @@ class TestSaasSQLAppConversationInfoServiceWebhookFallback:
         assert len(user1_page.items) == 1
         assert user1_page.items[0].id == conv_id
         assert user1_page.items[0].title == 'E2E Webhook Conversation'
+
+
+class TestSandboxIdFilterSaas:
+    """Test suite for sandbox_id__eq filter parameter in SAAS service."""
+
+    @pytest.mark.asyncio
+    async def test_search_by_sandbox_id(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test searching conversations by exact sandbox_id match with SAAS user filtering."""
+        # Create service for user1
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create conversations with different sandbox IDs for user1
+        conv1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_alpha',
+            title='Conversation Alpha',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_beta',
+            title='Conversation Beta',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+        conv3 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_alpha',
+            title='Conversation Gamma',
+            created_at=datetime(2024, 1, 1, 14, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 14, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save all conversations
+        await user1_service.save_app_conversation_info(conv1)
+        await user1_service.save_app_conversation_info(conv2)
+        await user1_service.save_app_conversation_info(conv3)
+
+        # Search for sandbox_alpha - should return 2 conversations
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_alpha'
+        )
+        assert len(page.items) == 2
+        sandbox_ids = {item.sandbox_id for item in page.items}
+        assert sandbox_ids == {'sandbox_alpha'}
+        conversation_ids = {item.id for item in page.items}
+        assert conv1.id in conversation_ids
+        assert conv3.id in conversation_ids
+
+        # Search for sandbox_beta - should return 1 conversation
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_beta'
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv2.id
+
+        # Search for non-existent sandbox - should return 0 conversations
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_nonexistent'
+        )
+        assert len(page.items) == 0
+
+    @pytest.mark.asyncio
+    async def test_count_by_sandbox_id(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test counting conversations by exact sandbox_id match with SAAS user filtering."""
+        # Create service for user1
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create conversations with different sandbox IDs
+        conv1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_x',
+            title='Conversation X1',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_y',
+            title='Conversation Y1',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+        conv3 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_x',
+            title='Conversation X2',
+            created_at=datetime(2024, 1, 1, 14, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 14, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save all conversations
+        await user1_service.save_app_conversation_info(conv1)
+        await user1_service.save_app_conversation_info(conv2)
+        await user1_service.save_app_conversation_info(conv3)
+
+        # Count for sandbox_x - should be 2
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_x'
+        )
+        assert count == 2
+
+        # Count for sandbox_y - should be 1
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_y'
+        )
+        assert count == 1
+
+        # Count for non-existent sandbox - should be 0
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_nonexistent'
+        )
+        assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_sandbox_id_filter_respects_user_isolation(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that sandbox_id filter respects user isolation in SAAS environment."""
+        # Create services for both users
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        user2_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER2_ID)),
+        )
+
+        # Create conversation with same sandbox_id for both users
+        shared_sandbox_id = 'sandbox_shared'
+
+        conv_user1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id=shared_sandbox_id,
+            title='User1 Conversation',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv_user2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER2_ID),
+            sandbox_id=shared_sandbox_id,
+            title='User2 Conversation',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save conversations
+        await user1_service.save_app_conversation_info(conv_user1)
+        await user2_service.save_app_conversation_info(conv_user2)
+
+        # User1 should only see their own conversation with this sandbox_id
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv_user1.id
+        assert page.items[0].title == 'User1 Conversation'
+
+        # User2 should only see their own conversation with this sandbox_id
+        page = await user2_service.search_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv_user2.id
+        assert page.items[0].title == 'User2 Conversation'
+
+        # Count should also respect user isolation
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert count == 1
+
+        count = await user2_service.count_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert count == 1

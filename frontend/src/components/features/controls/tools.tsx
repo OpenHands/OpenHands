@@ -8,6 +8,7 @@ import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-co
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
 import { SkillsModal } from "../conversation-panel/skills-modal";
+import { HooksModal } from "../conversation-panel/hooks-modal";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -18,12 +19,16 @@ export function Tools() {
   const {
     handleShowAgentTools,
     handleShowSkills,
+    handleShowHooks,
     systemModalVisible,
     setSystemModalVisible,
     skillsModalVisible,
     setSkillsModalVisible,
+    hooksModalVisible,
+    setHooksModalVisible,
     systemMessage,
     shouldShowAgentTools,
+    shouldShowHooks,
   } = useConversationNameContextMenu({
     conversationId,
     conversationStatus: conversation?.status,
@@ -52,8 +57,10 @@ export function Tools() {
         <ToolsContextMenu
           onClose={() => setContextMenuOpen(false)}
           onShowSkills={handleShowSkills}
+          onShowHooks={handleShowHooks}
           onShowAgentTools={handleShowAgentTools}
           shouldShowAgentTools={shouldShowAgentTools}
+          shouldShowHooks={shouldShowHooks}
         />
       )}
 
@@ -67,6 +74,11 @@ export function Tools() {
       {/* Skills Modal */}
       {skillsModalVisible && (
         <SkillsModal onClose={() => setSkillsModalVisible(false)} />
+      )}
+
+      {/* Hooks Modal */}
+      {hooksModalVisible && (
+        <HooksModal onClose={() => setHooksModalVisible(false)} />
       )}
     </div>
   );

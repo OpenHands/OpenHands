@@ -5,7 +5,7 @@ conversations are updated via the on_conversation_update webhook endpoint.
 """
 
 from typing import AsyncGenerator
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -19,6 +19,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
+from openhands.app_server.event_callback.webhook_router import on_conversation_update
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
@@ -118,9 +119,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Saved conversation retains the parent_conversation_id
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -137,13 +135,16 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Act - call on_conversation_update directly with dependencies
-        result = await on_conversation_update(
-            conversation_info=mock_conversation_info,
-            sandbox_info=sandbox_info,
-            existing=existing_conv,
-            app_conversation_info_service=app_conversation_info_service,
-        )
+        # Act - call on_conversation_update directly with mocked valid_conversation
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
 
         # Assert
         assert isinstance(result, Success)
@@ -171,9 +172,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Saved conversation has parent_conversation_id as None
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         conversation_id = mock_conversation_info.id
@@ -187,13 +185,16 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=None,
         )
 
-        # Act - call on_conversation_update directly with dependencies
-        result = await on_conversation_update(
-            conversation_info=mock_conversation_info,
-            sandbox_info=sandbox_info,
-            existing=existing_conv,
-            app_conversation_info_service=app_conversation_info_service,
-        )
+        # Act - call on_conversation_update directly with mocked valid_conversation
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
 
         # Assert
         assert isinstance(result, Success)
@@ -220,9 +221,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - New conversation has parent_conversation_id as None
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         conversation_id = mock_conversation_info.id
@@ -234,13 +232,16 @@ class TestOnConversationUpdateParentConversationId:
             created_by_user_id=sandbox_info.created_by_user_id,
         )
 
-        # Act - call on_conversation_update directly with dependencies
-        result = await on_conversation_update(
-            conversation_info=mock_conversation_info,
-            sandbox_info=sandbox_info,
-            existing=stub_conv,
-            app_conversation_info_service=app_conversation_info_service,
-        )
+        # Act - call on_conversation_update directly with mocked valid_conversation
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=stub_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
 
         # Assert
         assert isinstance(result, Success)
@@ -268,9 +269,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - All metadata including parent_conversation_id is preserved
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -290,13 +288,16 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Act - call on_conversation_update directly with dependencies
-        result = await on_conversation_update(
-            conversation_info=mock_conversation_info,
-            sandbox_info=sandbox_info,
-            existing=existing_conv,
-            app_conversation_info_service=app_conversation_info_service,
-        )
+        # Act - call on_conversation_update directly with mocked valid_conversation
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
 
         # Assert
         assert isinstance(result, Success)
@@ -333,9 +334,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Parent_conversation_id remains unchanged after all updates
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -363,12 +361,15 @@ class TestOnConversationUpdateParentConversationId:
             else:
                 existing = initial_conv
 
-            result = await on_conversation_update(
-                conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
-                existing=existing,
-                app_conversation_info_service=app_conversation_info_service,
-            )
+            with patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=existing,
+            ):
+                result = await on_conversation_update(
+                    conversation_info=mock_conversation_info,
+                    sandbox_info=sandbox_info,
+                    app_conversation_info_service=app_conversation_info_service,
+                )
             assert isinstance(result, Success)
 
         # Assert
@@ -396,9 +397,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Function returns early, no updates are made
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -420,13 +418,16 @@ class TestOnConversationUpdateParentConversationId:
         # Set conversation to DELETING status
         mock_conversation_info.execution_status = ConversationExecutionStatus.DELETING
 
-        # Act - call on_conversation_update directly with dependencies
-        result = await on_conversation_update(
-            conversation_info=mock_conversation_info,
-            sandbox_info=sandbox_info,
-            existing=existing_conv,
-            app_conversation_info_service=app_conversation_info_service,
-        )
+        # Act - call on_conversation_update directly with mocked valid_conversation
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
 
         # Assert - Function returns success but doesn't update
         assert isinstance(result, Success)
@@ -456,9 +457,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Parent_conversation_id is preserved and title is generated
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -473,13 +471,16 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Act - call on_conversation_update directly with dependencies
-        result = await on_conversation_update(
-            conversation_info=mock_conversation_info,
-            sandbox_info=sandbox_info,
-            existing=existing_conv,
-            app_conversation_info_service=app_conversation_info_service,
-        )
+        # Act - call on_conversation_update directly with mocked valid_conversation
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
 
         # Assert
         assert isinstance(result, Success)

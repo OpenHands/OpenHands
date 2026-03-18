@@ -36,9 +36,45 @@ then re-run the command to ensure it passes. Common issues include:
 - Be especially careful with `git reset --hard` after staging files, as it will remove accidentally staged files
 - When remote has new changes, use `git fetch upstream && git rebase upstream/<branch>` on the same branch
 
+## PR-Specific Artifacts (`.pr/` directory)
+
+When working on a PR that requires design documents, scripts meant for development-only, or other temporary artifacts that should NOT be merged to main, store them in a `.pr/` directory at the repository root.
+
+### Usage
+
+```
+.pr/
+├── design.md       # Design decisions and architecture notes
+├── analysis.md     # Investigation or debugging notes
+├── logs/           # Test output or CI logs for reviewer reference
+└── notes.md        # Any other PR-specific content
+```
+
+### How It Works
+
+1. **Notification**: When `.pr/` exists, a comment is posted to the PR conversation alerting reviewers
+2. **Auto-cleanup**: When the PR is approved, the `.pr/` directory is automatically removed via `.github/workflows/pr-artifacts.yml`
+3. **Fork PRs**: Auto-cleanup cannot push to forks, so manual removal is required before merging
+
+### Important Notes
+
+- Do NOT put anything in `.pr/` that needs to be preserved after merge
+- The `.pr/` check passes (green ✅) during development — it only posts a notification, not a blocking error
+- For fork PRs: You must manually remove `.pr/` before the PR can be merged
+
+### When to Use
+
+- Complex refactoring that benefits from written design rationale
+- Debugging sessions where you want to document your investigation
+- E2E test results or logs that demonstrate a cross-repo feature works
+- Feature implementations that need temporary planning docs
+- Any analysis that helps reviewers understand the PR but isn't needed long-term
+
 ## Repository Structure
 Backend:
 - Located in the `openhands` directory
+- The current V1 application server lives in `openhands/app_server/`. `make start-backend` still launches `openhands.server.listen:app`, which includes the V1 routes by default unless `ENABLE_V1=0`.
+- For V1 web-app docs, LLM setup should point users to the Settings UI.
 - Testing:
   - All tests are in `tests/unit/test_*.py`
   - To test new code, run `poetry run pytest tests/unit/test_xxx.py` where `xxx` is the appropriate file for the current functionality
@@ -342,3 +378,30 @@ To add a new LLM model to OpenHands, you need to update multiple files across bo
 - Models appear in CLI provider selection based on the verified arrays
 - The `organize_models_and_providers` function groups models by provider
 - Default model selection prioritizes verified models for each provider
+
+### Sandbox Settings API (SDK Credential Inheritance)
+
+The sandbox settings API allows SDK-created conversations to inherit the user's SaaS credentials
+(LLM config, secrets) securely via `LookupSecret`. Raw secret values only flow SaaS→sandbox,
+never through the SDK client.
+
+#### User Credentials with Exposed Secrets (in `openhands/app_server/user/user_router.py`):
+- `GET /api/v1/users/me?expose_secrets=true` → Full user settings with unmasked secrets (e.g., `llm_api_key`)
+- `GET /api/v1/users/me` → Full user settings (secrets masked, Bearer only)
+
+Auth requirements for `expose_secrets=true`:
+- Bearer token (proves user identity via `OPENHANDS_API_KEY`)
+- `X-Session-API-Key` header (proves caller has an active sandbox owned by the authenticated user)
+
+Called by `workspace.get_llm()` in the SDK to retrieve LLM config with the API key.
+
+#### Sandbox-Scoped Secrets Endpoints (in `openhands/app_server/sandbox/sandbox_router.py`):
+- `GET /sandboxes/{id}/settings/secrets` → list secret names (no values)
+- `GET /sandboxes/{id}/settings/secrets/{name}` → raw secret value (called FROM sandbox)
+
+#### Auth: `X-Session-API-Key` header, validated via `SandboxService.get_sandbox_by_session_api_key()`
+
+#### Related SDK code (in `software-agent-sdk` repo):
+- `openhands/sdk/llm/llm.py`: `LLM.api_key` accepts `SecretSource` (including `LookupSecret`)
+- `openhands/workspace/cloud/workspace.py`: `get_llm()` and `get_secrets()` return LookupSecret-backed objects
+- Tests: `tests/sdk/llm/test_llm_secret_source_api_key.py`, `tests/workspace/test_cloud_workspace_sdk_settings.py`

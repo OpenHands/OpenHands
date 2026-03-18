@@ -110,14 +110,21 @@ export const useTracking = () => {
     orgSize,
     useCase,
   }: {
-    role: string;
-    orgSize: string;
-    useCase: string;
+    role?: string;
+    orgSize?: string;
+    useCase?: string[];
   }) => {
     posthog.capture("onboarding_completed", {
       role,
       org_size: orgSize,
       use_case: useCase,
+      ...commonProperties,
+    });
+  };
+
+  const trackSaasSelfhostedInquiry = ({ location }: { location: string }) => {
+    posthog.capture("saas_selfhosted_inquiry", {
+      location,
       ...commonProperties,
     });
   };
@@ -134,5 +141,6 @@ export const useTracking = () => {
     trackCreditLimitReached,
     trackAddTeamMembersButtonClick,
     trackOnboardingCompleted,
+    trackSaasSelfhostedInquiry,
   };
 };

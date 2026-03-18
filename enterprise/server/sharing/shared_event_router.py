@@ -5,19 +5,45 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from server.sharing.google_cloud_shared_event_service import (
-    GoogleCloudSharedEventServiceInjector,
+from server.sharing.shared_event_service import (
+    SharedEventService,
+    SharedEventServiceInjector,
 )
-from server.sharing.shared_event_service import SharedEventService
 
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
+from openhands.utils.environment import StorageProvider, get_storage_provider
+
+
+def get_shared_event_service_injector() -> SharedEventServiceInjector:
+    """Get the appropriate SharedEventServiceInjector based on configuration.
+
+    Uses get_storage_provider() to determine the storage backend.
+    See openhands.utils.environment for supported environment variables.
+
+    Note: Shared events only support AWS and GCP storage. Filesystem storage
+    falls back to GCP for shared events.
+    """
+    provider = get_storage_provider()
+
+    if provider == StorageProvider.AWS:
+        from server.sharing.aws_shared_event_service import (
+            AwsSharedEventServiceInjector,
+        )
+
+        return AwsSharedEventServiceInjector()
+    else:
+        # GCP is the default for shared events (including filesystem fallback)
+        from server.sharing.google_cloud_shared_event_service import (
+            GoogleCloudSharedEventServiceInjector,
+        )
+
+        return GoogleCloudSharedEventServiceInjector()
+
 
 router = APIRouter(prefix='/api/shared-events', tags=['Sharing'])
-shared_event_service_dependency = Depends(
-    GoogleCloudSharedEventServiceInjector().depends
-)
+shared_event_service_dependency = Depends(get_shared_event_service_injector().depends)
 
 
 # Read methods

@@ -8,8 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import FastAPI, HTTPException, status
+from fastapi.testclient import TestClient
 
+from openhands.app_server.event_callback.webhook_router import (
+    router as webhook_router,
+)
 from openhands.app_server.event_callback.webhook_router import (
     valid_conversation,
     valid_sandbox,
@@ -531,3 +535,88 @@ class TestWebhookAuthenticationIntegration:
                 sandbox_info=sandbox_result,
                 app_conversation_info_service=mock_conversation_service,
             )
+
+
+class TestWebhookRouterHTTPIntegration:
+    """Integration tests for webhook router HTTP layer.
+
+    These tests validate that FastAPI routing correctly extracts conversation_id
+    from the request body rather than requiring it as a query parameter.
+    """
+
+    def test_conversation_update_endpoint_does_not_require_query_param(self):
+        """Test that /webhooks/conversations endpoint accepts conversation_id in body only.
+
+        This test validates the fix for the regression where the endpoint incorrectly
+        required conversation_id as a query parameter due to using Depends(valid_conversation).
+
+        The endpoint should:
+        1. Accept POST requests without any query parameters
+        2. Extract conversation_id from the request body (conversation_info.id)
+        3. Return 401 (not 422) when auth fails, proving the request was parsed correctly
+        """
+        # Create a minimal FastAPI app with just the webhook router
+        app = FastAPI()
+        app.include_router(webhook_router, prefix='/api/v1')
+
+        client = TestClient(app, raise_server_exceptions=False)
+
+        # Create a valid request body with conversation_id in it
+        conversation_id = str(uuid4())
+        request_body = {
+            'id': conversation_id,
+            'execution_status': 'running',
+            'agent': {
+                'llm': {
+                    'model': 'gpt-4',
+                },
+            },
+            'stats': {
+                'usage_to_metrics': {},
+            },
+        }
+
+        # POST to /webhooks/conversations WITHOUT any query parameters
+        # If the old bug existed (conversation_id required as query param),
+        # FastAPI would return 422 Unprocessable Entity
+        response = client.post(
+            '/api/v1/webhooks/conversations',
+            json=request_body,
+            # No X-Session-API-Key header - should fail auth but NOT validation
+        )
+
+        # We expect 401 Unauthorized (missing session API key)
+        # NOT 422 Unprocessable Entity (which would indicate conversation_id
+        # was incorrectly required as a query parameter)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED, (
+            f'Expected 401 (auth failure), got {response.status_code}. '
+            f'If 422, the endpoint incorrectly requires conversation_id as query param. '
+            f'Response: {response.json()}'
+        )
+        assert response.json()['detail'] == 'X-Session-API-Key header is required'
+
+    def test_events_endpoint_still_requires_conversation_id_in_path(self):
+        """Test that /webhooks/events/{conversation_id} correctly requires path param.
+
+        This ensures we didn't accidentally break the events endpoint which legitimately
+        requires conversation_id as a path parameter.
+        """
+        # Create a minimal FastAPI app with just the webhook router
+        app = FastAPI()
+        app.include_router(webhook_router, prefix='/api/v1')
+
+        client = TestClient(app, raise_server_exceptions=False)
+
+        conversation_id = str(uuid4())
+        request_body = []  # Empty events list
+
+        # POST to /webhooks/events/{conversation_id} with path parameter
+        response = client.post(
+            f'/api/v1/webhooks/events/{conversation_id}',
+            json=request_body,
+            # No X-Session-API-Key header - should fail auth but NOT validation
+        )
+
+        # We expect 401 Unauthorized (missing session API key)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json()['detail'] == 'X-Session-API-Key header is required'
