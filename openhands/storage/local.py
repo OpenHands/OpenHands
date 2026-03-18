@@ -32,7 +32,7 @@ class LocalFileStore(FileStore):
             with open(temp_path, mode) as f:
                 f.write(contents)
             os.replace(temp_path, full_path)
-        except:
+        except Exception:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             raise
