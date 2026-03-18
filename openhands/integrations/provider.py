@@ -471,7 +471,7 @@ class ProviderHandler:
     def check_cmd_action_for_provider_token_ref(
         cls, event: Action
     ) -> list[ProviderType]:
-        """Detect if agent run action is using a provider token (e.g $GITHUB_TOKEN)
+        """Detect if agent run action is using a provider token (e.g github_token)
         Returns a list of providers which are called by the agent
         """
         if not isinstance(event, CmdRunAction):

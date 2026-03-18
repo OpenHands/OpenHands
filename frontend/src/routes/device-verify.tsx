@@ -5,7 +5,7 @@ import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { EnterpriseBanner } from "#/components/features/device-verify/enterprise-banner";
 import { I18nKey } from "#/i18n/declaration";
 import { H1 } from "#/ui/typography";
-import { PROJ_USER_JOURNEY } from "#/utils/feature-flags";
+import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 
 export default function DeviceVerify() {
   const { t } = useTranslation();
@@ -16,7 +16,7 @@ export default function DeviceVerify() {
     messageKey: I18nKey;
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const showEnterpriseBanner = PROJ_USER_JOURNEY();
+  const showEnterpriseBanner = ENABLE_PROJ_USER_JOURNEY();
 
   // Get user_code from URL parameters
   const userCode = searchParams.get("user_code");

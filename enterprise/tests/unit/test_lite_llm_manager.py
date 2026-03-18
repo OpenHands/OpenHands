@@ -38,8 +38,9 @@ class TestDefaultInitialBudget:
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
-        # Clear the env var
+        # Clear the env vars
         os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
+        os.environ.pop('ENABLE_BILLING', None)
 
         # Restore original module or reimport fresh
         if original_module is not None:
@@ -47,31 +48,56 @@ class TestDefaultInitialBudget:
         else:
             importlib.import_module('storage.lite_llm_manager')
 
-    def test_default_initial_budget_defaults_to_zero(self):
-        """Test that DEFAULT_INITIAL_BUDGET defaults to 0.0 when env var not set."""
+    def test_default_initial_budget_none_when_billing_disabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET is None when billing is disabled."""
         # Temporarily remove the module so we can reimport with different env vars
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
-        # Clear the env var and reimport
+        # Ensure billing is disabled (default) and reimport
+        os.environ.pop('ENABLE_BILLING', None)
+        os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
+        module = importlib.import_module('storage.lite_llm_manager')
+        assert module.DEFAULT_INITIAL_BUDGET is None
+
+    def test_default_initial_budget_defaults_to_zero_when_billing_enabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET defaults to 0.0 when billing is enabled."""
+        # Temporarily remove the module so we can reimport with different env vars
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        # Enable billing and reimport
+        os.environ['ENABLE_BILLING'] = 'true'
         os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
         module = importlib.import_module('storage.lite_llm_manager')
         assert module.DEFAULT_INITIAL_BUDGET == 0.0
 
-    def test_default_initial_budget_uses_env_var(self):
-        """Test that DEFAULT_INITIAL_BUDGET uses value from environment variable."""
+    def test_default_initial_budget_uses_env_var_when_billing_enabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET uses value from environment variable when billing enabled."""
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
+        os.environ['ENABLE_BILLING'] = 'true'
         os.environ['DEFAULT_INITIAL_BUDGET'] = '100.0'
         module = importlib.import_module('storage.lite_llm_manager')
         assert module.DEFAULT_INITIAL_BUDGET == 100.0
+
+    def test_default_initial_budget_ignores_env_var_when_billing_disabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET returns None when billing disabled, ignoring env var."""
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        os.environ.pop('ENABLE_BILLING', None)  # billing disabled by default
+        os.environ['DEFAULT_INITIAL_BUDGET'] = '100.0'
+        module = importlib.import_module('storage.lite_llm_manager')
+        assert module.DEFAULT_INITIAL_BUDGET is None
 
     def test_default_initial_budget_rejects_invalid_value(self):
         """Test that DEFAULT_INITIAL_BUDGET raises ValueError for invalid values."""
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
+        os.environ['ENABLE_BILLING'] = 'true'
         os.environ['DEFAULT_INITIAL_BUDGET'] = 'abc'
         with pytest.raises(ValueError) as exc_info:
             importlib.import_module('storage.lite_llm_manager')
@@ -82,6 +108,7 @@ class TestDefaultInitialBudget:
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
+        os.environ['ENABLE_BILLING'] = 'true'
         os.environ['DEFAULT_INITIAL_BUDGET'] = '-10.0'
         with pytest.raises(ValueError) as exc_info:
             importlib.import_module('storage.lite_llm_manager')

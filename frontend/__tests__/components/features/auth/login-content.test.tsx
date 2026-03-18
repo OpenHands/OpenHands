@@ -49,9 +49,17 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+// Mock feature flags - we'll control the return value in each test
+const mockEnableProjUserJourney = vi.fn(() => true);
+vi.mock("#/utils/feature-flags", () => ({
+  ENABLE_PROJ_USER_JOURNEY: () => mockEnableProjUserJourney(),
+}));
+
 describe("LoginContent", () => {
   beforeEach(() => {
     vi.stubGlobal("location", { href: "" });
+    // Reset mock to return true by default
+    mockEnableProjUserJourney.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -272,6 +280,65 @@ describe("LoginContent", () => {
     );
 
     expect(screen.getByTestId("terms-and-privacy-notice")).toBeInTheDocument();
+  });
+
+  it("should display the enterprise LoginCTA component when appMode is saas and feature flag enabled", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("login-cta")).toBeInTheDocument();
+  });
+
+  it("should not display the enterprise LoginCTA component when appMode is oss even with feature flag enabled", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="oss"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
+  });
+
+  it("should not display the enterprise LoginCTA component when appMode is null", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode={null}
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
+  });
+
+  it("should not display the enterprise LoginCTA component when feature flag is disabled", () => {
+    // Disable the feature flag
+    mockEnableProjUserJourney.mockReturnValue(false);
+
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
   });
 
   it("should display invitation pending message when hasInvitation is true", () => {
