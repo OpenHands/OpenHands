@@ -43,7 +43,8 @@ const terminalObservationEvent: ObservationEvent = {
     content: [{ type: "text", text: "On branch main" }],
     command: "git status",
     exit_code: 0,
-    error: false,
+    is_error: false,
+    timeout: false,
     metadata: {
       exit_code: 0,
       pid: 1,
