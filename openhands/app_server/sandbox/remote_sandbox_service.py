@@ -598,7 +598,8 @@ class RemoteSandboxService(SandboxService):
         query = query.filter(StoredRemoteSandbox.id.in_(running_session_ids)).order_by(
             StoredRemoteSandbox.created_at.desc()
         )
-        running_sandboxes = list(await self.db_session.execute(query))
+        result = await self.db_session.execute(query)
+        running_sandboxes = result.scalars().all()
 
         # If we're within the limit, no cleanup needed
         if len(running_sandboxes) <= max_num_sandboxes:
