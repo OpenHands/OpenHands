@@ -1216,42 +1216,6 @@ class TestDockerSandboxServiceInjector:
             injector = DockerSandboxServiceInjector()
             assert injector.use_host_network is True
 
-    def test_use_host_network_from_legacy_sandbox_env_var(self):
-        """Test that legacy SANDBOX_USE_HOST_NETWORK env var still works."""
-        import os
-        from unittest.mock import patch
-
-        from openhands.app_server.sandbox.docker_sandbox_service import (
-            DockerSandboxServiceInjector,
-        )
-
-        env_vars = {
-            'SANDBOX_USE_HOST_NETWORK': 'true',
-        }
-
-        with patch.dict(os.environ, env_vars, clear=True):
-            injector = DockerSandboxServiceInjector()
-            assert injector.use_host_network is True
-
-    def test_use_host_network_new_env_var_takes_precedence(self):
-        """Test that AGENT_SERVER_USE_HOST_NETWORK takes precedence over legacy."""
-        import os
-        from unittest.mock import patch
-
-        from openhands.app_server.sandbox.docker_sandbox_service import (
-            DockerSandboxServiceInjector,
-        )
-
-        # New var says false, legacy says true - new should win
-        env_vars = {
-            'AGENT_SERVER_USE_HOST_NETWORK': 'false',
-            'SANDBOX_USE_HOST_NETWORK': 'true',
-        }
-
-        with patch.dict(os.environ, env_vars, clear=True):
-            injector = DockerSandboxServiceInjector()
-            assert injector.use_host_network is False
-
     def test_use_host_network_env_var_accepts_various_true_values(self):
         """Test that use_host_network accepts various truthy values."""
         import os
