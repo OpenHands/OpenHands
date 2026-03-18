@@ -51,6 +51,8 @@ def test_model_matches(name, pattern, expected):
     'name,pattern,expected',
     [
         ('openai/gpt-4o', 'openai/gpt-4o*', True),
+        ('minimax/minimax-m2.7', 'minimax-m2.7*', True),
+        ('minimax-m2.7-highspeed', 'minimax-m2.7*', True),
         ('minimax/minimax-m2.5', 'minimax-m2.5*', True),
         ('minimax-m2.5-highspeed', 'minimax-m2.5*', True),
         ('openrouter/gpt-4o', 'openai/gpt-4o*', False),
@@ -161,6 +163,24 @@ def test_model_matches_provider_qualified(name, pattern, expected):
             ),
         ),  # provider-qualified still matches basename patterns
         (
+            'minimax/minimax-m2.7',
+            ModelFeatures(
+                supports_function_calling=True,
+                supports_reasoning_effort=False,
+                supports_prompt_cache=False,
+                supports_stop_words=True,
+            ),
+        ),
+        (
+            'litellm_proxy/minimax-m2.7-highspeed',
+            ModelFeatures(
+                supports_function_calling=True,
+                supports_reasoning_effort=False,
+                supports_prompt_cache=False,
+                supports_stop_words=True,
+            ),
+        ),
+        (
             'minimax/minimax-m2.5',
             ModelFeatures(
                 supports_function_calling=True,
@@ -215,6 +235,10 @@ def test_get_features(model, expect):
         'qwen3-coder',
         'qwen3-coder-480b-a35b-instruct',
         # MiniMax
+        'minimax-m2.7',
+        'minimax-m2.7-highspeed',
+        'minimax/minimax-m2.7',
+        'litellm_proxy/minimax-m2.7',
         'minimax-m2.5',
         'minimax-m2.5-highspeed',
         'minimax/minimax-m2.5',

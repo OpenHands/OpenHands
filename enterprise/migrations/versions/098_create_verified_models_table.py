@@ -65,6 +65,8 @@ def upgrade() -> None:
         ('claude-sonnet-4-5-20250929', 'openhands'),
         ('gpt-5.2-codex', 'openhands'),
         ('gpt-5.2', 'openhands'),
+        ('minimax-m2.7', 'openhands'),
+        ('minimax-m2.7-highspeed', 'openhands'),
         ('minimax-m2.5', 'openhands'),
         ('gemini-3-pro-preview', 'openhands'),
         ('gemini-3-flash-preview', 'openhands'),
