@@ -12,6 +12,8 @@ import {
   FileEditorObservation,
   StrReplaceEditorObservation,
   TaskTrackerObservation,
+  GlobObservation,
+  GrepObservation,
 } from "#/types/v1/core/base/observation";
 
 // File Editor Observations
@@ -221,6 +223,72 @@ const getFinishObservationContent = (
   return content;
 };
 
+// Glob Observations
+const getGlobObservationContent = (
+  event: ObservationEvent<GlobObservation>,
+): string => {
+  const { observation } = event;
+
+  // Extract text content from the observation
+  const textContent = observation.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+
+  let content = `**Pattern:** \`${observation.pattern}\`\n`;
+  content += `**Search Path:** \`${observation.search_path}\`\n\n`;
+
+  if (observation.is_error) {
+    content += `**Error:**\n${textContent}`;
+  } else if (observation.files.length === 0) {
+    content += "**Result:** No files found.";
+  } else {
+    content += `**Files Found (${observation.files.length}${observation.truncated ? "+, truncated" : ""}):**\n`;
+    content += observation.files.map((f) => `- \`${f}\``).join("\n");
+  }
+
+  if (content.length > MAX_CONTENT_LENGTH) {
+    content = `${content.slice(0, MAX_CONTENT_LENGTH)}...(truncated)`;
+  }
+
+  return content;
+};
+
+// Grep Observations
+const getGrepObservationContent = (
+  event: ObservationEvent<GrepObservation>,
+): string => {
+  const { observation } = event;
+
+  // Extract text content from the observation
+  const textContent = observation.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+
+  let content = `**Pattern:** \`${observation.pattern}\`\n`;
+  content += `**Search Path:** \`${observation.search_path}\`\n`;
+  if (observation.include_pattern) {
+    content += `**Include:** \`${observation.include_pattern}\`\n`;
+  }
+  content += "\n";
+
+  if (observation.is_error) {
+    content += `**Error:**\n${textContent}`;
+  } else if (observation.matches.length === 0) {
+    content += "**Result:** No matches found.";
+  } else {
+    content += `**Matches (${observation.matches.length}${observation.truncated ? "+, truncated" : ""}):**\n`;
+    content += observation.matches.map((f) => `- \`${f}\``).join("\n");
+  }
+
+  if (content.length > MAX_CONTENT_LENGTH) {
+    content = `${content.slice(0, MAX_CONTENT_LENGTH)}...(truncated)`;
+  }
+
+  return content;
+};
+
 export const getObservationContent = (event: ObservationEvent): string => {
   const observationType = event.observation.kind;
 
@@ -262,6 +330,16 @@ export const getObservationContent = (event: ObservationEvent): string => {
     case "FinishObservation":
       return getFinishObservationContent(
         event as ObservationEvent<FinishObservation>,
+      );
+
+    case "GlobObservation":
+      return getGlobObservationContent(
+        event as ObservationEvent<GlobObservation>,
+      );
+
+    case "GrepObservation":
+      return getGrepObservationContent(
+        event as ObservationEvent<GrepObservation>,
       );
 
     default:

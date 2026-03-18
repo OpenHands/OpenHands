@@ -62,6 +62,7 @@ export function CustomChatInput({
     messageToSend,
     checkIsContentEmpty,
     clearEmptyContentHandler,
+    saveDraft,
   } = useChatInputLogic();
 
   const {
@@ -161,6 +162,7 @@ export function CustomChatInput({
           onInput={() => {
             handleInput();
             updateSlashMenu();
+            saveDraft();
           }}
           onPaste={handlePaste}
           onKeyDown={(e) => {

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from server.auth.token_manager import TokenManager
 from server.constants import (
+    DEFAULT_V1_ENABLED,
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     PERSONAL_WORKSPACE_VERSION_TO_MODEL,
@@ -240,6 +241,10 @@ class UserStore:
             for key, value in org_kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
+
+            # Apply DEFAULT_V1_ENABLED for migrated orgs if v1_enabled was not set
+            if org.v1_enabled is None:
+                org.v1_enabled = DEFAULT_V1_ENABLED
 
             user_kwargs = UserStore.get_kwargs_from_user_settings(
                 decrypted_user_settings
@@ -891,6 +896,8 @@ class UserStore:
         default_settings = Settings(
             language='en', enable_proactive_conversation_starters=True
         )
+
+        default_settings.v1_enabled = DEFAULT_V1_ENABLED
 
         from storage.lite_llm_manager import LiteLlmManager
 

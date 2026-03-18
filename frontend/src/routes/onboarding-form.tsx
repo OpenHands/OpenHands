@@ -1,8 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, redirect } from "react-router";
-import OptionService from "#/api/option-service/option-service.api";
-import { queryClient } from "#/query-client-config";
 import StepHeader from "#/components/features/onboarding/step-header";
 import { StepContent } from "#/components/features/onboarding/step-content";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -13,159 +11,154 @@ import { useTracking } from "#/hooks/use-tracking";
 import { ENABLE_ONBOARDING } from "#/utils/feature-flags";
 import { cn } from "#/utils/utils";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { useConfig } from "#/hooks/query/use-config";
+import {
+  ONBOARDING_FORM,
+  OnboardingQuestion,
+  OnboardingAppMode,
+} from "#/constants/onboarding";
 
 export const clientLoader = async () => {
-  const config = await queryClient.ensureQueryData({
-    queryKey: ["config"],
-    queryFn: OptionService.getConfig,
-  });
-
-  if (config.app_mode !== "saas" || !ENABLE_ONBOARDING()) {
+  if (!ENABLE_ONBOARDING()) {
     return redirect("/");
   }
 
   return null;
 };
 
-interface StepOption {
-  id: string;
-  labelKey?: I18nKey;
-  label?: string;
+type OnboardingAnswers = Record<string, string | string[]>;
+
+function getOnboardingAppMode(): OnboardingAppMode {
+  // TODO: query for app mode (saas or self hosted super user)
+  return "saas";
 }
 
-interface FormStep {
-  id: string;
-  titleKey: I18nKey;
-  options: StepOption[];
+function getAnswerAsArray(answers: OnboardingAnswers, key: string): string[] {
+  const value = answers[key];
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
 }
 
-const steps: FormStep[] = [
-  {
-    id: "step1",
-    titleKey: I18nKey.ONBOARDING$STEP1_TITLE,
-    options: [
-      {
-        id: "software_engineer",
-        labelKey: I18nKey.ONBOARDING$SOFTWARE_ENGINEER,
-      },
-      {
-        id: "engineering_manager",
-        labelKey: I18nKey.ONBOARDING$ENGINEERING_MANAGER,
-      },
-      {
-        id: "cto_founder",
-        labelKey: I18nKey.ONBOARDING$CTO_FOUNDER,
-      },
-      {
-        id: "product_operations",
-        labelKey: I18nKey.ONBOARDING$PRODUCT_OPERATIONS,
-      },
-      {
-        id: "student_hobbyist",
-        labelKey: I18nKey.ONBOARDING$STUDENT_HOBBYIST,
-      },
-      {
-        id: "other",
-        labelKey: I18nKey.ONBOARDING$OTHER,
-      },
-    ],
-  },
-  {
-    id: "step2",
-    titleKey: I18nKey.ONBOARDING$STEP2_TITLE,
-    options: [
-      {
-        id: "solo",
-        labelKey: I18nKey.ONBOARDING$SOLO,
-      },
-      {
-        id: "org_2_10",
-        labelKey: I18nKey.ONBOARDING$ORG_2_10,
-      },
-      {
-        id: "org_11_50",
-        labelKey: I18nKey.ONBOARDING$ORG_11_50,
-      },
-      {
-        id: "org_51_200",
-        labelKey: I18nKey.ONBOARDING$ORG_51_200,
-      },
-      {
-        id: "org_200_1000",
-        labelKey: I18nKey.ONBOARDING$ORG_200_1000,
-      },
-      {
-        id: "org_1000_plus",
-        labelKey: I18nKey.ONBOARDING$ORG_1000_PLUS,
-      },
-    ],
-  },
-  {
-    id: "step3",
-    titleKey: I18nKey.ONBOARDING$STEP3_TITLE,
-    options: [
-      {
-        id: "new_features",
-        labelKey: I18nKey.ONBOARDING$NEW_FEATURES,
-      },
-      {
-        id: "app_from_scratch",
-        labelKey: I18nKey.ONBOARDING$APP_FROM_SCRATCH,
-      },
-      {
-        id: "fixing_bugs",
-        labelKey: I18nKey.ONBOARDING$FIXING_BUGS,
-      },
-      {
-        id: "refactoring",
-        labelKey: I18nKey.ONBOARDING$REFACTORING,
-      },
-      {
-        id: "automating_tasks",
-        labelKey: I18nKey.ONBOARDING$AUTOMATING_TASKS,
-      },
-      {
-        id: "not_sure",
-        labelKey: I18nKey.ONBOARDING$NOT_SURE,
-      },
-    ],
-  },
-];
+function getTranslatedOptions(
+  step: OnboardingQuestion,
+  t: (key: I18nKey) => string,
+) {
+  if (step.type === "input") return undefined;
+  return step.answerOptions.map((option) => ({
+    id: option.id,
+    label: t(option.key),
+  }));
+}
+
+function getTranslatedInputFields(
+  step: OnboardingQuestion,
+  t: (key: I18nKey) => string,
+) {
+  if (step.type !== "input") return undefined;
+  return step.inputOptions.map((field) => ({
+    id: field.id,
+    label: t(field.key),
+  }));
+}
 
 function OnboardingForm() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const config = useConfig({ enabled: true });
   const { mutate: submitOnboarding } = useSubmitOnboarding();
   const { trackOnboardingCompleted } = useTracking();
 
-  const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
-  const [selections, setSelections] = React.useState<Record<string, string>>(
-    {},
+  const onboardingAppMode: OnboardingAppMode = getOnboardingAppMode();
+
+  const steps = React.useMemo(
+    () =>
+      ONBOARDING_FORM.filter((step) =>
+        step.app_mode.includes(onboardingAppMode),
+      ),
+    [onboardingAppMode],
   );
+
+  const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
+  const [answers, setAnswers] = React.useState<OnboardingAnswers>({});
 
   const currentStep = steps[currentStepIndex];
   const isLastStep = currentStepIndex === steps.length - 1;
   const isFirstStep = currentStepIndex === 0;
-  const currentSelection = selections[currentStep.id] || null;
+
+  const currentSelections = React.useMemo(
+    () => (currentStep ? getAnswerAsArray(answers, currentStep.id) : []),
+    [answers, currentStep],
+  );
+
+  const isStepComplete = React.useMemo(() => {
+    if (!currentStep) return false;
+
+    if (currentStep.type === "input") {
+      return currentStep.inputOptions.every((field) => {
+        const value = answers[field.id];
+        return typeof value === "string" && value.trim() !== "";
+      });
+    }
+    return currentSelections.length > 0;
+  }, [currentStep, answers, currentSelections]);
+
+  const inputValues = React.useMemo(() => {
+    const result: Record<string, string> = {};
+    for (const [key, value] of Object.entries(answers)) {
+      if (typeof value === "string") {
+        result[key] = value;
+      }
+    }
+    return result;
+  }, [answers]);
 
   const handleSelectOption = (optionId: string) => {
-    setSelections((prev) => ({
+    if (!currentStep) return;
+
+    if (currentStep.type === "multi") {
+      setAnswers((prev) => {
+        const currentArray = getAnswerAsArray(prev, currentStep.id);
+
+        if (currentArray.includes(optionId)) {
+          return {
+            ...prev,
+            [currentStep.id]: currentArray.filter((id) => id !== optionId),
+          };
+        }
+        return {
+          ...prev,
+          [currentStep.id]: [...currentArray, optionId],
+        };
+      });
+    } else {
+      setAnswers((prev) => ({
+        ...prev,
+        [currentStep.id]: optionId,
+      }));
+    }
+  };
+
+  const handleInputChange = (fieldId: string, value: string) => {
+    setAnswers((prev) => ({
       ...prev,
-      [currentStep.id]: optionId,
+      [fieldId]: value,
     }));
   };
 
   const handleNext = () => {
     if (isLastStep) {
-      submitOnboarding({ selections });
-      try {
+      submitOnboarding({ selections: answers });
+
+      // Only track onboarding for SaaS users
+      if (config.data?.app_mode === "saas") {
         trackOnboardingCompleted({
-          role: selections.step1,
-          orgSize: selections.step2,
-          useCase: selections.step3,
+          role: typeof answers.role === "string" ? answers.role : undefined,
+          orgSize:
+            typeof answers.org_size === "string" ? answers.org_size : undefined,
+          useCase: Array.isArray(answers.use_case)
+            ? answers.use_case
+            : undefined,
         });
-      } catch (error) {
-        console.error("Failed to track onboarding:", error);
       }
     } else {
       setCurrentStepIndex((prev) => prev + 1);
@@ -180,10 +173,12 @@ function OnboardingForm() {
     }
   };
 
-  const translatedOptions = currentStep.options.map((option) => ({
-    id: option.id,
-    label: option.labelKey ? t(option.labelKey) : option.label!,
-  }));
+  if (!currentStep) {
+    return null;
+  }
+
+  const translatedOptions = getTranslatedOptions(currentStep, t);
+  const translatedInputFields = getTranslatedInputFields(currentStep, t);
 
   return (
     <ModalBackdrop>
@@ -195,14 +190,20 @@ function OnboardingForm() {
           <OpenHandsLogoWhite width={55} height={55} />
         </div>
         <StepHeader
-          title={t(currentStep.titleKey)}
+          title={t(currentStep.questionKey)}
+          subtitle={
+            currentStep.subtitleKey ? t(currentStep.subtitleKey) : undefined
+          }
           currentStep={currentStepIndex + 1}
           totalSteps={steps.length}
         />
         <StepContent
           options={translatedOptions}
-          selectedOptionId={currentSelection}
+          inputFields={translatedInputFields}
+          selectedOptionIds={currentSelections}
+          inputValues={inputValues}
           onSelectOption={handleSelectOption}
+          onInputChange={handleInputChange}
         />
         <div
           data-testid="step-actions"
@@ -222,10 +223,10 @@ function OnboardingForm() {
             type="button"
             variant="primary"
             onClick={handleNext}
-            isDisabled={!currentSelection}
+            isDisabled={!isStepComplete}
             className={cn(
               "px-4 sm:px-6 py-2.5 bg-white text-black hover:bg-white/90",
-              isFirstStep ? "w-1/2" : "flex-1", // keep "Next" button to the right. Even if "Back" button is not rendered
+              isFirstStep ? "w-1/2" : "flex-1",
             )}
           >
             {t(

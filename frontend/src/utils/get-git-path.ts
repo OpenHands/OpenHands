@@ -7,10 +7,11 @@
  * @returns The git path to use
  */
 export function getGitPath(
+  conversationId: string,
   selectedRepository: string | null | undefined,
 ): string {
   if (!selectedRepository) {
-    return "/workspace/project";
+    return `/workspace/project/${conversationId}`;
   }
 
   // Extract the repository name from the path
@@ -18,5 +19,5 @@ export function getGitPath(
   const parts = selectedRepository.split("/");
   const repoName = parts[parts.length - 1];
 
-  return `/workspace/project/${repoName}`;
+  return `/workspace/project/${conversationId}/${repoName}`;
 }

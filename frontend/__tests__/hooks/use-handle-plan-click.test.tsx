@@ -88,6 +88,7 @@ describe("useHandlePlanClick", () => {
       unpinnedTabs: [],
       subConversationTaskId: null,
       conversationMode: "code",
+      draftMessage: null,
     });
   });
 
@@ -117,6 +118,7 @@ describe("useHandlePlanClick", () => {
         unpinnedTabs: [],
         subConversationTaskId: storedTaskId,
         conversationMode: "code",
+        draftMessage: null,
       });
 
       renderHook(() => useHandlePlanClick());
@@ -155,6 +157,7 @@ describe("useHandlePlanClick", () => {
         unpinnedTabs: [],
         subConversationTaskId: storedTaskId,
         conversationMode: "code",
+        draftMessage: null,
       });
 
       renderHook(() => useHandlePlanClick());

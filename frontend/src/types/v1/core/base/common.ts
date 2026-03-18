@@ -53,7 +53,7 @@ export type EventID = string;
 export type ToolCallID = string;
 
 // Source type for events
-export type SourceType = "agent" | "user" | "environment";
+export type SourceType = "agent" | "user" | "environment" | "hook";
 
 // Security risk levels
 export enum SecurityRisk {

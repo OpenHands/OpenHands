@@ -146,9 +146,10 @@ export function InteractiveChatBox({
     handleSubmit(suggestion);
   };
 
+  // Allow users to submit messages during LOADING state - they will be
+  // queued server-side and delivered when the conversation becomes ready
   const isDisabled =
     disabled ||
-    curAgentState === AgentState.LOADING ||
     curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
     isTaskPolling(subConversationTaskStatus);
 
