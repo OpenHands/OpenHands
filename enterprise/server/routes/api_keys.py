@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
+from server.auth.saas_user_auth import SaasUserAuth
 from storage.api_key import ApiKey
 from storage.api_key_store import ApiKeyStore
 from storage.lite_llm_manager import LiteLlmManager
@@ -295,24 +296,25 @@ async def get_current_api_key(
             detail='This endpoint requires API key authentication. Not available for cookie-based auth.',
         )
 
-    # Access API key context fields via getattr for type safety
-    # These fields are only present on SaasUserAuth when authenticated via API key
-    api_key_org_id = getattr(user_auth, 'api_key_org_id', None)
-    api_key_id = getattr(user_auth, 'api_key_id', None)
-    api_key_name = getattr(user_auth, 'api_key_name', None)
-
-    if api_key_org_id is None:
+    # Type narrow to SaasUserAuth for proper type safety
+    if not isinstance(user_auth, SaasUserAuth):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='API key organization context not available',
+            detail='Unexpected auth type for API key authentication',
+        )
+
+    if user_auth.api_key_org_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='This API key was created before organization support. Please regenerate your API key to use this endpoint.',
         )
 
     return CurrentApiKeyResponse(
-        id=api_key_id,
-        name=api_key_name,
-        org_id=str(api_key_org_id),
+        id=user_auth.api_key_id,
+        name=user_auth.api_key_name,
+        org_id=str(user_auth.api_key_org_id),
         user_id=user_id,
-        auth_type='bearer',
+        auth_type=user_auth.auth_type.value,
     )
 
 

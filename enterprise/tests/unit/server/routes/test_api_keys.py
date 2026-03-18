@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from fastapi import HTTPException
+from pydantic import SecretStr
+from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.api_keys import (
     ByorPermittedResponse,
     CurrentApiKeyResponse,
@@ -531,12 +533,16 @@ class TestGetCurrentApiKey:
         org_id = uuid.uuid4()
         mock_request = MagicMock()
 
-        mock_user_auth = MagicMock()
-        mock_user_auth.get_auth_type.return_value = AuthType.BEARER
-        mock_user_auth.api_key_org_id = org_id
-        mock_user_auth.api_key_id = 42
-        mock_user_auth.api_key_name = 'My Production Key'
-        mock_get_user_auth.return_value = mock_user_auth
+        # Use real SaasUserAuth instance for proper isinstance check
+        user_auth = SaasUserAuth(
+            refresh_token=SecretStr('mock-token'),
+            user_id=user_id,
+            auth_type=AuthType.BEARER,
+            api_key_org_id=org_id,
+            api_key_id=42,
+            api_key_name='My Production Key',
+        )
+        mock_get_user_auth.return_value = user_auth
 
         # Act
         result = await get_current_api_key(request=mock_request, user_id=user_id)
@@ -570,20 +576,26 @@ class TestGetCurrentApiKey:
 
     @pytest.mark.asyncio
     @patch('server.routes.api_keys.get_user_auth')
-    async def test_returns_500_when_api_key_org_id_is_none(self, mock_get_user_auth):
-        """Test that 500 is returned when API key has no org_id (legacy key)."""
+    async def test_returns_400_when_api_key_org_id_is_none(self, mock_get_user_auth):
+        """Test that 400 is returned when API key has no org_id (legacy key)."""
         # Arrange
         user_id = 'user-123'
         mock_request = MagicMock()
 
-        mock_user_auth = MagicMock()
-        mock_user_auth.get_auth_type.return_value = AuthType.BEARER
-        mock_user_auth.api_key_org_id = None
-        mock_get_user_auth.return_value = mock_user_auth
+        # Use real SaasUserAuth instance for proper isinstance check
+        user_auth = SaasUserAuth(
+            refresh_token=SecretStr('mock-token'),
+            user_id=user_id,
+            auth_type=AuthType.BEARER,
+            api_key_org_id=None,  # No org_id - legacy key
+            api_key_id=42,
+            api_key_name='Legacy Key',
+        )
+        mock_get_user_auth.return_value = user_auth
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
             await get_current_api_key(request=mock_request, user_id=user_id)
 
-        assert exc_info.value.status_code == 500
-        assert 'organization context not available' in exc_info.value.detail
+        assert exc_info.value.status_code == 400
+        assert 'created before organization support' in exc_info.value.detail
