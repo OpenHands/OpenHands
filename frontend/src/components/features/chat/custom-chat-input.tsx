@@ -13,6 +13,7 @@ import { useConversationStore } from "#/stores/conversation-store";
 
 export interface CustomChatInputProps {
   disabled?: boolean;
+  inputLocked?: boolean;
   showButton?: boolean;
   conversationStatus?: ConversationStatus | null;
   onSubmit: (message: string) => void;
@@ -25,6 +26,7 @@ export interface CustomChatInputProps {
 
 export function CustomChatInput({
   disabled = false,
+  inputLocked = false,
   showButton = true,
   conversationStatus = null,
   onSubmit,
@@ -146,6 +148,7 @@ export function CustomChatInput({
           chatContainerRef={chatContainerRef}
           isDragOver={isDragOver}
           disabled={isDisabled}
+          inputLocked={inputLocked}
           showButton={showButton}
           buttonClassName={buttonClassName}
           chatInputRef={chatInputRef}

@@ -156,6 +156,7 @@ export function InteractiveChatBox({
     <div data-testid="interactive-chat-box">
       <CustomChatInput
         disabled={isDisabled}
+        inputLocked={disabled}
         onSubmit={handleSubmit}
         onFilesPaste={handleUpload}
         conversationStatus={conversation?.status || null}
