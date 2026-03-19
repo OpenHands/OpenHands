@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 type SubmitOnboardingArgs = {
-  selections: Record<string, string>;
+  selections: Record<string, string | string[]>;
 };
 
 export const useSubmitOnboarding = () => {

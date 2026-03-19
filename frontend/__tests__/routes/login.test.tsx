@@ -73,6 +73,11 @@ vi.mock("#/hooks/use-invitation", () => ({
   useInvitation: () => useInvitationMock(),
 }));
 
+// Mock feature flags - enable by default for tests
+vi.mock("#/utils/feature-flags", () => ({
+  ENABLE_PROJ_USER_JOURNEY: () => true,
+}));
+
 const RouterStub = createRoutesStub([
   {
     Component: LoginPage,

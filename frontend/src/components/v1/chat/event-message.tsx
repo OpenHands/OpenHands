@@ -7,6 +7,7 @@ import {
   isAgentErrorEvent,
   isUserMessageEvent,
   isPlanningFileEditorObservationEvent,
+  isHookExecutionEvent,
 } from "#/types/v1/type-guards";
 import { MicroagentStatus } from "#/types/microagent-status";
 import { useConfig } from "#/hooks/query/use-config";
@@ -21,6 +22,7 @@ import {
   FinishEventMessage,
   GenericEventMessageWrapper,
   ThoughtEventMessage,
+  HookExecutionEventMessage,
 } from "./event-message-components";
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
 import { PlanPreview } from "../../features/chat/plan-preview";
@@ -188,6 +190,11 @@ export function EventMessage({
     return <ErrorEventMessage event={event} {...commonProps} />;
   }
 
+  // Hook execution events
+  if (isHookExecutionEvent(event)) {
+    return <HookExecutionEventMessage event={event} />;
+  }
+
   // Finish actions
   if (isActionEvent(event) && event.action.kind === "FinishAction") {
     return (
@@ -258,6 +265,11 @@ export function EventMessage({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          correspondingAction={
+            correspondingAction && isActionEvent(correspondingAction)
+              ? correspondingAction
+              : undefined
+          }
         />
       </>
     );

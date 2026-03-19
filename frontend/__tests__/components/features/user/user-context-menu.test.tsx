@@ -18,6 +18,27 @@ import { OrganizationMember } from "#/types/org";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 import { createMockWebClientConfig } from "#/mocks/settings-handlers";
 
+// Mock useBreakpoint hook
+vi.mock("#/hooks/use-breakpoint", () => ({
+  useBreakpoint: vi.fn(() => false), // Default to desktop (not mobile)
+}));
+
+// Mock feature flags
+const mockEnableProjUserJourney = vi.fn(() => true);
+vi.mock("#/utils/feature-flags", () => ({
+  ENABLE_PROJ_USER_JOURNEY: () => mockEnableProjUserJourney(),
+}));
+
+// Mock useTracking hook for CTA
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackSaasSelfhostedInquiry: vi.fn(),
+  }),
+}));
+
+// Import the mocked modules
+import * as breakpoint from "#/hooks/use-breakpoint";
+
 type UserContextMenuProps = GetComponentPropTypes<typeof UserContextMenu>;
 
 function UserContextMenuWithRootOutlet({
@@ -123,6 +144,9 @@ describe("UserContextMenu", () => {
     // Ensure clean state at the start of each test
     vi.restoreAllMocks();
     useSelectedOrganizationStore.setState({ organizationId: null });
+    // Reset feature flag and breakpoint mocks to defaults
+    mockEnableProjUserJourney.mockReturnValue(true);
+    vi.mocked(breakpoint.useBreakpoint).mockReturnValue(false); // Desktop by default
   });
 
   afterEach(() => {
@@ -629,5 +653,78 @@ describe("UserContextMenu", () => {
 
     // Verify that the dropdown shows the selected organization
     expect(screen.getByRole("combobox")).toHaveValue(INITIAL_MOCK_ORGS[1].name);
+  });
+
+  describe("Context Menu CTA", () => {
+    it("should render the CTA component in SaaS mode on desktop with feature flag enabled", async () => {
+      // Set SaaS mode
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+        createMockWebClientConfig({ app_mode: "saas" }),
+      );
+
+      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+
+      // Wait for config to load
+      await waitFor(() => {
+        expect(screen.getByTestId("context-menu-cta")).toBeInTheDocument();
+      });
+      expect(screen.getByText("CTA$ENTERPRISE_TITLE")).toBeInTheDocument();
+      expect(screen.getByText("CTA$LEARN_MORE")).toBeInTheDocument();
+    });
+
+    it("should not render the CTA component in OSS mode even with feature flag enabled", async () => {
+      // Set OSS mode
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+        createMockWebClientConfig({ app_mode: "oss" }),
+      );
+
+      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+
+      // Wait for config to load
+      await waitFor(() => {
+        expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
+      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
+    });
+
+    it("should not render the CTA component on mobile even in SaaS mode with feature flag enabled", async () => {
+      // Set SaaS mode
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+        createMockWebClientConfig({ app_mode: "saas" }),
+      );
+      // Set mobile mode
+      vi.mocked(breakpoint.useBreakpoint).mockReturnValue(true);
+
+      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+
+      // Wait for config to load
+      await waitFor(() => {
+        expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
+      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
+    });
+
+    it("should not render the CTA component when feature flag is disabled in SaaS mode", async () => {
+      // Set SaaS mode
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+        createMockWebClientConfig({ app_mode: "saas" }),
+      );
+      // Disable the feature flag
+      mockEnableProjUserJourney.mockReturnValue(false);
+
+      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+
+      // Wait for config to load
+      await waitFor(() => {
+        expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
+      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
+    });
   });
 });

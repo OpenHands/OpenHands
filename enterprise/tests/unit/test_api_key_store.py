@@ -126,13 +126,18 @@ async def test_validate_api_key_valid(api_key_store, async_session_maker):
         )
         session.add(key_record)
         await session.commit()
+        key_id = key_record.id
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
         result = await api_key_store.validate_api_key(api_key_value)
 
-    # Verify
-    assert result == user_id
+    # Verify - result is now ApiKeyValidationResult
+    assert result is not None
+    assert result.user_id == user_id
+    assert result.org_id == org_id
+    assert result.key_id == key_id
+    assert result.key_name == 'Test Key'
 
 
 @pytest.mark.asyncio
@@ -218,8 +223,9 @@ async def test_validate_api_key_valid_timezone_naive(
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
         result = await api_key_store.validate_api_key(api_key_value)
 
-    # Verify
-    assert result == user_id
+    # Verify - result is now ApiKeyValidationResult
+    assert result is not None
+    assert result.user_id == user_id
 
 
 @pytest.mark.asyncio
