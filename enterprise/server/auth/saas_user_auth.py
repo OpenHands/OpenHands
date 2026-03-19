@@ -61,9 +61,18 @@ class SaasUserAuth(UserAuth):
     accepted_tos: bool | None = None
     auth_type: AuthType = AuthType.COOKIE
     # API key context fields - populated when authenticated via API key
-    api_key_org_id: UUID | None = None
+    api_key_org_id: UUID | None = None  # Org bound to the API key used for auth
     api_key_id: int | None = None
     api_key_name: str | None = None
+
+    def get_api_key_org_id(self) -> UUID | None:
+        """Get the organization ID bound to the API key used for authentication.
+
+        Returns:
+            The org_id if authenticated via API key with org binding, None otherwise
+            (cookie auth or legacy API keys without org binding).
+        """
+        return self.api_key_org_id
 
     async def get_user_id(self) -> str | None:
         return self.user_id

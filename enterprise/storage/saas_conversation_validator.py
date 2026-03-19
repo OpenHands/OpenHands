@@ -15,13 +15,13 @@ class SaasConversationValidator(ConversationValidator):
 
     async def _validate_api_key(self, api_key: str) -> str | None:
         """
-        Validate an API key and return the user_id and github_user_id if valid.
+        Validate an API key and return the user_id if valid.
 
         Args:
             api_key: The API key to validate
 
         Returns:
-            A tuple of (user_id, github_user_id) if the API key is valid, None otherwise
+            The user_id if the API key is valid, None otherwise
         """
         try:
             token_manager = TokenManager()

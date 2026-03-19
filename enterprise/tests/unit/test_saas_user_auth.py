@@ -459,7 +459,8 @@ async def test_get_instance_no_auth(mock_request):
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_success():
-    """Test successful authentication from bearer token."""
+    """Test successful authentication from bearer token sets user_id and api_key_org_id."""
+    # Arrange
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
 

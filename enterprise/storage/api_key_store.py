@@ -16,10 +16,10 @@ from openhands.core.logger import openhands_logger as logger
 
 @dataclass
 class ApiKeyValidationResult:
-    """Result of API key validation containing user and org context."""
+    """Result of API key validation containing user and organization info."""
 
     user_id: str
-    org_id: UUID | None
+    org_id: UUID | None  # None for legacy API keys without org binding
     key_id: int
     key_name: str | None
 
@@ -195,7 +195,12 @@ class ApiKeyStore:
         return api_key
 
     async def validate_api_key(self, api_key: str) -> ApiKeyValidationResult | None:
-        """Validate an API key and return the associated user_id and org_id if valid."""
+        """Validate an API key and return the associated user_id and org_id if valid.
+
+        Returns:
+            ApiKeyValidationResult if the key is valid, None otherwise.
+            The org_id may be None for legacy API keys that weren't bound to an organization.
+        """
         now = datetime.now(UTC)
 
         async with a_session_maker() as session:
