@@ -64,13 +64,9 @@ class SaasSecretsStore(SecretsStore):
                 StoredCustomSecrets.keycloak_user_id == self.user_id
             )
             if org_id is not None:
-                delete_query = delete_query.filter(
-                    StoredCustomSecrets.org_id == org_id
-                )
+                delete_query = delete_query.filter(StoredCustomSecrets.org_id == org_id)
             else:
-                delete_query = delete_query.filter(
-                    StoredCustomSecrets.org_id.is_(None)
-                )
+                delete_query = delete_query.filter(StoredCustomSecrets.org_id.is_(None))
             await session.execute(delete_query)
 
             # Prepare the new secrets data

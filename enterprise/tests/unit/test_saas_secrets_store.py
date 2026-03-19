@@ -269,7 +269,10 @@ class TestSaasSecretsStore:
             custom_secrets=MappingProxyType(
                 {
                     'personal_secret': CustomSecret.from_value(
-                        {'secret': 'personal_secret_value', 'description': 'My personal secret'}
+                        {
+                            'secret': 'personal_secret_value',
+                            'description': 'My personal secret',
+                        }
                     ),
                 }
             )
@@ -315,7 +318,9 @@ class TestSaasSecretsStore:
         assert loaded_org1_again is not None
         assert 'personal_secret' in loaded_org1_again.custom_secrets
         assert (
-            loaded_org1_again.custom_secrets['personal_secret'].secret.get_secret_value()
+            loaded_org1_again.custom_secrets[
+                'personal_secret'
+            ].secret.get_secret_value()
             == 'personal_secret_value'
         )
         # Verify org2 secrets are NOT visible in org1
