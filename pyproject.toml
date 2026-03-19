@@ -5,13 +5,13 @@ requires = [
 ]
 
 [tool.poetry]
-name = "openhands-ai"
+name = "bao"
 version = "1.1.0"
-description = "OpenHands: Code Less, Make More"
-authors = [ "OpenHands" ]
+description = "bao: Code Less, Make More"
+authors = [ "bao" ]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/OpenHands/OpenHands"
+repository = "https://github.com/baobabstack-code/OpenHands"
 packages = [
   { include = "openhands/**/*" },
   { include = "third_party/**/*" },
