@@ -156,13 +156,16 @@ export function UserContextMenu({
               {t(I18nKey.SIDEBAR$DOCS)}
             </a>
 
-            <ContextMenuListItem
-              onClick={handleLogout}
-              className={contextMenuListItemClassName}
-            >
-              <IoLogOutOutline className="text-white" size={16} />
-              {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
-            </ContextMenuListItem>
+            {/* Only show logout in saas mode - oss mode has no session to invalidate */}
+            {isSaasMode && (
+              <ContextMenuListItem
+                onClick={handleLogout}
+                className={contextMenuListItemClassName}
+              >
+                <IoLogOutOutline className="text-white" size={16} />
+                {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
+              </ContextMenuListItem>
+            )}
           </div>
         </div>
       </div>
