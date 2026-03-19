@@ -28,10 +28,11 @@ import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-se
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
-import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
 import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
+
+const DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-5-20251101";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;

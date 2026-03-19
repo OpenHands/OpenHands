@@ -176,8 +176,8 @@ def _assign_provider(model: str) -> str:
     if '/' in model or '.' in model:
         return model
 
-    # Build the openhands bare-name set dynamically so it always matches
-    # whatever ``get_openhands_models`` returns at call time.
+    # Prefix well-known bare SDK model names with their canonical provider.
+    # The provider sets are loaded from the SDK once at import time.
     if model in _BARE_OPENAI_MODELS:
         return f'openai/{model}'
     if model in _BARE_ANTHROPIC_MODELS:
