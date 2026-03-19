@@ -123,9 +123,12 @@ async def store_llm_settings(
             settings.llm_api_key = existing_settings.llm_api_key
         if settings.llm_model is None:
             settings.llm_model = existing_settings.llm_model
-        # if llm_base_url is missing or empty, try to preserve existing or determine appropriate URL
-        if not settings.llm_base_url:
-            if settings.llm_base_url is None and existing_settings.llm_base_url:
+        # Distinguish three cases for llm_base_url:
+        # - None: field omitted, so preserve existing or auto-detect if needed
+        # - "": explicitly cleared by the user, keep it empty
+        # - non-empty string: explicit user-provided value, keep it as-is
+        if settings.llm_base_url is None:
+            if existing_settings.llm_base_url:
                 # Not provided at all (e.g. MCP config save) - preserve existing
                 settings.llm_base_url = existing_settings.llm_base_url
             elif is_openhands_model(settings.llm_model):

@@ -152,3 +152,26 @@ async def test_search_api_key_preservation(test_client):
     assert response.json()['search_api_key_set'] is True
     # Verify the other field updated correctly
     assert response.json()['llm_model'] == 'claude-3-opus'
+
+
+@pytest.mark.asyncio
+async def test_llm_base_url_can_be_explicitly_cleared(test_client):
+    """Test that sending an empty llm_base_url persists the cleared state."""
+    initial_settings = {
+        'llm_model': 'gpt-4',
+        'llm_base_url': 'https://old-proxy.example.com',
+    }
+    response = test_client.post('/api/settings', json=initial_settings)
+    assert response.status_code == 200
+
+    update_settings = {
+        'llm_model': 'gpt-4',
+        'llm_base_url': '',
+    }
+    response = test_client.post('/api/settings', json=update_settings)
+    assert response.status_code == 200
+
+    response = test_client.get('/api/settings')
+    assert response.status_code == 200
+    assert response.json()['llm_model'] == 'gpt-4'
+    assert response.json()['llm_base_url'] == ''

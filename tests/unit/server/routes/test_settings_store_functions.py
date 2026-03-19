@@ -186,13 +186,8 @@ async def test_store_llm_settings_update_existing():
 
 
 @pytest.mark.asyncio
-async def test_store_llm_settings_partial_update():
-    """Test store_llm_settings with partial update.
-
-    Note: When llm_base_url is not provided in the update and the model is NOT an
-    openhands model, we attempt to get the URL from litellm.get_api_base().
-    For OpenAI models, this returns https://api.openai.com.
-    """
+async def test_store_llm_settings_explicit_empty_base_url_stays_cleared():
+    """Test that an explicit empty llm_base_url is preserved as a user clear."""
     settings = Settings(
         llm_model='gpt-4',  # Only updating model (not an openhands model)
         llm_base_url='',  # Explicitly cleared (e.g. basic mode save)
@@ -211,9 +206,8 @@ async def test_store_llm_settings_partial_update():
     assert result.llm_model == 'gpt-4'
     # For SecretStr objects, we need to compare the secret value
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # llm_base_url was explicitly cleared (""), so auto-detection runs
-    # OpenAI models: litellm.get_api_base() returns https://api.openai.com
-    assert result.llm_base_url == 'https://api.openai.com'
+    # Explicit clears must stay empty instead of being repopulated
+    assert result.llm_base_url == ''
 
 
 @pytest.mark.asyncio
