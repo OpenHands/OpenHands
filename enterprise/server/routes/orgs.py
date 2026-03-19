@@ -68,7 +68,7 @@ async def list_user_orgs(
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, lte=100),
+        Query(title='The max number of results in the page', gt=0, le=100),
     ] = 100,
     user_id: str = Depends(get_user_id),
 ) -> OrgPage:
@@ -734,7 +734,7 @@ async def get_org_members(
         Query(
             title='The max number of results in the page',
             gt=0,
-            lte=100,
+            le=100,
         ),
     ] = 10,
     email: Annotated[

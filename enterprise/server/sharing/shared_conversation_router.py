@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
@@ -60,7 +60,7 @@ async def search_shared_conversations(
         Query(
             title='The max number of results in the page',
             gt=0,
-            lte=100,
+            le=100,
         ),
     ] = 100,
     include_sub_conversations: Annotated[
@@ -72,8 +72,6 @@ async def search_shared_conversations(
     shared_conversation_service: SharedConversationInfoService = shared_conversation_info_service_dependency,
 ) -> SharedConversationPage:
     """Search / List shared conversations."""
-    assert limit > 0
-    assert limit <= 100
     return await shared_conversation_service.search_shared_conversation_info(
         title__contains=title__contains,
         created_at__gte=created_at__gte,
@@ -127,7 +125,11 @@ async def batch_get_shared_conversations(
     shared_conversation_service: SharedConversationInfoService = shared_conversation_info_service_dependency,
 ) -> list[SharedConversation | None]:
     """Get a batch of shared conversations given their ids. Return None for any missing or non-shared."""
-    assert len(ids) <= 100
+    if len(ids) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Cannot request more than 100 conversations at once, got {len(ids)}',
+        )
     uuids = [UUID(id_) for id_ in ids]
     shared_conversation_info = (
         await shared_conversation_service.batch_get_shared_conversation_info(uuids)
