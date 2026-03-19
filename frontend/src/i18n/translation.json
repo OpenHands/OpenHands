@@ -19583,7 +19583,8 @@
     "fr": "La commande /new n'est disponible que pour les conversations V1",
     "tr": "/new komutu yalnızca V1 konuşmalarında kullanılabilir",
     "de": "Der /new-Befehl ist nur für V1-Konversationen verfügbar",
-    "uk": "Команда /new доступна лише для розмов V1"
+    "uk": "Команда /new доступна лише для розмов V1",
+    "ca": "L'ordre /new només està disponible per a converses V1"
   },
   "CONVERSATION$CLEAR_EMPTY": {
     "en": "Nothing to clear. This conversation has no messages yet.",
@@ -19599,7 +19600,8 @@
     "fr": "Rien à effacer. Cette conversation n'a pas encore de messages.",
     "tr": "Temizlenecek bir şey yok. Bu konuşmada henüz mesaj yok.",
     "de": "Nichts zu löschen. Diese Konversation hat noch keine Nachrichten.",
-    "uk": "Нічого очищувати. Ця розмова ще не має повідомлень."
+    "uk": "Нічого очищувати. Ця розмова ще не має повідомлень.",
+    "ca": "No hi ha res a esborrar. Aquesta conversa encara no té missatges."
   },
   "CONVERSATION$CLEAR_NO_ID": {
     "en": "No conversation ID found",
@@ -19615,7 +19617,8 @@
     "fr": "Aucun identifiant de conversation trouvé",
     "tr": "Konuşma kimliği bulunamadı",
     "de": "Keine Konversations-ID gefunden",
-    "uk": "Ідентифікатор розмови не знайдено"
+    "uk": "Ідентифікатор розмови не знайдено",
+    "ca": "No s'ha trobat l'identificador de la conversa"
   },
   "CONVERSATION$CLEAR_NO_NEW_ID": {
     "en": "Server did not return a new conversation ID",
@@ -19631,7 +19634,8 @@
     "fr": "Le serveur n'a pas renvoyé un nouvel identifiant de conversation",
     "tr": "Sunucu yeni bir konuşma kimliği döndürmedi",
     "de": "Der Server hat keine neue Konversations-ID zurückgegeben",
-    "uk": "Сервер не повернув новий ідентифікатор розмови"
+    "uk": "Сервер не повернув новий ідентифікатор розмови",
+    "ca": "El servidor no ha retornat un nou identificador de conversa"
   },
   "CONVERSATION$CLEAR_UNKNOWN_ERROR": {
     "en": "Unknown error",
@@ -19647,7 +19651,8 @@
     "fr": "Erreur inconnue",
     "tr": "Bilinmeyen hata",
     "de": "Unbekannter Fehler",
-    "uk": "Невідома помилка"
+    "uk": "Невідома помилка",
+    "ca": "Error desconegut"
   },
   "CONVERSATION$CLEAR_FAILED": {
     "en": "Failed to start new conversation: {{error}}",
@@ -19663,7 +19668,8 @@
     "fr": "Échec du démarrage d'une nouvelle conversation : {{error}}",
     "tr": "Yeni konuşma başlatılamadı: {{error}}",
     "de": "Neue Konversation konnte nicht gestartet werden: {{error}}",
-    "uk": "Не вдалося розпочати нову розмову: {{error}}"
+    "uk": "Не вдалося розпочати нову розмову: {{error}}",
+    "ca": "No s'ha pogut iniciar una nova conversa: {{error}}"
   },
   "CONVERSATION$CLEAR_SUCCESS": {
     "en": "Starting a new conversation in the same sandbox. These conversations share the same runtime.",
@@ -19679,7 +19685,8 @@
     "fr": "Démarrage d'une nouvelle conversation dans le même bac à sable. Ces conversations partagent le même environnement d'exécution.",
     "tr": "Aynı korumalı alanda yeni konuşma başlatılıyor. Bu konuşmalar aynı çalışma ortamını paylaşır.",
     "de": "Starte neue Konversation in derselben Sandbox. Diese Konversationen teilen dieselbe Laufzeitumgebung.",
-    "uk": "Починаю нову розмову в тому самому захищеному середовищі. Ці розмови використовують одне середовище виконання."
+    "uk": "Починаю нову розмову в тому самому захищеному середовищі. Ці розмови використовують одне середовище виконання.",
+    "ca": "S'està iniciant una nova conversa al mateix entorn aïllat. Aquestes converses comparteixen el mateix entorn d'execució."
   },
   "CONVERSATION$CLEARING": {
     "en": "Creating new conversation...",
@@ -19695,7 +19702,8 @@
     "fr": "Création d'une nouvelle conversation...",
     "tr": "Yeni konuşma oluşturuluyor...",
     "de": "Neue Konversation wird erstellt...",
-    "uk": "Створення нової розмови..."
+    "uk": "Створення нової розмови...",
+    "ca": "S'està creant una nova conversa..."
   },
   "CTA$ENTERPRISE": {
     "en": "Enterprise",
