@@ -12,7 +12,7 @@ interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
   isDragOver: boolean;
   disabled: boolean;
-  inputLocked?: boolean;
+  isNewConversationPending?: boolean;
   showButton: boolean;
   buttonClassName: string;
   chatInputRef: React.RefObject<HTMLDivElement | null>;
@@ -37,7 +37,7 @@ export function ChatInputContainer({
   chatContainerRef,
   isDragOver,
   disabled,
-  inputLocked = false,
+  isNewConversationPending = false,
   showButton,
   buttonClassName,
   chatInputRef,
@@ -91,7 +91,7 @@ export function ChatInputContainer({
         <ChatInputRow
           chatInputRef={chatInputRef}
           disabled={disabled}
-          inputLocked={inputLocked}
+          isNewConversationPending={isNewConversationPending}
           showButton={showButton}
           buttonClassName={buttonClassName}
           handleFileIconClick={handleFileIconClick}

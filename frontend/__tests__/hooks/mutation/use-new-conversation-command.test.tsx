@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
-import { useClearConversation } from "#/hooks/mutation/use-clear-conversation";
+import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 
 const mockNavigate = vi.fn();
 
@@ -87,7 +87,7 @@ function makeStartTask(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("useClearConversation", () => {
+describe("useNewConversationCommand", () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
@@ -136,7 +136,7 @@ describe("useClearConversation", () => {
       .spyOn(V1ConversationService, "getStartTask")
       .mockResolvedValue(readyTask as never);
 
-    const { result } = renderHook(() => useClearConversation(), { wrapper });
+    const { result } = renderHook(() => useNewConversationCommand(), { wrapper });
 
     await result.current.mutateAsync();
 
@@ -178,7 +178,7 @@ describe("useClearConversation", () => {
       .mockResolvedValueOnce(workingTask as never)
       .mockResolvedValueOnce(readyTask as never);
 
-    const { result } = renderHook(() => useClearConversation(), { wrapper });
+    const { result } = renderHook(() => useNewConversationCommand(), { wrapper });
 
     const mutatePromise = result.current.mutateAsync();
 
@@ -209,7 +209,7 @@ describe("useClearConversation", () => {
       errorTask as never,
     );
 
-    const { result } = renderHook(() => useClearConversation(), { wrapper });
+    const { result } = renderHook(() => useNewConversationCommand(), { wrapper });
 
     await expect(result.current.mutateAsync()).rejects.toThrow(
       "Sandbox crashed",
@@ -228,7 +228,7 @@ describe("useClearConversation", () => {
 
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
 
-    const { result } = renderHook(() => useClearConversation(), { wrapper });
+    const { result } = renderHook(() => useNewConversationCommand(), { wrapper });
 
     await result.current.mutateAsync();
 
@@ -251,7 +251,7 @@ describe("useClearConversation", () => {
       readyTask as never,
     );
 
-    const { result } = renderHook(() => useClearConversation(), { wrapper });
+    const { result } = renderHook(() => useNewConversationCommand(), { wrapper });
 
     await result.current.mutateAsync();
 
@@ -284,7 +284,7 @@ describe("useClearConversation", () => {
       readyTask as never,
     );
 
-    const { result } = renderHook(() => useClearConversation(), { wrapper });
+    const { result } = renderHook(() => useNewConversationCommand(), { wrapper });
 
     await result.current.mutateAsync();
 

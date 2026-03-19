@@ -7,7 +7,7 @@ import { ChatInputField } from "./chat-input-field";
 interface ChatInputRowProps {
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   disabled: boolean;
-  inputLocked?: boolean;
+  isNewConversationPending?: boolean;
   showButton: boolean;
   buttonClassName: string;
   handleFileIconClick: (isDisabled: boolean) => void;
@@ -22,7 +22,7 @@ interface ChatInputRowProps {
 export function ChatInputRow({
   chatInputRef,
   disabled,
-  inputLocked = false,
+  isNewConversationPending = false,
   showButton,
   buttonClassName,
   handleFileIconClick,
@@ -43,7 +43,7 @@ export function ChatInputRow({
 
         <ChatInputField
           chatInputRef={chatInputRef}
-          disabled={inputLocked}
+          disabled={isNewConversationPending}
           onInput={onInput}
           onPaste={onPaste}
           onKeyDown={onKeyDown}

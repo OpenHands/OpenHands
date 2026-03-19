@@ -38,7 +38,7 @@ import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
-import { useClearConversation } from "#/hooks/mutation/use-clear-conversation";
+import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { I18nKey } from "#/i18n/declaration";
 
 function getEntryPoint(
@@ -82,8 +82,10 @@ export function ChatInterface() {
     setHitBottom,
   } = useScrollToBottom(scrollRef);
   const { data: config } = useConfig();
-  const { mutate: clearConversation, isPending: isClearingConversation } =
-    useClearConversation();
+  const {
+    mutate: newConversationCommand,
+    isPending: isNewConversationPending,
+  } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
@@ -164,10 +166,10 @@ export function ChatInterface() {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_EMPTY));
         return;
       }
-      if (isClearingConversation) {
+      if (isNewConversationPending) {
         return;
       }
-      clearConversation();
+      newConversationCommand();
       return;
     }
 
@@ -365,7 +367,7 @@ export function ChatInterface() {
 
           <InteractiveChatBox
             onSubmit={handleSendMessage}
-            disabled={isClearingConversation}
+            disabled={isNewConversationPending}
           />
         </div>
 

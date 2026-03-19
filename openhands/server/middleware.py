@@ -20,6 +20,8 @@ from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+from openhands.app_server.config import get_global_config
+
 
 class LocalhostCORSMiddleware(CORSMiddleware):
     """Custom CORS middleware that allows any request from localhost/127.0.0.1 domains,
@@ -27,8 +29,6 @@ class LocalhostCORSMiddleware(CORSMiddleware):
     """
 
     def __init__(self, app: ASGIApp) -> None:
-        from openhands.app_server.config import get_global_config
-
         config = get_global_config()
         allow_origins = tuple(config.permitted_cors_origins)
         super().__init__(

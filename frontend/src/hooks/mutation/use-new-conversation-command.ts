@@ -11,7 +11,7 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
-export const useClearConversation = () => {
+export const useNewConversationCommand = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { t } = useTranslation();
