@@ -12,9 +12,7 @@ class OptionService {
    * verified providers, and provider assignment for bare model names.
    */
   static async getModels(): Promise<ModelsResponse> {
-    const { data } = await openHands.get<ModelsResponse>(
-      "/api/options/models",
-    );
+    const { data } = await openHands.get<ModelsResponse>("/api/options/models");
     return data;
   }
 

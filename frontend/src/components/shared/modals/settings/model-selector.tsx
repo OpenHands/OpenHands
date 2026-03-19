@@ -123,16 +123,16 @@ export function ModelSelector({
           }}
         >
           <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
-            {verifiedProviders.filter((provider) => models[provider]).map(
-              (provider) => (
+            {verifiedProviders
+              .filter((provider) => models[provider])
+              .map((provider) => (
                 <AutocompleteItem
                   data-testid={`provider-item-${provider}`}
                   key={provider}
                 >
                   {mapProvider(provider)}
                 </AutocompleteItem>
-              ),
-            )}
+              ))}
           </AutocompleteSection>
           {Object.keys(models).some(
             (provider) => !verifiedProviders.includes(provider),

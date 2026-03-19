@@ -4,7 +4,7 @@ import httpx
 from pydantic import BaseModel
 
 with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
+    warnings.simplefilter('ignore')
     import litellm
     from litellm import LlmProviders, ProviderConfigManager, get_llm_provider
 
@@ -22,29 +22,37 @@ from openhands.llm import bedrock
 # ---------------------------------------------------------------------------
 from openhands.sdk.llm.utils.verified_models import (  # noqa: E402
     VERIFIED_ANTHROPIC_MODELS as _SDK_ANTHROPIC,
+)
+from openhands.sdk.llm.utils.verified_models import (
     VERIFIED_MISTRAL_MODELS as _SDK_MISTRAL,
+)
+from openhands.sdk.llm.utils.verified_models import (
     VERIFIED_MODELS as _SDK_VERIFIED_MODELS,
-    VERIFIED_OPENHANDS_MODELS as _SDK_OPENHANDS,
+)
+from openhands.sdk.llm.utils.verified_models import (
     VERIFIED_OPENAI_MODELS as _SDK_OPENAI,
+)
+from openhands.sdk.llm.utils.verified_models import (
+    VERIFIED_OPENHANDS_MODELS as _SDK_OPENHANDS,
 )
 
 # Build the ``openhands/…`` model list from the SDK.
-OPENHANDS_MODELS: list[str] = [f"openhands/{m}" for m in _SDK_OPENHANDS]
+OPENHANDS_MODELS: list[str] = [f'openhands/{m}' for m in _SDK_OPENHANDS]
 
 CLARIFAI_MODELS = [
-    "clarifai/openai.chat-completion.gpt-oss-120b",
-    "clarifai/openai.chat-completion.gpt-oss-20b",
-    "clarifai/openai.chat-completion.gpt-5",
-    "clarifai/openai.chat-completion.gpt-5-mini",
-    "clarifai/qwen.qwen3.qwen3-next-80B-A3B-Thinking",
-    "clarifai/qwen.qwenLM.Qwen3-30B-A3B-Instruct-2507",
-    "clarifai/qwen.qwenLM.Qwen3-30B-A3B-Thinking-2507",
-    "clarifai/qwen.qwenLM.Qwen3-14B",
-    "clarifai/qwen.qwenCoder.Qwen3-Coder-30B-A3B-Instruct",
-    "clarifai/deepseek-ai.deepseek-chat.DeepSeek-R1-0528-Qwen3-8B",
-    "clarifai/deepseek-ai.deepseek-chat.DeepSeek-V3_1",
-    "clarifai/zai.completion.GLM_4_5",
-    "clarifai/moonshotai.kimi.Kimi-K2-Instruct",
+    'clarifai/openai.chat-completion.gpt-oss-120b',
+    'clarifai/openai.chat-completion.gpt-oss-20b',
+    'clarifai/openai.chat-completion.gpt-5',
+    'clarifai/openai.chat-completion.gpt-5-mini',
+    'clarifai/qwen.qwen3.qwen3-next-80B-A3B-Thinking',
+    'clarifai/qwen.qwenLM.Qwen3-30B-A3B-Instruct-2507',
+    'clarifai/qwen.qwenLM.Qwen3-30B-A3B-Thinking-2507',
+    'clarifai/qwen.qwenLM.Qwen3-14B',
+    'clarifai/qwen.qwenCoder.Qwen3-Coder-30B-A3B-Instruct',
+    'clarifai/deepseek-ai.deepseek-chat.DeepSeek-R1-0528-Qwen3-8B',
+    'clarifai/deepseek-ai.deepseek-chat.DeepSeek-V3_1',
+    'clarifai/zai.completion.GLM_4_5',
+    'clarifai/moonshotai.kimi.Kimi-K2-Instruct',
 ]
 
 # ---------------------------------------------------------------------------
@@ -60,7 +68,7 @@ _BARE_OPENAI_MODELS: set[str] = set(_SDK_OPENAI)
 _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
 _BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
-DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-5-20251101"
+DEFAULT_OPENHANDS_MODEL = 'openhands/claude-opus-4-5-20251101'
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +101,7 @@ def is_openhands_model(model: str | None) -> bool:
     Returns:
         True if the model starts with 'openhands/', False otherwise.
     """
-    return bool(model and model.startswith("openhands/"))
+    return bool(model and model.startswith('openhands/'))
 
 
 def get_provider_api_base(model: str) -> str | None:
@@ -129,7 +137,7 @@ def get_provider_api_base(model: str) -> str | None:
                 model_info = ProviderConfigManager.get_provider_model_info(
                     model, provider_enum
                 )
-                if model_info and hasattr(model_info, "get_api_base"):
+                if model_info and hasattr(model_info, 'get_api_base'):
                     return model_info.get_api_base()
             except ValueError:
                 pass  # Provider not in enum
@@ -165,26 +173,26 @@ def _assign_provider(model: str) -> str:
     unchanged.  Only well-known bare names (OpenAI, Anthropic, Mistral,
     OpenHands) are prefixed.
     """
-    if "/" in model or "." in model:
+    if '/' in model or '.' in model:
         return model
 
     # Build the openhands bare-name set dynamically so it always matches
     # whatever ``get_openhands_models`` returns at call time.
     if model in _BARE_OPENAI_MODELS:
-        return f"openai/{model}"
+        return f'openai/{model}'
     if model in _BARE_ANTHROPIC_MODELS:
-        return f"anthropic/{model}"
+        return f'anthropic/{model}'
     if model in _BARE_MISTRAL_MODELS:
-        return f"mistral/{model}"
+        return f'mistral/{model}'
     return model
 
 
 def _derive_verified_models(openhands_models: list[str]) -> list[str]:
     """Extract the bare model names from the ``openhands/…`` model list."""
     return [
-        m.removeprefix("openhands/")
+        m.removeprefix('openhands/')
         for m in openhands_models
-        if m.startswith("openhands/")
+        if m.startswith('openhands/')
     ]
 
 
@@ -228,18 +236,18 @@ def get_supported_llm_models(
     model_list = litellm_model_list_without_bedrock + bedrock_model_list
     for llm_config in config.llms.values():
         ollama_base_url = llm_config.ollama_base_url
-        if llm_config.model.startswith("ollama"):
+        if llm_config.model.startswith('ollama'):
             if not ollama_base_url:
                 ollama_base_url = llm_config.base_url
         if ollama_base_url:
-            ollama_url = ollama_base_url.strip("/") + "/api/tags"
+            ollama_url = ollama_base_url.strip('/') + '/api/tags'
             try:
-                ollama_models_list = httpx.get(ollama_url, timeout=3).json()["models"]  # noqa: ASYNC100
+                ollama_models_list = httpx.get(ollama_url, timeout=3).json()['models']  # noqa: ASYNC100
                 for model in ollama_models_list:
-                    model_list.append("ollama/" + model["name"])
+                    model_list.append('ollama/' + model['name'])
                 break
             except httpx.HTTPError as e:
-                logger.error(f"Error getting OLLAMA models: {e}")
+                logger.error(f'Error getting OLLAMA models: {e}')
 
     openhands_models = get_openhands_models(verified_models)
 

@@ -17,7 +17,7 @@ from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import config, server_config
 from openhands.utils.llm import ModelsResponse, get_supported_llm_models
 
-app = APIRouter(prefix="/api/options", dependencies=get_dependencies())
+app = APIRouter(prefix='/api/options', dependencies=get_dependencies())
 
 
 async def get_llm_models_dependency(request: Request) -> ModelsResponse:
@@ -29,14 +29,14 @@ async def get_llm_models_dependency(request: Request) -> ModelsResponse:
     return get_supported_llm_models(config)
 
 
-@app.get("/models")
+@app.get('/models')
 async def get_litellm_models(
     models: ModelsResponse = Depends(get_llm_models_dependency),
 ) -> ModelsResponse:
     return models
 
 
-@app.get("/agents", response_model=list[str])
+@app.get('/agents', response_model=list[str])
 async def get_agents() -> list[str]:
     """Get all agents supported by LiteLLM.
 
@@ -51,7 +51,7 @@ async def get_agents() -> list[str]:
     return sorted(Agent.list_agents())
 
 
-@app.get("/security-analyzers", response_model=list[str])
+@app.get('/security-analyzers', response_model=list[str])
 async def get_security_analyzers() -> list[str]:
     """Get all supported security analyzers.
 
@@ -66,7 +66,7 @@ async def get_security_analyzers() -> list[str]:
     return sorted(SecurityAnalyzers.keys())
 
 
-@app.get("/config", response_model=dict[str, Any], deprecated=True)
+@app.get('/config', response_model=dict[str, Any], deprecated=True)
 async def get_config() -> dict[str, Any]:
     """Get current config.
 
