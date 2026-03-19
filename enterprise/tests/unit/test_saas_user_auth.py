@@ -463,7 +463,6 @@ async def test_saas_user_auth_from_bearer_success():
     # Arrange
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
-    test_org_id = uuid.uuid4()
 
     # Create a valid offline token (refresh token)
     offline_token = jwt.encode(
