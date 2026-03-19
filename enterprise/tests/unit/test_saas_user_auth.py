@@ -19,6 +19,7 @@ from server.auth.saas_user_auth import (
     saas_user_auth_from_cookie,
     saas_user_auth_from_signed_token,
 )
+from storage.api_key_store import ApiKeyValidationResult
 from storage.user_authorization import UserAuthorizationType
 
 from openhands.integrations.provider import ProviderToken, ProviderType
@@ -471,12 +472,14 @@ async def test_saas_user_auth_from_bearer_success():
         algorithm='HS256',
     )
 
-    # Create mock validation result with user_id and org_id
-    mock_validation_result = MagicMock()
-    mock_validation_result.user_id = 'test_user_id'
-    mock_validation_result.org_id = test_org_id
+    mock_org_id = uuid.uuid4()
+    mock_validation_result = ApiKeyValidationResult(
+        user_id='test_user_id',
+        org_id=mock_org_id,
+        key_id=42,
+        key_name='Test Key',
+    )
 
-    # Act
     with (
         patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
         patch('server.auth.saas_user_auth.token_manager') as mock_token_manager,
@@ -494,13 +497,14 @@ async def test_saas_user_auth_from_bearer_success():
 
         result = await saas_user_auth_from_bearer(mock_request)
 
-    # Assert
-    assert isinstance(result, SaasUserAuth)
-    assert result.user_id == 'test_user_id'
-    assert result.api_key_org_id == test_org_id
-    mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
-    mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
-    mock_token_manager.refresh.assert_called_once_with(offline_token)
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        assert result.api_key_org_id == mock_org_id
+        assert result.api_key_id == 42
+        assert result.api_key_name == 'Test Key'
+        mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
+        mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
+        mock_token_manager.refresh.assert_called_once_with(offline_token)
 
 
 @pytest.mark.asyncio

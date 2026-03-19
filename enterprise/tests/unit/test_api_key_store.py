@@ -126,6 +126,7 @@ async def test_validate_api_key_valid(api_key_store, async_session_maker):
         )
         session.add(key_record)
         await session.commit()
+        key_id = key_record.id
 
     # Act
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -133,8 +134,11 @@ async def test_validate_api_key_valid(api_key_store, async_session_maker):
 
     # Assert
     assert isinstance(result, ApiKeyValidationResult)
+    assert result is not None
     assert result.user_id == user_id
     assert result.org_id == org_id
+    assert result.key_id == key_id
+    assert result.key_name == 'Test Key'
 
 
 @pytest.mark.asyncio
@@ -251,6 +255,7 @@ async def test_validate_api_key_legacy_without_org_id(
 
     # Assert
     assert isinstance(result, ApiKeyValidationResult)
+    assert result is not None
     assert result.user_id == user_id
     assert result.org_id is None
 

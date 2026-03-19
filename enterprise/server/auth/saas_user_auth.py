@@ -61,6 +61,8 @@ class SaasUserAuth(UserAuth):
     accepted_tos: bool | None = None
     auth_type: AuthType = AuthType.COOKIE
     api_key_org_id: UUID | None = None  # Org bound to the API key used for auth
+    api_key_id: int | None = None
+    api_key_name: str | None = None
 
     def get_api_key_org_id(self) -> UUID | None:
         """Get the organization ID bound to the API key used for authentication.
@@ -305,6 +307,8 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
             refresh_token=SecretStr(offline_token),
             auth_type=AuthType.BEARER,
             api_key_org_id=validation_result.org_id,
+            api_key_id=validation_result.key_id,
+            api_key_name=validation_result.key_name,
         )
         await saas_user_auth.refresh()
         return saas_user_auth
