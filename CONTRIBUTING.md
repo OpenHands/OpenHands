@@ -125,6 +125,17 @@ For example, a PR title could be:
 - If your changes are user-facing (e.g. a new feature in the UI, a change in behavior, or a bugfix),
   please include a short message that we can add to our changelog
 
+## Becoming a Maintainer
+
+For contributors who have made significant and sustained contributions to the project, there is a possibility of joining the maintainer team.
+The process for this is as follows:
+
+1. Any contributor who has made sustained and high-quality contributions to the codebase can be nominated by any maintainer. If you feel that you may qualify you can reach out to any of the maintainers that have reviewed your PRs and ask if you can be nominated.
+2. Once a maintainer nominates a new maintainer, there will be a discussion period among the maintainers for at least 3 days.
+3. If no concerns are raised the nomination will be accepted by acclamation, and if concerns are raised there will be a discussion and possible vote.
+
+Note that just making many PRs does not immediately imply that you will become a maintainer. We will be looking at sustained high-quality contributions over a period of time, as well as good teamwork and adherence to our [Code of Conduct](./CODE_OF_CONDUCT.md).
+
 ## Need Help?
 
 - **Slack**: [Join our community](https://openhands.dev/joinslack)

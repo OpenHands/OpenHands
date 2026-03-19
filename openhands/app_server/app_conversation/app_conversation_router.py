@@ -115,7 +115,7 @@ async def _get_agent_server_context(
     app_conversation_service: AppConversationService,
     sandbox_service: SandboxService,
     sandbox_spec_service: SandboxSpecService,
-) -> AgentServerContext | JSONResponse:
+) -> AgentServerContext | JSONResponse | None:
     """Get the agent server context for a conversation.
 
     This helper retrieves all necessary information to communicate with the
@@ -129,7 +129,8 @@ async def _get_agent_server_context(
         sandbox_spec_service: Service for sandbox spec operations
 
     Returns:
-        AgentServerContext if successful, or JSONResponse with error details.
+        AgentServerContext if successful, JSONResponse(404) if conversation
+        not found, or None if sandbox is not running (e.g. closed conversation).
     """
     # Get the conversation info
     conversation = await app_conversation_service.get_app_conversation(conversation_id)
@@ -141,12 +142,19 @@ async def _get_agent_server_context(
 
     # Get the sandbox info
     sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
-    if not sandbox or sandbox.status != SandboxStatus.RUNNING:
+    if not sandbox:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                'error': f'Sandbox not found or not running for conversation {conversation_id}'
-            },
+            content={'error': f'Sandbox not found for conversation {conversation_id}'},
+        )
+    # Return None for paused sandboxes (closed conversation)
+    if sandbox.status == SandboxStatus.PAUSED:
+        return None
+    # Return 404 for other non-running states (STARTING, ERROR, MISSING)
+    if sandbox.status != SandboxStatus.RUNNING:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': f'Sandbox not ready for conversation {conversation_id}'},
         )
 
     # Get the sandbox spec to find the working directory
@@ -587,6 +595,7 @@ async def get_conversation_skills(
 
     Returns:
         JSONResponse: A JSON response containing the list of skills.
+        Returns an empty list if the sandbox is not running.
     """
     try:
         # Get agent server context (conversation, sandbox, sandbox_spec, agent_server_url)
@@ -598,6 +607,8 @@ async def get_conversation_skills(
         )
         if isinstance(ctx, JSONResponse):
             return ctx
+        if ctx is None:
+            return JSONResponse(status_code=status.HTTP_200_OK, content={'skills': []})
 
         # Load skills from all sources
         logger.info(f'Loading skills for conversation {conversation_id}')
@@ -685,6 +696,7 @@ async def get_conversation_hooks(
 
     Returns:
         JSONResponse: A JSON response containing the list of hook event types.
+        Returns an empty list if the sandbox is not running.
     """
     try:
         # Get agent server context (conversation, sandbox, sandbox_spec, agent_server_url)
@@ -696,6 +708,8 @@ async def get_conversation_hooks(
         )
         if isinstance(ctx, JSONResponse):
             return ctx
+        if ctx is None:
+            return JSONResponse(status_code=status.HTTP_200_OK, content={'hooks': []})
 
         from openhands.app_server.app_conversation.hook_loader import (
             fetch_hooks_from_agent_server,
