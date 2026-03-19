@@ -7,6 +7,7 @@ import {
   WsClientProvider,
   useWsClient,
 } from "#/context/ws-client-provider";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 describe("Propagate error message", () => {
   it("should do nothing when no message was passed from server", () => {
@@ -56,6 +57,7 @@ function TestComponent() {
 describe("WsClientProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
     vi.mock("#/hooks/query/use-active-conversation", () => ({
       useActiveConversation: () => {
         return { data: {
