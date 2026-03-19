@@ -1,26 +1,25 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-box";
 import { renderWithProviders } from "../../test-utils";
 import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(),
 }));
 
 // Mock React Router hooks
-vi.mock("react-router", async () => {
-  const actual = await vi.importActual("react-router");
-  return {
-    ...actual,
-    useNavigate: () => vi.fn(),
-    useParams: () => ({ conversationId: "test-conversation-id" }),
-  };
-});
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => vi.fn(),
+  useParams: () => ({ conversationId: "test-conversation-id" }),
+  useRevalidator: () => ({ revalidate: vi.fn() }),
+}));
 
 // Mock the useActiveConversation hook
 vi.mock("#/hooks/query/use-active-conversation", () => ({
@@ -51,6 +50,10 @@ vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
 
 describe("InteractiveChatBox", () => {
   const onSubmitMock = vi.fn();
+
+  beforeEach(() => {
+    useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
+  });
 
   const mockStores = (agentState: AgentState = AgentState.INIT) => {
     vi.mocked(useAgentState).mockReturnValue({
