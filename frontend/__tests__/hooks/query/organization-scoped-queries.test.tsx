@@ -9,16 +9,7 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import ApiKeysClient from "#/api/api-keys";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
-
-// Track the current mock organization ID
-let mockOrganizationId: string | null = "org-1";
-
-vi.mock("#/context/use-selected-organization", () => ({
-  useSelectedOrganizationId: () => ({
-    organizationId: mockOrganizationId,
-    setOrganizationId: vi.fn(),
-  }),
-}));
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({
@@ -53,7 +44,7 @@ describe("Organization-scoped query hooks", () => {
         },
       },
     });
-    mockOrganizationId = "org-1";
+    useSelectedOrganizationStore.setState({ organizationId: "org-1" });
     vi.clearAllMocks();
   });
 
@@ -93,7 +84,7 @@ describe("Organization-scoped query hooks", () => {
       expect(getSettingsSpy).toHaveBeenCalledTimes(1);
 
       // Change organization
-      mockOrganizationId = "org-2";
+      useSelectedOrganizationStore.setState({ organizationId: "org-2" });
       getSettingsSpy.mockResolvedValue({
         ...MOCK_DEFAULT_USER_SETTINGS,
         language: "es",
@@ -152,7 +143,7 @@ describe("Organization-scoped query hooks", () => {
       expect(result.current.data?.[0].name).toBe("SECRET_ORG_1");
 
       // Change organization
-      mockOrganizationId = "org-2";
+      useSelectedOrganizationStore.setState({ organizationId: "org-2" });
       getSecretsSpy.mockResolvedValueOnce([
         { name: "SECRET_ORG_2", description: "Org 2 secret" },
       ]);
@@ -196,7 +187,7 @@ describe("Organization-scoped query hooks", () => {
         language: "en",
       });
 
-      mockOrganizationId = "org-1";
+      useSelectedOrganizationStore.setState({ organizationId: "org-1" });
       const { rerender } = renderHook(() => useSettings(), {
         wrapper: createWrapper(),
       });
@@ -211,7 +202,7 @@ describe("Organization-scoped query hooks", () => {
         language: "fr",
       });
 
-      mockOrganizationId = "org-2";
+      useSelectedOrganizationStore.setState({ organizationId: "org-2" });
       rerender();
 
       await waitFor(() => {
@@ -219,7 +210,7 @@ describe("Organization-scoped query hooks", () => {
       });
 
       // Switch back to org-1 - should use cached data, not refetch
-      mockOrganizationId = "org-1";
+      useSelectedOrganizationStore.setState({ organizationId: "org-1" });
       rerender();
 
       // org-1 data should still be in cache

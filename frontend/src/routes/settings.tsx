@@ -30,7 +30,6 @@ const SAAS_ONLY_PATHS = [
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
   const { pathname } = url;
-  console.log("clientLoader", { pathname });
 
   // Step 1: Get config first (needed for all checks, no user data required)
   let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
@@ -51,7 +50,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   // This handles hide_llm_settings, hide_users_page, hide_billing_page, hide_integrations_page
   if (isSettingsPageHidden(pathname, featureFlags)) {
     const fallbackPath = getFirstAvailablePath(isSaas, featureFlags);
-    console.log("fallbackPath", fallbackPath);
     if (fallbackPath && fallbackPath !== pathname) {
       return redirect(fallbackPath);
     }
