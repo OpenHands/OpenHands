@@ -164,9 +164,33 @@ class LiteLlmManager:
                 )
 
                 if create_user:
-                    await LiteLlmManager._create_user(
+                    user_created = await LiteLlmManager._create_user(
                         client, keycloak_user_info.get('email'), keycloak_user_id
                     )
+                    if not user_created:
+                        logger.error(
+                            'create_entries_failed_user_creation',
+                            extra={
+                                'org_id': org_id,
+                                'user_id': keycloak_user_id,
+                            },
+                        )
+                        return None
+
+                # Verify user exists before proceeding with key generation
+                user_exists = await LiteLlmManager._user_exists(
+                    client, keycloak_user_id
+                )
+                if not user_exists:
+                    logger.error(
+                        'create_entries_user_not_found_before_key_generation',
+                        extra={
+                            'org_id': org_id,
+                            'user_id': keycloak_user_id,
+                            'create_user_flag': create_user,
+                        },
+                    )
+                    return None
 
                 await LiteLlmManager._add_user_to_team(
                     client, keycloak_user_id, org_id, team_budget
@@ -656,14 +680,47 @@ class LiteLlmManager:
         response.raise_for_status()
 
     @staticmethod
+    async def _user_exists(
+        client: httpx.AsyncClient,
+        user_id: str,
+    ) -> bool:
+        """Check if a user exists in LiteLLM.
+
+        Returns True if the user exists, False otherwise.
+        """
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            return False
+        try:
+            response = await client.get(
+                f'{LITE_LLM_API_URL}/user/info?user_id={user_id}',
+            )
+            if response.is_success:
+                user_data = response.json()
+                # Check that user_info exists and has the user_id
+                user_info = user_data.get('user_info', {})
+                return user_info.get('user_id') == user_id
+            return False
+        except Exception as e:
+            logger.warning(
+                'litellm_user_exists_check_failed',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            return False
+
+    @staticmethod
     async def _create_user(
         client: httpx.AsyncClient,
         email: str | None,
         keycloak_user_id: str,
-    ):
+    ) -> bool:
+        """Create a user in LiteLLM.
+
+        Returns True if the user was created or already exists and is verified,
+        False if creation failed and user does not exist.
+        """
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
-            return
+            return False
         response = await client.post(
             f'{LITE_LLM_API_URL}/user/new',
             json={
@@ -716,17 +773,33 @@ class LiteLlmManager:
                             'user_id': keycloak_user_id,
                         },
                     )
-                    return
+                    # Verify the user actually exists before returning success
+                    user_exists = await LiteLlmManager._user_exists(
+                        client, keycloak_user_id
+                    )
+                    if not user_exists:
+                        logger.error(
+                            'litellm_user_claimed_exists_but_not_found',
+                            extra={
+                                'user_id': keycloak_user_id,
+                                'status_code': response.status_code,
+                                'text': response.text,
+                            },
+                        )
+                        return False
+                    return True
                 logger.error(
                     'error_creating_litellm_user',
                     extra={
                         'status_code': response.status_code,
                         'text': response.text,
-                        'user_id': [keycloak_user_id],
+                        'user_id': keycloak_user_id,
                         'email': None,
                     },
                 )
+                return False
             response.raise_for_status()
+        return True
 
     @staticmethod
     async def _get_user(client: httpx.AsyncClient, user_id: str) -> dict | None:
@@ -1450,6 +1523,7 @@ class LiteLlmManager:
     create_team = staticmethod(with_http_client(_create_team))
     get_team = staticmethod(with_http_client(_get_team))
     update_team = staticmethod(with_http_client(_update_team))
+    user_exists = staticmethod(with_http_client(_user_exists))
     create_user = staticmethod(with_http_client(_create_user))
     get_user = staticmethod(with_http_client(_get_user))
     update_user = staticmethod(with_http_client(_update_user))
