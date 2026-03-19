@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy import select
 from storage.api_key import ApiKey
-from storage.api_key_store import ApiKeyStore
+from storage.api_key_store import ApiKeyStore, ApiKeyValidationResult
 
 
 @pytest.fixture
@@ -110,8 +110,8 @@ async def test_create_api_key(
 
 @pytest.mark.asyncio
 async def test_validate_api_key_valid(api_key_store, async_session_maker):
-    """Test validating a valid API key."""
-    # Setup - create an API key in the database
+    """Test validating a valid API key returns user_id and org_id."""
+    # Arrange
     user_id = str(uuid.uuid4())
     org_id = uuid.uuid4()
     api_key_value = 'test-api-key'
@@ -128,11 +128,12 @@ async def test_validate_api_key_valid(api_key_store, async_session_maker):
         await session.commit()
         key_id = key_record.id
 
-    # Execute - patch a_session_maker to use test's async session maker
+    # Act
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
         result = await api_key_store.validate_api_key(api_key_value)
 
-    # Verify - result is now ApiKeyValidationResult
+    # Assert
+    assert isinstance(result, ApiKeyValidationResult)
     assert result is not None
     assert result.user_id == user_id
     assert result.org_id == org_id
@@ -202,7 +203,7 @@ async def test_validate_api_key_valid_timezone_naive(
     api_key_store, async_session_maker
 ):
     """Test validating a valid API key with timezone-naive datetime from database."""
-    # Setup - create a valid API key with timezone-naive datetime (future date)
+    # Arrange
     user_id = str(uuid.uuid4())
     org_id = uuid.uuid4()
     api_key_value = 'test-valid-naive-key'
@@ -219,13 +220,44 @@ async def test_validate_api_key_valid_timezone_naive(
         session.add(key_record)
         await session.commit()
 
-    # Execute - patch a_session_maker to use test's async session maker
+    # Act
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
         result = await api_key_store.validate_api_key(api_key_value)
 
-    # Verify - result is now ApiKeyValidationResult
+    # Assert
+    assert isinstance(result, ApiKeyValidationResult)
+    assert result.user_id == user_id
+    assert result.org_id == org_id
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_legacy_without_org_id(
+    api_key_store, async_session_maker
+):
+    """Test validating a legacy API key without org_id returns None for org_id."""
+    # Arrange
+    user_id = str(uuid.uuid4())
+    api_key_value = 'test-legacy-key-no-org'
+
+    async with async_session_maker() as session:
+        key_record = ApiKey(
+            key=api_key_value,
+            user_id=user_id,
+            org_id=None,  # Legacy key without org binding
+            name='Legacy Key',
+        )
+        session.add(key_record)
+        await session.commit()
+
+    # Act
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    # Assert
+    assert isinstance(result, ApiKeyValidationResult)
     assert result is not None
     assert result.user_id == user_id
+    assert result.org_id is None
 
 
 @pytest.mark.asyncio
