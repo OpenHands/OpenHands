@@ -22,7 +22,7 @@
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=ko">한국어</a> |
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=pt">Português</a> |
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=ru">Русский</a> |
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=zh">中文</a>
+  <a href="README.zh.md">中文</a>
 
 </div>
 
