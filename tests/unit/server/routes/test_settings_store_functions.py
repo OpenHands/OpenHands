@@ -38,11 +38,11 @@ def test_client():
     test_app.include_router(secrets_router)
 
     with (
-        patch.dict(os.environ, {"SESSION_API_KEY": ""}, clear=False),
-        patch("openhands.server.dependencies._SESSION_API_KEY", None),
+        patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
+        patch('openhands.server.dependencies._SESSION_API_KEY', None),
         patch(
-            "openhands.server.routes.secrets.check_provider_tokens",
-            AsyncMock(return_value=""),
+            'openhands.server.routes.secrets.check_provider_tokens',
+            AsyncMock(return_value=''),
         ),
     ):
         client = TestClient(test_app)
@@ -51,15 +51,15 @@ def test_client():
 
 @pytest.fixture
 def temp_dir(tmp_path_factory: pytest.TempPathFactory) -> str:
-    return str(tmp_path_factory.mktemp("secrets_store"))
+    return str(tmp_path_factory.mktemp('secrets_store'))
 
 
 @pytest.fixture
 def file_secrets_store(temp_dir):
-    file_store = get_file_store("local", temp_dir)
+    file_store = get_file_store('local', temp_dir)
     store = FileSecretsStore(file_store)
     with patch(
-        "openhands.storage.secrets.file_secrets_store.FileSecretsStore.get_instance",
+        'openhands.storage.secrets.file_secrets_store.FileSecretsStore.get_instance',
         AsyncMock(return_value=store),
     ):
         yield store
@@ -69,7 +69,7 @@ def file_secrets_store(temp_dir):
 @pytest.mark.asyncio
 async def test_check_provider_tokens_valid():
     """Test check_provider_tokens with valid tokens."""
-    provider_token = ProviderToken(token=SecretStr("valid-token"))
+    provider_token = ProviderToken(token=SecretStr('valid-token'))
     providers = POSTProviderModel(provider_tokens={ProviderType.GITHUB: provider_token})
 
     # Empty existing provider tokens
@@ -77,21 +77,21 @@ async def test_check_provider_tokens_valid():
 
     # Mock the validate_provider_token function to return GITHUB for valid tokens
     with patch(
-        "openhands.server.routes.secrets.validate_provider_token"
+        'openhands.server.routes.secrets.validate_provider_token'
     ) as mock_validate:
         mock_validate.return_value = ProviderType.GITHUB
 
         result = await check_provider_tokens(providers, existing_provider_tokens)
 
         # Should return empty string for valid token
-        assert result == ""
+        assert result == ''
         mock_validate.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_check_provider_tokens_invalid():
     """Test check_provider_tokens with invalid tokens."""
-    provider_token = ProviderToken(token=SecretStr("invalid-token"))
+    provider_token = ProviderToken(token=SecretStr('invalid-token'))
     providers = POSTProviderModel(provider_tokens={ProviderType.GITHUB: provider_token})
 
     # Empty existing provider tokens
@@ -99,14 +99,14 @@ async def test_check_provider_tokens_invalid():
 
     # Mock the validate_provider_token function to return None for invalid tokens
     with patch(
-        "openhands.server.routes.secrets.validate_provider_token"
+        'openhands.server.routes.secrets.validate_provider_token'
     ) as mock_validate:
         mock_validate.return_value = None
 
         result = await check_provider_tokens(providers, existing_provider_tokens)
 
         # Should return error message for invalid token
-        assert "Invalid token" in result
+        assert 'Invalid token' in result
         mock_validate.assert_called_once()
 
 
@@ -123,7 +123,7 @@ async def test_check_provider_tokens_wrong_type():
     result = await check_provider_tokens(providers, existing_provider_tokens)
 
     # Should return empty string for no providers
-    assert result == ""
+    assert result == ''
 
 
 @pytest.mark.asyncio
@@ -137,7 +137,7 @@ async def test_check_provider_tokens_no_tokens():
     result = await check_provider_tokens(providers, existing_provider_tokens)
 
     # Should return empty string when no tokens provided
-    assert result == ""
+    assert result == ''
 
 
 # Tests for store_llm_settings
@@ -145,9 +145,9 @@ async def test_check_provider_tokens_no_tokens():
 async def test_store_llm_settings_new_settings():
     """Test store_llm_settings with new settings."""
     settings = Settings(
-        llm_model="gpt-4",
-        llm_api_key="test-api-key",
-        llm_base_url="https://api.example.com",
+        llm_model='gpt-4',
+        llm_api_key='test-api-key',
+        llm_base_url='https://api.example.com',
     )
 
     # No existing settings
@@ -156,33 +156,33 @@ async def test_store_llm_settings_new_settings():
     result = await store_llm_settings(settings, existing_settings)
 
     # Should return settings with the provided values
-    assert result.llm_model == "gpt-4"
-    assert result.llm_api_key.get_secret_value() == "test-api-key"
-    assert result.llm_base_url == "https://api.example.com"
+    assert result.llm_model == 'gpt-4'
+    assert result.llm_api_key.get_secret_value() == 'test-api-key'
+    assert result.llm_base_url == 'https://api.example.com'
 
 
 @pytest.mark.asyncio
 async def test_store_llm_settings_update_existing():
     """Test store_llm_settings updates existing settings."""
     settings = Settings(
-        llm_model="gpt-4",
-        llm_api_key="new-api-key",
-        llm_base_url="https://new.example.com",
+        llm_model='gpt-4',
+        llm_api_key='new-api-key',
+        llm_base_url='https://new.example.com',
     )
 
     # Create existing settings
     existing_settings = Settings(
-        llm_model="gpt-3.5",
-        llm_api_key=SecretStr("old-api-key"),
-        llm_base_url="https://old.example.com",
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('old-api-key'),
+        llm_base_url='https://old.example.com',
     )
 
     result = await store_llm_settings(settings, existing_settings)
 
     # Should return settings with the updated values
-    assert result.llm_model == "gpt-4"
-    assert result.llm_api_key.get_secret_value() == "new-api-key"
-    assert result.llm_base_url == "https://new.example.com"
+    assert result.llm_model == 'gpt-4'
+    assert result.llm_api_key.get_secret_value() == 'new-api-key'
+    assert result.llm_base_url == 'https://new.example.com'
 
 
 @pytest.mark.asyncio
@@ -194,23 +194,23 @@ async def test_store_llm_settings_partial_update():
     For OpenAI models, this returns https://api.openai.com.
     """
     settings = Settings(
-        llm_model="gpt-4",  # Only updating model (not an openhands model)
-        llm_base_url="",  # Explicitly cleared (e.g. basic mode save)
+        llm_model='gpt-4',  # Only updating model (not an openhands model)
+        llm_base_url='',  # Explicitly cleared (e.g. basic mode save)
     )
 
     # Create existing settings
     existing_settings = Settings(
-        llm_model="gpt-3.5",
-        llm_api_key=SecretStr("existing-api-key"),
-        llm_base_url="https://existing.example.com",
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
+        llm_base_url='https://existing.example.com',
     )
 
     result = await store_llm_settings(settings, existing_settings)
 
     # Should return settings with updated model but keep API key
-    assert result.llm_model == "gpt-4"
+    assert result.llm_model == 'gpt-4'
     # For SecretStr objects, we need to compare the secret value
-    assert result.llm_api_key.get_secret_value() == "existing-api-key"
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
     # llm_base_url="" is an explicit clear — must not be repopulated via auto-detection
     assert result.llm_base_url is None
 
@@ -223,14 +223,14 @@ async def test_store_llm_settings_advanced_view_clear_removes_base_url():
     causing the backend to re-run auto-detection and overwrite the user's intent.
     """
     settings = Settings(
-        llm_model="gpt-4",
-        llm_base_url="",  # User deleted the field in Advanced view
+        llm_model='gpt-4',
+        llm_base_url='',  # User deleted the field in Advanced view
     )
 
     existing_settings = Settings(
-        llm_model="gpt-4",
-        llm_api_key=SecretStr("my-api-key"),
-        llm_base_url="https://my-custom-proxy.example.com",
+        llm_model='gpt-4',
+        llm_api_key=SecretStr('my-api-key'),
+        llm_base_url='https://my-custom-proxy.example.com',
     )
 
     result = await store_llm_settings(settings, existing_settings)
@@ -251,10 +251,10 @@ async def test_store_llm_settings_mcp_update_preserves_base_url():
         mcp_config=MCPConfig(
             stdio_servers=[
                 MCPStdioServerConfig(
-                    name="my-server",
-                    command="npx",
-                    args=["-y", "@my/mcp-server"],
-                    env={"API_TOKEN": "secret123", "ENDPOINT": "https://example.com"},
+                    name='my-server',
+                    command='npx',
+                    args=['-y', '@my/mcp-server'],
+                    env={'API_TOKEN': 'secret123', 'ENDPOINT': 'https://example.com'},
                 )
             ],
         ),
@@ -262,17 +262,17 @@ async def test_store_llm_settings_mcp_update_preserves_base_url():
 
     # Create existing settings with a custom base URL
     existing_settings = Settings(
-        llm_model="anthropic/claude-sonnet-4-5-20250929",
-        llm_api_key=SecretStr("existing-api-key"),
-        llm_base_url="https://my-custom-proxy.example.com",
+        llm_model='anthropic/claude-sonnet-4-5-20250929',
+        llm_api_key=SecretStr('existing-api-key'),
+        llm_base_url='https://my-custom-proxy.example.com',
     )
 
     result = await store_llm_settings(settings, existing_settings)
 
     # All existing LLM settings should be preserved
-    assert result.llm_model == "anthropic/claude-sonnet-4-5-20250929"
-    assert result.llm_api_key.get_secret_value() == "existing-api-key"
-    assert result.llm_base_url == "https://my-custom-proxy.example.com"
+    assert result.llm_model == 'anthropic/claude-sonnet-4-5-20250929'
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
+    assert result.llm_base_url == 'https://my-custom-proxy.example.com'
 
 
 @pytest.mark.asyncio
@@ -283,21 +283,21 @@ async def test_store_llm_settings_no_existing_base_url_uses_auto_detection():
     auto-detection from litellm should be used.
     """
     settings = Settings(
-        llm_model="gpt-4"  # Not an openhands model
+        llm_model='gpt-4'  # Not an openhands model
     )
 
     # Existing settings without a base URL
     existing_settings = Settings(
-        llm_model="gpt-3.5",
-        llm_api_key=SecretStr("existing-api-key"),
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
     )
 
     result = await store_llm_settings(settings, existing_settings)
 
-    assert result.llm_model == "gpt-4"
-    assert result.llm_api_key.get_secret_value() == "existing-api-key"
+    assert result.llm_model == 'gpt-4'
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
     # No existing base URL, so auto-detection should set it
-    assert result.llm_base_url == "https://api.openai.com"
+    assert result.llm_base_url == 'https://api.openai.com'
 
 
 @pytest.mark.asyncio
@@ -308,20 +308,20 @@ async def test_store_llm_settings_anthropic_model_gets_api_base():
     via ProviderConfigManager.get_provider_model_info().
     """
     settings = Settings(
-        llm_model="anthropic/claude-sonnet-4-5-20250929"  # Anthropic model
+        llm_model='anthropic/claude-sonnet-4-5-20250929'  # Anthropic model
     )
 
     existing_settings = Settings(
-        llm_model="gpt-3.5",
-        llm_api_key=SecretStr("existing-api-key"),
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
     )
 
     result = await store_llm_settings(settings, existing_settings)
 
-    assert result.llm_model == "anthropic/claude-sonnet-4-5-20250929"
-    assert result.llm_api_key.get_secret_value() == "existing-api-key"
+    assert result.llm_model == 'anthropic/claude-sonnet-4-5-20250929'
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
     # Anthropic models get https://api.anthropic.com via ProviderConfigManager
-    assert result.llm_base_url == "https://api.anthropic.com"
+    assert result.llm_base_url == 'https://api.anthropic.com'
 
 
 @pytest.mark.asyncio
@@ -330,16 +330,16 @@ async def test_store_llm_settings_litellm_error_logged():
     from unittest.mock import patch
 
     settings = Settings(
-        llm_model="unknown-model-xyz"  # A model that litellm won't recognize
+        llm_model='unknown-model-xyz'  # A model that litellm won't recognize
     )
 
     existing_settings = Settings(
-        llm_model="gpt-3.5",
-        llm_api_key=SecretStr("existing-api-key"),
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
     )
 
     # The function should not raise even if litellm fails
-    with patch("openhands.server.routes.settings.logger") as mock_logger:
+    with patch('openhands.server.routes.settings.logger') as mock_logger:
         result = await store_llm_settings(settings, existing_settings)
 
         # llm_base_url should remain None since litellm couldn't find the model
@@ -358,24 +358,24 @@ async def test_store_llm_settings_openhands_model_gets_default_url():
     import os
 
     settings = Settings(
-        llm_model="openhands/claude-sonnet-4-5-20250929"  # openhands model
+        llm_model='openhands/claude-sonnet-4-5-20250929'  # openhands model
     )
 
     # Create existing settings
     existing_settings = Settings(
-        llm_model="gpt-3.5",
-        llm_api_key=SecretStr("existing-api-key"),
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
     )
 
     result = await store_llm_settings(settings, existing_settings)
 
     # Should return settings with updated model
-    assert result.llm_model == "openhands/claude-sonnet-4-5-20250929"
+    assert result.llm_model == 'openhands/claude-sonnet-4-5-20250929'
     # For SecretStr objects, we need to compare the secret value
-    assert result.llm_api_key.get_secret_value() == "existing-api-key"
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
     # openhands models get the LiteLLM proxy URL
     expected_base_url = os.environ.get(
-        "LITE_LLM_API_URL", "https://llm-proxy.app.all-hands.dev"
+        'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
     )
     assert result.llm_base_url == expected_base_url
 
@@ -384,7 +384,7 @@ async def test_store_llm_settings_openhands_model_gets_default_url():
 @pytest.mark.asyncio
 async def test_store_provider_tokens_new_tokens(test_client, file_secrets_store):
     """Test store_provider_tokens with new tokens."""
-    provider_tokens = {"provider_tokens": {"github": {"token": "new-token"}}}
+    provider_tokens = {'provider_tokens': {'github': {'token': 'new-token'}}}
 
     # Mock the settings store
     mock_store = MagicMock()
@@ -394,14 +394,14 @@ async def test_store_provider_tokens_new_tokens(test_client, file_secrets_store)
 
     user_secrets = await file_secrets_store.store(Secrets())
 
-    response = test_client.post("/api/add-git-providers", json=provider_tokens)
+    response = test_client.post('/api/add-git-providers', json=provider_tokens)
     assert response.status_code == 200
 
     user_secrets = await file_secrets_store.load()
 
     assert (
         user_secrets.provider_tokens[ProviderType.GITHUB].token.get_secret_value()
-        == "new-token"
+        == 'new-token'
     )
 
 
@@ -409,7 +409,7 @@ async def test_store_provider_tokens_new_tokens(test_client, file_secrets_store)
 async def test_store_provider_tokens_update_existing(test_client, file_secrets_store):
     """Test store_provider_tokens updates existing tokens."""
     # Create existing settings with a GitHub token
-    github_token = ProviderToken(token=SecretStr("old-token"))
+    github_token = ProviderToken(token=SecretStr('old-token'))
     provider_tokens = {ProviderType.GITHUB: github_token}
 
     # Create a Secrets with the provider tokens
@@ -418,8 +418,8 @@ async def test_store_provider_tokens_update_existing(test_client, file_secrets_s
     await file_secrets_store.store(user_secrets)
 
     response = test_client.post(
-        "/api/add-git-providers",
-        json={"provider_tokens": {"github": {"token": "updated-token"}}},
+        '/api/add-git-providers',
+        json={'provider_tokens': {'github': {'token': 'updated-token'}}},
     )
 
     assert response.status_code == 200
@@ -428,7 +428,7 @@ async def test_store_provider_tokens_update_existing(test_client, file_secrets_s
 
     assert (
         user_secrets.provider_tokens[ProviderType.GITHUB].token.get_secret_value()
-        == "updated-token"
+        == 'updated-token'
     )
 
 
@@ -436,15 +436,15 @@ async def test_store_provider_tokens_update_existing(test_client, file_secrets_s
 async def test_store_provider_tokens_keep_existing(test_client, file_secrets_store):
     """Test store_provider_tokens keeps existing tokens when empty string provided."""
     # Create existing secrets with a GitHub token
-    github_token = ProviderToken(token=SecretStr("existing-token"))
+    github_token = ProviderToken(token=SecretStr('existing-token'))
     provider_tokens = {ProviderType.GITHUB: github_token}
     user_secrets = Secrets(provider_tokens=provider_tokens)
 
     await file_secrets_store.store(user_secrets)
 
     response = test_client.post(
-        "/api/add-git-providers",
-        json={"provider_tokens": {"github": {"token": ""}}},
+        '/api/add-git-providers',
+        json={'provider_tokens': {'github': {'token': ''}}},
     )
     assert response.status_code == 200
 
@@ -452,5 +452,5 @@ async def test_store_provider_tokens_keep_existing(test_client, file_secrets_sto
 
     assert (
         user_secrets.provider_tokens[ProviderType.GITHUB].token.get_secret_value()
-        == "existing-token"
+        == 'existing-token'
     )
