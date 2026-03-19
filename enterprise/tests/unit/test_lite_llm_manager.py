@@ -38,8 +38,9 @@ class TestDefaultInitialBudget:
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
-        # Clear the env var
+        # Clear the env vars
         os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
+        os.environ.pop('ENABLE_BILLING', None)
 
         # Restore original module or reimport fresh
         if original_module is not None:
@@ -47,31 +48,56 @@ class TestDefaultInitialBudget:
         else:
             importlib.import_module('storage.lite_llm_manager')
 
-    def test_default_initial_budget_defaults_to_zero(self):
-        """Test that DEFAULT_INITIAL_BUDGET defaults to 0.0 when env var not set."""
+    def test_default_initial_budget_none_when_billing_disabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET is None when billing is disabled."""
         # Temporarily remove the module so we can reimport with different env vars
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
-        # Clear the env var and reimport
+        # Ensure billing is disabled (default) and reimport
+        os.environ.pop('ENABLE_BILLING', None)
+        os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
+        module = importlib.import_module('storage.lite_llm_manager')
+        assert module.DEFAULT_INITIAL_BUDGET is None
+
+    def test_default_initial_budget_defaults_to_zero_when_billing_enabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET defaults to 0.0 when billing is enabled."""
+        # Temporarily remove the module so we can reimport with different env vars
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        # Enable billing and reimport
+        os.environ['ENABLE_BILLING'] = 'true'
         os.environ.pop('DEFAULT_INITIAL_BUDGET', None)
         module = importlib.import_module('storage.lite_llm_manager')
         assert module.DEFAULT_INITIAL_BUDGET == 0.0
 
-    def test_default_initial_budget_uses_env_var(self):
-        """Test that DEFAULT_INITIAL_BUDGET uses value from environment variable."""
+    def test_default_initial_budget_uses_env_var_when_billing_enabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET uses value from environment variable when billing enabled."""
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
+        os.environ['ENABLE_BILLING'] = 'true'
         os.environ['DEFAULT_INITIAL_BUDGET'] = '100.0'
         module = importlib.import_module('storage.lite_llm_manager')
         assert module.DEFAULT_INITIAL_BUDGET == 100.0
+
+    def test_default_initial_budget_ignores_env_var_when_billing_disabled(self):
+        """Test that DEFAULT_INITIAL_BUDGET returns None when billing disabled, ignoring env var."""
+        if 'storage.lite_llm_manager' in sys.modules:
+            del sys.modules['storage.lite_llm_manager']
+
+        os.environ.pop('ENABLE_BILLING', None)  # billing disabled by default
+        os.environ['DEFAULT_INITIAL_BUDGET'] = '100.0'
+        module = importlib.import_module('storage.lite_llm_manager')
+        assert module.DEFAULT_INITIAL_BUDGET is None
 
     def test_default_initial_budget_rejects_invalid_value(self):
         """Test that DEFAULT_INITIAL_BUDGET raises ValueError for invalid values."""
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
+        os.environ['ENABLE_BILLING'] = 'true'
         os.environ['DEFAULT_INITIAL_BUDGET'] = 'abc'
         with pytest.raises(ValueError) as exc_info:
             importlib.import_module('storage.lite_llm_manager')
@@ -82,6 +108,7 @@ class TestDefaultInitialBudget:
         if 'storage.lite_llm_manager' in sys.modules:
             del sys.modules['storage.lite_llm_manager']
 
+        os.environ['ENABLE_BILLING'] = 'true'
         os.environ['DEFAULT_INITIAL_BUDGET'] = '-10.0'
         with pytest.raises(ValueError) as exc_info:
             importlib.import_module('storage.lite_llm_manager')
@@ -212,6 +239,16 @@ class TestLiteLlmManager:
         mock_404_response = MagicMock()
         mock_404_response.status_code = 404
         mock_404_response.is_success = False
+        mock_404_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message='Not Found', request=MagicMock(), response=mock_404_response
+        )
+
+        # Mock user exists check response
+        mock_user_exists_response = MagicMock()
+        mock_user_exists_response.is_success = True
+        mock_user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
 
         mock_token_manager = MagicMock()
         mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
@@ -219,12 +256,8 @@ class TestLiteLlmManager:
         )
 
         mock_client = AsyncMock()
-        mock_client.get.return_value = mock_404_response
-        mock_client.get.return_value.raise_for_status.side_effect = (
-            httpx.HTTPStatusError(
-                message='Not Found', request=MagicMock(), response=mock_404_response
-            )
-        )
+        # First GET is for _get_team (404), second GET is for _user_exists (success)
+        mock_client.get.side_effect = [mock_404_response, mock_user_exists_response]
         mock_client.post.return_value = mock_response
 
         mock_client_class = MagicMock()
@@ -247,8 +280,8 @@ class TestLiteLlmManager:
             assert result.llm_api_key.get_secret_value() == 'test-api-key'
             assert result.llm_base_url == 'http://test.com'
 
-            # Verify API calls were made (get_team + 4 posts)
-            assert mock_client.get.call_count == 1  # get_team
+            # Verify API calls were made (get_team + user_exists + 4 posts)
+            assert mock_client.get.call_count == 2  # get_team + user_exists
             assert (
                 mock_client.post.call_count == 4
             )  # create_team, add_user_to_team, delete_key_by_alias, generate_key
@@ -267,13 +300,21 @@ class TestLiteLlmManager:
         }
         mock_team_response.raise_for_status = MagicMock()
 
+        # Mock user exists check response
+        mock_user_exists_response = MagicMock()
+        mock_user_exists_response.is_success = True
+        mock_user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
+
         mock_token_manager = MagicMock()
         mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
             return_value={'email': 'test@example.com'}
         )
 
         mock_client = AsyncMock()
-        mock_client.get.return_value = mock_team_response
+        # First GET is for _get_team (success), second GET is for _user_exists (success)
+        mock_client.get.side_effect = [mock_team_response, mock_user_exists_response]
         mock_client.post.return_value = mock_response
 
         mock_client_class = MagicMock()
@@ -293,8 +334,8 @@ class TestLiteLlmManager:
             assert result is not None
 
             # Verify _get_team was called first
-            mock_client.get.assert_called_once()
-            get_call_url = mock_client.get.call_args[0][0]
+            assert mock_client.get.call_count == 2  # get_team + user_exists
+            get_call_url = mock_client.get.call_args_list[0][0][0]
             assert 'team/info' in get_call_url
             assert 'test-org-id' in get_call_url
 
@@ -316,19 +357,25 @@ class TestLiteLlmManager:
         mock_404_response = MagicMock()
         mock_404_response.status_code = 404
         mock_404_response.is_success = False
+        mock_404_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message='Not Found', request=MagicMock(), response=mock_404_response
+        )
 
         mock_token_manager = MagicMock()
         mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
             return_value={'email': 'test@example.com'}
         )
 
+        # Mock user exists check response
+        mock_user_exists_response = MagicMock()
+        mock_user_exists_response.is_success = True
+        mock_user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
+
         mock_client = AsyncMock()
-        mock_client.get.return_value = mock_404_response
-        mock_client.get.return_value.raise_for_status.side_effect = (
-            httpx.HTTPStatusError(
-                message='Not Found', request=MagicMock(), response=mock_404_response
-            )
-        )
+        # First GET is for _get_team (404), second GET is for _user_exists (success)
+        mock_client.get.side_effect = [mock_404_response, mock_user_exists_response]
         mock_client.post.return_value = mock_response
 
         mock_client_class = MagicMock()
@@ -366,6 +413,16 @@ class TestLiteLlmManager:
         mock_404_response = MagicMock()
         mock_404_response.status_code = 404
         mock_404_response.is_success = False
+        mock_404_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message='Not Found', request=MagicMock(), response=mock_404_response
+        )
+
+        # Mock user exists check response
+        mock_user_exists_response = MagicMock()
+        mock_user_exists_response.is_success = True
+        mock_user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
 
         mock_token_manager = MagicMock()
         mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
@@ -373,12 +430,8 @@ class TestLiteLlmManager:
         )
 
         mock_client = AsyncMock()
-        mock_client.get.return_value = mock_404_response
-        mock_client.get.return_value.raise_for_status.side_effect = (
-            httpx.HTTPStatusError(
-                message='Not Found', request=MagicMock(), response=mock_404_response
-            )
-        )
+        # First GET is for _get_team (404), second GET is for _user_exists (success)
+        mock_client.get.side_effect = [mock_404_response, mock_user_exists_response]
         mock_client.post.return_value = mock_response
 
         mock_client_class = MagicMock()
@@ -806,15 +859,16 @@ class TestLiteLlmManager:
 
     @pytest.mark.asyncio
     async def test_create_user_success(self, mock_http_client, mock_response):
-        """Test successful _create_user operation."""
+        """Test successful _create_user operation returns True."""
         mock_http_client.post.return_value = mock_response
 
         with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
             with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
-                await LiteLlmManager._create_user(
+                result = await LiteLlmManager._create_user(
                     mock_http_client, 'test@example.com', 'test-user-id'
                 )
 
+                assert result is True
                 mock_http_client.post.assert_called_once()
                 call_args = mock_http_client.post.call_args
                 assert 'http://test.com/user/new' in call_args[0]
@@ -823,7 +877,7 @@ class TestLiteLlmManager:
 
     @pytest.mark.asyncio
     async def test_create_user_duplicate_email(self, mock_http_client, mock_response):
-        """Test _create_user with duplicate email handling."""
+        """Test _create_user with duplicate email handling returns True."""
         # First call fails with duplicate email
         error_response = MagicMock()
         error_response.is_success = False
@@ -835,23 +889,81 @@ class TestLiteLlmManager:
 
         with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
             with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
-                await LiteLlmManager._create_user(
+                result = await LiteLlmManager._create_user(
                     mock_http_client, 'test@example.com', 'test-user-id'
                 )
 
+                assert result is True
                 assert mock_http_client.post.call_count == 2
                 # Second call should have None email
                 second_call_args = mock_http_client.post.call_args_list[1]
                 assert second_call_args[1]['json']['user_email'] is None
 
     @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_user_exists_returns_true(self, mock_http_client):
+        """Test _user_exists returns True when user exists in LiteLLM."""
+        # Arrange
+        user_response = MagicMock()
+        user_response.is_success = True
+        user_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id', 'email': 'test@example.com'}
+        }
+        mock_http_client.get.return_value = user_response
+
+        # Act
+        result = await LiteLlmManager._user_exists(mock_http_client, 'test-user-id')
+
+        # Assert
+        assert result is True
+        mock_http_client.get.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_user_exists_returns_false_when_not_found(self, mock_http_client):
+        """Test _user_exists returns False when user not found."""
+        # Arrange
+        user_response = MagicMock()
+        user_response.is_success = False
+        mock_http_client.get.return_value = user_response
+
+        # Act
+        result = await LiteLlmManager._user_exists(mock_http_client, 'test-user-id')
+
+        # Assert
+        assert result is False
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_user_exists_returns_false_on_mismatched_user_id(
+        self, mock_http_client
+    ):
+        """Test _user_exists returns False when returned user_id doesn't match."""
+        # Arrange
+        user_response = MagicMock()
+        user_response.is_success = True
+        user_response.json.return_value = {
+            'user_info': {'user_id': 'different-user-id'}
+        }
+        mock_http_client.get.return_value = user_response
+
+        # Act
+        result = await LiteLlmManager._user_exists(mock_http_client, 'test-user-id')
+
+        # Assert
+        assert result is False
+
+    @pytest.mark.asyncio
     @patch('storage.lite_llm_manager.logger')
     @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
     @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
-    async def test_create_user_already_exists_with_409_status_code(
+    async def test_create_user_already_exists_and_verified(
         self, mock_logger, mock_http_client
     ):
-        """Test _create_user handles 409 Conflict when user already exists."""
+        """Test _create_user returns True when user already exists and is verified."""
         # Arrange
         first_response = MagicMock()
         first_response.is_success = False
@@ -863,14 +975,141 @@ class TestLiteLlmManager:
         second_response.status_code = 409
         second_response.text = 'User with id test-user-id already exists'
 
+        user_exists_response = MagicMock()
+        user_exists_response.is_success = True
+        user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
+
         mock_http_client.post.side_effect = [first_response, second_response]
+        mock_http_client.get.return_value = user_exists_response
 
         # Act
-        await LiteLlmManager._create_user(
+        result = await LiteLlmManager._create_user(
             mock_http_client, 'test@example.com', 'test-user-id'
         )
 
         # Assert
+        assert result is True
+        mock_logger.warning.assert_any_call(
+            'litellm_user_already_exists',
+            extra={'user_id': 'test-user-id'},
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_create_user_already_exists_but_not_found_returns_false(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _create_user returns False when LiteLLM claims user exists but verification fails."""
+        # Arrange
+        first_response = MagicMock()
+        first_response.is_success = False
+        first_response.status_code = 400
+        first_response.text = 'duplicate email'
+
+        second_response = MagicMock()
+        second_response.is_success = False
+        second_response.status_code = 409
+        second_response.text = 'User with id test-user-id already exists'
+
+        user_not_exists_response = MagicMock()
+        user_not_exists_response.is_success = False
+
+        mock_http_client.post.side_effect = [first_response, second_response]
+        mock_http_client.get.return_value = user_not_exists_response
+
+        # Act
+        result = await LiteLlmManager._create_user(
+            mock_http_client, 'test@example.com', 'test-user-id'
+        )
+
+        # Assert
+        assert result is False
+        mock_logger.error.assert_any_call(
+            'litellm_user_claimed_exists_but_not_found',
+            extra={
+                'user_id': 'test-user-id',
+                'status_code': 409,
+                'text': 'User with id test-user-id already exists',
+            },
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_create_user_failure_returns_false(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _create_user returns False when creation fails with non-'already exists' error."""
+        # Arrange
+        first_response = MagicMock()
+        first_response.is_success = False
+        first_response.status_code = 400
+        first_response.text = 'duplicate email'
+
+        second_response = MagicMock()
+        second_response.is_success = False
+        second_response.status_code = 500
+        second_response.text = 'Internal server error'
+
+        mock_http_client.post.side_effect = [first_response, second_response]
+
+        # Act
+        result = await LiteLlmManager._create_user(
+            mock_http_client, 'test@example.com', 'test-user-id'
+        )
+
+        # Assert
+        assert result is False
+        mock_logger.error.assert_any_call(
+            'error_creating_litellm_user',
+            extra={
+                'status_code': 500,
+                'text': 'Internal server error',
+                'user_id': 'test-user-id',
+                'email': None,
+            },
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_create_user_already_exists_with_409_status_code(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _create_user handles 409 Conflict when user already exists and verifies."""
+        # Arrange
+        first_response = MagicMock()
+        first_response.is_success = False
+        first_response.status_code = 400
+        first_response.text = 'duplicate email'
+
+        second_response = MagicMock()
+        second_response.is_success = False
+        second_response.status_code = 409
+        second_response.text = 'User with id test-user-id already exists'
+
+        user_exists_response = MagicMock()
+        user_exists_response.is_success = True
+        user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
+
+        mock_http_client.post.side_effect = [first_response, second_response]
+        mock_http_client.get.return_value = user_exists_response
+
+        # Act
+        result = await LiteLlmManager._create_user(
+            mock_http_client, 'test@example.com', 'test-user-id'
+        )
+
+        # Assert
+        assert result is True
         mock_logger.warning.assert_any_call(
             'litellm_user_already_exists',
             extra={'user_id': 'test-user-id'},
@@ -883,7 +1122,7 @@ class TestLiteLlmManager:
     async def test_create_user_already_exists_with_400_status_code(
         self, mock_logger, mock_http_client
     ):
-        """Test _create_user handles 400 Bad Request when user already exists."""
+        """Test _create_user handles 400 Bad Request when user already exists and verifies."""
         # Arrange
         first_response = MagicMock()
         first_response.is_success = False
@@ -895,14 +1134,22 @@ class TestLiteLlmManager:
         second_response.status_code = 400
         second_response.text = 'User already exists'
 
+        user_exists_response = MagicMock()
+        user_exists_response.is_success = True
+        user_exists_response.json.return_value = {
+            'user_info': {'user_id': 'test-user-id'}
+        }
+
         mock_http_client.post.side_effect = [first_response, second_response]
+        mock_http_client.get.return_value = user_exists_response
 
         # Act
-        await LiteLlmManager._create_user(
+        result = await LiteLlmManager._create_user(
             mock_http_client, 'test@example.com', 'test-user-id'
         )
 
         # Assert
+        assert result is True
         mock_logger.warning.assert_any_call(
             'litellm_user_already_exists',
             extra={'user_id': 'test-user-id'},
@@ -2137,3 +2384,195 @@ class TestVerifyExistingKey:
                 openhands_type=True,
             )
             assert result is False
+
+
+class TestBudgetPayloadHandling:
+    """Test cases for budget field handling in API payloads.
+
+    These tests verify that when max_budget is None, the budget field is NOT
+    included in the JSON payload (which tells LiteLLM to disable budget
+    enforcement), and when max_budget has a value, it IS included.
+    """
+
+    @pytest.mark.asyncio
+    async def test_create_team_excludes_max_budget_when_none(self):
+        """Test that _create_team does NOT include max_budget when it is None."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._create_team(
+                    mock_client,
+                    team_alias='test-team',
+                    team_id='test-team-id',
+                    max_budget=None,  # None = no budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify URL
+        assert call_args[0][0] == 'http://test.com/team/new'
+
+        # Verify that max_budget is NOT in the JSON payload
+        json_payload = call_args[1]['json']
+        assert 'max_budget' not in json_payload, (
+            'max_budget should NOT be in payload when None '
+            '(omitting it tells LiteLLM to disable budget enforcement)'
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_team_includes_max_budget_when_set(self):
+        """Test that _create_team includes max_budget when it has a value."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._create_team(
+                    mock_client,
+                    team_alias='test-team',
+                    team_id='test-team-id',
+                    max_budget=100.0,  # Explicit budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify that max_budget IS in the JSON payload with the correct value
+        json_payload = call_args[1]['json']
+        assert (
+            'max_budget' in json_payload
+        ), 'max_budget should be in payload when set to a value'
+        assert json_payload['max_budget'] == 100.0
+
+    @pytest.mark.asyncio
+    async def test_add_user_to_team_excludes_max_budget_when_none(self):
+        """Test that _add_user_to_team does NOT include max_budget_in_team when None."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._add_user_to_team(
+                    mock_client,
+                    keycloak_user_id='test-user-id',
+                    team_id='test-team-id',
+                    max_budget=None,  # None = no budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify URL
+        assert call_args[0][0] == 'http://test.com/team/member_add'
+
+        # Verify that max_budget_in_team is NOT in the JSON payload
+        json_payload = call_args[1]['json']
+        assert 'max_budget_in_team' not in json_payload, (
+            'max_budget_in_team should NOT be in payload when None '
+            '(omitting it tells LiteLLM to disable budget enforcement)'
+        )
+
+    @pytest.mark.asyncio
+    async def test_add_user_to_team_includes_max_budget_when_set(self):
+        """Test that _add_user_to_team includes max_budget_in_team when set."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._add_user_to_team(
+                    mock_client,
+                    keycloak_user_id='test-user-id',
+                    team_id='test-team-id',
+                    max_budget=50.0,  # Explicit budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify that max_budget_in_team IS in the JSON payload
+        json_payload = call_args[1]['json']
+        assert (
+            'max_budget_in_team' in json_payload
+        ), 'max_budget_in_team should be in payload when set to a value'
+        assert json_payload['max_budget_in_team'] == 50.0
+
+    @pytest.mark.asyncio
+    async def test_update_user_in_team_excludes_max_budget_when_none(self):
+        """Test that _update_user_in_team does NOT include max_budget_in_team when None."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._update_user_in_team(
+                    mock_client,
+                    keycloak_user_id='test-user-id',
+                    team_id='test-team-id',
+                    max_budget=None,  # None = no budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify URL
+        assert call_args[0][0] == 'http://test.com/team/member_update'
+
+        # Verify that max_budget_in_team is NOT in the JSON payload
+        json_payload = call_args[1]['json']
+        assert 'max_budget_in_team' not in json_payload, (
+            'max_budget_in_team should NOT be in payload when None '
+            '(omitting it tells LiteLLM to disable budget enforcement)'
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_user_in_team_includes_max_budget_when_set(self):
+        """Test that _update_user_in_team includes max_budget_in_team when set."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._update_user_in_team(
+                    mock_client,
+                    keycloak_user_id='test-user-id',
+                    team_id='test-team-id',
+                    max_budget=75.0,  # Explicit budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify that max_budget_in_team IS in the JSON payload
+        json_payload = call_args[1]['json']
+        assert (
+            'max_budget_in_team' in json_payload
+        ), 'max_budget_in_team should be in payload when set to a value'
+        assert json_payload['max_budget_in_team'] == 75.0

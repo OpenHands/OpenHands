@@ -263,7 +263,7 @@ class TestGetConversationHooks:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    async def test_get_hooks_returns_404_when_sandbox_not_running(self):
+    async def test_get_hooks_returns_404_when_sandbox_not_found(self):
         conversation_id = uuid4()
         sandbox_id = str(uuid4())
 
@@ -291,3 +291,44 @@ class TestGetConversationHooks:
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_get_hooks_returns_empty_list_when_sandbox_paused(self):
+        conversation_id = uuid4()
+        sandbox_id = str(uuid4())
+
+        mock_conversation = AppConversation(
+            id=conversation_id,
+            created_by_user_id='test-user',
+            sandbox_id=sandbox_id,
+            sandbox_status=SandboxStatus.PAUSED,
+        )
+
+        mock_sandbox = SandboxInfo(
+            id=sandbox_id,
+            created_by_user_id='test-user',
+            status=SandboxStatus.PAUSED,
+            sandbox_spec_id=str(uuid4()),
+            session_api_key='test-api-key',
+        )
+
+        mock_app_conversation_service = MagicMock()
+        mock_app_conversation_service.get_app_conversation = AsyncMock(
+            return_value=mock_conversation
+        )
+
+        mock_sandbox_service = MagicMock()
+        mock_sandbox_service.get_sandbox = AsyncMock(return_value=mock_sandbox)
+
+        response = await get_conversation_hooks(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=MagicMock(),
+            httpx_client=AsyncMock(spec=httpx.AsyncClient),
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        import json
+
+        data = json.loads(response.body.decode('utf-8'))
+        assert data == {'hooks': []}

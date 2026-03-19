@@ -60,7 +60,9 @@ class ResolverUserContext(UserContext):
                 return provider_token.token.get_secret_value()
         return None
 
-    async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
+    async def get_provider_tokens(
+        self, as_env_vars: bool = False
+    ) -> PROVIDER_TOKEN_TYPE | dict[str, str] | None:
         return await self.saas_user_auth.get_provider_tokens()
 
     async def get_secrets(self) -> dict[str, SecretSource]:

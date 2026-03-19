@@ -7,6 +7,8 @@ import { useSharedConversationEvents } from "#/hooks/query/use-shared-conversati
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { handleEventForUI } from "#/utils/handle-event-for-ui";
+import { OpenHandsEvent } from "#/types/v1/core";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 
 export default function SharedConversation() {
@@ -30,9 +32,15 @@ export default function SharedConversation() {
   // Transform shared events to V1 format
   const v1Events = eventsData?.items || [];
 
-  // Filter events that should be rendered
+  // Reconstruct the same UI event stream used in live conversations so
+  // completed tool calls render as a single action/observation unit.
   const renderableEvents = React.useMemo(
-    () => v1Events.filter(shouldRenderEvent),
+    () =>
+      v1Events
+        .reduce<
+          OpenHandsEvent[]
+        >((uiEvents, event) => handleEventForUI(event, uiEvents), [])
+        .filter(shouldRenderEvent),
     [v1Events],
   );
 

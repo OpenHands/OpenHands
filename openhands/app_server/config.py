@@ -87,6 +87,19 @@ def get_default_web_url() -> str | None:
     return f'https://{web_host}'
 
 
+def get_default_permitted_cors_origins() -> list[str]:
+    """Get permitted CORS origins, falling back to legacy PERMITTED_CORS_ORIGINS env var.
+
+    The preferred configuration is via OH_PERMITTED_CORS_ORIGINS_0, _1, etc.
+    (handled by the pydantic from_env parser). This fallback supports the legacy
+    comma-separated PERMITTED_CORS_ORIGINS environment variable.
+    """
+    legacy = os.getenv('PERMITTED_CORS_ORIGINS', '')
+    if legacy:
+        return [o.strip() for o in legacy.split(',') if o.strip()]
+    return []
+
+
 def get_openhands_provider_base_url() -> str | None:
     """Return the base URL for the OpenHands provider, if configured."""
     return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or None
@@ -105,6 +118,14 @@ class AppServerConfig(OpenHandsModel):
     web_url: str | None = Field(
         default_factory=get_default_web_url,
         description='The URL where OpenHands is running (e.g., http://localhost:3000)',
+    )
+    permitted_cors_origins: list[str] = Field(
+        default_factory=get_default_permitted_cors_origins,
+        description=(
+            'Additional permitted CORS origins for both the app server and agent '
+            'server containers. Configure via OH_PERMITTED_CORS_ORIGINS_0, _1, etc. '
+            'Falls back to legacy PERMITTED_CORS_ORIGINS env var.'
+        ),
     )
     openhands_provider_base_url: str | None = Field(
         default_factory=get_openhands_provider_base_url,

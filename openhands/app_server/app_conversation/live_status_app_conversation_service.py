@@ -7,7 +7,7 @@ import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, Sequence
+from typing import Any, AsyncGenerator, Sequence, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -84,7 +84,7 @@ from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
-from openhands.integrations.provider import ProviderType
+from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import SuggestedTask
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
@@ -837,7 +837,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         secrets = await self.user_context.get_secrets()
 
         # Get all provider tokens from user authentication
-        provider_tokens = await self.user_context.get_provider_tokens()
+        provider_tokens = cast(
+            PROVIDER_TOKEN_TYPE | None,
+            await self.user_context.get_provider_tokens(),
+        )
         if not provider_tokens:
             return secrets
 
@@ -1737,13 +1740,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversations = await self._build_app_conversations([info])
         return conversations[0]
 
-    async def delete_app_conversation(self, conversation_id: UUID) -> bool:
+    async def delete_app_conversation(
+        self, conversation_id: UUID, skip_agent_server_delete: bool = False
+    ) -> bool:
         """Delete a V1 conversation and all its associated data.
 
         This method will also cascade delete all sub-conversations of the parent.
 
         Args:
             conversation_id: The UUID of the conversation to delete.
+            skip_agent_server_delete: If True, skip the agent server DELETE call.
+                This should be set when the sandbox is shared with other
+                conversations (e.g. created via /new) to avoid destabilizing
+                the shared runtime.
         """
         # Check if we have the required SQL implementation for transactional deletion
         if not isinstance(
@@ -1769,8 +1778,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             await self._delete_sub_conversations(conversation_id)
 
             # Now delete the parent conversation
-            # Delete from agent server if sandbox is running
-            await self._delete_from_agent_server(app_conversation)
+            # Delete from agent server if sandbox is running (skip if sandbox is shared)
+            if not skip_agent_server_delete:
+                await self._delete_from_agent_server(app_conversation)
 
             # Delete from database using the conversation info from app_conversation
             # AppConversation extends AppConversationInfo, so we can use it directly

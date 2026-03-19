@@ -22,20 +22,43 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
   const [menuResetCount, setMenuResetCount] = React.useState(0);
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
     React.useState(false);
+  const hideTimeoutRef = React.useRef<number | null>(null);
 
   // Use the shared hook to determine if user actions should be shown
   const shouldShowUserActions = useShouldShowUserFeatures();
 
+  // Clean up timeout on unmount
+  React.useEffect(
+    () => () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
   const showAccountMenu = () => {
+    // Cancel any pending hide to allow diagonal mouse movement to menu
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
     setAccountContextMenuIsVisible(true);
   };
 
   const hideAccountMenu = () => {
-    setAccountContextMenuIsVisible(false);
-    setMenuResetCount((c) => c + 1);
+    // Delay hiding to allow diagonal mouse movement to menu
+    hideTimeoutRef.current = window.setTimeout(() => {
+      setAccountContextMenuIsVisible(false);
+      setMenuResetCount((c) => c + 1);
+    }, 500);
   };
 
   const closeAccountMenu = () => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
     if (accountContextMenuIsVisible) {
       setAccountContextMenuIsVisible(false);
       setMenuResetCount((c) => c + 1);
@@ -61,9 +84,6 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
             className={cn(
               "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
               accountContextMenuIsVisible && "opacity-100 pointer-events-auto",
-              // Invisible hover bridge: extends hover zone to create a "safe corridor"
-              // for diagonal mouse movement to the menu (only active when menu is visible)
-              "group-hover:before:content-[''] group-hover:before:block group-hover:before:absolute group-hover:before:inset-[-320px] group-hover:before:z-50 before:pointer-events-none",
             )}
           >
             <UserContextMenu

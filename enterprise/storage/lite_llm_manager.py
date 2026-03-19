@@ -29,14 +29,37 @@ KEY_VERIFICATION_TIMEOUT = 5.0
 # A very large number to represent "unlimited" until LiteLLM fixes their unlimited update bug.
 UNLIMITED_BUDGET_SETTING = 1000000000.0
 
-try:
-    DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', 0.0))
-    if DEFAULT_INITIAL_BUDGET < 0:
+# Check if billing is enabled (defaults to false for enterprise deployments)
+ENABLE_BILLING = os.environ.get('ENABLE_BILLING', 'false').lower() == 'true'
+
+
+def _get_default_initial_budget() -> float | None:
+    """Get the default initial budget for new teams.
+
+    When billing is disabled (ENABLE_BILLING=false), returns None to disable
+    budget enforcement in LiteLLM. When billing is enabled, returns the
+    DEFAULT_INITIAL_BUDGET environment variable value (default 0.0).
+
+    Returns:
+        float | None: The default budget, or None to disable budget enforcement.
+    """
+    if not ENABLE_BILLING:
+        return None
+
+    try:
+        budget = float(os.environ.get('DEFAULT_INITIAL_BUDGET', 0.0))
+        if budget < 0:
+            raise ValueError(
+                f'DEFAULT_INITIAL_BUDGET must be non-negative, got {budget}'
+            )
+        return budget
+    except ValueError as e:
         raise ValueError(
-            f'DEFAULT_INITIAL_BUDGET must be non-negative, got {DEFAULT_INITIAL_BUDGET}'
-        )
-except ValueError as e:
-    raise ValueError(f'Invalid DEFAULT_INITIAL_BUDGET environment variable: {e}') from e
+            f'Invalid DEFAULT_INITIAL_BUDGET environment variable: {e}'
+        ) from e
+
+
+DEFAULT_INITIAL_BUDGET: float | None = _get_default_initial_budget()
 
 
 def get_openhands_cloud_key_alias(keycloak_user_id: str, org_id: str) -> str:
@@ -110,12 +133,15 @@ class LiteLlmManager:
             ) as client:
                 # Check if team already exists and get its budget
                 # New users joining existing orgs should inherit the team's budget
-                team_budget: float = DEFAULT_INITIAL_BUDGET
+                # When billing is disabled, DEFAULT_INITIAL_BUDGET is None
+                team_budget: float | None = DEFAULT_INITIAL_BUDGET
                 try:
                     existing_team = await LiteLlmManager._get_team(client, org_id)
                     if existing_team:
                         team_info = existing_team.get('team_info', {})
-                        team_budget = team_info.get('max_budget', 0.0) or 0.0
+                        # Preserve None from existing team (no budget enforcement)
+                        existing_budget = team_info.get('max_budget')
+                        team_budget = existing_budget
                         logger.info(
                             'LiteLlmManager:create_entries:existing_team_budget',
                             extra={
@@ -138,9 +164,33 @@ class LiteLlmManager:
                 )
 
                 if create_user:
-                    await LiteLlmManager._create_user(
+                    user_created = await LiteLlmManager._create_user(
                         client, keycloak_user_info.get('email'), keycloak_user_id
                     )
+                    if not user_created:
+                        logger.error(
+                            'create_entries_failed_user_creation',
+                            extra={
+                                'org_id': org_id,
+                                'user_id': keycloak_user_id,
+                            },
+                        )
+                        return None
+
+                # Verify user exists before proceeding with key generation
+                user_exists = await LiteLlmManager._user_exists(
+                    client, keycloak_user_id
+                )
+                if not user_exists:
+                    logger.error(
+                        'create_entries_user_not_found_before_key_generation',
+                        extra={
+                            'org_id': org_id,
+                            'user_id': keycloak_user_id,
+                            'create_user_flag': create_user,
+                        },
+                    )
+                    return None
 
                 await LiteLlmManager._add_user_to_team(
                     client, keycloak_user_id, org_id, team_budget
@@ -525,25 +575,40 @@ class LiteLlmManager:
         client: httpx.AsyncClient,
         team_alias: str,
         team_id: str,
-        max_budget: float,
+        max_budget: float | None,
     ):
+        """Create a new team in LiteLLM.
+
+        Args:
+            client: The HTTP client to use.
+            team_alias: The alias for the team.
+            team_id: The ID for the team.
+            max_budget: The maximum budget for the team. When None, budget
+                enforcement is disabled (unlimited usage).
+        """
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
+
+        json_data: dict[str, Any] = {
+            'team_id': team_id,
+            'team_alias': team_alias,
+            'models': [],
+            'spend': 0,
+            'metadata': {
+                'version': ORG_SETTINGS_VERSION,
+                'model': get_default_litellm_model(),
+            },
+        }
+
+        if max_budget is not None:
+            json_data['max_budget'] = max_budget
+
         response = await client.post(
             f'{LITE_LLM_API_URL}/team/new',
-            json={
-                'team_id': team_id,
-                'team_alias': team_alias,
-                'models': [],
-                'max_budget': max_budget,
-                'spend': 0,
-                'metadata': {
-                    'version': ORG_SETTINGS_VERSION,
-                    'model': get_default_litellm_model(),
-                },
-            },
+            json=json_data,
         )
+
         # Team failed to create in litellm - this is an unforseen error state...
         if not response.is_success:
             if (
@@ -621,14 +686,47 @@ class LiteLlmManager:
         response.raise_for_status()
 
     @staticmethod
+    async def _user_exists(
+        client: httpx.AsyncClient,
+        user_id: str,
+    ) -> bool:
+        """Check if a user exists in LiteLLM.
+
+        Returns True if the user exists, False otherwise.
+        """
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            return False
+        try:
+            response = await client.get(
+                f'{LITE_LLM_API_URL}/user/info?user_id={user_id}',
+            )
+            if response.is_success:
+                user_data = response.json()
+                # Check that user_info exists and has the user_id
+                user_info = user_data.get('user_info', {})
+                return user_info.get('user_id') == user_id
+            return False
+        except Exception as e:
+            logger.warning(
+                'litellm_user_exists_check_failed',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            return False
+
+    @staticmethod
     async def _create_user(
         client: httpx.AsyncClient,
         email: str | None,
         keycloak_user_id: str,
-    ):
+    ) -> bool:
+        """Create a user in LiteLLM.
+
+        Returns True if the user was created or already exists and is verified,
+        False if creation failed and user does not exist.
+        """
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
-            return
+            return False
         response = await client.post(
             f'{LITE_LLM_API_URL}/user/new',
             json={
@@ -681,17 +779,33 @@ class LiteLlmManager:
                             'user_id': keycloak_user_id,
                         },
                     )
-                    return
+                    # Verify the user actually exists before returning success
+                    user_exists = await LiteLlmManager._user_exists(
+                        client, keycloak_user_id
+                    )
+                    if not user_exists:
+                        logger.error(
+                            'litellm_user_claimed_exists_but_not_found',
+                            extra={
+                                'user_id': keycloak_user_id,
+                                'status_code': response.status_code,
+                                'text': response.text,
+                            },
+                        )
+                        return False
+                    return True
                 logger.error(
                     'error_creating_litellm_user',
                     extra={
                         'status_code': response.status_code,
                         'text': response.text,
-                        'user_id': [keycloak_user_id],
+                        'user_id': keycloak_user_id,
                         'email': None,
                     },
                 )
+                return False
             response.raise_for_status()
+        return True
 
     @staticmethod
     async def _get_user(client: httpx.AsyncClient, user_id: str) -> dict | None:
@@ -918,19 +1032,34 @@ class LiteLlmManager:
         client: httpx.AsyncClient,
         keycloak_user_id: str,
         team_id: str,
-        max_budget: float,
+        max_budget: float | None,
     ):
+        """Add a user to a team in LiteLLM.
+
+        Args:
+            client: The HTTP client to use.
+            keycloak_user_id: The user's Keycloak ID.
+            team_id: The team ID.
+            max_budget: The maximum budget for the user in the team. When None,
+                budget enforcement is disabled (unlimited usage).
+        """
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
+
+        json_data: dict[str, Any] = {
+            'team_id': team_id,
+            'member': {'user_id': keycloak_user_id, 'role': 'user'},
+        }
+
+        if max_budget is not None:
+            json_data['max_budget_in_team'] = max_budget
+
         response = await client.post(
             f'{LITE_LLM_API_URL}/team/member_add',
-            json={
-                'team_id': team_id,
-                'member': {'user_id': keycloak_user_id, 'role': 'user'},
-                'max_budget_in_team': max_budget,
-            },
+            json=json_data,
         )
+
         # Failed to add user to team - this is an unforseen error state...
         if not response.is_success:
             if (
@@ -998,19 +1127,34 @@ class LiteLlmManager:
         client: httpx.AsyncClient,
         keycloak_user_id: str,
         team_id: str,
-        max_budget: float,
+        max_budget: float | None,
     ):
+        """Update a user's budget in a team.
+
+        Args:
+            client: The HTTP client to use.
+            keycloak_user_id: The user's Keycloak ID.
+            team_id: The team ID.
+            max_budget: The maximum budget for the user in the team. When None,
+                budget enforcement is disabled (unlimited usage).
+        """
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
+
+        json_data: dict[str, Any] = {
+            'team_id': team_id,
+            'user_id': keycloak_user_id,
+        }
+
+        if max_budget is not None:
+            json_data['max_budget_in_team'] = max_budget
+
         response = await client.post(
             f'{LITE_LLM_API_URL}/team/member_update',
-            json={
-                'team_id': team_id,
-                'user_id': keycloak_user_id,
-                'max_budget_in_team': max_budget,
-            },
+            json=json_data,
         )
+
         # Failed to update user in team - this is an unforseen error state...
         if not response.is_success:
             logger.error(
@@ -1397,6 +1541,7 @@ class LiteLlmManager:
     create_team = staticmethod(with_http_client(_create_team))
     get_team = staticmethod(with_http_client(_get_team))
     update_team = staticmethod(with_http_client(_update_team))
+    user_exists = staticmethod(with_http_client(_user_exists))
     create_user = staticmethod(with_http_client(_create_user))
     get_user = staticmethod(with_http_client(_get_user))
     update_user = staticmethod(with_http_client(_update_user))

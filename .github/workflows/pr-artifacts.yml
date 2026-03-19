@@ -1,0 +1,136 @@
+---
+name: PR Artifacts
+
+on:
+    workflow_dispatch: # Manual trigger for testing
+    pull_request:
+        types: [opened, synchronize, reopened]
+        branches: [main]
+    pull_request_review:
+        types: [submitted]
+
+jobs:
+  # Auto-remove .pr/ directory when a reviewer approves
+    cleanup-on-approval:
+        concurrency:
+            group: cleanup-pr-artifacts-${{ github.event.pull_request.number }}
+            cancel-in-progress: false
+        if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - name: Check if fork PR
+              id: check-fork
+              run: |
+                  if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.event.pull_request.base.repo.full_name }}" ]; then
+                    echo "is_fork=true" >> $GITHUB_OUTPUT
+                    echo "::notice::Fork PR detected - skipping auto-cleanup (manual removal required)"
+                  else
+                    echo "is_fork=false" >> $GITHUB_OUTPUT
+                  fi
+
+            - uses: actions/checkout@v5
+              if: steps.check-fork.outputs.is_fork == 'false'
+              with:
+                  ref: ${{ github.event.pull_request.head.ref }}
+                  token: ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}
+
+            - name: Remove .pr/ directory
+              id: remove
+              if: steps.check-fork.outputs.is_fork == 'false'
+              run: |
+                  if [ -d ".pr" ]; then
+                    git config user.name "allhands-bot"
+                    git config user.email "allhands-bot@users.noreply.github.com"
+                    git rm -rf .pr/
+                    git commit -m "chore: Remove PR-only artifacts [automated]"
+                    git push || {
+                      echo "::error::Failed to push cleanup commit. Check branch protection rules."
+                      exit 1
+                    }
+                    echo "removed=true" >> $GITHUB_OUTPUT
+                    echo "::notice::Removed .pr/ directory"
+                  else
+                    echo "removed=false" >> $GITHUB_OUTPUT
+                    echo "::notice::No .pr/ directory to remove"
+                  fi
+
+            - name: Update PR comment after cleanup
+              if: steps.check-fork.outputs.is_fork == 'false' && steps.remove.outputs.removed == 'true'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const marker = '<!-- pr-artifacts-notice -->';
+                      const body = `${marker}
+                      ✅ **PR Artifacts Cleaned Up**
+
+                      The \`.pr/\` directory has been automatically removed.
+                      `;
+
+                      const { data: comments } = await github.rest.issues.listComments({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: context.issue.number,
+                      });
+
+                      const existing = comments.find(c => c.body.includes(marker));
+                      if (existing) {
+                        await github.rest.issues.updateComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          comment_id: existing.id,
+                          body: body,
+                        });
+                      }
+
+  # Warn if .pr/ directory exists (will be auto-removed on approval)
+    check-pr-artifacts:
+        if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            pull-requests: write
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Check for .pr/ directory
+              id: check
+              run: |
+                  if [ -d ".pr" ]; then
+                    echo "exists=true" >> $GITHUB_OUTPUT
+                    echo "::warning::.pr/ directory exists and will be automatically removed when the PR is approved. For fork PRs, manual removal is required before merging."
+                  else
+                    echo "exists=false" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Post or update PR comment
+              if: steps.check.outputs.exists == 'true'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const marker = '<!-- pr-artifacts-notice -->';
+                      const body = `${marker}
+                      📁 **PR Artifacts Notice**
+
+                      This PR contains a \`.pr/\` directory with PR-specific documents. This directory will be **automatically removed** when the PR is approved.
+
+                      > For fork PRs: Manual removal is required before merging.
+                      `;
+
+                      const { data: comments } = await github.rest.issues.listComments({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: context.issue.number,
+                      });
+
+                      const existing = comments.find(c => c.body.includes(marker));
+                      if (!existing) {
+                        await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: context.issue.number,
+                          body: body,
+                        });
+                      }
