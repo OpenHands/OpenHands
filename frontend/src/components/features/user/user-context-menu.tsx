@@ -9,7 +9,6 @@ import {
 import { FiUsers } from "react-icons/fi";
 import { useLogout } from "#/hooks/mutation/use-logout";
 import { OrganizationUserRole } from "#/types/org";
-import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { cn } from "#/utils/utils";
 import { OrgSelector } from "../org/org-selector";
@@ -18,11 +17,16 @@ import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import DocumentIcon from "#/icons/document.svg?react";
 import { Divider } from "#/ui/divider";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
+import { ContextMenuContainer } from "../context-menu/context-menu-container";
+import { ContextMenuCTA } from "../context-menu/context-menu-cta";
 import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
+import { useConfig } from "#/hooks/query/use-config";
+import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 
 // Shared className for context menu list items in the user context menu
 const contextMenuListItemClassName = cn(
-  "flex items-center gap-2 p-2 h-auto hover:bg-white/10 hover:text-white rounded",
+  "flex items-center gap-2 p-2 h-auto hover:bg-white/10 hover:text-white rounded text-xs",
 );
 
 interface UserContextMenuProps {
@@ -40,9 +44,10 @@ export function UserContextMenu({
   const navigate = useNavigate();
   const { mutate: logout } = useLogout();
   const { isPersonalOrg } = useOrgTypeAndAccess();
-  const ref = useClickOutsideElement<HTMLDivElement>(onClose);
   const settingsNavItems = useSettingsNavItems();
   const shouldHideSelector = useShouldHideOrgSelector();
+  const isMobile = useBreakpoint(768);
+  const { data: config } = useConfig();
 
   // Filter out org routes since they're handled separately via buttons in this menu
   const navItems = settingsNavItems.filter(
@@ -51,7 +56,10 @@ export function UserContextMenu({
   );
 
   const isMember = type === "member";
+  const isSaasMode = config?.app_mode === "saas";
 
+  // CTA only renders in SaaS desktop with feature flag enabled
+  const showCta = isSaasMode && !isMobile && ENABLE_PROJ_USER_JOURNEY();
   const handleLogout = () => {
     logout();
     onClose();
@@ -73,96 +81,96 @@ export function UserContextMenu({
   };
 
   return (
-    <div
-      data-testid="user-context-menu"
-      ref={ref}
-      className={cn(
-        "w-72 flex flex-col gap-3 bg-tertiary border border-tertiary rounded-xl p-4 context-menu-box-shadow",
-        "text-sm absolute left-full bottom-0 z-101",
-      )}
-    >
-      <h3 className="text-lg font-semibold text-white">
-        {t(I18nKey.ORG$ACCOUNT)}
-      </h3>
+    <ContextMenuContainer testId="user-context-menu" onClose={onClose}>
+      <div className="flex flex-col gap-3 w-[248px]">
+        <h3 className="text-lg font-semibold text-white">
+          {t(I18nKey.ORG$ACCOUNT)}
+        </h3>
 
-      <div className="flex flex-col items-start gap-2">
-        {!shouldHideSelector && (
-          <div className="w-full relative">
-            <OrgSelector />
-          </div>
-        )}
+        <div className="flex flex-col items-start gap-2">
+          {!shouldHideSelector && (
+            <div className="w-full relative">
+              <OrgSelector />
+            </div>
+          )}
 
-        {!isMember && !isPersonalOrg && (
+          {!isMember && !isPersonalOrg && (
+            <div className="flex flex-col items-start gap-0 w-full">
+              <ContextMenuListItem
+                onClick={handleInviteMemberClick}
+                className={contextMenuListItemClassName}
+              >
+                <IoPersonAddOutline className="text-white" size={16} />
+                {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
+              </ContextMenuListItem>
+
+              <Divider className="my-1.5" />
+
+              <ContextMenuListItem
+                onClick={handleManageAccountClick}
+                className={contextMenuListItemClassName}
+              >
+                <IoCardOutline className="text-white" size={16} />
+                {t(I18nKey.COMMON$ORGANIZATION)}
+              </ContextMenuListItem>
+              <ContextMenuListItem
+                onClick={handleManageOrganizationMembersClick}
+                className={contextMenuListItemClassName}
+              >
+                <FiUsers className="text-white shrink-0" size={16} />
+                {t(I18nKey.ORG$ORGANIZATION_MEMBERS)}
+              </ContextMenuListItem>
+              <Divider className="my-1.5" />
+            </div>
+          )}
+
           <div className="flex flex-col items-start gap-0 w-full">
-            <ContextMenuListItem
-              onClick={handleInviteMemberClick}
-              className={contextMenuListItemClassName}
-            >
-              <IoPersonAddOutline className="text-white" size={14} />
-              {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
-            </ContextMenuListItem>
-
-            <Divider className="my-1.5" />
-
-            <ContextMenuListItem
-              onClick={handleManageAccountClick}
-              className={contextMenuListItemClassName}
-            >
-              <IoCardOutline className="text-white" size={14} />
-              {t(I18nKey.COMMON$ORGANIZATION)}
-            </ContextMenuListItem>
-            <ContextMenuListItem
-              onClick={handleManageOrganizationMembersClick}
-              className={contextMenuListItemClassName}
-            >
-              <FiUsers className="text-white shrink-0" size={14} />
-              {t(I18nKey.ORG$ORGANIZATION_MEMBERS)}
-            </ContextMenuListItem>
-            <Divider className="my-1.5" />
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={onClose}
+                className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full text-xs"
+              >
+                {React.cloneElement(item.icon, {
+                  className: "text-white",
+                  width: 16,
+                  height: 16,
+                } as React.SVGProps<SVGSVGElement>)}
+                {t(item.text)}
+              </Link>
+            ))}
           </div>
-        )}
 
-        <div className="flex flex-col items-start gap-0 w-full">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
+          <Divider className="my-1.5" />
+
+          <div className="flex flex-col items-start gap-0 w-full">
+            <a
+              href="https://docs.openhands.dev"
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={onClose}
-              className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full"
+              className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full text-xs"
             >
-              {React.cloneElement(item.icon, {
-                className: "text-white",
-                width: 14,
-                height: 14,
-              } as React.SVGProps<SVGSVGElement>)}
-              {t(item.text)}
-            </Link>
-          ))}
-        </div>
+              <DocumentIcon className="text-white" width={16} height={16} />
+              {t(I18nKey.SIDEBAR$DOCS)}
+            </a>
 
-        <Divider className="my-1.5" />
-
-        <div className="flex flex-col items-start gap-0 w-full">
-          <a
-            href="https://docs.openhands.dev"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={onClose}
-            className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full"
-          >
-            <DocumentIcon className="text-white" width={14} height={14} />
-            {t(I18nKey.SIDEBAR$DOCS)}
-          </a>
-
-          <ContextMenuListItem
-            onClick={handleLogout}
-            className={contextMenuListItemClassName}
-          >
-            <IoLogOutOutline className="text-white" size={14} />
-            {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
-          </ContextMenuListItem>
+            {/* Only show logout in saas mode - oss mode has no session to invalidate */}
+            {isSaasMode && (
+              <ContextMenuListItem
+                onClick={handleLogout}
+                className={contextMenuListItemClassName}
+              >
+                <IoLogOutOutline className="text-white" size={16} />
+                {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
+              </ContextMenuListItem>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {showCta && <ContextMenuCTA />}
+    </ContextMenuContainer>
   );
 }

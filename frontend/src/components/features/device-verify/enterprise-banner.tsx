@@ -3,7 +3,7 @@ import { usePostHog } from "posthog-js/react";
 import { I18nKey } from "#/i18n/declaration";
 import { H2, Text } from "#/ui/typography";
 import CheckCircleFillIcon from "#/icons/check-circle-fill.svg?react";
-import { PROJ_USER_JOURNEY } from "#/utils/feature-flags";
+import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 
 const ENTERPRISE_FEATURE_KEYS: I18nKey[] = [
   I18nKey.ENTERPRISE$FEATURE_DATA_PRIVACY,
@@ -16,7 +16,7 @@ export function EnterpriseBanner() {
   const { t } = useTranslation();
   const posthog = usePostHog();
 
-  if (!PROJ_USER_JOURNEY()) {
+  if (!ENABLE_PROJ_USER_JOURNEY()) {
     return null;
   }
 

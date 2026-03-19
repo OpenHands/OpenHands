@@ -182,6 +182,10 @@ class SetAuthCookieMiddleware:
         if path.startswith('/api/v1/webhooks/'):
             return False
 
+        # Service API uses its own authentication (X-Service-API-Key header)
+        if path.startswith('/api/service/'):
+            return False
+
         is_mcp = path.startswith('/mcp')
         is_api_route = path.startswith('/api')
         return is_api_route or is_mcp

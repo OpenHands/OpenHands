@@ -1,4 +1,5 @@
 import time
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
@@ -18,6 +19,7 @@ from server.auth.saas_user_auth import (
     saas_user_auth_from_cookie,
     saas_user_auth_from_signed_token,
 )
+from storage.api_key_store import ApiKeyValidationResult
 from storage.user_authorization import UserAuthorizationType
 
 from openhands.integrations.provider import ProviderToken, ProviderType
@@ -457,7 +459,8 @@ async def test_get_instance_no_auth(mock_request):
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_success():
-    """Test successful authentication from bearer token."""
+    """Test successful authentication from bearer token sets user_id and api_key_org_id."""
+    # Arrange
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
 
@@ -468,12 +471,22 @@ async def test_saas_user_auth_from_bearer_success():
         algorithm='HS256',
     )
 
+    mock_org_id = uuid.uuid4()
+    mock_validation_result = ApiKeyValidationResult(
+        user_id='test_user_id',
+        org_id=mock_org_id,
+        key_id=42,
+        key_name='Test Key',
+    )
+
     with (
         patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
         patch('server.auth.saas_user_auth.token_manager') as mock_token_manager,
     ):
         mock_api_key_store = MagicMock()
-        mock_api_key_store.validate_api_key = AsyncMock(return_value='test_user_id')
+        mock_api_key_store.validate_api_key = AsyncMock(
+            return_value=mock_validation_result
+        )
         mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
 
         mock_token_manager.load_offline_token = AsyncMock(return_value=offline_token)
@@ -485,6 +498,9 @@ async def test_saas_user_auth_from_bearer_success():
 
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
+        assert result.api_key_org_id == mock_org_id
+        assert result.api_key_id == 42
+        assert result.api_key_name == 'Test Key'
         mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
         mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
         mock_token_manager.refresh.assert_called_once_with(offline_token)

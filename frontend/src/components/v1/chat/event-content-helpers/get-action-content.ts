@@ -56,10 +56,6 @@ const getSearchActionContent = (
   if ("include" in action && action.include) {
     parts.push(`**Include:** \`${action.include}\``);
   }
-  const { summary } = event as { summary?: string };
-  if (summary) {
-    parts.push(`**Summary:** ${summary}`);
-  }
   return parts.length > 0 ? parts.join("\n") : getNoContentActionContent();
 };
 

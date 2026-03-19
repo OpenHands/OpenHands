@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "#/hooks/query/use-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MCPSSEServer, MCPStdioServer, MCPSHTTPServer } from "#/types/settings";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 type MCPServerType = "sse" | "stdio" | "shttp";
 
@@ -19,6 +20,7 @@ interface MCPServerConfig {
 export function useAddMcpServer() {
   const queryClient = useQueryClient();
   const { data: settings } = useSettings();
+  const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: async (server: MCPServerConfig): Promise<void> => {
@@ -64,7 +66,9 @@ export function useAddMcpServer() {
     },
     onSuccess: () => {
       // Invalidate the settings query to trigger a refetch
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({
+        queryKey: ["settings", organizationId],
+      });
     },
   });
 }

@@ -35,7 +35,7 @@ Usage:
 from enum import Enum
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.role_store import RoleStore
@@ -214,6 +214,19 @@ def has_permission(user_role: Role, permission: Permission) -> bool:
     return permission in permissions
 
 
+async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
+    """Get the org_id bound to the API key used for authentication.
+
+    Returns None if:
+    - Not authenticated via API key (cookie auth)
+    - API key is a legacy key without org binding
+    """
+    user_auth = getattr(request.state, 'user_auth', None)
+    if user_auth and hasattr(user_auth, 'get_api_key_org_id'):
+        return user_auth.get_api_key_org_id()
+    return None
+
+
 def require_permission(permission: Permission):
     """
     Factory function that creates a dependency to require a specific permission.
@@ -221,8 +234,9 @@ def require_permission(permission: Permission):
     This creates a FastAPI dependency that:
     1. Extracts org_id from the path parameter
     2. Gets the authenticated user_id
-    3. Checks if the user has the required permission in the organization
-    4. Returns the user_id if authorized, raises HTTPException otherwise
+    3. Validates API key org binding (if using API key auth)
+    4. Checks if the user has the required permission in the organization
+    5. Returns the user_id if authorized, raises HTTPException otherwise
 
     Usage:
         @router.get('/{org_id}/settings')
@@ -240,6 +254,7 @@ def require_permission(permission: Permission):
     """
 
     async def permission_checker(
+        request: Request,
         org_id: UUID | None = None,
         user_id: str | None = Depends(get_user_id),
     ) -> str:
@@ -248,6 +263,23 @@ def require_permission(permission: Permission):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail='User not authenticated',
             )
+
+        # Validate API key organization binding
+        api_key_org_id = await get_api_key_org_id_from_request(request)
+        if api_key_org_id is not None and org_id is not None:
+            if api_key_org_id != org_id:
+                logger.warning(
+                    'API key organization mismatch',
+                    extra={
+                        'user_id': user_id,
+                        'api_key_org_id': str(api_key_org_id),
+                        'target_org_id': str(org_id),
+                    },
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail='API key is not authorized for this organization',
+                )
 
         user_role = await get_user_org_role(user_id, org_id)
 

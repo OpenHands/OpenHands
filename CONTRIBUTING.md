@@ -1,83 +1,105 @@
 # Contributing
 
-Thanks for your interest in contributing to OpenHands! We welcome and appreciate contributions.
+Thanks for your interest in contributing to OpenHands! We're building the future of AI-powered software development, and we'd love for you to be part of this journey.
 
-## Understanding OpenHands's CodeBase
+## Our Vision
 
-To understand the codebase, please refer to the README in each module:
-- [frontend](./frontend/README.md)
-- [openhands](./openhands/README.md)
-   - [agenthub](./openhands/agenthub/README.md)
-   - [server](./openhands/server/README.md)
+The OpenHands community is built around the belief that AI and AI agents are going to fundamentally change the way we build software. If this is true, we should do everything we can to make sure that the benefits provided by such powerful technology are accessible to everyone.
 
-For benchmarks and evaluation, see the [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks) repository.
+We believe in the power of open source to democratize access to cutting-edge AI technology. Just as the internet transformed how we share information, we envision a world where AI-powered development tools are available to every developer, regardless of their background or resources.
 
-## Setting up Your Development Environment
+## Getting Started
 
-We have a separate doc [Development.md](https://github.com/OpenHands/OpenHands/blob/main/Development.md) that tells
-you how to set up a development workflow.
+### Quick Ways to Contribute
 
-## How Can I Contribute?
+- **Use OpenHands** and [report issues](https://github.com/OpenHands/OpenHands/issues) you encounter
+- **Give feedback** using the thumbs-up/thumbs-down buttons after each session
+- **Star our repository** on [GitHub](https://github.com/OpenHands/OpenHands)
+- **Share OpenHands** with other developers
 
-There are many ways that you can contribute:
+### Set Up Your Development Environment
 
-1. **Download and use** OpenHands, and send [issues](https://github.com/OpenHands/OpenHands/issues) when you encounter something that isn't working or a feature that you'd like to see.
-2. **Send feedback** after each session by [clicking the thumbs-up thumbs-down buttons](https://docs.openhands.dev/usage/feedback), so we can see where things are working and failing, and also build an open dataset for training code agents.
-3. **Improve the Codebase** by sending [PRs](#sending-pull-requests-to-openhands) (see details below). In particular, we have some [good first issues](https://github.com/OpenHands/OpenHands/labels/good%20first%20issue) that may be ones to start on.
+- **Requirements**: Linux/Mac/WSL, Docker, Python 3.12, Node.js 22+, Poetry 1.8+
+- **Quick setup**: `make build`
+- **Run locally**: `make run`
+- **LLM setup (V1 web app)**: configure your model and API key in the Settings UI after the app starts
 
-## What Can I Build?
+Full details in our [Development Guide](./Development.md).
 
-Here are a few ways you can help improve the codebase.
+### Find Your First Issue
 
-#### UI/UX
+- Browse [good first issues](https://github.com/OpenHands/OpenHands/labels/good%20first%20issue)
+- Check our [project boards](https://github.com/OpenHands/OpenHands/projects) for organized tasks
+- Join our [Slack community](https://openhands.dev/joinslack) to ask what needs help
 
-We're always looking to improve the look and feel of the application. If you've got a small fix
-for something that's bugging you, feel free to open up a PR that changes the [`./frontend`](./frontend) directory.
+## Understanding the Codebase
 
-If you're looking to make a bigger change, add a new UI element, or significantly alter the style
-of the application, please open an issue first, or better, join the #dev-ui-ux channel in our Slack
-to gather consensus from our design team first.
+- **[Frontend](./frontend/README.md)** - React application
+- **[App Server (V1)](./openhands/app_server/README.md)** - Current FastAPI application server and REST API modules
+- **[Agents](./openhands/agenthub/README.md)** - AI agent implementations
+- **[Runtime](./openhands/runtime/README.md)** - Execution environments
+- **[Evaluation](https://github.com/OpenHands/benchmarks)** - Testing and benchmarks
 
-#### Improving the agent
+## What Can You Build?
 
-Our main agent is the CodeAct agent. You can [see its prompts here](https://github.com/OpenHands/OpenHands/tree/main/openhands/agenthub/codeact_agent).
+### Frontend & UI/UX
+- React & TypeScript development
+- UI/UX improvements
+- Mobile responsiveness
+- Component libraries
 
-Changes to these prompts, and to the underlying behavior in Python, can have a huge impact on user experience.
-You can try modifying the prompts to see how they change the behavior of the agent as you use the app
-locally, but we will need to do an end-to-end evaluation of any changes here to ensure that the agent
-is getting better over time.
+For bigger changes, join the #proj-gui channel in [Slack](https://openhands.dev/joinslack) first.
 
-We use the [SWE-bench](https://www.swebench.com/) benchmark to test our agent. You can join the #evaluation
-channel in Slack to learn more.
+### Agent Development
+- Prompt engineering
+- New agent types
+- Agent evaluation
+- Multi-agent systems
 
-#### Adding a new agent
+We use [SWE-bench](https://www.swebench.com/) to evaluate agents.
 
-You may want to experiment with building new types of agents. You can add an agent to [`openhands/agenthub`](./openhands/agenthub)
-to help expand the capabilities of OpenHands.
+### Backend & Infrastructure
+- Python development
+- Runtime systems (Docker containers, sandboxes)
+- Cloud integrations
+- Performance optimization
 
-#### Adding a new runtime
+### Testing & Quality Assurance
+- Unit testing
+- Integration testing
+- Bug hunting
+- Performance testing
 
-The agent needs a place to run code and commands. When you run OpenHands on your laptop, it uses a Docker container
-to do this by default. But there are other ways of creating a sandbox for the agent.
+### Documentation & Education
+- Technical documentation
+- Translation
+- Community support
 
-If you work for a company that provides a cloud-based runtime, you could help us add support for that runtime
-by implementing the [interface specified here](https://github.com/OpenHands/OpenHands/blob/main/openhands/runtime/base.py).
+## Pull Request Process
 
-#### Testing
+### Small Improvements
+- Quick review and approval
+- Ensure CI tests pass
+- Include clear description of changes
 
-When you write code, it is also good to write tests. Please navigate to the [`./tests`](./tests) folder to see existing
-test suites. At the moment, we have these kinds of tests: [`unit`](./tests/unit), [`runtime`](./tests/runtime), and [`end-to-end (e2e)`](./tests/e2e).
-Please refer to the README for each test suite. These tests also run on GitHub's continuous integration to ensure
-quality of the project.
+### Core Agent Changes
+These are evaluated based on:
+- **Accuracy** - Does it make the agent better at solving problems?
+- **Efficiency** - Does it improve speed or reduce resource usage?
+- **Code Quality** - Is the code maintainable and well-tested?
+
+Discuss major changes in [GitHub issues](https://github.com/OpenHands/OpenHands/issues) or [Slack](https://openhands.dev/joinslack) first.
 
 ## Sending Pull Requests to OpenHands
 
 You'll need to fork our repository to send us a Pull Request. You can learn more
 about how to fork a GitHub repo and open a PR with your changes in [this article](https://medium.com/swlh/forks-and-pull-requests-how-to-contribute-to-github-repos-8843fac34ce8).
 
-### Pull Request title
+You may also check out previous PRs in the [PR list](https://github.com/OpenHands/OpenHands/pulls).
 
-As described [here](https://github.com/commitizen/conventional-commit-types/blob/master/index.json), ideally a valid PR title should begin with one of the following prefixes:
+### Pull Request Title Format
+
+As described [here](https://github.com/commitizen/conventional-commit-types/blob/master/index.json), a valid PR title should begin with one of the following prefixes:
 
 - `feat`: A new feature
 - `fix`: A bug fix
@@ -95,45 +117,27 @@ For example, a PR title could be:
 - `refactor: modify package path`
 - `feat(frontend): xxxx`, where `(frontend)` means that this PR mainly focuses on the frontend component.
 
-You may also check out previous PRs in the [PR list](https://github.com/OpenHands/OpenHands/pulls).
+### Pull Request Description
 
-### Pull Request description
+- Explain what the PR does and why
+- Link to related issues
+- Include screenshots for UI changes
+- If your changes are user-facing (e.g. a new feature in the UI, a change in behavior, or a bugfix),
+  please include a short message that we can add to our changelog
 
-- If your PR is small (such as a typo fix), you can go brief.
-- If it contains a lot of changes, it's better to write more details.
+## Becoming a Maintainer
 
-If your changes are user-facing (e.g. a new feature in the UI, a change in behavior, or a bugfix)
-please include a short message that we can add to our changelog.
+For contributors who have made significant and sustained contributions to the project, there is a possibility of joining the maintainer team.
+The process for this is as follows:
 
-## How to Make Effective Contributions
+1. Any contributor who has made sustained and high-quality contributions to the codebase can be nominated by any maintainer. If you feel that you may qualify you can reach out to any of the maintainers that have reviewed your PRs and ask if you can be nominated.
+2. Once a maintainer nominates a new maintainer, there will be a discussion period among the maintainers for at least 3 days.
+3. If no concerns are raised the nomination will be accepted by acclamation, and if concerns are raised there will be a discussion and possible vote.
 
-### Opening Issues
+Note that just making many PRs does not immediately imply that you will become a maintainer. We will be looking at sustained high-quality contributions over a period of time, as well as good teamwork and adherence to our [Code of Conduct](./CODE_OF_CONDUCT.md).
 
-If you notice any bugs or have any feature requests please open them via the [issues page](https://github.com/OpenHands/OpenHands/issues). We will triage
-based on how critical the bug is or how potentially useful the improvement is, discuss, and implement the ones that
-the community has interest/effort for.
+## Need Help?
 
-Further, if you see an issue you like, please leave a "thumbs-up" or a comment, which will help us prioritize.
-
-### Making Pull Requests
-
-We're generally happy to consider all pull requests with the evaluation process varying based on the type of change:
-
-#### For Small Improvements
-
-Small improvements with few downsides are typically reviewed and approved quickly.
-One thing to check when making changes is to ensure that all continuous integration tests pass, which you can check
-before getting a review.
-
-#### For Core Agent Changes
-
-We need to be more careful with changes to the core agent, as it is imperative to maintain high quality. These PRs are
-evaluated based on three key metrics:
-
-1. **Accuracy**
-2. **Efficiency**
-3. **Code Complexity**
-
-If it improves accuracy, efficiency, or both with only a minimal change to code quality, that's great we're happy to merge it in!
-If there are bigger tradeoffs (e.g. helping efficiency a lot and hurting accuracy a little) we might want to put it behind a feature flag.
-Either way, please feel free to discuss on github issues or slack, and we will give guidance and preliminary feedback.
+- **Slack**: [Join our community](https://openhands.dev/joinslack)
+- **GitHub Issues**: [Open an issue](https://github.com/OpenHands/OpenHands/issues)
+- **Email**: contact@openhands.dev

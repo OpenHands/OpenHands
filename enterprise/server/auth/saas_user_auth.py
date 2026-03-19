@@ -1,6 +1,7 @@
 import time
 from dataclasses import dataclass
 from types import MappingProxyType
+from uuid import UUID
 
 import jwt
 from fastapi import Request
@@ -59,6 +60,19 @@ class SaasUserAuth(UserAuth):
     _secrets: Secrets | None = None
     accepted_tos: bool | None = None
     auth_type: AuthType = AuthType.COOKIE
+    # API key context fields - populated when authenticated via API key
+    api_key_org_id: UUID | None = None  # Org bound to the API key used for auth
+    api_key_id: int | None = None
+    api_key_name: str | None = None
+
+    def get_api_key_org_id(self) -> UUID | None:
+        """Get the organization ID bound to the API key used for authentication.
+
+        Returns:
+            The org_id if authenticated via API key with org binding, None otherwise
+            (cookie auth or legacy API keys without org binding).
+        """
+        return self.api_key_org_id
 
     async def get_user_id(self) -> str | None:
         return self.user_id
@@ -283,14 +297,19 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
             return None
 
         api_key_store = ApiKeyStore.get_instance()
-        user_id = await api_key_store.validate_api_key(api_key)
-        if not user_id:
+        validation_result = await api_key_store.validate_api_key(api_key)
+        if not validation_result:
             return None
-        offline_token = await token_manager.load_offline_token(user_id)
+        offline_token = await token_manager.load_offline_token(
+            validation_result.user_id
+        )
         saas_user_auth = SaasUserAuth(
-            user_id=user_id,
+            user_id=validation_result.user_id,
             refresh_token=SecretStr(offline_token),
             auth_type=AuthType.BEARER,
+            api_key_org_id=validation_result.org_id,
+            api_key_id=validation_result.key_id,
+            api_key_name=validation_result.key_name,
         )
         await saas_user_auth.refresh()
         return saas_user_auth

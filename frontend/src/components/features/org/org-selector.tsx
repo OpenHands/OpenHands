@@ -56,6 +56,7 @@ export function OrgSelector() {
           label: getOrgDisplayName(org),
         })) || []
       }
+      className="bg-[#1F1F1F66] border-[#242424]"
     />
   );
 }

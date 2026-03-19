@@ -56,3 +56,12 @@ export interface OrganizationMembersPage {
 export type UpdateOrganizationMemberParams = Partial<
   Omit<OrganizationMember, "org_id" | "user_id">
 >;
+
+/**
+ * Query data structure for the organizations query.
+ * This represents the raw data returned by queryClient before any `select` transform.
+ */
+export type OrganizationsQueryData = {
+  items: Organization[];
+  currentOrgId: string | null;
+};

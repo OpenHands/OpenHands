@@ -40,6 +40,7 @@ import {
 import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV1Event } from "#/types/v1/type-guards";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 // Mock useUserConversation to return V1 conversation data
 vi.mock("#/hooks/query/use-user-conversation", () => ({
@@ -60,6 +61,10 @@ beforeAll(() => {
   // The global MSW server from vitest.setup.ts is already running
   // We just need to start our WebSocket-specific server
   mswServer.listen({ onUnhandledRequest: "bypass" });
+});
+
+beforeEach(() => {
+  useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
 });
 
 afterEach(() => {

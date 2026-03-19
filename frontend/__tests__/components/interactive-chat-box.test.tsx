@@ -1,26 +1,25 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-box";
 import { renderWithProviders } from "../../test-utils";
 import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(),
 }));
 
 // Mock React Router hooks
-vi.mock("react-router", async () => {
-  const actual = await vi.importActual("react-router");
-  return {
-    ...actual,
-    useNavigate: () => vi.fn(),
-    useParams: () => ({ conversationId: "test-conversation-id" }),
-  };
-});
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => vi.fn(),
+  useParams: () => ({ conversationId: "test-conversation-id" }),
+  useRevalidator: () => ({ revalidate: vi.fn() }),
+}));
 
 // Mock the useActiveConversation hook
 vi.mock("#/hooks/query/use-active-conversation", () => ({
@@ -51,6 +50,10 @@ vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
 
 describe("InteractiveChatBox", () => {
   const onSubmitMock = vi.fn();
+
+  beforeEach(() => {
+    useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
+  });
 
   const mockStores = (agentState: AgentState = AgentState.INIT) => {
     vi.mocked(useAgentState).mockReturnValue({
@@ -211,6 +214,36 @@ describe("InteractiveChatBox", () => {
 
     await user.click(button);
     expect(onSubmitMock).not.toHaveBeenCalled();
+  });
+
+  it("should lock the text input field when disabled prop is true (isNewConversationPending)", () => {
+    mockStores(AgentState.INIT);
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+      disabled: true,
+    });
+
+    const chatInput = screen.getByTestId("chat-input");
+    // When disabled=true, the text field should not be editable
+    expect(chatInput).toHaveAttribute("contenteditable", "false");
+    // Should show visual disabled state
+    expect(chatInput.className).toContain("cursor-not-allowed");
+    expect(chatInput.className).toContain("opacity-50");
+  });
+
+  it("should keep the text input field editable when disabled prop is false", () => {
+    mockStores(AgentState.INIT);
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+      disabled: false,
+    });
+
+    const chatInput = screen.getByTestId("chat-input");
+    expect(chatInput).toHaveAttribute("contenteditable", "true");
+    expect(chatInput.className).not.toContain("cursor-not-allowed");
+    expect(chatInput.className).not.toContain("opacity-50");
   });
 
   it("should handle image upload and message submission correctly", async () => {
