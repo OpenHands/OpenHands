@@ -1,8 +1,10 @@
 import { I18nKey } from "#/i18n/declaration";
+import { ProviderOptions, type Provider } from "#/types/settings";
 
 export interface Tip {
   key: I18nKey;
   link?: string;
+  providers?: Provider[];
 }
 
 export const TIPS: Tip[] = [
@@ -31,6 +33,7 @@ export const TIPS: Tip[] = [
   {
     key: I18nKey.TIPS$GITHUB_HOOK,
     link: "https://docs.all-hands.dev/usage/cloud/github-installation#working-on-github-issues-and-pull-requests-using-openhands",
+    providers: [ProviderOptions.github],
   },
   {
     key: I18nKey.TIPS$BLOG_SIGNUP,
@@ -42,7 +45,17 @@ export const TIPS: Tip[] = [
   },
 ];
 
-export function getRandomTip(): Tip {
-  const randomIndex = Math.floor(Math.random() * TIPS.length);
-  return TIPS[randomIndex];
+export function getAvailableTips(providers: Provider[] = []): Tip[] {
+  return TIPS.filter(
+    (tip) =>
+      !tip.providers ||
+      tip.providers.some((provider) => providers.includes(provider)),
+  );
+}
+
+export function getRandomTip(providers: Provider[] = []): Tip {
+  const availableTips = getAvailableTips(providers);
+  const tips = availableTips.length > 0 ? availableTips : TIPS;
+  const randomIndex = Math.floor(Math.random() * tips.length);
+  return tips[randomIndex];
 }
