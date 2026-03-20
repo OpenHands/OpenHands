@@ -11,7 +11,6 @@ import pytest
 from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 
-from openhands.agent_server.models import EventPage
 from openhands.app_server.event.event_router import batch_get_events, router
 from openhands.server.dependencies import check_session_api_key
 
@@ -55,15 +54,15 @@ class TestSearchEventsValidation:
         conversation_id = str(uuid4())
 
         response = test_client.get(
-            f"/conversation/{conversation_id}/events/search",
-            params={"limit": 200},
+            f'/conversation/{conversation_id}/events/search',
+            params={'limit': 200},
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
         # Verify the error message mentions the constraint
-        error_detail = response.json()["detail"]
+        error_detail = response.json()['detail']
         assert any(
-            "less than or equal to 100" in str(err).lower() or "le" in str(err).lower()
+            'less than or equal to 100' in str(err).lower() or 'le' in str(err).lower()
             for err in error_detail
         )
 
@@ -75,8 +74,8 @@ class TestSearchEventsValidation:
         conversation_id = str(uuid4())
 
         response = test_client.get(
-            f"/conversation/{conversation_id}/events/search",
-            params={"limit": 0},
+            f'/conversation/{conversation_id}/events/search',
+            params={'limit': 0},
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -89,8 +88,8 @@ class TestSearchEventsValidation:
         conversation_id = str(uuid4())
 
         response = test_client.get(
-            f"/conversation/{conversation_id}/events/search",
-            params={"limit": -1},
+            f'/conversation/{conversation_id}/events/search',
+            params={'limit': -1},
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -103,8 +102,8 @@ class TestSearchEventsValidation:
         conversation_id = str(uuid4())
 
         response = test_client.get(
-            f"/conversation/{conversation_id}/events/search",
-            params={"limit": 100},
+            f'/conversation/{conversation_id}/events/search',
+            params={'limit': 100},
         )
 
         # Should pass validation (not 422) - may fail on other errors like missing service
@@ -118,8 +117,8 @@ class TestSearchEventsValidation:
         conversation_id = str(uuid4())
 
         response = test_client.get(
-            f"/conversation/{conversation_id}/events/search",
-            params={"limit": 1},
+            f'/conversation/{conversation_id}/events/search',
+            params={'limit': 1},
         )
 
         # Should pass validation (not 422) - may fail on other errors like missing service
@@ -151,8 +150,8 @@ class TestBatchGetEvents:
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Cannot request more than 100 events" in exc_info.value.detail
-        assert "101" in exc_info.value.detail
+        assert 'Cannot request more than 100 events' in exc_info.value.detail
+        assert '101' in exc_info.value.detail
 
     async def test_accepts_exactly_100_ids(self):
         """Test that exactly 100 IDs is accepted.
