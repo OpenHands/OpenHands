@@ -7,13 +7,13 @@ focusing on limit validation and error handling.
 from datetime import datetime
 from typing import Annotated
 from unittest.mock import AsyncMock, MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.testclient import TestClient
 
-from openhands.agent_server.models import EventPage, EventSortOrder
+from openhands.agent_server.models import EventSortOrder
 from openhands.app_server.event.event_router import batch_get_events
 from openhands.app_server.event_callback.event_callback_models import EventKind
 
@@ -93,8 +93,7 @@ class TestSearchEventsValidation:
         # Verify the error message mentions the constraint
         error_detail = response.json()['detail']
         assert any(
-            'less than or equal to 100' in str(err).lower()
-            or 'le' in str(err).lower()
+            'less than or equal to 100' in str(err).lower() or 'le' in str(err).lower()
             for err in error_detail
         )
 
