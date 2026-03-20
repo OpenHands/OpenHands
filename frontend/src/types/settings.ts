@@ -88,3 +88,7 @@ export type Settings = {
   v1_enabled?: boolean;
   sandbox_grouping_strategy?: SandboxGroupingStrategy;
 };
+
+export type ApiSettings = Omit<Settings, "llm_base_url"> & {
+  llm_base_url: string | null;
+};

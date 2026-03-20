@@ -195,3 +195,26 @@ async def test_disabled_skills_persistence(test_client):
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == []
+
+
+@pytest.mark.asyncio
+async def test_llm_base_url_clear_round_trips_as_null(test_client):
+    """Test that clearing llm_base_url persists and loads back as a basic-mode null."""
+    initial_settings = {
+        'llm_model': 'gpt-4',
+        'llm_base_url': 'https://old-proxy.example.com',
+    }
+    response = test_client.post('/api/settings', json=initial_settings)
+    assert response.status_code == 200
+
+    update_settings = {
+        'llm_model': 'gpt-4',
+        'llm_base_url': '',
+    }
+    response = test_client.post('/api/settings', json=update_settings)
+    assert response.status_code == 200
+
+    response = test_client.get('/api/settings')
+    assert response.status_code == 200
+    assert response.json()['llm_model'] == 'gpt-4'
+    assert response.json()['llm_base_url'] is None

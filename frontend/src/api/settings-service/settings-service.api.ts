@@ -1,5 +1,5 @@
 import { openHands } from "../open-hands-axios";
-import { Settings } from "#/types/settings";
+import { ApiSettings, Settings } from "#/types/settings";
 
 /**
  * Settings service for managing application settings
@@ -8,8 +8,8 @@ class SettingsService {
   /**
    * Get the settings from the server or use the default settings if not found
    */
-  static async getSettings(): Promise<Settings> {
-    const { data } = await openHands.get<Settings>("/api/settings");
+  static async getSettings(): Promise<ApiSettings> {
+    const { data } = await openHands.get<ApiSettings>("/api/settings");
     return data;
   }
 

@@ -12,6 +12,7 @@ export const getSettingsQueryFn = async (): Promise<Settings> => {
 
   return {
     ...settings,
+    llm_base_url: settings.llm_base_url ?? DEFAULT_SETTINGS.llm_base_url,
     condenser_max_size:
       settings.condenser_max_size ?? DEFAULT_SETTINGS.condenser_max_size,
     search_api_key: settings.search_api_key || "",
