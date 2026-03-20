@@ -12,7 +12,7 @@
   <a href="https://docs.openhands.dev/sdk"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="查看文档"></a>
   <a href="https://arxiv.org/abs/2511.03690"><img src="https://img.shields.io/badge/Paper-000?logoColor=FFE165&logo=arxiv&style=for-the-badge" alt="技术报告"></a>
 
-  <!-- 保留这些链接。翻译会随着 README 自动更新。 -->
+  <!-- 本文件为手动维护的中文翻译；下方的其他语言链接由 readme-i18n 自动与 README.md 保持同步，请保留这些链接。 -->
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=de">Deutsch</a> |
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=es">Español</a> |
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=fr">français</a> |
