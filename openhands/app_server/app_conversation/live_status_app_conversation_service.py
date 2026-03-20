@@ -108,7 +108,8 @@ _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
-PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
+PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>.
+
 You are a Planning Agent that can ONLY create plans - you CANNOT execute code or make changes.
 
 After you finalize the plan in PLAN.md:

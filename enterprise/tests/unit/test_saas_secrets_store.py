@@ -255,10 +255,12 @@ class TestSaasSecretsStore:
     async def test_secrets_isolation_between_organizations(
         self, mock_get_user, secrets_store, mock_user
     ):
-        """Test that secrets from one organization are not deleted when storing
+        """Test that secrets from one organization are not deleted when storing.
+
         secrets in another organization. This reproduces a bug where switching
         organizations and creating a secret would delete all secrets from the
-        user's personal workspace."""
+        user's personal workspace.
+        """
         org1_id = UUID('a1111111-1111-1111-1111-111111111111')
         org2_id = UUID('b2222222-2222-2222-2222-222222222222')
 

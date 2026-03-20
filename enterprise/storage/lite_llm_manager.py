@@ -1,6 +1,4 @@
-"""
-Store class for managing organizational settings.
-"""
+"""Store class for managing organizational settings."""
 
 import functools
 import os

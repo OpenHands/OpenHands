@@ -1,5 +1,4 @@
-"""
-Permission-based authorization dependencies for API endpoints.
+"""Permission-based authorization dependencies for API endpoints.
 
 This module provides FastAPI dependencies for checking user permissions
 within organizations. It uses a permission-based authorization model where
@@ -158,8 +157,7 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 
 
 async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
-    """
-    Get the user's role in an organization.
+    """Get the user's role in an organization.
 
     Args:
         user_id: User ID (string that will be converted to UUID)
@@ -183,8 +181,7 @@ async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
 
 
 def get_role_permissions(role_name: str) -> frozenset[Permission]:
-    """
-    Get the permissions for a role.
+    """Get the permissions for a role.
 
     Args:
         role_name: Name of the role
@@ -200,8 +197,7 @@ def get_role_permissions(role_name: str) -> frozenset[Permission]:
 
 
 def has_permission(user_role: Role, permission: Permission) -> bool:
-    """
-    Check if a role has a specific permission.
+    """Check if a role has a specific permission.
 
     Args:
         user_role: User's Role object
@@ -228,8 +224,7 @@ async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
 
 
 def require_permission(permission: Permission):
-    """
-    Factory function that creates a dependency to require a specific permission.
+    """Factory function that creates a dependency to require a specific permission.
 
     This creates a FastAPI dependency that:
     1. Extracts org_id from the path parameter

@@ -1536,7 +1536,7 @@ async def get_microagent_management_conversations(
 
 
 def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo:
-    """Convert a V1 AppConversation into an old style ConversationInfo"""
+    """Convert a V1 AppConversation into an old style ConversationInfo."""
     from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
     # Map SandboxStatus to ConversationStatus

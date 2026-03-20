@@ -78,7 +78,7 @@ if sys.version_info >= (3, 10):
 else:
 
     async def anext(async_iterator):
-        """Compatibility function for anext in Python < 3.10"""
+        """Compatibility function for anext in Python < 3.10."""
         return await async_iterator.__anext__()
 
 
@@ -388,7 +388,8 @@ async def stream_app_conversation_start(
     user_context: UserContext = user_context_dependency,
 ) -> list[AppConversationStartTask]:
     """Start an app conversation start task and stream updates from it.
-    Leaves the connection open until either the conversation starts or there was an error
+
+    Leaves the connection open until either the conversation starts or there was an error.
     """
     response = StreamingResponse(
         _stream_app_conversation_start(request, user_context),
@@ -499,6 +500,9 @@ async def read_conversation_file(
     Args:
         conversation_id: The UUID of the conversation
         file_path: Path to the file to read within the sandbox workspace
+        app_conversation_service: The app conversation service
+        sandbox_service: The sandbox service
+        sandbox_spec_service: The sandbox spec service
 
     Returns:
         The content of the file or an empty string if the file doesn't exist
@@ -830,6 +834,7 @@ async def export_conversation(
 
     Args:
         conversation_id: The UUID of the conversation to download
+        app_conversation_service: The app conversation service
 
     Returns:
         A zip file containing the conversation trajectory
@@ -859,7 +864,7 @@ async def export_conversation(
 async def _consume_remaining(
     async_iter, db_session: AsyncSession, httpx_client: httpx.AsyncClient
 ):
-    """Consume the remaining items from an async iterator"""
+    """Consume the remaining items from an async iterator."""
     try:
         while True:
             await anext(async_iter)
