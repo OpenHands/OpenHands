@@ -17,10 +17,9 @@ export const useSwitchOrganization = () => {
       queryClient.invalidateQueries({
         queryKey: ["organizations", orgId, "me"],
       });
-      // Update local state
+      // Update local state - this triggers automatic refetch for all org-scoped queries
+      // since their query keys include organizationId (e.g., ["settings", orgId], ["secrets", orgId])
       setOrganizationId(orgId);
-      // Invalidate settings for the new org context
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
       // Invalidate conversations to fetch data for the new org context
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
       // Remove all individual conversation queries to clear any stale/null data

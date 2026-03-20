@@ -2384,3 +2384,195 @@ class TestVerifyExistingKey:
                 openhands_type=True,
             )
             assert result is False
+
+
+class TestBudgetPayloadHandling:
+    """Test cases for budget field handling in API payloads.
+
+    These tests verify that when max_budget is None, the budget field is NOT
+    included in the JSON payload (which tells LiteLLM to disable budget
+    enforcement), and when max_budget has a value, it IS included.
+    """
+
+    @pytest.mark.asyncio
+    async def test_create_team_excludes_max_budget_when_none(self):
+        """Test that _create_team does NOT include max_budget when it is None."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._create_team(
+                    mock_client,
+                    team_alias='test-team',
+                    team_id='test-team-id',
+                    max_budget=None,  # None = no budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify URL
+        assert call_args[0][0] == 'http://test.com/team/new'
+
+        # Verify that max_budget is NOT in the JSON payload
+        json_payload = call_args[1]['json']
+        assert 'max_budget' not in json_payload, (
+            'max_budget should NOT be in payload when None '
+            '(omitting it tells LiteLLM to disable budget enforcement)'
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_team_includes_max_budget_when_set(self):
+        """Test that _create_team includes max_budget when it has a value."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._create_team(
+                    mock_client,
+                    team_alias='test-team',
+                    team_id='test-team-id',
+                    max_budget=100.0,  # Explicit budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify that max_budget IS in the JSON payload with the correct value
+        json_payload = call_args[1]['json']
+        assert (
+            'max_budget' in json_payload
+        ), 'max_budget should be in payload when set to a value'
+        assert json_payload['max_budget'] == 100.0
+
+    @pytest.mark.asyncio
+    async def test_add_user_to_team_excludes_max_budget_when_none(self):
+        """Test that _add_user_to_team does NOT include max_budget_in_team when None."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._add_user_to_team(
+                    mock_client,
+                    keycloak_user_id='test-user-id',
+                    team_id='test-team-id',
+                    max_budget=None,  # None = no budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify URL
+        assert call_args[0][0] == 'http://test.com/team/member_add'
+
+        # Verify that max_budget_in_team is NOT in the JSON payload
+        json_payload = call_args[1]['json']
+        assert 'max_budget_in_team' not in json_payload, (
+            'max_budget_in_team should NOT be in payload when None '
+            '(omitting it tells LiteLLM to disable budget enforcement)'
+        )
+
+    @pytest.mark.asyncio
+    async def test_add_user_to_team_includes_max_budget_when_set(self):
+        """Test that _add_user_to_team includes max_budget_in_team when set."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._add_user_to_team(
+                    mock_client,
+                    keycloak_user_id='test-user-id',
+                    team_id='test-team-id',
+                    max_budget=50.0,  # Explicit budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify that max_budget_in_team IS in the JSON payload
+        json_payload = call_args[1]['json']
+        assert (
+            'max_budget_in_team' in json_payload
+        ), 'max_budget_in_team should be in payload when set to a value'
+        assert json_payload['max_budget_in_team'] == 50.0
+
+    @pytest.mark.asyncio
+    async def test_update_user_in_team_excludes_max_budget_when_none(self):
+        """Test that _update_user_in_team does NOT include max_budget_in_team when None."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._update_user_in_team(
+                    mock_client,
+                    keycloak_user_id='test-user-id',
+                    team_id='test-team-id',
+                    max_budget=None,  # None = no budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify URL
+        assert call_args[0][0] == 'http://test.com/team/member_update'
+
+        # Verify that max_budget_in_team is NOT in the JSON payload
+        json_payload = call_args[1]['json']
+        assert 'max_budget_in_team' not in json_payload, (
+            'max_budget_in_team should NOT be in payload when None '
+            '(omitting it tells LiteLLM to disable budget enforcement)'
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_user_in_team_includes_max_budget_when_set(self):
+        """Test that _update_user_in_team includes max_budget_in_team when set."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                await LiteLlmManager._update_user_in_team(
+                    mock_client,
+                    keycloak_user_id='test-user-id',
+                    team_id='test-team-id',
+                    max_budget=75.0,  # Explicit budget limit
+                )
+
+        # Verify the call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+
+        # Verify that max_budget_in_team IS in the JSON payload
+        json_payload = call_args[1]['json']
+        assert (
+            'max_budget_in_team' in json_payload
+        ), 'max_budget_in_team should be in payload when set to a value'
+        assert json_payload['max_budget_in_team'] == 75.0

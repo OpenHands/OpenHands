@@ -46,6 +46,12 @@ RUN apt-get update && \
     (apt-get install -y --no-install-recommends libgl1 || apt-get install -y --no-install-recommends libgl1-mesa-glx) && \
         # Install Docker dependencies
     apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release && \
+    # Security upgrade: patch GLib CVE-2025-14087 (buffer underflow in GVariant parser)
+    (apt-get install -y --no-install-recommends --only-upgrade \
+        libglib2.0-0t64 libglib2.0-bin libglib2.0-dev libglib2.0-dev-bin || true) && \
+    # Security upgrade: patch OpenSSL CVEs (CVE-2025-15467, CVE-2025-69419, CVE-2025-69421, et al.)
+    (apt-get install -y --no-install-recommends --only-upgrade \
+        openssl openssl-provider-legacy libssl3t64 || true) && \
     # Security upgrade: patch ImageMagick CVEs (CVE-2026-25897, CVE-2026-25968, CVE-2026-26284, et al.)
     (apt-get install -y --no-install-recommends --only-upgrade \
         imagemagick imagemagick-7-common imagemagick-7.q16 \
@@ -356,6 +362,14 @@ COPY --chown=openhands:openhands ./code/openhands /openhands/code/openhands
 RUN chmod a+rwx /openhands/code/openhands/__init__.py && \
     chown -R openhands:openhands /openhands/code
 
+
+# ================================================================
+# Install VSCode extensions for build_from_scratch
+# (must be after setup_vscode_server and source file copy)
+# ================================================================
+{% if build_from_scratch %}
+{{ install_vscode_extensions() }}
+{% endif %}
 
 # ================================================================
 # END: Build from versioned image

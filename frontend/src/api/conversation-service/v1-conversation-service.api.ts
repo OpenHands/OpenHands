@@ -68,6 +68,8 @@ class V1ConversationService {
     trigger?: ConversationTrigger,
     parent_conversation_id?: string,
     agent_type?: "default" | "plan",
+    sandbox_id?: string,
+    llm_model?: string,
   ): Promise<V1AppConversationStartTask> {
     const body: V1AppConversationStartRequest = {
       selected_repository: selectedRepository,
@@ -78,6 +80,8 @@ class V1ConversationService {
       trigger,
       parent_conversation_id: parent_conversation_id || null,
       agent_type,
+      sandbox_id: sandbox_id || null,
+      llm_model: llm_model || null,
     };
 
     // suggested_task implies the backend will construct the initial_message

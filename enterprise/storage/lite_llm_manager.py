@@ -589,20 +589,26 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
+
+        json_data: dict[str, Any] = {
+            'team_id': team_id,
+            'team_alias': team_alias,
+            'models': [],
+            'spend': 0,
+            'metadata': {
+                'version': ORG_SETTINGS_VERSION,
+                'model': get_default_litellm_model(),
+            },
+        }
+
+        if max_budget is not None:
+            json_data['max_budget'] = max_budget
+
         response = await client.post(
             f'{LITE_LLM_API_URL}/team/new',
-            json={
-                'team_id': team_id,
-                'team_alias': team_alias,
-                'models': [],
-                'max_budget': max_budget,  # None disables budget enforcement
-                'spend': 0,
-                'metadata': {
-                    'version': ORG_SETTINGS_VERSION,
-                    'model': get_default_litellm_model(),
-                },
-            },
+            json=json_data,
         )
+
         # Team failed to create in litellm - this is an unforseen error state...
         if not response.is_success:
             if (
@@ -1040,14 +1046,20 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
+
+        json_data: dict[str, Any] = {
+            'team_id': team_id,
+            'member': {'user_id': keycloak_user_id, 'role': 'user'},
+        }
+
+        if max_budget is not None:
+            json_data['max_budget_in_team'] = max_budget
+
         response = await client.post(
             f'{LITE_LLM_API_URL}/team/member_add',
-            json={
-                'team_id': team_id,
-                'member': {'user_id': keycloak_user_id, 'role': 'user'},
-                'max_budget_in_team': max_budget,  # None disables budget enforcement
-            },
+            json=json_data,
         )
+
         # Failed to add user to team - this is an unforseen error state...
         if not response.is_success:
             if (
@@ -1129,14 +1141,20 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
+
+        json_data: dict[str, Any] = {
+            'team_id': team_id,
+            'user_id': keycloak_user_id,
+        }
+
+        if max_budget is not None:
+            json_data['max_budget_in_team'] = max_budget
+
         response = await client.post(
             f'{LITE_LLM_API_URL}/team/member_update',
-            json={
-                'team_id': team_id,
-                'user_id': keycloak_user_id,
-                'max_budget_in_team': max_budget,  # None disables budget enforcement
-            },
+            json=json_data,
         )
+
         # Failed to update user in team - this is an unforseen error state...
         if not response.is_success:
             logger.error(
