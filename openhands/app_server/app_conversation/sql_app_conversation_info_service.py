@@ -278,6 +278,14 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         rows = result_set.scalars().all()
         return [UUID(row.conversation_id) for row in rows]
 
+    async def count_conversations_by_sandbox_id(self, sandbox_id: str) -> int:
+        query = await self._secure_select()
+        query = query.where(StoredConversationMetadata.sandbox_id == sandbox_id)
+        count_query = select(func.count()).select_from(query.subquery())
+        result = await self.db_session.execute(count_query)
+        count = result.scalar()
+        return count or 0
+
     async def get_app_conversation_info(
         self, conversation_id: UUID
     ) -> AppConversationInfo | None:

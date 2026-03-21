@@ -219,11 +219,9 @@ jobs:
       - name: Determine app image tag
         shell: bash
         run: |
-          # Duplicated with build.sh
-          sanitized_ref_name=$(echo "$GITHUB_REF_NAME" | sed 's/[^a-zA-Z0-9.-]\+/-/g')
-          OPENHANDS_BUILD_VERSION=$sanitized_ref_name
-          sanitized_ref_name=$(echo "$sanitized_ref_name" | tr '[:upper:]' '[:lower:]') # lower case is required in tagging
-          echo "OPENHANDS_DOCKER_TAG=${sanitized_ref_name}" >> $GITHUB_ENV
+          # Use the commit SHA to pin the exact app image built by ghcr_build_app,
+          # rather than a mutable branch tag like "main" which can serve stale cached layers.
+          echo "OPENHANDS_DOCKER_TAG=${RELEVANT_SHA}" >> $GITHUB_ENV
       - name: Build and push Docker image
         uses: useblacksmith/build-push-action@v1
         with:

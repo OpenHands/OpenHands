@@ -216,6 +216,36 @@ describe("InteractiveChatBox", () => {
     expect(onSubmitMock).not.toHaveBeenCalled();
   });
 
+  it("should lock the text input field when disabled prop is true (isNewConversationPending)", () => {
+    mockStores(AgentState.INIT);
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+      disabled: true,
+    });
+
+    const chatInput = screen.getByTestId("chat-input");
+    // When disabled=true, the text field should not be editable
+    expect(chatInput).toHaveAttribute("contenteditable", "false");
+    // Should show visual disabled state
+    expect(chatInput.className).toContain("cursor-not-allowed");
+    expect(chatInput.className).toContain("opacity-50");
+  });
+
+  it("should keep the text input field editable when disabled prop is false", () => {
+    mockStores(AgentState.INIT);
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+      disabled: false,
+    });
+
+    const chatInput = screen.getByTestId("chat-input");
+    expect(chatInput).toHaveAttribute("contenteditable", "true");
+    expect(chatInput.className).not.toContain("cursor-not-allowed");
+    expect(chatInput.className).not.toContain("opacity-50");
+  });
+
   it("should handle image upload and message submission correctly", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();

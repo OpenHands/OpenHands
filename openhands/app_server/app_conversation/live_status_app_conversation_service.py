@@ -1740,13 +1740,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversations = await self._build_app_conversations([info])
         return conversations[0]
 
-    async def delete_app_conversation(self, conversation_id: UUID) -> bool:
+    async def delete_app_conversation(
+        self, conversation_id: UUID, skip_agent_server_delete: bool = False
+    ) -> bool:
         """Delete a V1 conversation and all its associated data.
 
         This method will also cascade delete all sub-conversations of the parent.
 
         Args:
             conversation_id: The UUID of the conversation to delete.
+            skip_agent_server_delete: If True, skip the agent server DELETE call.
+                This should be set when the sandbox is shared with other
+                conversations (e.g. created via /new) to avoid destabilizing
+                the shared runtime.
         """
         # Check if we have the required SQL implementation for transactional deletion
         if not isinstance(
@@ -1772,8 +1778,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             await self._delete_sub_conversations(conversation_id)
 
             # Now delete the parent conversation
-            # Delete from agent server if sandbox is running
-            await self._delete_from_agent_server(app_conversation)
+            # Delete from agent server if sandbox is running (skip if sandbox is shared)
+            if not skip_agent_server_delete:
+                await self._delete_from_agent_server(app_conversation)
 
             # Delete from database using the conversation info from app_conversation
             # AppConversation extends AppConversationInfo, so we can use it directly

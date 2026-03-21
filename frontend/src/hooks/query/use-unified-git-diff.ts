@@ -4,6 +4,7 @@ import GitService from "#/api/git-service/git-service.api";
 import V1GitService from "#/api/git-service/v1-git-service.api";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useSettings } from "#/hooks/query/use-settings";
 import { getGitPath } from "#/utils/get-git-path";
 import type { GitChangeStatus } from "#/api/open-hands.types";
 
@@ -21,20 +22,36 @@ type UseUnifiedGitDiffConfig = {
 export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
+  const { data: settings } = useSettings();
 
   const isV1Conversation = conversation?.conversation_version === "V1";
   const conversationUrl = conversation?.url;
   const sessionApiKey = conversation?.session_api_key;
   const selectedRepository = conversation?.selected_repository;
 
+  // Sandbox grouping is enabled when strategy is not NO_GROUPING
+  const useSandboxGrouping =
+    settings?.sandbox_grouping_strategy !== "NO_GROUPING" &&
+    settings?.sandbox_grouping_strategy !== undefined;
+
   // For V1, we need to convert the relative file path to an absolute path
   // The diff endpoint expects: /workspace/project/RepoName/relative/path
   const absoluteFilePath = React.useMemo(() => {
     if (!isV1Conversation) return config.filePath;
 
-    const gitPath = getGitPath(conversationId, selectedRepository);
+    const gitPath = getGitPath(
+      conversationId,
+      selectedRepository,
+      useSandboxGrouping,
+    );
     return `${gitPath}/${config.filePath}`;
-  }, [isV1Conversation, selectedRepository, config.filePath]);
+  }, [
+    isV1Conversation,
+    conversationId,
+    selectedRepository,
+    useSandboxGrouping,
+    config.filePath,
+  ]);
 
   return useQuery({
     queryKey: [

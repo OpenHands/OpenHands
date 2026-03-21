@@ -156,11 +156,19 @@ describe("UserContextMenu", () => {
     useSelectedOrganizationStore.setState({ organizationId: null });
   });
 
-  it("should render the default context items for a user", () => {
+  it("should render the default context items for a user", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({ app_mode: "saas" }),
+    );
+
     renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     screen.getByTestId("org-selector");
-    screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
+
+    // Wait for config to load so logout button appears
+    await waitFor(() => {
+      expect(screen.getByText("ACCOUNT_SETTINGS$LOGOUT")).toBeInTheDocument();
+    });
 
     expect(
       screen.queryByText("ORG$INVITE_ORG_MEMBERS"),
@@ -304,6 +312,20 @@ describe("UserContextMenu", () => {
         screen.queryByText("Organization Members"),
       ).not.toBeInTheDocument();
     });
+
+    it("should not display logout button in OSS mode", async () => {
+      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+
+      // Wait for the config to load
+      await waitFor(() => {
+        expect(screen.getByText("SETTINGS$NAV_LLM")).toBeInTheDocument();
+      });
+
+      // Verify logout button is NOT rendered in OSS mode
+      expect(
+        screen.queryByText("ACCOUNT_SETTINGS$LOGOUT"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("HIDE_LLM_SETTINGS feature flag", () => {
@@ -382,10 +404,15 @@ describe("UserContextMenu", () => {
   });
 
   it("should call the logout handler when Logout is clicked", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({ app_mode: "saas" }),
+    );
+
     const logoutSpy = vi.spyOn(AuthService, "logout");
     renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-    const logoutButton = screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
+    // Wait for config to load so logout button appears
+    const logoutButton = await screen.findByText("ACCOUNT_SETTINGS$LOGOUT");
     await userEvent.click(logoutButton);
 
     expect(logoutSpy).toHaveBeenCalledOnce();
@@ -488,6 +515,10 @@ describe("UserContextMenu", () => {
   });
 
   it("should call the onClose handler after each action", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({ app_mode: "saas" }),
+    );
+
     // Mock a team org so org management buttons are visible
     vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
       items: [MOCK_TEAM_ORG_ACME],
@@ -497,7 +528,8 @@ describe("UserContextMenu", () => {
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "owner", onClose: onCloseMock, onOpenInviteModal: vi.fn });
 
-    const logoutButton = screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
+    // Wait for config to load so logout button appears
+    const logoutButton = await screen.findByText("ACCOUNT_SETTINGS$LOGOUT");
     await userEvent.click(logoutButton);
     expect(onCloseMock).toHaveBeenCalledTimes(1);
 
