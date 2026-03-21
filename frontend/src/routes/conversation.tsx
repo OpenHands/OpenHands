@@ -99,7 +99,7 @@ function AppContent() {
           data-testid="app-route"
           className="p-3 md:p-0 flex flex-col h-full gap-3"
         >
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4.5 pt-2 lg:pt-0">
+          <div className="sticky top-0 z-10 bg-base shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4.5 pt-2 lg:pt-0">
             <ConversationNameWithStatus />
             <ConversationTabs />
           </div>
