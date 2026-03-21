@@ -20,6 +20,12 @@ from openhands.server.middleware import (
 )
 from openhands.server.static import SPAStaticFiles
 
+# Mount WebSocket routes at /ws BEFORE static files to ensure WebSockets are handled properly
+if os.getenv('ENABLE_WEBSOCKET_GATEWAY', 'false').lower() in ('true', '1'):
+    from openhands.app_server.v1_router import websocket_routes
+
+    base_app.mount('/ws', websocket_routes, name='websocket')
+
 if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':
     base_app.mount(
         '/', SPAStaticFiles(directory='./frontend/build', html=True), name='dist'
