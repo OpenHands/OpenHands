@@ -25,6 +25,9 @@ from openhands.app_server.app_conversation.live_status_app_conversation_service 
     PLANNING_AGENT_INSTRUCTION,
     LiveStatusAppConversationService,
 )
+from openhands.app_server.event_callback.set_title_callback_processor import (
+    SetTitleCallbackProcessor,
+)
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     ExposedUrl,
@@ -1699,6 +1702,95 @@ class TestLiveStatusAppConversationService:
             f'but got "{saved_info.title}"'
         )
         assert saved_info.id == conversation_id
+
+        saved_callbacks = [
+            call.args[0]
+            for call in self.mock_event_callback_service.save_event_callback.call_args_list
+        ]
+        assert any(
+            isinstance(callback.processor, SetTitleCallbackProcessor)
+            for callback in saved_callbacks
+        )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.ConversationInfo'
+    )
+    async def test_start_app_conversation_can_disable_default_set_title_processor(
+        self, mock_conversation_info_class, mock_remote_workspace_class
+    ):
+        # Arrange
+        conversation_id = uuid4()
+
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_user_context.get_user_info = AsyncMock(return_value=self.mock_user)
+
+        mock_sandbox_spec = Mock(spec=SandboxSpecInfo)
+        mock_sandbox_spec.working_dir = '/test/workspace'
+        self.mock_sandbox.sandbox_spec_id = str(uuid4())
+        self.mock_sandbox.id = str(uuid4())
+        self.mock_sandbox.session_api_key = 'test_session_key'
+        exposed_url = ExposedUrl(
+            name=AGENT_SERVER, url='http://agent-server:8000', port=60000
+        )
+        self.mock_sandbox.exposed_urls = [exposed_url]
+
+        self.mock_sandbox_service.get_sandbox = AsyncMock(
+            return_value=self.mock_sandbox
+        )
+        self.mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+
+        mock_remote_workspace = Mock()
+        mock_remote_workspace_class.return_value = mock_remote_workspace
+
+        async def mock_wait_for_sandbox(task):
+            task.sandbox_id = self.mock_sandbox.id
+            yield task
+
+        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+            yield task
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+        self.service.run_setup_scripts = mock_run_setup_scripts
+
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = Mock(spec=LLM)
+        mock_agent.llm.model = 'gpt-4'
+        mock_start_request = Mock(spec=StartConversationRequest)
+        mock_start_request.agent = mock_agent
+        mock_start_request.model_dump.return_value = {'test': 'data'}
+        self.service._build_start_conversation_request_for_user = AsyncMock(
+            return_value=mock_start_request
+        )
+
+        mock_conversation_info = Mock()
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info_class.model_validate.return_value = (
+            mock_conversation_info
+        )
+
+        mock_response = Mock()
+        mock_response.json.return_value = {'id': str(conversation_id)}
+        mock_response.raise_for_status = Mock()
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        self.mock_event_callback_service.save_event_callback = AsyncMock()
+
+        request = AppConversationStartRequest()
+
+        # Act
+        with patch.dict(
+            os.environ, {'OH_DISABLE_SET_TITLE_PROCESSOR': 'true'}, clear=False
+        ):
+            async for _ in self.service._start_app_conversation(request):
+                pass
+
+        # Assert
+        assert self.mock_event_callback_service.save_event_callback.call_count == 0
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_sse_servers(self):

@@ -355,13 +355,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # Setup default processors
             processors = request.processors or []
 
-            # Always ensure SetTitleCallbackProcessor is included
-            has_set_title_processor = any(
-                isinstance(processor, SetTitleCallbackProcessor)
-                for processor in processors
-            )
-            if not has_set_title_processor:
-                processors.append(SetTitleCallbackProcessor())
+            disable_set_title_processor = os.environ.get(
+                'OH_DISABLE_SET_TITLE_PROCESSOR', '0'
+            ).lower() in ('1', 'true', 'yes')
+            if not disable_set_title_processor:
+                # Always ensure SetTitleCallbackProcessor is included
+                has_set_title_processor = any(
+                    isinstance(processor, SetTitleCallbackProcessor)
+                    for processor in processors
+                )
+                if not has_set_title_processor:
+                    processors.append(SetTitleCallbackProcessor())
 
             # Save processors
             for processor in processors:
