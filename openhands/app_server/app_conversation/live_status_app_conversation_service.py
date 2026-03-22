@@ -145,6 +145,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     app_mode: str | None = None
     tavily_api_key: str | None = None
 
+    def _ensure_default_callback_processors(self, processors: list[Any]) -> None:
+        disable_set_title_processor = os.environ.get(
+            'OH_DISABLE_SET_TITLE_PROCESSOR', '0'
+        ).lower() in ('1', 'true', 'yes')
+        if disable_set_title_processor:
+            return
+
+        has_set_title_processor = any(
+            isinstance(processor, SetTitleCallbackProcessor) for processor in processors
+        )
+        if not has_set_title_processor:
+            processors.append(SetTitleCallbackProcessor())
+
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
         user_info = await self.user_context.get_user_info()
@@ -354,18 +367,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Setup default processors
             processors = request.processors or []
-
-            disable_set_title_processor = os.environ.get(
-                'OH_DISABLE_SET_TITLE_PROCESSOR', '0'
-            ).lower() in ('1', 'true', 'yes')
-            if not disable_set_title_processor:
-                # Always ensure SetTitleCallbackProcessor is included
-                has_set_title_processor = any(
-                    isinstance(processor, SetTitleCallbackProcessor)
-                    for processor in processors
-                )
-                if not has_set_title_processor:
-                    processors.append(SetTitleCallbackProcessor())
+            self._ensure_default_callback_processors(processors)
 
             # Save processors
             for processor in processors:
