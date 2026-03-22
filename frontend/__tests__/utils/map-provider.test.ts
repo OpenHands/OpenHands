@@ -25,4 +25,5 @@ test("mapProvider", () => {
   expect(mapProvider("voyage")).toBe("Voyage AI");
   expect(mapProvider("openrouter")).toBe("OpenRouter");
   expect(mapProvider("clarifai")).toBe("Clarifai");
+  expect(mapProvider("novita")).toBe("Novita AI");
 });

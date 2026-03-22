@@ -101,4 +101,28 @@ describe("extractModelAndProvider", () => {
       separator: "/",
     });
   });
+
+  it("should extract novita provider and model", () => {
+    expect(
+      extractModelAndProvider("novita/moonshotai/kimi-k2.5"),
+    ).toEqual({
+      provider: "novita",
+      model: "moonshotai/kimi-k2.5",
+      separator: "/",
+    });
+
+    expect(extractModelAndProvider("novita/zai-org/glm-5")).toEqual({
+      provider: "novita",
+      model: "zai-org/glm-5",
+      separator: "/",
+    });
+
+    expect(
+      extractModelAndProvider("novita/minimax/minimax-m2.5"),
+    ).toEqual({
+      provider: "novita",
+      model: "minimax/minimax-m2.5",
+      separator: "/",
+    });
+  });
 });

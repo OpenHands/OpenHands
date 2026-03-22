@@ -194,6 +194,8 @@ def test_get_features(model, expect):
         'kimi-k2-instruct',
         'qwen3-coder',
         'qwen3-coder-480b-a35b-instruct',
+        # MiniMax
+        'minimax-m2.5',
     ],
 )
 def test_function_calling_models(model):
@@ -211,6 +213,8 @@ def test_function_calling_models(model):
         'gemini-2.5-pro',
         'gpt-5',
         'gpt-5-mini-2025-08-07',
+        # MiniMax
+        'minimax-m2.5',
     ],
 )
 def test_reasoning_effort_models(model):
