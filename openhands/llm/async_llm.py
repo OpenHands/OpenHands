@@ -69,6 +69,14 @@ class AsyncLLM(LLM):
             elif 'messages' in kwargs:
                 messages = kwargs['messages']
 
+            # Allow model override via kwargs for llama-server support
+            # This enables switching between main and critic models on a single llama-server instance
+            if 'model' in kwargs:
+                model_override = kwargs.pop('model')
+                logger.debug(
+                    f'Async completion: Model override requested: {model_override} (default: {self.config.model})'
+                )
+
             # Set reasoning effort for models that support it, only if explicitly provided
             if (
                 get_features(self.config.model).supports_reasoning_effort
@@ -100,6 +108,10 @@ class AsyncLLM(LLM):
             stop_check_task = asyncio.create_task(check_stopped())
 
             try:
+                # Apply model override if provided (for llama-server support)
+                if 'model_override' in dir():
+                    kwargs['model'] = model_override
+
                 # Directly call and await litellm_acompletion
                 resp = await async_completion_unwrapped(*args, **kwargs)
 
