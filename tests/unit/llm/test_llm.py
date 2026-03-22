@@ -1547,3 +1547,120 @@ def test_gemini_performance_optimization_end_to_end(mock_completion):
     # Verify temperature and top_p were removed for reasoning models
     assert 'temperature' not in call_kwargs
     assert 'top_p' not in call_kwargs
+
+
+@patch('openhands.llm.llm.litellm_completion')
+def test_llm_model_override_for_llama_server(mock_completion):
+    """Test that model override via kwargs works for llama-server support.
+
+    This allows switching between main and critic models on a single llama-server instance.
+    """
+    # Mock the completion response
+    mock_completion.return_value = {
+        'choices': [{'message': {'content': 'Test response'}}],
+        'usage': {'prompt_tokens': 10, 'completion_tokens': 5},
+    }
+
+    # Create config with main model
+    config = LLMConfig(
+        model='gpt-4o',
+        api_key='test_key',
+    )
+
+    # Create LLM instance
+    llm = LLM(config, service_id='test-service')
+
+    # Call completion with model override (simulating critic model switch)
+    sample_messages = [{'role': 'user', 'content': 'Hello, how are you?'}]
+    critic_model = 'gpt-3.5-turbo'  # Different model for critic
+    llm.completion(messages=sample_messages, model=critic_model)
+
+    # Verify that the model override was passed to litellm
+    call_kwargs = mock_completion.call_args[1]
+    assert call_kwargs.get('model') == critic_model
+
+
+@patch('openhands.llm.llm.litellm_completion')
+def test_llm_no_model_override_uses_configured_model(mock_completion):
+    """Test that without model override, the configured model is used."""
+    # Mock the completion response
+    mock_completion.return_value = {
+        'choices': [{'message': {'content': 'Test response'}}],
+        'usage': {'prompt_tokens': 10, 'completion_tokens': 5},
+    }
+
+    # Create config with main model
+    config = LLMConfig(
+        model='gpt-4o',
+        api_key='test_key',
+    )
+
+    # Create LLM instance
+    llm = LLM(config, service_id='test-service')
+
+    # Call completion without model override
+    sample_messages = [{'role': 'user', 'content': 'Hello, how are you?'}]
+    llm.completion(messages=sample_messages)
+
+    # Verify that the configured model is used (not overridden)
+    call_kwargs = mock_completion.call_args[1]
+    # The model should be from the partial function, not from kwargs
+    # When no override, 'model' should not be in kwargs (or should be the default)
+    assert call_kwargs.get('model') is None or call_kwargs.get('model') == 'gpt-4o'
+
+
+@patch('openhands.llm.async_llm.litellm_acompletion')
+@pytest.mark.asyncio
+async def test_async_llm_model_override_for_llama_server(mock_acompletion):
+    """Test that async model override via kwargs works for llama-server support."""
+    mock_acompletion.return_value = {
+        'choices': [{'message': {'content': 'Test response'}}],
+    }
+
+    config = LLMConfig(
+        model='gpt-4o',
+        api_key='test_key',
+    )
+
+    llm = AsyncLLM(config, service_id='test-service')
+
+    sample_messages = [{'role': 'user', 'content': 'Hello, how are you?'}]
+    critic_model = 'gpt-3.5-turbo'
+
+    await llm.async_completion(messages=sample_messages, model=critic_model)
+
+    call_kwargs = mock_acompletion.call_args[1]
+    assert call_kwargs.get('model') == critic_model
+
+
+@patch('openhands.llm.streaming_llm.AsyncLLM._call_acompletion')
+@pytest.mark.asyncio
+async def test_streaming_llm_model_override_for_llama_server(mock_call):
+    """Test that streaming model override via kwargs works for llama-server support."""
+
+    async def fake_stream(*args, **kwargs):
+        class Dummy:
+            async def __aiter__(self):
+                yield {'choices': [{'delta': {'content': 'x'}}]}
+
+        return Dummy()
+
+    mock_call.side_effect = fake_stream
+
+    config = LLMConfig(
+        model='gpt-4o',
+        api_key='test_key',
+    )
+
+    sllm = StreamingLLM(config, service_id='test-service')
+
+    sample_messages = [{'role': 'user', 'content': 'Hello, how are you?'}]
+    critic_model = 'gpt-3.5-turbo'
+
+    async for _ in sllm.async_streaming_completion(
+        messages=sample_messages, model=critic_model
+    ):
+        break
+
+    call_kwargs = mock_call.call_args[1]
+    assert call_kwargs.get('model') == critic_model
