@@ -1,5 +1,5 @@
-import { LoaderCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Spinner } from "#/components/shared/spinner";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 
@@ -17,7 +17,7 @@ export function ConversationLoading({ className }: ConversationLoadingProps) {
         className,
       )}
     >
-      <LoaderCircle className="animate-spin w-16 h-16" color="white" />
+      <Spinner size="xl" className="text-white" />
       <span className="text-2xl font-normal leading-5 text-white p-4">
         {t(I18nKey.HOME$LOADING)}
       </span>

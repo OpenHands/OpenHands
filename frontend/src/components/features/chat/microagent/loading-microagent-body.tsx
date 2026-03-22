@@ -1,5 +1,5 @@
-import { Spinner } from "@heroui/react";
 import { useTranslation } from "react-i18next";
+import { Spinner } from "#/components/shared/spinner";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { Typography } from "#/ui/typography";
 
