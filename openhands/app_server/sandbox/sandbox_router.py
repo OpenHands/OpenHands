@@ -25,6 +25,7 @@ from openhands.server.user_auth.user_auth import (
 )
 
 _logger = logging.getLogger(__name__)
+_secrets_logger = logging.getLogger('openhands.security.secrets_access')
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
@@ -151,10 +152,15 @@ async def _get_user_context(sandbox_info: SandboxInfo) -> AuthUserContext:
 async def list_secret_names(
     sandbox_info: SandboxInfo = Depends(_valid_sandbox_from_session_key),
 ) -> SecretNamesResponse:
-    """List available secret names (no raw values).
+    """List available secret names (no raw values)."""
+    _secrets_logger.info(
+        'secrets_access: route=/api/v1/sandboxes/settings/secrets '
+        'user_id=%s sandbox_id=%s actor_type=sandbox_agent '
+        'secret_name=None outcome=allowed',
+        sandbox_info.created_by_user_id,
+        sandbox_info.id,
+    )
 
-    Includes both custom secrets and provider tokens (e.g. github_token).
-    """
     user_context = await _get_user_context(sandbox_info)
 
     items: list[SecretNameItem] = []
@@ -183,12 +189,7 @@ async def get_secret_value(
     secret_name: str,
     sandbox_info: SandboxInfo = Depends(_valid_sandbox_from_session_key),
 ) -> Response:
-    """Return a single secret value as plain text.
-
-    Called by ``LookupSecret`` inside the sandbox. Checks custom secrets
-    first, then falls back to provider tokens — always resolving the
-    latest token at call time.
-    """
+    """Return a single secret value as plain text."""
     user_context = await _get_user_context(sandbox_info)
 
     # Check custom secrets first
@@ -197,10 +198,26 @@ async def get_secret_value(
     if source is not None:
         value = source.get_value()
         if value is None:
+            _secrets_logger.warning(
+                'secrets_access: route=/api/v1/sandboxes/settings/secrets/{name} '
+                'user_id=%s sandbox_id=%s actor_type=sandbox_agent '
+                'secret_name=%s outcome=not_found',
+                sandbox_info.created_by_user_id,
+                sandbox_info.id,
+                secret_name,
+            )
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Secret has no value')
+        _secrets_logger.info(
+            'secrets_access: route=/api/v1/sandboxes/settings/secrets/{name} '
+            'user_id=%s sandbox_id=%s actor_type=sandbox_agent '
+            'secret_name=%s outcome=allowed',
+            sandbox_info.created_by_user_id,
+            sandbox_info.id,
+            secret_name,
+        )
         return Response(content=value, media_type='text/plain')
 
-    # Fall back to provider tokens (resolved fresh per request)
+    # Fall back to provider tokens
     provider_env_vars = cast(
         dict[str, str] | None,
         await user_context.get_provider_tokens(as_env_vars=True),
@@ -208,6 +225,22 @@ async def get_secret_value(
     if provider_env_vars:
         token_value = provider_env_vars.get(secret_name)
         if token_value is not None:
+            _secrets_logger.info(
+                'secrets_access: route=/api/v1/sandboxes/settings/secrets/{name} '
+                'user_id=%s sandbox_id=%s actor_type=sandbox_agent '
+                'secret_name=%s outcome=allowed',
+                sandbox_info.created_by_user_id,
+                sandbox_info.id,
+                secret_name,
+            )
             return Response(content=token_value, media_type='text/plain')
 
+    _secrets_logger.warning(
+        'secrets_access: route=/api/v1/sandboxes/settings/secrets/{name} '
+        'user_id=%s sandbox_id=%s actor_type=sandbox_agent '
+        'secret_name=%s outcome=not_found',
+        sandbox_info.created_by_user_id,
+        sandbox_info.id,
+        secret_name,
+    )
     raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Secret not found')
