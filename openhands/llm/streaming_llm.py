@@ -62,6 +62,14 @@ class StreamingLLM(AsyncLLM):
             elif 'messages' in kwargs:
                 messages = kwargs['messages']
 
+            # Allow model override via kwargs for llama-server support
+            # This enables switching between main and critic models on a single llama-server instance
+            if 'model' in kwargs:
+                model_override = kwargs.pop('model')
+                logger.debug(
+                    f'Streaming completion: Model override requested: {model_override} (default: {self.config.model})'
+                )
+
             # ensure we work with a list of messages
             messages = messages if isinstance(messages, list) else [messages]
 
@@ -81,6 +89,10 @@ class StreamingLLM(AsyncLLM):
             self.log_prompt(messages)
 
             try:
+                # Apply model override if provided (for llama-server support)
+                if 'model_override' in dir():
+                    kwargs['model'] = model_override
+
                 # Directly call and await litellm_acompletion
                 resp = await async_streaming_completion_unwrapped(*args, **kwargs)
 
