@@ -12,6 +12,7 @@ from openhands.app_server.user.user_models import UserInfo
 from openhands.server.dependencies import get_dependencies
 
 _logger = logging.getLogger(__name__)
+_secrets_logger = logging.getLogger('openhands.security.secrets_access')
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
@@ -37,7 +38,23 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
     if expose_secrets:
-        await _validate_session_key_ownership(user_context, x_session_api_key)
+        user_id = await user_context.get_user_id()
+        try:
+            await _validate_session_key_ownership(user_context, x_session_api_key)
+        except HTTPException:
+            _secrets_logger.warning(
+                'secrets_access: route=/api/v1/users/me user_id=%s '
+                'sandbox_id=None actor_type=user secret_name=None '
+                'outcome=denied',
+                user_id,
+            )
+            raise
+        _secrets_logger.info(
+            'secrets_access: route=/api/v1/users/me user_id=%s '
+            'sandbox_id=None actor_type=user secret_name=None '
+            'outcome=allowed',
+            user_id,
+        )
         return JSONResponse(  # type: ignore[return-value]
             content=user.model_dump(mode='json', context={'expose_secrets': True})
         )
