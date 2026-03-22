@@ -254,9 +254,11 @@ class LLM(RetryMixin, DebugMixin):
 
             # some callers might send the model and messages directly
             # litellm allows positional args, like completion(model, messages, **kwargs)
+            # Also support model override via kwargs for llama-server compatibility
             if len(args) > 1:
                 # ignore the first argument if it's provided (it would be the model)
-                # design wise: we don't allow overriding the configured values
+                # design wise: by default we don't allow overriding the configured values
+                # but we allow model override via kwargs for llama-server support
                 # implementation wise: the partial function set the model as a kwarg already
                 # as well as other kwargs
                 messages_kwarg = args[1] if len(args) > 1 else args[0]
@@ -266,6 +268,14 @@ class LLM(RetryMixin, DebugMixin):
                 args = args[2:]
             elif 'messages' in kwargs:
                 messages_kwarg = kwargs['messages']
+
+            # Allow model override via kwargs for llama-server support
+            # This enables switching between main and critic models on a single llama-server instance
+            if 'model' in kwargs:
+                model_override = kwargs.pop('model')
+                logger.debug(
+                    f'Model override requested: {model_override} (default: {self.config.model})'
+                )
 
             # ensure we work with a list of messages
             messages_list = (
@@ -335,6 +345,11 @@ class LLM(RetryMixin, DebugMixin):
             # if we're not using litellm proxy, remove the extra_body
             if 'litellm_proxy' not in self.config.model:
                 kwargs.pop('extra_body', None)
+
+            # Apply model override if provided (for llama-server support)
+            # This allows switching between main and critic models on a single llama-server instance
+            if 'model_override' in dir():
+                kwargs['model'] = model_override
 
             # Record start time for latency measurement
             start_time = time.time()
