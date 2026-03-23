@@ -581,7 +581,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             ExposedPort(
                 name=WORKER_2,
                 description=(
-                    'The first port on which the agent should start application servers.'
+                    'The second port on which the agent should start application servers.'
                 ),
                 container_port=8012,
             ),
