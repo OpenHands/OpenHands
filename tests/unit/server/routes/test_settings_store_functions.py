@@ -211,9 +211,32 @@ async def test_store_llm_settings_partial_update():
     assert result.llm_model == 'gpt-4'
     # For SecretStr objects, we need to compare the secret value
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # llm_base_url was explicitly cleared (""), so auto-detection runs
-    # OpenAI models: litellm.get_api_base() returns https://api.openai.com
-    assert result.llm_base_url == 'https://api.openai.com'
+    # llm_base_url="" is an explicit clear — must not be repopulated via auto-detection
+    assert result.llm_base_url is None
+
+
+@pytest.mark.asyncio
+async def test_store_llm_settings_advanced_view_clear_removes_base_url():
+    """Regression test for #13420: clearing Base URL in Advanced view must persist.
+
+    Before the fix, llm_base_url="" was treated identically to llm_base_url=None,
+    causing the backend to re-run auto-detection and overwrite the user's intent.
+    """
+    settings = Settings(
+        llm_model='gpt-4',
+        llm_base_url='',  # User deleted the field in Advanced view
+    )
+
+    existing_settings = Settings(
+        llm_model='gpt-4',
+        llm_api_key=SecretStr('my-api-key'),
+        llm_base_url='https://my-custom-proxy.example.com',
+    )
+
+    result = await store_llm_settings(settings, existing_settings)
+
+    # The old custom URL must not come back
+    assert result.llm_base_url is None
 
 
 @pytest.mark.asyncio
