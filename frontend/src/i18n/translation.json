@@ -5354,6 +5354,23 @@
     "uk": "Зупинено",
     "ca": "Aturat"
   },
+  "CHAT_INTERFACE$LOADING_CONVERSATION": {
+    "en": "Loading conversation...",
+    "de": "Unterhaltung wird geladen...",
+    "zh-CN": "正在加载对话...",
+    "zh-TW": "正在載入對話...",
+    "ko-KR": "대화 로딩 중...",
+    "no": "Laster samtale...",
+    "it": "Caricamento conversazione...",
+    "pt": "Carregando conversa...",
+    "es": "Cargando conversación...",
+    "ar": "جارٍ تحميل المحادثة...",
+    "fr": "Chargement de la conversation...",
+    "tr": "Sohbet yükleniyor...",
+    "ja": "会話を読み込み中...",
+    "uk": "Завантаження розмови...",
+    "ca": "Carregant conversa..."
+  },
   "CHAT_INTERFACE$INITIALIZING_AGENT_LOADING_MESSAGE": {
     "en": "Initializing agent...",
     "de": "Agent wird initialisiert...",

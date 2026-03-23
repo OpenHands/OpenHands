@@ -261,11 +261,12 @@ export function ChatInterface() {
     onChatBodyScroll,
   };
 
-  // Get server status indicator props
   const isStartingStatus =
     curAgentState === AgentState.LOADING || curAgentState === AgentState.INIT;
   const isStopStatus = curAgentState === AgentState.STOPPED;
   const isPausing = curAgentState === AgentState.PAUSED;
+  const isLoadingHistory = conversationWebSocket?.isLoadingHistory ?? false;
+
   const serverStatusColor = getStatusColor({
     isPausing,
     isTask,
@@ -274,17 +275,20 @@ export function ChatInterface() {
     isStopStatus,
     curAgentState,
   });
-  const serverStatusText = getStatusText({
-    isPausing,
-    isTask,
-    taskStatus,
-    taskDetail,
-    isStartingStatus,
-    isStopStatus,
-    curAgentState,
-    errorMessage,
-    t,
-  });
+  const serverStatusText =
+    isLoadingHistory && isStartingStatus
+      ? t(I18nKey.CHAT_INTERFACE$LOADING_CONVERSATION)
+      : getStatusText({
+          isPausing,
+          isTask,
+          taskStatus,
+          taskDetail,
+          isStartingStatus,
+          isStopStatus,
+          curAgentState,
+          errorMessage,
+          t,
+        });
 
   return (
     <ScrollProvider value={scrollProviderValue}>

@@ -15,6 +15,8 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
+import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
+import { I18nKey } from "#/i18n/declaration";
 
 export interface AgentStatusProps {
   className?: string;
@@ -48,7 +50,9 @@ export function AgentStatus({
       conversation?.conversation_id || null,
     );
 
-  const statusCode = getStatusCode(
+  const v1Context = useConversationWebSocket();
+  const isLoadingHistory = v1Context?.isLoadingHistory ?? false;
+  const rawStatusCode = getStatusCode(
     curStatusMessage,
     webSocketStatus,
     conversation?.status || null,
@@ -57,6 +61,12 @@ export function AgentStatus({
     taskStatus,
     subConversationTaskStatus,
   );
+  const isHistoryLoadingState =
+    isLoadingHistory &&
+    (curAgentState === AgentState.LOADING || curAgentState === AgentState.INIT);
+  const statusCode = isHistoryLoadingState
+    ? I18nKey.CHAT_INTERFACE$LOADING_CONVERSATION
+    : rawStatusCode;
 
   const shouldShownAgentLoading =
     curAgentState === AgentState.INIT ||
