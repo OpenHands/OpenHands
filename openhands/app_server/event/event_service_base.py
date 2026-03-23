@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import UUID
 
 from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.agent_server.sockets import page_iterator
+from openhands.sdk.utils.paging import page_iterator
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -139,15 +139,16 @@ class EventServiceBase(EventService, ABC):
             timestamp__gte=timestamp__gte,
             timestamp__lt=timestamp__lt,
         )
-        result = sum(1 for event in events)
+        result = 0
+        async for event in events:
+            result += 1
         return result
 
     async def _count_events_no_filter(self, conversation_path: Path) -> int:
-        paths = page_iterator(self._search_paths, conversation_path)
-        result = 0
-        async for _ in paths:
-            result += 1
-        return result
+        """Count all event files in the conversation directory without filtering."""
+        loop = asyncio.get_running_loop()
+        paths = await loop.run_in_executor(None, self._search_paths, conversation_path)
+        return len(paths)
 
     async def save_event(self, conversation_id: UUID, event: Event):
         if isinstance(event.id, str):
