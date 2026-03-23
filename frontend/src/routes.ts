@@ -11,6 +11,7 @@ export default [
   layout("routes/root-layout.tsx", [
     index("routes/home.tsx"),
     route("accept-tos", "routes/accept-tos.tsx"),
+    route("launch", "routes/launch.tsx"),
     route("settings", "routes/settings.tsx", [
       index("routes/llm-settings.tsx"),
       route("mcp", "routes/mcp-settings.tsx"),

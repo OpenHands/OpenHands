@@ -7,6 +7,10 @@ const TOAST_STYLE: CSSProperties = {
   border: "1px solid #717888",
   color: "#fff",
   borderRadius: "4px",
+  width: "400px",
+  wordBreak: "break-word",
+  overflowWrap: "anywhere",
+  whiteSpace: "pre-wrap",
 };
 
 export const TOAST_OPTIONS: ToastOptions = {
@@ -16,10 +20,20 @@ export const TOAST_OPTIONS: ToastOptions = {
 
 export const displayErrorToast = (error: string) => {
   const duration = calculateToastDuration(error, 4000);
-  toast.error(error, { ...TOAST_OPTIONS, duration });
+  toast.error(
+    <span style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
+      {error}
+    </span>,
+    { ...TOAST_OPTIONS, duration },
+  );
 };
 
 export const displaySuccessToast = (message: string) => {
   const duration = calculateToastDuration(message, 5000);
-  toast.success(message, { ...TOAST_OPTIONS, duration });
+  toast.success(
+    <span style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
+      {message}
+    </span>,
+    { ...TOAST_OPTIONS, duration },
+  );
 };
