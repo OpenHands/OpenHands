@@ -215,6 +215,7 @@ class UserStore:
             )
 
             # Migrate stripe customer (pass session to avoid FK violation)
+            # avoids circular reference. This migrate method is temporary until all users are migrated.
             from integrations.stripe_service import migrate_customer
 
             logger.debug(
