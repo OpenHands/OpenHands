@@ -9,7 +9,6 @@ This implementation provides read-only access to events from shared conversation
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -17,9 +16,6 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from openhands.app_server.config import get_global_config
-from pydantic import Field
-from openhands.app_server.event.filesystem_event_service import FilesystemEventService
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
@@ -32,10 +28,9 @@ from server.sharing.sql_shared_conversation_info_service import (
 )
 
 from openhands.agent_server.models import EventPage, EventSortOrder
+from openhands.app_server.config import get_global_config
 from openhands.app_server.event.event_service import EventService
-from openhands.app_server.event.google_cloud_event_service import (
-    GoogleCloudEventService,
-)
+from openhands.app_server.event.filesystem_event_service import FilesystemEventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
