@@ -5,7 +5,6 @@ from server.constants import STRIPE_API_KEY
 from server.logger import logger
 from sqlalchemy import select
 from storage.database import a_session_maker
-from storage.org import Org
 from storage.org_store import OrgStore
 from storage.stripe_customer import StripeCustomer
 
@@ -100,27 +99,4 @@ async def has_payment_method_by_user_id(user_id: str) -> bool:
     return bool(payment_methods.data)
 
 
-async def migrate_customer(user_id: str, org: Org):
-    async with a_session_maker() as session:
-        result = await session.execute(
-            select(StripeCustomer).where(StripeCustomer.keycloak_user_id == user_id)
-        )
-        stripe_customer = result.scalar_one_or_none()
-        if stripe_customer is None:
-            return
-        stripe_customer.org_id = org.id
-        customer = await stripe.Customer.modify_async(
-            id=stripe_customer.stripe_customer_id,
-            email=org.contact_email,
-            metadata={'user_id': '', 'org_id': str(org.id)},
-        )
 
-        logger.info(
-            'migrated_customer',
-            extra={
-                'user_id': user_id,
-                'org_id': str(org.id),
-                'stripe_customer_id': customer.id,
-            },
-        )
-        await session.commit()
