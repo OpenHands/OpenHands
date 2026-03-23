@@ -23,6 +23,12 @@ async function prepareApp() {
     await worker.start({
       onUnhandledRequest: "bypass",
     });
+
+    // Expose Zustand stores on window so Playwright E2E tests can inject
+    // state directly (e.g. to simulate a long conversation) without going
+    // through the WebSocket layer.  Only active in mock/dev mode.
+    const { useEventStore } = await import("./stores/use-event-store");
+    (window as any).__stores = { eventStore: useEventStore }; // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 }
 
