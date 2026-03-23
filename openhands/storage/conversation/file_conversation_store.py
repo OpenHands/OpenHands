@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from json import JSONDecodeError
 from pathlib import Path
 
 from pydantic import TypeAdapter
@@ -38,8 +39,16 @@ class FileConversationStore(ConversationStore):
         path = self.get_conversation_metadata_filename(conversation_id)
         json_str = await call_sync_from_async(self.file_store.read, path)
 
-        # Validate the JSON
-        json_obj = json.loads(json_str)
+        # Validate the JSON, while tolerating a known corruption mode where
+        # duplicated trailing characters are appended after an otherwise-valid
+        # JSON object.
+        json_obj, repaired_json = self._load_metadata_json(json_str)
+        if repaired_json is not None:
+            logger.warning(
+                'Recovered conversation metadata with trailing characters',
+                extra={'conversation_id': conversation_id},
+            )
+            await call_sync_from_async(self.file_store.write, path, repaired_json)
         if 'created_at' not in json_obj:
             raise FileNotFoundError(path)
 
@@ -49,6 +58,22 @@ class FileConversationStore(ConversationStore):
 
         result = conversation_metadata_type_adapter.validate_python(json_obj)
         return result
+
+    def _load_metadata_json(self, json_str: str) -> tuple[dict, bytes | None]:
+        try:
+            return json.loads(json_str), None
+        except JSONDecodeError:
+            decoder = json.JSONDecoder()
+            json_obj, end = decoder.raw_decode(json_str)
+            trailing = json_str[end:]
+            if not trailing or trailing.isspace():
+                return json_obj, None
+
+            canonical_json = json.dumps(json_obj, separators=(',', ':'))
+            if not canonical_json.endswith(trailing):
+                raise
+
+            return json_obj, canonical_json.encode('utf-8')
 
     async def delete_metadata(self, conversation_id: str) -> None:
         path = str(

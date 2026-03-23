@@ -44,6 +44,27 @@ async def test_load_int_user_id():
 
 
 @pytest.mark.asyncio
+async def test_load_metadata_with_duplicated_trailing_characters_repairs_file():
+    metadata = {
+        'conversation_id': 'some-conversation-id',
+        'user_id': '67890',
+        'selected_repository': 'some-repo',
+        'title': "Let's talk about trains",
+        'created_at': '2025-01-16T19:51:04.886331Z',
+    }
+    valid_json = json.dumps(metadata)
+    corrupted_json = valid_json + valid_json[-24:]
+    file_path = get_conversation_metadata_filename('some-conversation-id')
+    file_store = InMemoryFileStore({file_path: corrupted_json})
+    store = FileConversationStore(file_store)
+
+    found = await store.get_metadata('some-conversation-id')
+
+    assert found.user_id == '67890'
+    assert json.loads(file_store.read(file_path)) == metadata
+
+
+@pytest.mark.asyncio
 async def test_search_empty():
     store = FileConversationStore(InMemoryFileStore({}))
     result = await store.search()
