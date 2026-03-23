@@ -122,6 +122,3 @@ async def migrate_customer(session, user_id: str, org: Org):
             'stripe_customer_id': customer.id,
         },
     )
-
-
-
