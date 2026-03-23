@@ -214,6 +214,19 @@ class UserStore:
                 decrypted_user_settings, user_settings.user_version
             )
 
+            # Migrate stripe customer (pass session to avoid FK violation)
+            from integrations.stripe_service import migrate_customer
+
+            logger.debug(
+                'user_store:migrate_user:calling_stripe_migrate_customer',
+                extra={'user_id': user_id},
+            )
+            await migrate_customer(session, user_id, org)
+            logger.debug(
+                'user_store:migrate_user:done_stripe_migrate_customer',
+                extra={'user_id': user_id},
+            )
+
             from storage.org_store import OrgStore
 
             org_kwargs = OrgStore.get_kwargs_from_user_settings(decrypted_user_settings)
