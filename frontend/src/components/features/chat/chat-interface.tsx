@@ -52,7 +52,10 @@ function getEntryPoint(
 
 export function ChatInterface() {
   const posthog = usePostHog();
-  const { setMessageToSend } = useConversationStore();
+  // Selector keeps ChatInterface from re-rendering on every unrelated store mutation.
+  const setMessageToSend = useConversationStore(
+    (state) => state.setMessageToSend,
+  );
   const { data: conversation } = useActiveConversation();
   const { errorMessage, removeErrorMessage } = useErrorMessageStore();
   const { isLoadingMessages } = useWsClient();

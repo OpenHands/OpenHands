@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { ConversationStatus } from "#/types/conversation-status";
 import { useChatInputLogic } from "#/hooks/chat/use-chat-input-logic";
 import { useFileHandling } from "#/hooks/chat/use-file-handling";
@@ -36,12 +37,21 @@ export function CustomChatInput({
   className = "",
   buttonClassName = "",
 }: CustomChatInputProps) {
+  // useShallow so this component only re-renders when one of these four
+  // specific fields changes, not on every unrelated store mutation.
   const {
     submittedMessage,
     clearAllFiles,
     setShouldHideSuggestions,
     setSubmittedMessage,
-  } = useConversationStore();
+  } = useConversationStore(
+    useShallow((state) => ({
+      submittedMessage: state.submittedMessage,
+      clearAllFiles: state.clearAllFiles,
+      setShouldHideSuggestions: state.setShouldHideSuggestions,
+      setSubmittedMessage: state.setSubmittedMessage,
+    })),
+  );
 
   // Disable input when conversation is stopped
   const isConversationStopped = conversationStatus === "STOPPED";

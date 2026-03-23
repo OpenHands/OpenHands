@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { isFileImage } from "#/utils/is-file-image";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { validateFiles } from "#/utils/file-validation";
@@ -20,6 +21,8 @@ export function InteractiveChatBox({
   onSubmit,
   disabled = false,
 }: InteractiveChatBoxProps) {
+  // useShallow so this component only re-renders when one of these specific
+  // fields changes, not on every unrelated store mutation.
   const {
     images,
     files,
@@ -31,7 +34,20 @@ export function InteractiveChatBox({
     addImageLoading,
     removeImageLoading,
     subConversationTaskId,
-  } = useConversationStore();
+  } = useConversationStore(
+    useShallow((state) => ({
+      images: state.images,
+      files: state.files,
+      addImages: state.addImages,
+      addFiles: state.addFiles,
+      clearAllFiles: state.clearAllFiles,
+      addFileLoading: state.addFileLoading,
+      removeFileLoading: state.removeFileLoading,
+      addImageLoading: state.addImageLoading,
+      removeImageLoading: state.removeImageLoading,
+      subConversationTaskId: state.subConversationTaskId,
+    })),
+  );
   const { curAgentState } = useAgentState();
   const { data: conversation } = useActiveConversation();
 
