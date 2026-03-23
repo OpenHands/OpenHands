@@ -173,9 +173,53 @@ describe("LaunchRoute", () => {
         `?plugins=${encoded}&message=${encodeURIComponent(maliciousMessage)}`,
       );
 
-      // The sanitized message should only show "Safe text"
+      // Script tags should be stripped (text content preserved but safe as plain text)
       expect(screen.queryByText(/<script>/)).not.toBeInTheDocument();
-      expect(screen.getByText("Safe text")).toBeInTheDocument();
+      // The text content remains but is rendered as plain text, not executed
+      expect(screen.getByText('alert("xss")Safe text')).toBeInTheDocument();
+    });
+
+    it("should strip img tags with onerror handlers (XSS prevention)", () => {
+      const plugins = [{ source: "github:owner/repo" }];
+      const encoded = btoa(JSON.stringify(plugins));
+      const maliciousMessage = '<img src=x onerror=alert(1)>Safe content';
+
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(maliciousMessage)}`,
+      );
+
+      // All HTML should be stripped, leaving only safe text
+      expect(screen.queryByText(/<img/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/onerror/)).not.toBeInTheDocument();
+      expect(screen.getByText("Safe content")).toBeInTheDocument();
+    });
+
+    it("should strip svg tags with onload handlers (XSS prevention)", () => {
+      const plugins = [{ source: "github:owner/repo" }];
+      const encoded = btoa(JSON.stringify(plugins));
+      const maliciousMessage = '<svg/onload=alert(1)>Safe content';
+
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(maliciousMessage)}`,
+      );
+
+      // All HTML should be stripped
+      expect(screen.queryByText(/<svg/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/onload/)).not.toBeInTheDocument();
+      expect(screen.getByText("Safe content")).toBeInTheDocument();
+    });
+
+    it("should strip all HTML tags for plain text display", () => {
+      const plugins = [{ source: "github:owner/repo" }];
+      const encoded = btoa(JSON.stringify(plugins));
+      const htmlMessage = '<div><p>Hello</p> <b>World</b></div>';
+
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(htmlMessage)}`,
+      );
+
+      // HTML tags should be stripped, text preserved
+      expect(screen.getByText("Hello World")).toBeInTheDocument();
     });
 
     it("should truncate long messages", () => {

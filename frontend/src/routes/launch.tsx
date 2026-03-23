@@ -16,13 +16,9 @@ interface ParseResult {
 
 function sanitizeMessage(message: string | null): string | undefined {
   if (!message) return undefined;
-  // Basic XSS sanitization - remove script tags and event handlers
-  const sanitized = message
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/on\w+\s*=/gi, "")
-    .replace(/javascript:/gi, "")
-    .slice(0, 500); // Limit length
-  return sanitized || undefined;
+  // Strip ALL HTML tags for plain text display
+  const stripped = message.replace(/<[^>]*>/g, "").slice(0, 500);
+  return stripped || undefined;
 }
 
 function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
