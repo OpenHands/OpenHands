@@ -19,7 +19,10 @@ function VSCodeTab() {
   useEffect(() => {
     if (data?.url) {
       try {
-        const iframeProtocol = new URL(data.url).protocol;
+        // Resolve relative URLs (e.g. /vscode/{sandbox_id}/) against the
+        // current page origin so that the protocol comparison always works.
+        const absoluteUrl = new URL(data.url, window.location.href);
+        const iframeProtocol = absoluteUrl.protocol;
         const currentProtocol = window.location.protocol;
 
         // Check if the iframe URL has a different protocol than the current page

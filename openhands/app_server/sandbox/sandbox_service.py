@@ -149,14 +149,50 @@ class SandboxService(ABC):
             )
             return False
 
+    async def get_vscode_internal_url(self, short_sandbox_id: str) -> str | None:
+        """Return the host-local VS Code base URL for the given short sandbox ID.
+
+        Used by the VS Code proxy route to forward browser traffic to the correct
+        container port.  The default implementation returns None (no proxy support).
+        DockerSandboxService overrides this when proxy_vscode is enabled.
+
+        Args:
+            short_sandbox_id: The sandbox ID without the container-name prefix,
+                as it appears in the proxy URL path (e.g. ``Abc123DEF``).
+
+        Returns:
+            A string like ``http://localhost:54321``, or None if not proxiable.
+        """
+        return None
+
+    async def get_agent_server_internal_url(self, short_sandbox_id: str) -> str | None:
+        """Return the host-local agent-server base URL for the given short sandbox ID.
+
+        Used by the agent proxy route to forward browser traffic (socket.io and REST)
+        to the correct container port.  The default implementation returns None.
+        DockerSandboxService overrides this when proxy_agent is enabled.
+
+        Args:
+            short_sandbox_id: The sandbox ID without the container-name prefix.
+
+        Returns:
+            A string like ``http://localhost:43210``, or None if not proxiable.
+        """
+        return None
+
     def _get_agent_server_url(self, sandbox: SandboxInfo) -> str:
-        """Get agent server URL from sandbox exposed URLs.
+        """Get agent server URL from sandbox exposed URLs for backend-internal use.
+
+        When the agent proxy is enabled, ExposedUrl.url holds the proxied URL
+        (for the frontend) and ExposedUrl.internal_url holds the direct container
+        URL (for backend API calls).  We always prefer internal_url here so that
+        backend calls go directly to the container regardless of proxy settings.
 
         Args:
             sandbox: The sandbox info containing exposed URLs
 
         Returns:
-            The agent server URL
+            The agent server URL suitable for backend API calls.
 
         Raises:
             SandboxError: If no agent server URL is found
@@ -166,7 +202,10 @@ class SandboxService(ABC):
 
         for exposed_url in sandbox.exposed_urls:
             if exposed_url.name == AGENT_SERVER:
-                return replace_localhost_hostname_for_docker(exposed_url.url)
+                # internal_url is the direct localhost URL; url may be the
+                # proxied URL when proxy_agent is enabled.
+                url = exposed_url.internal_url or exposed_url.url
+                return replace_localhost_hostname_for_docker(url)
 
         raise SandboxError(f'No agent server URL found for sandbox: {sandbox.id}')
 

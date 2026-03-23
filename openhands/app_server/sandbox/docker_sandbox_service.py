@@ -102,6 +102,8 @@ class DockerSandboxService(SandboxService):
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
     kvm_enabled: bool = False
+    proxy_vscode: bool = False
+    proxy_agent: bool = False
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -165,21 +167,37 @@ class DockerSandboxService(SandboxService):
             network_mode = container.attrs.get('HostConfig', {}).get('NetworkMode', '')
             is_host_network = network_mode == 'host'
 
+            # Derive the short sandbox ID (strip the container name prefix and
+            # any leading slash Docker may prepend to container.name).
+            raw_name = container.name.lstrip('/')
+            short_sandbox_id = raw_name[len(self.container_name_prefix):]
+            working_dir = container.attrs['Config']['WorkingDir']
+
             if is_host_network:
                 # Host network mode: container ports are directly accessible on host
                 for exposed_port in self.exposed_ports:
                     host_port = exposed_port.container_port
                     url = self.container_url_pattern.format(port=host_port)
+                    internal_url = None
 
-                    # VSCode URLs require the api_key and working dir
                     if exposed_port.name == VSCODE:
-                        url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+                        if self.proxy_vscode:
+                            internal_url = self.container_url_pattern.format(
+                                port=host_port
+                            )
+                            url = f'/vscode/{short_sandbox_id}/?tkn={session_api_key}&folder={working_dir}'
+                        else:
+                            url += f'/?tkn={session_api_key}&folder={working_dir}'
+                    elif exposed_port.name == AGENT_SERVER and self.proxy_agent and self.web_url:
+                        internal_url = self.container_url_pattern.format(port=host_port)
+                        url = f'{self.web_url}/agent/{short_sandbox_id}'
 
                     exposed_urls.append(
                         ExposedUrl(
                             name=exposed_port.name,
                             url=url,
                             port=exposed_port.container_port,
+                            internal_url=internal_url,
                         )
                     )
             else:
@@ -201,16 +219,34 @@ class DockerSandboxService(SandboxService):
                             )
                             if matching_port:
                                 url = self.container_url_pattern.format(port=host_port)
+                                internal_url = None
 
-                                # VSCode URLs require the api_key and working dir
                                 if matching_port.name == VSCODE:
-                                    url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+                                    if self.proxy_vscode:
+                                        internal_url = (
+                                            self.container_url_pattern.format(
+                                                port=host_port
+                                            )
+                                        )
+                                        url = f'/vscode/{short_sandbox_id}/?tkn={session_api_key}&folder={working_dir}'
+                                    else:
+                                        url += f'/?tkn={session_api_key}&folder={working_dir}'
+                                elif (
+                                    matching_port.name == AGENT_SERVER
+                                    and self.proxy_agent
+                                    and self.web_url
+                                ):
+                                    internal_url = self.container_url_pattern.format(
+                                        port=host_port
+                                    )
+                                    url = f'{self.web_url}/agent/{short_sandbox_id}'
 
                                 exposed_urls.append(
                                     ExposedUrl(
                                         name=matching_port.name,
                                         url=url,
                                         port=matching_port.container_port,
+                                        internal_url=internal_url,
                                     )
                                 )
 
@@ -237,11 +273,13 @@ class DockerSandboxService(SandboxService):
             and self.health_check_path is not None
             and sandbox_info.exposed_urls
         ):
-            app_server_url = next(
-                exposed_url.url
-                for exposed_url in sandbox_info.exposed_urls
-                if exposed_url.name == AGENT_SERVER
+            _agent_eu = next(
+                eu for eu in sandbox_info.exposed_urls if eu.name == AGENT_SERVER
             )
+            # Health-check must use the direct container URL, not the proxied URL
+            # that is meant for the browser.  internal_url is always the direct
+            # localhost URL; fall back to url only when proxy_agent is disabled.
+            app_server_url = _agent_eu.internal_url or _agent_eu.url
             try:
                 # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
                 app_server_url = replace_localhost_hostname_for_docker(app_server_url)
@@ -389,6 +427,14 @@ class DockerSandboxService(SandboxService):
         env_vars[WEBHOOK_CALLBACK_VARIABLE] = (
             f'http://host.docker.internal:{self.host_port}/api/v1/webhooks'
         )
+
+        # Tell the agent-server which base path to pass to OpenVSCode Server via
+        # --server-base-path, so the Service Worker scope and all generated URLs
+        # match the proxy route exposed on the OpenHands server.
+        # The agent-server reads this via from_env(Config, "OH"), so the key is
+        # OH_VSCODE_BASE_PATH (prefix "OH" + "_" + field name "vscode_base_path").
+        if self.proxy_vscode:
+            env_vars['OH_VSCODE_BASE_PATH'] = f'/vscode/{sandbox_id}'
 
         # Set CORS origins for remote browser access when web_url is configured.
         # This allows the agent-server container to accept requests from the
@@ -545,6 +591,40 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return False
 
+    async def get_vscode_internal_url(self, short_sandbox_id: str) -> str | None:
+        """Return the host-local VS Code base URL when proxy_vscode is enabled.
+
+        Looks up the running container by reconstructing the full container name from
+        the short ID, then reads the internal_url stored in its VS Code ExposedUrl.
+        """
+        if not self.proxy_vscode:
+            return None
+        full_sandbox_id = f'{self.container_name_prefix}{short_sandbox_id}'
+        sandbox = await self.get_sandbox(full_sandbox_id)
+        if not sandbox or not sandbox.exposed_urls:
+            return None
+        for exposed_url in sandbox.exposed_urls:
+            if exposed_url.name == VSCODE and exposed_url.internal_url:
+                return exposed_url.internal_url
+        return None
+
+    async def get_agent_server_internal_url(self, short_sandbox_id: str) -> str | None:
+        """Return the host-local agent-server base URL when proxy_agent is enabled.
+
+        Looks up the running container by reconstructing the full container name from
+        the short ID, then reads the internal_url stored in its agent-server ExposedUrl.
+        """
+        if not self.proxy_agent:
+            return None
+        full_sandbox_id = f'{self.container_name_prefix}{short_sandbox_id}'
+        sandbox = await self.get_sandbox(full_sandbox_id)
+        if not sandbox or not sandbox.exposed_urls:
+            return None
+        for exposed_url in sandbox.exposed_urls:
+            if exposed_url.name == AGENT_SERVER and exposed_url.internal_url:
+                return exposed_url.internal_url
+        return None
+
 
 class DockerSandboxServiceInjector(SandboxServiceInjector):
     """Dependency injector for docker sandbox services."""
@@ -647,6 +727,29 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Configure via SANDBOX_KVM_ENABLED environment variable.'
         ),
     )
+    proxy_vscode: bool = Field(
+        default=False,
+        description=(
+            'Route VS Code traffic through the OpenHands server instead of exposing the '
+            'container port directly to the browser.  When enabled, the VS Code iframe URL '
+            'becomes a same-origin path (/vscode/<sandbox_id>/) served by a built-in proxy, '
+            'which satisfies the secure-context requirement for Service Workers and therefore '
+            'unlocks image preview in the embedded editor. '
+            'Configure via SANDBOX_PROXY_VSCODE environment variable.'
+        ),
+    )
+    proxy_agent: bool = Field(
+        default=False,
+        description=(
+            'Route agent-server traffic (socket.io events and REST API) through the '
+            'OpenHands server instead of exposing the container port directly to the browser. '
+            'When enabled, the agent_server_url returned to the frontend becomes a path-prefixed '
+            'URL on the OpenHands server (/agent/<sandbox_id>/), allowing conversations to work '
+            'through a reverse proxy such as Caddy or nginx. '
+            'Requires WEB_HOST to be configured so the server knows its external URL. '
+            'Configure via SANDBOX_PROXY_AGENT environment variable.'
+        ),
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -682,4 +785,6 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 startup_grace_seconds=self.startup_grace_seconds,
                 use_host_network=self.use_host_network,
                 kvm_enabled=self.kvm_enabled,
+                proxy_vscode=self.proxy_vscode,
+                proxy_agent=self.proxy_agent,
             )

@@ -259,6 +259,14 @@ def config_from_env() -> AppServerConfig:
                 docker_sandbox_kwargs['startup_grace_seconds'] = int(
                     os.environ['SANDBOX_STARTUP_GRACE_SECONDS']
                 )
+            if os.getenv('SANDBOX_PROXY_VSCODE'):
+                docker_sandbox_kwargs['proxy_vscode'] = os.environ[
+                    'SANDBOX_PROXY_VSCODE'
+                ].lower() in ('1', 'true', 'yes', 'on')
+            if os.getenv('SANDBOX_PROXY_AGENT'):
+                docker_sandbox_kwargs['proxy_agent'] = os.environ[
+                    'SANDBOX_PROXY_AGENT'
+                ].lower() in ('1', 'true', 'yes', 'on')
             # Parse SANDBOX_VOLUMES and convert to VolumeMount objects
             # This is set by the CLI's --mount-cwd flag
             sandbox_volumes = os.getenv('SANDBOX_VOLUMES')

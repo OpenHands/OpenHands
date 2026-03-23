@@ -176,7 +176,9 @@ async def _get_agent_server_context(
     agent_server_url = None
     for exposed_url in sandbox.exposed_urls:
         if exposed_url.name == AGENT_SERVER:
-            agent_server_url = exposed_url.url
+            # Prefer internal_url for direct container access when proxy_agent
+            # is enabled; fall back to url for non-proxied deployments.
+            agent_server_url = exposed_url.internal_url or exposed_url.url
             break
 
     if not agent_server_url:
@@ -525,7 +527,7 @@ async def read_conversation_file(
     agent_server_url = None
     for exposed_url in sandbox.exposed_urls:
         if exposed_url.name == AGENT_SERVER:
-            agent_server_url = exposed_url.url
+            agent_server_url = exposed_url.internal_url or exposed_url.url
             break
 
     if not agent_server_url:

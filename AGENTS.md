@@ -441,3 +441,97 @@ Called by `workspace.get_llm()` in the SDK to retrieve LLM config with the API k
 - `openhands/sdk/llm/llm.py`: `LLM.api_key` accepts `SecretSource` (including `LookupSecret`)
 - `openhands/workspace/cloud/workspace.py`: `get_llm()` and `get_secrets()` return LookupSecret-backed objects
 - Tests: `tests/sdk/llm/test_llm_secret_source_api_key.py`, `tests/workspace/test_cloud_workspace_sdk_settings.py`
+
+### VS Code Proxy (fork-specific, `OH_SANDBOX_PROXY_VSCODE=true`)
+
+This fork adds an opt-in HTTP + WebSocket proxy that routes VS Code traffic
+through port 3000 instead of a random container port, making the iframe
+same-origin with the OpenHands UI.
+
+**Why**: Service Workers (required by VS Code image preview) need a secure
+context. Same-origin + HTTPS via Caddy in front satisfies this.
+
+**How to enable**: set env var `SANDBOX_PROXY_VSCODE=true` (maps to
+`DockerSandboxServiceInjector.proxy_vscode` via `config_from_env()` in
+`openhands/app_server/config.py`).
+
+**Key files**:
+- `openhands/app_server/vscode_proxy/vscode_proxy_router.py` — FastAPI
+  router with `/vscode/{short_sandbox_id}/{path:path}` for both HTTP and
+  WebSocket.
+- `openhands/app_server/_proxy_core.py` — shared HTTP (httpx, streaming) and
+  WebSocket (aiohttp, bidirectional relay) mechanics used by both routers.
+- `openhands/app_server/sandbox/docker_sandbox_service.py` — injects
+  `OH_VSCODE_BASE_PATH=/vscode/{sandbox_id}` into the container;
+  stores `internal_url` in `ExposedUrl`; overrides `get_vscode_internal_url`.
+- `openhands/app_server/sandbox/sandbox_models.py` — `ExposedUrl.internal_url`
+  field (host-local URL for the proxy; None when proxy disabled).
+- `openhands/app_server/sandbox/sandbox_service.py` — `get_vscode_internal_url`
+  ABC method (default returns None).
+- `frontend/src/routes/vscode-tab.tsx` — resolves relative VS Code URLs
+  against `window.location.href` before the protocol comparison.
+
+**Upstream note**: PR #13516 ("WebSocket Gateway") by @kripper addresses the
+same agent-server connectivity problem using a WS-only opt-in gateway at
+`/ws/events/{conversation_id}`.  Our implementation is broader (HTTP + WS,
+VS Code) and always proxied when the env vars are set.  The two approaches
+are non-conflicting (different paths).
+
+### Agent-Server Proxy (fork-specific)
+
+A companion proxy that routes all agent-server connections (socket.io events,
+REST API, raw WebSocket) through port 3000, enabling full operation behind a
+reverse proxy such as Caddy.
+
+**Why**: By default the frontend connects to the agent-server on a dynamic host
+port.  When Caddy (or any reverse proxy) sits in front, that port is unreachable.
+Routing via `/agent/{sandbox_id}/` keeps everything on one port.
+
+**How to enable**: set both:
+- `SANDBOX_PROXY_AGENT=true`
+- `WEB_HOST=<external hostname>` (e.g. `WEB_HOST=openhands-host` → `web_url =
+  "https://openhands-host"`)
+
+Without `WEB_HOST` the proxy route is registered but the feature has no effect
+(no external URL to embed in `agent_server_url`) — degrades to direct-port.
+
+**URL construction**: when both flags are set, `ExposedUrl.url` for the
+`agent server` port becomes `{web_url}/agent/{short_sandbox_id}`.  The
+`ExposedUrl.internal_url` always holds the direct `http://localhost:PORT` URL.
+
+**Backend / frontend split**:
+- All backend API calls use `internal_url` (direct container URL) to avoid
+  routing through the proxy (infinite loop).
+- `task.agent_server_url` (returned to frontend) uses `url` (the proxied URL).
+- The frontend's `extractPathPrefix` / `extractBaseHost` utilities parse the
+  proxied URL to derive `{web_url}` as host and `/agent/{id}` as path prefix,
+  so socket.io and raw WebSocket connections both go through Caddy.
+
+**Path stripping**: unlike VS Code (which is launched with `OH_VSCODE_BASE_PATH`
+so it understands the `/vscode/{id}` prefix), the agent server serves at its root.
+The proxy strips the `/agent/{short_sandbox_id}` prefix from every forwarded
+request so the agent server receives `/sockets/events/…` not `/agent/{id}/sockets/events/…`.
+
+**Origin header**: do NOT forward `Origin` to the agent server. When `WEB_HOST`
+is set, the agent container's `allow_cors_origins = ['https://{WEB_HOST}']`.
+`LocalhostCORSMiddleware`'s localhost shortcut only fires when `allow_origins`
+is empty; with it non-empty the check falls to standard CORSMiddleware which
+rejects `Origin: http://localhost:{port}`. Starlette CORS passes through when
+Origin is absent entirely. `'origin'` is in `_WS_SKIP` in the agent proxy.
+
+**Key files**:
+- `openhands/app_server/agent_proxy/agent_proxy_router.py` — HTTP + WebSocket
+  proxy with three route shapes (`/{path:path}`, `/`, no trailing slash).
+  Strips `/agent/{id}` prefix; drops Origin header.  Delegates to `_proxy_core.py`.
+- `openhands/app_server/sandbox/sandbox_service.py` —
+  `get_agent_server_internal_url()` hook; `_get_agent_server_url` updated to
+  prefer `internal_url`.
+- `openhands/app_server/sandbox/docker_sandbox_service.py` — `proxy_agent` bool
+  field; URL construction; `get_agent_server_internal_url` implementation;
+  health-check uses `internal_url`.
+- `openhands/app_server/app_conversation/live_status_app_conversation_service.py`
+  — `_get_agent_server_frontend_url()` new method; `task.agent_server_url` uses it.
+- `openhands/app_server/app_conversation/app_conversation_router.py` — updated
+  to prefer `internal_url` in both agent URL extraction sites.
+- `tests/unit/test_agent_proxy.py` — 11 tests covering failure modes A–K.
+

@@ -21,6 +21,16 @@ class ExposedUrl(BaseModel):
     name: str
     url: str
     port: int
+    internal_url: str | None = Field(
+        default=None,
+        description=(
+            'Host-local base URL (scheme + host + port, no path/query) used by the '
+            'OpenHands server to proxy traffic to this service.  Populated when '
+            'proxy_vscode or proxy_agent is enabled; None otherwise.  '
+            'Backend code should prefer this over url for direct container access '
+            'so it bypasses any proxy indirection intended for the browser.'
+        ),
+    )
 
 
 # Standard names

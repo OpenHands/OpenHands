@@ -24,8 +24,10 @@ from fastapi.responses import JSONResponse
 
 import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
 from openhands.app_server import v1_router
+from openhands.app_server.agent_proxy import router as agent_proxy_router
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.status.status_router import router as health_router
+from openhands.app_server.vscode_proxy import router as vscode_proxy_router
 from openhands.integrations.service_types import AuthenticationError
 from openhands.server.routes.conversation import app as conversation_api_router
 from openhands.server.routes.feedback import app as feedback_api_router
@@ -100,5 +102,14 @@ if server_config.app_mode == AppMode.OPENHANDS:
     app.include_router(git_api_router)
 if server_config.enable_v1:
     app.include_router(v1_router.router)
+# VS Code proxy – routes /vscode/{sandbox_id}/... to the container port.
+# Active only when DockerSandboxServiceInjector.proxy_vscode is True; the
+# sandbox service returns None for all other configurations, so the routes
+# respond with 503/1013 and the frontend falls back to the direct-port URL.
+app.include_router(vscode_proxy_router)
+# Agent proxy – routes /agent/{sandbox_id}/... (socket.io + REST) to the
+# agent-server container port. Active only when proxy_agent=True AND WEB_HOST
+# is configured; otherwise the sandbox service returns None and routes 503/1013.
+app.include_router(agent_proxy_router)
 app.include_router(trajectory_router)
 app.include_router(health_router)
