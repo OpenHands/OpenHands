@@ -14,9 +14,10 @@ export enum AgentState {
   USER_REJECTED = "user_rejected",
 }
 
+export const RUNTIME_STARTING_STATES = [AgentState.INIT, AgentState.LOADING];
+
 export const RUNTIME_INACTIVE_STATES = [
-  AgentState.INIT,
-  AgentState.LOADING,
+  ...RUNTIME_STARTING_STATES,
   // Removed AgentState.STOPPED to allow tabs to remain visible when agent is stopped
   AgentState.ERROR,
 ];

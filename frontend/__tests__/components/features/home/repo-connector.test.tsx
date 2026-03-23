@@ -10,6 +10,7 @@ import OptionService from "#/api/option-service/option-service.api";
 import { GitRepository } from "#/types/git";
 import { RepoConnector } from "#/components/features/home/repo-connector";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 const renderRepoConnector = () => {
   const mockRepoSelection = vi.fn();
@@ -65,6 +66,7 @@ const MOCK_RESPOSITORIES: GitRepository[] = [
 ];
 
 beforeEach(() => {
+  useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
   getSettingsSpy.mockResolvedValue({
     ...MOCK_DEFAULT_USER_SETTINGS,

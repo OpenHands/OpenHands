@@ -12,11 +12,8 @@ from server.auth.auth_error import (
 )
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth, token_manager
-from server.routes.auth import (
-    get_cookie_domain,
-    get_cookie_samesite,
-    set_response_cookie,
-)
+from server.routes.auth import set_response_cookie
+from server.utils.url_utils import get_cookie_domain, get_cookie_samesite
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
@@ -93,8 +90,8 @@ class SetAuthCookieMiddleware:
             if keycloak_auth_cookie:
                 response.delete_cookie(
                     key='keycloak_auth',
-                    domain=get_cookie_domain(request),
-                    samesite=get_cookie_samesite(request),
+                    domain=get_cookie_domain(),
+                    samesite=get_cookie_samesite(),
                 )
             return response
 
@@ -183,6 +180,10 @@ class SetAuthCookieMiddleware:
 
         # Webhooks access is controlled using separate API keys
         if path.startswith('/api/v1/webhooks/'):
+            return False
+
+        # Service API uses its own authentication (X-Service-API-Key header)
+        if path.startswith('/api/service/'):
             return False
 
         is_mcp = path.startswith('/mcp')

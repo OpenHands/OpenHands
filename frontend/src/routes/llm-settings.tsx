@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { AxiosError } from "axios";
 import { useSearchParams } from "react-router";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
+import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { organizeModelsAndProviders } from "#/utils/organize-models-and-providers";
 import { useAIConfigOptions } from "#/hooks/query/use-ai-config-options";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -28,6 +29,9 @@ import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
+import { useMe } from "#/hooks/query/use-me";
+import { usePermission } from "#/hooks/organizations/use-permissions";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -69,6 +73,36 @@ function LlmSettingsScreen() {
   const { data: resources } = useAIConfigOptions();
   const { data: settings, isLoading, isFetching } = useSettings();
   const { data: config } = useConfig();
+  const { data: me } = useMe();
+  const { hasPermission } = usePermission(me?.role ?? "member");
+  const { isPersonalOrg, isTeamOrg } = useOrgTypeAndAccess();
+
+  // In OSS mode, user has full access (no permission restrictions)
+  // In SaaS mode, check role-based permissions (members can only view, owners and admins can edit)
+  const isOssMode = config?.app_mode === "oss";
+  const isReadOnly = isOssMode ? false : !hasPermission("edit_llm_settings");
+
+  // Determine the contextual info message based on workspace type and role
+  const getLlmSettingsInfoMessage = (): I18nKey | null => {
+    // No message in OSS mode (no organization context)
+    if (isOssMode) return null;
+
+    // No message for personal workspaces
+    if (isPersonalOrg) return null;
+
+    // Team org - show appropriate message based on role
+    if (isTeamOrg) {
+      const role = me?.role ?? "member";
+      if (role === "admin" || role === "owner") {
+        return I18nKey.SETTINGS$LLM_ADMIN_INFO;
+      }
+      return I18nKey.SETTINGS$LLM_MEMBER_INFO;
+    }
+
+    return null;
+  };
+
+  const llmInfoMessage = getLlmSettingsInfoMessage();
 
   const [view, setView] = React.useState<"basic" | "advanced">("basic");
 
@@ -494,11 +528,20 @@ function LlmSettingsScreen() {
         className="flex flex-col h-full justify-between"
       >
         <div className="flex flex-col gap-6">
+          {llmInfoMessage && (
+            <p
+              data-testid="llm-settings-info-message"
+              className="text-sm text-tertiary-alt"
+            >
+              {t(llmInfoMessage)}
+            </p>
+          )}
           <SettingsSwitch
             testId="advanced-settings-switch"
             defaultIsToggled={view === "advanced"}
             onToggle={handleToggleAdvancedSettings}
             isToggled={view === "advanced"}
+            isDisabled={isReadOnly}
           >
             {t(I18nKey.SETTINGS$ADVANCED)}
           </SettingsSwitch>
@@ -516,6 +559,7 @@ function LlmSettingsScreen() {
                     onChange={handleModelIsDirty}
                     onDefaultValuesChanged={onDefaultValuesChanged}
                     wrapperClassName="!flex-col !gap-6"
+                    isDisabled={isReadOnly}
                   />
                   {(settings.llm_model?.startsWith("openhands/") ||
                     currentSelectedModel?.startsWith("openhands/")) && (
@@ -534,6 +578,7 @@ function LlmSettingsScreen() {
                     className="w-full max-w-[680px]"
                     placeholder={settings.llm_api_key_set ? "<hidden>" : ""}
                     onChange={handleApiKeyIsDirty}
+                    isDisabled={isReadOnly}
                     startContent={
                       settings.llm_api_key_set && (
                         <KeyStatusIcon isSet={settings.llm_api_key_set} />
@@ -566,6 +611,7 @@ function LlmSettingsScreen() {
                 type="text"
                 className="w-full max-w-[680px]"
                 onChange={handleCustomModelIsDirty}
+                isDisabled={isReadOnly}
               />
               {(settings.llm_model?.startsWith("openhands/") ||
                 currentSelectedModel?.startsWith("openhands/")) && (
@@ -581,6 +627,7 @@ function LlmSettingsScreen() {
                 type="text"
                 className="w-full max-w-[680px]"
                 onChange={handleBaseUrlIsDirty}
+                isDisabled={isReadOnly}
               />
 
               {!shouldUseOpenHandsKey && (
@@ -593,6 +640,7 @@ function LlmSettingsScreen() {
                     className="w-full max-w-[680px]"
                     placeholder={settings.llm_api_key_set ? "<hidden>" : ""}
                     onChange={handleApiKeyIsDirty}
+                    isDisabled={isReadOnly}
                     startContent={
                       settings.llm_api_key_set && (
                         <KeyStatusIcon isSet={settings.llm_api_key_set} />
@@ -647,6 +695,7 @@ function LlmSettingsScreen() {
                       defaultSelectedKey={settings.agent}
                       isClearable={false}
                       onInputChange={handleAgentIsDirty}
+                      isDisabled={isReadOnly}
                       wrapperClassName="w-full max-w-[680px]"
                     />
                   )}
@@ -666,7 +715,7 @@ function LlmSettingsScreen() {
                     DEFAULT_SETTINGS.condenser_max_size
                   )?.toString()}
                   onChange={(value) => handleCondenserMaxSizeIsDirty(value)}
-                  isDisabled={!settings.enable_default_condenser}
+                  isDisabled={isReadOnly || !settings.enable_default_condenser}
                   className="w-full max-w-[680px] capitalize"
                 />
                 <p className="text-xs text-tertiary-alt mt-6">
@@ -679,6 +728,7 @@ function LlmSettingsScreen() {
                 name="enable-memory-condenser-switch"
                 defaultIsToggled={settings.enable_default_condenser}
                 onToggle={handleEnableDefaultCondenserIsDirty}
+                isDisabled={isReadOnly}
               >
                 {t(I18nKey.SETTINGS$ENABLE_MEMORY_CONDENSATION)}
               </SettingsSwitch>
@@ -691,6 +741,7 @@ function LlmSettingsScreen() {
                   onToggle={handleConfirmationModeIsDirty}
                   defaultIsToggled={settings.confirmation_mode}
                   isBeta
+                  isDisabled={isReadOnly}
                 >
                   {t(I18nKey.SETTINGS$CONFIRMATION_MODE)}
                 </SettingsSwitch>
@@ -716,6 +767,7 @@ function LlmSettingsScreen() {
                       )}
                       selectedKey={selectedSecurityAnalyzer || "none"}
                       isClearable={false}
+                      isDisabled={isReadOnly}
                       onSelectionChange={(key) => {
                         const newValue = key?.toString() || "";
                         setSelectedSecurityAnalyzer(newValue);
@@ -746,20 +798,26 @@ function LlmSettingsScreen() {
           )}
         </div>
 
-        <div className="flex gap-6 p-6 justify-end">
-          <BrandButton
-            testId="submit-button"
-            type="submit"
-            variant="primary"
-            isDisabled={!formIsDirty || isPending}
-          >
-            {!isPending && t("SETTINGS$SAVE_CHANGES")}
-            {isPending && t("SETTINGS$SAVING")}
-          </BrandButton>
-        </div>
+        {!isReadOnly && (
+          <div className="flex gap-6 p-6 justify-end">
+            <BrandButton
+              testId="submit-button"
+              type="submit"
+              variant="primary"
+              isDisabled={!formIsDirty || isPending}
+            >
+              {!isPending && t("SETTINGS$SAVE_CHANGES")}
+              {isPending && t("SETTINGS$SAVING")}
+            </BrandButton>
+          </div>
+        )}
       </form>
     </div>
   );
 }
+
+// Route protection: all roles have view_llm_settings, but this guard ensures
+// consistency with other routes and allows future restrictions if needed
+export const clientLoader = createPermissionGuard("view_llm_settings");
 
 export default LlmSettingsScreen;

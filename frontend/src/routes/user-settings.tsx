@@ -5,6 +5,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { openHands } from "#/api/open-hands-axios";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { useEmailVerification } from "#/hooks/use-email-verification";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 // Email validation regex pattern
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -113,6 +114,7 @@ function VerificationAlert() {
 function UserSettingsScreen() {
   const { t } = useTranslation();
   const { data: settings, isLoading, refetch } = useSettings();
+  const { organizationId } = useSelectedOrganizationId();
   const [email, setEmail] = useState("");
   const [originalEmail, setOriginalEmail] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -144,7 +146,9 @@ function UserSettingsScreen() {
       // Display toast notification instead of setting state
       displaySuccessToast(t("SETTINGS$EMAIL_VERIFIED_SUCCESSFULLY"));
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["settings"] });
+        queryClient.invalidateQueries({
+          queryKey: ["settings", organizationId],
+        });
       }, 2000);
     }
 
@@ -162,7 +166,7 @@ function UserSettingsScreen() {
         pollingIntervalRef.current = null;
       }
     };
-  }, [settings?.email_verified, refetch, queryClient, t]);
+  }, [settings?.email_verified, refetch, queryClient, t, organizationId]);
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newEmail = e.target.value;
@@ -178,7 +182,9 @@ function UserSettingsScreen() {
       setOriginalEmail(email);
       // Display toast notification instead of setting state
       displaySuccessToast(t("SETTINGS$EMAIL_SAVED_SUCCESSFULLY"));
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({
+        queryKey: ["settings", organizationId],
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(t("SETTINGS$FAILED_TO_SAVE_EMAIL"), error);

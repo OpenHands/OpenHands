@@ -41,7 +41,7 @@ from openhands.app_server.config import (
     depends_httpx_client,
     depends_sandbox_service,
 )
-from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.app_server.sandbox.sandbox_models import AGENT_SERVER, SandboxStatus
 from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.services.db_session_injector import set_db_session_keep_open
 from openhands.app_server.services.httpx_client_injector import (
@@ -603,18 +603,30 @@ async def _try_delete_v1_conversation(
             )
         )
         if app_conversation_info:
+            # Check if the sandbox is shared with other conversations
+            # (e.g. multiple conversations can share a sandbox via /new).
+            # If shared, skip the agent server DELETE call to avoid
+            # destabilizing the runtime for the remaining conversations.
+            sandbox_id = app_conversation_info.sandbox_id
+            sandbox_is_shared = False
+            if sandbox_id:
+                conversation_count = await app_conversation_info_service.count_conversations_by_sandbox_id(
+                    sandbox_id
+                )
+                sandbox_is_shared = conversation_count > 1
+
             # This is a V1 conversation, delete it using the app conversation service
-            # Pass the conversation ID for secure deletion
             result = await app_conversation_service.delete_app_conversation(
-                app_conversation_info.id
+                app_conversation_info.id,
+                skip_agent_server_delete=sandbox_is_shared,
             )
 
             # Manually commit so that the conversation will vanish from the list
             await db_session.commit()
 
-            # Delete the sandbox in the background
+            # Delete the sandbox in the background (checks remaining conversations first)
             asyncio.create_task(
-                _delete_sandbox_and_close_connections(
+                _finalize_delete_and_close_connections(
                     sandbox_service,
                     app_conversation_info.sandbox_id,
                     db_session,
@@ -628,14 +640,18 @@ async def _try_delete_v1_conversation(
     return result
 
 
-async def _delete_sandbox_and_close_connections(
+async def _finalize_delete_and_close_connections(
     sandbox_service: SandboxService,
     sandbox_id: str,
     db_session: AsyncSession,
     httpx_client: httpx.AsyncClient,
 ):
     try:
-        await sandbox_service.delete_sandbox(sandbox_id)
+        num_conversations_in_sandbox = await _get_num_conversations_in_sandbox(
+            sandbox_service, sandbox_id, httpx_client
+        )
+        if num_conversations_in_sandbox == 0:
+            await sandbox_service.delete_sandbox(sandbox_id)
         await db_session.commit()
     finally:
         await asyncio.gather(
@@ -644,6 +660,28 @@ async def _delete_sandbox_and_close_connections(
                 httpx_client.aclose(),
             ]
         )
+
+
+async def _get_num_conversations_in_sandbox(
+    sandbox_service: SandboxService,
+    sandbox_id: str,
+    httpx_client: httpx.AsyncClient,
+) -> int:
+    try:
+        sandbox = await sandbox_service.get_sandbox(sandbox_id)
+        if not sandbox or not sandbox.exposed_urls:
+            return 0
+        agent_server_url = next(
+            u for u in sandbox.exposed_urls if u.name == AGENT_SERVER
+        )
+        response = await httpx_client.get(
+            f'{agent_server_url.url}/api/conversations/count',
+            headers={'X-Session-API-Key': sandbox.session_api_key},
+        )
+        result = int(response.content)
+        return result
+    except Exception:
+        return 0
 
 
 async def _delete_v0_conversation(conversation_id: str, user_id: str | None) -> bool:

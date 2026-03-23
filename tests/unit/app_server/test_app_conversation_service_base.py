@@ -1035,7 +1035,7 @@ class TestLoadAndMergeAllSkills:
 
             # Act
             result = await service.load_and_merge_all_skills(
-                sandbox, 'owner/repo', '/workspace', 'http://localhost:8000'
+                sandbox, 'owner/repo', '/workspace/repo', 'http://localhost:8000'
             )
 
             # Assert
@@ -1073,7 +1073,7 @@ class TestLoadAndMergeAllSkills:
             # Act - pass empty string to simulate no agent server URL
             # This should still call load_skills_from_agent_server but it will fail
             result = await service.load_and_merge_all_skills(
-                sandbox, 'owner/repo', '/workspace', ''
+                sandbox, 'owner/repo', '/workspace/repo', ''
             )
 
             # Assert - should return empty list when agent_server_url is empty
@@ -1089,13 +1089,13 @@ class TestLoadAndMergeAllSkills:
     @patch(
         'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
     )
-    async def test_uses_working_dir_when_no_repository(
+    async def test_uses_project_dir_when_no_repository(
         self,
         mock_build_sandbox_config,
         mock_build_org_config,
         mock_load_skills,
     ):
-        """Test uses working_dir as project_dir when no repository is selected."""
+        """Test uses project_dir directly when no repository is selected."""
         # Arrange
         mock_user_context = Mock(spec=UserContext)
         with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
@@ -1164,7 +1164,7 @@ class TestLoadAndMergeAllSkills:
 
             # Act
             result = await service.load_and_merge_all_skills(
-                sandbox, 'owner/repo', '/workspace', 'http://localhost:8000'
+                sandbox, 'owner/repo', '/workspace/repo', 'http://localhost:8000'
             )
 
             # Assert

@@ -365,14 +365,12 @@ class OrgInvitationService:
                 'Failed to set up organization access. Please try again.'
             )
 
-        # Step 5: Add user to organization
-        from storage.org_member_store import OrgMemberStore as OMS
+        # Step 4.5: Fetch organization to get its LLM settings
+        org = await OrgStore.get_org_by_id(invitation.org_id)
+        if not org:
+            raise InvitationInvalidError('Organization not found')
 
-        org_member_kwargs = OMS.get_kwargs_from_settings(settings)
-        # Don't override with org defaults - use invitation-specified role
-        org_member_kwargs.pop('llm_model', None)
-        org_member_kwargs.pop('llm_base_url', None)
-
+        # Step 5: Add user to organization with inherited org LLM settings
         # Get the llm_api_key as string (it's SecretStr | None in Settings)
         llm_api_key = (
             settings.llm_api_key.get_secret_value() if settings.llm_api_key else ''
@@ -384,6 +382,9 @@ class OrgInvitationService:
             role_id=invitation.role_id,
             llm_api_key=llm_api_key,
             status='active',
+            llm_model=org.default_llm_model,
+            llm_base_url=org.default_llm_base_url,
+            max_iterations=org.default_max_iterations,
         )
 
         # Step 6: Mark invitation as accepted

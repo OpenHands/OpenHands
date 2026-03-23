@@ -8,6 +8,17 @@ export const ProviderOptions = {
   enterprise_sso: "enterprise_sso",
 } as const;
 
+export const SandboxGroupingStrategyOptions = {
+  NO_GROUPING: "NO_GROUPING",
+  GROUP_BY_NEWEST: "GROUP_BY_NEWEST",
+  LEAST_RECENTLY_USED: "LEAST_RECENTLY_USED",
+  FEWEST_CONVERSATIONS: "FEWEST_CONVERSATIONS",
+  ADD_TO_ANY: "ADD_TO_ANY",
+} as const;
+
+export type SandboxGroupingStrategy =
+  keyof typeof SandboxGroupingStrategyOptions;
+
 export type Provider = keyof typeof ProviderOptions;
 
 export type ProviderToken = {
@@ -67,4 +78,5 @@ export type Settings = {
   git_user_name?: string;
   git_user_email?: string;
   v1_enabled?: boolean;
+  sandbox_grouping_strategy?: SandboxGroupingStrategy;
 };

@@ -245,6 +245,61 @@ class TestDockerSandboxService:
         assert len(result.items) == 0
         assert result.next_page_id is None
 
+    async def test_search_sandboxes_skips_containers_with_no_image_tags(
+        self, service, mock_running_container
+    ):
+        """Test that containers with tagless images are skipped without crashing.
+
+        Regression test: when a container's image has been rebuilt with the same tag,
+        the old container's image loses its tags, causing container.image.tags to be
+        an empty list. Previously this caused an IndexError.
+        """
+        # Setup a container with no image tags (e.g. image was retagged/rebuilt)
+        tagless_container = MagicMock()
+        tagless_container.name = 'oh-test-tagless'
+        tagless_container.status = 'paused'
+        tagless_container.image.tags = []
+        tagless_container.image.id = 'sha256:abc123def456'
+        tagless_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {'Env': []},
+            'NetworkSettings': {'Ports': {}},
+        }
+
+        service.docker_client.containers.list.return_value = [
+            mock_running_container,
+            tagless_container,
+        ]
+        service.httpx_client.get.return_value.raise_for_status.return_value = None
+
+        # Execute - should not raise IndexError
+        result = await service.search_sandboxes()
+
+        # Verify - only the properly tagged container is returned
+        assert isinstance(result, SandboxPage)
+        assert len(result.items) == 1
+        assert result.items[0].id == 'oh-test-abc123'
+
+    async def test_get_sandbox_returns_none_for_tagless_image(self, service):
+        """Test that get_sandbox returns None for containers with tagless images."""
+        tagless_container = MagicMock()
+        tagless_container.name = 'oh-test-tagless'
+        tagless_container.status = 'paused'
+        tagless_container.image.tags = []
+        tagless_container.image.id = 'sha256:abc123def456'
+        tagless_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {'Env': []},
+            'NetworkSettings': {'Ports': {}},
+        }
+        service.docker_client.containers.get.return_value = tagless_container
+
+        # Execute - should not raise IndexError
+        result = await service.get_sandbox('oh-test-tagless')
+
+        # Verify - returns None for tagless container
+        assert result is None
+
     async def test_search_sandboxes_filters_by_prefix(self, service):
         """Test that search filters containers by name prefix."""
         # Setup
@@ -1198,6 +1253,59 @@ class TestDockerSandboxServiceInjector:
 
         injector = DockerSandboxServiceInjector(use_host_network=True)
         assert injector.use_host_network is True
+
+    def test_use_host_network_from_agent_server_env_var(self):
+        """Test that AGENT_SERVER_USE_HOST_NETWORK env var enables host network mode."""
+        import os
+        from unittest.mock import patch
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        env_vars = {
+            'AGENT_SERVER_USE_HOST_NETWORK': 'true',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            injector = DockerSandboxServiceInjector()
+            assert injector.use_host_network is True
+
+    def test_use_host_network_env_var_accepts_various_true_values(self):
+        """Test that use_host_network accepts various truthy values."""
+        import os
+        from unittest.mock import patch
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        for true_value in ['true', 'TRUE', 'True', '1', 'yes', 'YES', 'Yes']:
+            env_vars = {'AGENT_SERVER_USE_HOST_NETWORK': true_value}
+            with patch.dict(os.environ, env_vars, clear=True):
+                injector = DockerSandboxServiceInjector()
+                assert injector.use_host_network is True, (
+                    f'Failed for value: {true_value}'
+                )
+
+    def test_use_host_network_env_var_defaults_to_false(self):
+        """Test that unset or empty env var defaults to False."""
+        import os
+        from unittest.mock import patch
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        # Empty environment
+        with patch.dict(os.environ, {}, clear=True):
+            injector = DockerSandboxServiceInjector()
+            assert injector.use_host_network is False
+
+        # Empty string
+        with patch.dict(os.environ, {'AGENT_SERVER_USE_HOST_NETWORK': ''}, clear=True):
+            injector = DockerSandboxServiceInjector()
+            assert injector.use_host_network is False
 
 
 class TestDockerSandboxServiceInjectorFromEnv:

@@ -7,7 +7,7 @@ interface BrandButtonProps {
   type: React.ButtonHTMLAttributes<HTMLButtonElement>["type"];
   isDisabled?: boolean;
   className?: string;
-  onClick?: () => void;
+  onClick?: (event?: React.MouseEvent<HTMLButtonElement>) => void;
   startContent?: React.ReactNode;
 }
 
