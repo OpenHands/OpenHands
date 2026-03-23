@@ -130,29 +130,42 @@ async def _relay_up(
     except WebSocketDisconnect:
         pass
     except Exception as exc:
-        _logger.debug('WS proxy browser→%s relay error: %s', label, exc)
+        _logger.warning('WS proxy browser→%s relay error: %s', label, exc)
 
 
 async def _relay_down(
     browser_ws: WebSocket,
     upstream_ws: aiohttp.ClientWebSocketResponse,
     label: str,
-) -> None:
-    """Forward frames upstream → browser until the upstream closes."""
+) -> int:
+    """Forward frames upstream → browser until the upstream closes.
+
+    Returns the WS close code sent by the upstream (1000 if not available).
+    """
+    close_code = 1000
     try:
         async for msg in upstream_ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
                 await browser_ws.send_text(msg.data)
             elif msg.type == aiohttp.WSMsgType.BINARY:
                 await browser_ws.send_bytes(msg.data)
-            elif msg.type in (
-                aiohttp.WSMsgType.CLOSE,
-                aiohttp.WSMsgType.CLOSING,
-                aiohttp.WSMsgType.ERROR,
-            ):
+            elif msg.type == aiohttp.WSMsgType.CLOSE:
+                close_code = int(msg.data) if msg.data else 1000
+                _logger.info(
+                    'WS upstream sent CLOSE (%s): code=%s reason=%r',
+                    label,
+                    close_code,
+                    msg.extra,
+                )
+                break
+            elif msg.type in (aiohttp.WSMsgType.CLOSING, aiohttp.WSMsgType.ERROR):
+                _logger.info(
+                    'WS upstream sent %s (%s)', msg.type.name, label
+                )
                 break
     except Exception as exc:
-        _logger.debug('WS proxy %s→browser relay error: %s', label, exc)
+        _logger.warning('WS proxy %s→browser relay error: %s', label, exc)
+    return close_code
 
 
 async def do_ws_proxy(
@@ -164,7 +177,10 @@ async def do_ws_proxy(
     """Proxy a WebSocket connection bidirectionally to *target_ws_url*.
 
     Accepts the browser WebSocket, connects to the upstream, and relays
-    frames in both directions until either side closes.
+    frames in both directions until either side closes.  Sends an explicit
+    WS close frame to the browser so it receives code 1000 (normal closure)
+    rather than an abrupt 1006 drop, which would be treated as an error by
+    the frontend and trigger an unnecessary reconnect error message.
 
     Args:
         websocket: Incoming browser WebSocket (not yet accepted).
@@ -189,7 +205,7 @@ async def do_ws_proxy(
                     _relay_down(websocket, upstream_ws, label)
                 )
 
-                _done, pending = await asyncio.wait(
+                done, pending = await asyncio.wait(
                     [t_up, t_down], return_when=asyncio.FIRST_COMPLETED
                 )
                 for task in pending:
@@ -198,6 +214,26 @@ async def do_ws_proxy(
                         await task
                     except (asyncio.CancelledError, Exception):
                         pass
+
+                # Determine which side closed first and get the upstream close code.
+                done_task = next(iter(done))
+                if done_task is t_down:
+                    _logger.info('WS proxy upstream closed first (%s)', label)
+                    try:
+                        close_code = done_task.result()
+                    except Exception:
+                        close_code = 1000
+                else:
+                    _logger.info('WS proxy browser closed first (%s)', label)
+                    close_code = 1000
+
+        # Explicitly close the browser WS with the upstream's code so the browser
+        # receives a proper close frame (code 1000 = normal) rather than an abrupt
+        # TCP drop (code 1006), which would trigger the frontend's onError handler.
+        try:
+            await websocket.close(code=close_code)
+        except Exception:
+            pass
 
     except (aiohttp.ClientConnectorError, aiohttp.WSServerHandshakeError) as exc:
         _logger.warning('WS proxy connect error (%s): %s', label, exc)
