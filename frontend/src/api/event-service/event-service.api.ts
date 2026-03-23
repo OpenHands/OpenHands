@@ -7,6 +7,7 @@ import type {
 } from "./event-service.types";
 import { openHands } from "../open-hands-axios";
 import { OpenHandsEvent } from "#/types/v1/core";
+import type { V1SendMessageRequest } from "#/api/conversation-service/v1-conversation-service.types";
 
 class EventService {
   /**
@@ -62,6 +63,30 @@ class EventService {
       { headers },
     );
     return data;
+  }
+
+  /**
+   * Post a message event directly to the agent server.
+   * Used when the WebSocket is closed but the conversation is already running.
+   *
+   * @param conversationId The agent server conversation ID
+   * @param conversationUrl The conversation URL containing the agent server base
+   * @param message The message to send
+   * @param sessionApiKey Session API key for authentication
+   */
+  static async postEvent(
+    conversationId: string,
+    conversationUrl: string,
+    message: V1SendMessageRequest,
+    sessionApiKey?: string | null,
+  ): Promise<void> {
+    const runtimeUrl = buildHttpBaseUrl(conversationUrl);
+    const headers = buildSessionHeaders(sessionApiKey);
+    await axios.post(
+      `${runtimeUrl}/api/conversations/${conversationId}/events`,
+      { role: message.role, content: message.content, run: true },
+      { headers },
+    );
   }
 
   // V1 conversations — App Server REST endpoint

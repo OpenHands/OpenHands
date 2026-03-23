@@ -829,53 +829,85 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
-  // V1 send message function via WebSocket
-  // Falls back to REST API queue when WebSocket is not connected
+  // V1 send message — prefers HTTP POST to the agent server when the
+  // conversation is running, falls back to WebSocket or the pending-message
+  // queue for pre-start scenarios.
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest): Promise<SendMessageResult> => {
+      if (!conversationId) {
+        const error = new Error("No conversation ID available");
+        setErrorMessage(error.message);
+        throw error;
+      }
+
       const currentMode = useConversationStore.getState().conversationMode;
-      const currentSocket =
-        currentMode === "plan" ? planningAgentSocket : mainSocket;
 
-      if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
-        // WebSocket not connected - queue message via REST API
-        // Message will be delivered automatically when conversation becomes ready
-        if (!conversationId) {
-          const error = new Error("No conversation ID available");
-          setErrorMessage(error.message);
-          throw error;
-        }
-
+      // For the main (code) conversation, always use HTTP POST to the agent
+      // server when the conversation is running (conversationUrl is set).
+      //
+      // The agent server closes the sockets/events WebSocket for fresh
+      // conversations (0 events to replay), which causes a rapid reconnect
+      // loop.  A message sent through the socket at the wrong moment is
+      // silently dropped because the agent server has already torn down the
+      // connection on its side.  HTTP POST to the events endpoint is
+      // stateless and therefore always reliable; the WebSocket is only
+      // needed to *receive* events back from the agent.
+      if (currentMode !== "plan" && conversationUrl && sessionApiKey) {
         try {
-          await PendingMessageService.queueMessage(conversationId, {
-            role: "user",
-            content: message.content,
-          });
-          // Message queued successfully - it will be delivered when ready
-          // Return queued: true so caller knows not to show optimistic UI
-          return { queued: true };
+          await EventService.postEvent(
+            conversationId,
+            conversationUrl,
+            message,
+            sessionApiKey,
+          );
+          return { queued: false };
         } catch (error) {
           const errorMessage =
-            error instanceof Error
-              ? error.message
-              : "Failed to queue message for delivery";
+            error instanceof Error ? error.message : "Failed to send message";
           setErrorMessage(errorMessage);
           throw error;
         }
       }
 
+      // Planning-agent path and pre-start fallback: try WebSocket first.
+      const currentSocket =
+        currentMode === "plan" ? planningAgentSocket : mainSocket;
+      if (currentSocket?.readyState === WebSocket.OPEN) {
+        try {
+          currentSocket.send(JSON.stringify(message));
+          return { queued: false };
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to send message";
+          setErrorMessage(errorMessage);
+          throw error;
+        }
+      }
+
+      // Conversation not yet started — queue for delivery when it becomes ready.
       try {
-        // Send message through WebSocket as JSON
-        currentSocket.send(JSON.stringify(message));
-        return { queued: false };
+        await PendingMessageService.queueMessage(conversationId, {
+          role: "user",
+          content: message.content,
+        });
+        return { queued: true };
       } catch (error) {
         const errorMessage =
-          error instanceof Error ? error.message : "Failed to send message";
+          error instanceof Error
+            ? error.message
+            : "Failed to queue message for delivery";
         setErrorMessage(errorMessage);
         throw error;
       }
     },
-    [mainSocket, planningAgentSocket, setErrorMessage, conversationId],
+    [
+      mainSocket,
+      planningAgentSocket,
+      setErrorMessage,
+      conversationId,
+      conversationUrl,
+      sessionApiKey,
+    ],
   );
 
   // Track main socket state changes
