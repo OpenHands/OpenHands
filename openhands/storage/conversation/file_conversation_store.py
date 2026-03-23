@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from json import JSONDecodeError
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,14 +39,16 @@ class FileConversationStore(ConversationStore):
         path = self.get_conversation_metadata_filename(conversation_id)
         json_str = await call_sync_from_async(self.file_store.read, path)
 
-        # Validate the JSON
-        json_obj = json.loads(json_str)
+        json_obj, normalized_json_str = self._load_metadata_json(path, json_str)
         if 'created_at' not in json_obj:
             raise FileNotFoundError(path)
 
         # Remove github_user_id if it exists
         if 'github_user_id' in json_obj:
             json_obj.pop('github_user_id')
+
+        if normalized_json_str is not None:
+            await call_sync_from_async(self.file_store.write, path, normalized_json_str)
 
         result = conversation_metadata_type_adapter.validate_python(json_obj)
         return result
@@ -113,6 +116,32 @@ class FileConversationStore(ConversationStore):
             file_store_web_hook_batch=config.file_store_web_hook_batch,
         )
         return FileConversationStore(file_store)
+
+    def _load_metadata_json(
+        self, path: str, json_str: str
+    ) -> tuple[dict, str | None]:
+        try:
+            return json.loads(json_str), None
+        except JSONDecodeError as exc:
+            decoder = json.JSONDecoder()
+            try:
+                json_obj, end = decoder.raw_decode(json_str)
+            except JSONDecodeError:
+                raise exc
+
+            trailing = json_str[end:].strip()
+            if not trailing or not isinstance(json_obj, dict):
+                raise exc
+
+            logger.warning(
+                'Recovered malformed conversation metadata with trailing characters',
+                extra={
+                    'path': path,
+                    'trailing_length': len(trailing),
+                },
+            )
+            normalized_json_str = json.dumps(json_obj, separators=(',', ':'))
+            return json_obj, normalized_json_str
 
 
 def _sort_key(conversation: ConversationMetadata) -> str:

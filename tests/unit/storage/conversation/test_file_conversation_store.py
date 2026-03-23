@@ -44,6 +44,48 @@ async def test_load_int_user_id():
 
 
 @pytest.mark.asyncio
+async def test_load_recovers_metadata_with_duplicated_trailing_characters():
+    valid_metadata = {
+        'conversation_id': 'some-conversation-id',
+        'selected_repository': 'some-repo',
+        'user_id': None,
+        'selected_branch': 'main',
+        'git_provider': 'github',
+        'title': 'A conversation',
+        'last_updated_at': '2026-03-23T02:59:22.445043Z',
+        'trigger': 'gui',
+        'pr_number': [],
+        'created_at': '2026-03-06T06:22:32.162408Z',
+        'llm_model': None,
+        'accumulated_cost': 0.0,
+        'prompt_tokens': 0,
+        'completion_tokens': 0,
+        'total_tokens': 0,
+        'sandbox_id': None,
+        'conversation_version': None,
+        'public': None,
+    }
+    valid_json = json.dumps(valid_metadata, separators=(',', ':'))
+    corrupted_json = valid_json + 'rsion":null,"public":null}'
+    file_store = InMemoryFileStore(
+        {
+            get_conversation_metadata_filename('some-conversation-id'): corrupted_json,
+        }
+    )
+    store = FileConversationStore(file_store)
+
+    found = await store.get_metadata('some-conversation-id')
+
+    assert found.conversation_id == 'some-conversation-id'
+    assert found.selected_branch == 'main'
+    assert found.title == 'A conversation'
+    assert (
+        file_store.read(get_conversation_metadata_filename('some-conversation-id'))
+        == valid_json
+    )
+
+
+@pytest.mark.asyncio
 async def test_search_empty():
     store = FileConversationStore(InMemoryFileStore({}))
     result = await store.search()
