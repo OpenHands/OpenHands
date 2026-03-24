@@ -5,6 +5,7 @@ import { useFileHandling } from "#/hooks/chat/use-file-handling";
 import { useGripResize } from "#/hooks/chat/use-grip-resize";
 import { useChatInputEvents } from "#/hooks/chat/use-chat-input-events";
 import { useChatSubmission } from "#/hooks/chat/use-chat-submission";
+import { useSlashCommand } from "#/hooks/chat/use-slash-command";
 import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
@@ -12,6 +13,7 @@ import { useConversationStore } from "#/stores/conversation-store";
 
 export interface CustomChatInputProps {
   disabled?: boolean;
+  isNewConversationPending?: boolean;
   showButton?: boolean;
   conversationStatus?: ConversationStatus | null;
   onSubmit: (message: string) => void;
@@ -24,6 +26,7 @@ export interface CustomChatInputProps {
 
 export function CustomChatInput({
   disabled = false,
+  isNewConversationPending = false,
   showButton = true,
   conversationStatus = null,
   onSubmit,
@@ -59,6 +62,7 @@ export function CustomChatInput({
     messageToSend,
     checkIsContentEmpty,
     clearEmptyContentHandler,
+    saveDraft,
   } = useChatInputLogic();
 
   const {
@@ -105,6 +109,16 @@ export function CustomChatInput({
       onBlur,
     );
 
+  const {
+    isMenuOpen: isSlashMenuOpen,
+    filteredItems: slashItems,
+    selectedIndex: slashSelectedIndex,
+    updateSlashMenu,
+    selectItem: selectSlashItem,
+    handleSlashKeyDown,
+    closeMenu: closeSlashMenu,
+  } = useSlashCommand(chatInputRef as React.RefObject<HTMLDivElement | null>);
+
   // Cleanup: reset suggestions visibility when component unmounts
   useEffect(
     () => () => {
@@ -135,6 +149,7 @@ export function CustomChatInput({
           chatContainerRef={chatContainerRef}
           isDragOver={isDragOver}
           disabled={isDisabled}
+          isNewConversationPending={isNewConversationPending}
           showButton={showButton}
           buttonClassName={buttonClassName}
           chatInputRef={chatInputRef}
@@ -144,11 +159,25 @@ export function CustomChatInput({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onInput={handleInput}
+          onInput={() => {
+            handleInput();
+            updateSlashMenu();
+            saveDraft();
+          }}
           onPaste={handlePaste}
-          onKeyDown={(e) => handleKeyDown(e, isDisabled, handleSubmit)}
+          onKeyDown={(e) => {
+            if (handleSlashKeyDown(e)) return;
+            handleKeyDown(e, isDisabled, handleSubmit);
+          }}
           onFocus={handleFocus}
-          onBlur={handleBlur}
+          onBlur={() => {
+            handleBlur();
+            closeSlashMenu();
+          }}
+          isSlashMenuOpen={isSlashMenuOpen}
+          slashItems={slashItems}
+          slashSelectedIndex={slashSelectedIndex}
+          onSlashSelect={selectSlashItem}
         />
       </div>
     </div>

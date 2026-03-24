@@ -19,7 +19,6 @@ import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 
 import { ScrollToBottomButton } from "#/components/shared/buttons/scroll-to-bottom-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -39,6 +38,8 @@ import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
+import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
+import { I18nKey } from "#/i18n/declaration";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -81,10 +82,13 @@ export function ChatInterface() {
     setHitBottom,
   } = useScrollToBottom(scrollRef);
   const { data: config } = useConfig();
+  const {
+    mutate: newConversationCommand,
+    isPending: isNewConversationPending,
+  } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   // Disable Build button while agent is running (streaming)
   const isAgentRunning =
@@ -95,7 +99,7 @@ export function ChatInterface() {
   // This is placed here instead of PlanPreview to avoid duplicate listeners
   // when multiple PlanPreview components exist in the chat
   React.useEffect(() => {
-    if (!shouldUsePlanningAgent || isAgentRunning) {
+    if (isAgentRunning) {
       return undefined;
     }
 
@@ -114,12 +118,7 @@ export function ChatInterface() {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [
-    shouldUsePlanningAgent,
-    isAgentRunning,
-    handleBuildPlanClick,
-    scrollDomToBottom,
-  ]);
+  }, [isAgentRunning, handleBuildPlanClick, scrollDomToBottom]);
 
   const [feedbackPolarity, setFeedbackPolarity] = React.useState<
     "positive" | "negative"
@@ -153,6 +152,27 @@ export function ChatInterface() {
     originalImages: File[],
     originalFiles: File[],
   ) => {
+    // Handle /new command for V1 conversations
+    if (content.trim() === "/new") {
+      if (!isV1Conversation) {
+        displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_V1_ONLY));
+        return;
+      }
+      if (!params.conversationId) {
+        displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_NO_ID));
+        return;
+      }
+      if (totalEvents === 0) {
+        displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_EMPTY));
+        return;
+      }
+      if (isNewConversationPending) {
+        return;
+      }
+      newConversationCommand();
+      return;
+    }
+
     // Create mutable copies of the arrays
     const images = [...originalImages];
     const files = [...originalFiles];
@@ -197,8 +217,14 @@ export function ChatInterface() {
     const prompt =
       uploadedFiles.length > 0 ? `${content}\n\n${filePrompt}` : content;
 
-    send(createChatMessage(prompt, imageUrls, uploadedFiles, timestamp));
-    setOptimisticUserMessage(content);
+    const result = await send(
+      createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
+    );
+    // Only show optimistic UI if message was sent immediately via WebSocket
+    // If queued for later delivery, the message will appear when actually delivered
+    if (!result.queued) {
+      setOptimisticUserMessage(content);
+    }
     setMessageToSend("");
   };
 
@@ -208,6 +234,21 @@ export function ChatInterface() {
     setFeedbackModalIsOpen(true);
     setFeedbackPolarity(polarity);
   };
+
+  // Auto-scroll to bottom when new messages arrive
+  React.useEffect(() => {
+    if (autoScroll) {
+      scrollDomToBottom();
+    }
+    // Note: We intentionally exclude autoScroll from deps because we only want
+    // to scroll when message content changes, not when autoScroll state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    v1UiEvents.length,
+    v0Events.length,
+    optimisticUserMessage,
+    scrollDomToBottom,
+  ]);
 
   // Create a ScrollProvider with the scroll hook values
   const scrollProviderValue = {
@@ -324,7 +365,10 @@ export function ChatInterface() {
             />
           )}
 
-          <InteractiveChatBox onSubmit={handleSendMessage} />
+          <InteractiveChatBox
+            onSubmit={handleSendMessage}
+            disabled={isNewConversationPending}
+          />
         </div>
 
         {config?.app_mode !== "saas" && !isV1Conversation && (

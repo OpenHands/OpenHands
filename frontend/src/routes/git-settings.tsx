@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useConfig } from "#/hooks/query/use-config";
+import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { useSettings } from "#/hooks/query/use-settings";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useLogout } from "#/hooks/mutation/use-logout";
@@ -8,6 +9,7 @@ import { GitHubTokenInput } from "#/components/features/settings/git-settings/gi
 import { GitLabTokenInput } from "#/components/features/settings/git-settings/gitlab-token-input";
 import { GitLabWebhookManager } from "#/components/features/settings/git-settings/gitlab-webhook-manager";
 import { BitbucketTokenInput } from "#/components/features/settings/git-settings/bitbucket-token-input";
+import { BitbucketDCTokenInput } from "#/components/features/settings/git-settings/bitbucket-dc-token-help-input";
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
 import { ForgejoTokenInput } from "#/components/features/settings/git-settings/forgejo-token-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
@@ -24,6 +26,8 @@ import { useAddGitProviders } from "#/hooks/mutation/use-add-git-providers";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { ProjectManagementIntegration } from "#/components/features/settings/project-management/project-management-integration";
 import { Typography } from "#/ui/typography";
+
+export const clientLoader = createPermissionGuard("manage_integrations");
 
 function GitSettingsScreen() {
   const { t } = useTranslation();
@@ -42,6 +46,8 @@ function GitSettingsScreen() {
     React.useState(false);
   const [bitbucketTokenInputHasValue, setBitbucketTokenInputHasValue] =
     React.useState(false);
+  const [bitbucketDCTokenInputHasValue, setBitbucketDCTokenInputHasValue] =
+    React.useState(false);
   const [azureDevOpsTokenInputHasValue, setAzureDevOpsTokenInputHasValue] =
     React.useState(false);
   const [forgejoTokenInputHasValue, setForgejoTokenInputHasValue] =
@@ -53,6 +59,8 @@ function GitSettingsScreen() {
     React.useState(false);
   const [bitbucketHostInputHasValue, setBitbucketHostInputHasValue] =
     React.useState(false);
+  const [bitbucketDCHostInputHasValue, setBitbucketDCHostInputHasValue] =
+    React.useState(false);
   const [azureDevOpsHostInputHasValue, setAzureDevOpsHostInputHasValue] =
     React.useState(false);
   const [forgejoHostInputHasValue, setForgejoHostInputHasValue] =
@@ -61,6 +69,8 @@ function GitSettingsScreen() {
   const existingGithubHost = settings?.provider_tokens_set.github;
   const existingGitlabHost = settings?.provider_tokens_set.gitlab;
   const existingBitbucketHost = settings?.provider_tokens_set.bitbucket;
+  const existingBitbucketDCHost =
+    settings?.provider_tokens_set.bitbucket_data_center;
   const existingAzureDevOpsHost = settings?.provider_tokens_set.azure_devops;
   const existingForgejoHost = settings?.provider_tokens_set.forgejo;
 
@@ -68,6 +78,7 @@ function GitSettingsScreen() {
   const isGitHubTokenSet = providers.includes("github");
   const isGitLabTokenSet = providers.includes("gitlab");
   const isBitbucketTokenSet = providers.includes("bitbucket");
+  const isBitbucketDCTokenSet = providers.includes("bitbucket_data_center");
   const isAzureDevOpsTokenSet = providers.includes("azure_devops");
   const isForgejoTokenSet = providers.includes("forgejo");
 
@@ -89,6 +100,9 @@ function GitSettingsScreen() {
     const bitbucketToken = (
       formData.get("bitbucket-token-input")?.toString() || ""
     ).trim();
+    const bitbucketDCToken = (
+      formData.get("bitbucket-dc-token-input")?.toString() || ""
+    ).trim();
     const azureDevOpsToken = (
       formData.get("azure-devops-token-input")?.toString() || ""
     ).trim();
@@ -104,6 +118,9 @@ function GitSettingsScreen() {
     const bitbucketHost = (
       formData.get("bitbucket-host-input")?.toString() || ""
     ).trim();
+    const bitbucketDCHost = (
+      formData.get("bitbucket-dc-host-input")?.toString() || ""
+    ).trim();
     const azureDevOpsHost = (
       formData.get("azure-devops-host-input")?.toString() || ""
     ).trim();
@@ -116,6 +133,7 @@ function GitSettingsScreen() {
       github: { token: githubToken, host: githubHost },
       gitlab: { token: gitlabToken, host: gitlabHost },
       bitbucket: { token: bitbucketToken, host: bitbucketHost },
+      bitbucket_data_center: { token: bitbucketDCToken, host: bitbucketDCHost },
       azure_devops: { token: azureDevOpsToken, host: azureDevOpsHost },
       forgejo: { token: forgejoToken, host: forgejoHost },
     };
@@ -136,11 +154,13 @@ function GitSettingsScreen() {
           setGithubTokenInputHasValue(false);
           setGitlabTokenInputHasValue(false);
           setBitbucketTokenInputHasValue(false);
+          setBitbucketDCTokenInputHasValue(false);
           setAzureDevOpsTokenInputHasValue(false);
           setForgejoTokenInputHasValue(false);
           setGithubHostInputHasValue(false);
           setGitlabHostInputHasValue(false);
           setBitbucketHostInputHasValue(false);
+          setBitbucketDCHostInputHasValue(false);
           setAzureDevOpsHostInputHasValue(false);
           setForgejoHostInputHasValue(false);
         },
@@ -152,11 +172,13 @@ function GitSettingsScreen() {
     !githubTokenInputHasValue &&
     !gitlabTokenInputHasValue &&
     !bitbucketTokenInputHasValue &&
+    !bitbucketDCTokenInputHasValue &&
     !azureDevOpsTokenInputHasValue &&
     !forgejoTokenInputHasValue &&
     !githubHostInputHasValue &&
     !gitlabHostInputHasValue &&
     !bitbucketHostInputHasValue &&
+    !bitbucketDCHostInputHasValue &&
     !azureDevOpsHostInputHasValue &&
     !forgejoHostInputHasValue;
   const shouldRenderExternalConfigureButtons =
@@ -277,6 +299,20 @@ function GitSettingsScreen() {
             )}
 
             {!isSaas && (
+              <BitbucketDCTokenInput
+                name="bitbucket-dc-token-input"
+                isBitbucketDCTokenSet={isBitbucketDCTokenSet}
+                onChange={(value) => {
+                  setBitbucketDCTokenInputHasValue(!!value);
+                }}
+                onBitbucketDCHostChange={(value) => {
+                  setBitbucketDCHostInputHasValue(!!value);
+                }}
+                bitbucketDCHostSet={existingBitbucketDCHost}
+              />
+            )}
+
+            {!isSaas && (
               <AzureDevOpsTokenInput
                 name="azure-devops-token-input"
                 isAzureDevOpsTokenSet={isAzureDevOpsTokenSet}
@@ -321,6 +357,7 @@ function GitSettingsScreen() {
                 !isGitHubTokenSet &&
                 !isGitLabTokenSet &&
                 !isBitbucketTokenSet &&
+                !isBitbucketDCTokenSet &&
                 !isAzureDevOpsTokenSet &&
                 !isForgejoTokenSet
               }

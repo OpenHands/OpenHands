@@ -10,7 +10,9 @@ window.scrollTo = vi.fn();
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
   observe = vi.fn();
+
   unobserve = vi.fn();
+
   disconnect = vi.fn();
 }
 
@@ -28,6 +30,19 @@ vi.mock("react-i18next", async (importOriginal) => ({
 
 vi.mock("#/hooks/use-is-on-tos-page", () => ({
   useIsOnTosPage: () => false,
+}));
+
+vi.mock("#/hooks/use-is-on-intermediate-page", () => ({
+  useIsOnIntermediatePage: () => false,
+}));
+
+// Mock useRevalidator from react-router to allow direct store manipulation
+// in tests instead of mocking useSelectedOrganizationId hook
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useRevalidator: () => ({
+    revalidate: vi.fn(),
+  }),
 }));
 
 // Import the Zustand mock to enable automatic store resets

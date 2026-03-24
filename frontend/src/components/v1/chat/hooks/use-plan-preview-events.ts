@@ -38,19 +38,24 @@ function groupEventsByPhase(events: OpenHandsEvent[]): OpenHandsEvent[][] {
   return phases;
 }
 
+const isPlanFilePath = (path: string | null): boolean =>
+  path?.toUpperCase().endsWith("PLAN.MD") ?? false;
+
 /**
- * Finds the last PlanningFileEditorObservation in a phase.
+ * Finds the last PlanningFileEditorObservation for Plan.md in a phase.
  *
  * @param phase - Array of events in a phase
- * @returns The event ID of the last PlanningFileEditorObservation, or null
+ * @returns The event ID of the last Plan.md observation, or null
  */
 function findLastPlanningObservationInPhase(
   phase: OpenHandsEvent[],
 ): string | null {
-  // Iterate backwards to find the last one
   for (let i = phase.length - 1; i >= 0; i -= 1) {
     const event = phase[i];
-    if (isPlanningFileEditorObservationEvent(event)) {
+    if (
+      isPlanningFileEditorObservationEvent(event) &&
+      isPlanFilePath(event.observation.path)
+    ) {
       return event.id;
     }
   }

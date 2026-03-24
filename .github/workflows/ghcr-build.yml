@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - "saas-rel-*"
     tags:
       - "*"
   pull_request:
@@ -39,11 +40,11 @@ jobs:
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" }
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik" }
               ]')
           else
             json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik" },
                 { image: "ubuntu:24.04", tag: "ubuntu" }
               ]')
           fi
@@ -218,11 +219,9 @@ jobs:
       - name: Determine app image tag
         shell: bash
         run: |
-          # Duplicated with build.sh
-          sanitized_ref_name=$(echo "$GITHUB_REF_NAME" | sed 's/[^a-zA-Z0-9.-]\+/-/g')
-          OPENHANDS_BUILD_VERSION=$sanitized_ref_name
-          sanitized_ref_name=$(echo "$sanitized_ref_name" | tr '[:upper:]' '[:lower:]') # lower case is required in tagging
-          echo "OPENHANDS_DOCKER_TAG=${sanitized_ref_name}" >> $GITHUB_ENV
+          # Use the commit SHA to pin the exact app image built by ghcr_build_app,
+          # rather than a mutable branch tag like "main" which can serve stale cached layers.
+          echo "OPENHANDS_DOCKER_TAG=${RELEVANT_SHA}" >> $GITHUB_ENV
       - name: Build and push Docker image
         uses: useblacksmith/build-push-action@v1
         with:
@@ -238,21 +237,6 @@ jobs:
           provenance: true
           # Add build attestations for better security
           sbom: true
-
-  enterprise-preview:
-    name: Enterprise preview
-    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy')
-    runs-on: blacksmith-4vcpu-ubuntu-2204
-    needs: [ghcr_build_enterprise]
-    steps:
-      # This should match the version in enterprise-preview.yml
-      - name: Trigger remote job
-        run: |
-          curl --fail-with-body -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}" \
-            -H "Accept: application/vnd.github+json" \
-            -d "{\"ref\": \"main\", \"inputs\": {\"openhandsPrNumber\": \"${{ github.event.pull_request.number }}\", \"deployEnvironment\": \"feature\", \"enterpriseImageTag\": \"pr-${{ github.event.pull_request.number }}\" }}" \
-            https://api.github.com/repos/OpenHands/deploy/actions/workflows/deploy.yaml/dispatches
 
   # "All Runtime Tests Passed" is a required job for PRs to merge
   # We can remove this once the config changes

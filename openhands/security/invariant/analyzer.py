@@ -1,4 +1,12 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import re
+import time
 import uuid
 from typing import Any
 
@@ -64,15 +72,16 @@ class InvariantAnalyzer(SecurityAnalyzer):
         else:
             self.container = running_containers[0]
 
-        elapsed = 0
+        start_time = time.time()
         while self.container.status != 'running':
             self.container = self.docker_client.containers.get(self.container_name)
-            elapsed += 1
+            elapsed = time.time() - start_time
             logger.debug(
-                f'waiting for container to start: {elapsed}, container status: {self.container.status}'
+                f'waiting for container to start: {elapsed:.1f}s, container status: {self.container.status}'
             )
             if elapsed > self.timeout:
                 break
+            time.sleep(0.5)
 
         self.api_port = int(
             self.container.attrs['NetworkSettings']['Ports']['8000/tcp'][0]['HostPort']

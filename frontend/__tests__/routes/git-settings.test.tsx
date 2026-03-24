@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import i18next from "i18next";
 import { I18nextProvider } from "react-i18next";
-import GitSettingsScreen from "#/routes/git-settings";
+import GitSettingsScreen, { clientLoader } from "#/routes/git-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import AuthService from "#/api/auth-service/auth-service.api";
@@ -13,7 +13,6 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import { SecretsService } from "#/api/secrets-service";
-import { integrationService } from "#/api/integration-service/integration-service.api";
 
 const VALID_OSS_CONFIG: WebClientConfig = {
   app_mode: "oss",
@@ -24,6 +23,9 @@ const VALID_OSS_CONFIG: WebClientConfig = {
     enable_jira: false,
     enable_jira_dc: false,
     enable_linear: false,
+    hide_users_page: false,
+    hide_billing_page: false,
+    hide_integrations_page: false,
   },
   providers_configured: [],
   maintenance_start_time: null,
@@ -44,6 +46,9 @@ const VALID_SAAS_CONFIG: WebClientConfig = {
     enable_jira: false,
     enable_jira_dc: false,
     enable_linear: false,
+    hide_users_page: false,
+    hide_billing_page: false,
+    hide_integrations_page: false,
   },
   providers_configured: [],
   maintenance_start_time: null,
@@ -321,6 +326,7 @@ describe("Form submission", () => {
       github: { token: "test-token", host: "" },
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
+      bitbucket_data_center: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -344,6 +350,7 @@ describe("Form submission", () => {
       github: { token: "", host: "" },
       gitlab: { token: "test-token", host: "" },
       bitbucket: { token: "", host: "" },
+      bitbucket_data_center: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -367,6 +374,7 @@ describe("Form submission", () => {
       github: { token: "", host: "" },
       gitlab: { token: "", host: "" },
       bitbucket: { token: "test-token", host: "" },
+      bitbucket_data_center: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -392,6 +400,7 @@ describe("Form submission", () => {
       github: { token: "", host: "" },
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
+      bitbucket_data_center: { token: "", host: "" },
       azure_devops: { token: "test-token", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -645,5 +654,12 @@ describe("GitLab Webhook Manager Integration", () => {
         screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("clientLoader permission checks", () => {
+  it("should export a clientLoader for route protection", () => {
+    expect(clientLoader).toBeDefined();
+    expect(typeof clientLoader).toBe("function");
   });
 });

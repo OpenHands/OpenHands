@@ -50,8 +50,10 @@ repos:
           - ./
           - stripe==11.5.0
           - pygithub==2.6.1
-        # To see gaps add `--html-report mypy-report/`
-        entry: mypy --config-file enterprise/dev_config/python/mypy.ini enterprise/
+        # Use -p (package) to avoid dual module name conflict when using MYPYPATH
+        # MYPYPATH=enterprise allows resolving bare imports like "from integrations.xxx"
+        # Note: tests package excluded to avoid conflict with core openhands tests
+        entry: bash -c 'MYPYPATH=enterprise mypy --config-file enterprise/dev_config/python/mypy.ini -p integrations -p server -p storage -p sync'
         always_run: true
         pass_filenames: false
         files: ^enterprise/

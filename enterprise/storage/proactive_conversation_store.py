@@ -10,7 +10,6 @@ from integrations.github.github_types import (
     WorkflowRunStatus,
 )
 from sqlalchemy import and_, delete, select, update
-from sqlalchemy.orm import sessionmaker
 from storage.database import a_session_maker
 from storage.proactive_convos import ProactiveConversation
 
@@ -20,8 +19,6 @@ from openhands.integrations.service_types import ProviderType
 
 @dataclass
 class ProactiveConversationStore:
-    a_session_maker: sessionmaker = a_session_maker
-
     def get_repo_id(self, provider: ProviderType, repo_id):
         return f'{provider.value}##{repo_id}'
 
@@ -51,7 +48,7 @@ class ProactiveConversationStore:
 
         final_workflow_group = None
 
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             # Start an explicit transaction with row-level locking
             async with session.begin():
                 # Get the existing proactive conversation entry with FOR UPDATE lock
@@ -142,7 +139,7 @@ class ProactiveConversationStore:
         # Calculate the cutoff time (current time - older_than_minutes)
         cutoff_time = datetime.now(UTC) - timedelta(minutes=older_than_minutes)
 
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             async with session.begin():
                 # Delete records older than the cutoff time
                 delete_stmt = delete(ProactiveConversation).where(
@@ -158,9 +155,9 @@ class ProactiveConversationStore:
 
     @classmethod
     async def get_instance(cls) -> ProactiveConversationStore:
-        """Get an instance of the GitlabWebhookStore.
+        """Get an instance of the ProactiveConversationStore.
 
         Returns:
-            An instance of GitlabWebhookStore
+            An instance of ProactiveConversationStore
         """
-        return ProactiveConversationStore(a_session_maker)
+        return ProactiveConversationStore()

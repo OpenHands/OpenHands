@@ -10,6 +10,7 @@ import { BrandButton } from "../brand-button";
 import { useGetSecrets } from "#/hooks/query/use-get-secrets";
 import { GetSecretsResponse } from "#/api/secrets-service.types";
 import { OptionalTag } from "../optional-tag";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 interface SecretFormProps {
   mode: "add" | "edit";
@@ -24,6 +25,7 @@ export function SecretForm({
 }: SecretFormProps) {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { organizationId } = useSelectedOrganizationId();
 
   const { data: secrets } = useGetSecrets();
   const { mutate: createSecret } = useCreateSecret();
@@ -49,7 +51,9 @@ export function SecretForm({
       {
         onSettled: onCancel,
         onSuccess: async () => {
-          await queryClient.invalidateQueries({ queryKey: ["secrets"] });
+          await queryClient.invalidateQueries({
+            queryKey: ["secrets", organizationId],
+          });
         },
       },
     );
@@ -61,7 +65,7 @@ export function SecretForm({
     description?: string,
   ) => {
     queryClient.setQueryData<GetSecretsResponse["custom_secrets"]>(
-      ["secrets"],
+      ["secrets", organizationId],
       (oldSecrets) => {
         if (!oldSecrets) return [];
         return oldSecrets.map((secret) => {
@@ -79,7 +83,7 @@ export function SecretForm({
   };
 
   const revertOptimisticUpdate = () => {
-    queryClient.invalidateQueries({ queryKey: ["secrets"] });
+    queryClient.invalidateQueries({ queryKey: ["secrets", organizationId] });
   };
 
   const handleEditSecret = (

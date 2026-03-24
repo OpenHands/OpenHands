@@ -2,11 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import axios, { AxiosError } from "axios";
 import AuthService from "#/api/auth-service/auth-service.api";
 import { useConfig } from "./use-config";
-import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
+import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
 
 export const useIsAuthed = () => {
   const { data: config } = useConfig();
-  const isOnTosPage = useIsOnTosPage();
+  const isOnIntermediatePage = useIsOnIntermediatePage();
 
   const appMode = config?.app_mode;
 
@@ -29,7 +29,7 @@ export const useIsAuthed = () => {
         throw error;
       }
     },
-    enabled: !!appMode && !isOnTosPage,
+    enabled: !!appMode && !isOnIntermediatePage,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
     retry: false,

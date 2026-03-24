@@ -1,18 +1,19 @@
 """Device code store for OAuth 2.0 Device Flow."""
 
+from __future__ import annotations
+
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from storage.database import a_session_maker
 from storage.device_code import DeviceCode
 
 
 class DeviceCodeStore:
     """Store for managing OAuth 2.0 device codes."""
-
-    def __init__(self, session_maker):
-        self.session_maker = session_maker
 
     def generate_user_code(self) -> str:
         """Generate a human-readable user code (8 characters, uppercase letters and digits)."""
@@ -25,7 +26,7 @@ class DeviceCodeStore:
         alphabet = string.ascii_letters + string.digits
         return ''.join(secrets.choice(alphabet) for _ in range(128))
 
-    def create_device_code(
+    async def create_device_code(
         self,
         expires_in: int = 600,  # 10 minutes default
         max_attempts: int = 10,
@@ -58,11 +59,10 @@ class DeviceCodeStore:
             )
 
             try:
-                with self.session_maker() as session:
+                async with a_session_maker() as session:
                     session.add(device_code_entry)
-                    session.commit()
-                    session.refresh(device_code_entry)
-                    session.expunge(device_code_entry)  # Detach from session cleanly
+                    await session.commit()
+                    await session.refresh(device_code_entry)
                     return device_code_entry
             except IntegrityError:
                 # Constraint violation - codes already exist, retry with new codes
@@ -72,25 +72,23 @@ class DeviceCodeStore:
             f'Failed to generate unique device codes after {max_attempts} attempts'
         )
 
-    def get_by_device_code(self, device_code: str) -> DeviceCode | None:
+    async def get_by_device_code(self, device_code: str) -> DeviceCode | None:
         """Get device code entry by device code."""
-        with self.session_maker() as session:
-            result = (
-                session.query(DeviceCode).filter_by(device_code=device_code).first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(DeviceCode).filter_by(device_code=device_code)
             )
-            if result:
-                session.expunge(result)  # Detach from session cleanly
-            return result
+            return result.scalars().first()
 
-    def get_by_user_code(self, user_code: str) -> DeviceCode | None:
+    async def get_by_user_code(self, user_code: str) -> DeviceCode | None:
         """Get device code entry by user code."""
-        with self.session_maker() as session:
-            result = session.query(DeviceCode).filter_by(user_code=user_code).first()
-            if result:
-                session.expunge(result)  # Detach from session cleanly
-            return result
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(DeviceCode).filter_by(user_code=user_code)
+            )
+            return result.scalars().first()
 
-    def authorize_device_code(self, user_code: str, user_id: str) -> bool:
+    async def authorize_device_code(self, user_code: str, user_id: str) -> bool:
         """Authorize a device code.
 
         Args:
@@ -100,10 +98,11 @@ class DeviceCodeStore:
         Returns:
             True if authorization was successful, False otherwise
         """
-        with self.session_maker() as session:
-            device_code_entry = (
-                session.query(DeviceCode).filter_by(user_code=user_code).first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(DeviceCode).filter_by(user_code=user_code)
             )
+            device_code_entry = result.scalars().first()
 
             if not device_code_entry:
                 return False
@@ -112,11 +111,11 @@ class DeviceCodeStore:
                 return False
 
             device_code_entry.authorize(user_id)
-            session.commit()
+            await session.commit()
 
             return True
 
-    def deny_device_code(self, user_code: str) -> bool:
+    async def deny_device_code(self, user_code: str) -> bool:
         """Deny a device code authorization.
 
         Args:
@@ -125,10 +124,11 @@ class DeviceCodeStore:
         Returns:
             True if denial was successful, False otherwise
         """
-        with self.session_maker() as session:
-            device_code_entry = (
-                session.query(DeviceCode).filter_by(user_code=user_code).first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(DeviceCode).filter_by(user_code=user_code)
             )
+            device_code_entry = result.scalars().first()
 
             if not device_code_entry:
                 return False
@@ -137,11 +137,11 @@ class DeviceCodeStore:
                 return False
 
             device_code_entry.deny()
-            session.commit()
+            await session.commit()
 
             return True
 
-    def update_poll_time(
+    async def update_poll_time(
         self, device_code: str, increase_interval: bool = False
     ) -> bool:
         """Update the poll time for a device code and optionally increase interval.
@@ -153,15 +153,16 @@ class DeviceCodeStore:
         Returns:
             True if update was successful, False otherwise
         """
-        with self.session_maker() as session:
-            device_code_entry = (
-                session.query(DeviceCode).filter_by(device_code=device_code).first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(DeviceCode).filter_by(device_code=device_code)
             )
+            device_code_entry = result.scalars().first()
 
             if not device_code_entry:
                 return False
 
             device_code_entry.update_poll_time(increase_interval)
-            session.commit()
+            await session.commit()
 
             return True

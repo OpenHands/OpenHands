@@ -1,7 +1,9 @@
-import { STRIPE_BILLING_HANDLERS } from "./billing-handlers";
+import { API_KEYS_HANDLERS } from "./api-keys-handlers";
+import { BILLING_HANDLERS } from "./billing-handlers";
 import { FILE_SERVICE_HANDLERS } from "./file-service-handlers";
 import { TASK_SUGGESTIONS_HANDLERS } from "./task-suggestions-handlers";
 import { SECRETS_HANDLERS } from "./secrets-handlers";
+import { ORG_HANDLERS } from "./org-handlers";
 import { GIT_REPOSITORY_HANDLERS } from "./git-repository-handlers";
 import {
   SETTINGS_HANDLERS,
@@ -14,7 +16,9 @@ import { FEEDBACK_HANDLERS } from "./feedback-handlers";
 import { ANALYTICS_HANDLERS } from "./analytics-handlers";
 
 export const handlers = [
-  ...STRIPE_BILLING_HANDLERS,
+  ...ORG_HANDLERS,
+  ...API_KEYS_HANDLERS,
+  ...BILLING_HANDLERS,
   ...FILE_SERVICE_HANDLERS,
   ...TASK_SUGGESTIONS_HANDLERS,
   ...SECRETS_HANDLERS,

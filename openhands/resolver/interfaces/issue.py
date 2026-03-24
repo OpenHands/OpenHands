@@ -1,7 +1,14 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 from abc import ABC, abstractmethod
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class ReviewThread(BaseModel):
@@ -14,7 +21,13 @@ class Issue(BaseModel):
     repo: str
     number: int
     title: str
-    body: str
+    body: str = ''
+
+    @field_validator('body', mode='before')
+    @classmethod
+    def body_must_not_be_none(cls, v: str | None) -> str:
+        return v if v is not None else ''
+
     thread_comments: list[str] | None = None  # Added field for issue thread comments
     closing_issues: list[str] | None = None
     review_comments: list[str] | None = None

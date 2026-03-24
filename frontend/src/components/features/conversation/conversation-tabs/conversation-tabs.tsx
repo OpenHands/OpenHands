@@ -7,6 +7,7 @@ import GitChanges from "#/icons/git_changes.svg?react";
 import VSCodeIcon from "#/icons/vscode.svg?react";
 import ThreeDotsVerticalIcon from "#/icons/three-dots-vertical.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { cn } from "#/utils/utils";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import { ConversationTabNav } from "./conversation-tab-nav";
@@ -15,9 +16,9 @@ import { I18nKey } from "#/i18n/declaration";
 import { VSCodeTooltipContent } from "./vscode-tooltip-content";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
+import { useTaskList } from "#/hooks/use-task-list";
 
 export function ConversationTabs() {
   const { conversationId } = useConversationId();
@@ -28,7 +29,7 @@ export function ConversationTabs() {
   const { state: persistedState } =
     useConversationLocalStorageState(conversationId);
 
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
+  const { hasTaskList } = useTaskList();
 
   const {
     selectTab,
@@ -66,6 +67,15 @@ export function ConversationTabs() {
   const { t } = useTranslation();
 
   const tabs = [
+    {
+      tabValue: "planner",
+      isActive: isTabActive("planner"),
+      icon: LessonPlanIcon,
+      onClick: () => selectTab("planner"),
+      tooltipContent: t(I18nKey.COMMON$PLANNER),
+      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
+      label: t(I18nKey.COMMON$PLANNER),
+    },
     {
       tabValue: "editor",
       isActive: isTabActive("editor"),
@@ -114,15 +124,15 @@ export function ConversationTabs() {
     },
   ];
 
-  if (shouldUsePlanningAgent) {
+  if (hasTaskList) {
     tabs.unshift({
-      tabValue: "planner",
-      isActive: isTabActive("planner"),
-      icon: LessonPlanIcon,
-      onClick: () => selectTab("planner"),
-      tooltipContent: t(I18nKey.COMMON$PLANNER),
-      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
-      label: t(I18nKey.COMMON$PLANNER),
+      tabValue: "tasklist",
+      isActive: isTabActive("tasklist"),
+      icon: DoubleCheckIcon,
+      onClick: () => selectTab("tasklist"),
+      tooltipContent: t(I18nKey.COMMON$TASK_LIST),
+      tooltipAriaLabel: t(I18nKey.COMMON$TASK_LIST),
+      label: t(I18nKey.COMMON$TASK_LIST),
     });
   }
 

@@ -11,6 +11,7 @@ interface ConversationRepoLinkProps {
 
 const providerIcon: Partial<Record<Provider, IconType>> = {
   bitbucket: FaBitbucket,
+  bitbucket_data_center: FaBitbucket,
   github: FaGithub,
   gitlab: FaGitlab,
   enterprise_sso: FaUserShield,

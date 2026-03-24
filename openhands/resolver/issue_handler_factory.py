@@ -1,9 +1,20 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 from openhands.core.config import LLMConfig
 from openhands.integrations.provider import ProviderType
 from openhands.resolver.interfaces.azure_devops import AzureDevOpsIssueHandler
 from openhands.resolver.interfaces.bitbucket import (
     BitbucketIssueHandler,
     BitbucketPRHandler,
+)
+from openhands.resolver.interfaces.bitbucket_data_center import (
+    BitbucketDCIssueHandler,
+    BitbucketDCPRHandler,
 )
 from openhands.resolver.interfaces.forgejo import (
     ForgejoIssueHandler,
@@ -73,6 +84,17 @@ class IssueHandlerFactory:
                     ),
                     self.llm_config,
                 )
+            elif self.platform == ProviderType.BITBUCKET_DATA_CENTER:
+                return ServiceContextIssue(
+                    BitbucketDCIssueHandler(
+                        self.owner,
+                        self.repo,
+                        self.token,
+                        self.username,
+                        self.base_domain,
+                    ),
+                    self.llm_config,
+                )
             elif self.platform == ProviderType.FORGEJO:
                 return ServiceContextIssue(
                     ForgejoIssueHandler(
@@ -132,6 +154,17 @@ class IssueHandlerFactory:
             elif self.platform == ProviderType.BITBUCKET:
                 return ServiceContextPR(
                     BitbucketPRHandler(
+                        self.owner,
+                        self.repo,
+                        self.token,
+                        self.username,
+                        self.base_domain,
+                    ),
+                    self.llm_config,
+                )
+            elif self.platform == ProviderType.BITBUCKET_DATA_CENTER:
+                return ServiceContextPR(
+                    BitbucketDCPRHandler(
                         self.owner,
                         self.repo,
                         self.token,

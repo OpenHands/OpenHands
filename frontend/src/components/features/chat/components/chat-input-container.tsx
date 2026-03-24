@@ -3,13 +3,16 @@ import { DragOver } from "../drag-over";
 import { UploadedFiles } from "../uploaded-files";
 import { ChatInputRow } from "./chat-input-row";
 import { ChatInputActions } from "./chat-input-actions";
+import { SlashCommandMenu } from "./slash-command-menu";
 import { useConversationStore } from "#/stores/conversation-store";
 import { cn } from "#/utils/utils";
+import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
 
 interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
   isDragOver: boolean;
   disabled: boolean;
+  isNewConversationPending?: boolean;
   showButton: boolean;
   buttonClassName: string;
   chatInputRef: React.RefObject<HTMLDivElement | null>;
@@ -24,12 +27,17 @@ interface ChatInputContainerProps {
   onKeyDown: (e: React.KeyboardEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  isSlashMenuOpen?: boolean;
+  slashItems?: SlashCommandItem[];
+  slashSelectedIndex?: number;
+  onSlashSelect?: (item: SlashCommandItem) => void;
 }
 
 export function ChatInputContainer({
   chatContainerRef,
   isDragOver,
   disabled,
+  isNewConversationPending = false,
   showButton,
   buttonClassName,
   chatInputRef,
@@ -44,6 +52,10 @@ export function ChatInputContainer({
   onKeyDown,
   onFocus,
   onBlur,
+  isSlashMenuOpen = false,
+  slashItems = [],
+  slashSelectedIndex = 0,
+  onSlashSelect,
 }: ChatInputContainerProps) {
   const conversationMode = useConversationStore(
     (state) => state.conversationMode,
@@ -65,19 +77,32 @@ export function ChatInputContainer({
 
       <UploadedFiles />
 
-      <ChatInputRow
-        chatInputRef={chatInputRef}
-        disabled={disabled}
-        showButton={showButton}
-        buttonClassName={buttonClassName}
-        handleFileIconClick={handleFileIconClick}
-        handleSubmit={handleSubmit}
-        onInput={onInput}
-        onPaste={onPaste}
-        onKeyDown={onKeyDown}
-        onFocus={onFocus}
-        onBlur={onBlur}
-      />
+      {/* Wrapper so the slash menu anchors just above the input row,
+          not above the entire (possibly resized) container */}
+      <div className="relative w-full">
+        {isSlashMenuOpen && onSlashSelect && (
+          <SlashCommandMenu
+            items={slashItems}
+            selectedIndex={slashSelectedIndex}
+            onSelect={onSlashSelect}
+          />
+        )}
+
+        <ChatInputRow
+          chatInputRef={chatInputRef}
+          disabled={disabled}
+          isNewConversationPending={isNewConversationPending}
+          showButton={showButton}
+          buttonClassName={buttonClassName}
+          handleFileIconClick={handleFileIconClick}
+          handleSubmit={handleSubmit}
+          onInput={onInput}
+          onPaste={onPaste}
+          onKeyDown={onKeyDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        />
+      </div>
 
       <ChatInputActions
         disabled={disabled}

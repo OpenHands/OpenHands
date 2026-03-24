@@ -99,6 +99,36 @@ export const useTracking = () => {
     });
   };
 
+  const trackAddTeamMembersButtonClick = () => {
+    posthog.capture("exp_add_team_members", {
+      ...commonProperties,
+    });
+  };
+
+  const trackOnboardingCompleted = ({
+    role,
+    orgSize,
+    useCase,
+  }: {
+    role?: string;
+    orgSize?: string;
+    useCase?: string[];
+  }) => {
+    posthog.capture("onboarding_completed", {
+      role,
+      org_size: orgSize,
+      use_case: useCase,
+      ...commonProperties,
+    });
+  };
+
+  const trackSaasSelfhostedInquiry = ({ location }: { location: string }) => {
+    posthog.capture("saas_selfhosted_inquiry", {
+      location,
+      ...commonProperties,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -109,5 +139,8 @@ export const useTracking = () => {
     trackUserSignupCompleted,
     trackCreditsPurchased,
     trackCreditLimitReached,
+    trackAddTeamMembersButtonClick,
+    trackOnboardingCompleted,
+    trackSaasSelfhostedInquiry,
   };
 };
