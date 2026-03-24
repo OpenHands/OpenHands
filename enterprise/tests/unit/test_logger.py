@@ -11,6 +11,8 @@ from server.logger import format_stack, setup_json_logger
 from openhands.core.logger import openhands_logger
 
 FROZEN_TIMESTAMP = '2024-01-15T10:30:00+00:00'
+# datetime.now().isoformat() doesn't include timezone info
+FROZEN_TIMESTAMP_NO_TZ = '2024-01-15T10:30:00'
 
 
 @pytest.fixture
@@ -338,4 +340,6 @@ class TestLogOutput:
         ), f"'ts' should appear exactly once, found in: {raw_output}"
         assert output['message'] == 'Test both modes message'
         assert output['severity'] == 'INFO'
-        assert output['ts'] == FROZEN_TIMESTAMP
+        # When LOG_JSON_FOR_CONSOLE=1, custom_json_serializer uses datetime.now().isoformat()
+        # which doesn't include timezone info
+        assert output['ts'] == FROZEN_TIMESTAMP_NO_TZ
