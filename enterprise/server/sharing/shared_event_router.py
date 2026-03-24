@@ -33,6 +33,12 @@ def get_shared_event_service_injector() -> SharedEventServiceInjector:
         )
 
         return AwsSharedEventServiceInjector()
+    elif provider == StorageProvider.FILESYSTEM:
+        from server.sharing.filesystem_shared_event_service import (
+            FilesystemSharedEventServiceInjector,
+        )
+
+        return FilesystemSharedEventServiceInjector()
     else:
         # GCP is the default for shared events (including filesystem fallback)
         from server.sharing.google_cloud_shared_event_service import (
