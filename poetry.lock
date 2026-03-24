@@ -1335,6 +1335,7 @@ description = "Generic pure Python loader for .NET runtimes"
 optional = false
 python-versions = ">=3.7"
 groups = ["main"]
+markers = "sys_platform == \"win32\""
 files = [
     {file = "clr_loader-0.2.10-py3-none-any.whl", hash = "sha256:ebbbf9d511a7fe95fa28a95a4e04cd195b097881dfe66158dc2c281d3536f282"},
     {file = "clr_loader-0.2.10.tar.gz", hash = "sha256:81f114afbc5005bafc5efe5af1341d400e22137e275b042a8979f3feb9fc9446"},
@@ -11934,6 +11935,7 @@ description = ".NET and Mono integration for Python"
 optional = false
 python-versions = "<3.14,>=3.7"
 groups = ["main"]
+markers = "sys_platform == \"win32\""
 files = [
     {file = "pythonnet-3.0.5-py3-none-any.whl", hash = "sha256:f6702d694d5d5b163c9f3f5cc34e0bed8d6857150237fae411fefb883a656d20"},
     {file = "pythonnet-3.0.5.tar.gz", hash = "sha256:48e43ca463941b3608b32b4e236db92d8d40db4c58a75ace902985f76dac21cf"},
@@ -14833,4 +14835,4 @@ third-party-runtimes = ["daytona", "e2b-code-interpreter", "modal", "runloop-api
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "1d1661870075ed85d87818cc3f3bd30bf23dcd00d1604be57f616f60b583c758"
+content-hash = "27133f26b38ca7c234ff6f3ade24067804ec47776cae8c24d48657cf1dcd7280"

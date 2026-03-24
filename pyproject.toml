@@ -84,7 +84,7 @@ dependencies = [
   "python-multipart>=0.0.22",
   "python-pptx",
   "python-socketio==5.14",
-  "pythonnet",
+  "pythonnet; sys_platform=='win32'",
   "pyyaml>=6.0.2",
   "qtconsole>=5.6.1",
   "rapidfuzz>=3.9",
@@ -211,7 +211,7 @@ python-json-logger = "^3.2.1"
 prompt-toolkit = "^3.0.50"
 poetry = "^2.1.2"
 anyio = "4.9.0"
-pythonnet = "*"
+pythonnet = { version = "*", markers = "sys_platform == 'win32'" }
 fastmcp = ">=3,<4"
 python-frontmatter = "^1.1.0"
 shellingham = "^1.5.4"
