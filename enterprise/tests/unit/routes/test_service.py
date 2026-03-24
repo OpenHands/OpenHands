@@ -19,18 +19,14 @@ class TestValidateServiceApiKey:
     @pytest.mark.asyncio
     async def test_valid_service_key(self):
         """Test validation with valid service API key."""
-        with patch(
-            'server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'
-        ):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'):
             result = await validate_service_api_key('test-service-key')
         assert result == 'automations-service'
 
     @pytest.mark.asyncio
     async def test_missing_service_key(self):
         """Test validation with missing service API key header."""
-        with patch(
-            'server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'
-        ):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'):
             with pytest.raises(HTTPException) as exc_info:
                 await validate_service_api_key(None)
         assert exc_info.value.status_code == 401
@@ -39,9 +35,7 @@ class TestValidateServiceApiKey:
     @pytest.mark.asyncio
     async def test_invalid_service_key(self):
         """Test validation with invalid service API key."""
-        with patch(
-            'server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'
-        ):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'):
             with pytest.raises(HTTPException) as exc_info:
                 await validate_service_api_key('wrong-key')
         assert exc_info.value.status_code == 401
