@@ -5,8 +5,10 @@ import { I18nKey } from "#/i18n/declaration";
 import { useTracking } from "#/hooks/use-tracking";
 import { Card } from "#/ui/card";
 import { Typography } from "#/ui/typography";
-import { isValidEmail } from "#/utils/input-validation";
-import { EnterpriseFormData } from "#/utils/local-storage";
+import {
+  clearEnterpriseFormData,
+  EnterpriseFormData,
+} from "#/utils/local-storage";
 import { cn } from "#/utils/utils";
 import { FormInput } from "./form-input";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
@@ -34,20 +36,15 @@ export function InformationRequestForm({
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSubmitting) return;
     setHasAttemptedSubmit(true);
 
-    // Check if all required fields are filled and email is valid
-    const isValid =
-      formData.name.trim() &&
-      formData.company.trim() &&
-      formData.email.trim() &&
-      isValidEmail(formData.email.trim()) &&
-      formData.message.trim();
-
-    if (!isValid) {
+    // Use native form validation to show browser error popups
+    const form = e.currentTarget;
+    if (!form.checkValidity()) {
+      form.reportValidity();
       return;
     }
 
@@ -60,6 +57,10 @@ export function InformationRequestForm({
       email: formData.email.trim(),
       message: formData.message.trim(),
     });
+
+    // Clear form data from localStorage and reset form state
+    clearEnterpriseFormData(requestType);
+    onFormDataChange({ name: "", company: "", email: "", message: "" });
 
     // Navigate to login page with state to show confirmation modal
     navigate("/login", { state: { showRequestSubmittedModal: true } });

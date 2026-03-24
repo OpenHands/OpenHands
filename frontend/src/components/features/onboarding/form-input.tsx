@@ -1,6 +1,9 @@
 import { isValidEmail } from "#/utils/input-validation";
 import { cn } from "#/utils/utils";
 
+// Email validation pattern - must match EMAIL_REGEX in input-validation.ts
+const EMAIL_PATTERN = "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}";
+
 interface FormInputProps {
   id: string;
   label: string;
@@ -62,6 +65,7 @@ export function FormInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          pattern={type === "email" ? EMAIL_PATTERN : undefined}
           required={required}
           aria-required={required}
           aria-invalid={hasError}
