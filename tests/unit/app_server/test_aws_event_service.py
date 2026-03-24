@@ -4,6 +4,7 @@ This module tests the AWS S3-based implementation of EventService,
 focusing on search functionality and S3 operations.
 """
 
+import importlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -12,6 +13,7 @@ from uuid import uuid4
 import botocore.exceptions
 import pytest
 
+from openhands.app_server.event import aws_event_service
 from openhands.app_server.event.aws_event_service import (
     AwsEventService,
     AwsEventServiceInjector,
@@ -222,10 +224,6 @@ class TestGetDefaultAwsEndpointUrl:
         monkeypatch.delenv('AWS_S3_SECURE', raising=False)
 
         # Need to reload to get fresh default factory
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
-
         importlib.reload(aws_event_service)
 
         result = aws_event_service._get_default_aws_endpoint_url()
@@ -235,10 +233,6 @@ class TestGetDefaultAwsEndpointUrl:
         """Test endpoint with https:// prefix when secure=true."""
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'https://minio.example.com:9000')
         monkeypatch.setenv('AWS_S3_SECURE', 'true')
-
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
 
         importlib.reload(aws_event_service)
 
@@ -250,10 +244,6 @@ class TestGetDefaultAwsEndpointUrl:
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
         monkeypatch.setenv('AWS_S3_SECURE', 'true')
 
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
-
         importlib.reload(aws_event_service)
 
         result = aws_event_service._get_default_aws_endpoint_url()
@@ -263,10 +253,6 @@ class TestGetDefaultAwsEndpointUrl:
         """Test endpoint with http:// prefix when secure=false."""
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'http://minio.example.com:9000')
         monkeypatch.setenv('AWS_S3_SECURE', 'false')
-
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
 
         importlib.reload(aws_event_service)
 
@@ -278,10 +264,6 @@ class TestGetDefaultAwsEndpointUrl:
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
         monkeypatch.setenv('AWS_S3_SECURE', 'false')
 
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
-
         importlib.reload(aws_event_service)
 
         result = aws_event_service._get_default_aws_endpoint_url()
@@ -291,10 +273,6 @@ class TestGetDefaultAwsEndpointUrl:
         """Test http:// is converted to https:// when secure=true."""
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'http://minio.example.com:9000')
         monkeypatch.setenv('AWS_S3_SECURE', 'true')
-
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
 
         importlib.reload(aws_event_service)
 
@@ -306,10 +284,6 @@ class TestGetDefaultAwsEndpointUrl:
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'https://minio.example.com:9000')
         monkeypatch.setenv('AWS_S3_SECURE', 'false')
 
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
-
         importlib.reload(aws_event_service)
 
         result = aws_event_service._get_default_aws_endpoint_url()
@@ -319,10 +293,6 @@ class TestGetDefaultAwsEndpointUrl:
         """Test that secure defaults to true when not set."""
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
         monkeypatch.delenv('AWS_S3_SECURE', raising=False)
-
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
 
         importlib.reload(aws_event_service)
 
@@ -338,10 +308,6 @@ class TestAwsEventServiceInjectorEndpointUrl:
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
         monkeypatch.setenv('AWS_S3_SECURE', 'false')
 
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
-
         importlib.reload(aws_event_service)
 
         injector = aws_event_service.AwsEventServiceInjector(bucket_name='my-bucket')
@@ -351,10 +317,6 @@ class TestAwsEventServiceInjectorEndpointUrl:
         """Test that injector accepts custom endpoint_url parameter."""
         monkeypatch.delenv('AWS_S3_ENDPOINT', raising=False)
         monkeypatch.delenv('AWS_S3_SECURE', raising=False)
-
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
 
         importlib.reload(aws_event_service)
 
@@ -367,10 +329,6 @@ class TestAwsEventServiceInjectorEndpointUrl:
         """Test that endpoint_url is None when no env vars set."""
         monkeypatch.delenv('AWS_S3_ENDPOINT', raising=False)
         monkeypatch.delenv('AWS_S3_SECURE', raising=False)
-
-        import importlib
-
-        from openhands.app_server.event import aws_event_service
 
         importlib.reload(aws_event_service)
 
