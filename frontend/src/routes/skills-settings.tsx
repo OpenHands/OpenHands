@@ -62,13 +62,8 @@ function SkillsSettingsScreen() {
   const isLoading = settingsLoading || skillsLoading || !settings;
 
   return (
-    <div
-      data-testid="skills-settings-screen"
-      className="flex flex-col h-full"
-    >
-      <p className="text-xs mb-4">
-        {t(I18nKey.SETTINGS$SKILLS_DESCRIPTION)}
-      </p>
+    <div data-testid="skills-settings-screen" className="flex flex-col h-full">
+      <p className="text-xs mb-4">{t(I18nKey.SETTINGS$SKILLS_DESCRIPTION)}</p>
 
       <div className="flex-1 overflow-auto custom-scrollbar-always">
         {isLoading && (
