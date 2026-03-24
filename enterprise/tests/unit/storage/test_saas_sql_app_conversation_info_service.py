@@ -10,6 +10,9 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from server.utils.saas_app_conversation_info_injector import (
+    SaasSQLAppConversationInfoService,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -17,9 +20,6 @@ from storage.base import Base
 from storage.org import Org
 from storage.user import User
 
-from enterprise.server.utils.saas_app_conversation_info_injector import (
-    SaasSQLAppConversationInfoService,
-)
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
@@ -663,3 +663,330 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         admin_page = await admin_service.search_app_conversation_info()
         assert len(admin_page.items) == 5
+
+
+class TestSaasSQLAppConversationInfoServiceWebhookFallback:
+    """Test suite for webhook callback fallback using info.created_by_user_id."""
+
+    @pytest.mark.asyncio
+    async def test_save_with_admin_context_uses_created_by_user_id_fallback(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that save_app_conversation_info uses info.created_by_user_id when user_context returns None.
+
+        This is the key fix for SDK-created conversations: when the webhook endpoint
+        uses ADMIN context (user_id=None), the service should fall back to using
+        the created_by_user_id from the AppConversationInfo object.
+        """
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Create service with ADMIN context (user_id=None)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        # Create conversation info with created_by_user_id set (as would come from sandbox_info)
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),  # This should be used as fallback
+            sandbox_id='sandbox_webhook_test',
+            title='Webhook Created Conversation',
+        )
+
+        # Act: Save using ADMIN context
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Assert: SAAS metadata should be created with user_id from info.created_by_user_id
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None, 'SAAS metadata should be created'
+        assert (
+            saas_metadata.user_id == USER1_ID
+        ), 'user_id should match info.created_by_user_id'
+        assert saas_metadata.org_id == ORG1_ID, 'org_id should match user current org'
+
+    @pytest.mark.asyncio
+    async def test_save_with_admin_context_no_user_id_skips_saas_metadata(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that save_app_conversation_info skips SAAS metadata when both user_context and info have no user_id."""
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Create service with ADMIN context (user_id=None)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        # Create conversation info without created_by_user_id
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=None,  # No user_id available
+            sandbox_id='sandbox_no_user',
+            title='No User Conversation',
+        )
+
+        # Act: Save using ADMIN context with no user_id fallback
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Assert: SAAS metadata should NOT be created
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert (
+            saas_metadata is None
+        ), 'SAAS metadata should not be created without user_id'
+
+    @pytest.mark.asyncio
+    async def test_webhook_created_conversation_visible_to_user(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test end-to-end: conversation saved via webhook is visible to the owning user."""
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Save conversation using ADMIN context (simulating webhook)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_webhook_e2e',
+            title='E2E Webhook Conversation',
+        )
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Act: Query as the owning user
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        user1_page = await user1_service.search_app_conversation_info()
+
+        # Assert: User should see the webhook-created conversation
+        assert len(user1_page.items) == 1
+        assert user1_page.items[0].id == conv_id
+        assert user1_page.items[0].title == 'E2E Webhook Conversation'
+
+
+class TestSandboxIdFilterSaas:
+    """Test suite for sandbox_id__eq filter parameter in SAAS service."""
+
+    @pytest.mark.asyncio
+    async def test_search_by_sandbox_id(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test searching conversations by exact sandbox_id match with SAAS user filtering."""
+        # Create service for user1
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create conversations with different sandbox IDs for user1
+        conv1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_alpha',
+            title='Conversation Alpha',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_beta',
+            title='Conversation Beta',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+        conv3 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_alpha',
+            title='Conversation Gamma',
+            created_at=datetime(2024, 1, 1, 14, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 14, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save all conversations
+        await user1_service.save_app_conversation_info(conv1)
+        await user1_service.save_app_conversation_info(conv2)
+        await user1_service.save_app_conversation_info(conv3)
+
+        # Search for sandbox_alpha - should return 2 conversations
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_alpha'
+        )
+        assert len(page.items) == 2
+        sandbox_ids = {item.sandbox_id for item in page.items}
+        assert sandbox_ids == {'sandbox_alpha'}
+        conversation_ids = {item.id for item in page.items}
+        assert conv1.id in conversation_ids
+        assert conv3.id in conversation_ids
+
+        # Search for sandbox_beta - should return 1 conversation
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_beta'
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv2.id
+
+        # Search for non-existent sandbox - should return 0 conversations
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_nonexistent'
+        )
+        assert len(page.items) == 0
+
+    @pytest.mark.asyncio
+    async def test_count_by_sandbox_id(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test counting conversations by exact sandbox_id match with SAAS user filtering."""
+        # Create service for user1
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create conversations with different sandbox IDs
+        conv1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_x',
+            title='Conversation X1',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_y',
+            title='Conversation Y1',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+        conv3 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_x',
+            title='Conversation X2',
+            created_at=datetime(2024, 1, 1, 14, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 14, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save all conversations
+        await user1_service.save_app_conversation_info(conv1)
+        await user1_service.save_app_conversation_info(conv2)
+        await user1_service.save_app_conversation_info(conv3)
+
+        # Count for sandbox_x - should be 2
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_x'
+        )
+        assert count == 2
+
+        # Count for sandbox_y - should be 1
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_y'
+        )
+        assert count == 1
+
+        # Count for non-existent sandbox - should be 0
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_nonexistent'
+        )
+        assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_sandbox_id_filter_respects_user_isolation(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that sandbox_id filter respects user isolation in SAAS environment."""
+        # Create services for both users
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        user2_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER2_ID)),
+        )
+
+        # Create conversation with same sandbox_id for both users
+        shared_sandbox_id = 'sandbox_shared'
+
+        conv_user1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id=shared_sandbox_id,
+            title='User1 Conversation',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv_user2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER2_ID),
+            sandbox_id=shared_sandbox_id,
+            title='User2 Conversation',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save conversations
+        await user1_service.save_app_conversation_info(conv_user1)
+        await user2_service.save_app_conversation_info(conv_user2)
+
+        # User1 should only see their own conversation with this sandbox_id
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv_user1.id
+        assert page.items[0].title == 'User1 Conversation'
+
+        # User2 should only see their own conversation with this sandbox_id
+        page = await user2_service.search_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv_user2.id
+        assert page.items[0].title == 'User2 Conversation'
+
+        # Count should also respect user isolation
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert count == 1
+
+        count = await user2_service.count_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert count == 1

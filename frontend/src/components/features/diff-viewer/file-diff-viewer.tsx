@@ -159,7 +159,7 @@ export function FileDiffViewer({ path, type }: FileDiffViewerProps) {
       </div>
       {isSuccess && !isCollapsed && (
         <div
-          className="w-full border border-neutral-600 overflow-hidden"
+          className="w-full border border-neutral-600 overflow-hidden rounded-b-xl"
           style={{ height: `${editorHeight}px` }}
         >
           <DiffEditor

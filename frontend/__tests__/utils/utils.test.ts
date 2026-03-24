@@ -11,7 +11,7 @@ import { I18nKey } from "#/i18n/declaration";
 // Mock translations
 const t = (key: string) => {
   const translations: { [key: string]: string } = {
-    COMMON$WAITING_FOR_SANDBOX: "Waiting For Sandbox",
+    COMMON$WAITING_FOR_SANDBOX: "Waiting for sandbox",
     COMMON$STOPPING: "Stopping",
     COMMON$STARTING: "Starting",
     COMMON$SERVER_STOPPED: "Server stopped",
@@ -69,7 +69,7 @@ describe("getStatusText", () => {
       t,
     });
 
-    expect(result).toBe(t(I18nKey.COMMON$WAITING_FOR_SANDBOX));
+    expect(result).toBe("Waiting for sandbox");
   });
 
   it("returns task detail when task status is ERROR and detail exists", () => {

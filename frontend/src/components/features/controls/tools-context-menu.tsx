@@ -27,15 +27,19 @@ const contextMenuListItemClassName = cn(
 interface ToolsContextMenuProps {
   onClose: () => void;
   onShowSkills: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onShowHooks: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools: (event: React.MouseEvent<HTMLButtonElement>) => void;
   shouldShowAgentTools?: boolean;
+  shouldShowHooks?: boolean;
 }
 
 export function ToolsContextMenu({
   onClose,
   onShowSkills,
+  onShowHooks,
   onShowAgentTools,
   shouldShowAgentTools = true,
+  shouldShowHooks = false,
 }: ToolsContextMenuProps) {
   const { t } = useTranslation();
   const { data: conversation } = useActiveConversation();
@@ -140,6 +144,21 @@ export function ToolsContextMenu({
           className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
         />
       </ContextMenuListItem>
+
+      {/* Show Hooks - Only show for V1 conversations */}
+      {shouldShowHooks && (
+        <ContextMenuListItem
+          testId="show-hooks-button"
+          onClick={onShowHooks}
+          className={contextMenuListItemClassName}
+        >
+          <ToolsContextMenuIconText
+            icon={<ToolsIcon width={16} height={16} />}
+            text={t(I18nKey.CONVERSATION$SHOW_HOOKS)}
+            className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
+          />
+        </ContextMenuListItem>
+      )}
 
       {/* Show Agent Tools and Metadata - Only show if system message is available */}
       {shouldShowAgentTools && (

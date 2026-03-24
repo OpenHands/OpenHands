@@ -203,7 +203,7 @@ class TestGetConversationSkills:
 
         Arrange: Setup conversation but no sandbox
         Act: Call get_conversation_skills endpoint
-        Assert: Response is 404 with sandbox error message
+        Assert: Response is 404
         """
         # Arrange
         conversation_id = uuid4()
@@ -237,19 +237,13 @@ class TestGetConversationSkills:
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        content = response.body.decode('utf-8')
-        import json
 
-        data = json.loads(content)
-        assert 'error' in data
-        assert 'Sandbox not found' in data['error']
+    async def test_get_skills_returns_empty_list_when_sandbox_paused(self):
+        """Test endpoint returns empty skills when sandbox is PAUSED (closed conversation).
 
-    async def test_get_skills_returns_404_when_sandbox_not_running(self):
-        """Test endpoint returns 404 when sandbox is not in RUNNING state.
-
-        Arrange: Setup conversation with stopped sandbox
+        Arrange: Setup conversation with paused sandbox
         Act: Call get_conversation_skills endpoint
-        Assert: Response is 404 with sandbox not running message
+        Assert: Response is 200 with empty skills list
         """
         # Arrange
         conversation_id = uuid4()
@@ -290,13 +284,12 @@ class TestGetConversationSkills:
         )
 
         # Assert
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_200_OK
         content = response.body.decode('utf-8')
         import json
 
         data = json.loads(content)
-        assert 'error' in data
-        assert 'not running' in data['error']
+        assert data == {'skills': []}
 
     async def test_get_skills_handles_task_trigger_skills(self):
         """Test endpoint correctly handles skills with TaskTrigger.
@@ -501,3 +494,73 @@ class TestGetConversationSkills:
         data = json.loads(content)
         assert 'skills' in data
         assert len(data['skills']) == 0
+
+    async def test_get_skills_uses_default_sandbox_spec_when_not_found(self):
+        """Test endpoint uses default sandbox spec when original spec is not found.
+
+        Arrange: Setup sandbox with spec that returns None, but default spec available
+        Act: Call get_conversation_skills endpoint
+        Assert: Response is successful using default sandbox spec
+        """
+        # Arrange
+        conversation_id = uuid4()
+        sandbox_id = str(uuid4())
+
+        mock_conversation = AppConversation(
+            id=conversation_id,
+            created_by_user_id='test-user',
+            sandbox_id=sandbox_id,
+            sandbox_status=SandboxStatus.RUNNING,
+        )
+
+        mock_sandbox = SandboxInfo(
+            id=sandbox_id,
+            created_by_user_id='test-user',
+            status=SandboxStatus.RUNNING,
+            sandbox_spec_id=str(uuid4()),
+            session_api_key='test-api-key',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:8000', port=8000)
+            ],
+        )
+
+        # Default sandbox spec to be used as fallback
+        default_sandbox_spec = SandboxSpecInfo(
+            id=str(uuid4()), command=None, working_dir='/workspace'
+        )
+
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
+            skills_return=[],
+        )
+
+        mock_sandbox_service = MagicMock()
+        mock_sandbox_service.get_sandbox = AsyncMock(return_value=mock_sandbox)
+
+        mock_sandbox_spec_service = MagicMock()
+        # Original sandbox spec lookup returns None
+        mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(return_value=None)
+        # Default sandbox spec is available
+        mock_sandbox_spec_service.get_default_sandbox_spec = AsyncMock(
+            return_value=default_sandbox_spec
+        )
+
+        # Act
+        response = await get_conversation_skills(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        # Verify that get_default_sandbox_spec was called as fallback
+        mock_sandbox_spec_service.get_default_sandbox_spec.assert_called_once()
+        content = response.body.decode('utf-8')
+        import json
+
+        data = json.loads(content)
+        assert 'skills' in data

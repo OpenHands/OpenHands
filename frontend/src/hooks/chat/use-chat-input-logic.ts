@@ -5,12 +5,15 @@ import {
   getTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useConversationId } from "#/hooks/use-conversation-id";
+import { useDraftPersistence } from "./use-draft-persistence";
 
 /**
  * Hook for managing chat input content logic
  */
 export const useChatInputLogic = () => {
   const chatInputRef = useRef<HTMLDivElement | null>(null);
+  const { conversationId } = useConversationId();
 
   const {
     messageToSend,
@@ -18,6 +21,12 @@ export const useChatInputLogic = () => {
     setMessageToSend,
     setIsRightPanelShown,
   } = useConversationStore();
+
+  // Draft persistence - saves to localStorage, restores on mount
+  const { saveDraft, clearDraft } = useDraftPersistence(
+    conversationId,
+    chatInputRef,
+  );
 
   // Save current input value when drawer state changes
   useEffect(() => {
@@ -51,5 +60,7 @@ export const useChatInputLogic = () => {
     checkIsContentEmpty,
     clearEmptyContentHandler,
     getCurrentMessage,
+    saveDraft,
+    clearDraft,
   };
 };

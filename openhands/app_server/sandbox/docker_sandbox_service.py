@@ -27,7 +27,6 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
-    ALLOW_CORS_ORIGINS_VARIABLE,
     SESSION_API_KEY_VARIABLE,
     WEBHOOK_CALLBACK_VARIABLE,
     SandboxService,
@@ -41,6 +40,16 @@ from openhands.app_server.utils.docker_utils import (
 
 _logger = logging.getLogger(__name__)
 STARTUP_GRACE_SECONDS = 15
+
+
+def _get_use_host_network_default() -> bool:
+    """Get the default value for use_host_network from environment variables.
+
+    This function is called at runtime (not at class definition time) to ensure
+    that environment variable changes are picked up correctly.
+    """
+    value = os.getenv('AGENT_SERVER_USE_HOST_NETWORK', '')
+    return value.lower() in ('true', '1', 'yes')
 
 
 class VolumeMount(BaseModel):
@@ -81,6 +90,7 @@ class DockerSandboxService(SandboxService):
     httpx_client: httpx.AsyncClient
     max_num_sandboxes: int
     web_url: str | None = None
+    permitted_cors_origins: list[str] = field(default_factory=list)
     extra_hosts: dict[str, str] = field(default_factory=dict)
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
@@ -196,6 +206,12 @@ class DockerSandboxService(SandboxService):
                                         port=matching_port.container_port,
                                     )
                                 )
+
+        if not container.image.tags:
+            _logger.debug(
+                f'Skipping container {container.name!r}: image has no tags (image id: {container.image.id})'
+            )
+            return None
 
         return SandboxInfo(
             id=container.name,
@@ -370,8 +386,18 @@ class DockerSandboxService(SandboxService):
         # Set CORS origins for remote browser access when web_url is configured.
         # This allows the agent-server container to accept requests from the
         # frontend when running OpenHands on a remote machine.
+        # Each origin gets its own indexed env var (OH_ALLOW_CORS_ORIGINS_0, _1, etc.)
+        cors_origins: list[str] = []
         if self.web_url:
-            env_vars[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
+            cors_origins.append(self.web_url)
+        cors_origins.extend(self.permitted_cors_origins)
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        for origin in cors_origins:
+            if origin not in seen:
+                seen.add(origin)
+                idx = len(seen) - 1
+                env_vars[f'OH_ALLOW_CORS_ORIGINS_{idx}'] = origin
 
         # Prepare port mappings and add port environment variables
         # When using host network, container ports are directly accessible on the host
@@ -555,7 +581,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             ExposedPort(
                 name=WORKER_2,
                 description=(
-                    'The first port on which the agent should start application servers.'
+                    'The second port on which the agent should start application servers.'
                 ),
                 container_port=8012,
             ),
@@ -585,18 +611,13 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
         ),
     )
     use_host_network: bool = Field(
-        default=os.getenv('SANDBOX_USE_HOST_NETWORK', '').lower()
-        in (
-            'true',
-            '1',
-            'yes',
-        ),
+        default_factory=_get_use_host_network_default,
         description=(
-            'Whether to use host networking mode for sandbox containers. '
+            'Whether to use host networking mode for agent-server containers. '
             'When enabled, containers share the host network namespace, '
             'making all container ports directly accessible on the host. '
             'This is useful for reverse proxy setups where dynamic port mapping '
-            'is problematic. Configure via OH_SANDBOX_USE_HOST_NETWORK environment variable.'
+            'is problematic. Configure via AGENT_SERVER_USE_HOST_NETWORK environment variable.'
         ),
     )
 
@@ -610,7 +631,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             get_sandbox_spec_service,
         )
 
-        # Get web_url from global config for CORS support
+        # Get web_url and permitted_cors_origins from global config
         config = get_global_config()
         web_url = config.web_url
 
@@ -629,6 +650,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
                 web_url=web_url,
+                permitted_cors_origins=config.permitted_cors_origins,
                 extra_hosts=self.extra_hosts,
                 startup_grace_seconds=self.startup_grace_seconds,
                 use_host_network=self.use_host_network,

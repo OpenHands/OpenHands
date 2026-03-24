@@ -5,6 +5,9 @@ from openhands.app_server.event import event_router
 from openhands.app_server.event_callback import (
     webhook_router,
 )
+from openhands.app_server.pending_messages.pending_message_router import (
+    router as pending_message_router,
+)
 from openhands.app_server.sandbox import sandbox_router, sandbox_spec_router
 from openhands.app_server.user import user_router
 from openhands.app_server.web_client import web_client_router
@@ -13,6 +16,7 @@ from openhands.app_server.web_client import web_client_router
 router = APIRouter(prefix='/api/v1')
 router.include_router(event_router.router)
 router.include_router(app_conversation_router.router)
+router.include_router(pending_message_router)
 router.include_router(sandbox_router.router)
 router.include_router(sandbox_spec_router.router)
 router.include_router(user_router.router)

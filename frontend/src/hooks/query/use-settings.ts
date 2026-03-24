@@ -4,6 +4,8 @@ import { DEFAULT_SETTINGS } from "#/services/settings";
 import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
 import { Settings } from "#/types/settings";
 import { useIsAuthed } from "./use-is-authed";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useConfig } from "./use-config";
 
 const getSettingsQueryFn = async (): Promise<Settings> => {
   const settings = await SettingsService.getSettings();
@@ -18,15 +20,22 @@ const getSettingsQueryFn = async (): Promise<Settings> => {
     git_user_email: settings.git_user_email || DEFAULT_SETTINGS.git_user_email,
     is_new_user: false,
     v1_enabled: settings.v1_enabled ?? DEFAULT_SETTINGS.v1_enabled,
+    sandbox_grouping_strategy:
+      settings.sandbox_grouping_strategy ??
+      DEFAULT_SETTINGS.sandbox_grouping_strategy,
   };
 };
 
 export const useSettings = () => {
   const isOnIntermediatePage = useIsOnIntermediatePage();
   const { data: userIsAuthenticated } = useIsAuthed();
+  const { organizationId } = useSelectedOrganizationId();
+  const { data: config } = useConfig();
+
+  const isOss = config?.app_mode === "oss";
 
   const query = useQuery({
-    queryKey: ["settings"],
+    queryKey: ["settings", organizationId],
     queryFn: getSettingsQueryFn,
     // Only retry if the error is not a 404 because we
     // would want to show the modal immediately if the
@@ -35,7 +44,10 @@ export const useSettings = () => {
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
-    enabled: !isOnIntermediatePage && !!userIsAuthenticated,
+    enabled:
+      !isOnIntermediatePage &&
+      !!userIsAuthenticated &&
+      (isOss || !!organizationId),
     meta: {
       disableToast: true,
     },

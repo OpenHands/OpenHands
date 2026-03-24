@@ -7,6 +7,7 @@ from uuid import UUID
 
 from server.auth.token_manager import TokenManager
 from server.constants import (
+    DEFAULT_V1_ENABLED,
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     PERSONAL_WORKSPACE_VERSION_TO_MODEL,
@@ -213,14 +214,15 @@ class UserStore:
                 decrypted_user_settings, user_settings.user_version
             )
 
-            # avoids circular reference. This migrate method is temprorary until all users are migrated.
+            # Migrate stripe customer (pass session to avoid FK violation)
+            # avoids circular reference. This migrate method is temporary until all users are migrated.
             from integrations.stripe_service import migrate_customer
 
             logger.debug(
                 'user_store:migrate_user:calling_stripe_migrate_customer',
                 extra={'user_id': user_id},
             )
-            await migrate_customer(user_id, org)
+            await migrate_customer(session, user_id, org)
             logger.debug(
                 'user_store:migrate_user:done_stripe_migrate_customer',
                 extra={'user_id': user_id},
@@ -240,6 +242,10 @@ class UserStore:
             for key, value in org_kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
+
+            # Apply DEFAULT_V1_ENABLED for migrated orgs if v1_enabled was not set
+            if org.v1_enabled is None:
+                org.v1_enabled = DEFAULT_V1_ENABLED
 
             user_kwargs = UserStore.get_kwargs_from_user_settings(
                 decrypted_user_settings
@@ -891,6 +897,8 @@ class UserStore:
         default_settings = Settings(
             language='en', enable_proactive_conversation_starters=True
         )
+
+        default_settings.v1_enabled = DEFAULT_V1_ENABLED
 
         from storage.lite_llm_manager import LiteLlmManager
 

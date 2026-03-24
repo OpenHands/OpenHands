@@ -1,8 +1,13 @@
 import { render, screen } from "@testing-library/react";
-import { test, expect, describe, vi } from "vitest";
+import { test, expect, describe, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router";
 import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-box";
 import { renderWithProviders } from "../../test-utils";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+
+beforeEach(() => {
+  useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
+});
 
 // Mock the translation function
 vi.mock("react-i18next", async () => {
@@ -29,14 +34,12 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 }));
 
 // Mock React Router hooks
-vi.mock("react-router", async () => {
-  const actual = await vi.importActual("react-router");
-  return {
-    ...actual,
-    useNavigate: () => vi.fn(),
-    useParams: () => ({ conversationId: "test-conversation-id" }),
-  };
-});
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => vi.fn(),
+  useParams: () => ({ conversationId: "test-conversation-id" }),
+  useRevalidator: () => ({ revalidate: vi.fn() }),
+}));
 
 // Mock other hooks that might be used by the component
 vi.mock("#/hooks/use-user-providers", () => ({
