@@ -1,4 +1,6 @@
 # IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon.
+# Tag: Legacy-V0
 import os
 from pathlib import Path
 
@@ -11,7 +13,7 @@ from openhands.agenthub.codeact_agent.tools.security_utils import (
 from openhands.core.config.config_utils import DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX
 from openhands.llm.tool_names import STR_REPLACE_EDITOR_TOOL_NAME
 
-# Импортируем твой хендлер (убедись, что файл notebook_handler.py лежит в этой же папке)
+# Импорт хендлера для ноутбуков
 try:
     from .notebook_handler import NotebookHandler
     _notebook_handler = NotebookHandler()
@@ -20,9 +22,9 @@ except ImportError:
 
 _DETAILED_STR_REPLACE_EDITOR_DESCRIPTION = """Custom editing tool for viewing, creating and editing files in plain-text format
 * State is persistent across command calls and discussions with the user
-* If `path` is a text file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
+* If `path` is a text file, `view` displays the result of applying `cat -n`.
 * NEW: Supports Jupyter Notebooks (.ipynb). It automatically strips heavy base64 images and truncates large outputs to prevent context overflow.
-* The following binary file extensions can be viewed in Markdown format: [".xlsx", ".pptx", ".wav", ".mp3", ".m4a", ".flac", ".pdf", ".docx"]. IT DOES NOT HANDLE IMAGES.
+* The following binary file extensions can be viewed in Markdown format: [".xlsx", ".pptx", ".wav", ".mp3", ".m4a", ".flac", ".pdf", ".docx"].
 * The `create` command cannot be used if the specified `path` already exists as a file
 * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
 * The `undo_edit` command will revert the last edit made to the file at `path`
@@ -30,9 +32,9 @@ _DETAILED_STR_REPLACE_EDITOR_DESCRIPTION = """Custom editing tool for viewing, c
 
 _SHORT_STR_REPLACE_EDITOR_DESCRIPTION = """Custom editing tool for viewing, creating and editing files in plain-text format
 * Supports viewing Jupyter Notebooks (.ipynb) with automatic truncation of large outputs.
-* If `path` is a file, `view` displays the result of applying `cat -n`. 
 * The `undo_edit` command will revert the last edit made to the file at `path`
 """
+
 
 def _get_workspace_mount_path_from_env(runtime_type: str | None = None) -> str:
     if runtime_type in ('local', 'cli'):
@@ -46,6 +48,7 @@ def _get_workspace_mount_path_from_env(runtime_type: str | None = None) -> str:
                     return host_path
         return os.getcwd()
     return DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX
+
 
 def create_str_replace_editor_tool(
     use_short_description: bool = False,
@@ -77,27 +80,27 @@ def create_str_replace_editor_tool(
                         'type': 'string',
                     },
                     'path': {
-                        'description': f'Absolute path to file or directory, e.g. `{workspace_mount_path_in_sandbox}/file.py`.',
+                        'description': f'Absolute path to file, e.g. `{workspace_mount_path_in_sandbox}/file.py`.',
                         'type': 'string',
                     },
                     'file_text': {
-                        'description': 'Required parameter of `create` command.',
+                        'description': 'Content of the file to be created.',
                         'type': 'string',
                     },
                     'old_str': {
-                        'description': 'Required parameter of `str_replace` command.',
+                        'description': 'The string in `path` to replace.',
                         'type': 'string',
                     },
                     'new_str': {
-                        'description': 'New string for replacement or insertion.',
+                        'description': 'The new string to replace or insert.',
                         'type': 'string',
                     },
                     'insert_line': {
-                        'description': 'Line number for `insert` command.',
+                        'description': 'Line number AFTER which to insert `new_str`.',
                         'type': 'integer',
                     },
                     'view_range': {
-                        'description': 'Optional line range for `view` command.',
+                        'description': 'Optional line range, e.g. [1, 10].',
                         'items': {'type': 'integer'},
                         'type': 'array',
                     },
