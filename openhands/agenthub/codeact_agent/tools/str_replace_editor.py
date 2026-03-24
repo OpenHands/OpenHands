@@ -23,7 +23,7 @@ except ImportError:
 _DETAILED_STR_REPLACE_EDITOR_DESCRIPTION = """Custom editing tool for viewing, creating and editing files in plain-text format
 * State is persistent across command calls and discussions with the user
 * If `path` is a text file, `view` displays the result of applying `cat -n`.
-* NEW: Supports Jupyter Notebooks (.ipynb). It automatically strips heavy base64 images and truncates large outputs to prevent context overflow.
+* NEW: Supports Jupyter Notebooks (.ipynb). It automatically strips heavy base64 images and truncates large outputs.
 * The following binary file extensions can be viewed in Markdown format: [".xlsx", ".pptx", ".wav", ".mp3", ".m4a", ".flac", ".pdf", ".docx"].
 * The `create` command cannot be used if the specified `path` already exists as a file
 * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
@@ -44,8 +44,7 @@ def _get_workspace_mount_path_from_env(runtime_type: str | None = None) -> str:
             for mount in mounts:
                 parts = mount.split(':')
                 if len(parts) >= 2 and parts[1] == '/workspace':
-                    host_path = os.path.abspath(parts[0])
-                    return host_path
+                    return os.path.abspath(parts[0])
         return os.getcwd()
     return DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX
 
@@ -75,7 +74,7 @@ def create_str_replace_editor_tool(
                 'type': 'object',
                 'properties': {
                     'command': {
-                        'description': 'The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.',
+                        'description': 'The commands to run: `view`, `create`, `str_replace`, `insert`, `undo_edit`.',
                         'enum': ['view', 'create', 'str_replace', 'insert', 'undo_edit'],
                         'type': 'string',
                     },
@@ -84,7 +83,7 @@ def create_str_replace_editor_tool(
                         'type': 'string',
                     },
                     'file_text': {
-                        'description': 'Content of the file to be created.',
+                        'description': 'Content for the `create` command.',
                         'type': 'string',
                     },
                     'old_str': {
