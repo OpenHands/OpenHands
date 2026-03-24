@@ -26,7 +26,8 @@ class FilesystemEventService(EventServiceBase):
             content = Event.model_validate_json(content)
             return content
         except Exception:
-            _logger.exception('Error reading event', stack_info=True)
+            if path.exists():
+                _logger.exception('Error reading event', stack_info=True)
             return None
 
     def _store_event(self, path: Path, event: Event):
