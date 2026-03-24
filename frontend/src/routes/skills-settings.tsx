@@ -64,18 +64,13 @@ function SkillsSettingsScreen() {
   return (
     <div
       data-testid="skills-settings-screen"
-      className="flex flex-col h-full justify-between"
+      className="flex flex-col h-full"
     >
-      <div className="flex flex-col gap-6">
-        <div>
-          <h2 className="text-lg font-medium">
-            {t(I18nKey.SETTINGS$SKILLS_TITLE)}
-          </h2>
-          <p className="text-xs mt-1">
-            {t(I18nKey.SETTINGS$SKILLS_DESCRIPTION)}
-          </p>
-        </div>
+      <p className="text-xs mb-4">
+        {t(I18nKey.SETTINGS$SKILLS_DESCRIPTION)}
+      </p>
 
+      <div className="flex-1 overflow-auto custom-scrollbar-always">
         {isLoading && (
           <div className="flex flex-col gap-4">
             {[1, 2, 3].map((i) => (
@@ -108,6 +103,7 @@ function SkillsSettingsScreen() {
                   <span className="text-xs text-neutral-500 ml-14">
                     {t(I18nKey.SETTINGS$SKILLS_TRIGGERS, {
                       triggers: skill.triggers.join(", "),
+                      interpolation: { escapeValue: false },
                     })}
                   </span>
                 )}
