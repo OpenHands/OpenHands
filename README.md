@@ -84,3 +84,28 @@ All our work is available under the MIT license, except for the `enterprise/` di
 The core `openhands` and `agent-server` Docker images are fully MIT-licensed as well.
 
 If you need help with anything, or just want to chat, [come find us on Slack](https://dub.sh/openhands).
+
+<hr>
+
+<div align="center">
+  <h3>Trusted by engineers at</h3>
+  <p>
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f6974b71a1a4a932f82_TikTok_logo.svg" alt="TikTok" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f523b08f91a5aa905b9_Vmware.svg" alt="VMware" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f2cb537758796a9dba1_Roche_Logo.svg" alt="Roche" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f10c3975e28b3932320_Amazon_logo%201.svg" alt="Amazon" height="28">
+  </p>
+  <p>
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137ec5a6f77dd174e557ce_C3ai_logo%201.svg" alt="C3 AI" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137eac8f27ca27f5e48420_Netflix_2015_logo%201.svg" alt="Netflix" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e8df2c028b9e1506ede_mastercard%201.svg" alt="Mastercard" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e783790933dd06f9d59_Red_Hat_Logo_2019%201.svg" alt="Red Hat" height="28">
+  </p>
+  <p>
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e5fa006d963a1d1904d_mongodb-ar21%201.svg" alt="MongoDB" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e47b45195da10c50f49_apple-11%201.svg" alt="Apple" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e34e3a5ab71e37082a7_NVIDIA_logo%201.svg" alt="NVIDIA" height="28">&nbsp;&nbsp;&nbsp;
+    <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e199ce2cb594b0210ab_google-ar21%201.svg" alt="Google" height="28">
+  </p>
+  <p><a href="https://openhands.dev/">See more on openhands.dev</a></p>
+</div>
