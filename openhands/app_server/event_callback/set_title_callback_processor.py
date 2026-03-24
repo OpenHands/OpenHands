@@ -34,7 +34,7 @@ _NUM_POLL_ATTEMPTS = 4
 async def _poll_for_title(
     httpx_client: httpx.AsyncClient,
     url: str,
-    session_api_key: str,
+    session_api_key: str | None,
 ) -> str | None:
     """Poll the agent server for the conversation title.
 
