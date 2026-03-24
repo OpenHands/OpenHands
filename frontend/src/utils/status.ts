@@ -119,6 +119,14 @@ export function getStatusCode(
     return I18nKey.CHAT_INTERFACE$STOPPED;
   }
 
+  // PRIORITY 2.5: Handle conversation starting state
+  // This must come before WebSocket status check to show "Starting" when
+  // the server reports STARTING, even if WebSocket is temporarily disconnected
+  // during the resume process
+  if (conversationStatus === "STARTING") {
+    return I18nKey.COMMON$STARTING;
+  }
+
   // Prioritize agent state when it indicates readiness, even if runtime status is stale
   const agentIsReady =
     agentState &&
