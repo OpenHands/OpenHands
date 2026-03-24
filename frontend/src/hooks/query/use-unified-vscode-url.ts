@@ -23,7 +23,7 @@ export const useUnifiedVSCodeUrl = () => {
   const { t } = useTranslation();
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
-  const runtimeIsReady = useRuntimeIsReady();
+  const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
   const isV1Conversation = conversation?.conversation_version === "V1";
 

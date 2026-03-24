@@ -1,12 +1,45 @@
 from __future__ import annotations
 
 import os
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
 LEMONADE_DOCKER_BASE_URL = 'http://host.docker.internal:8000/api/v1/'
 _LEMONADE_PROVIDER_NAME = 'lemonade'
 _LEMONADE_MODEL_PREFIX = 'lemonade/'
+
+
+class StorageProvider(str, Enum):
+    """Storage provider types for event and shared event storage."""
+
+    AWS = 'aws'
+    GCP = 'gcp'
+    FILESYSTEM = 'filesystem'
+
+
+def get_storage_provider() -> StorageProvider:
+    """Get the storage provider based on environment variables.
+
+    Determines the storage provider from environment configuration:
+    - SHARED_EVENT_STORAGE_PROVIDER: Primary setting, supports 'aws', 's3', 'gcp', 'google_cloud'
+    - FILE_STORE: Legacy fallback, supports 'google_cloud', 's3', 'filesystem'
+
+    Returns:
+        StorageProvider: The configured storage provider (AWS, GCP, or FILESYSTEM)
+    """
+    provider = os.environ.get('SHARED_EVENT_STORAGE_PROVIDER', '').lower()
+
+    # If not explicitly set, fall back to FILE_STORE
+    if not provider:
+        provider = os.environ.get('FILE_STORE', '').lower()
+
+    if provider in ('aws', 's3'):
+        return StorageProvider.AWS
+    elif provider in ('gcp', 'google_cloud'):
+        return StorageProvider.GCP
+    else:
+        return StorageProvider.FILESYSTEM
 
 
 @lru_cache(maxsize=1)

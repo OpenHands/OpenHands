@@ -1,74 +1,108 @@
 import React from "react";
+import ReactDOM from "react-dom";
 import { UserAvatar } from "./user-avatar";
-import { AccountSettingsContextMenu } from "../context-menu/account-settings-context-menu";
+import { useMe } from "#/hooks/query/use-me";
 import { useShouldShowUserFeatures } from "#/hooks/use-should-show-user-features";
+import { UserContextMenu } from "../user/user-context-menu";
+import { InviteOrganizationMemberModal } from "../org/invite-organization-member-modal";
 import { cn } from "#/utils/utils";
-import { useConfig } from "#/hooks/query/use-config";
 
 interface UserActionsProps {
-  onLogout: () => void;
   user?: { avatar_url: string };
   isLoading?: boolean;
 }
 
-export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
+export function UserActions({ user, isLoading }: UserActionsProps) {
+  const { data: me } = useMe();
   const [accountContextMenuIsVisible, setAccountContextMenuIsVisible] =
     React.useState(false);
-
-  const { data: config } = useConfig();
+  // Counter that increments each time the menu hides, used as a React key
+  // to force UserContextMenu to remount with fresh state (resets dropdown
+  // open/close, search text, and scroll position in the org selector).
+  const [menuResetCount, setMenuResetCount] = React.useState(0);
+  const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
+    React.useState(false);
+  const hideTimeoutRef = React.useRef<number | null>(null);
 
   // Use the shared hook to determine if user actions should be shown
   const shouldShowUserActions = useShouldShowUserFeatures();
 
-  const toggleAccountMenu = () => {
-    // Always toggle the menu, even if user is undefined
-    setAccountContextMenuIsVisible((prev) => !prev);
+  // Clean up timeout on unmount
+  React.useEffect(
+    () => () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  const showAccountMenu = () => {
+    // Cancel any pending hide to allow diagonal mouse movement to menu
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+    setAccountContextMenuIsVisible(true);
+  };
+
+  const hideAccountMenu = () => {
+    // Delay hiding to allow diagonal mouse movement to menu
+    hideTimeoutRef.current = window.setTimeout(() => {
+      setAccountContextMenuIsVisible(false);
+      setMenuResetCount((c) => c + 1);
+    }, 500);
   };
 
   const closeAccountMenu = () => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
     if (accountContextMenuIsVisible) {
       setAccountContextMenuIsVisible(false);
+      setMenuResetCount((c) => c + 1);
     }
   };
 
-  const handleLogout = () => {
-    onLogout();
-    closeAccountMenu();
+  const openInviteMemberModal = () => {
+    setInviteMemberModalIsOpen(true);
   };
 
-  const isOSS = config?.app_mode === "oss";
-
-  // Show the menu based on the new logic
-  const showMenu =
-    accountContextMenuIsVisible && (shouldShowUserActions || isOSS);
-
   return (
-    <div
-      data-testid="user-actions"
-      className="w-8 h-8 relative cursor-pointer group"
-    >
-      <UserAvatar
-        avatarUrl={user?.avatar_url}
-        onClick={toggleAccountMenu}
-        isLoading={isLoading}
-      />
+    <>
+      <div
+        data-testid="user-actions"
+        className="relative cursor-pointer group"
+        onMouseEnter={showAccountMenu}
+        onMouseLeave={hideAccountMenu}
+      >
+        <UserAvatar avatarUrl={user?.avatar_url} isLoading={isLoading} />
 
-      {(shouldShowUserActions || isOSS) && (
-        <div
-          className={cn(
-            "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
-            showMenu && "opacity-100 pointer-events-auto",
-            // Invisible hover bridge: extends hover zone to create a "safe corridor"
-            // for diagonal mouse movement to the menu (only active when menu is visible)
-            "group-hover:before:content-[''] group-hover:before:block group-hover:before:absolute group-hover:before:inset-[-320px] group-hover:before:z-9998",
-          )}
-        >
-          <AccountSettingsContextMenu
-            onLogout={handleLogout}
-            onClose={closeAccountMenu}
-          />
-        </div>
-      )}
-    </div>
+        {shouldShowUserActions && user && (
+          <div
+            className={cn(
+              "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+              accountContextMenuIsVisible && "opacity-100 pointer-events-auto",
+            )}
+          >
+            <UserContextMenu
+              key={menuResetCount}
+              type={me?.role ?? "member"}
+              onClose={closeAccountMenu}
+              onOpenInviteModal={openInviteMemberModal}
+            />
+          </div>
+        )}
+      </div>
+
+      {inviteMemberModalIsOpen &&
+        ReactDOM.createPortal(
+          <InviteOrganizationMemberModal
+            onClose={() => setInviteMemberModalIsOpen(false)}
+          />,
+          document.getElementById("portal-root") || document.body,
+        )}
+    </>
   );
 }

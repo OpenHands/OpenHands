@@ -1,5 +1,8 @@
+import asyncio
 import logging
 from uuid import UUID
+
+import httpx
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
@@ -21,6 +24,9 @@ from openhands.app_server.utils.docker_utils import (
 from openhands.sdk import Event, MessageEvent
 
 _logger = logging.getLogger(__name__)
+
+# Poll with ~3.75s total wait per message event before retrying later.
+_TITLE_POLL_DELAYS_S = (0.25, 0.5, 1.0, 2.0)
 
 
 class SetTitleCallbackProcessor(EventCallbackProcessor):
@@ -51,7 +57,6 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             get_app_conversation_info_service(state) as app_conversation_info_service,
             get_httpx_client(state) as httpx_client,
         ):
-            # Generate a title for the conversation
             app_conversation = await app_conversation_service.get_app_conversation(
                 conversation_id
             )
@@ -61,15 +66,38 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             app_conversation_url = replace_localhost_hostname_for_docker(
                 app_conversation_url
             )
-            response = await httpx_client.post(
-                f'{app_conversation_url}/generate_title',
-                headers={
-                    'X-Session-API-Key': app_conversation.session_api_key,
-                },
-                content='{}',
-            )
-            response.raise_for_status()
-            title = response.json()['title']
+
+            title = None
+            for delay_s in _TITLE_POLL_DELAYS_S:
+                try:
+                    response = await httpx_client.get(
+                        app_conversation_url,
+                        headers={
+                            'X-Session-API-Key': app_conversation.session_api_key,
+                        },
+                    )
+                    response.raise_for_status()
+                except httpx.HTTPError as exc:
+                    # Transient agent-server failures are acceptable; retry later.
+                    _logger.debug(
+                        'Title poll failed for conversation %s: %s',
+                        conversation_id,
+                        exc,
+                    )
+                else:
+                    title = response.json().get('title')
+                    if title:
+                        break
+                # Backoff applies to both missing-title responses and transient errors.
+                await asyncio.sleep(delay_s)
+
+            if not title:
+                # Keep the callback active so later message events can retry.
+                _logger.info(
+                    f'Conversation {conversation_id} title not available yet; '
+                    'will retry on a future message event.'
+                )
+                return None
 
             # Save the conversation info
             info = AppConversationInfo(

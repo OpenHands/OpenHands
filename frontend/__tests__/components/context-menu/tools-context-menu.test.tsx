@@ -44,6 +44,7 @@ describe("SystemMessage UI Rendering", () => {
       <ToolsContextMenu
         onClose={() => {}}
         onShowSkills={() => {}}
+        onShowHooks={() => {}}
         onShowAgentTools={() => {}}
       />,
     );

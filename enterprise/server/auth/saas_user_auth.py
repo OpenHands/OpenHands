@@ -1,6 +1,7 @@
 import time
 from dataclasses import dataclass
 from types import MappingProxyType
+from uuid import UUID
 
 import jwt
 from fastapi import Request
@@ -13,7 +14,7 @@ from server.auth.auth_error import (
     ExpiredError,
     NoCredentialsError,
 )
-from server.auth.domain_blocker import domain_blocker
+from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 from server.auth.token_manager import TokenManager
 from server.config import get_config
 from server.logger import logger
@@ -24,6 +25,8 @@ from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
+from storage.user_authorization import UserAuthorizationType
+from storage.user_authorization_store import UserAuthorizationStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from openhands.integrations.provider import (
@@ -57,6 +60,19 @@ class SaasUserAuth(UserAuth):
     _secrets: Secrets | None = None
     accepted_tos: bool | None = None
     auth_type: AuthType = AuthType.COOKIE
+    # API key context fields - populated when authenticated via API key
+    api_key_org_id: UUID | None = None  # Org bound to the API key used for auth
+    api_key_id: int | None = None
+    api_key_name: str | None = None
+
+    def get_api_key_org_id(self) -> UUID | None:
+        """Get the organization ID bound to the API key used for authentication.
+
+        Returns:
+            The org_id if authenticated via API key with org binding, None otherwise
+            (cookie auth or legacy API keys without org binding).
+        """
+        return self.api_key_org_id
 
     async def get_user_id(self) -> str | None:
         return self.user_id
@@ -176,6 +192,9 @@ class SaasUserAuth(UserAuth):
                     if user_secrets and idp_type in user_secrets.provider_tokens:
                         host = user_secrets.provider_tokens[idp_type].host
 
+                    if idp_type == ProviderType.BITBUCKET_DATA_CENTER and not host:
+                        host = BITBUCKET_DATA_CENTER_HOST or None
+
                     provider_token = await token_manager.get_idp_token(
                         access_token.get_secret_value(),
                         idp=idp_type,
@@ -278,14 +297,19 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
             return None
 
         api_key_store = ApiKeyStore.get_instance()
-        user_id = await api_key_store.validate_api_key(api_key)
-        if not user_id:
+        validation_result = await api_key_store.validate_api_key(api_key)
+        if not validation_result:
             return None
-        offline_token = await token_manager.load_offline_token(user_id)
+        offline_token = await token_manager.load_offline_token(
+            validation_result.user_id
+        )
         saas_user_auth = SaasUserAuth(
-            user_id=user_id,
+            user_id=validation_result.user_id,
             refresh_token=SecretStr(offline_token),
             auth_type=AuthType.BEARER,
+            api_key_org_id=validation_result.org_id,
+            api_key_id=validation_result.key_id,
+            api_key_name=validation_result.key_name,
         )
         await saas_user_auth.refresh()
         return saas_user_auth
@@ -326,14 +350,16 @@ async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     email = access_token_payload['email']
     email_verified = access_token_payload['email_verified']
 
-    # Check if email domain is blocked
-    if email and await domain_blocker.is_domain_blocked(email):
-        logger.warning(
-            f'Blocked authentication attempt for existing user with email: {email}'
-        )
-        raise AuthError(
-            'Access denied: Your email domain is not allowed to access this service'
-        )
+    # Check if email is blacklisted (whitelist takes precedence)
+    if email:
+        auth_type = await UserAuthorizationStore.get_authorization_type(email, None)
+        if auth_type == UserAuthorizationType.BLACKLIST:
+            logger.warning(
+                f'Blocked authentication attempt for existing user with email: {email}'
+            )
+            raise AuthError(
+                'Access denied: Your email domain is not allowed to access this service'
+            )
 
     logger.debug('saas_user_auth_from_signed_token:return')
 

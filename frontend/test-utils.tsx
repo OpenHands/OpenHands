@@ -1,12 +1,18 @@
-// Test utilities for React components
-
 import React, { PropsWithChildren } from "react";
-import { RenderOptions, render } from "@testing-library/react";
+import {
+  act,
+  RenderOptions,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import i18n from "i18next";
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 import { AxiosError } from "axios";
+import { INITIAL_MOCK_ORGS } from "#/mocks/org-handlers";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 import {
   ActionEvent,
   MessageEvent,
@@ -26,6 +32,9 @@ vi.mock("react-router", async () => {
   return {
     ...actual,
     useParams: useParamsMock,
+    useRevalidator: () => ({
+      revalidate: vi.fn(),
+    }),
   };
 });
 
@@ -37,7 +46,10 @@ i18n.use(initReactI18next).init({
   defaultNS: "translation",
   resources: {
     en: {
-      translation: {},
+      translation: {
+        "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+        "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
+      },
     },
   },
   interpolation: {
@@ -85,6 +97,47 @@ export const createAxiosNotFoundErrorObject = () =>
       config: {},
     },
   );
+
+export const selectOrganization = async ({
+  orgIndex,
+}: {
+  orgIndex: number;
+}) => {
+  const targetOrg = INITIAL_MOCK_ORGS[orgIndex];
+  if (!targetOrg) {
+    expect.fail(`No organization found at index ${orgIndex}`);
+  }
+
+  // Wait for the settings navbar to render (which contains the org selector)
+  await screen.findByTestId("settings-navbar");
+
+  // Wait for orgs to load and org selector to be present
+  const organizationSelect = await screen.findByTestId("org-selector");
+  expect(organizationSelect).toBeInTheDocument();
+
+  // Wait until the dropdown trigger is not disabled (orgs have loaded)
+  const trigger = await screen.findByTestId("dropdown-trigger");
+  await waitFor(() => {
+    expect(trigger).not.toBeDisabled();
+  });
+
+  // Set the organization ID directly in the Zustand store
+  // This is more reliable than UI interaction in router stub tests
+  // Use act() to ensure React processes the state update
+  act(() => {
+    useSelectedOrganizationStore.setState({ organizationId: targetOrg.id });
+  });
+
+  // Get the combobox input and wait for it to reflect the selection
+  // For personal orgs, the display name is "Personal Workspace" (from i18n)
+  const expectedDisplayName = targetOrg.is_personal
+    ? "Personal Workspace"
+    : targetOrg.name;
+  const combobox = screen.getByRole("combobox");
+  await waitFor(() => {
+    expect(combobox).toHaveValue(expectedDisplayName);
+  });
+};
 
 export const createAxiosError = (
   status: number,

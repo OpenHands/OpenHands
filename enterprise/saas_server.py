@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
+    BITBUCKET_DATA_CENTER_HOST,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
     ENABLE_LINEAR,
@@ -45,6 +46,7 @@ from server.routes.org_invitations import (  # noqa: E402
 )
 from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
+from server.routes.service import service_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
 from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
 from server.sharing.shared_conversation_router import (  # noqa: E402
@@ -111,6 +113,7 @@ if GITLAB_APP_CLIENT_ID:
     base_app.include_router(gitlab_integration_router)
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
+base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
 base_app.include_router(
     verified_models_router
@@ -130,6 +133,12 @@ if ENABLE_JIRA_DC:
     base_app.include_router(jira_dc_integration_router)
 if ENABLE_LINEAR:
     base_app.include_router(linear_integration_router)
+if BITBUCKET_DATA_CENTER_HOST:
+    from server.routes.bitbucket_dc_proxy import (
+        router as bitbucket_dc_proxy_router,  # noqa: E402
+    )
+
+    base_app.include_router(bitbucket_dc_proxy_router)
 base_app.include_router(email_router)  # Add routes for email management
 base_app.include_router(feedback_router)  # Add routes for conversation feedback
 base_app.include_router(

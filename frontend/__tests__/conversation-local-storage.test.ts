@@ -229,4 +229,231 @@ describe("conversation localStorage utilities", () => {
       expect(parsed.subConversationTaskId).toBeNull();
     });
   });
+
+  describe("draftMessage persistence", () => {
+    describe("getConversationState", () => {
+      it("returns default draftMessage as null when no state exists", () => {
+        // Arrange
+        const conversationId = "conv-draft-1";
+
+        // Act
+        const state = getConversationState(conversationId);
+
+        // Assert
+        expect(state.draftMessage).toBeNull();
+      });
+
+      it("retrieves draftMessage from localStorage when it exists", () => {
+        // Arrange
+        const conversationId = "conv-draft-2";
+        const draftText = "This is my saved draft message";
+        const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+
+        localStorage.setItem(
+          consolidatedKey,
+          JSON.stringify({
+            draftMessage: draftText,
+          }),
+        );
+
+        // Act
+        const state = getConversationState(conversationId);
+
+        // Assert
+        expect(state.draftMessage).toBe(draftText);
+      });
+
+      it("returns null draftMessage for task conversation IDs (not persisted)", () => {
+        // Arrange
+        const taskId = "task-uuid-123";
+        const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${taskId}`;
+
+        // Even if somehow there's data in localStorage for a task ID
+        localStorage.setItem(
+          consolidatedKey,
+          JSON.stringify({
+            draftMessage: "Should not be returned",
+          }),
+        );
+
+        // Act
+        const state = getConversationState(taskId);
+
+        // Assert - should return default state, not the stored value
+        expect(state.draftMessage).toBeNull();
+      });
+    });
+
+    describe("setConversationState", () => {
+      it("persists draftMessage to localStorage", () => {
+        // Arrange
+        const conversationId = "conv-draft-3";
+        const draftText = "New draft message to save";
+        const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+
+        // Act
+        setConversationState(conversationId, {
+          draftMessage: draftText,
+        });
+
+        // Assert
+        const stored = localStorage.getItem(consolidatedKey);
+        expect(stored).not.toBeNull();
+        const parsed = JSON.parse(stored!);
+        expect(parsed.draftMessage).toBe(draftText);
+      });
+
+      it("does not persist draftMessage for task conversation IDs", () => {
+        // Arrange
+        const taskId = "task-draft-xyz";
+        const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${taskId}`;
+
+        // Act
+        setConversationState(taskId, {
+          draftMessage: "Draft for task ID",
+        });
+
+        // Assert - nothing should be stored
+        expect(localStorage.getItem(consolidatedKey)).toBeNull();
+      });
+
+      it("merges draftMessage with existing state without overwriting other fields", () => {
+        // Arrange
+        const conversationId = "conv-draft-4";
+        const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+
+        localStorage.setItem(
+          consolidatedKey,
+          JSON.stringify({
+            selectedTab: "terminal",
+            rightPanelShown: false,
+            unpinnedTabs: ["tab-1", "tab-2"],
+            conversationMode: "plan",
+            subConversationTaskId: "task-123",
+          }),
+        );
+
+        // Act
+        setConversationState(conversationId, {
+          draftMessage: "Updated draft",
+        });
+
+        // Assert
+        const stored = localStorage.getItem(consolidatedKey);
+        const parsed = JSON.parse(stored!);
+
+        expect(parsed.draftMessage).toBe("Updated draft");
+        expect(parsed.selectedTab).toBe("terminal");
+        expect(parsed.rightPanelShown).toBe(false);
+        expect(parsed.unpinnedTabs).toEqual(["tab-1", "tab-2"]);
+        expect(parsed.conversationMode).toBe("plan");
+        expect(parsed.subConversationTaskId).toBe("task-123");
+      });
+
+      it("clears draftMessage when set to null", () => {
+        // Arrange
+        const conversationId = "conv-draft-5";
+        const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+
+        localStorage.setItem(
+          consolidatedKey,
+          JSON.stringify({
+            draftMessage: "Existing draft",
+          }),
+        );
+
+        // Act
+        setConversationState(conversationId, {
+          draftMessage: null,
+        });
+
+        // Assert
+        const stored = localStorage.getItem(consolidatedKey);
+        const parsed = JSON.parse(stored!);
+        expect(parsed.draftMessage).toBeNull();
+      });
+
+      it("clears draftMessage when set to empty string (stored as empty string)", () => {
+        // Arrange
+        const conversationId = "conv-draft-6";
+        const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+
+        localStorage.setItem(
+          consolidatedKey,
+          JSON.stringify({
+            draftMessage: "Existing draft",
+          }),
+        );
+
+        // Act
+        setConversationState(conversationId, {
+          draftMessage: "",
+        });
+
+        // Assert
+        const stored = localStorage.getItem(consolidatedKey);
+        const parsed = JSON.parse(stored!);
+        expect(parsed.draftMessage).toBe("");
+      });
+    });
+
+    describe("conversation-specific draft isolation", () => {
+      it("stores drafts separately for different conversations", () => {
+        // Arrange
+        const convA = "conv-A";
+        const convB = "conv-B";
+        const draftA = "Draft for conversation A";
+        const draftB = "Draft for conversation B";
+
+        // Act
+        setConversationState(convA, { draftMessage: draftA });
+        setConversationState(convB, { draftMessage: draftB });
+
+        // Assert
+        const stateA = getConversationState(convA);
+        const stateB = getConversationState(convB);
+
+        expect(stateA.draftMessage).toBe(draftA);
+        expect(stateB.draftMessage).toBe(draftB);
+      });
+
+      it("updating one conversation draft does not affect another", () => {
+        // Arrange
+        const convA = "conv-isolated-A";
+        const convB = "conv-isolated-B";
+
+        setConversationState(convA, { draftMessage: "Original draft A" });
+        setConversationState(convB, { draftMessage: "Original draft B" });
+
+        // Act - update only conversation A
+        setConversationState(convA, { draftMessage: "Updated draft A" });
+
+        // Assert - conversation B should be unchanged
+        const stateA = getConversationState(convA);
+        const stateB = getConversationState(convB);
+
+        expect(stateA.draftMessage).toBe("Updated draft A");
+        expect(stateB.draftMessage).toBe("Original draft B");
+      });
+
+      it("clearing one conversation draft does not affect another", () => {
+        // Arrange
+        const convA = "conv-clear-A";
+        const convB = "conv-clear-B";
+
+        setConversationState(convA, { draftMessage: "Draft A" });
+        setConversationState(convB, { draftMessage: "Draft B" });
+
+        // Act - clear draft for conversation A
+        setConversationState(convA, { draftMessage: null });
+
+        // Assert
+        const stateA = getConversationState(convA);
+        const stateB = getConversationState(convB);
+
+        expect(stateA.draftMessage).toBeNull();
+        expect(stateB.draftMessage).toBe("Draft B");
+      });
+    });
+  });
 });

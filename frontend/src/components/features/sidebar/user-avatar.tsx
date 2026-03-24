@@ -6,12 +6,11 @@ import { cn } from "#/utils/utils";
 import { Avatar } from "./avatar";
 
 interface UserAvatarProps {
-  onClick: () => void;
   avatarUrl?: string;
   isLoading?: boolean;
 }
 
-export function UserAvatar({ onClick, avatarUrl, isLoading }: UserAvatarProps) {
+export function UserAvatar({ avatarUrl, isLoading }: UserAvatarProps) {
   const { t } = useTranslation();
 
   return (
@@ -22,7 +21,6 @@ export function UserAvatar({ onClick, avatarUrl, isLoading }: UserAvatarProps) {
         "w-8 h-8 rounded-full flex items-center justify-center cursor-pointer",
         isLoading && "bg-transparent",
       )}
-      onClick={onClick}
     >
       {!isLoading && avatarUrl && <Avatar src={avatarUrl} />}
       {!isLoading && !avatarUrl && (
