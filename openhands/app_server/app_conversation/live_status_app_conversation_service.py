@@ -142,6 +142,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     max_num_conversations_per_sandbox: int
     httpx_client: httpx.AsyncClient
     web_url: str | None
+    # HTTP URL reachable from inside Docker containers (host.docker.internal).
+    # Used for agent→host calls (MCP, secret lookup) to avoid TLS issues with
+    # self-signed certificates on the external web_url.
+    internal_web_url: str | None = None
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
@@ -875,7 +879,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             secret_name = f'{provider_type.name}_TOKEN'
             description = f'{provider_type.name} authentication token'
 
-            if self.web_url:
+            # Use the internal URL when available so the agent container avoids
+            # TLS issues with self-signed certs on the external web_url.
+            secrets_base = self.internal_web_url or self.web_url
+            if secrets_base:
                 # Create an access token for web-based authentication
                 access_token = self.jwt_service.create_jws_token(
                     payload={
@@ -887,7 +894,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 headers = {'X-Access-Token': access_token}
 
                 secrets[secret_name] = LookupSecret(
-                    url=self.web_url + '/api/v1/webhooks/secrets',
+                    url=secrets_base + '/api/v1/webhooks/secrets',
                     headers=headers,
                     description=description,
                 )
@@ -959,11 +966,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user: User information for API keys
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
         """
-        if not self.web_url:
+        # Prefer the internal (Docker-reachable) URL so the agent container
+        # avoids TLS issues with self-signed certificates on the external URL.
+        mcp_base = self.internal_web_url or self.web_url
+        if not mcp_base:
             return
 
         # Add default OpenHands MCP server
-        mcp_url = f'{self.web_url}/mcp/mcp'
+        mcp_url = f'{mcp_base}/mcp/mcp'
         mcp_servers['default'] = {
             'url': mcp_url,
             'headers': {'X-OpenHands-ServerConversation-ID': str(conversation_id)},
@@ -2040,6 +2050,16 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 if isinstance(sandbox_service, DockerSandboxService):
                     web_url = f'http://host.docker.internal:{sandbox_service.host_port}'
 
+            # When running with Docker, always build an internal URL that agents
+            # inside containers use for callbacks (MCP, secret lookup).  This is
+            # plain HTTP, so TLS certificate problems with the external web_url
+            # (e.g., self-signed certs behind a reverse proxy) do not apply.
+            internal_web_url: str | None = None
+            if isinstance(sandbox_service, DockerSandboxService):
+                internal_web_url = (
+                    f'http://host.docker.internal:{sandbox_service.host_port}'
+                )
+
             # Get app_mode for SaaS mode
             app_mode = None
             try:
@@ -2076,6 +2096,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 max_num_conversations_per_sandbox=self.max_num_conversations_per_sandbox,
                 httpx_client=httpx_client,
                 web_url=web_url,
+                internal_web_url=internal_web_url,
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
