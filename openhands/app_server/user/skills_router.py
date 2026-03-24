@@ -9,7 +9,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.memory.memory import GLOBAL_MICROAGENTS_DIR, USER_MICROAGENTS_DIR
 from openhands.server.dependencies import get_dependencies
 
-router = APIRouter(prefix="/skills", tags=["Skills"], dependencies=get_dependencies())
+router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
 
 # Re-use V0 path constants (single source of truth)
 GLOBAL_SKILLS_DIR = Path(GLOBAL_MICROAGENTS_DIR)
@@ -38,21 +38,21 @@ def _parse_skill_frontmatter(file_path: Path) -> dict | None:
     Returns the frontmatter dict, or None if parsing fails.
     """
     try:
-        text = file_path.read_text(encoding="utf-8")
+        text = file_path.read_text(encoding='utf-8')
     except Exception:
         return None
 
-    if not text.startswith("---"):
+    if not text.startswith('---'):
         return None
 
-    end = text.find("---", 3)
+    end = text.find('---', 3)
     if end == -1:
         return None
 
     try:
         return yaml.safe_load(text[3:end])
     except yaml.YAMLError as e:
-        logger.warning(f"Invalid YAML frontmatter in {file_path}: {e}")
+        logger.warning(f'Invalid YAML frontmatter in {file_path}: {e}')
         return None
 
 
@@ -70,8 +70,8 @@ def _load_skills_from_dir(skills_dir: Path, source: str) -> list[SkillInfo]:
     if not skills_dir.exists():
         return skills
 
-    for md_file in skills_dir.rglob("*.md"):
-        if md_file.name == "README.md":
+    for md_file in skills_dir.rglob('*.md'):
+        if md_file.name == 'README.md':
             continue
 
         try:
@@ -80,11 +80,11 @@ def _load_skills_from_dir(skills_dir: Path, source: str) -> list[SkillInfo]:
                 continue
 
             # Use name from frontmatter, falling back to filename stem
-            name = fm.get("name") or md_file.stem
+            name = fm.get('name') or md_file.stem
 
             # Determine type from frontmatter
-            skill_type = fm.get("type", "knowledge")
-            triggers = fm.get("triggers") or None
+            skill_type = fm.get('type', 'knowledge')
+            triggers = fm.get('triggers') or None
 
             skills.append(
                 SkillInfo(
@@ -95,24 +95,24 @@ def _load_skills_from_dir(skills_dir: Path, source: str) -> list[SkillInfo]:
                 )
             )
         except Exception as e:
-            logger.warning(f"Failed to parse skill file {md_file}: {e}")
+            logger.warning(f'Failed to parse skill file {md_file}: {e}')
 
     return skills
 
 
 @router.get(
-    "/search",
+    '/search',
     response_model=SkillPage,
 )
 async def search_skills(
     page_id: Annotated[
         str | None,
-        Query(title="Optional next_page_id from the previously returned page"),
+        Query(title='Optional next_page_id from the previously returned page'),
     ] = None,
     limit: Annotated[
         int,
         Query(
-            title="The max number of results in the page",
+            title='The max number of results in the page',
             gt=0,
             le=100,
         ),
@@ -126,15 +126,15 @@ async def search_skills(
 
     # Load global skills
     try:
-        skills.extend(_load_skills_from_dir(GLOBAL_SKILLS_DIR, "global"))
+        skills.extend(_load_skills_from_dir(GLOBAL_SKILLS_DIR, 'global'))
     except Exception as e:
-        logger.warning(f"Failed to load global skills: {e}")
+        logger.warning(f'Failed to load global skills: {e}')
 
     # Load user-level skills
     try:
-        skills.extend(_load_skills_from_dir(USER_SKILLS_DIR, "user"))
+        skills.extend(_load_skills_from_dir(USER_SKILLS_DIR, 'user'))
     except Exception as e:
-        logger.warning(f"Failed to load user skills: {e}")
+        logger.warning(f'Failed to load user skills: {e}')
 
     # Sort by source (global first), then by name
     skills.sort(key=lambda s: (s.source, s.name))
