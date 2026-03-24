@@ -49,7 +49,8 @@ def _parse_skill_frontmatter(file_path: Path) -> dict | None:
 
     try:
         return yaml.safe_load(text[3:end])
-    except yaml.YAMLError:
+    except yaml.YAMLError as e:
+        logger.warning(f'Invalid YAML frontmatter in {file_path}: {e}')
         return None
 
 

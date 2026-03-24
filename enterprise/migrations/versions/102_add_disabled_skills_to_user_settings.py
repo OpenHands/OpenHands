@@ -1,7 +1,7 @@
 """add disabled_skills to user_settings
 
-Revision ID: 098
-Revises: 097
+Revision ID: 102
+Revises: 101
 Create Date: 2026-02-25
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '098'
-down_revision: Union[str, None] = '097'
+revision: str = '102'
+down_revision: Union[str, None] = '101'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
