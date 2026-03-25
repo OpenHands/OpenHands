@@ -1475,11 +1475,8 @@ describe("Role-based permissions", () => {
       });
 
       // Basic form should remain visible (members can't switch to advanced)
-      expect(
-        screen.getByTestId("llm-settings-form-basic"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
     });
-
   });
 
   describe("Owner role (full access)", () => {
@@ -1799,4 +1796,3 @@ describe("clientLoader permission checks", () => {
     expect(typeof clientLoader).toBe("function");
   });
 });
-
