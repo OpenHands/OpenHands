@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useNavigate, useSearchParams, useLocation } from "react-router";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { useConfig } from "#/hooks/query/use-config";
 import { useGitHubAuthUrl } from "#/hooks/use-github-auth-url";
@@ -7,11 +7,18 @@ import { useEmailVerification } from "#/hooks/use-email-verification";
 import { useInvitation } from "#/hooks/use-invitation";
 import { LoginContent } from "#/components/features/auth/login-content";
 import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
+import { RequestSubmittedModal } from "#/components/features/onboarding/request-submitted-modal";
+
+interface LocationState {
+  showRequestSubmittedModal?: boolean;
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/";
+  const locationState = location.state as LocationState | null;
 
   const config = useConfig();
   const { data: isAuthed, isLoading: isAuthLoading } = useIsAuthed();
@@ -31,6 +38,15 @@ export default function LoginPage() {
     appMode: config.data?.app_mode || null,
     authUrl: config.data?.auth_url,
   });
+
+  const [showRequestModal, setShowRequestModal] = React.useState(
+    () => locationState?.showRequestSubmittedModal ?? false,
+  );
+
+  const handleRequestModalClose = () => {
+    setShowRequestModal(false);
+    navigate(location.pathname, { replace: true, state: {} });
+  };
 
   // Redirect OSS mode users to home
   React.useEffect(() => {
@@ -93,6 +109,10 @@ export default function LoginPage() {
           userId={userId}
           wasRateLimited={wasRateLimited}
         />
+      )}
+
+      {showRequestModal && (
+        <RequestSubmittedModal onClose={handleRequestModalClose} />
       )}
     </>
   );

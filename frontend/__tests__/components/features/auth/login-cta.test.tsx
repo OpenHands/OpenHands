@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
+import { createRoutesStub } from "react-router";
 import { LoginCTA } from "#/components/features/auth/login-cta";
 
 // Mock useTracking hook
@@ -16,8 +17,23 @@ describe("LoginCTA", () => {
     vi.clearAllMocks();
   });
 
+  const renderWithRouter = () => {
+    const Stub = createRoutesStub([
+      {
+        path: "/",
+        Component: LoginCTA,
+      },
+      {
+        path: "/information-request",
+        Component: () => <div data-testid="information-request-page" />,
+      },
+    ]);
+
+    return render(<Stub initialEntries={["/"]} />);
+  };
+
   it("should render enterprise CTA with title and description", () => {
-    render(<LoginCTA />);
+    renderWithRouter();
 
     expect(screen.getByTestId("login-cta")).toBeInTheDocument();
     expect(screen.getByText("CTA$ENTERPRISE")).toBeInTheDocument();
@@ -25,7 +41,7 @@ describe("LoginCTA", () => {
   });
 
   it("should render all enterprise feature list items", () => {
-    render(<LoginCTA />);
+    renderWithRouter();
 
     expect(screen.getByText("CTA$FEATURE_ON_PREMISES")).toBeInTheDocument();
     expect(screen.getByText("CTA$FEATURE_DATA_CONTROL")).toBeInTheDocument();
@@ -33,23 +49,9 @@ describe("LoginCTA", () => {
     expect(screen.getByText("CTA$FEATURE_SUPPORT")).toBeInTheDocument();
   });
 
-  it("should render Learn More as a link with correct href and target", () => {
-    render(<LoginCTA />);
-
-    const learnMoreLink = screen.getByRole("link", {
-      name: "CTA$LEARN_MORE",
-    });
-    expect(learnMoreLink).toHaveAttribute(
-      "href",
-      "https://openhands.dev/enterprise/",
-    );
-    expect(learnMoreLink).toHaveAttribute("target", "_blank");
-    expect(learnMoreLink).toHaveAttribute("rel", "noopener noreferrer");
-  });
-
-  it("should call trackSaasSelfhostedInquiry with location 'login_page' when Learn More is clicked", async () => {
+  it("should track and navigate to information request page when Learn More is clicked", async () => {
     const user = userEvent.setup();
-    render(<LoginCTA />);
+    renderWithRouter();
 
     const learnMoreLink = screen.getByRole("link", {
       name: "CTA$LEARN_MORE",
@@ -59,5 +61,18 @@ describe("LoginCTA", () => {
     expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
       location: "login_page",
     });
+    expect(screen.getByTestId("information-request-page")).toBeInTheDocument();
+  });
+
+  it("should render Learn More as a link for Open in New Tab support", () => {
+    renderWithRouter();
+
+    const learnMoreLink = screen.getByRole("link", {
+      name: "CTA$LEARN_MORE",
+    });
+    expect(learnMoreLink).toHaveAttribute(
+      "href",
+      "/information-request",
+    );
   });
 });

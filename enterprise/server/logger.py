@@ -84,6 +84,8 @@ def setup_json_logger(
         style='{',
         rename_fields={'levelname': 'severity'},
         json_serializer=custom_json_serializer,
+        # Use 'ts' for consistency with LOG_JSON_FOR_CONSOLE mode (skip when console mode to avoid duplicates)
+        timestamp='ts' if not LOG_JSON_FOR_CONSOLE else False,
     )
 
     handler.setFormatter(formatter)

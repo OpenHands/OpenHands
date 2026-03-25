@@ -120,6 +120,11 @@ export const CONVERSATION_HANDLERS = [
     return HttpResponse.json(null, { status: 404 });
   }),
 
+  http.post(
+    "/api/v1/conversations/:conversationId/pending-messages",
+    async () => HttpResponse.json({ id: "mock-pending-id", position: 0 }),
+  ),
+
   http.get("/api/conversations/:conversationId/microagents", async () => {
     const response: GetMicroagentsResponse = {
       microagents: [
