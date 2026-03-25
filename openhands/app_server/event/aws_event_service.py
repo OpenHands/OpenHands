@@ -13,6 +13,7 @@ from typing import Any, AsyncGenerator
 import boto3
 import botocore.exceptions
 from fastapi import Request
+from pydantic import Field
 
 from openhands.app_server.config import get_app_conversation_info_service
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
@@ -75,9 +76,25 @@ class AwsEventService(EventServiceBase):
         return paths
 
 
+def _get_default_aws_endpoint_url() -> str | None:
+    """Legacy fallback for aws endpoint url based on V0"""
+    endpoint_url = os.getenv('AWS_S3_ENDPOINT')
+    if not endpoint_url:
+        return None
+    secure = os.getenv('AWS_S3_SECURE', 'true').lower() == 'true'
+    if secure:
+        if not endpoint_url.startswith('https://'):
+            endpoint_url = 'https://' + endpoint_url.removeprefix('http://')
+    else:
+        if not endpoint_url.startswith('http://'):
+            endpoint_url = 'http://' + endpoint_url.removeprefix('https://')
+    return endpoint_url
+
+
 class AwsEventServiceInjector(EventServiceInjector):
     bucket_name: str
     prefix: Path = Path('users')
+    endpoint_url: str | None = Field(default_factory=_get_default_aws_endpoint_url)
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -100,7 +117,7 @@ class AwsEventServiceInjector(EventServiceInjector):
             # use IAM role credentials when running in AWS
             s3_client = boto3.client(
                 's3',
-                endpoint_url=os.getenv('AWS_S3_ENDPOINT'),
+                endpoint_url=self.endpoint_url,
             )
 
             yield AwsEventService(

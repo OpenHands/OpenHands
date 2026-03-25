@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enable_solvability_analysis: false,
   search_api_key: "",
   is_new_user: true,
+  disabled_skills: [],
   max_budget_per_task: null,
   email: "",
   email_verified: true, // Default to true to avoid restricting access unnecessarily

@@ -32,6 +32,12 @@ describe("useIsOnIntermediatePage", () => {
       const { result } = renderHook(() => useIsOnIntermediatePage());
       expect(result.current).toBe(true);
     });
+
+    it("should return true when on /information-request page", () => {
+      useLocationMock.mockReturnValue({ pathname: "/information-request" });
+      const { result } = renderHook(() => useIsOnIntermediatePage());
+      expect(result.current).toBe(true);
+    });
   });
 
   describe("returns false for non-intermediate pages", () => {
