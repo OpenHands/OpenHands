@@ -211,7 +211,7 @@ describe("HookEventItem", () => {
       matchers: [
         {
           matcher: "*",
-          hooks: undefined as unknown as HookEvent["matchers"][0]["hooks"],
+          hooks: undefined,
         },
       ],
     };
@@ -234,7 +234,7 @@ describe("HookEventItem", () => {
       matchers: [
         {
           matcher: "*",
-          hooks: undefined as unknown as HookEvent["matchers"][0]["hooks"],
+          hooks: undefined,
         },
       ],
     };
@@ -266,7 +266,7 @@ describe("HookEventItem", () => {
         },
         {
           matcher: "browser",
-          hooks: undefined as unknown as HookEvent["matchers"][0]["hooks"],
+          hooks: undefined,
         },
       ],
     };

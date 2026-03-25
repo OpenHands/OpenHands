@@ -153,7 +153,7 @@ export interface HookDefinition {
 
 export interface HookMatcher {
   matcher: string; // Pattern: '*', exact match, or regex
-  hooks: HookDefinition[];
+  hooks?: HookDefinition[]; // May be undefined while hooks are still executing on the server
 }
 
 export interface HookEvent {
