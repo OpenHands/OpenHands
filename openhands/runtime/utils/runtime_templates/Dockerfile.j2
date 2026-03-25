@@ -345,9 +345,12 @@ RUN \
     mkdir -p /home/openhands && \
     mkdir -p /openhands && \
     mkdir -p $(dirname ${OPENVSCODE_SERVER_ROOT}) && \
-    # Ensure ownership is correct for all OpenHands paths
-    chown -R openhands:openhands /home/openhands || true && \
-    chown -R openhands:openhands /openhands || true
+    # Fix ownership only on files not already owned by openhands.
+    # A blanket chown -R would trigger an overlay2 copy-up of every inode
+    # from prior layers even when ownership is already correct.
+    find /home/openhands /openhands \
+        ! \( -user openhands -group openhands \) \
+        -exec chown openhands:openhands {} + 2>/dev/null || true
 
 {{ setup_vscode_server() }}
 
