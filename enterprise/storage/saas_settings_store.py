@@ -115,7 +115,7 @@ class SaasSettingsStore(SettingsStore):
             kwargs['llm_api_key_for_byor'] = org_member.llm_api_key_for_byor
         if org_member.llm_base_url:
             kwargs['llm_base_url'] = org_member.llm_base_url
-        # User-specific MCP config takes precedence over org-level default
+        # MCP config is user-specific (stored on org_member, not org)
         if org_member.mcp_config is not None:
             kwargs['mcp_config'] = org_member.mcp_config
         if org.v1_enabled is None:

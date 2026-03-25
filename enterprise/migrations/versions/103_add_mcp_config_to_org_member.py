@@ -21,6 +21,21 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column('org_member', sa.Column('mcp_config', sa.JSON(), nullable=True))
 
+    # Migrate existing org-level MCP configs to all members in each org.
+    # This preserves existing configurations while transitioning to user-specific settings.
+    conn = op.get_bind()
+    orgs_with_config = conn.execute(
+        sa.text('SELECT id, mcp_config FROM org WHERE mcp_config IS NOT NULL')
+    ).fetchall()
+
+    for org_id, mcp_config in orgs_with_config:
+        conn.execute(
+            sa.text(
+                'UPDATE org_member SET mcp_config = :config WHERE org_id = :org_id'
+            ),
+            {'config': mcp_config, 'org_id': str(org_id)},
+        )
+
 
 def downgrade() -> None:
     op.drop_column('org_member', 'mcp_config')
