@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - develop
   pull_request:
 
 # If triggered by a PR, it will be in the same group. However, each commit on main will be in its own unique group
@@ -19,11 +20,11 @@ jobs:
   # Run lint on the frontend code
   lint-frontend:
     name: Lint frontend
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install Node.js 22
-        uses: useblacksmith/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install dependencies
@@ -40,13 +41,13 @@ jobs:
   # Run lint on the python code
   lint-python:
     name: Lint python
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
           cache: "pip"
@@ -56,14 +57,15 @@ jobs:
         run: pre-commit run --all-files --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
 
   lint-enterprise-python:
+    if: false # Disabled — enterprise lint not needed in this fork
     name: Lint enterprise python
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
           cache: "pip"

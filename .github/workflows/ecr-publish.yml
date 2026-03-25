@@ -1,0 +1,40 @@
+# Workflow that builds and publishes the OpenHands Docker image to AWS ECR
+name: Publish to ECR
+
+# Only run on tags
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  publish:
+    name: Build and push to ECR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.B1_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.B1_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          REPOSITORY: 653306034207.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/b1
+          VERSION: ${{ github.ref_name }}
+          NAME: openhands
+        run: |
+          docker build . -f containers/app/Dockerfile \
+            -t "${REPOSITORY}/${NAME}:${VERSION}" \
+            --build-arg BUILD_VERSION="${VERSION}" \
+            --build-arg BUILD_DATE="$(date)" \
+            --build-arg BUILD_NAME="${NAME}" \
+            --build-arg BUILD_IMAGE="${REPOSITORY}/${NAME}"
+          docker push "${REPOSITORY}/${NAME}:${VERSION}"
+        timeout-minutes: 30
