@@ -219,7 +219,6 @@ RUN \
     # Install libasound2 - try new package name first (Ubuntu 24.04+), fallback to old name
     (apt-get install -y --no-install-recommends libasound2t64 || apt-get install -y --no-install-recommends libasound2) && \
     # Install Playwright browsers in shared location accessible to all users
-    # Note: apt-get clean deferred to end so --with-deps doesn't re-fetch package lists
     export PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers && \
     mkdir -p /opt/playwright-browsers && \
     umask 022 && \
