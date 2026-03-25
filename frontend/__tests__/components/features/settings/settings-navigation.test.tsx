@@ -6,6 +6,7 @@ import { SettingsNavigation } from "#/components/features/settings/settings-navi
 import OptionService from "#/api/option-service/option-service.api";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 import { SAAS_NAV_ITEMS, SettingsNavItem } from "#/constants/settings-nav";
+import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 
 vi.mock("react-router", async () => ({
   ...(await vi.importActual("react-router")),
@@ -18,13 +19,17 @@ const mockConfig = () => {
   } as Awaited<ReturnType<typeof OptionService.getConfig>>);
 };
 
+// Convert SettingsNavItem[] to SettingsNavRenderedItem[]
+const toRenderedItems = (items: SettingsNavItem[]): SettingsNavRenderedItem[] =>
+  items.map((item) => ({ type: "item", item }));
+
 const ITEMS_WITHOUT_ORG = SAAS_NAV_ITEMS.filter(
   (item) =>
     item.to !== "/settings/org" && item.to !== "/settings/org-members",
 );
 
 const renderSettingsNavigation = (
-  items: SettingsNavItem[] = SAAS_NAV_ITEMS,
+  items: SettingsNavRenderedItem[] = toRenderedItems(SAAS_NAV_ITEMS),
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -56,31 +61,31 @@ describe("SettingsNavigation", () => {
 
   describe("renders navigation items passed via props", () => {
     it("should render org routes when included in navigation items", async () => {
-      renderSettingsNavigation(SAAS_NAV_ITEMS);
+      renderSettingsNavigation(toRenderedItems(SAAS_NAV_ITEMS));
 
       await screen.findByTestId("settings-navbar");
 
-      const orgMembersLink = await screen.findByText("Organization Members");
-      const orgLink = await screen.findByText("Organization");
+      const orgMembersLink = await screen.findByText("SETTINGS$NAV_ORG_MEMBERS");
+      const orgLink = await screen.findByText("SETTINGS$NAV_ORGANIZATION");
 
       expect(orgMembersLink).toBeInTheDocument();
       expect(orgLink).toBeInTheDocument();
     });
 
     it("should not render org routes when excluded from navigation items", async () => {
-      renderSettingsNavigation(ITEMS_WITHOUT_ORG);
+      renderSettingsNavigation(toRenderedItems(ITEMS_WITHOUT_ORG));
 
       await screen.findByTestId("settings-navbar");
 
-      const orgMembersLink = screen.queryByText("Organization Members");
-      const orgLink = screen.queryByText("Organization");
+      const orgMembersLink = screen.queryByText("SETTINGS$NAV_ORG_MEMBERS");
+      const orgLink = screen.queryByText("SETTINGS$NAV_ORGANIZATION");
 
       expect(orgMembersLink).not.toBeInTheDocument();
       expect(orgLink).not.toBeInTheDocument();
     });
 
     it("should render all non-org SAAS items regardless of which items are passed", async () => {
-      renderSettingsNavigation(SAAS_NAV_ITEMS);
+      renderSettingsNavigation(toRenderedItems(SAAS_NAV_ITEMS));
 
       await screen.findByTestId("settings-navbar");
 
@@ -99,11 +104,65 @@ describe("SettingsNavigation", () => {
       await screen.findByTestId("settings-navbar");
 
       // No nav links should be rendered
-      const orgMembersLink = screen.queryByText("Organization Members");
-      const orgLink = screen.queryByText("Organization");
+      const orgMembersLink = screen.queryByText("SETTINGS$NAV_ORG_MEMBERS");
+      const orgLink = screen.queryByText("SETTINGS$NAV_ORGANIZATION");
 
       expect(orgMembersLink).not.toBeInTheDocument();
       expect(orgLink).not.toBeInTheDocument();
+    });
+  });
+
+  describe("renders section headers and dividers", () => {
+    it("should render section headers when included in navigation items", async () => {
+      // Arrange
+      const itemsWithHeader: SettingsNavRenderedItem[] = [
+        { type: "header", text: "SETTINGS$ORG_SETTINGS_HEADER" as any },
+        ...toRenderedItems(SAAS_NAV_ITEMS.slice(0, 2)),
+      ];
+
+      // Act
+      renderSettingsNavigation(itemsWithHeader);
+      await screen.findByTestId("settings-navbar");
+
+      // Assert
+      expect(screen.getByText("SETTINGS$ORG_SETTINGS_HEADER")).toBeInTheDocument();
+    });
+
+    it("should render dividers when included in navigation items", async () => {
+      // Arrange
+      const itemsWithDivider: SettingsNavRenderedItem[] = [
+        ...toRenderedItems(SAAS_NAV_ITEMS.slice(0, 2)),
+        { type: "divider" },
+        ...toRenderedItems(SAAS_NAV_ITEMS.slice(2, 4)),
+      ];
+
+      // Act
+      renderSettingsNavigation(itemsWithDivider);
+      await screen.findByTestId("settings-navbar");
+
+      // Assert - divider is a div with border-t class
+      const navbar = screen.getByTestId("settings-navbar");
+      const dividers = navbar.querySelectorAll(".border-t");
+      expect(dividers.length).toBeGreaterThan(0);
+    });
+
+    it("should render multiple headers and dividers in correct order", async () => {
+      // Arrange
+      const itemsWithHeadersAndDividers: SettingsNavRenderedItem[] = [
+        { type: "header", text: "SETTINGS$ORG_SETTINGS_HEADER" as any },
+        ...toRenderedItems(SAAS_NAV_ITEMS.slice(0, 1)),
+        { type: "divider" },
+        { type: "header", text: "SETTINGS$PERSONAL_SETTINGS_HEADER" as any },
+        ...toRenderedItems(SAAS_NAV_ITEMS.slice(1, 2)),
+      ];
+
+      // Act
+      renderSettingsNavigation(itemsWithHeadersAndDividers);
+      await screen.findByTestId("settings-navbar");
+
+      // Assert
+      expect(screen.getByText("SETTINGS$ORG_SETTINGS_HEADER")).toBeInTheDocument();
+      expect(screen.getByText("SETTINGS$PERSONAL_SETTINGS_HEADER")).toBeInTheDocument();
     });
   });
 });
