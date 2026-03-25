@@ -14,7 +14,7 @@ from pydantic import (
     model_validator,
 )
 
-from openhands.core.config.llm_config import LLMConfig
+from openhands.core.config.llm_config import LLMConfig, _INVALID_BASE_URL_SUFFIXES
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.utils import load_openhands_config
 from openhands.storage.data_models.secrets import Secrets
@@ -141,6 +141,30 @@ class Settings(BaseModel):
             return v
         if v < 20:
             raise ValueError('condenser_max_size must be at least 20')
+        return v
+
+    @field_validator('llm_base_url')
+    @classmethod
+    def validate_llm_base_url_no_endpoint_path(cls, v: str | None) -> str | None:
+        """Reject llm_base_url values that include API endpoint paths.
+
+        Users sometimes configure llm_base_url with a full API endpoint path
+        like ``https://my-proxy.com/v1/chat/completions`` instead of just the
+        base URL ``https://my-proxy.com/v1``.  When this happens, litellm
+        appends the endpoint path again, producing a broken URL that returns a
+        cryptic 404 error with no useful guidance.
+        """
+        if v is None:
+            return v
+        url_lower = v.rstrip('/').lower()
+        for suffix in _INVALID_BASE_URL_SUFFIXES:
+            if url_lower.endswith(suffix):
+                stripped = v.rstrip('/')
+                stripped = stripped[: len(stripped) - len(suffix)]
+                raise ValueError(
+                    f'llm_base_url must not include the API endpoint path '
+                    f'"{suffix}". Use only the base URL, e.g. "{stripped}".'
+                )
         return v
 
     @field_serializer('secrets_store')

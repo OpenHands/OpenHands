@@ -10,10 +10,30 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+)
 
 from openhands.core.logger import LOG_DIR
 from openhands.core.logger import openhands_logger as logger
+
+# Common API endpoint path suffixes that should not be included in base_url.
+# Users sometimes mistakenly include the full endpoint path (e.g.,
+# "https://my-proxy.com/v1/chat/completions") instead of just the base URL
+# (e.g., "https://my-proxy.com/v1"). This causes cryptic 404 errors at runtime
+# because litellm appends these paths again, resulting in invalid URLs.
+_INVALID_BASE_URL_SUFFIXES = (
+    '/chat/completions',
+    '/completions',
+    '/messages',
+    '/engines',
+    '/embeddings',
+)
 
 
 class LLMConfig(BaseModel):
@@ -61,6 +81,30 @@ class LLMConfig(BaseModel):
     api_key: SecretStr | None = Field(default=None)
     base_url: str | None = Field(default=None)
     api_version: str | None = Field(default=None)
+
+    @field_validator('base_url')
+    @classmethod
+    def validate_base_url_no_endpoint_path(cls, v: str | None) -> str | None:
+        """Reject base_url values that include API endpoint paths.
+
+        Users sometimes configure base_url with a full API endpoint path like
+        ``https://my-proxy.com/v1/chat/completions`` instead of just the base
+        URL ``https://my-proxy.com/v1``. When this happens, litellm appends
+        the endpoint path again, producing a broken URL that returns a cryptic
+        404 error with no useful guidance.
+        """
+        if v is None:
+            return v
+        url_lower = v.rstrip('/').lower()
+        for suffix in _INVALID_BASE_URL_SUFFIXES:
+            if url_lower.endswith(suffix):
+                stripped = v.rstrip('/')
+                stripped = stripped[: len(stripped) - len(suffix)]
+                raise ValueError(
+                    f'base_url must not include the API endpoint path '
+                    f'"{suffix}". Use only the base URL, e.g. "{stripped}".'
+                )
+        return v
     aws_access_key_id: SecretStr | None = Field(default=None)
     aws_secret_access_key: SecretStr | None = Field(default=None)
     aws_region_name: str | None = Field(default=None)

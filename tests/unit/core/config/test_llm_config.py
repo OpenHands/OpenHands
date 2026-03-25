@@ -3,6 +3,7 @@ import pathlib
 import pytest
 
 from openhands.core.config import OpenHandsConfig
+from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.utils import load_from_toml
 
 
@@ -254,3 +255,58 @@ api_key = "test-api-key"
     non_azure_llm = default_config.get_llm_config('llm')
     assert non_azure_llm.model == 'anthropic/claude-3-sonnet'
     assert non_azure_llm.api_version is None
+
+
+class TestBaseUrlValidation:
+    """Tests for base_url validation that rejects API endpoint paths."""
+
+    @pytest.mark.parametrize(
+        'invalid_url, expected_suggestion',
+        [
+            (
+                'https://my-proxy.com/v1/chat/completions',
+                'https://my-proxy.com/v1',
+            ),
+            (
+                'https://api.example.com/v1/completions',
+                'https://api.example.com/v1',
+            ),
+            (
+                'https://api.example.com/v1/messages',
+                'https://api.example.com/v1',
+            ),
+            (
+                'https://api.example.com/v1/engines',
+                'https://api.example.com/v1',
+            ),
+            (
+                'https://api.example.com/v1/embeddings',
+                'https://api.example.com/v1',
+            ),
+            # With trailing slash
+            (
+                'https://my-proxy.com/v1/chat/completions/',
+                'https://my-proxy.com/v1',
+            ),
+        ],
+    )
+    def test_rejects_base_url_with_api_endpoint_path(
+        self, invalid_url: str, expected_suggestion: str
+    ):
+        with pytest.raises(ValueError, match='must not include the API endpoint path'):
+            LLMConfig(base_url=invalid_url)
+
+    @pytest.mark.parametrize(
+        'valid_url',
+        [
+            'https://my-proxy.com/v1',
+            'https://api.openai.com/v1',
+            'https://api.example.com',
+            'http://localhost:11434',
+            'http://localhost:8080/v1',
+            None,
+        ],
+    )
+    def test_accepts_valid_base_url(self, valid_url: str | None):
+        config = LLMConfig(base_url=valid_url)
+        assert config.base_url == valid_url
