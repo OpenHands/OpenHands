@@ -26,7 +26,7 @@ export function HookMatcherContent({ matcher }: HookMatcherContentProps) {
         <Typography.Text className="text-sm font-semibold text-gray-300 mb-2">
           {t(I18nKey.HOOKS_MODAL$COMMANDS)}
         </Typography.Text>
-        {matcher.hooks.map((hook, index) => (
+        {(matcher.hooks ?? []).map((hook, index) => (
           <div key={`${hook.command}-${index}`} className="mt-2">
             <Pre
               size="default"
