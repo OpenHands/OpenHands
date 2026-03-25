@@ -33,5 +33,5 @@ def _get_max_token() -> int:
 
 
 def _get_openai_client() -> OpenAI:
-    client = OpenAI(api_key=_get_openai_api_key(), base_url=_get_openai_base_url())
+    client = OpenAI(api_key=_get_openai_api_key(), base_url=_get_openai_base_url(), timeout=60.0, max_retries=3)
     return client
