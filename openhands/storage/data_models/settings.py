@@ -14,7 +14,7 @@ from pydantic import (
     model_validator,
 )
 
-from openhands.core.config.llm_config import LLMConfig, _INVALID_BASE_URL_SUFFIXES
+from openhands.core.config.llm_config import _INVALID_BASE_URL_SUFFIXES, LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.utils import load_openhands_config
 from openhands.storage.data_models.secrets import Secrets

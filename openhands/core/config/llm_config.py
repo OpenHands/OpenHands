@@ -105,6 +105,7 @@ class LLMConfig(BaseModel):
                     f'"{suffix}". Use only the base URL, e.g. "{stripped}".'
                 )
         return v
+
     aws_access_key_id: SecretStr | None = Field(default=None)
     aws_secret_access_key: SecretStr | None = Field(default=None)
     aws_region_name: str | None = Field(default=None)
