@@ -78,6 +78,11 @@ class OrgMemberFinancialService:
             # Return empty financial data if LiteLLM is unavailable
             financial_data = {}
 
+        # Extract team-level data for shared budget calculation
+        team_max_budget = financial_data.get('team_max_budget')
+        team_spend = financial_data.get('team_spend', 0) or 0
+        members_financial = financial_data.get('members', {})
+
         # Build response items by joining DB members with LiteLLM financial data
         items: list[OrgMemberFinancialResponse] = []
         for member in members:
@@ -85,13 +90,21 @@ class OrgMemberFinancialService:
             user_id_str = str(member.user_id)
 
             # Get financial data for this user (or defaults if not found)
-            user_financial = financial_data.get(user_id_str, {})
-            spend = user_financial.get('spend', 0) or 0
+            user_financial = members_financial.get(user_id_str, {})
+            individual_spend = user_financial.get('spend', 0) or 0
             max_budget = user_financial.get('max_budget')
 
             # Calculate current budget (remaining)
+            # For shared team budgets, use team_spend to calculate remaining budget
+            # This ensures all members see the same remaining budget
             if max_budget is not None:
-                current_budget = max(max_budget - spend, 0)
+                # If max_budget equals team_max_budget, it's a shared budget
+                # Use team_spend for the calculation
+                if max_budget == team_max_budget:
+                    current_budget = max(max_budget - team_spend, 0)
+                else:
+                    # Individual budget - use individual spend
+                    current_budget = max(max_budget - individual_spend, 0)
             else:
                 # If no max_budget, current_budget is unlimited (represented as 0)
                 current_budget = 0
@@ -100,7 +113,7 @@ class OrgMemberFinancialService:
                 OrgMemberFinancialResponse(
                     user_id=user_id_str,
                     email=user.email if user else None,
-                    lifetime_spend=spend,
+                    lifetime_spend=individual_spend,
                     current_budget=current_budget,
                     max_budget=max_budget,
                 )

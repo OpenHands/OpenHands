@@ -2591,14 +2591,14 @@ class TestGetTeamMembersFinancialData:
         """
         GIVEN: Team with multiple members having financial data
         WHEN: _get_team_members_financial_data is called
-        THEN: Returns dict mapping user_id to spend/max_budget
+        THEN: Returns dict with team info and member data
         """
         # Arrange
         mock_response = MagicMock()
         mock_response.is_success = True
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'team_info': {'team_id': 'test-team'},
+            'team_info': {'team_id': 'test-team', 'max_budget': 500.0, 'spend': 125.5},
             'team_memberships': [
                 {
                     'user_id': 'user-1',
@@ -2623,9 +2623,11 @@ class TestGetTeamMembersFinancialData:
                 )
 
         # Assert
-        assert len(result) == 2
-        assert result['user-1'] == {'spend': 50.0, 'max_budget': 200.0}
-        assert result['user-2'] == {'spend': 75.5, 'max_budget': 150.0}
+        assert result['team_max_budget'] == 500.0
+        assert result['team_spend'] == 125.5
+        assert len(result['members']) == 2
+        assert result['members']['user-1'] == {'spend': 50.0, 'max_budget': 200.0}
+        assert result['members']['user-2'] == {'spend': 75.5, 'max_budget': 150.0}
 
     @pytest.mark.asyncio
     async def test_returns_empty_dict_when_litellm_not_configured(
@@ -2672,18 +2674,20 @@ class TestGetTeamMembersFinancialData:
                     )
 
     @pytest.mark.asyncio
-    async def test_returns_empty_dict_when_team_has_no_members(self, mock_http_client):
+    async def test_returns_empty_members_when_team_has_no_members(
+        self, mock_http_client
+    ):
         """
         GIVEN: Team exists but has no members
         WHEN: _get_team_members_financial_data is called
-        THEN: Returns empty dict
+        THEN: Returns structure with empty members dict
         """
         # Arrange
         mock_response = MagicMock()
         mock_response.is_success = True
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'team_info': {'team_id': 'empty-team'},
+            'team_info': {'team_id': 'empty-team', 'max_budget': 100.0, 'spend': 0},
             'team_memberships': [],
         }
         mock_response.raise_for_status = MagicMock()
@@ -2697,30 +2701,40 @@ class TestGetTeamMembersFinancialData:
                 )
 
         # Assert
-        assert result == {}
+        assert result['team_max_budget'] == 100.0
+        assert result['team_spend'] == 0
+        assert result['members'] == {}
 
     @pytest.mark.asyncio
-    async def test_uses_defaults_for_missing_financial_fields(self, mock_http_client):
+    async def test_falls_back_to_team_budget_when_member_budget_missing(
+        self, mock_http_client
+    ):
         """
-        GIVEN: Team member without spend or max_budget_in_team fields
+        GIVEN: Team with shared budget, members without individual max_budget_in_team
         WHEN: _get_team_members_financial_data is called
-        THEN: Returns default values (spend=0, max_budget=None)
+        THEN: Falls back to team_info.max_budget for members without individual budget
         """
         # Arrange
         mock_response = MagicMock()
         mock_response.is_success = True
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'team_info': {'team_id': 'test-team'},
+            'team_info': {'team_id': 'test-team', 'max_budget': 500.0, 'spend': 150.0},
             'team_memberships': [
                 {
-                    'user_id': 'user-no-data',
-                    # No spend or max_budget_in_team
+                    'user_id': 'user-no-individual-budget',
+                    'spend': 50.0,
+                    # No max_budget_in_team - should fall back to team budget
                 },
                 {
-                    'user_id': 'user-null-spend',
-                    'spend': None,  # Explicit null
-                    'max_budget_in_team': 100.0,
+                    'user_id': 'user-with-individual-budget',
+                    'spend': 75.0,
+                    'max_budget_in_team': 200.0,  # Individual budget set
+                },
+                {
+                    'user_id': 'user-null-budget',
+                    'spend': 25.0,
+                    'max_budget_in_team': None,  # Explicit null - fall back to team
                 },
             ],
         }
@@ -2735,8 +2749,59 @@ class TestGetTeamMembersFinancialData:
                 )
 
         # Assert
-        assert result['user-no-data'] == {'spend': 0, 'max_budget': None}
-        assert result['user-null-spend'] == {'spend': 0, 'max_budget': 100.0}
+        assert result['team_max_budget'] == 500.0
+        assert result['team_spend'] == 150.0
+        members = result['members']
+        assert members['user-no-individual-budget'] == {
+            'spend': 50.0,
+            'max_budget': 500.0,
+        }
+        assert members['user-with-individual-budget'] == {
+            'spend': 75.0,
+            'max_budget': 200.0,
+        }
+        assert members['user-null-budget'] == {'spend': 25.0, 'max_budget': 500.0}
+
+    @pytest.mark.asyncio
+    async def test_uses_defaults_when_no_budget_data_available(self, mock_http_client):
+        """
+        GIVEN: Team without budget and members without individual budgets
+        WHEN: _get_team_members_financial_data is called
+        THEN: Returns default values (spend=0, max_budget=None)
+        """
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'team_info': {'team_id': 'test-team'},  # No max_budget at team level
+            'team_memberships': [
+                {
+                    'user_id': 'user-no-data',
+                    # No spend or max_budget_in_team
+                },
+                {
+                    'user_id': 'user-null-spend',
+                    'spend': None,  # Explicit null
+                },
+            ],
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_http_client.get.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                # Act
+                result = await LiteLlmManager._get_team_members_financial_data(
+                    mock_http_client, 'test-team'
+                )
+
+        # Assert
+        assert result['team_max_budget'] is None
+        assert result['team_spend'] == 0
+        members = result['members']
+        assert members['user-no-data'] == {'spend': 0, 'max_budget': None}
+        assert members['user-null-spend'] == {'spend': 0, 'max_budget': None}
 
     @pytest.mark.asyncio
     async def test_skips_members_without_user_id(self, mock_http_client):
@@ -2750,7 +2815,7 @@ class TestGetTeamMembersFinancialData:
         mock_response.is_success = True
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'team_info': {'team_id': 'test-team'},
+            'team_info': {'team_id': 'test-team', 'max_budget': 300.0, 'spend': 105.0},
             'team_memberships': [
                 {
                     'user_id': 'valid-user',
@@ -2779,6 +2844,8 @@ class TestGetTeamMembersFinancialData:
                 )
 
         # Assert - only valid user should be included
-        assert len(result) == 1
-        assert 'valid-user' in result
-        assert result['valid-user'] == {'spend': 25.0, 'max_budget': 100.0}
+        assert result['team_max_budget'] == 300.0
+        assert result['team_spend'] == 105.0
+        assert len(result['members']) == 1
+        assert 'valid-user' in result['members']
+        assert result['members']['valid-user'] == {'spend': 25.0, 'max_budget': 100.0}
