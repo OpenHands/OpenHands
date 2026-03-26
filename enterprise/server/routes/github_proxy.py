@@ -8,13 +8,41 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import httpx
 from cryptography.fernet import Fernet
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from server.logger import logger
 
 from openhands.server.shared import config
 from openhands.utils.http_session import httpx_verify_option
 
 GITHUB_PROXY_ENDPOINTS = bool(os.environ.get('GITHUB_PROXY_ENDPOINTS'))
+
+
+def _is_safe_redirect_uri(redirect_uri: str, request_netloc: str) -> bool:
+    """Validate that redirect_uri points to the same host as the proxy server.
+
+    This prevents open-redirect attacks where an attacker crafts a redirect_uri
+    pointing to an external domain (e.g., https://evil.com/steal) that would
+    receive the OAuth authorization code after the callback.
+
+    The redirect_uri must:
+    - Use the https scheme (or http for localhost)
+    - Have a netloc (hostname:port) that matches the request's own netloc
+    """
+    parsed = urlparse(redirect_uri)
+
+    # Reject non-HTTP(S) schemes (e.g., javascript:, data:, etc.)
+    if parsed.scheme not in ('https', 'http'):
+        return False
+
+    # Reject if no hostname
+    if not parsed.hostname:
+        return False
+
+    # The redirect_uri must target the same host as the proxy server itself
+    if parsed.netloc != request_netloc:
+        return False
+
+    return True
 
 
 def add_github_proxy_routes(app: FastAPI):
@@ -49,8 +77,21 @@ def add_github_proxy_routes(app: FastAPI):
     def github_proxy_start(request: Request):
         parsed_url = urlparse(str(request.url))
         query_params = parse_qs(parsed_url.query)
+        redirect_uri = query_params['redirect_uri'][0]
+
+        # Validate redirect_uri before encrypting it into the state
+        request_netloc = str(request.url.netloc)
+        if not _is_safe_redirect_uri(redirect_uri, request_netloc):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    'error': 'invalid_redirect_uri',
+                    'message': 'redirect_uri must target the same host as the proxy server',
+                },
+            )
+
         state_payload = json.dumps(
-            [query_params['state'][0], query_params['redirect_uri'][0]]
+            [query_params['state'][0], redirect_uri, request_netloc]
         )
         # Compress before encrypting to reduce URL length
         # This is critical for feature deployments where reCAPTCHA tokens in state
@@ -77,7 +118,24 @@ def add_github_proxy_routes(app: FastAPI):
         decrypted_state = zlib.decompress(decrypted_payload).decode()
 
         # Build query Params
-        state, redirect_uri = json.loads(decrypted_state)
+        payload = json.loads(decrypted_state)
+        # Support both old format [state, redirect_uri] and new [state, redirect_uri, netloc]
+        if len(payload) == 3:
+            state, redirect_uri, origin_netloc = payload
+        else:
+            state, redirect_uri = payload
+            origin_netloc = str(request.url.netloc)
+
+        # Validate redirect_uri before redirecting (defense in depth)
+        if not _is_safe_redirect_uri(redirect_uri, origin_netloc):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    'error': 'invalid_redirect_uri',
+                    'message': 'redirect_uri must target the same host as the proxy server',
+                },
+            )
+
         query_params['state'] = [state]
         query_string = urlencode(query_params, doseq=True)
 
