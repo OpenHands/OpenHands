@@ -101,7 +101,13 @@ async def get_remote_runtime_config(
         # This is a V1 conversation
         return {
             'runtime_id': v1_conversation_info.sandbox_id,
-            'session_id': conversation_id,
+        return JSONResponse(
+            content={
+                'runtime_id': v1_conversation_info.sandbox_id,
+                'session_id': conversation_id,
+            },
+            status_code=200,
+        )
         }
     else:
         # V0 conversation - get the conversation and use the existing logic
