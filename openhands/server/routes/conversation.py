@@ -60,8 +60,6 @@ async def _get_v1_conversation_info(
         # Service error, assume it's not a V1 conversation
         logger.debug(f'Failed to fetch V1 conversation {conversation_id}: {e}')
         return None
-        # Service error, assume it's not a V1 conversation
-        return None
 
 
 def _get_v0_conversation_config(
@@ -102,8 +100,6 @@ async def get_remote_runtime_config(
     )
     if v1_conversation_info:
         # This is a V1 conversation
-        return {
-            'runtime_id': v1_conversation_info.sandbox_id,
         return JSONResponse(
             content={
                 'runtime_id': v1_conversation_info.sandbox_id,
@@ -111,7 +107,6 @@ async def get_remote_runtime_config(
             },
             status_code=200,
         )
-        }
     else:
         # V0 conversation - get the conversation and use the existing logic
         conversation = await conversation_manager.attach_to_conversation(
