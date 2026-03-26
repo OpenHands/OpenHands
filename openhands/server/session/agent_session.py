@@ -410,6 +410,8 @@ class AgentSession:
         Cloning failures are logged as warnings rather than hard errors so a missing
         or private dependency repo doesn't prevent the session from starting.
         """
+        if self.runtime is None:
+            return
         microagents = await call_sync_from_async(
             self.runtime.get_microagents_from_selected_repo,
             selected_repository,
