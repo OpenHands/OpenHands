@@ -288,9 +288,16 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         result_set = await self.db_session.execute(query)
         result = result_set.scalar_one_or_none()
         if result:
+            logger.info(
+                f'[REPO_DEBUG] DB read conversation: id={result.conversation_id}, '
+                f'selected_repository={result.selected_repository}'
+            )
             # Fetch sub-conversation IDs
             sub_conversation_ids = await self.get_sub_conversation_ids(conversation_id)
             return self._to_info(result, sub_conversation_ids=sub_conversation_ids)
+        logger.info(
+            f'[REPO_DEBUG] DB read conversation: id={conversation_id} NOT FOUND'
+        )
         return None
 
     async def batch_get_app_conversation_info(

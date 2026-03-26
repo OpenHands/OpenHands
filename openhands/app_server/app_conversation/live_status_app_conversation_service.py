@@ -358,6 +358,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Store info...
             user_id = await self.user_context.get_user_id()
+            _logger.info(
+                f'[REPO_DEBUG] Saving AppConversationInfo: '
+                f'id={info.id.hex}, '
+                f'selected_repository={request.selected_repository}, '
+                f'selected_branch={request.selected_branch}, '
+                f'git_provider={request.git_provider}'
+            )
             app_conversation_info = AppConversationInfo(
                 id=info.id,
                 title=request.title or f'Conversation {info.id.hex[:5]}',
@@ -375,6 +382,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
             await self.app_conversation_info_service.save_app_conversation_info(
                 app_conversation_info
+            )
+            _logger.info(
+                f'[REPO_DEBUG] AppConversationInfo saved successfully: id={info.id.hex}'
             )
 
             # Setup default processors

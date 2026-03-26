@@ -9,12 +9,6 @@ from datetime import datetime
 from typing import Annotated, AsyncGenerator, Literal
 from uuid import UUID
 
-import httpx
-
-from openhands.app_server.services.db_session_injector import set_db_session_keep_open
-from openhands.app_server.services.httpx_client_injector import (
-    set_httpx_client_keep_open,
-)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
@@ -31,7 +25,6 @@ else:
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
@@ -55,8 +48,6 @@ from openhands.app_server.app_conversation.app_conversation_start_task_service i
 from openhands.app_server.config import (
     depends_app_conversation_service,
     depends_app_conversation_start_task_service,
-    depends_db_session,
-    depends_httpx_client,
     depends_sandbox_service,
     depends_sandbox_spec_service,
     depends_user_context,
@@ -81,8 +72,6 @@ app_conversation_start_task_service_dependency = (
     depends_app_conversation_start_task_service()
 )
 user_context_dependency = depends_user_context()
-db_session_dependency = depends_db_session()
-httpx_client_dependency = depends_httpx_client()
 sandbox_service_dependency = depends_sandbox_service()
 sandbox_spec_service_dependency = depends_sandbox_spec_service()
 
@@ -201,25 +190,32 @@ async def batch_get_app_conversations(
 async def start_app_conversation(
     request: Request,
     start_request: AppConversationStartRequest,
-    db_session: AsyncSession = db_session_dependency,
-    httpx_client: httpx.AsyncClient = httpx_client_dependency,
-    app_conversation_service: AppConversationService = (
-        app_conversation_service_dependency
-    ),
+    user_context: UserContext = user_context_dependency,
 ) -> AppConversationStartTask:
-    # Because we are processing after the request finishes, keep the db connection open
-    set_db_session_keep_open(request.state, True)
-    set_httpx_client_keep_open(request.state, True)
+    """Start an app conversation start task and return it."""
+    logger.info(
+        f'[REPO_DEBUG] Router received start_request: '
+        f'selected_repository={start_request.selected_repository}, '
+        f'selected_branch={start_request.selected_branch}, '
+        f'git_provider={start_request.git_provider}'
+    )
+    # Create a dedicated service context for the background task.
+    # The request-scoped dependencies are cleaned up after the response is sent,
+    # so the background task needs its own context that stays alive.
+    state = InjectorState()
+    setattr(state, USER_CONTEXT_ATTR, user_context)
+    app_conversation_service_ctx = get_app_conversation_service(state)
+    app_conversation_service = await app_conversation_service_ctx.__aenter__()
 
     try:
-        """Start an app conversation start task and return it."""
         async_iter = app_conversation_service.start_app_conversation(start_request)
         result = await anext(async_iter)
-        asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
+        asyncio.create_task(
+            _consume_remaining_with_context(async_iter, app_conversation_service_ctx)
+        )
         return result
     except Exception:
-        await db_session.close()
-        await httpx_client.aclose()
+        await app_conversation_service_ctx.__aexit__(None, None, None)
         raise
 
 
@@ -602,10 +598,8 @@ async def export_conversation(
         )
 
 
-async def _consume_remaining(
-    async_iter, db_session: AsyncSession, httpx_client: httpx.AsyncClient
-):
-    """Consume the remaining items from an async iterator"""
+async def _consume_remaining_with_context(async_iter, service_ctx):
+    """Consume the remaining items from an async iterator, then clean up the service context."""
     try:
         while True:
             await anext(async_iter)
@@ -616,8 +610,7 @@ async def _consume_remaining(
             'Error in background conversation startup task', stack_info=True
         )
     finally:
-        await db_session.close()
-        await httpx_client.aclose()
+        await service_ctx.__aexit__(None, None, None)
 
 
 @router.get('/{conversation_id}/messages')

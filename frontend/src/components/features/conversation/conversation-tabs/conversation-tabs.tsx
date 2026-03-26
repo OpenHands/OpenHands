@@ -18,9 +18,10 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
-import { ENABLE_VSCODE_TAB, USE_PLANNING_AGENT } from "#/utils/feature-flags";
+import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useTaskPolling } from "#/hooks/query/use-task-polling";
 
 const REPO_ONLY_TABS = ["editor", "vscode", "terminal"];
 
@@ -42,10 +43,12 @@ export function ConversationTabs() {
   } = useConversationLocalStorageState(conversationId);
 
   const { data: conversation } = useActiveConversation();
-  const isRepositoryConversation = !!conversation?.selected_repository;
+  const { repositoryInfo } = useTaskPolling();
+  const isRepositoryConversation = !!(
+    conversation?.selected_repository || repositoryInfo?.selectedRepository
+  );
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
-  const shouldShowVSCodeTab = ENABLE_VSCODE_TAB();
 
   const onTabChange = (value: ConversationTab | null) => {
     setSelectedTab(value);
@@ -129,6 +132,15 @@ export function ConversationTabs() {
             label: t(I18nKey.COMMON$CHANGES),
           },
           {
+            tabValue: "vscode",
+            isActive: isTabActive("vscode"),
+            icon: VSCodeIcon,
+            onClick: () => onTabSelected("vscode"),
+            tooltipContent: <VSCodeTooltipContent />,
+            tooltipAriaLabel: t(I18nKey.COMMON$CODE),
+            label: t(I18nKey.COMMON$CODE),
+          },
+          {
             tabValue: "terminal",
             isActive: isTabActive("terminal"),
             icon: TerminalIcon,
@@ -159,19 +171,6 @@ export function ConversationTabs() {
       label: t(I18nKey.COMMON$BROWSER),
     },
   ];
-
-  if (shouldShowVSCodeTab && isRepositoryConversation) {
-    // Insert after "editor" tab (index 0)
-    tabs.splice(1, 0, {
-      tabValue: "vscode",
-      isActive: isTabActive("vscode"),
-      icon: VSCodeIcon,
-      onClick: () => onTabSelected("vscode"),
-      tooltipContent: <VSCodeTooltipContent />,
-      tooltipAriaLabel: t(I18nKey.COMMON$CODE),
-      label: t(I18nKey.COMMON$CODE),
-    });
-  }
 
   if (shouldUsePlanningAgent) {
     tabs.unshift({

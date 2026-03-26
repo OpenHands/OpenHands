@@ -11,7 +11,6 @@ const REAL_CONVERSATION_ID = "conv-abc123";
 
 vi.mock("#/utils/feature-flags", () => ({
   USE_PLANNING_AGENT: () => false,
-  ENABLE_VSCODE_TAB: () => false,
 }));
 
 let mockSelectedRepository: string | null = null;

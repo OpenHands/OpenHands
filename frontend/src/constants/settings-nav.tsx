@@ -40,11 +40,6 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
   },
   {
     icon: <KeyIcon width={22} height={22} />,
-    to: "/settings/secrets",
-    text: "SETTINGS$NAV_SECRETS",
-  },
-  {
-    icon: <KeyIcon width={22} height={22} />,
     to: "/settings/api-keys",
     text: "SETTINGS$NAV_API_KEYS",
   },
@@ -75,10 +70,5 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <SettingsGearIcon width={22} height={22} />,
     to: "/settings/app",
     text: "SETTINGS$NAV_APPLICATION",
-  },
-  {
-    icon: <KeyIcon width={22} height={22} />,
-    to: "/settings/secrets",
-    text: "SETTINGS$NAV_SECRETS",
   },
 ];
