@@ -1,0 +1,50 @@
+<svg width="800" height="50" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <!-- Define clipping path to hide overflow -->
+    <clipPath id="ticker-clip">
+      <rect x="0" y="0" width="800" height="50"/>
+    </clipPath>
+  </defs>
+  
+  <g clip-path="url(#ticker-clip)">
+    <g id="logo-strip">
+      <!-- First set of logos -->
+      <image x="0" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f6974b71a1a4a932f82_TikTok_logo.svg"/>
+      <image x="120" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f523b08f91a5aa905b9_Vmware.svg"/>
+      <image x="240" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f2cb537758796a9dba1_Roche_Logo.svg"/>
+      <image x="360" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f10c3975e28b3932320_Amazon_logo%201.svg"/>
+      <image x="480" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137ec5a6f77dd174e557ce_C3ai_logo%201.svg"/>
+      <image x="600" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137eac8f27ca27f5e48420_Netflix_2015_logo%201.svg"/>
+      <image x="720" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e8df2c028b9e1506ede_mastercard%201.svg"/>
+      <image x="840" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e783790933dd06f9d59_Red_Hat_Logo_2019%201.svg"/>
+      <image x="960" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e5fa006d963a1d1904d_mongodb-ar21%201.svg"/>
+      <image x="1080" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e47b45195da10c50f49_apple-11%201.svg"/>
+      <image x="1200" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e34e3a5ab71e37082a7_NVIDIA_logo%201.svg"/>
+      <image x="1320" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e199ce2cb594b0210ab_google-ar21%201.svg"/>
+      
+      <!-- Duplicate set for seamless loop -->
+      <image x="1440" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f6974b71a1a4a932f82_TikTok_logo.svg"/>
+      <image x="1560" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f523b08f91a5aa905b9_Vmware.svg"/>
+      <image x="1680" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f2cb537758796a9dba1_Roche_Logo.svg"/>
+      <image x="1800" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f10c3975e28b3932320_Amazon_logo%201.svg"/>
+      <image x="1920" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137ec5a6f77dd174e557ce_C3ai_logo%201.svg"/>
+      <image x="2040" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137eac8f27ca27f5e48420_Netflix_2015_logo%201.svg"/>
+      <image x="2160" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e8df2c028b9e1506ede_mastercard%201.svg"/>
+      <image x="2280" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e783790933dd06f9d59_Red_Hat_Logo_2019%201.svg"/>
+      <image x="2400" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e5fa006d963a1d1904d_mongodb-ar21%201.svg"/>
+      <image x="2520" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e47b45195da10c50f49_apple-11%201.svg"/>
+      <image x="2640" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e34e3a5ab71e37082a7_NVIDIA_logo%201.svg"/>
+      <image x="2760" y="11" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e199ce2cb594b0210ab_google-ar21%201.svg"/>
+      
+      <!-- SMIL animation for smooth scrolling -->
+      <animateTransform
+        attributeName="transform"
+        attributeType="XML"
+        type="translate"
+        from="0 0"
+        to="-1440 0"
+        dur="25s"
+        repeatCount="indefinite"/>
+    </g>
+  </g>
+</svg>
