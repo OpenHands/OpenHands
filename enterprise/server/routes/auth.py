@@ -60,6 +60,9 @@ oauth_router = APIRouter(prefix='/oauth')
 token_manager = TokenManager()
 
 
+COOKIE_MAX_AGE = 30 * 24 * 60 * 60  # 30 days in seconds
+
+
 def set_response_cookie(
     request: Request,
     response: Response,
@@ -86,6 +89,7 @@ def set_response_cookie(
             httponly=True,
             secure=secure,
             samesite=get_cookie_samesite(),
+            max_age=COOKIE_MAX_AGE,
         )
     else:
         response.set_cookie(
@@ -94,6 +98,7 @@ def set_response_cookie(
             httponly=True,
             secure=secure,
             samesite=get_cookie_samesite(),
+            max_age=COOKIE_MAX_AGE,
         )
 
 
