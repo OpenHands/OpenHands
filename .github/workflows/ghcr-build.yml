@@ -69,18 +69,18 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.7.0
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
         with:
           image: tonistiigi/binfmt:latest
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Lowercase Repository Owner
         run: |
           echo REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
@@ -107,22 +107,22 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.7.0
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
         with:
           image: tonistiigi/binfmt:latest
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Install poetry via pipx
         run: pipx install poetry
       - name: Set up Python
-        uses: useblacksmith/setup-python@v6
+        uses: useblacksmith/setup-python@943b05a7c4ca70c2360391137527a37bee33fb1d # v6
         with:
           python-version: "3.12"
           cache: poetry
@@ -149,7 +149,7 @@ jobs:
           echo "DOCKER_BUILD_ARGS=$(echo "$DOCKER_BUILD_JSON" | jq -r '.build_args | join(",")')" >> $GITHUB_ENV
       - name: Build and push runtime image ${{ matrix.base_image.image }}
         if: github.event.pull_request.head.repo.fork != true
-        uses: useblacksmith/build-push-action@v1
+        uses: useblacksmith/build-push-action@39d1b1a90b3dd4f04cd9e61ee11e097b9028e9ae # v1
         with:
           push: true
           tags: ${{ env.DOCKER_TAGS }}
@@ -163,7 +163,7 @@ jobs:
       # Forked repos can't push to GHCR, so we just build in order to populate the cache for rebuilding
       - name: Build runtime image ${{ matrix.base_image.image }} for fork
         if: github.event.pull_request.head.repo.fork
-        uses: useblacksmith/build-push-action@v1
+        uses: useblacksmith/build-push-action@39d1b1a90b3dd4f04cd9e61ee11e097b9028e9ae # v1
         with:
           tags: ghcr.io/${{ env.REPO_OWNER }}/runtime:${{ env.RELEVANT_SHA }}-${{ matrix.base_image.tag }}
           context: containers/runtime
@@ -191,12 +191,12 @@ jobs:
 
       # Set up Docker Buildx for better performance
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
         with:
           driver-opts: network=host
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -204,7 +204,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/openhands/enterprise-server
           tags: |
@@ -228,7 +228,7 @@ jobs:
           # rather than a mutable branch tag like "main" which can serve stale cached layers.
           echo "OPENHANDS_DOCKER_TAG=${RELEVANT_SHA}" >> $GITHUB_ENV
       - name: Build and push Docker image
-        uses: useblacksmith/build-push-action@v1
+        uses: useblacksmith/build-push-action@39d1b1a90b3dd4f04cd9e61ee11e097b9028e9ae # v1
         with:
           context: .
           file: enterprise/Dockerfile
@@ -263,7 +263,9 @@ jobs:
 
       - name: Get short SHA
         id: short_sha
-        run: echo "SHORT_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+        run: echo "SHORT_SHA=$(echo ${PR_HEAD_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: Update PR Description
         env:

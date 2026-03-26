@@ -33,17 +33,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
       - name: Setup Node.js
-        uses: useblacksmith/setup-node@v5
+        uses: useblacksmith/setup-node@65c6ca86fdeb0ab3d85e78f57e4f6a7e4780b391 # v5
         with:
           node-version: "22.x"
       - name: Install poetry via pipx
         run: pipx install poetry
       - name: Set up Python
-        uses: useblacksmith/setup-python@v6
+        uses: useblacksmith/setup-python@943b05a7c4ca70c2360391137527a37bee33fb1d # v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
@@ -82,7 +82,7 @@ jobs:
       - name: Install poetry via pipx
         run: pipx install poetry
       - name: Set up Python
-        uses: useblacksmith/setup-python@v6
+        uses: useblacksmith/setup-python@943b05a7c4ca70c2360391137527a37bee33fb1d # v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
@@ -121,7 +121,7 @@ jobs:
 
       - name: Coverage comment
         id: coverage_comment
-        uses: py-cov-action/python-coverage-comment-action@v3
+        uses: py-cov-action/python-coverage-comment-action@7188638f871f721a365d644f505d1ff3df20d683 # v3
         with:
           GITHUB_TOKEN: ${{ github.token }}
           MERGE_COVERAGE_FILES: true

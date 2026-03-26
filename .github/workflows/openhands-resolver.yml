@@ -159,6 +159,7 @@ jobs:
       - name: Set environment variables
         env:
           REVIEW_BODY: ${{ github.event.review.body || '' }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
         run: |
           # Handle pull request events first
           if [ -n "${{ github.event.pull_request.number }}" ]; then
@@ -185,7 +186,7 @@ jobs:
           fi
 
           echo "MAX_ITERATIONS=${{ inputs.max_iterations || 50 }}" >> $GITHUB_ENV
-          echo "SANDBOX_ENV_GITHUB_TOKEN=${{ secrets.PAT_TOKEN || github.token }}" >> $GITHUB_ENV
+          echo "SANDBOX_ENV_GITHUB_TOKEN=${PAT_TOKEN}" >> $GITHUB_ENV
           echo "SANDBOX_BASE_CONTAINER_IMAGE=${{ inputs.base_container_image }}" >> $GITHUB_ENV
 
           # Set branch variables

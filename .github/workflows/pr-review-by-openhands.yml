@@ -38,7 +38,7 @@ jobs:
         runs-on: ubuntu-24.04
         steps:
             - name: Run PR Review
-              uses: OpenHands/extensions/plugins/pr-review@main
+              uses: OpenHands/extensions/plugins/pr-review@fdd6c7373bdf1c20cfdedb7261ffdbf49d5a76e5 # main
               with:
                   llm-model: litellm_proxy/claude-sonnet-4-5-20250929
                   llm-base-url: https://llm-proxy.app.all-hands.dev
