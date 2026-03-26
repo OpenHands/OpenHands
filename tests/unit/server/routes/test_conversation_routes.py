@@ -1719,10 +1719,12 @@ async def test_get_remote_runtime_config_v1_conversation():
         app_conversation_info_service=mock_info_service,
     )
 
-    # Verify the response - V1 returns a dict directly, not JSONResponse
-    assert isinstance(result, dict)
-    assert result['runtime_id'] == test_sandbox_id
-    assert result['session_id'] == conversation_id
+    # Verify the response - V1 returns a JSONResponse
+    assert isinstance(result, JSONResponse)
+    content = json.loads(result.body)
+    assert isinstance(content, dict)
+    assert content['runtime_id'] == test_sandbox_id
+    assert content['session_id'] == conversation_id
 
     # Verify the service was called with correct UUID
     mock_info_service.get_app_conversation_info.assert_called_once_with(
