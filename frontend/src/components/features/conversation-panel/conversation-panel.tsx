@@ -18,6 +18,7 @@ import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
+import { SubConversationList } from "./sub-conversation-list";
 
 interface ConversationPanelProps {
   onClose: () => void;
@@ -47,6 +48,21 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const [openContextMenuId, setOpenContextMenuId] = React.useState<
     string | null
   >(null);
+  const [expandedConversations, setExpandedConversations] = React.useState<
+    Set<string>
+  >(new Set());
+
+  const handleToggleExpand = (conversationId: string) => {
+    setExpandedConversations((prev) => {
+      const next = new Set(prev);
+      if (next.has(conversationId)) {
+        next.delete(conversationId);
+      } else {
+        next.add(conversationId);
+      }
+      return next;
+    });
+  };
 
   const {
     data,
@@ -175,45 +191,68 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         ),
       )}
       {/* Then render completed conversations */}
-      {conversations?.map((project) => (
-        <NavLink
-          key={project.conversation_id}
-          to={`/conversations/${project.conversation_id}`}
-          onClick={onClose}
-        >
-          <ConversationCard
-            onDelete={() =>
-              handleDeleteProject(project.conversation_id, project.title)
-            }
-            onStop={() =>
-              handleStopConversation(
-                project.conversation_id,
-                project.conversation_version,
-              )
-            }
-            onChangeTitle={(title) =>
-              handleConversationTitleChange(project.conversation_id, title)
-            }
-            title={project.title}
-            selectedRepository={{
-              selected_repository: project.selected_repository,
-              selected_branch: project.selected_branch,
-              git_provider: project.git_provider as Provider,
-            }}
-            lastUpdatedAt={project.last_updated_at}
-            createdAt={project.created_at}
-            conversationStatus={project.status}
-            conversationId={project.conversation_id}
-            conversationVersion={project.conversation_version}
-            trigger={project.trigger}
-            environmentUrl={project.environment_url}
-            contextMenuOpen={openContextMenuId === project.conversation_id}
-            onContextMenuToggle={(isOpen) =>
-              setOpenContextMenuId(isOpen ? project.conversation_id : null)
-            }
-          />
-        </NavLink>
-      ))}
+      {conversations?.map((project) => {
+        const hasSubConversations =
+          (project.sub_conversation_ids?.length ?? 0) > 0;
+        const isExpanded = expandedConversations.has(project.conversation_id);
+
+        return (
+          <React.Fragment key={project.conversation_id}>
+            <NavLink
+              to={`/conversations/${project.conversation_id}`}
+              onClick={onClose}
+            >
+              <ConversationCard
+                onDelete={() =>
+                  handleDeleteProject(project.conversation_id, project.title)
+                }
+                onStop={() =>
+                  handleStopConversation(
+                    project.conversation_id,
+                    project.conversation_version,
+                  )
+                }
+                onChangeTitle={(title) =>
+                  handleConversationTitleChange(project.conversation_id, title)
+                }
+                title={project.title}
+                selectedRepository={{
+                  selected_repository: project.selected_repository,
+                  selected_branch: project.selected_branch,
+                  git_provider: project.git_provider as Provider,
+                }}
+                lastUpdatedAt={project.last_updated_at}
+                createdAt={project.created_at}
+                conversationStatus={project.status}
+                conversationId={project.conversation_id}
+                conversationVersion={project.conversation_version}
+                trigger={project.trigger}
+                environmentUrl={project.environment_url}
+                contextMenuOpen={openContextMenuId === project.conversation_id}
+                onContextMenuToggle={(isOpen) =>
+                  setOpenContextMenuId(isOpen ? project.conversation_id : null)
+                }
+                hasSubConversations={hasSubConversations}
+                isExpanded={isExpanded}
+                onToggleExpand={() =>
+                  handleToggleExpand(project.conversation_id)
+                }
+              />
+            </NavLink>
+            {hasSubConversations && isExpanded && (
+              <SubConversationList
+                subConversationIds={project.sub_conversation_ids!}
+                onClose={onClose}
+                onDelete={handleDeleteProject}
+                onStop={handleStopConversation}
+                onChangeTitle={handleConversationTitleChange}
+                openContextMenuId={openContextMenuId}
+                onContextMenuToggle={setOpenContextMenuId}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
 
       {/* Loading indicator for fetching more conversations */}
       {isFetchingNextPage && (

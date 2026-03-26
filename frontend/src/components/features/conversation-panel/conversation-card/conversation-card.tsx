@@ -1,5 +1,6 @@
 import React from "react";
 import { usePostHog } from "posthog-js/react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -30,6 +31,9 @@ interface ConversationCardProps {
   environmentUrl?: string | null;
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
+  hasSubConversations?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export function ConversationCard({
@@ -51,6 +55,9 @@ export function ConversationCard({
   environmentUrl,
   contextMenuOpen = false,
   onContextMenuToggle,
+  hasSubConversations = false,
+  isExpanded = false,
+  onToggleExpand,
 }: ConversationCardProps) {
   const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -135,6 +142,24 @@ export function ConversationCard({
       )}
     >
       <div className="flex items-center justify-between w-full">
+        {hasSubConversations && (
+          <button
+            type="button"
+            data-testid="expand-sub-conversations"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleExpand?.();
+            }}
+            className="flex-shrink-0 p-0.5 mr-1 text-neutral-400 hover:text-neutral-200"
+          >
+            {isExpanded ? (
+              <ChevronDown size={14} />
+            ) : (
+              <ChevronRight size={14} />
+            )}
+          </button>
+        )}
         <ConversationCardHeader
           title={title}
           titleMode={titleMode}

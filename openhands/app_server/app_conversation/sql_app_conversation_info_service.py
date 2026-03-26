@@ -182,7 +182,12 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         if has_more:
             rows = rows[:limit]
 
-        items = [self._to_info(row) for row in rows]
+        # Populate sub_conversation_ids for each conversation
+        items = []
+        for row in rows:
+            conversation_id = UUID(row.conversation_id)
+            sub_ids = await self.get_sub_conversation_ids(conversation_id)
+            items.append(self._to_info(row, sub_conversation_ids=sub_ids))
 
         # Calculate next page ID
         next_page_id = None

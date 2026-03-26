@@ -620,6 +620,88 @@ async def _consume_remaining(
         await httpx_client.aclose()
 
 
+@router.get('/{conversation_id}/messages')
+async def get_conversation_messages(
+    conversation_id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    httpx_client_param: httpx.AsyncClient = httpx_client_dependency,
+    sandbox_service: SandboxService = sandbox_service_dependency,
+) -> list[dict]:
+    """Get message events from a conversation's agent server.
+
+    Returns a list of message objects with source, content, and timestamp.
+    """
+    try:
+        app_conversation = await app_conversation_service.get_app_conversation(
+            conversation_id
+        )
+        if not app_conversation:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, 'Conversation not found')
+
+        # Resolve agent server URL from sandbox
+        sandbox = await sandbox_service.get_sandbox(app_conversation.sandbox_id)
+        if not sandbox or sandbox.status != SandboxStatus.RUNNING:
+            return []
+
+        agent_server_eu = next(
+            (eu for eu in (sandbox.exposed_urls or []) if eu.name == AGENT_SERVER),
+            None,
+        )
+        if not agent_server_eu:
+            return []
+
+        agent_url = agent_server_eu.internal_url or agent_server_eu.url
+        if not agent_url:
+            return []
+        if not agent_server_eu.internal_url:
+            agent_url = replace_localhost_hostname_for_docker(agent_url)
+
+        headers: dict[str, str] = {}
+        if sandbox.session_api_key:
+            headers['X-Session-API-Key'] = sandbox.session_api_key
+
+        resp = await httpx_client_param.get(
+            f'{agent_url}/api/conversations/{conversation_id.hex}/events/search',
+            params={'limit': limit},
+            headers=headers,
+        )
+        resp.raise_for_status()
+        events_data = resp.json()
+
+        messages = []
+        for event in events_data.get('items', []):
+            if event.get('kind') != 'MessageEvent':
+                continue
+            llm_message = event.get('llm_message')
+            if not llm_message:
+                continue
+            content_blocks = llm_message.get('content', [])
+            text_parts = [
+                block.get('text', '')
+                for block in content_blocks
+                if block.get('type') == 'text'
+            ]
+            messages.append(
+                {
+                    'role': llm_message.get('role'),
+                    'content': '\n'.join(text_parts),
+                    'timestamp': event.get('timestamp'),
+                }
+            )
+        return messages
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f'Error getting messages for conversation {conversation_id}: {e}')
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Error fetching messages: {e}',
+        )
+
+
 async def _stream_app_conversation_start(
     request: AppConversationStartRequest,
     user_context: UserContext,

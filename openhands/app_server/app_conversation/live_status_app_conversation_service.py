@@ -163,6 +163,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
     tavily_api_key: str | None = None
+    session_cookie: str | None = None
 
     async def search_app_conversations(
         self,
@@ -359,7 +360,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user_id = await self.user_context.get_user_id()
             app_conversation_info = AppConversationInfo(
                 id=info.id,
-                title=f'Conversation {info.id.hex[:5]}',
+                title=request.title or f'Conversation {info.id.hex[:5]}',
                 sandbox_id=sandbox.id,
                 created_by_user_id=user_id,
                 llm_model=start_conversation_request.agent.llm.model,
@@ -379,13 +380,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # Setup default processors
             processors = request.processors or []
 
-            # Always ensure SetTitleCallbackProcessor is included
-            has_set_title_processor = any(
-                isinstance(processor, SetTitleCallbackProcessor)
-                for processor in processors
-            )
-            if not has_set_title_processor:
-                processors.append(SetTitleCallbackProcessor())
+            # Add SetTitleCallbackProcessor unless the request already provided
+            # an explicit title (in which case we keep it as-is).
+            if not request.title:
+                has_set_title_processor = any(
+                    isinstance(processor, SetTitleCallbackProcessor)
+                    for processor in processors
+                )
+                if not has_set_title_processor:
+                    processors.append(SetTitleCallbackProcessor())
 
             # Save processors
             for processor in processors:
@@ -894,13 +897,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         return user_search_key or service_tavily_key
 
     async def _add_system_mcp_servers(
-        self, mcp_servers: dict[str, Any], user: UserInfo
+        self,
+        mcp_servers: dict[str, Any],
+        user: UserInfo,
+        conversation_id: str | None = None,
     ) -> None:
         """Add system-generated MCP servers (default OpenHands server and Tavily).
 
         Args:
             mcp_servers: Dictionary to add servers to
             user: User information for API keys
+            conversation_id: Optional conversation ID to forward to the MCP server
         """
         if not self.web_url:
             return
@@ -909,12 +916,25 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         mcp_url = f'{self.web_url}/mcp/mcp'
         mcp_servers['default'] = {'url': mcp_url}
 
+        # Build headers for the default MCP server
+        default_headers: dict[str, str] = {}
+
         # Add API key if available
         mcp_api_key = await self.user_context.get_mcp_api_key()
         if mcp_api_key:
-            mcp_servers['default']['headers'] = {
-                'X-Session-API-Key': mcp_api_key,
-            }
+            default_headers['X-Session-API-Key'] = mcp_api_key
+
+        # Add conversation ID so MCP tools can identify the calling conversation
+        if conversation_id:
+            default_headers['X-OpenHands-ServerConversation-ID'] = conversation_id
+
+        # Forward session cookie so MCP tools can make authenticated calls
+        # back to the app server API (which requires cookie-based auth)
+        if self.session_cookie:
+            default_headers['cookie'] = self.session_cookie
+
+        if default_headers:
+            mcp_servers['default']['headers'] = default_headers
 
         # Add Tavily search if API key is available
         tavily_api_key = await self._get_tavily_api_key(user)
@@ -1046,13 +1066,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
     async def _configure_llm_and_mcp(
-        self, user: UserInfo, llm_model: str | None
+        self,
+        user: UserInfo,
+        llm_model: str | None,
+        conversation_id: str | None = None,
     ) -> tuple[LLM, dict]:
         """Configure LLM and MCP (Model Context Protocol) settings.
 
         Args:
             user: User information containing LLM preferences
             llm_model: Optional specific model to use, falls back to user default
+            conversation_id: Optional conversation ID to forward to MCP servers
 
         Returns:
             Tuple of (configured LLM instance, MCP config dictionary)
@@ -1064,7 +1088,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         mcp_servers: dict[str, Any] = {}
 
         # Add system-generated servers (default + tavily)
-        await self._add_system_mcp_servers(mcp_servers, user)
+        await self._add_system_mcp_servers(mcp_servers, user, conversation_id)
 
         # Merge custom servers from user settings
         self._merge_custom_mcp_config(mcp_servers, user)
@@ -1279,7 +1303,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         secrets = await self._setup_secrets_for_git_providers(user)
 
         # Configure LLM and MCP
-        llm, mcp_config = await self._configure_llm_and_mcp(user, llm_model)
+        conversation_id_hex = conversation_id.hex if conversation_id else None
+        llm, mcp_config = await self._configure_llm_and_mcp(
+            user, llm_model, conversation_id_hex
+        )
 
         # Add remote environment as MCP server if provided
         if environment_url:
@@ -1659,6 +1686,13 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             else:
                 tavily_api_key = None
 
+            # Capture the session cookie from the original request so it can
+            # be forwarded to internal MCP servers (needed for auth when MCP
+            # tools call back into the app-server API).
+            session_cookie: str | None = None
+            if request is not None:
+                session_cookie = request.headers.get('cookie')
+
             yield LiveStatusAppConversationService(
                 init_git_in_empty_workspace=self.init_git_in_empty_workspace,
                 user_context=user_context,
@@ -1677,4 +1711,5 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
                 tavily_api_key=tavily_api_key,
+                session_cookie=session_cookie,
             )
