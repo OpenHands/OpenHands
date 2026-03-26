@@ -8,26 +8,7 @@ import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { cn } from "#/utils/utils";
 import ChevronUp from "#/icons/chveron-up.svg?react";
 import { useUnifiedGitDiff } from "#/hooks/query/use-unified-git-diff";
-
-interface LoadingSpinnerProps {
-  className?: string;
-}
-
-// TODO: Move out of this file and replace the current spinner with this one
-function LoadingSpinner({ className }: LoadingSpinnerProps) {
-  return (
-    <div className="flex items-center justify-center">
-      <div
-        className={cn(
-          "animate-spin rounded-full border-4 border-gray-200 border-t-blue-500",
-          className,
-        )}
-        role="status"
-        aria-label="Loading"
-      />
-    </div>
-  );
-}
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
 const STATUS_MAP: Record<GitChangeStatus, string | IconType> = {
   A: LuFilePlus,

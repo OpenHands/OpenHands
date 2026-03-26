@@ -1,9 +1,9 @@
-import { LoaderCircle } from "lucide-react";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
 export function AgentLoading() {
   return (
     <div data-testid="agent-loading-spinner">
-      <LoaderCircle className="animate-spin w-4 h-4" color="white" />
+      <LoadingSpinner className="w-4 h-4 text-white" />
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import { Spinner } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { Typography } from "#/ui/typography";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
 export function LoadingMicroagentBody() {
   const { t } = useTranslation();
@@ -10,7 +10,7 @@ export function LoadingMicroagentBody() {
       <h2 className="font-bold text-[20px] leading-6 -tracking-[0.01em] flex items-center gap-2">
         {t("MICROAGENT$ADD_TO_MICROAGENT")}
       </h2>
-      <Spinner size="lg" />
+      <LoadingSpinner size="large" />
       <Typography.Text>{t("MICROAGENT$WAIT_FOR_RUNTIME")}</Typography.Text>
     </ModalBody>
   );

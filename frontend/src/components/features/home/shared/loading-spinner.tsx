@@ -1,5 +1,5 @@
-import React from "react";
 import { cn } from "#/utils/utils";
+import { LoadingSpinner as SharedLoadingSpinner } from "#/components/shared/loading-spinner";
 
 interface LoadingSpinnerProps {
   hasSelection: boolean;
@@ -17,10 +17,9 @@ export function LoadingSpinner({
         hasSelection ? "right-11" : "right-6",
       )}
     >
-      <div
-        className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"
-        data-testid={testId}
-      />
+      <div data-testid={testId}>
+        <SharedLoadingSpinner className="w-4 h-4" />
+      </div>
     </div>
   );
 }

@@ -1,8 +1,9 @@
+import { LoadingSpinner as SharedLoadingSpinner } from "#/components/shared/loading-spinner";
+
 export function LoadingSpinner() {
   return (
-    <div
-      className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"
-      data-testid="dropdown-loading"
-    />
+    <div data-testid="dropdown-loading">
+      <SharedLoadingSpinner className="w-4 h-4" />
+    </div>
   );
 }
