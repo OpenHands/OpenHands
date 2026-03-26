@@ -142,12 +142,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     max_num_conversations_per_sandbox: int
     httpx_client: httpx.AsyncClient
     web_url: str | None
+    openhands_provider_base_url: str | None
+    access_token_hard_timeout: timedelta | None
     # HTTP URL reachable from inside Docker containers (host.docker.internal).
     # Used for agent→host calls (MCP, secret lookup) to avoid TLS issues with
     # self-signed certificates on the external web_url.
     internal_web_url: str | None = None
-    openhands_provider_base_url: str | None
-    access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
     tavily_api_key: str | None = None
 
