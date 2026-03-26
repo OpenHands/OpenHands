@@ -204,4 +204,84 @@ describe("HookEventItem", () => {
     );
     expect(screen.getByText("unknown_event")).toBeInTheDocument();
   });
+
+  it("should not crash when a matcher has undefined hooks", () => {
+    const hookEventWithUndefinedHooks: HookEvent = {
+      event_type: "stop",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: undefined,
+        },
+      ],
+    };
+
+    expect(() =>
+      render(
+        <HookEventItem
+          {...defaultProps}
+          hookEvent={hookEventWithUndefinedHooks}
+        />,
+      ),
+    ).not.toThrow();
+
+    expect(screen.getByText("0 hooks")).toBeInTheDocument();
+  });
+
+  it("should not crash when a matcher has undefined hooks in expanded state", () => {
+    const hookEventWithUndefinedHooks: HookEvent = {
+      event_type: "stop",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: undefined,
+        },
+      ],
+    };
+
+    expect(() =>
+      render(
+        <HookEventItem
+          {...defaultProps}
+          hookEvent={hookEventWithUndefinedHooks}
+          isExpanded={true}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
+  it("should handle a mix of matchers with and without hooks", () => {
+    const mixedHookEvent: HookEvent = {
+      event_type: "pre_tool_use",
+      matchers: [
+        {
+          matcher: "terminal",
+          hooks: [
+            {
+              type: "command",
+              command: "check.sh",
+              timeout: 10,
+            },
+          ],
+        },
+        {
+          matcher: "browser",
+          hooks: undefined,
+        },
+      ],
+    };
+
+    expect(() =>
+      render(
+        <HookEventItem
+          {...defaultProps}
+          hookEvent={mixedHookEvent}
+          isExpanded={true}
+        />,
+      ),
+    ).not.toThrow();
+
+    // Should count only the valid hooks
+    expect(screen.getByText("1 hooks")).toBeInTheDocument();
+  });
 });

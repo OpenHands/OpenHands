@@ -1391,7 +1391,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if remote_workspace:
             try:
                 agent = await self._load_skills_and_update_agent(
-                    sandbox, agent, remote_workspace, selected_repository, working_dir
+                    sandbox,
+                    agent,
+                    remote_workspace,
+                    selected_repository,
+                    working_dir,
+                    disabled_skills=user.disabled_skills,
                 )
             except Exception as e:
                 _logger.warning(f'Failed to load skills: {e}', exc_info=True)

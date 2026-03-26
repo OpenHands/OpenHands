@@ -115,6 +115,9 @@ class SaasSettingsStore(SettingsStore):
             kwargs['llm_api_key_for_byor'] = org_member.llm_api_key_for_byor
         if org_member.llm_base_url:
             kwargs['llm_base_url'] = org_member.llm_base_url
+        # MCP config is user-specific (stored on org_member, not org)
+        if org_member.mcp_config is not None:
+            kwargs['mcp_config'] = org_member.mcp_config
         if org.v1_enabled is None:
             kwargs['v1_enabled'] = True
         # Apply default if sandbox_grouping_strategy is None in the database
@@ -187,6 +190,9 @@ class SaasSettingsStore(SettingsStore):
             kwargs = item.model_dump(context={'expose_secrets': True})
             for model in (user, org, org_member):
                 for key, value in kwargs.items():
+                    # Skip mcp_config for org - it should only be stored on org_member (user-specific)
+                    if key == 'mcp_config' and model is org:
+                        continue
                     if hasattr(model, key):
                         setattr(model, key, value)
 
