@@ -1735,8 +1735,8 @@ async def test_get_remote_runtime_config_v1_conversation():
 @pytest.mark.asyncio
 async def test_get_remote_runtime_config_v0_conversation():
     """Test get_remote_runtime_config returns correct config for V0 conversations."""
-    from openhands.server.session.conversation import ServerConversation
     from openhands.runtime.base import Runtime
+    from openhands.server.session.conversation import ServerConversation
 
     conversation_id = 'test-conversation-v0'
     test_runtime_id = 'test-runtime-456'
@@ -1778,8 +1778,8 @@ async def test_get_remote_runtime_config_v0_conversation():
 @pytest.mark.asyncio
 async def test_get_remote_runtime_config_v1_not_found_falls_back_to_v0():
     """Test get_remote_runtime_config falls back to V0 when V1 conversation not found."""
-    from openhands.server.session.conversation import ServerConversation
     from openhands.runtime.base import Runtime
+    from openhands.server.session.conversation import ServerConversation
 
     conversation_id = 'test-conversation-v0'
     test_runtime_id = 'test-runtime-abc'
@@ -1821,8 +1821,8 @@ async def test_get_remote_runtime_config_v1_not_found_falls_back_to_v0():
 @pytest.mark.asyncio
 async def test_get_remote_runtime_config_invalid_uuid_falls_back_to_v0():
     """Test get_remote_runtime_config falls back to V0 for invalid UUID."""
-    from openhands.server.session.conversation import ServerConversation
     from openhands.runtime.base import Runtime
+    from openhands.server.session.conversation import ServerConversation
 
     conversation_id = 'not-a-valid-uuid'
     test_runtime_id = 'test-runtime-def'
@@ -1867,13 +1867,12 @@ async def test_get_remote_runtime_config_invalid_uuid_falls_back_to_v0():
 @pytest.mark.asyncio
 async def test_get_remote_runtime_config_v0_not_found():
     """Test get_remote_runtime_config returns 404 when V0 conversation not found."""
-    from openhands.server.session.conversation import ServerConversation
     from openhands.runtime.base import Runtime
 
     conversation_id = 'test-conversation-v0'
 
     # Create mock Runtime (won't be used since attach returns None)
-    mock_runtime = MagicMock(spec=Runtime)
+    MagicMock(spec=Runtime)
 
     # Mock the conversation_manager
     with patch(
@@ -1893,6 +1892,4 @@ async def test_get_remote_runtime_config_v0_not_found():
             )
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
-        assert f'Conversation {conversation_id} not found' in str(
-            exc_info.value.detail
-        )
+        assert f'Conversation {conversation_id} not found' in str(exc_info.value.detail)
