@@ -32,11 +32,12 @@ class TestLogOutput:
 
         logger.info('Test message')
         output = json.loads(string_io.getvalue())
-        assert output == {
-            'message': 'Test message',
-            'severity': 'INFO',
-            'ts': FROZEN_TIMESTAMP,
-        }
+        assert output['message'] == 'Test message'
+        assert output['severity'] == 'INFO'
+        assert output['ts'] == FROZEN_TIMESTAMP
+        assert output['module'] == 'test_logger'
+        assert output['funcName'] == 'test_info'
+        assert 'lineno' in output
 
     @freeze_time(FROZEN_TIMESTAMP)
     def test_error(self, log_output):
@@ -44,11 +45,12 @@ class TestLogOutput:
 
         logger.error('Test message')
         output = json.loads(string_io.getvalue())
-        assert output == {
-            'message': 'Test message',
-            'severity': 'ERROR',
-            'ts': FROZEN_TIMESTAMP,
-        }
+        assert output['message'] == 'Test message'
+        assert output['severity'] == 'ERROR'
+        assert output['ts'] == FROZEN_TIMESTAMP
+        assert output['module'] == 'test_logger'
+        assert output['funcName'] == 'test_error'
+        assert 'lineno' in output
 
     @freeze_time(FROZEN_TIMESTAMP)
     def test_extra_fields(self, log_output):
@@ -56,12 +58,13 @@ class TestLogOutput:
 
         logger.info('Test message', extra={'key': '..val..'})
         output = json.loads(string_io.getvalue())
-        assert output == {
-            'key': '..val..',
-            'message': 'Test message',
-            'severity': 'INFO',
-            'ts': FROZEN_TIMESTAMP,
-        }
+        assert output['key'] == '..val..'
+        assert output['message'] == 'Test message'
+        assert output['severity'] == 'INFO'
+        assert output['ts'] == FROZEN_TIMESTAMP
+        assert output['module'] == 'test_logger'
+        assert output['funcName'] == 'test_extra_fields'
+        assert 'lineno' in output
 
     def test_format_stack(self):
         stack = (
@@ -284,11 +287,12 @@ class TestLogOutput:
         ):
             openhands_logger.info('The secret key was supersecretvalue')
         output = json.loads(string_io.getvalue())
-        assert output == {
-            'message': 'The secret key was ******',
-            'severity': 'INFO',
-            'ts': FROZEN_TIMESTAMP,
-        }
+        assert output['message'] == 'The secret key was ******'
+        assert output['severity'] == 'INFO'
+        assert output['ts'] == FROZEN_TIMESTAMP
+        assert 'module' in output
+        assert 'funcName' in output
+        assert 'lineno' in output
 
     @freeze_time(FROZEN_TIMESTAMP)
     def test_console_serializer_uses_ts_not_timestamp(self):
