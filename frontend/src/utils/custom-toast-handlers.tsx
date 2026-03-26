@@ -1,6 +1,8 @@
 import { CSSProperties } from "react";
 import toast, { ToastOptions } from "react-hot-toast";
 import { calculateToastDuration } from "./toast-duration";
+import i18n from "#/i18n";
+
 
 const TOAST_STYLE: CSSProperties = {
   background: "#454545",
@@ -13,12 +15,17 @@ const TOAST_STYLE: CSSProperties = {
   whiteSpace: "pre-wrap",
 };
 
+
 export const TOAST_OPTIONS: ToastOptions = {
   position: "top-right",
   style: TOAST_STYLE,
 };
 
-export const displayErrorToast = (error: string) => {
+
+export const displayErrorToast = (error: string | null | undefined) => {
+  if (!error) {
+    error = i18n.t('STATUS$ERROR');
+  }
   const duration = calculateToastDuration(error, 4000);
   toast.error(
     <span style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
@@ -27,6 +34,7 @@ export const displayErrorToast = (error: string) => {
     { ...TOAST_OPTIONS, duration },
   );
 };
+
 
 export const displaySuccessToast = (message: string) => {
   const duration = calculateToastDuration(message, 5000);

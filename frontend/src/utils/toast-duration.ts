@@ -6,10 +6,15 @@
  * @returns Duration in milliseconds
  */
 export const calculateToastDuration = (
-  message: string,
+  message: string | null | undefined,
   minDuration: number = 5000,
   maxDuration: number = 10000,
 ): number => {
+  // Handle null/undefined messages - return minDuration immediately
+  if (!message) {
+    return minDuration;
+  }
+
   // Calculate duration based on reading speed (average 200 words per minute)
   // Assuming average word length of 5 characters
   const wordsPerMinute = 200;
@@ -17,8 +22,7 @@ export const calculateToastDuration = (
   const charactersPerSecond = charactersPerMinute / 60;
 
   // Calculate time needed to read the message
-  const messageLength = message?.length || 0;
-  const readingTimeMs = (messageLength / charactersPerSecond) * 1000;
+  const readingTimeMs = (message.length / charactersPerSecond) * 1000;
 
   // Add some buffer time (50% extra) for processing
   const durationWithBuffer = readingTimeMs * 1.5;
