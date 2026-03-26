@@ -211,38 +211,6 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
-.loader {
-  background: #c9b974;
-  animation: l5 1s infinite linear alternate;
-}
-
-@keyframes l5 {
-  0% {
-    box-shadow:
-      20px 0 #c9b974,
-      -20px 0 rgba(201, 185, 116, 0.1);
-    background: #c9b974;
-  }
-  33% {
-    box-shadow:
-      20px 0 #c9b974,
-      -20px 0 rgba(201, 185, 116, 0.1);
-    background: rgba(201, 185, 116, 0.1);
-  }
-  66% {
-    box-shadow:
-      20px 0 rgba(201, 185, 116, 0.1),
-      -20px 0 #c9b974;
-    background: rgba(201, 185, 116, 0.1);
-  }
-  100% {
-    box-shadow:
-      20px 0 rgba(201, 185, 116, 0.1),
-      -20px 0 #c9b974;
-    background: #c9b974;
-  }
-}
-
 /* Custom styling for xterm */
 /* XTerm.js scrollbar styling - follows custom-scrollbar pattern */
 .xterm-viewport::-webkit-scrollbar {

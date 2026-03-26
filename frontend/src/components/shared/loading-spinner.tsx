@@ -4,6 +4,7 @@ import { cn } from "#/utils/utils";
 interface LoadingSpinnerProps {
   size?: "small" | "large";
   className?: string;
+  "aria-label"?: string;
 }
 
 const sizeClasses = {
@@ -14,10 +15,13 @@ const sizeClasses = {
 export function LoadingSpinner({
   size = "small",
   className,
+  "aria-label": ariaLabel = "Loading",
 }: LoadingSpinnerProps) {
   return (
     <LoaderCircle
       data-testid="loading-spinner"
+      role="status"
+      aria-label={ariaLabel}
       className={cn("animate-spin", sizeClasses[size], className)}
     />
   );
