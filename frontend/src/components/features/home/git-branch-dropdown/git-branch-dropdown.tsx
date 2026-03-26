@@ -10,6 +10,7 @@ import { Branch } from "#/types/git";
 import { Provider } from "#/types/settings";
 import { useDebounce } from "#/hooks/use-debounce";
 import { cn } from "#/utils/utils";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useBranchData } from "#/hooks/query/use-branch-data";
 
 import { ClearButton } from "../shared/clear-button";
@@ -186,7 +187,7 @@ export function GitBranchDropdown({
       <div className="relative">
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
           {isLoadingState ? (
-            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <LoadingSpinner className="h-4 w-4" />
           ) : (
             <BranchIcon width={16} height={16} />
           )}

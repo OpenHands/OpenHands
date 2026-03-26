@@ -11,6 +11,7 @@ import { Provider, ProviderOptions } from "#/types/settings";
 import { GitRepository } from "#/types/git";
 import { useDebounce } from "#/hooks/use-debounce";
 import { cn } from "#/utils/utils";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
 import { ClearButton } from "../shared/clear-button";
 import { ToggleButton } from "../shared/toggle-button";
@@ -322,7 +323,7 @@ export function GitRepoDropdown({
       <div className="relative">
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
           {isLoadingState ? (
-            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <LoadingSpinner className="h-4 w-4" />
           ) : (
             <RepoIcon width={16} height={16} />
           )}

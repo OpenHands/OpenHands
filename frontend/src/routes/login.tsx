@@ -5,6 +5,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { useGitHubAuthUrl } from "#/hooks/use-github-auth-url";
 import { useEmailVerification } from "#/hooks/use-email-verification";
 import { useInvitation } from "#/hooks/use-invitation";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { LoginContent } from "#/components/features/auth/login-content";
 import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
 import { RequestSubmittedModal } from "#/components/features/onboarding/request-submitted-modal";
@@ -72,7 +73,7 @@ export default function LoginPage() {
   if (isAuthLoading || config.isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
+        <LoadingSpinner className="h-8 w-8 text-white" />
       </div>
     );
   }
