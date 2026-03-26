@@ -10,12 +10,13 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from openhands.app_server.app_conversation.app_conversation_info_service import AppConversationInfoService
-from openhands.app_server.app_conversation.app_conversation_models import AppConversationInfo
 from pydantic import BaseModel
 
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
+)
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationInfo,
 )
 from openhands.app_server.config import depends_app_conversation_info_service
 from openhands.core.logger import openhands_logger as logger
@@ -46,8 +47,10 @@ async def _get_v1_conversation_info(
 ) -> AppConversationInfo | None:
     try:
         conversation_uuid = uuid.UUID(conversation_id)
-        app_conversation_info = await app_conversation_info_service.get_app_conversation_info(
-            conversation_uuid
+        app_conversation_info = (
+            await app_conversation_info_service.get_app_conversation_info(
+                conversation_uuid
+            )
         )
         return app_conversation_info
     except (ValueError, TypeError):
@@ -57,8 +60,9 @@ async def _get_v1_conversation_info(
         # Service error, assume it's not a V1 conversation
         return None
 
+
 def _get_v1_conversation_config(
-    app_conversation_info: AppConversationInfo
+    app_conversation_info: AppConversationInfo,
 ) -> dict[str, str | None]:
     """Get configuration for a V1 conversation.
 
@@ -107,7 +111,9 @@ async def get_remote_runtime_config(
     For V1 conversations: returns sandbox_id as runtime_id and conversation_id as session_id.
     """
     # Check if this is a V1 conversation first
-    v1_conversation_info = await _get_v1_conversation_info(conversation_id, app_conversation_info_service)
+    v1_conversation_info = await _get_v1_conversation_info(
+        conversation_id, app_conversation_info_service
+    )
     if v1_conversation_info:
         # This is a V1 conversation
         config = _get_v1_conversation_config(v1_conversation_info)
