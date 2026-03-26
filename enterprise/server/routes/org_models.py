@@ -241,7 +241,6 @@ class OrgUpdate(BaseModel):
     enable_proactive_conversation_starters: bool | None = None
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
-    mcp_config: dict | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = Field(default=None, gt=0)
     enable_solvability_analysis: bool | None = None
