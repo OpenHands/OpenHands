@@ -17,7 +17,8 @@ export const calculateToastDuration = (
   const charactersPerSecond = charactersPerMinute / 60;
 
   // Calculate time needed to read the message
-  const readingTimeMs = (message.length / charactersPerSecond) * 1000;
+  const messageLength = message?.length || 0;
+  const readingTimeMs = (messageLength / charactersPerSecond) * 1000;
 
   // Add some buffer time (50% extra) for processing
   const durationWithBuffer = readingTimeMs * 1.5;
