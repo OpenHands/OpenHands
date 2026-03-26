@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
       - name: Setup Node.js

@@ -73,14 +73,14 @@ jobs:
         with:
           image: tonistiigi/binfmt:latest
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Lowercase Repository Owner
         run: |
           echo REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
@@ -111,14 +111,14 @@ jobs:
         with:
           image: tonistiigi/binfmt:latest
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Install poetry via pipx
         run: pipx install poetry
       - name: Set up Python
@@ -191,12 +191,12 @@ jobs:
 
       # Set up Docker Buildx for better performance
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
         with:
           driver-opts: network=host
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -204,7 +204,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/openhands/enterprise-server
           tags: |
@@ -263,7 +263,9 @@ jobs:
 
       - name: Get short SHA
         id: short_sha
-        run: echo "SHORT_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+        run: echo "SHORT_SHA=$(echo ${PR_HEAD_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: Update PR Description
         env:
