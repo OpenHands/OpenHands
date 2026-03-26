@@ -737,9 +737,9 @@ class ProviderHandler:
                         f'{protocol}://oauth2:{token_value}@{domain}/{repo_name}.git'
                     )
                 elif provider == ProviderType.BITBUCKET:
-                    # For Bitbucket, handle username:app_password format
+                    # For Bitbucket, handle username:app_password or username:api_token format
                     if ':' in token_value:
-                        # App token format: username:app_password
+                        # username:token format (app password or API token)
                         remote_url = (
                             f'{protocol}://{token_value}@{domain}/{repo_name}.git'
                         )
