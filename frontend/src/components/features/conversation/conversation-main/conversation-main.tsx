@@ -32,7 +32,7 @@ export function ConversationMain() {
     <div
       className={cn(
         isMobile
-          ? "relative flex-1 flex flex-col"
+          ? "flex-1 flex flex-col"
           : "h-full flex flex-col overflow-hidden",
       )}
     >
@@ -80,12 +80,7 @@ export function ConversationMain() {
           className={cn(
             "transition-all duration-300 ease-in-out overflow-hidden",
             isMobile
-              ? cn(
-                  "absolute bottom-4 left-0 right-0 top-160",
-                  isRightPanelShown
-                    ? "h-160 translate-y-0 opacity-100"
-                    : "h-0 translate-y-full opacity-0",
-                )
+              ? cn(isRightPanelShown ? "h-160 opacity-100" : "h-0 opacity-0")
               : getDesktopTabPanelClass(isRightPanelShown),
           )}
           style={
