@@ -27,49 +27,21 @@
 </div>
 
 <div align="center">
-  <p style="margin: 20px 0 10px 0; font-size: 14px; color: #666;">Trusted by engineers at</p>
-  <svg width="100%" height="40" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <defs>
-      <style>
-        @keyframes scroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .logo-group {
-          animation: scroll 30s linear infinite;
-        }
-      </style>
-    </defs>
-    <g class="logo-group">
-      <!-- First set of logos -->
-      <image x="0" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f6974b71a1a4a932f82_TikTok_logo.svg"/>
-      <image x="150" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f523b08f91a5aa905b9_Vmware.svg"/>
-      <image x="300" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f2cb537758796a9dba1_Roche_Logo.svg"/>
-      <image x="450" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f10c3975e28b3932320_Amazon_logo%201.svg"/>
-      <image x="600" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137ec5a6f77dd174e557ce_C3ai_logo%201.svg"/>
-      <image x="750" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137eac8f27ca27f5e48420_Netflix_2015_logo%201.svg"/>
-      <image x="900" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e8df2c028b9e1506ede_mastercard%201.svg"/>
-      <image x="1050" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e783790933dd06f9d59_Red_Hat_Logo_2019%201.svg"/>
-      <image x="1200" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e5fa006d963a1d1904d_mongodb-ar21%201.svg"/>
-      <image x="1350" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e47b45195da10c50f49_apple-11%201.svg"/>
-      <image x="1500" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e34e3a5ab71e37082a7_NVIDIA_logo%201.svg"/>
-      <image x="1650" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e199ce2cb594b0210ab_google-ar21%201.svg"/>
-      
-      <!-- Duplicate set for seamless loop -->
-      <image x="1800" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f6974b71a1a4a932f82_TikTok_logo.svg"/>
-      <image x="1950" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f523b08f91a5aa905b9_Vmware.svg"/>
-      <image x="2100" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f2cb537758796a9dba1_Roche_Logo.svg"/>
-      <image x="2250" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f10c3975e28b3932320_Amazon_logo%201.svg"/>
-      <image x="2400" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137ec5a6f77dd174e557ce_C3ai_logo%201.svg"/>
-      <image x="2550" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137eac8f27ca27f5e48420_Netflix_2015_logo%201.svg"/>
-      <image x="2700" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e8df2c028b9e1506ede_mastercard%201.svg"/>
-      <image x="2850" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e783790933dd06f9d59_Red_Hat_Logo_2019%201.svg"/>
-      <image x="3000" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e5fa006d963a1d1904d_mongodb-ar21%201.svg"/>
-      <image x="3150" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e47b45195da10c50f49_apple-11%201.svg"/>
-      <image x="3300" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e34e3a5ab71e37082a7_NVIDIA_logo%201.svg"/>
-      <image x="3450" y="6" height="28" href="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e199ce2cb594b0210ab_google-ar21%201.svg"/>
-    </g>
-  </svg>
+  <sub>Trusted by engineers at</sub>
+  <br/><br/>
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f6974b71a1a4a932f82_TikTok_logo.svg" alt="TikTok" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f523b08f91a5aa905b9_Vmware.svg" alt="VMware" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f2cb537758796a9dba1_Roche_Logo.svg" alt="Roche" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137f10c3975e28b3932320_Amazon_logo%201.svg" alt="Amazon" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137ec5a6f77dd174e557ce_C3ai_logo%201.svg" alt="C3 AI" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137eac8f27ca27f5e48420_Netflix_2015_logo%201.svg" alt="Netflix" height="24">
+  <br/>
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e8df2c028b9e1506ede_mastercard%201.svg" alt="Mastercard" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e783790933dd06f9d59_Red_Hat_Logo_2019%201.svg" alt="Red Hat" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e5fa006d963a1d1904d_mongodb-ar21%201.svg" alt="MongoDB" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e47b45195da10c50f49_apple-11%201.svg" alt="Apple" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e34e3a5ab71e37082a7_NVIDIA_logo%201.svg" alt="NVIDIA" height="24">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.prod.website-files.com/68ff4058b35616cdd47d5b59/69137e199ce2cb594b0210ab_google-ar21%201.svg" alt="Google" height="24">
 </div>
 
 <hr>
