@@ -61,23 +61,6 @@ async def _get_v1_conversation_info(
         return None
 
 
-def _get_v1_conversation_config(
-    app_conversation_info: AppConversationInfo,
-) -> dict[str, str | None]:
-    """Get configuration for a V1 conversation.
-
-    Args:
-        app_conversation: The conversation
-
-    Returns:
-        Dictionary with runtime_id (sandbox_id) and session_id (conversation_id)
-    """
-    return {
-        'runtime_id': app_conversation_info.sandbox_id,
-        'session_id': app_conversation_info.id.hex,
-    }
-
-
 def _get_v0_conversation_config(
     conversation: ServerConversation,
 ) -> dict[str, str | None]:
@@ -116,7 +99,10 @@ async def get_remote_runtime_config(
     )
     if v1_conversation_info:
         # This is a V1 conversation
-        config = _get_v1_conversation_config(v1_conversation_info)
+        return {
+            'runtime_id': v1_conversation_info.sandbox_id,
+            'session_id': conversation_id,
+        }
     else:
         # V0 conversation - get the conversation and use the existing logic
         conversation = await conversation_manager.attach_to_conversation(
