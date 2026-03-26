@@ -31,6 +31,7 @@ import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
 import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -79,6 +80,20 @@ function LlmSettingsScreen() {
   // In SaaS mode, check role-based permissions (members can only view, owners and admins can edit)
   const isOssMode = config?.app_mode === "oss";
   const isReadOnly = isOssMode ? false : !hasPermission("edit_llm_settings");
+
+  // Get organization type for contextual info messages
+  const { isTeamOrg } = useOrgTypeAndAccess();
+  const isAdminOrOwner = me?.role === "admin" || me?.role === "owner";
+
+  const getLlmSettingsInfoMessage = (): I18nKey | null => {
+    if (isOssMode) return null;
+    if (!isTeamOrg) return null;
+    return isAdminOrOwner
+      ? I18nKey.SETTINGS$LLM_ADMIN_INFO
+      : I18nKey.SETTINGS$LLM_MEMBER_INFO;
+  };
+
+  const infoMessageKey = getLlmSettingsInfoMessage();
 
   const [view, setView] = React.useState<"basic" | "advanced">("basic");
 
@@ -504,6 +519,15 @@ function LlmSettingsScreen() {
         className="flex flex-col h-full justify-between"
       >
         <div className="flex flex-col gap-6">
+          {infoMessageKey && (
+            <p
+              data-testid="llm-settings-info-message"
+              className="text-sm text-tertiary-alt"
+            >
+              {t(infoMessageKey)}
+            </p>
+          )}
+
           <SettingsSwitch
             testId="advanced-settings-switch"
             defaultIsToggled={view === "advanced"}
