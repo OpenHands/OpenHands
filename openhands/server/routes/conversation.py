@@ -56,7 +56,10 @@ async def _get_v1_conversation_info(
     except (ValueError, TypeError):
         # Not a valid UUID, so it's not a V1 conversation
         return None
-    except Exception:
+    except Exception as e:
+        # Service error, assume it's not a V1 conversation
+        logger.debug(f'Failed to fetch V1 conversation {conversation_id}: {e}')
+        return None
         # Service error, assume it's not a V1 conversation
         return None
 
