@@ -32,7 +32,7 @@ from openhands.integrations.provider import (
 from openhands.llm.llm_registry import LLMRegistry
 from openhands.mcp import add_mcp_tools_to_agent
 from openhands.memory.memory import Memory
-from openhands.microagent.microagent import BaseMicroagent
+from openhands.microagent.microagent import BaseMicroagent, RepoMicroagent
 from openhands.runtime import get_runtime_cls
 from openhands.runtime.base import Runtime
 from openhands.runtime.impl.remote.remote_runtime import RemoteRuntime
@@ -383,6 +383,11 @@ class AgentSession:
         await self.runtime.clone_or_init_repo(
             git_provider_tokens, selected_repository, selected_branch
         )
+
+        # Clone any repos listed under dependency_repos in the frontmatter
+        if selected_repository:
+            await self._clone_dependency_repos(git_provider_tokens, selected_repository)
+
         await call_sync_from_async(self.runtime.maybe_run_setup_script)
         await call_sync_from_async(self.runtime.maybe_setup_git_hooks)
 
@@ -390,6 +395,43 @@ class AgentSession:
             f'Runtime initialized with plugins: {[plugin.name for plugin in self.runtime.plugins]}'
         )
         return True
+
+    async def _clone_dependency_repos(
+        self,
+        git_provider_tokens: PROVIDER_TOKEN_TYPE | None,
+        selected_repository: str,
+    ) -> None:
+        """Clone repos declared under dependency_repos in the main repo's frontmatter.
+
+        After the primary repository is cloned, we read the repo microagents and look
+        for any ``dependency_repos`` entries.  Each listed repo is cloned into the
+        same workspace so the agent has them available from the start.
+
+        Cloning failures are logged as warnings rather than hard errors so a missing
+        or private dependency repo doesn't prevent the session from starting.
+        """
+        microagents = await call_sync_from_async(
+            self.runtime.get_microagents_from_selected_repo,
+            selected_repository,
+        )
+        seen: set[str] = set()
+        for agent in microagents:
+            if isinstance(agent, RepoMicroagent) and agent.dependency_repos:
+                for dep_repo in agent.dependency_repos:
+                    if dep_repo not in seen:
+                        seen.add(dep_repo)
+                        self.logger.info(
+                            f'Cloning dependency repo {dep_repo!r} '
+                            f'declared in {selected_repository!r} frontmatter'
+                        )
+                        try:
+                            await self.runtime.clone_or_init_repo(
+                                git_provider_tokens, dep_repo, None
+                            )
+                        except Exception as exc:
+                            self.logger.warning(
+                                f'Failed to clone dependency repo {dep_repo!r}: {exc}'
+                            )
 
     def _create_controller(
         self,

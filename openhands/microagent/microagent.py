@@ -222,6 +222,11 @@ class RepoMicroagent(BaseMicroagent):
                 f'RepoMicroagent initialized with incorrect type: {self.type}'
             )
 
+    @property
+    def dependency_repos(self) -> list[str]:
+        """Return repos declared in the frontmatter dependency_repos field."""
+        return self.metadata.dependency_repos
+
 
 class TaskMicroagent(KnowledgeMicroagent):
     """TaskMicroagent is a special type of KnowledgeMicroagent that requires user input.

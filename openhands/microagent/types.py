@@ -35,6 +35,7 @@ class MicroagentMetadata(BaseModel):
     mcp_tools: MCPConfig | None = (
         None  # optional, for microagents that provide additional MCP tools
     )
+    dependency_repos: list[str] = []  # optional, repos to clone alongside the main repo
 
 
 class MicroagentResponse(BaseModel):

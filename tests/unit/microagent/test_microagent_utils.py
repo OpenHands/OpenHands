@@ -545,3 +545,130 @@ def test_load_both_cursorrules_and_agents_md(temp_dir_with_both_cursorrules_and_
     agents_agent = repo_agents['agents']
     assert isinstance(agents_agent, RepoMicroagent)
     assert 'Install deps: `poetry install`' in agents_agent.content
+
+
+# ---------------------------------------------------------------------------
+# Tests for dependency_repos frontmatter field (issue #11938)
+# ---------------------------------------------------------------------------
+
+
+def test_repo_microagent_dependency_repos_parsed():
+    """dependency_repos in frontmatter should be available on the RepoMicroagent."""
+    content = """---
+name: my-repo
+dependency_repos:
+  - OpenHands/OpenHands
+  - OpenHands/software-agent-sdk
+---
+Repository instructions here.
+"""
+    with tempfile.NamedTemporaryFile(suffix='.md', mode='w', delete=False) as f:
+        f.write(content)
+        tmp_path = Path(f.name)
+
+    try:
+        agent = BaseMicroagent.load(tmp_path)
+        assert isinstance(agent, RepoMicroagent)
+        assert agent.dependency_repos == [
+            'OpenHands/OpenHands',
+            'OpenHands/software-agent-sdk',
+        ], f'Unexpected dependency_repos: {agent.dependency_repos}'
+    finally:
+        tmp_path.unlink()
+
+
+def test_repo_microagent_no_dependency_repos_defaults_to_empty():
+    """A RepoMicroagent without dependency_repos should have an empty list."""
+    content = """---
+name: plain-repo
+---
+No dependencies declared.
+"""
+    with tempfile.NamedTemporaryFile(suffix='.md', mode='w', delete=False) as f:
+        f.write(content)
+        tmp_path = Path(f.name)
+
+    try:
+        agent = BaseMicroagent.load(tmp_path)
+        assert isinstance(agent, RepoMicroagent)
+        assert agent.dependency_repos == []
+    finally:
+        tmp_path.unlink()
+
+
+def test_repo_microagent_single_dependency_repo():
+    """A single dependency repo should be a list of one string."""
+    content = """---
+name: single-dep
+dependency_repos:
+  - owner/repo
+---
+One dependency.
+"""
+    with tempfile.NamedTemporaryFile(suffix='.md', mode='w', delete=False) as f:
+        f.write(content)
+        tmp_path = Path(f.name)
+
+    try:
+        agent = BaseMicroagent.load(tmp_path)
+        assert isinstance(agent, RepoMicroagent)
+        assert agent.dependency_repos == ['owner/repo']
+    finally:
+        tmp_path.unlink()
+
+
+def test_dependency_repos_not_inherited_by_knowledge_microagent():
+    """dependency_repos is a field on MicroagentMetadata; verify it doesn't
+    accidentally influence non-repo agents."""
+    content = """---
+name: knowledge-agent
+triggers:
+  - python
+dependency_repos:
+  - some/repo
+---
+Knowledge content.
+"""
+    with tempfile.NamedTemporaryFile(suffix='.md', mode='w', delete=False) as f:
+        f.write(content)
+        tmp_path = Path(f.name)
+
+    try:
+        agent = BaseMicroagent.load(tmp_path)
+        # Knowledge agents have triggers so they are KnowledgeMicroagent, not Repo
+        assert isinstance(agent, KnowledgeMicroagent)
+        # The metadata still holds the field; it's just not meaningful for
+        # knowledge agents (the session code only acts on RepoMicroagent instances)
+        assert agent.metadata.dependency_repos == ['some/repo']
+    finally:
+        tmp_path.unlink()
+
+
+def test_dependency_repos_metadata_model():
+    """MicroagentMetadata should accept dependency_repos directly."""
+    meta = MicroagentMetadata(
+        name='test',
+        dependency_repos=['org/repo-a', 'org/repo-b'],
+    )
+    assert meta.dependency_repos == ['org/repo-a', 'org/repo-b']
+
+
+def test_dependency_repos_preserved_in_load_from_dir(tmp_path):
+    """dependency_repos should survive a full load_microagents_from_dir round-trip."""
+    repo_agent_content = """---
+name: with-deps
+dependency_repos:
+  - org/frontend
+  - org/backend
+---
+Instructions for a multi-repo project.
+"""
+    microagents_dir = tmp_path / 'microagents'
+    microagents_dir.mkdir()
+    (microagents_dir / 'repo.md').write_text(repo_agent_content)
+
+    repo_agents, _ = load_microagents_from_dir(microagents_dir)
+    assert 'repo' in repo_agents
+    loaded = repo_agents['repo']
+    assert isinstance(loaded, RepoMicroagent)
+    assert loaded.dependency_repos == ['org/frontend', 'org/backend']
