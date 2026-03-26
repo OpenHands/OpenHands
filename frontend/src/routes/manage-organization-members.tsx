@@ -1,7 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
-import { LoaderCircle, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { InviteOrganizationMemberModal } from "#/components/features/org/invite-organization-member-modal";
 import { ConfirmRemoveMemberModal } from "#/components/features/org/confirm-remove-member-modal";
 import { ConfirmUpdateRoleModal } from "#/components/features/org/confirm-update-role-modal";
@@ -158,10 +159,9 @@ function ManageOrganizationMembers() {
           className="w-full leading-4 font-normal bg-transparent placeholder:italic placeholder:text-tertiary-alt outline-none"
         />
         {isFetching && debouncedEmailFilter && (
-          <LoaderCircle
-            size={16}
-            className="text-tertiary-alt animate-spin"
-            data-testid="search-loading-indicator"
+          <LoadingSpinner
+            className="w-4 h-4 text-tertiary-alt"
+            aria-label="Searching"
           />
         )}
       </div>
