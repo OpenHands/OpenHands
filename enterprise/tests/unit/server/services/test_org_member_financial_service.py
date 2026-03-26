@@ -115,8 +115,11 @@ class TestOrgMemberFinancialServiceGetFinancialData:
             'team_max_budget': 500.0,
             'team_spend': 150.0,  # Total team spend
             'members': {
-                # max_budget matches team_max_budget = shared budget
-                user_id_str: {'spend': 50.0, 'max_budget': 500.0}
+                user_id_str: {
+                    'spend': 50.0,
+                    'max_budget': 500.0,
+                    'uses_shared_budget': True,  # Explicitly using shared budget
+                }
             },
         }
 

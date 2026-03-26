@@ -2626,8 +2626,17 @@ class TestGetTeamMembersFinancialData:
         assert result['team_max_budget'] == 500.0
         assert result['team_spend'] == 125.5
         assert len(result['members']) == 2
-        assert result['members']['user-1'] == {'spend': 50.0, 'max_budget': 200.0}
-        assert result['members']['user-2'] == {'spend': 75.5, 'max_budget': 150.0}
+        # Both users have individual budgets (max_budget_in_team is set)
+        assert result['members']['user-1'] == {
+            'spend': 50.0,
+            'max_budget': 200.0,
+            'uses_shared_budget': False,
+        }
+        assert result['members']['user-2'] == {
+            'spend': 75.5,
+            'max_budget': 150.0,
+            'uses_shared_budget': False,
+        }
 
     @pytest.mark.asyncio
     async def test_returns_empty_dict_when_litellm_not_configured(
@@ -2755,12 +2764,18 @@ class TestGetTeamMembersFinancialData:
         assert members['user-no-individual-budget'] == {
             'spend': 50.0,
             'max_budget': 500.0,
+            'uses_shared_budget': True,
         }
         assert members['user-with-individual-budget'] == {
             'spend': 75.0,
             'max_budget': 200.0,
+            'uses_shared_budget': False,
         }
-        assert members['user-null-budget'] == {'spend': 25.0, 'max_budget': 500.0}
+        assert members['user-null-budget'] == {
+            'spend': 25.0,
+            'max_budget': 500.0,
+            'uses_shared_budget': True,
+        }
 
     @pytest.mark.asyncio
     async def test_uses_defaults_when_no_budget_data_available(self, mock_http_client):
@@ -2800,8 +2815,17 @@ class TestGetTeamMembersFinancialData:
         assert result['team_max_budget'] is None
         assert result['team_spend'] == 0
         members = result['members']
-        assert members['user-no-data'] == {'spend': 0, 'max_budget': None}
-        assert members['user-null-spend'] == {'spend': 0, 'max_budget': None}
+        # Both users fall back to team budget (which is None)
+        assert members['user-no-data'] == {
+            'spend': 0,
+            'max_budget': None,
+            'uses_shared_budget': True,
+        }
+        assert members['user-null-spend'] == {
+            'spend': 0,
+            'max_budget': None,
+            'uses_shared_budget': True,
+        }
 
     @pytest.mark.asyncio
     async def test_skips_members_without_user_id(self, mock_http_client):
@@ -2848,4 +2872,8 @@ class TestGetTeamMembersFinancialData:
         assert result['team_spend'] == 105.0
         assert len(result['members']) == 1
         assert 'valid-user' in result['members']
-        assert result['members']['valid-user'] == {'spend': 25.0, 'max_budget': 100.0}
+        assert result['members']['valid-user'] == {
+            'spend': 25.0,
+            'max_budget': 100.0,
+            'uses_shared_budget': False,
+        }

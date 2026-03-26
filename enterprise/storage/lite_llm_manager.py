@@ -1544,7 +1544,11 @@ class LiteLlmManager:
                 "team_max_budget": float | None,  # Team's shared budget
                 "team_spend": float,              # Team's total spend (for shared budget calc)
                 "members": {
-                    user_id: {"spend": float, "max_budget": float | None},
+                    user_id: {
+                        "spend": float,
+                        "max_budget": float | None,
+                        "uses_shared_budget": bool  # True if using team budget
+                    },
                     ...
                 }
             }
@@ -1577,12 +1581,14 @@ class LiteLlmManager:
 
             # Use individual max_budget_in_team if set, otherwise fall back to team budget
             member_max_budget = membership.get('max_budget_in_team')
-            if member_max_budget is None:
+            uses_shared_budget = member_max_budget is None
+            if uses_shared_budget:
                 member_max_budget = team_max_budget
 
             members[user_id] = {
                 'spend': membership.get('spend', 0) or 0,
                 'max_budget': member_max_budget,
+                'uses_shared_budget': uses_shared_budget,
             }
 
         logger.debug(

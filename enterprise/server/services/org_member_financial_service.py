@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+import httpx
 from server.routes.org_models import (
     OrgMemberFinancialPage,
     OrgMemberFinancialResponse,
@@ -70,16 +71,42 @@ class OrgMemberFinancialService:
             financial_data = await LiteLlmManager.get_team_members_financial_data(
                 str(org_id)
             )
-        except Exception as e:
-            logger.error(
+        except httpx.HTTPStatusError as e:
+            # Re-raise auth errors - these indicate configuration issues that need fixing
+            if e.response.status_code in (401, 403):
+                logger.error(
+                    'LiteLLM authentication/authorization failed',
+                    extra={
+                        'org_id': str(org_id),
+                        'status_code': e.response.status_code,
+                        'error': str(e),
+                    },
+                )
+                raise
+            # For other HTTP errors (404, 500, etc.), use graceful degradation
+            logger.warning(
                 'Failed to fetch financial data from LiteLLM',
-                extra={'org_id': str(org_id), 'error': str(e)},
+                extra={
+                    'org_id': str(org_id),
+                    'status_code': e.response.status_code,
+                    'error_type': type(e).__name__,
+                    'error': str(e),
+                },
             )
-            # Return empty financial data if LiteLLM is unavailable
+            financial_data = {}
+        except Exception as e:
+            # For network errors, timeouts, etc., use graceful degradation
+            logger.warning(
+                'Failed to fetch financial data from LiteLLM',
+                extra={
+                    'org_id': str(org_id),
+                    'error_type': type(e).__name__,
+                    'error': str(e),
+                },
+            )
             financial_data = {}
 
         # Extract team-level data for shared budget calculation
-        team_max_budget = financial_data.get('team_max_budget')
         team_spend = financial_data.get('team_spend', 0) or 0
         members_financial = financial_data.get('members', {})
 
@@ -93,14 +120,14 @@ class OrgMemberFinancialService:
             user_financial = members_financial.get(user_id_str, {})
             individual_spend = user_financial.get('spend', 0) or 0
             max_budget = user_financial.get('max_budget')
+            uses_shared_budget = user_financial.get('uses_shared_budget', False)
 
             # Calculate current budget (remaining)
             # For shared team budgets, use team_spend to calculate remaining budget
             # This ensures all members see the same remaining budget
             if max_budget is not None:
-                # If max_budget equals team_max_budget, it's a shared budget
-                # Use team_spend for the calculation
-                if max_budget == team_max_budget:
+                if uses_shared_budget:
+                    # Shared budget - use team's total spend
                     current_budget = max(max_budget - team_spend, 0)
                 else:
                     # Individual budget - use individual spend
