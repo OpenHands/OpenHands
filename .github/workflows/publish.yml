@@ -1,11 +1,14 @@
-# Workflow that builds and publishes the OpenHands Docker image to AWS ECR
 name: Publish to ECR
 
-# Only run on tags
 on:
   push:
     tags:
       - "*"
+
+env:
+  AWS_REGION: eu-central-1
+  DOCKER_REPOSITORY: 653306034207.dkr.ecr.eu-central-1.amazonaws.com/b1
+  APP_NAME: openhands
 
 jobs:
   publish:
@@ -19,22 +22,20 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.B1_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.B1_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker image
         env:
-          REPOSITORY: 653306034207.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/b1
           VERSION: ${{ github.ref_name }}
-          NAME: openhands
         run: |
           docker build . -f containers/app/Dockerfile \
-            -t "${REPOSITORY}/${NAME}:${VERSION}" \
+            -t "${DOCKER_REPOSITORY}/${APP_NAME}:${VERSION}" \
             --build-arg BUILD_VERSION="${VERSION}" \
             --build-arg BUILD_DATE="$(date)" \
-            --build-arg BUILD_NAME="${NAME}" \
-            --build-arg BUILD_IMAGE="${REPOSITORY}/${NAME}"
-          docker push "${REPOSITORY}/${NAME}:${VERSION}"
+            --build-arg BUILD_NAME="${APP_NAME}" \
+            --build-arg BUILD_IMAGE="${DOCKER_REPOSITORY}/${APP_NAME}"
+          docker push "${DOCKER_REPOSITORY}/${APP_NAME}:${VERSION}"
         timeout-minutes: 30

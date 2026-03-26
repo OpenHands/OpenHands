@@ -1,0 +1,23 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: |
+          docker build . -f containers/app/Dockerfile \
+            -t openhands:build
+        timeout-minutes: 30

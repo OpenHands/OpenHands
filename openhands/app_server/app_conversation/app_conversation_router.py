@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Annotated, AsyncGenerator, Literal
 from uuid import UUID
 
+import httpx
+
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
@@ -48,6 +50,7 @@ from openhands.app_server.app_conversation.app_conversation_start_task_service i
 from openhands.app_server.config import (
     depends_app_conversation_service,
     depends_app_conversation_start_task_service,
+    depends_httpx_client,
     depends_sandbox_service,
     depends_sandbox_spec_service,
     depends_user_context,
@@ -74,6 +77,7 @@ app_conversation_start_task_service_dependency = (
 user_context_dependency = depends_user_context()
 sandbox_service_dependency = depends_sandbox_service()
 sandbox_spec_service_dependency = depends_sandbox_spec_service()
+httpx_client_dependency = depends_httpx_client()
 
 # Read methods
 
