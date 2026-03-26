@@ -60,7 +60,7 @@ class ProviderToken(BaseModel):
 
     @classmethod
     def from_value(cls, token_value: ProviderToken | dict[str, str]) -> ProviderToken:
-        """Factory method to create a ProviderToken from various input types"""
+        """Factory method to create a ProviderToken from various input types."""
         if isinstance(token_value, cls):
             return token_value
         elif isinstance(token_value, dict):
@@ -88,7 +88,7 @@ class CustomSecret(BaseModel):
 
     @classmethod
     def from_value(cls, secret_value: CustomSecret | dict[str, str]) -> CustomSecret:
-        """Factory method to create a ProviderToken from various input types"""
+        """Factory method to create a CustomSecret from various input types."""
         if isinstance(secret_value, CustomSecret):
             return secret_value
         elif isinstance(secret_value, dict):
@@ -737,9 +737,9 @@ class ProviderHandler:
                         f'{protocol}://oauth2:{token_value}@{domain}/{repo_name}.git'
                     )
                 elif provider == ProviderType.BITBUCKET:
-                    # For Bitbucket, handle username:app_password or username:api_token format
+                    # For Bitbucket, handle username:app_password (Basic) or access token (no colon)
                     if ':' in token_value:
-                        # username:token format (app password or API token)
+                        # username:app_password format (Basic auth)
                         remote_url = (
                             f'{protocol}://{token_value}@{domain}/{repo_name}.git'
                         )
