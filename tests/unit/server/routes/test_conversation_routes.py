@@ -1709,9 +1709,9 @@ async def test_get_remote_runtime_config_v1_conversation():
         updated_at=datetime.now(timezone.utc),
     )
 
-    # Mock the AppConversationInfoService
+    # Mock the AppConversationInfoService - use AsyncMock for the method
     mock_info_service = AsyncMock(spec=AppConversationInfoService)
-    mock_info_service.get_app_conversation_info.return_value = mock_info
+    mock_info_service.get_app_conversation_info = AsyncMock(return_value=mock_info)
 
     # Call the function directly
     result = await get_remote_runtime_config(
@@ -1719,12 +1719,10 @@ async def test_get_remote_runtime_config_v1_conversation():
         app_conversation_info_service=mock_info_service,
     )
 
-    # Verify the response
-    assert isinstance(result, JSONResponse)
-    assert result.status_code == 200
-    content = json.loads(result.body)
-    assert content['runtime_id'] == test_sandbox_id
-    assert content['session_id'] == conversation_id
+    # Verify the response - V1 returns a dict directly, not JSONResponse
+    assert isinstance(result, dict)
+    assert result['runtime_id'] == test_sandbox_id
+    assert result['session_id'] == conversation_id
 
     # Verify the service was called with correct UUID
     mock_info_service.get_app_conversation_info.assert_called_once_with(
@@ -1751,15 +1749,16 @@ async def test_get_remote_runtime_config_v0_conversation():
     mock_conversation = MagicMock(spec=ServerConversation)
     mock_conversation.runtime = mock_runtime
 
-    # Mock the conversation_manager
+    # Mock the conversation_manager - use AsyncMock for attach_to_conversation
     with patch(
         'openhands.server.routes.conversation.conversation_manager'
     ) as mock_manager:
-        mock_manager.attach_to_conversation.return_value = mock_conversation
+        mock_manager.attach_to_conversation = AsyncMock(return_value=mock_conversation)
+        mock_manager.detach_from_conversation = AsyncMock()
 
         # Mock the AppConversationInfoService to return None (not V1)
         mock_info_service = AsyncMock(spec=AppConversationInfoService)
-        mock_info_service.get_app_conversation_info.return_value = None
+        mock_info_service.get_app_conversation_info = AsyncMock(return_value=None)
 
         # Call the function directly
         result = await get_remote_runtime_config(
@@ -1794,15 +1793,16 @@ async def test_get_remote_runtime_config_v1_not_found_falls_back_to_v0():
     mock_conversation = MagicMock(spec=ServerConversation)
     mock_conversation.runtime = mock_runtime
 
-    # Mock the conversation_manager
+    # Mock the conversation_manager - use AsyncMock
     with patch(
         'openhands.server.routes.conversation.conversation_manager'
     ) as mock_manager:
-        mock_manager.attach_to_conversation.return_value = mock_conversation
+        mock_manager.attach_to_conversation = AsyncMock(return_value=mock_conversation)
+        mock_manager.detach_from_conversation = AsyncMock()
 
         # Mock the AppConversationInfoService to return None (not found)
         mock_info_service = AsyncMock(spec=AppConversationInfoService)
-        mock_info_service.get_app_conversation_info.return_value = None
+        mock_info_service.get_app_conversation_info = AsyncMock(return_value=None)
 
         # Call the function directly
         result = await get_remote_runtime_config(
@@ -1837,17 +1837,17 @@ async def test_get_remote_runtime_config_invalid_uuid_falls_back_to_v0():
     mock_conversation = MagicMock(spec=ServerConversation)
     mock_conversation.runtime = mock_runtime
 
-    # Mock the conversation_manager
+    # Mock the conversation_manager - use AsyncMock
     with patch(
         'openhands.server.routes.conversation.conversation_manager'
     ) as mock_manager:
-        mock_manager.attach_to_conversation.return_value = mock_conversation
+        mock_manager.attach_to_conversation = AsyncMock(return_value=mock_conversation)
+        mock_manager.detach_from_conversation = AsyncMock()
 
-        # Mock the AppConversationInfoService - should be called but return None for invalid UUID
+        # Mock the AppConversationInfoService - use AsyncMock for the method
         mock_info_service = AsyncMock(spec=AppConversationInfoService)
-        # Note: For invalid UUID, the function catches ValueError and returns None
-        mock_info_service.get_app_conversation_info.side_effect = ValueError(
-            'Invalid UUID'
+        mock_info_service.get_app_conversation_info = AsyncMock(
+            side_effect=ValueError('Invalid UUID')
         )
 
         # Call the function directly
@@ -1867,22 +1867,19 @@ async def test_get_remote_runtime_config_invalid_uuid_falls_back_to_v0():
 @pytest.mark.asyncio
 async def test_get_remote_runtime_config_v0_not_found():
     """Test get_remote_runtime_config returns 404 when V0 conversation not found."""
-    from openhands.runtime.base import Runtime
+    from fastapi import HTTPException
 
     conversation_id = 'test-conversation-v0'
 
-    # Create mock Runtime (won't be used since attach returns None)
-    MagicMock(spec=Runtime)
-
-    # Mock the conversation_manager
+    # Mock the conversation_manager - use AsyncMock
     with patch(
         'openhands.server.routes.conversation.conversation_manager'
     ) as mock_manager:
-        mock_manager.attach_to_conversation.return_value = None
+        mock_manager.attach_to_conversation = AsyncMock(return_value=None)
 
         # Mock the AppConversationInfoService to return None (not V1)
         mock_info_service = AsyncMock(spec=AppConversationInfoService)
-        mock_info_service.get_app_conversation_info.return_value = None
+        mock_info_service.get_app_conversation_info = AsyncMock(return_value=None)
 
         # Call the function and expect HTTPException
         with pytest.raises(HTTPException) as exc_info:
