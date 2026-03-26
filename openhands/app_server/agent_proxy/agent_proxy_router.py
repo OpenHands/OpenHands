@@ -27,6 +27,7 @@ from openhands.app_server._proxy_core import (
     do_ws_proxy,
 )
 from openhands.app_server.config import get_sandbox_service
+from openhands.app_server.utils.docker_utils import replace_localhost_hostname_for_docker
 
 _logger = logging.getLogger(__name__)
 
@@ -70,6 +71,10 @@ async def _do_proxy_http(request: Request, short_sandbox_id: str) -> Response:
             content='Agent server proxy not available for this sandbox',
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
+
+    # When running in Docker, localhost refers to the container itself.
+    # Replace with host.docker.internal to reach the host.
+    internal_url = replace_localhost_hostname_for_docker(internal_url)
 
     # Strip the /agent/{id} prefix — the agent server serves at its root and
     # has no knowledge of the proxy prefix (unlike VS Code which is configured
@@ -150,6 +155,10 @@ async def _do_proxy_ws(websocket: WebSocket, short_sandbox_id: str) -> None:
     if internal_url is None:
         await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         return
+
+    # When running in Docker, localhost refers to the container itself.
+    # Replace with host.docker.internal to reach the host.
+    internal_url = replace_localhost_hostname_for_docker(internal_url)
 
     ws_scheme = 'wss' if internal_url.startswith('https') else 'ws'
     host_part = internal_url.split('://', 1)[-1]
