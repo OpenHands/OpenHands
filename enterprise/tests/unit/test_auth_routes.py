@@ -77,7 +77,7 @@ def test_set_response_cookie(mock_response, mock_request):
         assert 'value' in kwargs
         assert kwargs['httponly'] is True
         assert kwargs['secure'] is True
-        assert kwargs['samesite'] == 'lax'
+        assert kwargs['samesite'] == 'strict'
         assert kwargs['domain'] == 'example.com'
 
         # Verify the JWT token contains the correct data
