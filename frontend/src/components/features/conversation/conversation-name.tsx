@@ -169,6 +169,16 @@ export function ConversationName() {
           />
         )}
 
+        {titleMode !== "edit" && conversation.llm_model && (
+          <span
+            className="text-xs text-[#A3A3A3] truncate max-w-[150px]"
+            title={conversation.llm_model}
+            data-testid="conversation-name-llm-model"
+          >
+            {conversation.llm_model}
+          </span>
+        )}
+
         {titleMode !== "edit" && (
           <div className="relative flex items-center">
             <EllipsisButton fill="#B1B9D3" onClick={handleEllipsisClick} />
