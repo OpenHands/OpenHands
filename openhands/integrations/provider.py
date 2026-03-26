@@ -154,7 +154,7 @@ class ProviderHandler:
         return self._provider_tokens
 
     def get_service(self, provider: ProviderType) -> GitService:
-        """Helper method to instantiate a service for a given provider"""
+        """Helper method to instantiate a service for a given provider."""
         token = self.provider_tokens[provider]
         service_class = self.service_class_map[provider]
         return service_class(
@@ -167,7 +167,7 @@ class ProviderHandler:
         )
 
     async def get_user(self) -> User:
-        """Get user information from the first available provider"""
+        """Get user information from the first available provider."""
         exceptions: list[tuple[ProviderType, Exception]] = []
         for provider in self.provider_tokens:
             try:
@@ -186,7 +186,7 @@ class ProviderHandler:
     async def _get_latest_provider_token(
         self, provider: ProviderType
     ) -> SecretStr | None:
-        """Get latest token from service"""
+        """Get latest token from service."""
         try:
             async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
                 resp = await client.get(
@@ -288,7 +288,7 @@ class ProviderHandler:
         return all_repos
 
     async def get_suggested_tasks(self) -> list[SuggestedTask]:
-        """Get suggested tasks from providers"""
+        """Get suggested tasks from providers."""
         tasks: list[SuggestedTask] = []
         for provider in self.provider_tokens:
             try:
@@ -386,7 +386,7 @@ class ProviderHandler:
         env_vars: dict[ProviderType, SecretStr] | None = None,
     ) -> None:
         """This ensures that the latest provider tokens are masked from the event stream
-        It is called when the provider tokens are first initialized in the runtime or when tokens are re-exported with the latest working ones
+        It is called when the provider tokens are first initialized in the runtime or when tokens are re-exported with the latest working ones.
 
         Args:
             event_stream: Agent session's event stream
@@ -402,7 +402,7 @@ class ProviderHandler:
         self, env_secrets: dict[ProviderType, SecretStr]
     ) -> dict[str, str]:
         """Return string values instead of typed values for environment secrets
-        Called just before exporting secrets to runtime, or setting secrets in the event stream
+        Called just before exporting secrets to runtime, or setting secrets in the event stream.
         """
         exposed_envs = {}
         for provider, token in env_secrets.items():
@@ -434,7 +434,7 @@ class ProviderHandler:
         get_latest: bool = False,
     ) -> dict[ProviderType, SecretStr] | dict[str, str]:
         """Retrieves the provider tokens from ProviderHandler object
-        This is used when initializing/exporting new provider tokens in the runtime
+        This is used when initializing/exporting new provider tokens in the runtime.
 
         Args:
             expose_secrets: Flag which returns strings instead of secrets
@@ -472,7 +472,7 @@ class ProviderHandler:
         cls, event: Action
     ) -> list[ProviderType]:
         """Detect if agent run action is using a provider token (e.g github_token)
-        Returns a list of providers which are called by the agent
+        Returns a list of providers which are called by the agent.
         """
         if not isinstance(event, CmdRunAction):
             return []
@@ -486,7 +486,7 @@ class ProviderHandler:
 
     @classmethod
     def get_provider_env_key(cls, provider: ProviderType) -> str:
-        """Map ProviderType value to the environment variable name in the runtime"""
+        """Map ProviderType value to the environment variable name in the runtime."""
         return f'{provider.value}_token'.lower()
 
     async def verify_repo_provider(
@@ -539,7 +539,7 @@ class ProviderHandler:
         page: int = 1,
         per_page: int = 30,
     ) -> PaginatedBranchesResponse:
-        """Get branches for a repository
+        """Get branches for a repository.
 
         Args:
             repository: The repository name
