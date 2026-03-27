@@ -17,11 +17,11 @@ describe("LoginCTA", () => {
     vi.clearAllMocks();
   });
 
-  const renderWithRouter = () => {
+  const renderWithRouter = (source?: "login_page" | "device_verify") => {
     const Stub = createRoutesStub([
       {
         path: "/",
-        Component: LoginCTA,
+        Component: () => <LoginCTA source={source} />,
       },
       {
         path: "/information-request",
@@ -74,5 +74,33 @@ describe("LoginCTA", () => {
       "href",
       "/information-request",
     );
+  });
+
+  it("should render external enterprise URL in device verify mode", () => {
+    renderWithRouter("device_verify");
+
+    const learnMoreLink = screen.getByRole("link", {
+      name: "CTA$LEARN_MORE",
+    });
+    expect(learnMoreLink).toHaveAttribute(
+      "href",
+      "https://openhands.dev/enterprise",
+    );
+    expect(learnMoreLink).toHaveAttribute("target", "_blank");
+    expect(learnMoreLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("should track device_verify location when Learn More is clicked in device verify mode", async () => {
+    const user = userEvent.setup();
+    renderWithRouter("device_verify");
+
+    const learnMoreLink = screen.getByRole("link", {
+      name: "CTA$LEARN_MORE",
+    });
+    await user.click(learnMoreLink);
+
+    expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
+      location: "device_verify",
+    });
   });
 });
