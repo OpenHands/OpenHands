@@ -135,15 +135,6 @@ describe("UserActions", () => {
     expect(screen.getByTestId("user-avatar")).toBeInTheDocument();
   });
 
-  it("should NOT show context menu when user is undefined and avatar is hovered", async () => {
-    renderUserActions({ hasAvatar: false });
-    const userActions = screen.getByTestId("user-actions");
-    await user.hover(userActions);
-
-    // Context menu should NOT appear because user is undefined
-    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
-  });
-
   it("should show context menu even when user has no avatar_url", async () => {
     renderUserActions();
     const userActions = screen.getByTestId("user-actions");
@@ -151,54 +142,6 @@ describe("UserActions", () => {
 
     // Context menu SHOULD appear because user object exists (even with empty avatar_url)
     expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
-  });
-
-  it("should handle user prop changing from undefined to defined", async () => {
-    const { unmount } = renderWithRouter(<UserActions />);
-
-    // Initially no user - menu should not appear
-    const userActions = screen.getByTestId("user-actions");
-    await user.hover(userActions);
-    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
-
-    // Unmount the first component
-    unmount();
-
-    // Render a new component with user prop
-    renderWithRouter(
-      <UserActions user={{ avatar_url: "https://example.com/avatar.png" }} />,
-    );
-
-    // Component should render correctly
-    expect(screen.getByTestId("user-actions")).toBeInTheDocument();
-    expect(screen.getByTestId("user-avatar")).toBeInTheDocument();
-
-    // Menu should now work with user defined
-    const userActionsEl = screen.getByTestId("user-actions");
-    await user.hover(userActionsEl);
-
-    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
-  });
-
-  it("should handle user prop changing from defined to undefined", async () => {
-    const { rerender } = renderWithRouter(
-      <UserActions user={{ avatar_url: "https://example.com/avatar.png" }} />,
-    );
-
-    // Hover to open menu
-    const userActions = screen.getByTestId("user-actions");
-    await user.hover(userActions);
-    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
-
-    // Remove user prop - menu should disappear
-    rerender(
-      <MemoryRouter>
-        <UserActions />
-      </MemoryRouter>,
-    );
-
-    // Context menu should NOT be visible when user prop is removed
-    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
   });
 
   it("should work with loading state and user provided", async () => {

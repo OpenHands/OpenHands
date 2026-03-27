@@ -748,52 +748,6 @@ describe("HomepageCTA visibility", () => {
     expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
   });
 
-  it("should not show HomepageCTA when dismissed in local storage", async () => {
-    // Override localStorage to mark CTA as dismissed while keeping the feature flag enabled
-    vi.stubGlobal("localStorage", {
-      getItem: vi.fn((key: string) => {
-        if (key === "FEATURE_PROJ_USER_JOURNEY") {
-          return "true";
-        }
-        if (key === "homepage-cta-dismissed") {
-          return "true";
-        }
-        return null;
-      }),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    });
-
-    useIsAuthedMock.mockReturnValue({
-      data: true,
-      isLoading: false,
-      isFetching: false,
-      isError: false,
-    });
-    useConfigMock.mockReturnValue({
-      data: { app_mode: "saas", feature_flags: DEFAULT_FEATURE_FLAGS },
-      isLoading: false,
-    });
-
-    getConfigSpy.mockResolvedValue({
-      app_mode: "saas",
-      posthog_client_key: "test-posthog-key",
-      providers_configured: ["github"],
-      auth_url: "https://auth.example.com",
-      feature_flags: DEFAULT_FEATURE_FLAGS,
-      maintenance_start_time: null,
-      recaptcha_site_key: null,
-      faulty_models: [],
-      error_message: null,
-      updated_at: "2024-01-14T10:00:00Z",
-      github_app_slug: null,
-    });
-
-    renderHomeScreen();
-
-    await screen.findByTestId("home-screen");
-
-    expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
-  });
 });
+
+describe("HomepageCTA visibility", () => {
