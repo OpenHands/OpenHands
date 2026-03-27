@@ -97,9 +97,9 @@ function AppContent() {
       <EventHandler>
         <div
           data-testid="app-route"
-          className="p-3 md:p-0 flex flex-col min-h-full lg:h-full gap-3"
+          className="px-3 pb-3 md:p-0 flex flex-col min-h-full lg:h-full gap-3"
         >
-          <div className="sticky top-0 z-10 bg-base shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4.5 pt-2 lg:pt-0">
+          <div className="sticky top-0 z-10 bg-base shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4.5 py-2 lg:pt-0">
             <ConversationNameWithStatus />
             <ConversationTabs />
           </div>
