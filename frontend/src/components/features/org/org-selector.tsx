@@ -45,7 +45,12 @@ export function OrgSelector() {
       }}
       onChange={(item) => {
         if (item && item.value !== organizationId) {
-          switchOrganization(item.value);
+          const org = organizations?.find((o) => o.id === item.value);
+          switchOrganization({
+            orgId: item.value,
+            orgName: item.label,
+            isPersonal: org?.is_personal ?? false,
+          });
         }
       }}
       placeholder={t(I18nKey.ORG$SELECT_ORGANIZATION_PLACEHOLDER)}

@@ -120,3 +120,18 @@ class BatchInvitationResponse(BaseModel):
 
     successful: list[InvitationResponse]
     failed: list[InvitationFailure]
+
+
+class AcceptInvitationRequest(BaseModel):
+    """Request model for accepting an invitation via POST."""
+
+    token: str
+
+
+class AcceptInvitationResponse(BaseModel):
+    """Response model for successful invitation acceptance."""
+
+    success: bool
+    org_id: str
+    org_name: str
+    role: str
