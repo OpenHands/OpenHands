@@ -23,10 +23,9 @@
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=pt">Português</a> |
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=ru">Русский</a> |
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=zh">中文</a>
-
 </div>
 
-
+<hr>
 🙌 Welcome to OpenHands, a [community](COMMUNITY.md) focused on AI-driven development. We’d love for you to [join us on Slack](https://dub.sh/openhands).
 
 There are a few ways to work with OpenHands:
