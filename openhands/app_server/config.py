@@ -67,6 +67,10 @@ def get_default_persistence_dir() -> Path:
     # Recheck env because this function is also used to generate other defaults
     persistence_dir = os.getenv('OH_PERSISTENCE_DIR')
 
+    # Legacy V0 fallback variable
+    if persistence_dir is None:
+        persistence_dir = os.getenv('FILE_STORE_PATH')
+
     if persistence_dir:
         result = Path(persistence_dir)
     else:
