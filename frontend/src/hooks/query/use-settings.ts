@@ -7,7 +7,7 @@ import { useIsAuthed } from "./use-is-authed";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useConfig } from "./use-config";
 
-const getSettingsQueryFn = async (): Promise<Settings> => {
+export const getSettingsQueryFn = async (): Promise<Settings> => {
   const settings = await SettingsService.getSettings();
 
   return {
