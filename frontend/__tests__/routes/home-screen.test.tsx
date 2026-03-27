@@ -749,5 +749,3 @@ describe("HomepageCTA visibility", () => {
   });
 
 });
-
-describe("HomepageCTA visibility", () => {
