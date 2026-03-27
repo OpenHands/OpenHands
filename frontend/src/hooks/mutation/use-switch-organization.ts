@@ -1,18 +1,31 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useMatch, useNavigate } from "react-router";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { I18nKey } from "#/i18n/declaration";
+import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 
 export const useSwitchOrganization = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { setOrganizationId } = useSelectedOrganizationId();
   const navigate = useNavigate();
   const conversationMatch = useMatch("/conversations/:conversationId");
 
   return useMutation({
-    mutationFn: (orgId: string) =>
-      organizationService.switchOrganization({ orgId }),
-    onSuccess: (_, orgId) => {
+    mutationFn: ({
+      orgId,
+    }: {
+      orgId: string;
+      orgName: string;
+      isPersonal: boolean;
+    }) => organizationService.switchOrganization({ orgId }),
+    onSuccess: (_, { orgId, orgName, isPersonal }) => {
+      const message = isPersonal
+        ? t(I18nKey.ORG$SWITCHED_TO_PERSONAL_WORKSPACE)
+        : t(I18nKey.ORG$SWITCHED_TO_ORGANIZATION, { name: orgName });
+      displaySuccessToast(message);
       // Invalidate the target org's /me query to ensure fresh data on every switch
       queryClient.invalidateQueries({
         queryKey: ["organizations", orgId, "me"],

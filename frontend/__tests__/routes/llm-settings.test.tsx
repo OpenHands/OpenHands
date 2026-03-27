@@ -73,6 +73,12 @@ vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => mockUseConfig(),
 }));
 
+// Mock useOrgTypeAndAccess hook
+const mockUseOrgTypeAndAccess = vi.fn();
+vi.mock("#/hooks/use-org-type-and-access", () => ({
+  useOrgTypeAndAccess: () => mockUseOrgTypeAndAccess(),
+}));
+
 const renderLlmSettingsScreen = (
   orgId: string | null = null,
   meData?: {
@@ -163,6 +169,15 @@ beforeEach(() => {
 
   // Reset organization store
   useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+  // Default mock for useOrgTypeAndAccess - returns team org by default
+  mockUseOrgTypeAndAccess.mockReturnValue({
+    selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+    isPersonalOrg: false,
+    isTeamOrg: true,
+    canViewOrgRoutes: true,
+    organizationId: "1",
+  });
 });
 
 describe("Content", () => {
@@ -1783,6 +1798,122 @@ describe("Role-based permissions", () => {
         expect(saveSettingsSpy).toHaveBeenCalled();
       });
     });
+  });
+});
+
+describe("Contextual info messages", () => {
+  it("should show admin info message for admin user in team organization", async () => {
+    // Arrange: SaaS mode with team org and admin role
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
+    });
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
+    });
+    const adminData = {
+      org_id: "1",
+      user_id: "99",
+      email: "admin@example.com",
+      role: "admin",
+      status: "active",
+      llm_api_key: "",
+      max_iterations: 20,
+      llm_model: "",
+      llm_api_key_for_byor: null,
+      llm_base_url: "",
+    };
+
+    // Act
+    renderLlmSettingsScreen("1", adminData);
+    await screen.findByTestId("llm-settings-screen");
+
+    // Assert
+    const infoMessage = screen.getByTestId("llm-settings-info-message");
+    expect(infoMessage).toHaveTextContent("SETTINGS$LLM_ADMIN_INFO");
+  });
+
+  it("should show member info message for member user in team organization", async () => {
+    // Arrange: SaaS mode with team org and member role
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
+    });
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
+    });
+    const memberData = {
+      org_id: "1",
+      user_id: "99",
+      email: "member@example.com",
+      role: "member",
+      status: "active",
+      llm_api_key: "",
+      max_iterations: 20,
+      llm_model: "",
+      llm_api_key_for_byor: null,
+      llm_base_url: "",
+    };
+
+    // Act
+    renderLlmSettingsScreen("1", memberData);
+    await screen.findByTestId("llm-settings-screen");
+
+    // Assert
+    const infoMessage = screen.getByTestId("llm-settings-info-message");
+    expect(infoMessage).toHaveTextContent("SETTINGS$LLM_MEMBER_INFO");
+  });
+
+  it("should not show info message for personal workspace", async () => {
+    // Arrange: SaaS mode with personal org
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
+    });
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Personal Org", is_personal: true }),
+      isPersonalOrg: true,
+      isTeamOrg: false,
+      canViewOrgRoutes: false,
+      organizationId: "1",
+    });
+
+    // Act
+    renderLlmSettingsScreen("1");
+    await screen.findByTestId("llm-settings-screen");
+
+    // Assert
+    expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
+  });
+
+  it("should not show info message in OSS mode", async () => {
+    // Arrange: OSS mode
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "oss" },
+      isLoading: false,
+    });
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
+    });
+
+    // Act
+    renderLlmSettingsScreen("1");
+    await screen.findByTestId("llm-settings-screen");
+
+    // Assert
+    expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
   });
 });
 

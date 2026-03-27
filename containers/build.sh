@@ -8,15 +8,17 @@ push=0
 load=0
 tag_suffix=""
 dry_run=0
+platform_override=""
 
 # Function to display usage information
 usage() {
-    echo "Usage: $0 -i <image_name> [-o <org_name>] [--push] [--load] [-t <tag_suffix>] [--dry]"
+    echo "Usage: $0 -i <image_name> [-o <org_name>] [--push] [--load] [-t <tag_suffix>] [-p <platform>] [--dry]"
     echo "  -i: Image name (required)"
     echo "  -o: Organization name"
     echo "  --push: Push the image"
     echo "  --load: Load the image"
     echo "  -t: Tag suffix"
+    echo "  -p: Platform(s) to build for (e.g. linux/amd64 or linux/amd64,linux/arm64)"
     echo "  --dry: Don't build, only create build-args.json"
     exit 1
 }
@@ -29,6 +31,7 @@ while [[ $# -gt 0 ]]; do
         --push) push=1; shift ;;
         --load) load=1; shift ;;
         -t) tag_suffix="$2"; shift 2 ;;
+        -p) platform_override="$2"; shift 2 ;;
         --dry) dry_run=1; shift ;;
         *) usage ;;
     esac
@@ -134,8 +137,10 @@ fi
 
 echo "Args: $args"
 
-# Modify the platform selection based on --load flag
-if [[ $load -eq 1 ]]; then
+# Determine the platform(s) to build for
+if [[ -n "$platform_override" ]]; then
+  platform="$platform_override"
+elif [[ $load -eq 1 ]]; then
   # When loading, build only for the current platform
   platform=$(docker version -f '{{.Server.Os}}/{{.Server.Arch}}')
 else
