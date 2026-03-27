@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from server.auth.authorization import (
     Permission,
+    require_financial_data_access,
     require_permission,
 )
 from server.email_validation import get_admin_user_id
@@ -22,6 +23,7 @@ from server.routes.org_models import (
     OrgDatabaseError,
     OrgLLMSettingsResponse,
     OrgLLMSettingsUpdate,
+    OrgMemberFinancialPage,
     OrgMemberNotFoundError,
     OrgMemberPage,
     OrgMemberResponse,
@@ -42,6 +44,7 @@ from server.services.org_llm_settings_service import (
     OrgLLMSettingsService,
     OrgLLMSettingsServiceInjector,
 )
+from server.services.org_member_financial_service import OrgMemberFinancialService
 from server.services.org_member_service import OrgMemberService
 from storage.org_service import OrgService
 from storage.user_store import UserStore
@@ -880,6 +883,104 @@ async def get_org_members_count(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve member count',
+        )
+
+
+@org_router.get(
+    '/{org_id}/members/financial',
+    response_model=OrgMemberFinancialPage,
+)
+async def get_org_members_financial(
+    org_id: UUID,
+    page_id: Annotated[
+        str | None,
+        Query(
+            title='Pagination offset encoded as string',
+            description='Offset for pagination (e.g., "0", "10", "20")',
+        ),
+    ] = None,
+    limit: Annotated[
+        int,
+        Query(
+            title='Maximum items per page',
+            gt=0,
+            le=100,
+        ),
+    ] = 10,
+    email: Annotated[
+        str | None,
+        Query(
+            title='Filter members by email (case-insensitive partial match)',
+            min_length=1,
+            max_length=255,
+        ),
+    ] = None,
+    user_id: str = Depends(require_financial_data_access),
+) -> OrgMemberFinancialPage:
+    """Get paginated financial data for organization members.
+
+    Returns financial information (lifetime spend, current budget) for all members
+    within the specified organization. Access is restricted to:
+    - Organization Admins
+    - Organization Owners
+    - OpenHands members (users with @openhands.dev emails)
+
+    Args:
+        org_id: Organization ID (UUID)
+        page_id: Optional pagination offset encoded as string
+        limit: Maximum items per page (1-100, default 10)
+        email: Optional email filter (case-insensitive partial match)
+        user_id: Authenticated user ID (injected by require_financial_data_access)
+
+    Returns:
+        OrgMemberFinancialPage: Paginated response with member financial data
+            - items: List of members with user_id, email, lifetime_spend,
+                     current_budget, and max_budget
+            - current_page: Current page number (1-indexed)
+            - per_page: Items per page
+            - next_page_id: Offset for next page, or None if no more pages
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks access (not admin/owner and not @openhands.dev)
+        HTTPException: 400 if page_id is invalid
+        HTTPException: 500 if retrieval fails
+    """
+    logger.info(
+        'Getting financial data for organization members',
+        extra={
+            'org_id': str(org_id),
+            'user_id': user_id,
+            'page_id': page_id,
+            'limit': limit,
+            'email_filter': email,
+        },
+    )
+
+    try:
+        return await OrgMemberFinancialService.get_org_members_financial_data(
+            org_id=org_id,
+            page_id=page_id,
+            limit=limit,
+            email_filter=email,
+        )
+    except ValueError as e:
+        logger.warning(
+            'Invalid page_id for financial data request',
+            extra={'org_id': str(org_id), 'page_id': page_id, 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception:
+        logger.exception(
+            'Error retrieving organization member financial data',
+            extra={'org_id': str(org_id)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve member financial data',
         )
 
 

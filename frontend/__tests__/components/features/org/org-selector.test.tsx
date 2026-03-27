@@ -1,9 +1,11 @@
 import { screen, render, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { OrgSelector } from "#/components/features/org/org-selector";
 import { organizationService } from "#/api/organization-service/organization-service.api";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 import {
   MOCK_PERSONAL_ORG,
   MOCK_TEAM_ORG_ACME,
@@ -32,10 +34,13 @@ vi.mock("react-i18next", async () => {
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string) => {
+      t: (key: string, params?: Record<string, string>) => {
         const translations: Record<string, string> = {
           "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
           "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+          "ORG$SWITCHED_TO_ORGANIZATION": `You have switched to organization: ${params?.name ?? ""}`,
+          "ORG$SWITCHED_TO_PERSONAL_WORKSPACE":
+            "You have switched to your personal workspace.",
         };
         return translations[key] || key;
       },
@@ -56,6 +61,9 @@ const renderOrgSelector = () =>
   });
 
 describe("OrgSelector", () => {
+  beforeEach(() => {
+    useSelectedOrganizationStore.setState({ organizationId: null });
+  });
   it("should not render when user only has a personal workspace", async () => {
     vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
       items: [MOCK_PERSONAL_ORG],
@@ -198,6 +206,82 @@ describe("OrgSelector", () => {
     // Assert
     await waitFor(() => {
       expect(screen.getByTestId("dropdown-trigger")).toBeDisabled();
+    });
+  });
+
+  it("should display toast with organization name when switching to a team organization", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+      items: [MOCK_PERSONAL_ORG, MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_PERSONAL_ORG.id,
+    });
+    vi.spyOn(organizationService, "switchOrganization").mockResolvedValue(
+      MOCK_TEAM_ORG_ACME,
+    );
+    const displaySuccessToastSpy = vi.spyOn(
+      ToastHandlers,
+      "displaySuccessToast",
+    );
+
+    renderOrgSelector();
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("Personal Workspace");
+    });
+
+    // Act
+    const trigger = screen.getByTestId("dropdown-trigger");
+    await user.click(trigger);
+    const listbox = await screen.findByRole("listbox");
+    const acmeOption = within(listbox).getByText("Acme Corp");
+    await user.click(acmeOption);
+
+    // Assert
+    await waitFor(() => {
+      expect(displaySuccessToastSpy).toHaveBeenCalledWith(
+        "You have switched to organization: Acme Corp",
+      );
+    });
+  });
+
+  it("should display toast for personal workspace when switching to personal workspace", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    // Pre-set the store to have team org selected
+    useSelectedOrganizationStore.setState({
+      organizationId: MOCK_TEAM_ORG_ACME.id,
+    });
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+      items: [MOCK_TEAM_ORG_ACME, MOCK_PERSONAL_ORG],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
+    vi.spyOn(organizationService, "switchOrganization").mockResolvedValue(
+      MOCK_PERSONAL_ORG,
+    );
+    const displaySuccessToastSpy = vi.spyOn(
+      ToastHandlers,
+      "displaySuccessToast",
+    );
+
+    renderOrgSelector();
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("Acme Corp");
+    });
+
+    // Act
+    const trigger = screen.getByTestId("dropdown-trigger");
+    await user.click(trigger);
+    const listbox = await screen.findByRole("listbox");
+    const personalOption = within(listbox).getByText("Personal Workspace");
+    await user.click(personalOption);
+
+    // Assert
+    await waitFor(() => {
+      expect(displaySuccessToastSpy).toHaveBeenCalledWith(
+        "You have switched to your personal workspace.",
+      );
     });
   });
 });
