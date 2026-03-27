@@ -70,3 +70,11 @@ export const CHAT_INPUT = {
 
 // UI tolerance constants
 export const EPS = 1.5; // px tolerance for "near min" height comparisons
+
+// Skill content metadata prefixes
+export const METADATA_PREFIXES: readonly string[] = [
+  "The following information has been included",
+  "It may or may not be relevant",
+  "Skill location:",
+  "(Use this path to resolve",
+];

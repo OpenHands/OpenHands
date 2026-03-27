@@ -235,7 +235,7 @@ describe("DeviceVerify", () => {
       });
     });
 
-    it("should include the EnterpriseBanner component when feature flag is enabled", async () => {
+    it("should include the LoginCTA component when feature flag is enabled", async () => {
       useIsAuthedMock.mockReturnValue({
         data: true,
         isLoading: false,
@@ -249,11 +249,11 @@ describe("DeviceVerify", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("ENTERPRISE$TITLE")).toBeInTheDocument();
+        expect(screen.getByTestId("login-cta")).toBeInTheDocument();
       });
     });
 
-    it("should not include the EnterpriseBanner and be center-aligned when feature flag is disabled", async () => {
+    it("should not include the LoginCTA and be center-aligned when feature flag is disabled", async () => {
       ENABLE_PROJ_USER_JOURNEY_MOCK.mockReturnValue(false);
       useIsAuthedMock.mockReturnValue({
         data: true,
@@ -273,8 +273,8 @@ describe("DeviceVerify", () => {
         ).toBeInTheDocument();
       });
 
-      // Banner should not be rendered
-      expect(screen.queryByText("ENTERPRISE$TITLE")).not.toBeInTheDocument();
+      // CTA should not be rendered
+      expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
 
       // Container should use max-w-md (centered layout) instead of max-w-4xl
       const container = document.querySelector(".max-w-md");
