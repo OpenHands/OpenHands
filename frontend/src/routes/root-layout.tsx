@@ -155,11 +155,11 @@ export default function MainApp() {
   }, [clearInvitation]);
 
   const handleInvitationSuccess = React.useCallback(
-    (orgId: string) => {
+    (payload: { orgId: string; orgName: string; isPersonal: boolean }) => {
       setShowInvitationModal(false);
       clearInvitation();
       // Switch to the newly joined organization
-      switchOrganization(orgId);
+      switchOrganization(payload);
     },
     [clearInvitation, switchOrganization],
   );

@@ -129,7 +129,11 @@ describe("InvitationAcceptModal", () => {
     await user.click(screen.getByTestId("accept-invitation-button"));
 
     await waitFor(() => {
-      expect(mockOnSuccess).toHaveBeenCalledWith("org-123");
+      expect(mockOnSuccess).toHaveBeenCalledWith({
+        orgId: "org-123",
+        orgName: "Test Organization",
+        isPersonal: false,
+      });
     });
 
     expect(toastHandlers.displaySuccessToast).toHaveBeenCalled();

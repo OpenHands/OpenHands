@@ -16,7 +16,11 @@ import {
 interface InvitationAcceptModalProps {
   token: string;
   onClose: () => void;
-  onSuccess: (orgId: string) => void;
+  onSuccess: (payload: {
+    orgId: string;
+    orgName: string;
+    isPersonal: boolean;
+  }) => void;
 }
 
 export function InvitationAcceptModal({
@@ -52,7 +56,11 @@ export function InvitationAcceptModal({
               orgName: data.org_name,
             }),
           );
-          onSuccess(data.org_id);
+          onSuccess({
+            orgId: data.org_id,
+            orgName: data.org_name,
+            isPersonal: false,
+          });
         },
         onError: (error) => {
           const errorCode = getInvitationErrorCode(
