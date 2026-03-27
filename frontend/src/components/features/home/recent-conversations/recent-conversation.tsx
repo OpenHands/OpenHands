@@ -64,14 +64,25 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
             </div>
           ) : null}
         </div>
-        {(conversation.created_at || conversation.last_updated_at) && (
-          <span>
-            {formatTimeDelta(
-              conversation.created_at || conversation.last_updated_at,
-            )}{" "}
-            {t(I18nKey.CONVERSATION$AGO)}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {conversation.llm_model && (
+            <span
+              className="truncate max-w-[120px]"
+              title={conversation.llm_model}
+              data-testid="recent-conversation-llm-model"
+            >
+              {conversation.llm_model}
+            </span>
+          )}
+          {(conversation.created_at || conversation.last_updated_at) && (
+            <span>
+              {formatTimeDelta(
+                conversation.created_at || conversation.last_updated_at,
+              )}{" "}
+              {t(I18nKey.CONVERSATION$AGO)}
+            </span>
+          )}
+        </div>
       </div>
     </Link>
   );
