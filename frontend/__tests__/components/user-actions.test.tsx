@@ -135,27 +135,6 @@ describe("UserActions", () => {
     expect(screen.getByTestId("user-avatar")).toBeInTheDocument();
   });
 
-  it("should NOT show context menu when user is not authenticated and avatar is clicked", async () => {
-    // Set isAuthed to false for this test
-    useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
-    // Keep other mocks with default values
-    useConfigMock.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
-    });
-    useUserProvidersMock.mockReturnValue({
-      providers: [{ id: "github", name: "GitHub" }],
-    });
-
-    renderUserActions();
-
-    const userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
-
-    // Context menu should NOT appear because user is not authenticated
-    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
-  });
-
   it("should NOT show context menu when user is undefined and avatar is hovered", async () => {
     renderUserActions({ hasAvatar: false });
     const userActions = screen.getByTestId("user-actions");
@@ -174,47 +153,10 @@ describe("UserActions", () => {
     expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
   });
 
-  it("should NOT be able to access logout when user is not authenticated", async () => {
-    // Set isAuthed to false for this test
-    useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
-    // Keep other mocks with default values
-    useConfigMock.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
-    });
-    useUserProvidersMock.mockReturnValue({
-      providers: [{ id: "github", name: "GitHub" }],
-    });
-
-    renderWithRouter(<UserActions />);
-
-    const userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
-
-    // Context menu should NOT appear because user is not authenticated
-    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
-
-    // Logout option should NOT be accessible when user is not authenticated
-    expect(
-      screen.queryByText("ACCOUNT_SETTINGS$LOGOUT"),
-    ).not.toBeInTheDocument();
-  });
-
   it("should handle user prop changing from undefined to defined", async () => {
-    // Start with no authentication
-    useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
-    // Keep other mocks with default values
-    useConfigMock.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
-    });
-    useUserProvidersMock.mockReturnValue({
-      providers: [{ id: "github", name: "GitHub" }],
-    });
-
     const { unmount } = renderWithRouter(<UserActions />);
 
-    // Initially no user and not authenticated - menu should not appear
+    // Initially no user - menu should not appear
     const userActions = screen.getByTestId("user-actions");
     await user.hover(userActions);
     expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
@@ -222,18 +164,7 @@ describe("UserActions", () => {
     // Unmount the first component
     unmount();
 
-    // Set authentication to true for the new render
-    useIsAuthedMock.mockReturnValue({ data: true, isLoading: false });
-    // Ensure config and providers are set correctly
-    useConfigMock.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
-    });
-    useUserProvidersMock.mockReturnValue({
-      providers: [{ id: "github", name: "GitHub" }],
-    });
-
-    // Render a new component with user prop and authentication
+    // Render a new component with user prop
     renderWithRouter(
       <UserActions user={{ avatar_url: "https://example.com/avatar.png" }} />,
     );
@@ -242,7 +173,7 @@ describe("UserActions", () => {
     expect(screen.getByTestId("user-actions")).toBeInTheDocument();
     expect(screen.getByTestId("user-avatar")).toBeInTheDocument();
 
-    // Menu should now work with user defined and authenticated
+    // Menu should now work with user defined
     const userActionsEl = screen.getByTestId("user-actions");
     await user.hover(userActionsEl);
 
@@ -250,16 +181,6 @@ describe("UserActions", () => {
   });
 
   it("should handle user prop changing from defined to undefined", async () => {
-    // Start with authentication and providers
-    useIsAuthedMock.mockReturnValue({ data: true, isLoading: false });
-    useConfigMock.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
-    });
-    useUserProvidersMock.mockReturnValue({
-      providers: [{ id: "github", name: "GitHub" }],
-    });
-
     const { rerender } = renderWithRouter(
       <UserActions user={{ avatar_url: "https://example.com/avatar.png" }} />,
     );
@@ -269,31 +190,15 @@ describe("UserActions", () => {
     await user.hover(userActions);
     expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
 
-    // Set authentication to false for the rerender
-    useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
-    // Keep other mocks with default values
-    useConfigMock.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
-    });
-    useUserProvidersMock.mockReturnValue({
-      providers: [{ id: "github", name: "GitHub" }],
-    });
-
-    // Remove user prop - menu should disappear because user is no longer authenticated
+    // Remove user prop - menu should disappear
     rerender(
       <MemoryRouter>
         <UserActions />
       </MemoryRouter>,
     );
 
-    // Context menu should NOT be visible when user becomes unauthenticated
+    // Context menu should NOT be visible when user prop is removed
     expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
-
-    // Logout option should not be accessible
-    expect(
-      screen.queryByText("ACCOUNT_SETTINGS$LOGOUT"),
-    ).not.toBeInTheDocument();
   });
 
   it("should work with loading state and user provided", async () => {

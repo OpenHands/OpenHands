@@ -670,9 +670,7 @@ describe("HomepageCTA visibility", () => {
 
     await screen.findByTestId("home-screen");
 
-    const ctaLink = await screen.findByRole("link", {
-      name: "CTA$LEARN_MORE",
-    });
+    const ctaLink = await screen.findByTestId("homepage-cta-learn-more");
     expect(ctaLink).toBeInTheDocument();
   });
 

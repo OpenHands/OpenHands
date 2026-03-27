@@ -55,6 +55,7 @@ export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
         </div>
 
         <a
+          data-testid="homepage-cta-learn-more"
           href="https://openhands.dev/enterprise/"
           target="_blank"
           rel="noopener noreferrer"
