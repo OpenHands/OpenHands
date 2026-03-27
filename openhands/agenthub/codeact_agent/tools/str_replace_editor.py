@@ -9,9 +9,9 @@ from openhands.llm.tool_names import STR_REPLACE_EDITOR_TOOL_NAME
 
 try:
     from .notebook_handler import NotebookHandler
-    _notebook_handler = NotebookHandler()
+    _notebook_handler: NotebookHandler = NotebookHandler()
 except ImportError:
-    _notebook_handler = None
+    _notebook_handler: NotebookHandler | None = None
 
 _DETAILED_STR_REPLACE_EDITOR_DESCRIPTION = """Custom editing tool for viewing, creating and editing files in plain-text format
 * State is persistent across command calls and discussions with the user
