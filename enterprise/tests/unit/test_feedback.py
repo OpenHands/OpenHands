@@ -30,6 +30,16 @@ async def test_submit_feedback():
     mock_session = MagicMock()
     mock_session.commit = AsyncMock()
 
+    # Mock the ownership verification query to return a matching record
+    mock_metadata = MagicMock()
+    mock_metadata.conversation_id = 'test-conversation-123'
+    mock_metadata.user_id = 'test-user-id'
+    mock_result = MagicMock()
+    mock_scalars = MagicMock()
+    mock_scalars.first.return_value = mock_metadata
+    mock_result.scalars.return_value = mock_scalars
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
     # Test data
     feedback_data = FeedbackRequest(
         conversation_id='test-conversation-123',
@@ -47,7 +57,7 @@ async def test_submit_feedback():
     # Mock a_session_maker
     with patch('server.routes.feedback.a_session_maker', mock_a_session_maker):
         # Call the function
-        result = await submit_conversation_feedback(feedback_data)
+        result = await submit_conversation_feedback(feedback_data, user_id='test-user-id')
 
         # Check response
         assert result == {
@@ -76,6 +86,14 @@ async def test_invalid_rating():
     mock_session = MagicMock()
     mock_session.commit = AsyncMock()
 
+    # Mock the ownership verification query to return a matching record
+    mock_metadata = MagicMock()
+    mock_result = MagicMock()
+    mock_scalars = MagicMock()
+    mock_scalars.first.return_value = mock_metadata
+    mock_result.scalars.return_value = mock_scalars
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
     # Since Pydantic validation happens before our function is called,
     # we need to patch the validation to test our function's validation
     with patch(
@@ -101,12 +119,12 @@ async def test_invalid_rating():
         with patch('server.routes.feedback.a_session_maker', mock_a_session_maker):
             # Call the function and expect an exception
             with pytest.raises(HTTPException) as excinfo:
-                await submit_conversation_feedback(feedback_data)
+                await submit_conversation_feedback(feedback_data, user_id='test-user-id')
 
             # Check the exception details
             assert excinfo.value.status_code == 400
             assert 'Rating must be between 1 and 5' in excinfo.value.detail
 
-            # Verify no database operations were called
+            # Verify no feedback was added to the database
             mock_session.add.assert_not_called()
             mock_session.commit.assert_not_called()

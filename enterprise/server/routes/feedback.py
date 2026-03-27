@@ -14,11 +14,36 @@ from openhands.server.user_auth import get_user_id
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
-# TODO: It may be an error by you can actually post feedback to a conversation you don't
-# own right now - maybe this is useful in the context of public shared conversations?
 router = APIRouter(
     prefix='/feedback', tags=['feedback'], dependencies=get_dependencies()
 )
+
+
+async def _verify_conversation_ownership(
+    conversation_id: str, user_id: str
+) -> None:
+    """Verify that the conversation belongs to the authenticated user.
+
+    Args:
+        conversation_id: The ID of the conversation to verify
+        user_id: The ID of the authenticated user
+
+    Raises:
+        HTTPException: If conversation not found or not owned by user
+    """
+    async with a_session_maker() as session:
+        result = await session.execute(
+            select(StoredConversationMetadataSaas).where(
+                StoredConversationMetadataSaas.conversation_id == conversation_id,
+                StoredConversationMetadataSaas.user_id == user_id,
+            )
+        )
+        metadata = result.scalars().first()
+        if not metadata:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f'Conversation {conversation_id} not found',
+            )
 
 
 async def get_event_ids(conversation_id: str, user_id: str) -> List[int]:
@@ -36,19 +61,7 @@ async def get_event_ids(conversation_id: str, user_id: str) -> List[int]:
     """
 
     # Verify the conversation belongs to the user
-    async with a_session_maker() as session:
-        result = await session.execute(
-            select(StoredConversationMetadataSaas).where(
-                StoredConversationMetadataSaas.conversation_id == conversation_id,
-                StoredConversationMetadataSaas.user_id == user_id,
-            )
-        )
-        metadata = result.scalars().first()
-        if not metadata:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Conversation {conversation_id} not found',
-            )
+    await _verify_conversation_ownership(conversation_id, user_id)
 
     # Create an event store to access the events directly
     # This works even when the conversation is not running
@@ -74,13 +87,18 @@ class FeedbackRequest(BaseModel):
 
 
 @router.post('/conversation', status_code=status.HTTP_201_CREATED)
-async def submit_conversation_feedback(feedback: FeedbackRequest):
+async def submit_conversation_feedback(
+    feedback: FeedbackRequest, user_id: str = Depends(get_user_id)
+):
     """
     Submit feedback for a conversation.
 
     This endpoint accepts a rating (1-5) and optional reason for the feedback.
     The feedback is associated with a specific conversation and optionally a specific event.
     """
+    # Verify the authenticated user owns the conversation
+    await _verify_conversation_ownership(feedback.conversation_id, user_id)
+
     # Validate rating is between 1 and 5
     if feedback.rating < 1 or feedback.rating > 5:
         raise HTTPException(
