@@ -54,7 +54,8 @@ export const useCreateConversation = () => {
         plugins,
       } = variables;
 
-      const useV1 = !!settings?.v1_enabled && !createMicroagent;
+      // Default to V1 (matching backend default) when settings haven't loaded yet
+      const useV1 = (settings?.v1_enabled ?? true) && !createMicroagent;
 
       if (useV1) {
         // Use V1 API - creates a conversation start task
