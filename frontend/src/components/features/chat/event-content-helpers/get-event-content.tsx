@@ -85,6 +85,6 @@ export const getEventContent = (
 
   return {
     title: title ?? i18n.t("EVENT$UNKNOWN_EVENT"),
-    details: details ?? i18n.t("EVENT$UNKNOWN_EVENT"),
+    details,
   };
 };
