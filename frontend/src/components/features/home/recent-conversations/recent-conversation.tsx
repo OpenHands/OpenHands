@@ -8,6 +8,7 @@ import { formatTimeDelta } from "#/utils/format-time-delta";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationStatusIndicator } from "./conversation-status-indicator";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
+import CircuitIcon from "#/icons/u-circuit.svg?react";
 
 interface RecentConversationProps {
   conversation: Conversation;
@@ -67,10 +68,11 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
         <div className="flex items-center gap-2">
           {conversation.llm_model && (
             <span
-              className="truncate max-w-[120px]"
+              className="truncate max-w-[120px] flex items-center gap-1"
               title={conversation.llm_model}
               data-testid="recent-conversation-llm-model"
             >
+              <CircuitIcon width={12} height={12} className="shrink-0" />
               {conversation.llm_model}
             </span>
           )}
