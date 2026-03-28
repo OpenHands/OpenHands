@@ -35,12 +35,29 @@ export const useSlashCommand = (
   const [filterText, setFilterText] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  // Built-in slash commands that are always available regardless of loaded skills
+  const BUILTIN_SLASH_ITEMS: SlashCommandItem[] = useMemo(
+    () => [
+      {
+        command: "/new",
+        skill: {
+          name: "new",
+          type: "knowledge" as const,
+          content:
+            "Start a new conversation while keeping the runtime alive.",
+          triggers: ["/new"],
+        },
+      },
+    ],
+    [],
+  );
+
   // Build slash command items from skills:
   // - Skills with explicit "/" triggers use those triggers
   // - AgentSkills without "/" triggers get a derived "/<name>" command
   const slashItems = useMemo(() => {
-    if (!skills) return [];
-    const items: SlashCommandItem[] = [];
+    const items: SlashCommandItem[] = [...BUILTIN_SLASH_ITEMS];
+    if (!skills) return items;
     skills.forEach((skill) => {
       const triggers = skill.triggers || [];
       const slashTriggers = triggers.filter((t) => t.startsWith("/"));
@@ -56,7 +73,7 @@ export const useSlashCommand = (
       }
     });
     return items;
-  }, [skills]);
+  }, [skills, BUILTIN_SLASH_ITEMS]);
 
   // Filter items based on user input after "/"
   const filteredItems = useMemo(() => {
