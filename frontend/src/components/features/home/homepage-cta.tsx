@@ -63,7 +63,7 @@ export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
             "inline-flex items-center justify-center",
             "w-fit h-10 px-4 rounded",
             "bg-[#050505] border border-[#242424]",
-            "text-white hover:bg-[#1a1a1a]",
+            "text-white hover:bg-white hover:text-black",
             "font-semibold text-sm",
           )}
         >

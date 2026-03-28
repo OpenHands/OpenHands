@@ -1,6 +1,12 @@
 import { MessageEvent } from "#/types/v1/core";
 import { BaseEvent } from "#/types/v1/core/base/event";
-import { getSkillReadyContent } from "./get-skill-ready-content";
+import {
+  getSkillReadyContent,
+  getSkillReadyItems,
+  SkillReadyItem,
+} from "./get-skill-ready-content";
+
+export type { SkillReadyItem };
 
 /**
  * Synthetic event type for Skill Ready events.
@@ -9,6 +15,7 @@ import { getSkillReadyContent } from "./get-skill-ready-content";
 export interface SkillReadyEvent extends BaseEvent {
   _isSkillReadyEvent: true;
   _skillReadyContent: string;
+  _skillReadyItems: SkillReadyItem[];
 }
 
 /**
@@ -45,6 +52,7 @@ export const createSkillReadyEvent = (
   }
 
   const content = getSkillReadyContent(activatedSkills, extendedContent);
+  const items = getSkillReadyItems(activatedSkills, extendedContent);
 
   return {
     id: `${userEvent.id}-skill-ready`,
@@ -52,5 +60,6 @@ export const createSkillReadyEvent = (
     source: "agent",
     _isSkillReadyEvent: true,
     _skillReadyContent: content,
+    _skillReadyItems: items,
   };
 };

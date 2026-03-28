@@ -19,16 +19,17 @@ describe("getStatusCode", () => {
   });
 
   it("should show runtime status when agent is not ready", () => {
-    // Test case: Agent is loading and runtime is starting
+    // Test case: Agent is loading - but since conversationStatus is not STARTING,
+    // it should fall through to runtime status check
     const result = getStatusCode(
       { id: "", message: "", type: "info", status_update: true }, // statusMessage
       "CONNECTED", // webSocketStatus
-      "STARTING", // conversationStatus
+      "RUNNING", // conversationStatus (not STARTING)
       "STATUS$STARTING_RUNTIME", // runtimeStatus
       AgentState.LOADING, // agentState (not ready)
     );
 
-    // Should return runtime status since agent is not ready
+    // Should return runtime status since conversation is RUNNING
     expect(result).toBe("STATUS$STARTING_RUNTIME");
   });
 
@@ -74,8 +75,8 @@ describe("getStatusCode", () => {
     expect(result).toBe(I18nKey.CHAT_INTERFACE$STOPPED);
   });
 
-  it("should handle null agent state with runtime status", () => {
-    // Test case: No agent state, runtime is starting
+  it("should handle null agent state with conversation status STARTING", () => {
+    // Test case: No agent state, conversation is STARTING
     const result = getStatusCode(
       { id: "", message: "", type: "info", status_update: true }, // statusMessage
       "CONNECTED", // webSocketStatus
@@ -84,8 +85,8 @@ describe("getStatusCode", () => {
       null, // agentState
     );
 
-    // Should return runtime status since no agent state
-    expect(result).toBe("STATUS$STARTING_RUNTIME");
+    // Should return STARTING since conversationStatus takes priority
+    expect(result).toBe(I18nKey.COMMON$STARTING);
   });
 
   it("should prioritize task ERROR status over websocket CONNECTING state", () => {
@@ -101,6 +102,20 @@ describe("getStatusCode", () => {
 
     // Should return error message, not "Connecting..."
     expect(result).toBe(I18nKey.AGENT_STATUS$ERROR_OCCURRED);
+  });
+
+  it("should show Starting when conversation status is STARTING even with disconnected websocket", () => {
+    // Test case: Server reports STARTING but websocket is disconnected (e.g., during resume)
+    const result = getStatusCode(
+      { id: "", message: "", type: "info", status_update: true }, // statusMessage
+      "DISCONNECTED", // webSocketStatus
+      "STARTING", // conversationStatus (server reports STARTING)
+      "STATUS$STARTING_RUNTIME", // runtimeStatus
+      null, // agentState
+    );
+
+    // Should return STARTING status, not DISCONNECTED
+    expect(result).toBe(I18nKey.COMMON$STARTING);
   });
 
   it("should show Connecting when task is working and websocket is connecting", () => {

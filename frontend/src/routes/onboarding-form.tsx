@@ -10,7 +10,6 @@ import { useSubmitOnboarding } from "#/hooks/mutation/use-submit-onboarding";
 import { useTracking } from "#/hooks/use-tracking";
 import { ENABLE_ONBOARDING } from "#/utils/feature-flags";
 import { cn } from "#/utils/utils";
-import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { useConfig } from "#/hooks/query/use-config";
 import {
   ONBOARDING_FORM,
@@ -181,63 +180,61 @@ function OnboardingForm() {
   const translatedInputFields = getTranslatedInputFields(currentStep, t);
 
   return (
-    <ModalBackdrop>
+    <div
+      data-testid="onboarding-form"
+      className="w-[500px] max-w-[calc(100vw-2rem)] mx-auto p-4 sm:p-6 flex flex-col justify-center overflow-hidden"
+    >
+      <div className="flex flex-col items-center mb-4">
+        <OpenHandsLogoWhite width={55} height={55} />
+      </div>
+      <StepHeader
+        title={t(currentStep.questionKey)}
+        subtitle={
+          currentStep.subtitleKey ? t(currentStep.subtitleKey) : undefined
+        }
+        currentStep={currentStepIndex + 1}
+        totalSteps={steps.length}
+      />
+      <StepContent
+        options={translatedOptions}
+        inputFields={translatedInputFields}
+        selectedOptionIds={currentSelections}
+        inputValues={inputValues}
+        onSelectOption={handleSelectOption}
+        onInputChange={handleInputChange}
+      />
       <div
-        data-testid="onboarding-form"
-        className="w-[500px] max-w-[calc(100vw-2rem)] mx-auto p-4 sm:p-6 flex flex-col justify-center overflow-hidden"
+        data-testid="step-actions"
+        className="flex justify-end items-center gap-3"
       >
-        <div className="flex flex-col items-center mb-4">
-          <OpenHandsLogoWhite width={55} height={55} />
-        </div>
-        <StepHeader
-          title={t(currentStep.questionKey)}
-          subtitle={
-            currentStep.subtitleKey ? t(currentStep.subtitleKey) : undefined
-          }
-          currentStep={currentStepIndex + 1}
-          totalSteps={steps.length}
-        />
-        <StepContent
-          options={translatedOptions}
-          inputFields={translatedInputFields}
-          selectedOptionIds={currentSelections}
-          inputValues={inputValues}
-          onSelectOption={handleSelectOption}
-          onInputChange={handleInputChange}
-        />
-        <div
-          data-testid="step-actions"
-          className="flex justify-end items-center gap-3"
-        >
-          {!isFirstStep && (
-            <BrandButton
-              type="button"
-              variant="secondary"
-              onClick={handleBack}
-              className="flex-1 px-4 sm:px-6 py-2.5 bg-[050505] text-white border hover:bg-white border-[#242424] hover:text-black"
-            >
-              {t(I18nKey.ONBOARDING$BACK_BUTTON)}
-            </BrandButton>
-          )}
+        {!isFirstStep && (
           <BrandButton
             type="button"
-            variant="primary"
-            onClick={handleNext}
-            isDisabled={!isStepComplete}
-            className={cn(
-              "px-4 sm:px-6 py-2.5 bg-white text-black hover:bg-white/90",
-              isFirstStep ? "w-1/2" : "flex-1",
-            )}
+            variant="secondary"
+            onClick={handleBack}
+            className="flex-1 px-4 sm:px-6 py-2.5 bg-[050505] text-white border hover:bg-white border-[#242424] hover:text-black"
           >
-            {t(
-              isLastStep
-                ? I18nKey.ONBOARDING$FINISH_BUTTON
-                : I18nKey.ONBOARDING$NEXT_BUTTON,
-            )}
+            {t(I18nKey.ONBOARDING$BACK_BUTTON)}
           </BrandButton>
-        </div>
+        )}
+        <BrandButton
+          type="button"
+          variant="primary"
+          onClick={handleNext}
+          isDisabled={!isStepComplete}
+          className={cn(
+            "px-4 sm:px-6 py-2.5 bg-white text-black hover:bg-white/90",
+            isFirstStep ? "w-1/2" : "flex-1",
+          )}
+        >
+          {t(
+            isLastStep
+              ? I18nKey.ONBOARDING$FINISH_BUTTON
+              : I18nKey.ONBOARDING$NEXT_BUTTON,
+          )}
+        </BrandButton>
       </div>
-    </ModalBackdrop>
+    </div>
   );
 }
 
