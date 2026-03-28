@@ -312,6 +312,7 @@ describe("ConversationName", () => {
     expect(model).toBeInTheDocument();
     expect(model).toHaveTextContent("openai/gpt-4o");
     expect(model).toHaveAttribute("title", "openai/gpt-4o");
+    expect(model.querySelector("svg")).toBeInTheDocument();
   });
 
   it("should not render the llm model when not available", () => {

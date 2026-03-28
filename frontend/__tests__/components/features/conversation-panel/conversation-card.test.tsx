@@ -450,6 +450,7 @@ describe("ConversationCard", () => {
     expect(model).toBeInTheDocument();
     expect(model).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
     expect(model).toHaveAttribute("title", "anthropic/claude-sonnet-4-20250514");
+    expect(model.querySelector("svg")).toBeInTheDocument();
   });
 
   it("should not render the llm model when not provided", () => {
