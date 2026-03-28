@@ -8,7 +8,7 @@ const TOAST_STYLE: CSSProperties = {
   border: "1px solid #717888",
   color: "#fff",
   borderRadius: "4px",
-  width: "400px",
+  maxWidth: "400px",
   wordBreak: "break-word",
   overflowWrap: "anywhere",
   whiteSpace: "pre-wrap",
