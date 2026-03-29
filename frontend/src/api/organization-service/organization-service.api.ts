@@ -156,4 +156,15 @@ export const organizationService = {
     );
     return data;
   },
+
+  acceptInvitation: async ({ token }: { token: string }) => {
+    const { data } = await openHands.post<{
+      success: boolean;
+      org_id: string;
+      org_name: string;
+      role: string;
+    }>("/api/organizations/members/invite/accept", { token });
+
+    return data;
+  },
 };

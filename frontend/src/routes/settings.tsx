@@ -17,6 +17,10 @@ import {
   isSettingsPageHidden,
   getFirstAvailablePath,
 } from "#/utils/settings-utils";
+import { useMe } from "#/hooks/query/use-me";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
+import { useConfig } from "#/hooks/query/use-config";
+import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 
 const SAAS_ONLY_PATHS = [
   "/settings/user",
@@ -119,14 +123,32 @@ function SettingsScreen() {
   const location = useLocation();
   const matches = useMatches();
   const navItems = useSettingsNavItems();
+  const { data: me } = useMe();
+  const { data: config } = useConfig();
+  const { isTeamOrg } = useOrgTypeAndAccess();
+
+  // Determine if we should show the org-wide settings badge
+  // Only show for Admin/Owner roles on the LLM settings page in team orgs
+  const isLlmSettingsPage = location.pathname === "/settings";
+  const isAdminOrOwner = me?.role === "admin" || me?.role === "owner";
+  const isSaasMode = config?.app_mode === "saas";
+  const shouldShowOrgWideBadge =
+    isLlmSettingsPage && isAdminOrOwner && isTeamOrg && isSaasMode;
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {
-    const currentItem = navItems.find((item) => item.to === location.pathname);
+    // Find the current item from rendered items
+    const currentRenderedItem = navItems.find(
+      (item) => item.type === "item" && item.item.to === location.pathname,
+    );
+    if (currentRenderedItem && currentRenderedItem.type === "item") {
+      return currentRenderedItem.item.text;
+    }
     // Default to the first available navigation item if current page is not found
-    return currentItem
-      ? currentItem.text
-      : (navItems[0]?.text ?? "SETTINGS$TITLE");
+    const firstItem = navItems.find((item) => item.type === "item");
+    return firstItem && firstItem.type === "item"
+      ? firstItem.item.text
+      : "SETTINGS$TITLE";
   }, [navItems, location.pathname]);
 
   const routeHandle = matches.find((m) => m.pathname === location.pathname)
@@ -138,7 +160,10 @@ function SettingsScreen() {
       <SettingsLayout navigationItems={navItems}>
         <div className="flex flex-col gap-6 h-full">
           {!shouldHideTitle && (
-            <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
+              {shouldShowOrgWideBadge && <OrgWideSettingsBadge />}
+            </div>
           )}
           <div className="flex-1 overflow-auto custom-scrollbar-always">
             <Outlet />

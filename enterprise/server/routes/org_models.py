@@ -241,7 +241,6 @@ class OrgUpdate(BaseModel):
     enable_proactive_conversation_starters: bool | None = None
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
-    mcp_config: dict | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = Field(default=None, gt=0)
     enable_solvability_analysis: bool | None = None
@@ -484,3 +483,22 @@ class OrgAppSettingsUpdate(BaseModel):
         if v is not None and v <= 0:
             raise ValueError('max_budget_per_task must be greater than 0')
         return v
+
+
+class OrgMemberFinancialResponse(BaseModel):
+    """Financial data for a single organization member."""
+
+    user_id: str
+    email: str | None
+    lifetime_spend: float  # Total amount spent (from LiteLLM)
+    current_budget: float  # Remaining budget (max_budget - spend)
+    max_budget: float | None  # Total allocated budget (None = unlimited)
+
+
+class OrgMemberFinancialPage(BaseModel):
+    """Paginated response for organization member financial data."""
+
+    items: list[OrgMemberFinancialResponse]
+    current_page: int = 1
+    per_page: int = 10
+    next_page_id: str | None = None

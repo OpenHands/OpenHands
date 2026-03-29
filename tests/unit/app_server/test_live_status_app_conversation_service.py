@@ -123,6 +123,9 @@ class TestLiveStatusAppConversationService:
         self.mock_sandbox.id = uuid4()
         self.mock_sandbox.status = SandboxStatus.RUNNING
 
+        # Stable conversation ID for tests that call _configure_llm_and_mcp directly
+        self.conversation_id = uuid4()
+
         # Default mock for hooks loading - returns None (no hooks found)
         # Tests that specifically test hooks loading can override this mock
         self.service._load_hooks_from_workspace = AsyncMock(return_value=None)
@@ -472,7 +475,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, custom_model
+            self.mock_user, custom_model, self.conversation_id
         )
 
         # Assert
@@ -488,6 +491,9 @@ class TestLiveStatusAppConversationService:
             mcp_config['mcpServers']['default']['url']
             == 'https://test.example.com/mcp/mcp'
         )
+        assert mcp_config['mcpServers']['default']['headers'][
+            'X-OpenHands-ServerConversation-ID'
+        ] == str(self.conversation_id)
         assert (
             mcp_config['mcpServers']['default']['headers']['X-Session-API-Key']
             == 'mcp_api_key'
@@ -503,7 +509,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, _ = await self.service._configure_llm_and_mcp(
-            self.mock_user, self.mock_user.llm_model
+            self.mock_user, self.mock_user.llm_model, self.conversation_id
         )
 
         # Assert
@@ -519,7 +525,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, _ = await self.service._configure_llm_and_mcp(
-            self.mock_user, self.mock_user.llm_model
+            self.mock_user, self.mock_user.llm_model, self.conversation_id
         )
 
         # Assert
@@ -536,7 +542,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, _ = await self.service._configure_llm_and_mcp(
-            self.mock_user, self.mock_user.llm_model
+            self.mock_user, self.mock_user.llm_model, self.conversation_id
         )
 
         # Assert
@@ -552,7 +558,9 @@ class TestLiveStatusAppConversationService:
         self.mock_user_context.get_mcp_api_key.return_value = None
 
         # Act
-        llm, _ = await self.service._configure_llm_and_mcp(self.mock_user, None)
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
 
         # Assert
         assert llm.base_url == 'https://user-llm.example.com'
@@ -565,14 +573,17 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
         assert llm.model == self.mock_user.llm_model
         assert 'mcpServers' in mcp_config
         assert 'default' in mcp_config['mcpServers']
-        assert 'headers' not in mcp_config['mcpServers']['default']
+
+        headers = mcp_config['mcpServers']['default']['headers']
+        assert headers['X-OpenHands-ServerConversation-ID'] == str(self.conversation_id)
+        assert 'X-Session-API-Key' not in headers
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_without_web_url(self):
@@ -582,7 +593,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -598,7 +609,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -620,7 +631,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -643,7 +654,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -665,7 +676,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -689,7 +700,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -712,7 +723,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -735,7 +746,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -758,7 +769,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -1103,12 +1114,12 @@ class TestLiveStatusAppConversationService:
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {'test': StaticSecret(value='secret')}
-        test_conversation_id = uuid4()
+        conversation_id = uuid4()
 
         # Act
         result = await self.service._finalize_conversation_request(
             mock_agent,
-            test_conversation_id,
+            conversation_id,
             self.mock_user,
             workspace,
             None,
@@ -1121,7 +1132,7 @@ class TestLiveStatusAppConversationService:
 
         # Assert
         assert isinstance(result, StartConversationRequest)
-        assert result.conversation_id == test_conversation_id
+        assert result.conversation_id == conversation_id
 
     @pytest.mark.asyncio
     async def test_finalize_conversation_request_skills_loading_fails(self):
@@ -1138,6 +1149,7 @@ class TestLiveStatusAppConversationService:
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {'test': StaticSecret(value='secret')}
         remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        conversation_id = uuid4()
 
         # Mock skills loading to raise an exception
         self.service._load_skills_and_update_agent = AsyncMock(
@@ -1152,7 +1164,7 @@ class TestLiveStatusAppConversationService:
         ) as mock_logger:
             result = await self.service._finalize_conversation_request(
                 mock_agent,
-                None,
+                conversation_id,
                 self.mock_user,
                 workspace,
                 None,
@@ -1179,6 +1191,7 @@ class TestLiveStatusAppConversationService:
         mock_mcp_config = {'default': {'url': 'test'}}
         mock_agent = Mock(spec=Agent)
         mock_final_request = Mock(spec=StartConversationRequest)
+        test_conversation_id = uuid4()
 
         self.service._setup_secrets_for_git_providers = AsyncMock(
             return_value=mock_secrets
@@ -1194,7 +1207,7 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
-            conversation_id=uuid4(),
+            conversation_id=test_conversation_id,
             initial_message=None,
             system_message_suffix='Test suffix',
             git_provider=ProviderType.GITHUB,
@@ -1212,10 +1225,10 @@ class TestLiveStatusAppConversationService:
             self.mock_user
         )
         self.service._configure_llm_and_mcp.assert_called_once_with(
-            self.mock_user, 'gpt-4'
+            self.mock_user, 'gpt-4', test_conversation_id
         )
         # When selected_repository='test/repo', project_dir is resolved
-        # to '/test/dir/repo' via get_project_dir.  All downstream calls
+        # to '/test/dir/repo' via get_project_dir. All downstream calls
         # (agent context, workspace, skills) must use this path.
         self.service._create_agent_with_context.assert_called_once_with(
             mock_llm,
@@ -1228,6 +1241,10 @@ class TestLiveStatusAppConversationService:
             working_dir='/test/dir/repo',
         )
         self.service._finalize_conversation_request.assert_called_once()
+        assert (
+            self.service._finalize_conversation_request.call_args.args[1]
+            == test_conversation_id
+        )
 
     @pytest.mark.asyncio
     async def test_find_running_sandbox_for_user_found(self):
@@ -1717,7 +1734,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -1763,7 +1780,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -1800,7 +1817,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -1837,7 +1854,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -1870,7 +1887,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert - should still return valid config with system servers only
@@ -1887,7 +1904,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert - SDK expects {'mcpServers': {...}} format
@@ -1912,7 +1929,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -1934,7 +1951,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -1961,7 +1978,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -1990,7 +2007,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -2020,7 +2037,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -2071,7 +2088,7 @@ class TestLiveStatusAppConversationService:
 
         # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None
+            self.mock_user, None, self.conversation_id
         )
 
         # Assert
@@ -2573,6 +2590,7 @@ class TestPluginHandling:
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {'test': StaticSecret(value='secret')}
+        conversation_id = uuid4()
 
         plugins = [
             PluginSpec(
@@ -2585,7 +2603,7 @@ class TestPluginHandling:
         # Act
         result = await self.service._finalize_conversation_request(
             mock_agent,
-            None,
+            conversation_id,
             self.mock_user,
             workspace,
             None,
@@ -2628,11 +2646,12 @@ class TestPluginHandling:
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {}
+        conversation_id = uuid4()
 
         # Act
         result = await self.service._finalize_conversation_request(
             mock_agent,
-            None,
+            conversation_id,
             self.mock_user,
             workspace,
             None,
@@ -2670,6 +2689,7 @@ class TestPluginHandling:
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {}
+        conversation_id = uuid4()
 
         # Plugin without ref or parameters
         plugins = [PluginSpec(source='github:owner/my-plugin')]
@@ -2677,7 +2697,7 @@ class TestPluginHandling:
         # Act
         result = await self.service._finalize_conversation_request(
             mock_agent,
-            None,
+            conversation_id,
             self.mock_user,
             workspace,
             None,
@@ -2720,6 +2740,7 @@ class TestPluginHandling:
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {}
+        conversation_id = uuid4()
 
         # Plugin with repo_path (for marketplace repos containing multiple plugins)
         plugins = [
@@ -2733,7 +2754,7 @@ class TestPluginHandling:
         # Act
         result = await self.service._finalize_conversation_request(
             mock_agent,
-            None,
+            conversation_id,
             self.mock_user,
             workspace,
             None,
@@ -2775,6 +2796,7 @@ class TestPluginHandling:
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {}
+        conversation_id = uuid4()
 
         # Multiple plugins
         plugins = [
@@ -2789,7 +2811,7 @@ class TestPluginHandling:
         # Act
         result = await self.service._finalize_conversation_request(
             mock_agent,
-            None,
+            conversation_id,
             self.mock_user,
             workspace,
             None,
