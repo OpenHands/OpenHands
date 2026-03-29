@@ -5,6 +5,8 @@ from urllib.parse import urlencode
 import httpx  # type: ignore
 from fastapi import status
 
+from openhands.utils.async_utils import GENERAL_TIMEOUT
+
 from openhands.events.event import Event
 from openhands.events.event_filter import EventFilter
 from openhands.events.event_store_abc import EventStoreABC
@@ -46,7 +48,7 @@ class NestedEventStore(EventStoreABC):
             headers: dict[str, str] = {}
             if self.session_api_key:
                 headers['X-Session-API-Key'] = self.session_api_key
-            response = httpx.get(url, headers=headers)
+            response = httpx.get(url, headers=headers, timeout=GENERAL_TIMEOUT)
             if response.status_code == status.HTTP_404_NOT_FOUND:
                 # Follow pattern of event store not throwing errors on not found
                 return
