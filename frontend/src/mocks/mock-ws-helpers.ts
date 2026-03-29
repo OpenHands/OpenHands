@@ -7,7 +7,10 @@ import {
 import { AgentStateChangeObservation } from "#/types/core/observations";
 import { MessageEvent } from "#/types/v1/core";
 import { AgentErrorEvent } from "#/types/v1/core/events/observation-event";
-import { ConversationErrorEvent } from "#/types/v1/core/events/conversation-state-event";
+import {
+  ConversationErrorEvent,
+  ServerErrorEvent,
+} from "#/types/v1/core/events/conversation-state-event";
 import { MockSessionMessaage } from "./session-history.mock";
 
 export const generateAgentStateChangeObservation = (
@@ -251,5 +254,21 @@ export const createMockConversationErrorEvent = (
   kind: "ConversationErrorEvent",
   code: "AuthenticationError",
   detail: "Your session has expired. Please log in again.",
+  ...overrides,
+});
+
+/**
+ * Creates a mock ServerErrorEvent for testing server-level error handling
+ * These are errors from the agent server (e.g., MCP configuration errors) that should show error banners
+ */
+export const createMockServerErrorEvent = (
+  overrides: Partial<ServerErrorEvent> = {},
+): ServerErrorEvent => ({
+  id: "server-error-123",
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  kind: "ServerErrorEvent",
+  code: "MCPError",
+  detail: "MCP server connection failed: Invalid configuration",
   ...overrides,
 });
