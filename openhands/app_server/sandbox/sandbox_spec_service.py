@@ -13,8 +13,8 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 # The version of the agent server to use for deployments.
 # Typically this will be the same as the values from the pyproject.toml
-#AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.15.0-python'
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:ae5eb1b-python'
+AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.15.0-python'
+
 
 class SandboxSpecService(ABC):
     """Service for managing Sandbox specs.
