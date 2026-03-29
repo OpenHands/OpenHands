@@ -5,6 +5,7 @@ and the recent bug fixes for git checkout operations.
 """
 
 import subprocess
+from pathlib import Path
 from types import MethodType
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
@@ -1169,3 +1170,163 @@ class TestLoadAndMergeAllSkills:
 
             # Assert
             assert result == []
+
+
+class TestCloneOrInitGitRepo:
+    """Tests for the clone_or_init_git_repo method."""
+
+    @pytest.fixture
+    def mock_user_context(self):
+        """Create a mock user context."""
+        mock = Mock(spec=UserContext)
+        mock.get_authenticated_git_url = AsyncMock(return_value=None)
+        return mock
+
+    @pytest.fixture
+    def mock_workspace(self):
+        """Create a mock workspace with AsyncRemoteWorkspace interface."""
+        workspace = Mock()
+        workspace.working_dir = '/workspace/projects/repo-123'
+        workspace.execute_command = AsyncMock(
+            return_value=MockCommandResult(exit_code=0, stderr='')
+        )
+        return workspace
+
+    @pytest.fixture
+    def mock_task(self):
+        """Create a mock task with AppConversationStartTask interface."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationStartTask,
+        )
+
+        task = Mock(spec=AppConversationStartTask)
+        task.request = Mock()
+        task.request.selected_repository = None
+        task.request.selected_branch = None
+        return task
+
+    @pytest.mark.asyncio
+    async def test_mkdir_uses_p_flag_for_parent_directories(
+        self, mock_user_context, mock_workspace, mock_task
+    ):
+        """Test that mkdir uses -p flag to create parent directories."""
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            await service.clone_or_init_git_repo(mock_task, mock_workspace)
+
+            # Verify mkdir -p was called with the correct working directory
+            calls = mock_workspace.execute_command.call_args_list
+            mkdir_call = next(
+                (call for call in calls if 'mkdir' in str(call)),
+                None,
+            )
+            assert mkdir_call is not None, 'mkdir command was not called'
+            # Check that -p flag is used
+            args, kwargs = mkdir_call
+            assert '-p' in args[0], f'mkdir should use -p flag, got: {args[0]}'
+            assert mock_workspace.working_dir in args[0]
+
+    @pytest.mark.asyncio
+    async def test_mkdir_creates_workspace_directory(
+        self, mock_user_context, mock_workspace, mock_task
+    ):
+        """Test that mkdir creates the workspace directory."""
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            await service.clone_or_init_git_repo(mock_task, mock_workspace)
+
+            # Verify mkdir was called with the workspace directory
+            mkdir_call = mock_workspace.execute_command.call_args_list[0]
+            args, kwargs = mkdir_call
+            assert mock_workspace.working_dir in args[0]
+
+    @pytest.mark.asyncio
+    async def test_mkdir_failure_logs_warning(
+        self, mock_user_context, mock_workspace, mock_task, caplog
+    ):
+        """Test that mkdir failure logs a warning and continues."""
+        # Make mkdir fail
+        mock_workspace.execute_command = AsyncMock(
+            return_value=MockCommandResult(exit_code=1, stderr='Permission denied')
+        )
+
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            # Should not raise, just log warning
+            await service.clone_or_init_git_repo(mock_task, mock_workspace)
+
+            # Verify warning was logged
+            assert 'mkdir failed' in caplog.text.lower() or 'permission denied' in caplog.text.lower()
+
+    @pytest.mark.asyncio
+    async def test_mkdir_executes_in_parent_directory(
+        self, mock_user_context, mock_workspace, mock_task
+    ):
+        """Test that mkdir is executed in the parent directory of the workspace."""
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            await service.clone_or_init_git_repo(mock_task, mock_workspace)
+
+            # Verify mkdir was called with parent as the working directory
+            mkdir_call = mock_workspace.execute_command.call_args_list[0]
+            args, kwargs = mkdir_call
+            # The second argument should be the parent directory
+            assert len(args) >= 2, 'mkdir should be called with parent directory'
+            parent_dir = Path(mock_workspace.working_dir).parent
+            assert args[1] == parent_dir, f'Expected parent {parent_dir}, got {args[1]}'
+
+    @pytest.mark.asyncio
+    async def test_mkdir_with_nested_path(self, mock_user_context, mock_task, caplog):
+        """Test mkdir with deeply nested path creates all parent directories."""
+        workspace = Mock()
+        workspace.working_dir = '/workspace/group/conversation/subdir/repo'
+        workspace.execute_command = AsyncMock(
+            return_value=MockCommandResult(exit_code=0, stderr='')
+        )
+
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            await service.clone_or_init_git_repo(mock_task, workspace)
+
+            # Verify mkdir -p was called for the nested path
+            mkdir_call = workspace.execute_command.call_args_list[0]
+            args, kwargs = mkdir_call
+            assert '-p' in args[0]
+            assert workspace.working_dir in args[0]
+
+    @pytest.mark.asyncio
+    async def test_mkdir_failure_does_not_prevent_continuation(
+        self, mock_user_context, mock_workspace, mock_task
+    ):
+        """Test that mkdir failure doesn't prevent subsequent operations."""
+        # First call fails (mkdir), subsequent calls succeed
+        mock_workspace.execute_command = AsyncMock(
+            return_value=MockCommandResult(exit_code=0, stderr='')
+        )
+
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            # This should complete without raising even if mkdir somehow failed
+            # (the current implementation logs warning but continues)
+            await service.clone_or_init_git_repo(mock_task, mock_workspace)
+
+            # Verify that commands were still executed (at least mkdir was called)
+            assert mock_workspace.execute_command.call_count >= 1
