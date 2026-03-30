@@ -25,10 +25,19 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+// Mock toast handlers
+const mockDisplaySuccessToast = vi.fn();
+const mockDisplayErrorToast = vi.fn();
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: (...args: unknown[]) => mockDisplaySuccessToast(...args),
+  displayErrorToast: (...args: unknown[]) => mockDisplayErrorToast(...args),
+}));
+
 // Mock useTracking hook
+const mockTrackCreditsPurchased = vi.fn();
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
-    trackCreditsPurchased: vi.fn(),
+    trackCreditsPurchased: mockTrackCreditsPurchased,
   }),
 }));
 
@@ -308,6 +317,77 @@ describe("Billing Route", () => {
       await waitFor(() => {
         expect(screen.getByTestId("user-settings-screen")).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("checkout success flow", () => {
+    beforeEach(() => {
+      mockUseBalance.mockReturnValue({
+        data: "150.00",
+        isLoading: false,
+      });
+    });
+
+    it("should display success toast exactly once and track credits on checkout success", async () => {
+      const RouterStub = createRoutesStub([
+        {
+          Component: BillingSettingsScreen,
+          path: "/settings/billing",
+        },
+      ]);
+
+      render(
+        <RouterStub
+          initialEntries={[
+            "/settings/billing?checkout=success&amount=25&session_id=sess_123",
+          ]}
+        />,
+        {
+          wrapper: ({ children }) => (
+            <QueryClientProvider client={mockQueryClient}>
+              {children}
+            </QueryClientProvider>
+          ),
+        },
+      );
+
+      await waitFor(() => {
+        expect(mockDisplaySuccessToast).toHaveBeenCalledTimes(1);
+      });
+
+      expect(mockTrackCreditsPurchased).toHaveBeenCalledTimes(1);
+      expect(mockTrackCreditsPurchased).toHaveBeenCalledWith({
+        amountUsd: 25,
+        stripeSessionId: "sess_123",
+      });
+    });
+
+    it("should display error toast exactly once on checkout cancel", async () => {
+      const RouterStub = createRoutesStub([
+        {
+          Component: BillingSettingsScreen,
+          path: "/settings/billing",
+        },
+      ]);
+
+      render(
+        <RouterStub
+          initialEntries={["/settings/billing?checkout=cancel"]}
+        />,
+        {
+          wrapper: ({ children }) => (
+            <QueryClientProvider client={mockQueryClient}>
+              {children}
+            </QueryClientProvider>
+          ),
+        },
+      );
+
+      await waitFor(() => {
+        expect(mockDisplayErrorToast).toHaveBeenCalledTimes(1);
+      });
+
+      expect(mockTrackCreditsPurchased).not.toHaveBeenCalled();
     });
   });
 
