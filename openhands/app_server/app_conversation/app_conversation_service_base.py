@@ -323,7 +323,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         # Create the projects directory if it does not exist yet
         parent = Path(workspace.working_dir).parent
         result = await workspace.execute_command(
-            f'mkdir {workspace.working_dir}', parent
+            f'mkdir -p {workspace.working_dir}', parent
         )
         if result.exit_code:
             _logger.warning(f'mkdir failed: {result.stderr}')
