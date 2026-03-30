@@ -45,6 +45,13 @@ hands    IN A    5.235.208.128
 
 to the authoritative `gantor.ir` zone used by QADR.
 
+## Gantor Platform Integration
+OpenHands is part of the Gantor platform alongside:
+- **WorldMonitor** at `monitor.gantor.ir` — geopolitical intelligence dashboard
+- **FreeGPT** at `freegpt.ir` / `chat.freegpt.ir` — free AI chat
+
+WorldMonitor links to OpenHands and FreeGPT from its header, footer, and mobile menu.
+
 ## Notes
 - The container needs `/var/run/docker.sock` because OpenHands local GUI launches sandbox/runtime containers.
 - The QADR compose file mounts `config.toml` into `/app/config.toml` so the runtime can deterministically load the live service configuration.
