@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { extractModelAndProvider } from "../../src/utils/extract-model-and-provider";
 
 describe("extractModelAndProvider", () => {
-  it("should work", () => {
+  it("should split on / separator", () => {
     expect(extractModelAndProvider("azure/ada")).toEqual({
       provider: "azure",
       model: "ada",
@@ -23,12 +23,6 @@ describe("extractModelAndProvider", () => {
       separator: "/",
     });
 
-    expect(extractModelAndProvider("cohere.command-r-v1:0")).toEqual({
-      provider: "cohere",
-      model: "command-r-v1:0",
-      separator: ".",
-    });
-
     expect(
       extractModelAndProvider(
         "cloudflare/@cf/mistral/mistral-7b-instruct-v0.1",
@@ -38,7 +32,17 @@ describe("extractModelAndProvider", () => {
       model: "@cf/mistral/mistral-7b-instruct-v0.1",
       separator: "/",
     });
+  });
 
+  it("should split on . separator for providers like cohere", () => {
+    expect(extractModelAndProvider("cohere.command-r-v1:0")).toEqual({
+      provider: "cohere",
+      model: "command-r-v1:0",
+      separator: ".",
+    });
+  });
+
+  it("should not split version numbers that look like . separators", () => {
     expect(extractModelAndProvider("together-ai-21.1b-41b")).toEqual({
       provider: "",
       model: "together-ai-21.1b-41b",
@@ -46,58 +50,39 @@ describe("extractModelAndProvider", () => {
     });
   });
 
-  it("should add provider for popular models", () => {
+  it("should return bare models as-is (backend handles provider assignment)", () => {
+    // Provider assignment for bare names now happens server-side.
+    // The frontend should only see pre-prefixed model strings from the API.
+    // Any remaining bare names are returned as model-only.
     expect(extractModelAndProvider("gpt-4o-mini")).toEqual({
-      provider: "openai",
+      provider: "",
       model: "gpt-4o-mini",
-      separator: "/",
+      separator: "",
     });
 
-    expect(extractModelAndProvider("gpt-4o")).toEqual({
-      provider: "openai",
-      model: "gpt-4o",
-      separator: "/",
+    expect(extractModelAndProvider("claude-opus-4-6")).toEqual({
+      provider: "",
+      model: "claude-opus-4-6",
+      separator: "",
     });
+  });
 
-    expect(extractModelAndProvider("gpt-5.2")).toEqual({
+  it("should correctly parse already-prefixed models", () => {
+    expect(extractModelAndProvider("openai/gpt-5.2")).toEqual({
       provider: "openai",
       model: "gpt-5.2",
       separator: "/",
     });
 
-    expect(extractModelAndProvider("gpt-5.2-codex")).toEqual({
-      provider: "openai",
-      model: "gpt-5.2-codex",
+    expect(extractModelAndProvider("anthropic/claude-opus-4-6")).toEqual({
+      provider: "anthropic",
+      model: "claude-opus-4-6",
       separator: "/",
     });
 
-    expect(extractModelAndProvider("claude-3-5-sonnet-20240620")).toEqual({
-      provider: "anthropic",
-      model: "claude-3-5-sonnet-20240620",
-      separator: "/",
-    });
-
-    expect(extractModelAndProvider("claude-3-7-sonnet-20250219")).toEqual({
-      provider: "anthropic",
-      model: "claude-3-7-sonnet-20250219",
-      separator: "/",
-    });
-
-    expect(extractModelAndProvider("claude-sonnet-4-20250514")).toEqual({
-      provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
-      separator: "/",
-    });
-
-    expect(extractModelAndProvider("claude-opus-4-20250514")).toEqual({
-      provider: "anthropic",
-      model: "claude-opus-4-20250514",
-      separator: "/",
-    });
-
-    expect(extractModelAndProvider("claude-opus-4-1-20250805")).toEqual({
-      provider: "anthropic",
-      model: "claude-opus-4-1-20250805",
+    expect(extractModelAndProvider("openhands/claude-opus-4-5-20251101")).toEqual({
+      provider: "openhands",
+      model: "claude-opus-4-5-20251101",
       separator: "/",
     });
   });

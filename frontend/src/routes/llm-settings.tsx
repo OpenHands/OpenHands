@@ -134,6 +134,9 @@ function LlmSettingsScreen() {
   const modelsAndProviders = organizeModelsAndProviders(
     resources?.models || [],
   );
+  const verifiedModels = resources?.verifiedModels || [];
+  const verifiedProviders = resources?.verifiedProviders || [];
+  const defaultModel = resources?.defaultModel || DEFAULT_OPENHANDS_MODEL;
 
   // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
   const currentModel = currentSelectedModel || settings?.llm_model;
@@ -547,7 +550,9 @@ function LlmSettingsScreen() {
                 <>
                   <ModelSelector
                     models={modelsAndProviders}
-                    currentModel={settings.llm_model || DEFAULT_OPENHANDS_MODEL}
+                    verifiedModels={verifiedModels}
+                    verifiedProviders={verifiedProviders}
+                    currentModel={settings.llm_model || defaultModel}
                     onChange={handleModelIsDirty}
                     onDefaultValuesChanged={onDefaultValuesChanged}
                     wrapperClassName="!flex-col !gap-6"
@@ -598,8 +603,8 @@ function LlmSettingsScreen() {
                 testId="llm-custom-model-input"
                 name="llm-custom-model-input"
                 label={t(I18nKey.SETTINGS$CUSTOM_MODEL)}
-                defaultValue={settings.llm_model || DEFAULT_OPENHANDS_MODEL}
-                placeholder={DEFAULT_OPENHANDS_MODEL}
+                defaultValue={settings.llm_model || defaultModel}
+                placeholder={defaultModel}
                 type="text"
                 className="w-full max-w-[680px]"
                 onChange={handleCustomModelIsDirty}
