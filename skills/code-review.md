@@ -51,4 +51,7 @@ Use the following structure in your output:
 [src/database.py, Lines 78–85] :mag: Readability: This nested if-else block is hard to follow. Consider refactoring into smaller functions or using early returns.
 [src/auth.py, Line 102] :closed_lock_with_key: Security Risk: User input is directly concatenated into an SQL query. This could allow SQL injection. Use parameterized queries instead.
 
+RELEASE PR POLICY:
+If the PR author is @mamoodi and the PR is a release PR (e.g., version bumps, changelog updates, dependency updates, standard release branch merges), and nothing looks suspicious in the diff, approve the PR without requesting changes. Release PRs from trusted maintainers that contain only expected release artifacts do not need detailed code review feedback.
+
 REMEMBER, DO NOT MODIFY THE CODE. ONLY PROVIDE FEEDBACK IN YOUR RESPONSE.
