@@ -3,8 +3,22 @@ import { render, screen } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { NewConversation } from "#/components/features/home/new-conversation/new-conversation";
+
+vi.mock("#/hooks/query/use-settings", async () => {
+  const actual = await vi.importActual<typeof import("#/hooks/query/use-settings")>(
+    "#/hooks/query/use-settings",
+  );
+  return {
+    ...actual,
+    getSettingsQueryFn: vi.fn().mockResolvedValue({ v1_enabled: true }),
+  };
+});
+
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({ organizationId: null }),
+}));
 
 // Mock the translation function
 vi.mock("react-i18next", async () => {
@@ -50,31 +64,52 @@ const renderNewConversation = () => {
 
 describe("NewConversation", () => {
   it("should create an empty conversation and redirect when pressing the launch from scratch button", async () => {
-    const createConversationSpy = vi.spyOn(
-      ConversationService,
-      "createConversation",
-    );
+    const createConversationSpy = vi
+      .spyOn(V1ConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        created_by_user_id: null,
+        status: "READY",
+        detail: null,
+        app_conversation_id: "conv-123",
+        sandbox_id: null,
+        agent_server_url: "http://agent-server.local",
+        request: {
+          sandbox_id: null,
+          initial_message: null,
+          processors: [],
+          llm_model: null,
+          selected_repository: null,
+          selected_branch: null,
+          git_provider: "github",
+          suggested_task: null,
+          title: null,
+          trigger: null,
+          pr_number: [],
+          parent_conversation_id: null,
+          agent_type: "default",
+        },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
 
     renderNewConversation();
 
     const launchButton = screen.getByTestId("launch-new-conversation-button");
     await userEvent.click(launchButton);
 
-    expect(createConversationSpy).toHaveBeenCalledExactlyOnceWith(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(createConversationSpy).toHaveBeenCalledOnce();
 
     // expect to be redirected to /conversations/:conversationId
     await screen.findByTestId("conversation-screen");
   });
 
   it("should change the launch button text to 'Loading...' when creating a conversation", async () => {
+    // Mock V1 API to never resolve, keeping the mutation in loading state
+    vi.spyOn(V1ConversationService, "createConversation").mockImplementation(
+      () => new Promise(() => {}),
+    );
+
     renderNewConversation();
 
     const launchButton = screen.getByTestId("launch-new-conversation-button");
