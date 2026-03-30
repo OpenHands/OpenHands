@@ -21,7 +21,7 @@ services:
     hostname: openhands-app
     environment:
       # --- LLM Configuration ---
-      - LLM_MODEL=${LLM_MODEL:-anthropic/claude-opus-4-5-20251101}
+      - LLM_MODEL=${LLM_MODEL:-anthropic/claude-opus-4-6}
       - LLM_BASE_URL=${LLM_BASE_URL:-}
 
       # --- Auth ---

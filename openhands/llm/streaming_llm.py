@@ -21,8 +21,7 @@ class StreamingLLM(AsyncLLM):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
-        self._async_streaming_completion = partial(
-            self._call_acompletion,
+        streaming_kwargs: dict[str, Any] = dict(
             model=self.config.model,
             api_key=self.config.api_key.get_secret_value()
             if self.config.api_key
@@ -36,6 +35,21 @@ class StreamingLLM(AsyncLLM):
             top_p=self.config.top_p,
             drop_params=self.config.drop_params,
             stream=True,  # Ensure streaming is enabled
+        )
+
+        # Anthropic constraint: certain Claude models cannot accept both temperature and top_p
+        _model_lower = self.config.model.lower()
+        if (
+            ('claude-opus-4-1' in _model_lower)
+            or ('claude-opus-4-5' in _model_lower)
+            or ('claude-opus-4-6' in _model_lower)
+            or ('claude-sonnet-4' in _model_lower)
+        ) and ('temperature' in streaming_kwargs and 'top_p' in streaming_kwargs):
+            streaming_kwargs.pop('top_p', None)
+
+        self._async_streaming_completion = partial(
+            self._call_acompletion,
+            **streaming_kwargs,
         )
 
         async_streaming_completion_unwrapped = self._async_streaming_completion

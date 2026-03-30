@@ -72,7 +72,7 @@ describe("Content", () => {
 
       await waitFor(() => {
         expect(provider).toHaveValue("OpenHands");
-        expect(model).toHaveValue("claude-opus-4-5-20251101");
+        expect(model).toHaveValue("claude-opus-4-6");
 
         expect(apiKey).toHaveValue("");
         expect(apiKey).toHaveProperty("placeholder", "");
@@ -190,7 +190,7 @@ describe("Content", () => {
       const agent = screen.getByTestId("agent-input");
       const condensor = screen.getByTestId("enable-memory-condenser-switch");
 
-      expect(model).toHaveValue("openhands/claude-opus-4-5-20251101");
+      expect(model).toHaveValue("openhands/claude-opus-4-6");
       expect(baseUrl).toHaveValue("");
       expect(apiKey).toHaveValue("");
       expect(apiKey).toHaveProperty("placeholder", "");

@@ -15,7 +15,6 @@ from openhands.llm import bedrock
 # In SaaS mode these are loaded from the database instead.
 OPENHANDS_MODELS = [
     'openhands/claude-opus-4-6',
-    'openhands/claude-opus-4-5-20251101',
     'openhands/claude-sonnet-4-6',
     'openhands/claude-sonnet-4-5-20250929',
     'openhands/gpt-5.2-codex',

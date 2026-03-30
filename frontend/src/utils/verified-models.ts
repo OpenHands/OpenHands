@@ -9,7 +9,6 @@ export const VERIFIED_PROVIDERS = [
 ];
 export const VERIFIED_MODELS = [
   "claude-opus-4-6",
-  "claude-opus-4-5-20251101",
   "claude-sonnet-4-6",
   "claude-sonnet-4-5-20250929",
   "gpt-5.2-codex",
@@ -41,7 +40,6 @@ export const VERIFIED_OPENAI_MODELS = [
 // (e.g., they return `claude-3-5-sonnet-20241022` instead of `anthropic/claude-3-5-sonnet-20241022`)
 export const VERIFIED_ANTHROPIC_MODELS = [
   "claude-opus-4-6",
-  "claude-opus-4-5-20251101",
   "claude-sonnet-4-5-20250929",
   "claude-3-5-sonnet-20240620",
   "claude-3-5-sonnet-20241022",
@@ -59,7 +57,6 @@ export const VERIFIED_MISTRAL_MODELS = ["devstral-medium-2512"];
 // (e.g., they return `claude-sonnet-4-20250514` instead of `openhands/claude-sonnet-4-20250514`)
 export const VERIFIED_OPENHANDS_MODELS = [
   "claude-opus-4-6",
-  "claude-opus-4-5-20251101",
   "claude-sonnet-4-6",
   "claude-sonnet-4-5-20250929",
   "gpt-5.2-codex",
@@ -78,4 +75,4 @@ export const VERIFIED_OPENHANDS_MODELS = [
 ];
 
 // Default model for OpenHands provider
-export const DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-5-20251101";
+export const DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-6";

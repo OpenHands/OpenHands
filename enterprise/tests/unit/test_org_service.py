@@ -1138,7 +1138,7 @@ async def test_update_org_with_permissions_success_llm_fields_admin(session_make
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         default_llm_base_url='https://api.anthropic.com',
     )
 
@@ -1156,7 +1156,7 @@ async def test_update_org_with_permissions_success_llm_fields_admin(session_make
 
         # Assert
         assert result is not None
-        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.default_llm_model == 'claude-opus-4-6'
         assert result.default_llm_base_url == 'https://api.anthropic.com'
 
 
@@ -1198,7 +1198,7 @@ async def test_update_org_with_permissions_success_llm_fields_owner(session_make
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         security_analyzer='enabled',
     )
 
@@ -1216,7 +1216,7 @@ async def test_update_org_with_permissions_success_llm_fields_owner(session_make
 
         # Assert
         assert result is not None
-        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.default_llm_model == 'claude-opus-4-6'
         assert result.security_analyzer == 'enabled'
 
 
@@ -1259,7 +1259,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(session_ma
 
     update_data = OrgUpdate(
         contact_name='Jane Doe',
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         conversation_expiration=30,
     )
 
@@ -1278,7 +1278,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(session_ma
         # Assert
         assert result is not None
         assert result.contact_name == 'Jane Doe'
-        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.default_llm_model == 'claude-opus-4-6'
         assert result.conversation_expiration == 30
 
 
@@ -1455,7 +1455,7 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
 
     from server.routes.org_models import OrgUpdate
 
-    update_data = OrgUpdate(default_llm_model='claude-opus-4-5-20251101')
+    update_data = OrgUpdate(default_llm_model='claude-opus-4-6')
 
     with (
         patch('storage.org_store.session_maker', session_maker),
@@ -1573,7 +1573,7 @@ async def test_update_org_with_permissions_only_llm_fields(session_maker):
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         security_analyzer='enabled',
         agent='agent-mode',
     )
@@ -1592,7 +1592,7 @@ async def test_update_org_with_permissions_only_llm_fields(session_maker):
 
         # Assert
         assert result is not None
-        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.default_llm_model == 'claude-opus-4-6'
         assert result.security_analyzer == 'enabled'
         assert result.agent == 'agent-mode'
 

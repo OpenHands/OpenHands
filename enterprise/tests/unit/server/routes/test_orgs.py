@@ -60,7 +60,7 @@ async def test_create_org_success(mock_app):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         enable_default_condenser=True,
         enable_proactive_conversation_starters=True,
     )
@@ -94,7 +94,7 @@ async def test_create_org_success(mock_app):
         assert response_data['contact_email'] == 'john@example.com'
         assert response_data['credits'] == 100.0
         assert response_data['org_version'] == 5
-        assert response_data['default_llm_model'] == 'claude-opus-4-5-20251101'
+        assert response_data['default_llm_model'] == 'claude-opus-4-6'
 
 
 @pytest.mark.asyncio
@@ -337,7 +337,7 @@ async def test_create_org_sensitive_fields_not_exposed(mock_app):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         enable_default_condenser=True,
         enable_proactive_conversation_starters=True,
     )
@@ -414,7 +414,7 @@ async def test_list_user_orgs_success(mock_app_list):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
     )
 
     with patch(
@@ -603,7 +603,7 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
         default_max_iterations=50,
         security_analyzer='enabled',
         confirmation_mode=True,
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         default_llm_base_url='https://api.example.com',
         remote_runtime_resource_factor=2,
         enable_default_condenser=True,
@@ -639,7 +639,7 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
         assert org_data['default_max_iterations'] == 50
         assert org_data['security_analyzer'] == 'enabled'
         assert org_data['confirmation_mode'] is True
-        assert org_data['default_llm_model'] == 'claude-opus-4-5-20251101'
+        assert org_data['default_llm_model'] == 'claude-opus-4-6'
         assert org_data['default_llm_base_url'] == 'https://api.example.com'
         assert org_data['remote_runtime_resource_factor'] == 2
         assert org_data['enable_default_condenser'] is True
@@ -685,7 +685,7 @@ async def test_get_org_success(mock_app_with_get_user_id):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         enable_default_condenser=True,
         enable_proactive_conversation_starters=True,
     )
@@ -848,7 +848,7 @@ async def test_get_org_with_credits_none(mock_app_with_get_user_id):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         enable_default_condenser=True,
         enable_proactive_conversation_starters=True,
     )
@@ -889,7 +889,7 @@ async def test_get_org_sensitive_fields_not_exposed(mock_app_with_get_user_id):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_model='claude-opus-4-6',
         search_api_key='secret-search-key-123',  # Should not be exposed
         sandbox_api_key='secret-sandbox-key-123',  # Should not be exposed
         enable_default_condenser=True,
@@ -1222,7 +1222,7 @@ async def test_update_org_permission_denied_llm_settings(mock_update_app):
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {'default_llm_model': 'claude-opus-4-5-20251101'}
+    update_data = {'default_llm_model': 'claude-opus-4-6'}
 
     with patch(
         'server.routes.orgs.OrgService.update_org_with_permissions',

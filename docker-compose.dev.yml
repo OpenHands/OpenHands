@@ -22,7 +22,7 @@ services:
       - OH_SANDBOX__PRIVILEGED=true
       - OH_SANDBOX__DIND_REGISTRY_MIRROR_URL=http://openhands-registry-cache:5000
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
-      - LLM_MODEL=${LLM_MODEL:-anthropic/claude-opus-4-5-20251101}
+      - LLM_MODEL=${LLM_MODEL:-anthropic/claude-opus-4-6}
       - LLM_BASE_URL=${LLM_BASE_URL:-}
       - LOG_LEVEL=${LOG_LEVEL:-WARNING}
       # --- Env vars forwarded into sandbox containers (OH_SANDBOX_FWD__ prefix is stripped) ---

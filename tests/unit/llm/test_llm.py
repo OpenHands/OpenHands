@@ -1261,7 +1261,7 @@ def test_opus_45_keeps_temperature_drops_top_p(mock_completion):
         'choices': [{'message': {'content': 'ok'}}],
     }
     config = LLMConfig(
-        model='anthropic/claude-opus-4-5-20251101',
+        model='anthropic/claude-opus-4-6',
         api_key='k',
         temperature=0.7,
         top_p=0.9,

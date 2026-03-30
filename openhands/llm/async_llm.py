@@ -27,8 +27,7 @@ class AsyncLLM(LLM):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
-        self._async_completion = partial(
-            self._call_acompletion,
+        async_kwargs: dict[str, Any] = dict(
             model=self.config.model,
             api_key=self.config.api_key.get_secret_value()
             if self.config.api_key
@@ -42,6 +41,21 @@ class AsyncLLM(LLM):
             top_p=self.config.top_p,
             drop_params=self.config.drop_params,
             seed=self.config.seed,
+        )
+
+        # Anthropic constraint: certain Claude models cannot accept both temperature and top_p
+        _model_lower = self.config.model.lower()
+        if (
+            ('claude-opus-4-1' in _model_lower)
+            or ('claude-opus-4-5' in _model_lower)
+            or ('claude-opus-4-6' in _model_lower)
+            or ('claude-sonnet-4' in _model_lower)
+        ) and ('temperature' in async_kwargs and 'top_p' in async_kwargs):
+            async_kwargs.pop('top_p', None)
+
+        self._async_completion = partial(
+            self._call_acompletion,
+            **async_kwargs,
         )
 
         async_completion_unwrapped = self._async_completion

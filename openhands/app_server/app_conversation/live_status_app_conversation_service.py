@@ -875,11 +875,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if model and model.startswith('openhands/'):
             base_url = user.llm_base_url or self.openhands_provider_base_url
 
+        # Anthropic constraint: certain Claude models cannot accept both temperature
+        # and top_p. Setting top_p=None prevents the SDK from sending it alongside
+        # temperature, avoiding InvalidRequestError from the Anthropic API.
+        _model_lower = (model or '').lower()
+        _needs_top_p_suppressed = any(
+            tag in _model_lower
+            for tag in (
+                'claude-opus-4-1',
+                'claude-opus-4-5',
+                'claude-opus-4-6',
+                'claude-sonnet-4',
+            )
+        )
+
         return LLM(
             model=model,
             base_url=base_url,
             api_key=user.llm_api_key,
             usage_id='agent',
+            top_p=None if _needs_top_p_suppressed else 1.0,
         )
 
     async def _get_tavily_api_key(self, user: UserInfo) -> str | None:
