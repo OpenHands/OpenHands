@@ -87,6 +87,8 @@ from openhands.app_server.utils.llm_metadata import (
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import SuggestedTask
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk.agent import ACPAgent
+from openhands.sdk.agent.base import AgentBase
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
@@ -304,6 +306,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
                     plugins=request.plugins,
+                    acp_command=request.acp_command,
+                    acp_args=request.acp_args,
+                    acp_env=request.acp_env,
+                    acp_model=request.acp_model,
                 )
             )
 
@@ -1121,22 +1127,42 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         secrets: dict[str, SecretValue] | None = None,
         git_provider: ProviderType | None = None,
         working_dir: str | None = None,
-    ) -> Agent:
+        acp_command: list[str] | None = None,
+        acp_args: list[str] | None = None,
+        acp_env: dict[str, str] | None = None,
+        acp_model: str | None = None,
+    ) -> AgentBase:
         """Create an agent with appropriate tools and context based on agent type.
 
         Args:
             llm: Configured LLM instance
-            agent_type: Type of agent to create (PLAN or DEFAULT)
+            agent_type: Type of agent to create (PLAN, DEFAULT, or ACP)
             system_message_suffix: Optional suffix for system messages
             mcp_config: MCP configuration dictionary
             condenser_max_size: condenser_max_size setting
             secrets: Optional dictionary of secrets for authentication
             git_provider: Optional git provider type for computing plan path
             working_dir: Optional working directory for computing plan path
+            acp_command: Command to start the ACP server (required for ACP type)
+            acp_args: Additional arguments for the ACP server
+            acp_env: Environment variables for the ACP server
+            acp_model: Model override for the ACP server
 
         Returns:
-            Configured Agent instance with context
+            Configured AgentBase instance with context
         """
+        # For ACP agents, create an ACPAgent directly - it manages its own LLM,
+        # tools, and system prompt via the external ACP server.
+        if agent_type == AgentType.ACP:
+            if not acp_command:
+                raise ValueError('acp_command is required for ACP agent type')
+            return ACPAgent(
+                acp_command=acp_command,
+                acp_args=acp_args or [],
+                acp_env=acp_env or {},
+                acp_model=acp_model,
+            )
+
         # Create condenser with user's settings
         condenser = self._create_condenser(llm, agent_type, condenser_max_size)
 
@@ -1355,7 +1381,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
     async def _finalize_conversation_request(
         self,
-        agent: Agent,
+        agent: AgentBase,
         conversation_id: UUID,
         user: UserInfo,
         workspace: LocalWorkspace,
@@ -1385,24 +1411,32 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Returns:
             Complete StartConversationRequest ready for use
         """
+        # ACP agents manage their own LLM, tools, and skills — skip app-level
+        # LLM metadata injection and skill loading for them.
+        is_acp = isinstance(agent, ACPAgent)
+
         # Update agent's LLM with litellm_extra_body metadata for tracing
-        agent = self._update_agent_with_llm_metadata(agent, conversation_id, user.id)
+        if not is_acp:
+            agent = self._update_agent_with_llm_metadata(
+                agent, conversation_id, user.id  # type: ignore[arg-type]
+            )
 
         # Load and merge skills if remote workspace is available
         hook_config: HookConfig | None = None
         if remote_workspace:
-            try:
-                agent = await self._load_skills_and_update_agent(
-                    sandbox,
-                    agent,
-                    remote_workspace,
-                    selected_repository,
-                    working_dir,
-                    disabled_skills=user.disabled_skills,
-                )
-            except Exception as e:
-                _logger.warning(f'Failed to load skills: {e}', exc_info=True)
-                # Continue without skills - don't fail conversation startup
+            if not is_acp:
+                try:
+                    agent = await self._load_skills_and_update_agent(
+                        sandbox,
+                        agent,  # type: ignore[arg-type]
+                        remote_workspace,
+                        selected_repository,
+                        working_dir,
+                        disabled_skills=user.disabled_skills,
+                    )
+                except Exception as e:
+                    _logger.warning(f'Failed to load skills: {e}', exc_info=True)
+                    # Continue without skills - don't fail conversation startup
 
             # Load hooks from workspace (.openhands/hooks.json)
             # Note: working_dir is already the resolved project_dir
@@ -1470,6 +1504,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
+        acp_command: list[str] | None = None,
+        acp_args: list[str] | None = None,
+        acp_env: dict[str, str] | None = None,
+        acp_model: str | None = None,
     ) -> StartConversationRequest:
         """Build a complete conversation request for a user.
 
@@ -1506,6 +1544,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             secrets=secrets,
             git_provider=git_provider,
             working_dir=project_dir,
+            acp_command=acp_command,
+            acp_args=acp_args,
+            acp_env=acp_env,
+            acp_model=acp_model,
         )
 
         # Finalize and return the conversation request

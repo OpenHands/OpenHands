@@ -6,6 +6,7 @@ import { I18nKey } from "#/i18n/declaration";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
 import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import RobotIcon from "#/icons/robot.svg?react";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ChangeAgentContextMenu } from "./change-agent-context-menu";
 import { cn } from "#/utils/utils";
@@ -95,8 +96,10 @@ export function ChangeAgentButton() {
         event.preventDefault();
         event.stopPropagation();
 
-        // Cycle between modes: code -> plan -> code
-        const nextMode = conversationMode === "code" ? "plan" : "code";
+        // Cycle between modes: code -> plan -> acp -> code
+        const modeOrder = ["code", "plan", "acp"] as const;
+        const currentIndex = modeOrder.indexOf(conversationMode);
+        const nextMode = modeOrder[(currentIndex + 1) % modeOrder.length];
         if (nextMode === "plan") {
           handlePlanClick(event);
         } else {
@@ -129,21 +132,34 @@ export function ChangeAgentButton() {
     setConversationMode("code");
   };
 
+  const handleAcpClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConversationMode("acp");
+  };
+
   const isExecutionAgent = conversationMode === "code";
+  const isAcpAgent = conversationMode === "acp";
 
   const buttonLabel = useMemo(() => {
+    if (isAcpAgent) {
+      return t(I18nKey.COMMON$ACP);
+    }
     if (isExecutionAgent) {
       return t(I18nKey.COMMON$CODE);
     }
     return t(I18nKey.COMMON$PLAN);
-  }, [isExecutionAgent, t]);
+  }, [isExecutionAgent, isAcpAgent, t]);
 
   const buttonIcon = useMemo(() => {
+    if (isAcpAgent) {
+      return <RobotIcon width={18} height={18} color="#ffffff" />;
+    }
     if (isExecutionAgent) {
       return <CodeTagIcon width={18} height={18} color="#737373" />;
     }
     return <LessonPlanIcon width={18} height={18} color="#ffffff" />;
-  }, [isExecutionAgent]);
+  }, [isExecutionAgent, isAcpAgent]);
 
   return (
     <div className="relative">
@@ -153,7 +169,8 @@ export function ChangeAgentButton() {
         disabled={isButtonDisabled}
         className={cn(
           "flex items-center border border-[#4B505F] rounded-[100px] transition-opacity",
-          !isExecutionAgent && "border-[#597FF4] bg-[#4A67BD]",
+          !isExecutionAgent && !isAcpAgent && "border-[#597FF4] bg-[#4A67BD]",
+          isAcpAgent && "border-[#10B981] bg-[#065F46]",
           isButtonDisabled
             ? "opacity-50 cursor-not-allowed"
             : "cursor-pointer hover:opacity-80",
@@ -172,6 +189,7 @@ export function ChangeAgentButton() {
           onClose={() => setContextMenuOpen(false)}
           onCodeClick={handleCodeClick}
           onPlanClick={handlePlanClick}
+          onAcpClick={handleAcpClick}
         />
       )}
     </div>

@@ -68,10 +68,14 @@ class V1ConversationService {
     suggestedTask?: SuggestedTask,
     trigger?: ConversationTrigger,
     parent_conversation_id?: string,
-    agent_type?: "default" | "plan",
+    agent_type?: "default" | "plan" | "acp",
     plugins?: PluginSpec[],
     sandbox_id?: string,
     llm_model?: string,
+    acp_command?: string[],
+    acp_args?: string[],
+    acp_env?: Record<string, string>,
+    acp_model?: string,
   ): Promise<V1AppConversationStartTask> {
     const body: V1AppConversationStartRequest = {
       selected_repository: selectedRepository,
@@ -85,6 +89,10 @@ class V1ConversationService {
       plugins: plugins || null,
       sandbox_id: sandbox_id || null,
       llm_model: llm_model || null,
+      acp_command: acp_command || null,
+      acp_args,
+      acp_env,
+      acp_model: acp_model || null,
     };
 
     // suggested_task implies the backend will construct the initial_message

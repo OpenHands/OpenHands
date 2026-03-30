@@ -21,8 +21,12 @@ interface CreateConversationVariables {
   conversationInstructions?: string;
   createMicroagent?: CreateMicroagent;
   parentConversationId?: string;
-  agentType?: "default" | "plan";
+  agentType?: "default" | "plan" | "acp";
   plugins?: PluginSpec[];
+  acpCommand?: string[];
+  acpArgs?: string[];
+  acpEnv?: Record<string, string>;
+  acpModel?: string;
 }
 
 // Response type that combines both V1 and legacy responses
@@ -54,6 +58,10 @@ export const useCreateConversation = () => {
         parentConversationId,
         agentType,
         plugins,
+        acpCommand,
+        acpArgs,
+        acpEnv,
+        acpModel,
       } = variables;
 
       // Wait for settings to be loaded before deciding V0 vs V1
@@ -84,6 +92,12 @@ export const useCreateConversation = () => {
           parentConversationId,
           agentType,
           plugins,
+          undefined, // sandbox_id
+          undefined, // llm_model
+          acpCommand,
+          acpArgs,
+          acpEnv,
+          acpModel,
         );
 
         // Return a special task ID that the frontend will recognize

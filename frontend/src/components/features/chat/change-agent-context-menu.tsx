@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import RobotIcon from "#/icons/robot.svg?react";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
 import { ContextMenuIconTextWithDescription } from "../context-menu/context-menu-icon-text-with-description";
@@ -17,12 +18,14 @@ interface ChangeAgentContextMenuProps {
   onClose: () => void;
   onCodeClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onPlanClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onAcpClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 export function ChangeAgentContextMenu({
   onClose,
   onCodeClick,
   onPlanClick,
+  onAcpClick,
 }: ChangeAgentContextMenuProps) {
   const { t } = useTranslation();
   const menuRef = useClickOutsideElement<HTMLUListElement>(onClose);
@@ -38,6 +41,13 @@ export function ChangeAgentContextMenu({
     event.preventDefault();
     event.stopPropagation();
     onPlanClick?.(event);
+    onClose();
+  };
+
+  const handleAcpClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onAcpClick?.(event);
     onClose();
   };
 
@@ -69,6 +79,17 @@ export function ChangeAgentContextMenu({
           icon={LessonPlanIcon}
           title={t(I18nKey.COMMON$PLAN)}
           description={t(I18nKey.COMMON$PLAN_AGENT_DESCRIPTION)}
+        />
+      </ContextMenuListItem>
+      <ContextMenuListItem
+        testId="acp-option"
+        onClick={handleAcpClick}
+        className={contextMenuListItemClassName}
+      >
+        <ContextMenuIconTextWithDescription
+          icon={RobotIcon}
+          title={t(I18nKey.COMMON$ACP)}
+          description={t(I18nKey.COMMON$ACP_AGENT_DESCRIPTION)}
         />
       </ContextMenuListItem>
     </ContextMenu>

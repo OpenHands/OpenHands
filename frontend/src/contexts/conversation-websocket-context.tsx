@@ -825,6 +825,7 @@ export function ConversationWebSocketProvider({
       const currentMode = useConversationStore.getState().conversationMode;
       const currentSocket =
         currentMode === "plan" ? planningAgentSocket : mainSocket;
+      // ACP mode uses the main socket (same as code mode)
 
       if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
         // WebSocket not connected - queue message via REST API

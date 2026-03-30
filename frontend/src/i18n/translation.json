@@ -17543,6 +17543,12 @@
     "uk": "Окресліть цілі, структуруйте завдання та сплануйте наступні кроки.",
     "ca": "Defineix objectius, estructura tasques i planifica els propers passos."
   },
+  "COMMON$ACP": {
+    "en": "ACP"
+  },
+  "COMMON$ACP_AGENT_DESCRIPTION": {
+    "en": "Delegate to an external ACP-compatible agent (e.g. Claude Code, Codex)."
+  },
   "PLANNING_AGENTT$PLANNING_AGENT_INITIALIZED": {
     "en": "Planning agent initialized",
     "ja": "プランニングエージェントが初期化されました",

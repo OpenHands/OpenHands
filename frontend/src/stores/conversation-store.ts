@@ -14,7 +14,7 @@ export type ConversationTab =
   | "planner"
   | "tasklist";
 
-export type ConversationMode = "code" | "plan";
+export type ConversationMode = "code" | "plan" | "acp";
 
 export interface IMessageToSend {
   text: string;

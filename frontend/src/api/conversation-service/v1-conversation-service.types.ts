@@ -61,8 +61,13 @@ export interface V1AppConversationStartRequest {
   trigger?: ConversationTrigger | null;
   pr_number?: number[];
   parent_conversation_id?: string | null;
-  agent_type?: "default" | "plan";
+  agent_type?: "default" | "plan" | "acp";
   plugins?: PluginSpec[] | null; // Plugins to load when starting the conversation
+  // ACP agent parameters - only used when agent_type is "acp"
+  acp_command?: string[] | null;
+  acp_args?: string[];
+  acp_env?: Record<string, string>;
+  acp_model?: string | null;
 }
 
 export type V1AppConversationStartTaskStatus =

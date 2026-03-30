@@ -27,6 +27,7 @@ class AgentType(Enum):
 
     DEFAULT = 'default'
     PLAN = 'plan'
+    ACP = 'acp'
 
 
 class PluginSpec(PluginSource):
@@ -160,6 +161,24 @@ class AppConversationStartRequest(OpenHandsModel):
     pr_number: list[int] = Field(default_factory=list)
     parent_conversation_id: OpenHandsUUID | None = None
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
+
+    # ACP agent parameters - only used when agent_type is ACP
+    acp_command: list[str] | None = Field(
+        default=None,
+        description='Command to start the ACP server (e.g. ["npx", "-y", "@anthropic-ai/claude-agent-acp"])',
+    )
+    acp_args: list[str] = Field(
+        default_factory=list,
+        description='Additional arguments for the ACP server command',
+    )
+    acp_env: dict[str, str] = Field(
+        default_factory=dict,
+        description='Environment variables for the ACP server process',
+    )
+    acp_model: str | None = Field(
+        default=None,
+        description='Model override for the ACP server (e.g. "claude-opus-4-6")',
+    )
 
     public: bool | None = None
 
