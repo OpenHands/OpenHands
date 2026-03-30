@@ -56,13 +56,11 @@ function BillingSettingsScreen() {
   const { hasPermission } = usePermission(me?.role ?? "member");
   const canAddCredits = !!me && hasPermission("add_credits");
   const checkoutStatus = searchParams.get("checkout");
+  const amount = searchParams.get("amount");
+  const sessionId = searchParams.get("session_id");
 
   React.useEffect(() => {
     if (checkoutStatus === "success") {
-      // Get purchase details from URL params
-      const amount = searchParams.get("amount");
-      const sessionId = searchParams.get("session_id");
-
       // Track credits purchased if we have the necessary data
       if (amount && sessionId) {
         trackCreditsPurchased({
@@ -78,7 +76,8 @@ function BillingSettingsScreen() {
       displayErrorToast(t(I18nKey.PAYMENT$CANCELLED));
       setSearchParams({});
     }
-  }, [checkoutStatus, searchParams, setSearchParams, t, trackCreditsPurchased]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutStatus, amount, sessionId, setSearchParams, t]);
 
   return <PaymentForm isDisabled={!canAddCredits} />;
 }
