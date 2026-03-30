@@ -284,6 +284,16 @@ async def call_tool_mcp(mcp_clients: list[MCPClient], action: MCPAction) -> Obse
             name=action.name,
             arguments=action.arguments,
         )
+    except Exception as e:
+        # Handle validation errors (e.g. wrong argument names) and other unexpected
+        # errors by returning an error observation so the agent can self-correct
+        logger.error(f'Error calling MCP tool {action.name}: {e}')
+        error_content = json.dumps({'isError': True, 'error': str(e), 'content': []})
+        return MCPObservation(
+            content=error_content,
+            name=action.name,
+            arguments=action.arguments,
+        )
 
 
 async def add_mcp_tools_to_agent(
