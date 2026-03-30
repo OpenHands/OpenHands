@@ -890,7 +890,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """
         model = llm_model or user.llm_model
         base_url = user.llm_base_url
-        if model and model.startswith('openhands/'):
+        if model and (
+            model.startswith('openhands/') or model.startswith('litellm_proxy/')
+        ):
             base_url = user.llm_base_url or self.openhands_provider_base_url
 
         return LLM(
