@@ -71,9 +71,6 @@ const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
       break;
     case "MCPToolAction":
       actionKey = "ACTION_MESSAGE$CALL_TOOL_MCP";
-      actionValues = {
-        mcp_tool_name: event.tool_name,
-      };
       break;
     case "ThinkAction":
       actionKey = "ACTION_MESSAGE$THINK";
@@ -142,9 +139,6 @@ const getObservationEventTitle = (event: OpenHandsEvent): React.ReactNode => {
       break;
     case "MCPToolObservation":
       observationKey = "OBSERVATION_MESSAGE$MCP";
-      observationValues = {
-        mcp_tool_name: event.observation.tool_name,
-      };
       break;
     case "BrowserObservation":
       observationKey = "OBSERVATION_MESSAGE$BROWSE";
