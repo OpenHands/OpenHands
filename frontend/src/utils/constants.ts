@@ -1,3 +1,5 @@
+import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+
 export const ASSET_FILE_TYPES = [
   ".png",
   ".jpg",
@@ -70,6 +72,19 @@ export const CHAT_INPUT = {
 
 // UI tolerance constants
 export const EPS = 1.5; // px tolerance for "near min" height comparisons
+
+/** Built-in slash commands surfaced in the menu for V1 conversations. */
+export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
+  {
+    skill: {
+      name: "new",
+      type: "agentskills",
+      content: "Creates a new conversation using the same runtime",
+      triggers: ["/new"],
+    },
+    command: "/new",
+  },
+];
 
 // Skill content metadata prefixes
 export const METADATA_PREFIXES: readonly string[] = [
