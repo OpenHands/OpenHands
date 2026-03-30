@@ -1050,7 +1050,9 @@ describe("Conversation WebSocket Handler", () => {
         http.get(
           `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
           async () => {
-            await new Promise((resolve) => setTimeout(resolve, 10));
+            await new Promise<void>((resolve) => {
+              setTimeout(resolve, 10);
+            });
             return HttpResponse.json({
               items: mockHistoryEvents,
             });
@@ -1171,7 +1173,9 @@ describe("Conversation WebSocket Handler", () => {
         http.get(
           `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
           async () => {
-            await new Promise((resolve) => setTimeout(resolve, 10));
+            await new Promise<void>((resolve) => {
+              setTimeout(resolve, 10);
+            });
             return HttpResponse.json({
               items: mockHistoryEvents,
             });
