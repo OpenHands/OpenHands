@@ -76,8 +76,14 @@ function BillingSettingsScreen() {
       displayErrorToast(t(I18nKey.PAYMENT$CANCELLED));
       setSearchParams({});
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkoutStatus, amount, sessionId, setSearchParams, t]);
+  }, [
+    checkoutStatus,
+    amount,
+    sessionId,
+    setSearchParams,
+    t,
+    trackCreditsPurchased,
+  ]);
 
   return <PaymentForm isDisabled={!canAddCredits} />;
 }
