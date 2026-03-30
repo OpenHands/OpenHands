@@ -12,9 +12,24 @@ import "./index.css";
 import React from "react";
 import { Toaster } from "react-hot-toast";
 
+function getThemeFromUrl(): "dark" | "light" {
+  if (typeof window === "undefined") return "dark";
+  const params = new URLSearchParams(window.location.search);
+  const theme = params.get("colorScheme");
+  return theme === "light" ? "light" : "dark";
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = React.useState<"dark" | "light">(getThemeFromUrl);
+
+  React.useEffect(() => {
+    const handlePopState = () => setTheme(getThemeFromUrl());
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   return (
-    <html lang="en">
+    <html lang="en" className={theme} data-theme={theme}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

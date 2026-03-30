@@ -38,7 +38,7 @@ export function ConversationStatusIndicator({
       content={statusLabel}
       placement="right"
       showArrow
-      tooltipClassName="bg-[#1a1a1a] text-white text-xs shadow-lg"
+      tooltipClassName="bg-base text-content text-xs shadow-lg"
     >
       <div
         className={cn(

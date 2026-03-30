@@ -22,8 +22,8 @@ export function ChatAddFileButton({
       onClick={handleFileIconClick}
     >
       <PaperclipIcon
-        className="block max-w-none w-[13px] h-[25px]"
-        color={disabled ? "#959CB2" : "white"}
+        className="block max-w-none w-[13px] h-[25px] text-content"
+        color={disabled ? "#959CB2" : "currentColor"}
       />
     </button>
   );

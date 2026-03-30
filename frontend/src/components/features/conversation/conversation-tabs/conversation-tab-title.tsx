@@ -18,7 +18,7 @@ export function ConversationTabTitle({
 
   return (
     <div className="flex flex-row items-center justify-between border-b border-[#474A54] py-2 px-3">
-      <span className="text-xs font-medium text-white">{title}</span>
+      <span className="text-xs font-medium text-content">{title}</span>
       {conversationKey === "editor" && (
         <button
           type="button"

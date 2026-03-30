@@ -14,7 +14,7 @@ export function ConnectToProviderMessage() {
       <div className="flex flex-col gap-2.5">
         <div className="flex items-center gap-[10px]">
           <RepoForkedIcon width={24} height={24} />
-          <span className="leading-5 font-bold text-base text-white">
+          <span className="leading-5 font-bold text-base text-content">
             {t(I18nKey.COMMON$OPEN_REPOSITORY)}
           </span>
         </div>

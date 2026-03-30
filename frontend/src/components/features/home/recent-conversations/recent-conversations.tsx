@@ -59,7 +59,7 @@ export function RecentConversations() {
           !hasConversations && "mb-[14px]",
         )}
       >
-        <h3 className="text-xs leading-4 text-white font-bold py-[14px] pl-4">
+        <h3 className="text-xs leading-4 text-content font-bold py-[14px] pl-4">
           {t(I18nKey.COMMON$RECENT_CONVERSATIONS)}
         </h3>
       </div>
@@ -79,7 +79,7 @@ export function RecentConversations() {
       </div>
 
       {!isInitialLoading && !error && displayedConversations?.length === 0 && (
-        <span className="text-xs leading-4 text-white font-medium pl-4">
+        <span className="text-xs leading-4 text-content font-medium pl-4">
           {t(I18nKey.HOME$NO_RECENT_CONVERSATIONS)}
         </span>
       )}
@@ -106,7 +106,7 @@ export function RecentConversations() {
           <button
             type="button"
             onClick={handleToggleExpansion}
-            className="text-xs leading-4 text-[#FAFAFA] font-normal cursor-pointer hover:underline"
+            className="text-xs leading-4 text-content font-normal cursor-pointer hover:underline"
           >
             {isExpanded
               ? t(I18nKey.COMMON$VIEW_LESS)

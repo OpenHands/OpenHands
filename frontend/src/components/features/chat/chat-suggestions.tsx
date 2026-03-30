@@ -19,7 +19,7 @@ export function ChatSuggestions() {
           className="absolute top-0 left-0 right-0 bottom-[151px] flex flex-col items-center justify-center pointer-events-auto"
         >
           <div className="flex flex-col items-center p-4 rounded-xl w-full text-center">
-            <span className="text-[32px] font-bold leading-10 text-white pt-4 pb-6">
+            <span className="text-[32px] font-bold leading-10 text-content pt-4 pb-6">
               {t(I18nKey.LANDING$TITLE)}
               <br />
               {t(I18nKey.LANDING$SUBTITLE_PROMPT)}

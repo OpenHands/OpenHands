@@ -101,7 +101,7 @@ export function MaintenanceBanner({ startTime }: MaintenanceBannerProps) {
         data-testid="dismiss-button"
         onClick={() => setDismissedAt(localTime)}
         className={cn(
-          "bg-[#0D0F11] rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
+          "bg-base rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
         )}
       >
         <CloseIcon />

@@ -15,7 +15,7 @@ function ChatStatusIndicator({
     <div
       data-testid="chat-status-indicator"
       className={cn(
-        "h-[31px] w-fit rounded-[100px] pt-[20px] pr-[16px] pb-[20px] pl-[5px] bg-[#25272D] flex items-center",
+        "h-[31px] w-fit rounded-[100px] pt-[20px] pr-[16px] pb-[20px] pl-[5px] bg-base-secondary flex items-center",
       )}
     >
       <AnimatePresence mode="wait">
@@ -41,7 +41,7 @@ function ChatStatusIndicator({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 2 }}
           transition={{ duration: 0.3 }}
-          className="font-normal text-[11px] leading-[20px] normal-case"
+          className="font-normal text-[11px] leading-[20px] normal-case text-content"
         >
           {status}
         </motion.span>

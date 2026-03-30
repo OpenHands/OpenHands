@@ -9,8 +9,8 @@
   preferredstrategy: "pseudoelements";
 }
 
-/* OLD TAILWIND STYLES */
-@theme {
+/* Theme color tokens — referenced as CSS custom properties so they can be overridden per-theme */
+:root {
   --color-primary: #c084fc;
   --color-logo: #cfb755;
   --color-base: #0d0f11;
@@ -22,6 +22,36 @@
   --color-tertiary-light: #b7bdc2;
   --color-content: #ecedee;
   --color-content-2: #f9fbfe;
+}
+
+/* Light theme overrides */
+html.light {
+  --color-primary: #9333ea;
+  --color-logo: #a8922e;
+  --color-base: #f5f5f5;
+  --color-base-secondary: #e5e7eb;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-basic: #6b7280;
+  --color-tertiary: #d1d5db;
+  --color-tertiary-light: #4b5563;
+  --color-content: #1f2937;
+  --color-content-2: #111827;
+}
+
+/* Register theme tokens with Tailwind — uses var() so they respond to theme overrides */
+@theme {
+  --color-primary: var(--color-primary);
+  --color-logo: var(--color-logo);
+  --color-base: var(--color-base);
+  --color-base-secondary: var(--color-base-secondary);
+  --color-danger: var(--color-danger);
+  --color-success: var(--color-success);
+  --color-basic: var(--color-basic);
+  --color-tertiary: var(--color-tertiary);
+  --color-tertiary-light: var(--color-tertiary-light);
+  --color-content: var(--color-content);
+  --color-content-2: var(--color-content-2);
 }
 
 .button-base {

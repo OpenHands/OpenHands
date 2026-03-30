@@ -25,12 +25,12 @@ export function ConversationTabNav({
       className={cn(
         "flex items-center gap-2 rounded-md cursor-pointer",
         "pl-1.5 pr-2 py-1",
-        "text-[#9299AA] bg-[#0D0F11]",
-        isActive && "bg-[#25272D] text-white",
+        "text-basic bg-base",
+        isActive && "bg-base-secondary text-content",
         isActive
-          ? "hover:text-white hover:bg-tertiary"
-          : "hover:text-white hover:bg-[#0D0F11]",
-        isActive ? "focus-within:text-white" : "focus-within:text-[#9299AA]",
+          ? "hover:text-content hover:bg-tertiary"
+          : "hover:text-content hover:bg-base",
+        isActive ? "focus-within:text-content" : "focus-within:text-[#9299AA]",
         className,
       )}
     >

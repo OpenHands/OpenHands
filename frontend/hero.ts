@@ -14,5 +14,10 @@ export default heroui({
         primary: "#c084fc",
       },
     },
+    light: {
+      colors: {
+        primary: "#9333ea",
+      },
+    },
   },
 });

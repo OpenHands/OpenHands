@@ -38,11 +38,11 @@ export function PlanPreview({
   }
 
   return (
-    <div className="bg-[#25272d] border border-[#597FF4] rounded-[12px] w-full mb-4 mt-2">
+    <div className="bg-base-secondary border border-[#597FF4] rounded-[12px] w-full mb-4 mt-2">
       {/* Header */}
       <div className="border-b border-[#525252] flex h-[41px] items-center px-2 gap-1">
         <LessonPlanIcon width={18} height={18} color="#9299aa" />
-        <Typography.Text className="font-medium text-[11px] text-white tracking-[0.11px] leading-4">
+        <Typography.Text className="font-medium text-[11px] text-content tracking-[0.11px] leading-4">
           {t(I18nKey.COMMON$PLAN_MD)}
         </Typography.Text>
         <div className="flex-1" />
@@ -52,17 +52,17 @@ export function PlanPreview({
           className="flex items-center gap-1 hover:opacity-80 transition-opacity"
           data-testid="plan-preview-view-button"
         >
-          <Typography.Text className="font-medium text-[11px] text-white tracking-[0.11px] leading-4">
+          <Typography.Text className="font-medium text-[11px] text-content tracking-[0.11px] leading-4">
             {t(I18nKey.COMMON$VIEW)}
           </Typography.Text>
-          <ArrowUpRight className="text-white" size={18} />
+          <ArrowUpRight className="text-content" size={18} />
         </button>
       </div>
 
       {/* Content */}
       <div
         data-testid="plan-preview-content"
-        className="flex flex-col gap-[10px] p-4 text-[15px] text-white leading-[29px]"
+        className="flex flex-col gap-[10px] p-4 text-[15px] text-content leading-[29px]"
       >
         {truncatedContent && (
           <>

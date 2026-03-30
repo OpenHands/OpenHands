@@ -41,7 +41,7 @@ export function GitControlBarPrButton({
       className={cn(
         "flex flex-row gap-1 items-center justify-center px-2 py-1 rounded-[100px] w-[126px] min-w-[126px] h-7",
         isButtonEnabled
-          ? "bg-[#25272D] hover:bg-[#454545] cursor-pointer"
+          ? "bg-base-secondary hover:bg-[#454545] cursor-pointer"
           : "bg-[rgba(71,74,84,0.50)] cursor-not-allowed",
       )}
     >
@@ -49,7 +49,7 @@ export function GitControlBarPrButton({
         <PRIcon width={12} height={12} color="white" />
       </div>
       <div
-        className="font-normal text-white text-sm leading-5 max-w-[126px] truncate"
+        className="font-normal text-content text-sm leading-5 max-w-[126px] truncate"
         title={t(I18nKey.COMMON$PULL_REQUEST)}
       >
         {t(I18nKey.COMMON$PULL_REQUEST)}

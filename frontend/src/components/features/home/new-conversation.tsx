@@ -23,17 +23,17 @@ export function NewConversation() {
     isPending || isSuccess || isCreatingConversationElsewhere;
 
   return (
-    <section className="w-full min-h-[286px] md:min-h-auto flex flex-col rounded-[12px] p-[20px] gap-[10px] border border-[#727987] bg-[#26282D] relative">
+    <section className="w-full min-h-[286px] md:min-h-auto flex flex-col rounded-[12px] p-[20px] gap-[10px] border border-[#727987] bg-base-secondary relative">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-[10px]">
           <PlusIcon width={17} height={14} />
-          <span className="leading-5 font-bold text-base text-white">
+          <span className="leading-5 font-bold text-base text-content">
             {t(I18nKey.COMMON$START_FROM_SCRATCH)}
           </span>
         </div>
       </div>
       <div>
-        <span className="leading-[22px] text-sm font-normal text-white">
+        <span className="leading-[22px] text-sm font-normal text-content">
           {t(I18nKey.HOME$NEW_PROJECT_DESCRIPTION)}
         </span>
       </div>

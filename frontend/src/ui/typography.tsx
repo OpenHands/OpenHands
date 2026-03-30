@@ -4,10 +4,10 @@ import { cn } from "#/utils/utils";
 const typographyVariants = cva("", {
   variants: {
     variant: {
-      h1: "text-[32px] text-white font-bold leading-5",
-      h2: "text-xl font-semibold leading-6 -tracking-[0.02em] text-white",
+      h1: "text-[32px] text-content font-bold leading-5",
+      h2: "text-xl font-semibold leading-6 -tracking-[0.02em] text-content",
       h3: "text-sm font-semibold text-gray-300",
-      span: "text-sm font-normal text-white leading-5.5",
+      span: "text-sm font-normal text-content leading-5.5",
       codeBlock:
         "font-mono text-sm leading-relaxed text-gray-300 whitespace-pre-wrap",
     },
