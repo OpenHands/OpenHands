@@ -169,11 +169,11 @@ def get_openhands_models(
 def _assign_provider(model: str) -> str:
     """Prefix a bare model name with its canonical provider.
 
-    Models that already contain a ``/`` or ``.`` separator are returned
-    unchanged.  Only well-known bare names (OpenAI, Anthropic, Mistral,
-    OpenHands) are prefixed.
+    Models that already contain a ``/`` provider separator are returned
+    unchanged. Only well-known bare names (OpenAI, Anthropic, Mistral)
+    are prefixed.
     """
-    if '/' in model or '.' in model:
+    if '/' in model:
         return model
 
     # Prefix well-known bare SDK model names with their canonical provider.

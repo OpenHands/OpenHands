@@ -3,7 +3,7 @@ import { organizeModelsAndProviders } from "../../src/utils/organize-models-and-
 
 test("organizeModelsAndProviders — models already prefixed by backend", () => {
   // The backend now assigns provider prefixes to bare LiteLLM names.
-  // The frontend only needs to parse the provider/model strings.
+  // The frontend only needs to parse slash-prefixed provider/model strings.
   const models = [
     "azure/ada",
     "azure/gpt-35-turbo",
@@ -37,7 +37,6 @@ test("organizeModelsAndProviders — models already prefixed by backend", () => 
       models: ["chat-bison", "chat-bison-32k"],
     },
     sagemaker: { separator: "/", models: ["meta-textgeneration-llama-2-13b"] },
-    cohere: { separator: ".", models: ["command-r-v1:0"] },
     cloudflare: {
       separator: "/",
       models: ["@cf/mistral/mistral-7b-instruct-v0.1"],
@@ -52,7 +51,7 @@ test("organizeModelsAndProviders — models already prefixed by backend", () => 
     },
     other: {
       separator: "",
-      models: ["together-ai-21.1b-41b"],
+      models: ["cohere.command-r-v1:0", "together-ai-21.1b-41b"],
     },
   });
 });

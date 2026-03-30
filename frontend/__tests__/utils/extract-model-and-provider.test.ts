@@ -34,26 +34,19 @@ describe("extractModelAndProvider", () => {
     });
   });
 
-  it("should split on . separator for providers like cohere", () => {
+  it("should return dotted or bare models as-is", () => {
     expect(extractModelAndProvider("cohere.command-r-v1:0")).toEqual({
-      provider: "cohere",
-      model: "command-r-v1:0",
-      separator: ".",
+      provider: "",
+      model: "cohere.command-r-v1:0",
+      separator: "",
     });
-  });
 
-  it("should not split version numbers that look like . separators", () => {
     expect(extractModelAndProvider("together-ai-21.1b-41b")).toEqual({
       provider: "",
       model: "together-ai-21.1b-41b",
       separator: "",
     });
-  });
 
-  it("should return bare models as-is (backend handles provider assignment)", () => {
-    // Provider assignment for bare names now happens server-side.
-    // The frontend should only see pre-prefixed model strings from the API.
-    // Any remaining bare names are returned as model-only.
     expect(extractModelAndProvider("gpt-4o-mini")).toEqual({
       provider: "",
       model: "gpt-4o-mini",
