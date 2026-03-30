@@ -4,6 +4,7 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
+import { useConversationStore } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
@@ -28,8 +29,10 @@ export function ConversationTabsContextMenu({
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { t } = useTranslation();
   const { conversationId } = useConversationId();
-  const { state, setUnpinnedTabs } =
+  const { state, setUnpinnedTabs, setRightPanelShown } =
     useConversationLocalStorageState(conversationId);
+  const { selectedTab, isRightPanelShown, setHasRightPanelToggled } =
+    useConversationStore();
 
   const { hasTaskList } = useTaskList();
 
@@ -61,6 +64,10 @@ export function ConversationTabsContextMenu({
       setUnpinnedTabs(state.unpinnedTabs.filter((item) => item !== tab));
     } else {
       setUnpinnedTabs([...state.unpinnedTabs, tab]);
+      if (selectedTab === tab && isRightPanelShown) {
+        setHasRightPanelToggled(false);
+        setRightPanelShown(false);
+      }
     }
   };
 
