@@ -1418,7 +1418,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Update agent's LLM with litellm_extra_body metadata for tracing
         if not is_acp:
             agent = self._update_agent_with_llm_metadata(
-                agent, conversation_id, user.id  # type: ignore[arg-type]
+                agent,  # type: ignore[arg-type]
+                conversation_id,
+                user.id,
             )
 
         # Load and merge skills if remote workspace is available

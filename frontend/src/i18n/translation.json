@@ -17544,10 +17544,38 @@
     "ca": "Defineix objectius, estructura tasques i planifica els propers passos."
   },
   "COMMON$ACP": {
-    "en": "ACP"
+    "en": "ACP",
+    "ja": "ACP",
+    "zh-CN": "ACP",
+    "zh-TW": "ACP",
+    "ko-KR": "ACP",
+    "no": "ACP",
+    "it": "ACP",
+    "pt": "ACP",
+    "es": "ACP",
+    "ar": "ACP",
+    "fr": "ACP",
+    "tr": "ACP",
+    "de": "ACP",
+    "uk": "ACP",
+    "ca": "ACP"
   },
   "COMMON$ACP_AGENT_DESCRIPTION": {
-    "en": "Delegate to an external ACP-compatible agent (e.g. Claude Code, Codex)."
+    "en": "Delegate to an external ACP-compatible agent (e.g. Claude Code, Codex).",
+    "ja": "外部のACP対応エージェント（例：Claude Code、Codex）に委任します。",
+    "zh-CN": "委托给外部 ACP 兼容代理（如 Claude Code、Codex）。",
+    "zh-TW": "委託給外部 ACP 相容代理（如 Claude Code、Codex）。",
+    "ko-KR": "외부 ACP 호환 에이전트(예: Claude Code, Codex)에 위임합니다.",
+    "no": "Deleger til en ekstern ACP-kompatibel agent (f.eks. Claude Code, Codex).",
+    "it": "Delega a un agente esterno compatibile con ACP (es. Claude Code, Codex).",
+    "pt": "Delegar a um agente externo compatível com ACP (ex.: Claude Code, Codex).",
+    "es": "Delegar a un agente externo compatible con ACP (ej. Claude Code, Codex).",
+    "ar": "تفويض إلى وكيل خارجي متوافق مع ACP (مثل Claude Code أو Codex).",
+    "fr": "Déléguer à un agent externe compatible ACP (ex. Claude Code, Codex).",
+    "tr": "Harici ACP uyumlu bir ajana devredin (ör. Claude Code, Codex).",
+    "de": "An einen externen ACP-kompatiblen Agenten delegieren (z. B. Claude Code, Codex).",
+    "uk": "Делегувати зовнішньому ACP-сумісному агенту (напр. Claude Code, Codex).",
+    "ca": "Delega a un agent extern compatible amb ACP (p. ex. Claude Code, Codex)."
   },
   "PLANNING_AGENTT$PLANNING_AGENT_INITIALIZED": {
     "en": "Planning agent initialized",

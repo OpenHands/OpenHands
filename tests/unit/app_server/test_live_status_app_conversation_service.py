@@ -1273,6 +1273,10 @@ class TestLiveStatusAppConversationService:
             secrets=mock_secrets,
             git_provider=ProviderType.GITHUB,
             working_dir='/test/dir/repo',
+            acp_command=None,
+            acp_args=None,
+            acp_env=None,
+            acp_model=None,
         )
         self.service._finalize_conversation_request.assert_called_once()
         assert (

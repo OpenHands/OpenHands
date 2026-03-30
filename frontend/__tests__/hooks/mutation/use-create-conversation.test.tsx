@@ -100,6 +100,12 @@ describe("useCreateConversation", () => {
         undefined,
         undefined,
         undefined, // plugins
+        undefined, // sandbox_id
+        undefined, // llm_model
+        undefined, // acpCommand
+        undefined, // acpArgs
+        undefined, // acpEnv
+        undefined, // acpModel
       );
     });
   });
