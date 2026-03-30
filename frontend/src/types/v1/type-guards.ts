@@ -203,6 +203,13 @@ export const isServerErrorEvent = (
   "kind" in event && event.kind === "ServerErrorEvent";
 
 /**
+ * Type guard function to check if an event is a displayable error event
+ * (ConversationErrorEvent or ServerErrorEvent) - both should show as error banners
+ */
+export const isDisplayableErrorEvent = (event: OpenHandsEvent): boolean =>
+  isConversationErrorEvent(event) || isServerErrorEvent(event);
+
+/**
  * Type guard function to check if an event is a hook execution event
  */
 export const isHookExecutionEvent = (

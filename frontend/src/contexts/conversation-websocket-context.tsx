@@ -27,8 +27,7 @@ import {
   isStatsConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
-  isConversationErrorEvent,
-  isServerErrorEvent,
+  isDisplayableErrorEvent,
   isPlanningFileEditorObservationEvent,
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
@@ -353,9 +352,9 @@ export function ConversationWebSocketProvider({
         if (isV1Event(event)) {
           addEvent(event);
 
-          // Handle ConversationErrorEvent specifically - show error banner
+          // Handle displayable error events - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
-          if (isConversationErrorEvent(event) || isServerErrorEvent(event)) {
+          if (isDisplayableErrorEvent(event)) {
             trackError({
               message: event.detail,
               source: "conversation",
@@ -516,9 +515,9 @@ export function ConversationWebSocketProvider({
           };
           addEvent(eventWithPlanningFlag);
 
-          // Handle ConversationErrorEvent specifically - show error banner
+          // Handle displayable error events - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
-          if (isConversationErrorEvent(event) || isServerErrorEvent(event)) {
+          if (isDisplayableErrorEvent(event)) {
             trackError({
               message: event.detail,
               source: "planning_conversation",
