@@ -115,6 +115,15 @@ export default function MainApp() {
   }, [settings?.language, isOnIntermediatePage]);
 
   React.useEffect(() => {
+    const language =
+      settings?.language || i18n.resolvedLanguage || i18n.language || "en";
+    const direction = ["fa", "ar"].includes(language) ? "rtl" : "ltr";
+
+    document.documentElement.lang = language;
+    document.documentElement.dir = direction;
+  }, [settings?.language, i18n.language, i18n.resolvedLanguage]);
+
+  React.useEffect(() => {
     // Don't show consent form when on intermediate pages
     if (!isOnIntermediatePage) {
       const consentFormModalIsOpen =

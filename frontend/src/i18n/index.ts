@@ -5,6 +5,7 @@ import { initReactI18next } from "react-i18next";
 
 export const AvailableLanguages = [
   { label: "English", value: "en" },
+  { label: "فارسی", value: "fa" },
   { label: "日本語", value: "ja" },
   { label: "简体中文", value: "zh-CN" },
   { label: "繁體中文", value: "zh-TW" },

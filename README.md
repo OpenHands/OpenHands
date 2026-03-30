@@ -49,6 +49,14 @@ The experience will be familiar to anyone who has used Devin or Jules.
 
 [Check out the docs](https://docs.openhands.dev/openhands/usage/run-openhands/local-setup) or view the source in this repo.
 
+### Gantor fork notes
+This fork adds:
+- Persian (`fa`) as a supported UI language
+- RTL-aware document handling for Persian and Arabic
+- QADR deployment packaging for `hands.gantor.ir`
+
+See [QADR deployment notes](./docs/qadr-deployment.md).
+
 ### OpenHands Cloud
 This is a deployment of OpenHands GUI, running on hosted infrastructure.
 

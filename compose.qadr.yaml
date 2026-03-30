@@ -1,0 +1,49 @@
+services:
+  openhands:
+    build:
+      context: .
+      dockerfile: ./containers/app/Dockerfile
+      args:
+        OPENHANDS_BUILD_VERSION: ${OPENHANDS_BUILD_VERSION:-qadr-fa}
+    image: gantor/openhands:${OPENHANDS_BUILD_VERSION:-qadr-fa}
+    container_name: qadr-openhands
+    restart: unless-stopped
+    environment:
+      AGENT_SERVER_IMAGE_REPOSITORY: ${AGENT_SERVER_IMAGE_REPOSITORY:-ghcr.io/openhands/agent-server}
+      AGENT_SERVER_IMAGE_TAG: ${AGENT_SERVER_IMAGE_TAG:-1.12.0-python}
+      SANDBOX_USER_ID: ${SANDBOX_USER_ID:-0}
+      WORKSPACE_MOUNT_PATH: /opt/workspace_base
+      TZ: Asia/Tehran
+      SERVE_FRONTEND: "true"
+      FILE_STORE: local
+      FILE_STORE_PATH: /.openhands
+    ports:
+      - "127.0.0.1:${OPENHANDS_PORT:-39030}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${OPENHANDS_STATE_DIR:-/srv/data/openhands-state}:/.openhands
+      - ${OPENHANDS_WORKSPACE_DIR:-/srv/data/openhands-workspace}:/opt/workspace_base
+    pull_policy: build
+    stdin_open: true
+    tty: true
+    cpus: 3.00
+    mem_limit: 4096m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - fgpt_ingress
+      - fgpt_ai
+
+networks:
+  fgpt_ingress:
+    external: true
+    name: fgpt_ingress
+  fgpt_ai:
+    external: true
+    name: fgpt_ai

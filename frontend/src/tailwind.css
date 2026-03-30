@@ -9,6 +9,16 @@
   preferredstrategy: "pseudoelements";
 }
 
+html[lang="fa"] body {
+  font-family:
+    "Vazirmatn",
+    "IRANSansX",
+    "Noto Sans Arabic",
+    Tahoma,
+    "Segoe UI",
+    sans-serif;
+}
+
 /* OLD TAILWIND STYLES */
 @theme {
   --color-primary: #c9b974;

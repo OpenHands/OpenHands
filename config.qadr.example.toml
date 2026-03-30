@@ -1,0 +1,23 @@
+[core]
+workspace_base = "/opt/workspace_base"
+file_store = "local"
+file_store_path = "/.openhands"
+runtime = "docker"
+enable_browser = true
+default_agent = "CodeActAgent"
+
+[llm]
+model = "openai/gpt-4.1-mini"
+base_url = "http://qadr-ai-gateway-litellm:4000/v1"
+api_key = "REPLACE_WITH_LITELLM_MASTER_KEY"
+custom_llm_provider = "openai"
+temperature = 0.0
+max_budget_per_task = 0.0
+
+[agent]
+enable_browsing = true
+enable_editor = true
+enable_jupyter = true
+enable_cmd = true
+enable_think = true
+enable_finish = true
