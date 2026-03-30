@@ -96,10 +96,8 @@ export function ChangeAgentButton() {
         event.preventDefault();
         event.stopPropagation();
 
-        // Cycle between modes: code -> plan -> acp -> code
-        const modeOrder = ["code", "plan", "acp"] as const;
-        const currentIndex = modeOrder.indexOf(conversationMode);
-        const nextMode = modeOrder[(currentIndex + 1) % modeOrder.length];
+        // Cycle between modes: code -> plan -> code
+        const nextMode = conversationMode === "code" ? "plan" : "code";
         if (nextMode === "plan") {
           handlePlanClick(event);
         } else {
