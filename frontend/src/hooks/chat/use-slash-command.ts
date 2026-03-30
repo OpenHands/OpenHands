@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
 import { Skill } from "#/api/conversation-service/v1-conversation-service.types";
 import { Microagent } from "#/api/open-hands.types";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { BUILT_IN_COMMANDS } from "#/utils/constants";
 
 export type SlashCommandSkill = Skill | Microagent;
 
@@ -30,17 +32,30 @@ function getCursorOffset(element: HTMLElement): number {
 export const useSlashCommand = (
   chatInputRef: React.RefObject<HTMLDivElement | null>,
 ) => {
-  const { data: skills } = useConversationSkills();
+  const { data: skills, isLoading: isSkillsLoading } = useConversationSkills();
+  const { data: conversation } = useActiveConversation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Build slash command items from skills:
+  const isV1Conversation = conversation?.conversation_version === "V1";
+
+  // Build slash command items from built-in commands + skills:
+  // - Built-in commands (like /new) are included for V1 conversations
   // - Skills with explicit "/" triggers use those triggers
   // - AgentSkills without "/" triggers get a derived "/<name>" command
   const slashItems = useMemo(() => {
-    if (!skills) return [];
     const items: SlashCommandItem[] = [];
+
+    // Wait for skills to finish initial load so all commands appear together
+    if (isSkillsLoading) return items;
+
+    // Include built-in commands for V1 conversations
+    if (isV1Conversation) {
+      items.push(...BUILT_IN_COMMANDS);
+    }
+
+    if (!skills) return items;
     skills.forEach((skill) => {
       const triggers = skill.triggers || [];
       const slashTriggers = triggers.filter((t) => t.startsWith("/"));
@@ -56,7 +71,7 @@ export const useSlashCommand = (
       }
     });
     return items;
-  }, [skills]);
+  }, [skills, isV1Conversation, isSkillsLoading]);
 
   // Filter items based on user input after "/"
   const filteredItems = useMemo(() => {
