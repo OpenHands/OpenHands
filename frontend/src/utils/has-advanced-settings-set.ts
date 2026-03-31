@@ -37,12 +37,17 @@ export const hasAdvancedSettingsSet = (
     settings.search_api_key !== undefined &&
     settings.search_api_key !== null &&
     settings.search_api_key.trim() !== "";
+  // Check if max output tokens is explicitly configured
+  const hasMaxOutputTokens =
+    settings.llm_max_output_tokens !== undefined &&
+    settings.llm_max_output_tokens !== null;
 
   return (
     hasBaseUrl ||
     hasCustomAgent ||
     hasDisabledCondenser ||
     hasCustomCondenserSize ||
-    hasSearchApiKey
+    hasSearchApiKey ||
+    hasMaxOutputTokens
   );
 };

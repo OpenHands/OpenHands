@@ -107,6 +107,7 @@ function LlmSettingsScreen() {
     enableDefaultCondenser: false,
     securityAnalyzer: false,
     condenserMaxSize: false,
+    maxOutputTokens: false,
   });
 
   // Track the currently selected model to show help text
@@ -226,6 +227,7 @@ function LlmSettingsScreen() {
       enableDefaultCondenser: false,
       securityAnalyzer: false,
       condenserMaxSize: false,
+      maxOutputTokens: false,
     });
   };
 
@@ -268,6 +270,7 @@ function LlmSettingsScreen() {
         llm_base_url: DEFAULT_SETTINGS.llm_base_url,
         agent: DEFAULT_SETTINGS.agent,
         enable_default_condenser: DEFAULT_SETTINGS.enable_default_condenser,
+        llm_max_output_tokens: DEFAULT_SETTINGS.llm_max_output_tokens,
       },
       {
         onSuccess: handleSuccessfulMutation,
@@ -297,6 +300,17 @@ function LlmSettingsScreen() {
         ? Math.max(20, condenserMaxSizeRaw)
         : undefined;
 
+    const maxOutputTokensStr = formData
+      .get("max-output-tokens-input")
+      ?.toString();
+    const maxOutputTokensRaw = maxOutputTokensStr
+      ? Number.parseInt(maxOutputTokensStr, 10)
+      : null;
+    const maxOutputTokens =
+      maxOutputTokensRaw !== null && maxOutputTokensRaw >= 1
+        ? maxOutputTokensRaw
+        : null;
+
     const securityAnalyzer = formData
       .get("security-analyzer-input")
       ?.toString();
@@ -315,6 +329,7 @@ function LlmSettingsScreen() {
         enable_default_condenser: enableDefaultCondenser,
         condenser_max_size:
           condenserMaxSize ?? DEFAULT_SETTINGS.condenser_max_size,
+        llm_max_output_tokens: maxOutputTokens,
         security_analyzer:
           securityAnalyzer === "none"
             ? null
@@ -339,6 +354,7 @@ function LlmSettingsScreen() {
       enableDefaultCondenser: false,
       securityAnalyzer: false,
       condenserMaxSize: false,
+      maxOutputTokens: false,
     });
   };
 
@@ -446,6 +462,16 @@ function LlmSettingsScreen() {
     setDirtyInputs((prev) => ({
       ...prev,
       condenserMaxSize: condenserMaxSizeIsDirty,
+    }));
+  };
+
+  const handleMaxOutputTokensIsDirty = (value: string) => {
+    const parsed = value ? Number.parseInt(value, 10) : null;
+    const current = settings?.llm_max_output_tokens ?? null;
+    const maxOutputTokensIsDirty = parsed !== current;
+    setDirtyInputs((prev) => ({
+      ...prev,
+      maxOutputTokens: maxOutputTokensIsDirty,
     }));
   };
 
@@ -712,6 +738,29 @@ function LlmSettingsScreen() {
                 />
                 <p className="text-xs text-tertiary-alt mt-6">
                   {t(I18nKey.SETTINGS$CONDENSER_MAX_SIZE_TOOLTIP)}
+                </p>
+              </div>
+
+              <div className="w-full max-w-[680px]">
+                <SettingsInput
+                  testId="max-output-tokens-input"
+                  name="max-output-tokens-input"
+                  type="number"
+                  min={1}
+                  step={1}
+                  label={t(I18nKey.SETTINGS$MAX_OUTPUT_TOKENS)}
+                  defaultValue={
+                    settings.llm_max_output_tokens?.toString() ?? ""
+                  }
+                  placeholder={t(
+                    I18nKey.SETTINGS$MAX_OUTPUT_TOKENS_PLACEHOLDER,
+                  )}
+                  onChange={(value) => handleMaxOutputTokensIsDirty(value)}
+                  isDisabled={isReadOnly}
+                  className="w-full max-w-[680px]"
+                />
+                <p className="text-xs text-tertiary-alt mt-6">
+                  {t(I18nKey.SETTINGS$MAX_OUTPUT_TOKENS_TOOLTIP)}
                 </p>
               </div>
 

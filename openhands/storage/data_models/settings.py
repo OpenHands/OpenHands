@@ -63,6 +63,7 @@ class Settings(BaseModel):
     search_api_key: SecretStr | None = None
     sandbox_api_key: SecretStr | None = None
     max_budget_per_task: float | None = None
+    llm_max_output_tokens: int | None = None
     # Maximum number of events in the conversation view before condensation runs
     condenser_max_size: int | None = None
     email: str | None = None
@@ -143,6 +144,15 @@ class Settings(BaseModel):
             raise ValueError('condenser_max_size must be at least 20')
         return v
 
+    @field_validator('llm_max_output_tokens')
+    @classmethod
+    def validate_llm_max_output_tokens(cls, v: int | None) -> int | None:
+        if v is None:
+            return v
+        if v < 1:
+            raise ValueError('llm_max_output_tokens must be at least 1')
+        return v
+
     @field_serializer('secrets_store')
     def secrets_store_serializer(self, secrets: Secrets, info: SerializationInfo):
         """Custom serializer for secrets store."""
@@ -172,6 +182,7 @@ class Settings(BaseModel):
             llm_model=llm_config.model,
             llm_api_key=llm_config.api_key,
             llm_base_url=llm_config.base_url,
+            llm_max_output_tokens=llm_config.max_output_tokens,
             remote_runtime_resource_factor=app_config.sandbox.remote_runtime_resource_factor,
             mcp_config=mcp_config,
             search_api_key=app_config.search_api_key,

@@ -1,7 +1,8 @@
 import warnings
 from unittest.mock import patch
 
-from pydantic import SecretStr
+import pytest
+from pydantic import SecretStr, ValidationError
 
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -47,6 +48,36 @@ def test_settings_from_config():
         assert settings.llm_base_url == 'https://test.example.com'
         assert settings.remote_runtime_resource_factor == 2
         assert not settings.secrets_store.provider_tokens
+        assert settings.llm_max_output_tokens is None
+
+
+def test_settings_from_config_with_max_output_tokens():
+    mock_app_config = OpenHandsConfig(
+        default_agent='test-agent',
+        max_iterations=100,
+        security=SecurityConfig(
+            security_analyzer='test-analyzer',
+            confirmation_mode=True,
+        ),
+        llms={
+            'llm': LLMConfig(
+                model='test-model',
+                api_key=SecretStr('test-key'),
+                base_url='https://test.example.com',
+                max_output_tokens=4096,
+            )
+        },
+        sandbox=SandboxConfig(remote_runtime_resource_factor=2),
+    )
+
+    with patch(
+        'openhands.storage.data_models.settings.load_openhands_config',
+        return_value=mock_app_config,
+    ):
+        settings = Settings.from_config()
+
+        assert settings is not None
+        assert settings.llm_max_output_tokens == 4096
 
 
 def test_settings_from_config_no_api_key():
@@ -127,3 +158,22 @@ def test_settings_no_pydantic_frozen_field_warning():
         assert len(frozen_warnings) == 0, (
             f'Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}'
         )
+
+
+def test_llm_max_output_tokens_valid_values():
+    settings = Settings(llm_max_output_tokens=4096)
+    assert settings.llm_max_output_tokens == 4096
+
+    settings = Settings(llm_max_output_tokens=1)
+    assert settings.llm_max_output_tokens == 1
+
+    settings = Settings(llm_max_output_tokens=None)
+    assert settings.llm_max_output_tokens is None
+
+
+def test_llm_max_output_tokens_invalid_value():
+    with pytest.raises(ValidationError, match='llm_max_output_tokens must be at least 1'):
+        Settings(llm_max_output_tokens=0)
+
+    with pytest.raises(ValidationError, match='llm_max_output_tokens must be at least 1'):
+        Settings(llm_max_output_tokens=-100)

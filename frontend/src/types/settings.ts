@@ -81,6 +81,7 @@ export type Settings = {
   mcp_config?: MCPConfig;
   disabled_skills?: string[];
   max_budget_per_task: number | null;
+  llm_max_output_tokens: number | null;
   email?: string;
   email_verified?: boolean;
   git_user_name?: string;

@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   is_new_user: true,
   disabled_skills: [],
   max_budget_per_task: null,
+  llm_max_output_tokens: null,
   email: "",
   email_verified: true, // Default to true to avoid restricting access unnecessarily
   mcp_config: {

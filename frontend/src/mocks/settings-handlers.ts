@@ -55,6 +55,7 @@ export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
   enable_solvability_analysis: DEFAULT_SETTINGS.enable_solvability_analysis,
   user_consents_to_analytics: DEFAULT_SETTINGS.user_consents_to_analytics,
   max_budget_per_task: DEFAULT_SETTINGS.max_budget_per_task,
+  llm_max_output_tokens: DEFAULT_SETTINGS.llm_max_output_tokens,
 };
 
 const MOCK_USER_PREFERENCES: {

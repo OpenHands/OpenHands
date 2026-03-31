@@ -29,6 +29,8 @@ def setup_llm_config(config: OpenHandsConfig, settings: Settings) -> OpenHandsCo
         base_url_to_use,
         llm_config.custom_llm_provider,
     )
+    if settings.llm_max_output_tokens is not None:
+        llm_config.max_output_tokens = settings.llm_max_output_tokens
     config.set_llm_config(llm_config)
     return config
 

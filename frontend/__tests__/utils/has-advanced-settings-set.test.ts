@@ -99,5 +99,23 @@ describe("hasAdvancedSettingsSet", () => {
       // Assert
       expect(result).toBe(true);
     });
+
+    test("llm_max_output_tokens is explicitly configured", () => {
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        llm_max_output_tokens: 4096,
+      };
+
+      expect(hasAdvancedSettingsSet(settings)).toBe(true);
+    });
+
+    test("llm_max_output_tokens as null is not advanced", () => {
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        llm_max_output_tokens: null,
+      };
+
+      expect(hasAdvancedSettingsSet(settings)).toBe(false);
+    });
   });
 });

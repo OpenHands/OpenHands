@@ -155,6 +155,7 @@ describe("useConversationSkills - V1 API Integration", () => {
         enable_solvability_analysis: false,
         user_consents_to_analytics: null,
         max_budget_per_task: null,
+        llm_max_output_tokens: null,
       });
 
       // Act
@@ -192,6 +193,7 @@ describe("useConversationSkills - V1 API Integration", () => {
         enable_solvability_analysis: false,
         user_consents_to_analytics: null,
         max_budget_per_task: null,
+        llm_max_output_tokens: null,
       });
 
       // Act
@@ -230,6 +232,7 @@ describe("useConversationSkills - V1 API Integration", () => {
         enable_solvability_analysis: false,
         user_consents_to_analytics: null,
         max_budget_per_task: null,
+        llm_max_output_tokens: null,
       });
 
       // Act
@@ -267,6 +270,7 @@ describe("useConversationSkills - V1 API Integration", () => {
         enable_solvability_analysis: false,
         user_consents_to_analytics: null,
         max_budget_per_task: null,
+        llm_max_output_tokens: null,
       });
 
       // Act
@@ -299,6 +303,7 @@ describe("useConversationSkills - V1 API Integration", () => {
         enable_solvability_analysis: false,
         user_consents_to_analytics: null,
         max_budget_per_task: null,
+        llm_max_output_tokens: null,
       });
 
       const getSkillsSpy = vi
@@ -349,6 +354,7 @@ describe("useConversationSkills - V1 API Integration", () => {
           enable_solvability_analysis: false,
           user_consents_to_analytics: null,
           max_budget_per_task: null,
+          llm_max_output_tokens: null,
         });
 
       // Act - Initial render with v1_enabled: false
@@ -381,6 +387,7 @@ describe("useConversationSkills - V1 API Integration", () => {
         enable_solvability_analysis: false,
         user_consents_to_analytics: null,
         max_budget_per_task: null,
+        llm_max_output_tokens: null,
       });
 
       // Act - Force re-render
