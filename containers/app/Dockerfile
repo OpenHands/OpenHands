@@ -75,8 +75,10 @@ COPY --chown=openhands:openhands --chmod=770 --from=backend-builder ${VIRTUAL_EN
 
 # Upgrade pip to fix CVE-2025-8869 (symbolic link extraction vulnerability)
 # Upgrade both venv pip and system pip (Trivy scans both)
-RUN pip install --upgrade pip && \
-    /usr/bin/python3 -m pip install --upgrade pip --break-system-packages
+# - `python -m pip` uses the venv because `PATH` is prefixed with `${VIRTUAL_ENV}/bin`
+# - `sudo python3 -m pip` uses the system interpreter (sudo secure_path)
+RUN python -m pip install --upgrade pip && \
+    sudo -H python3 -m pip install --upgrade pip --break-system-packages
 
 COPY --chown=openhands:openhands --chmod=770 ./skills ./skills
 COPY --chown=openhands:openhands --chmod=770 ./openhands ./openhands
