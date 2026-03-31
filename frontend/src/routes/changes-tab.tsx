@@ -8,6 +8,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
 import { RandomTip } from "#/components/features/tips/random-tip";
 import { useAgentState } from "#/hooks/use-agent-state";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 // Error message patterns
 const GIT_REPO_ERROR_PATTERN = /not a git repository/i;
@@ -22,6 +23,7 @@ function StatusMessage({ children }: React.PropsWithChildren) {
 
 function GitChanges() {
   const { t } = useTranslation();
+  const { data: conversation } = useActiveConversation();
   const {
     data: gitChanges,
     isSuccess,
@@ -86,7 +88,7 @@ function GitChanges() {
           <div className="absolute inset-x-0 bottom-0">
             {!isError && gitChanges?.length === 0 && (
               <div className="max-w-2xl mb-4 text-m bg-tertiary rounded-xl p-4 text-left mx-auto">
-                <RandomTip />
+                <RandomTip gitProvider={conversation?.git_provider} />
               </div>
             )}
           </div>

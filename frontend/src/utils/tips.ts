@@ -45,16 +45,18 @@ export const TIPS: Tip[] = [
   },
 ];
 
-export function getAvailableTips(providers: Provider[] = []): Tip[] {
+export function getAvailableTipsForProvider(
+  currentProvider: Provider | null = null,
+): Tip[] {
   return TIPS.filter(
     (tip) =>
       !tip.providers ||
-      tip.providers.some((provider) => providers.includes(provider)),
+      (currentProvider !== null && tip.providers.includes(currentProvider)),
   );
 }
 
-export function getRandomTip(providers: Provider[] = []): Tip {
-  const availableTips = getAvailableTips(providers);
+export function getRandomTip(currentProvider: Provider | null = null): Tip {
+  const availableTips = getAvailableTipsForProvider(currentProvider);
   const tips = availableTips.length > 0 ? availableTips : TIPS;
   const randomIndex = Math.floor(Math.random() * tips.length);
   return tips[randomIndex];

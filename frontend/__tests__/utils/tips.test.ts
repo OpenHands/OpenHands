@@ -1,31 +1,31 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { I18nKey } from "#/i18n/declaration";
 import { ProviderOptions } from "#/types/settings";
-import { getAvailableTips, getRandomTip } from "#/utils/tips";
+import { getAvailableTipsForProvider, getRandomTip } from "#/utils/tips";
 
 describe("tips", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("filters out GitHub-only tips when the user does not have GitHub configured", () => {
-    const tips = getAvailableTips([ProviderOptions.gitlab]);
+  it("filters out GitHub-only tips when the current conversation uses GitLab", () => {
+    const tips = getAvailableTipsForProvider(ProviderOptions.gitlab);
 
     expect(tips.find((tip) => tip.key === I18nKey.TIPS$GITHUB_HOOK)).toBe(
       undefined,
     );
   });
 
-  it("keeps GitHub-only tips when the user has GitHub configured", () => {
-    const tips = getAvailableTips([ProviderOptions.github]);
+  it("keeps GitHub-only tips when the current conversation uses GitHub", () => {
+    const tips = getAvailableTipsForProvider(ProviderOptions.github);
 
     expect(tips.find((tip) => tip.key === I18nKey.TIPS$GITHUB_HOOK)).toBeTruthy();
   });
 
-  it("never returns a GitHub-only tip for users without GitHub access", () => {
+  it("never returns a GitHub-only tip for GitLab conversations", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.999999);
 
-    const tip = getRandomTip([ProviderOptions.gitlab]);
+    const tip = getRandomTip(ProviderOptions.gitlab);
 
     expect(tip.key).not.toBe(I18nKey.TIPS$GITHUB_HOOK);
   });

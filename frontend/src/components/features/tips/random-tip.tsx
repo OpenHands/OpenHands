@@ -2,19 +2,22 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { getRandomTip } from "#/utils/tips";
-import { useUserProviders } from "#/hooks/use-user-providers";
+import { Provider } from "#/types/settings";
 
-export function RandomTip() {
+interface RandomTipProps {
+  gitProvider?: Provider | null;
+}
+
+export function RandomTip({ gitProvider = null }: RandomTipProps) {
   const { t } = useTranslation();
-  const { providers } = useUserProviders();
   const [randomTip, setRandomTip] = React.useState(() =>
-    getRandomTip(providers),
+    getRandomTip(gitProvider),
   );
 
-  // Update the random tip when the component mounts
+  // Update the random tip when the active conversation provider changes.
   React.useEffect(() => {
-    setRandomTip(getRandomTip(providers));
-  }, [providers]);
+    setRandomTip(getRandomTip(gitProvider));
+  }, [gitProvider]);
 
   return (
     <div>
