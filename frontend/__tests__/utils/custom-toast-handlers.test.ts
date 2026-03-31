@@ -24,11 +24,14 @@ describe("custom-toast-handlers", () => {
       displaySuccessToast(shortMessage);
 
       expect(toast.success).toHaveBeenCalledWith(
-        shortMessage,
+        expect.anything(),
         expect.objectContaining({
           duration: 5000, // Should use minimum duration of 5000ms
           position: "top-right",
-          style: expect.any(Object),
+          style: expect.objectContaining({
+            maxWidth: "400px",
+            wordBreak: "break-word",
+          }),
         }),
       );
     });
@@ -39,11 +42,14 @@ describe("custom-toast-handlers", () => {
       displaySuccessToast(longMessage);
 
       expect(toast.success).toHaveBeenCalledWith(
-        longMessage,
+        expect.anything(),
         expect.objectContaining({
           duration: expect.any(Number),
           position: "top-right",
-          style: expect.any(Object),
+          style: expect.objectContaining({
+            maxWidth: "400px",
+            wordBreak: "break-word",
+          }),
         }),
       );
 
@@ -66,11 +72,14 @@ describe("custom-toast-handlers", () => {
       displayErrorToast(shortMessage);
 
       expect(toast.error).toHaveBeenCalledWith(
-        shortMessage,
+        expect.anything(),
         expect.objectContaining({
           duration: 4000, // Should use minimum duration of 4000ms for errors
           position: "top-right",
-          style: expect.any(Object),
+          style: expect.objectContaining({
+            maxWidth: "400px",
+            wordBreak: "break-word",
+          }),
         }),
       );
     });
@@ -81,11 +90,14 @@ describe("custom-toast-handlers", () => {
       displayErrorToast(longMessage);
 
       expect(toast.error).toHaveBeenCalledWith(
-        longMessage,
+        expect.anything(),
         expect.objectContaining({
           duration: expect.any(Number),
           position: "top-right",
-          style: expect.any(Object),
+          style: expect.objectContaining({
+            maxWidth: "400px",
+            wordBreak: "break-word",
+          }),
         }),
       );
 

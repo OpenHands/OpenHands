@@ -1,4 +1,5 @@
 from types import MappingProxyType
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr, ValidationError
@@ -338,3 +339,60 @@ def test_get_provider_env_key():
     """Test provider environment key generation"""
     assert ProviderHandler.get_provider_env_key(ProviderType.GITHUB) == 'github_token'
     assert ProviderHandler.get_provider_env_key(ProviderType.GITLAB) == 'gitlab_token'
+
+
+@pytest.mark.asyncio
+async def test_get_github_organizations_delegates_to_service():
+    """Test that get_github_organizations calls get_organizations_from_installations on the GitHub service."""
+    tokens = MappingProxyType(
+        {ProviderType.GITHUB: ProviderToken(token=SecretStr('gh-token'))}
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'get_service') as mock_get_service:
+        mock_service = mock_get_service.return_value
+        mock_service.get_organizations_from_installations = AsyncMock(
+            return_value=['org1', 'org2']
+        )
+
+        result = await handler.get_github_organizations()
+
+        assert result == ['org1', 'org2']
+        mock_get_service.assert_called_once_with(ProviderType.GITHUB)
+
+
+@pytest.mark.asyncio
+async def test_get_github_organizations_returns_empty_on_error():
+    """Test that get_github_organizations returns empty list when the service call fails."""
+    tokens = MappingProxyType(
+        {ProviderType.GITHUB: ProviderToken(token=SecretStr('gh-token'))}
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'get_service') as mock_get_service:
+        mock_service = mock_get_service.return_value
+        mock_service.get_organizations_from_installations = AsyncMock(
+            side_effect=Exception('API error')
+        )
+
+        result = await handler.get_github_organizations()
+
+        assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_gitlab_groups_delegates_to_service():
+    """Test that get_gitlab_groups calls get_user_groups on the GitLab service."""
+    tokens = MappingProxyType(
+        {ProviderType.GITLAB: ProviderToken(token=SecretStr('gl-token'))}
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'get_service') as mock_get_service:
+        mock_service = mock_get_service.return_value
+        mock_service.get_user_groups = AsyncMock(return_value=['group-a', 'group-b'])
+
+        result = await handler.get_gitlab_groups()
+
+        assert result == ['group-a', 'group-b']
+        mock_get_service.assert_called_once_with(ProviderType.GITLAB)
