@@ -76,10 +76,13 @@ COPY --chown=openhands:openhands --chmod=770 --from=backend-builder ${VIRTUAL_EN
 # Pin pip to a known-good version (reproducible builds) and fix CVE-2025-8869
 # Pin both venv pip and system pip (Trivy scans both)
 # - `python -m pip` uses the venv because `PATH` is prefixed with `${VIRTUAL_ENV}/bin`
-# - `sudo python3 -m pip` uses the system interpreter (sudo secure_path)
+# - `/usr/local/bin/python3 -m pip` uses the system interpreter regardless of `PATH`
 ARG PIP_VERSION=26.0.1
-RUN python -m pip install --no-cache-dir "pip==${PIP_VERSION}" && \
-    sudo -H python3 -m pip install --no-cache-dir "pip==${PIP_VERSION}" --break-system-packages
+RUN python -m pip install --no-cache-dir "pip==${PIP_VERSION}"
+
+USER root
+RUN /usr/local/bin/python3 -m pip install --no-cache-dir "pip==${PIP_VERSION}" --break-system-packages
+USER openhands
 
 COPY --chown=openhands:openhands --chmod=770 ./skills ./skills
 COPY --chown=openhands:openhands --chmod=770 ./openhands ./openhands
