@@ -73,12 +73,13 @@ ENV VIRTUAL_ENV=/app/.venv \
 
 COPY --chown=openhands:openhands --chmod=770 --from=backend-builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 
-# Upgrade pip to fix CVE-2025-8869 (symbolic link extraction vulnerability)
-# Upgrade both venv pip and system pip (Trivy scans both)
+# Pin pip to a known-good version (reproducible builds) and fix CVE-2025-8869
+# Pin both venv pip and system pip (Trivy scans both)
 # - `python -m pip` uses the venv because `PATH` is prefixed with `${VIRTUAL_ENV}/bin`
 # - `sudo python3 -m pip` uses the system interpreter (sudo secure_path)
-RUN python -m pip install --upgrade pip && \
-    sudo -H python3 -m pip install --upgrade pip --break-system-packages
+ARG PIP_VERSION=26.0.1
+RUN python -m pip install --no-cache-dir "pip==${PIP_VERSION}" && \
+    sudo -H python3 -m pip install --no-cache-dir "pip==${PIP_VERSION}" --break-system-packages
 
 COPY --chown=openhands:openhands --chmod=770 ./skills ./skills
 COPY --chown=openhands:openhands --chmod=770 ./openhands ./openhands
