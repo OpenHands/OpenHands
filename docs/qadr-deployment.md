@@ -22,7 +22,7 @@ This fork is prepared for a Persian-first deployment on `hands.gantor.ir`.
 1. Create the host directories.
 2. Copy `.env.qadr.example` to `.env.qadr` and adjust values if needed.
 3. Create `config.toml` inside the state directory from `config.qadr.example.toml`.
-4. Replace the placeholder LiteLLM key in `config.toml`.
+4. Replace the placeholder LiteLLM key in `config.toml` with a dedicated service key.
 5. Start the stack:
 
 ```bash
@@ -47,4 +47,6 @@ to the authoritative `gantor.ir` zone used by QADR.
 
 ## Notes
 - The container needs `/var/run/docker.sock` because OpenHands local GUI launches sandbox/runtime containers.
+- The QADR compose file mounts `config.toml` into `/app/config.toml` so the runtime can deterministically load the live service configuration.
+- The recommended LLM path is the internal FreeGPT/LiteLLM API on `http://qadr-ai-gateway-litellm:4000/v1`, backed by a dedicated OpenHands service key rather than the LiteLLM master key.
 - This fork keeps upstream OpenHands functionality intact and adds Persian UI support plus QADR-specific deployment packaging.

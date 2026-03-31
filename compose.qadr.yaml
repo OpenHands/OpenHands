@@ -13,6 +13,7 @@ services:
       AGENT_SERVER_IMAGE_TAG: ${AGENT_SERVER_IMAGE_TAG:-1.12.0-python}
       SANDBOX_USER_ID: ${SANDBOX_USER_ID:-0}
       WORKSPACE_MOUNT_PATH: /opt/workspace_base
+      HOME: /.openhands
       TZ: Asia/Tehran
       SERVE_FRONTEND: "true"
       FILE_STORE: local
@@ -24,6 +25,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${OPENHANDS_STATE_DIR:-/srv/data/openhands-state}:/.openhands
+      - ${OPENHANDS_STATE_DIR:-/srv/data/openhands-state}/config.toml:/app/config.toml:ro
       - ${OPENHANDS_WORKSPACE_DIR:-/srv/data/openhands-workspace}:/opt/workspace_base
     pull_policy: build
     stdin_open: true
