@@ -81,8 +81,12 @@ async def saas_get_user_git_organizations(
         )
         if retval is not None:
             return retval
-
-    assert provider_tokens is not None
+        # _check_idp returned None (tokens refreshed on Keycloak side),
+        # but provider_tokens is still None for this request.
+        return JSONResponse(
+            content='Git provider token required.',
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
 
     client = ProviderHandler(
         provider_tokens=provider_tokens,

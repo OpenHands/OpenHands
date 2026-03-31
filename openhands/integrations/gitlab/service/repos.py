@@ -171,6 +171,7 @@ class GitLabReposMixin(GitLabMixinBase):
         """Get list of GitLab group paths that the user is a member of."""
         url = f'{self.BASE_URL}/groups'
         try:
+            # min_access_level 10 = Guest (includes all membership levels)
             params = {'min_access_level': '10', 'per_page': '100'}
             response, _ = await self._make_request(url, params)
             return [group['path'] for group in response]
