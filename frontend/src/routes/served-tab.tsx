@@ -72,7 +72,7 @@ function ServedApp() {
 
   return (
     <div className="h-full w-full flex flex-col">
-      <div className="w-full p-2 flex items-center gap-4 border-b border-neutral-600">
+      <div className="browser-bar w-full p-2 flex items-center gap-4 border-b border-neutral-600">
         <button
           type="button"
           onClick={() => window.open(externalUrl, "_blank")}

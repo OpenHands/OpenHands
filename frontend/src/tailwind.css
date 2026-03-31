@@ -39,6 +39,98 @@ html.light {
   --color-content-2: #111827;
 }
 
+/* Light theme: chat message bubble overrides */
+html.light .conversation-top-bar {
+  flex-shrink: 0 !important;
+  padding: 4px 12px !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(200, 195, 220, 0.5) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light [data-testid="app-route"] .bg-base-secondary,
+html.light [data-testid="app-route"] .bg-base {
+  background: transparent !important;
+}
+
+html.light .browser-bar {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(200, 195, 220, 0.5) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+  padding: 8px 12px !important;
+  margin: 4px !important;
+}
+
+html.light .tab-title {
+  display: none !important;
+}
+
+html.light .tab-container {
+  border: none !important;
+  background: transparent !important;
+}
+
+html.light [data-testid="scroll-to-bottom"] svg path,
+html.light [data-testid="copy-to-clipboard"] svg path {
+  fill: #0f172a !important;
+}
+
+html.light [data-testid="scroll-to-bottom"],
+html.light [data-testid="copy-to-clipboard"] {
+  border: none !important;
+}
+
+html.light [data-testid="interactive-chat-box"] .bg-base-secondary {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(200, 195, 220, 0.6) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light [data-testid="submit-button"] {
+  background: linear-gradient(135deg, #0057FF, #8B5CF6) !important;
+  border-color: transparent !important;
+  border-radius: 50% !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 87, 255, 0.3) !important;
+}
+
+html.light [data-testid="submit-button"]:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+html.light [data-testid="root-layout"],
+html.light .chat-container {
+  background: transparent !important;
+}
+
+html.light .version-badge {
+  color: #0f172a !important;
+}
+
+html.light .tool-message .text-neutral-300,
+html.light .tool-message .fill-neutral-300 {
+  color: #0f172a !important;
+  fill: #0f172a !important;
+}
+
+html.light [data-testid="agent-message"] {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(200, 195, 220, 0.5) !important;
+  border-radius: 16px !important;
+  padding: 16px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 6px 16px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light [data-testid="user-message"] {
+  background: rgba(0, 87, 255, 0.12) !important;
+  border: 1px solid rgba(0, 87, 255, 0.18) !important;
+  border-radius: 16px !important;
+}
+
 /* Register theme tokens with Tailwind — uses var() so they respond to theme overrides */
 @theme {
   --color-primary: var(--color-primary);

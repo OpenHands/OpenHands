@@ -29,7 +29,7 @@ export function DesktopLayout({ isRightPanelShown }: DesktopLayoutProps) {
       >
         {/* Left Panel (Chat) */}
         <div
-          className="flex flex-col bg-base overflow-hidden transition-all duration-300 ease-in-out"
+          className="chat-container flex flex-col bg-base overflow-hidden transition-all duration-300 ease-in-out"
           style={{
             width: isRightPanelShown ? `${leftWidth}%` : "100%",
             transitionProperty: isDragging ? "none" : "all",

@@ -121,7 +121,7 @@ export function ExpandableMessage({
   return (
     <div
       className={cn(
-        "flex gap-2 items-center justify-start border-l-2 pl-2 my-2 py-2",
+        "tool-message flex gap-2 items-center justify-start border-l-2 pl-2 my-2 py-2",
         type === "error" ? "border-danger" : "border-neutral-300",
       )}
     >

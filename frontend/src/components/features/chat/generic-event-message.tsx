@@ -21,7 +21,7 @@ export function GenericEventMessage({
   const [showDetails, setShowDetails] = React.useState(initiallyExpanded);
 
   return (
-    <div className="flex flex-col gap-2 border-l-2 pl-2 my-2 py-2 border-neutral-300 text-sm w-full">
+    <div className="tool-message flex flex-col gap-2 border-l-2 pl-2 my-2 py-2 border-neutral-300 text-sm w-full">
       <div className="flex items-center justify-between font-bold text-neutral-300">
         <div>
           {title}
