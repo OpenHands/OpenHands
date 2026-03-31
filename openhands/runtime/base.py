@@ -83,7 +83,6 @@ from openhands.utils.async_utils import (
     call_async_from_sync,
     call_sync_from_async,
 )
-from openhands.utils.git import ensure_valid_git_branch_name
 
 DISABLE_VSCODE_PLUGIN = os.getenv('DISABLE_VSCODE_PLUGIN', 'false').lower() == 'true'
 
@@ -525,13 +524,11 @@ class Runtime(FileEditRuntimeMixin):
         clone_command = f'git clone {quoted_remote_repo_url} {quoted_repo_path}'
 
         # Checkout to appropriate branch
-        if selected_branch:
-            ensure_valid_git_branch_name(selected_branch)
-            checkout_command = f'git checkout {shlex.quote(selected_branch)}'
-        else:
-            checkout_command = (
-                f'git checkout -b {shlex.quote(openhands_workspace_branch)}'
-            )
+        checkout_command = (
+            f'git checkout {selected_branch}'
+            if selected_branch
+            else f'git checkout -b {openhands_workspace_branch}'
+        )
 
         clone_action = CmdRunAction(command=clone_command)
         await call_sync_from_async(self.run_action, clone_action)
