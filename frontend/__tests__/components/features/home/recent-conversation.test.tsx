@@ -60,6 +60,11 @@ describe("RecentConversation - llm_model", () => {
       "anthropic/claude-sonnet-4-20250514",
     );
     expect(model.querySelector("svg")).toBeInTheDocument();
+
+    // Verify truncation structure: text is wrapped in a span with truncate class
+    const textSpan = model.querySelector("span.truncate");
+    expect(textSpan).toBeInTheDocument();
+    expect(textSpan).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
   });
 
   it("should not render the llm model when not provided", () => {
