@@ -73,6 +73,12 @@ vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => mockUseConfig(),
 }));
 
+// Mock useOrgTypeAndAccess hook
+const mockUseOrgTypeAndAccess = vi.fn();
+vi.mock("#/hooks/use-org-type-and-access", () => ({
+  useOrgTypeAndAccess: () => mockUseOrgTypeAndAccess(),
+}));
+
 const renderLlmSettingsScreen = (
   orgId: string | null = null,
   meData?: {
@@ -163,6 +169,15 @@ beforeEach(() => {
 
   // Reset organization store
   useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+  // Default mock for useOrgTypeAndAccess - returns team org by default
+  mockUseOrgTypeAndAccess.mockReturnValue({
+    selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+    isPersonalOrg: false,
+    isTeamOrg: true,
+    canViewOrgRoutes: true,
+    organizationId: "1",
+  });
 });
 
 describe("Content", () => {
@@ -1475,11 +1490,8 @@ describe("Role-based permissions", () => {
       });
 
       // Basic form should remain visible (members can't switch to advanced)
-      expect(
-        screen.getByTestId("llm-settings-form-basic"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
     });
-
   });
 
   describe("Owner role (full access)", () => {
@@ -1789,24 +1801,23 @@ describe("Role-based permissions", () => {
   });
 });
 
-describe("clientLoader permission checks", () => {
-  it("should export a clientLoader for route protection", async () => {
-    // This test verifies the clientLoader is exported for consistency with other routes
-    // Note: All roles have view_llm_settings permission, so this guard ensures
-    // the route is protected and can be restricted in the future if needed
-    const { clientLoader } = await import("#/routes/llm-settings");
-    expect(clientLoader).toBeDefined();
-    expect(typeof clientLoader).toBe("function");
-  });
-});
-
 describe("Contextual info messages", () => {
-  it("should show admin message when user is an admin in a team organization", async () => {
-    // Arrange
-    const orgId = "team-org-1";
-    const adminMeData: OrganizationMember = {
-      org_id: orgId,
-      user_id: "1",
+  it("should show admin info message for admin user in team organization", async () => {
+    // Arrange: SaaS mode with team org and admin role
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
+    });
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
+    });
+    const adminData = {
+      org_id: "1",
+      user_id: "99",
       email: "admin@example.com",
       role: "admin",
       status: "active",
@@ -1817,44 +1828,31 @@ describe("Contextual info messages", () => {
       llm_base_url: "",
     };
 
+    // Act
+    renderLlmSettingsScreen("1", adminData);
+    await screen.findByTestId("llm-settings-screen");
+
+    // Assert
+    const infoMessage = screen.getByTestId("llm-settings-info-message");
+    expect(infoMessage).toHaveTextContent("SETTINGS$LLM_ADMIN_INFO");
+  });
+
+  it("should show member info message for member user in team organization", async () => {
+    // Arrange: SaaS mode with team org and member role
     mockUseConfig.mockReturnValue({
       data: { app_mode: "saas" },
       isLoading: false,
     });
-
-    vi.spyOn(organizationService, "getMe").mockResolvedValue(adminMeData);
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
-      items: [
-        createMockOrganization({
-          id: orgId,
-          name: "Team Org",
-          is_personal: false,
-        }),
-      ],
-      currentOrgId: orgId,
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
     });
-
-    // Act
-    renderLlmSettingsScreen(orgId, adminMeData);
-
-    // Assert
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("llm-settings-info-message"),
-      ).toBeInTheDocument();
-    });
-
-    expect(screen.getByTestId("llm-settings-info-message")).toHaveTextContent(
-      "SETTINGS$LLM_ADMIN_INFO",
-    );
-  });
-
-  it("should show member message when user is a member in a team organization", async () => {
-    // Arrange
-    const orgId = "team-org-2";
-    const memberMeData: OrganizationMember = {
-      org_id: orgId,
-      user_id: "2",
+    const memberData = {
+      org_id: "1",
+      user_id: "99",
       email: "member@example.com",
       role: "member",
       status: "active",
@@ -1865,97 +1863,67 @@ describe("Contextual info messages", () => {
       llm_base_url: "",
     };
 
-    mockUseConfig.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
-    });
-
-    vi.spyOn(organizationService, "getMe").mockResolvedValue(memberMeData);
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
-      items: [
-        createMockOrganization({
-          id: orgId,
-          name: "Team Org",
-          is_personal: false,
-        }),
-      ],
-      currentOrgId: orgId,
-    });
-
     // Act
-    renderLlmSettingsScreen(orgId, memberMeData);
+    renderLlmSettingsScreen("1", memberData);
+    await screen.findByTestId("llm-settings-screen");
 
     // Assert
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("llm-settings-info-message"),
-      ).toBeInTheDocument();
-    });
-
-    expect(screen.getByTestId("llm-settings-info-message")).toHaveTextContent(
-      "SETTINGS$LLM_MEMBER_INFO",
-    );
+    const infoMessage = screen.getByTestId("llm-settings-info-message");
+    expect(infoMessage).toHaveTextContent("SETTINGS$LLM_MEMBER_INFO");
   });
 
-  it("should not show info message in personal workspace", async () => {
-    // Arrange
-    const orgId = "personal-org-1";
-    const ownerMeData: OrganizationMember = {
-      org_id: orgId,
-      user_id: "3",
-      email: "user@example.com",
-      role: "owner",
-      status: "active",
-      llm_api_key: "",
-      max_iterations: 20,
-      llm_model: "",
-      llm_api_key_for_byor: null,
-      llm_base_url: "",
-    };
-
+  it("should not show info message for personal workspace", async () => {
+    // Arrange: SaaS mode with personal org
     mockUseConfig.mockReturnValue({
       data: { app_mode: "saas" },
       isLoading: false,
     });
-
-    vi.spyOn(organizationService, "getMe").mockResolvedValue(ownerMeData);
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
-      items: [
-        createMockOrganization({ id: orgId, name: "Personal", is_personal: true }),
-      ],
-      currentOrgId: orgId,
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Personal Org", is_personal: true }),
+      isPersonalOrg: true,
+      isTeamOrg: false,
+      canViewOrgRoutes: false,
+      organizationId: "1",
     });
 
     // Act
-    renderLlmSettingsScreen(orgId, ownerMeData);
+    renderLlmSettingsScreen("1");
+    await screen.findByTestId("llm-settings-screen");
 
     // Assert
-    await waitFor(() => {
-      expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
-    });
-
-    expect(
-      screen.queryByTestId("llm-settings-info-message"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
   });
 
   it("should not show info message in OSS mode", async () => {
-    // Arrange
+    // Arrange: OSS mode
     mockUseConfig.mockReturnValue({
       data: { app_mode: "oss" },
       isLoading: false,
     });
-
-    // Act
-    renderLlmSettingsScreen();
-
-    // Assert
-    await waitFor(() => {
-      expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
     });
 
-    expect(
-      screen.queryByTestId("llm-settings-info-message"),
-    ).not.toBeInTheDocument();
+    // Act
+    renderLlmSettingsScreen("1");
+    await screen.findByTestId("llm-settings-screen");
+
+    // Assert
+    expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
+  });
+});
+
+describe("clientLoader permission checks", () => {
+  it("should export a clientLoader for route protection", async () => {
+    // This test verifies the clientLoader is exported for consistency with other routes
+    // Note: All roles have view_llm_settings permission, so this guard ensures
+    // the route is protected and can be restricted in the future if needed
+    const { clientLoader } = await import("#/routes/llm-settings");
+    expect(clientLoader).toBeDefined();
+    expect(typeof clientLoader).toBe("function");
   });
 });

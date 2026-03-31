@@ -123,10 +123,9 @@ async def store_llm_settings(
             settings.llm_api_key = existing_settings.llm_api_key
         if settings.llm_model is None:
             settings.llm_model = existing_settings.llm_model
-        # if llm_base_url is missing or empty, try to preserve existing or determine appropriate URL
-        if not settings.llm_base_url:
-            if settings.llm_base_url is None and existing_settings.llm_base_url:
-                # Not provided at all (e.g. MCP config save) - preserve existing
+        if settings.llm_base_url is None:
+            # Not provided at all (e.g. MCP config save) - preserve existing or auto-detect
+            if existing_settings.llm_base_url:
                 settings.llm_base_url = existing_settings.llm_base_url
             elif is_openhands_model(settings.llm_model):
                 # OpenHands models use the LiteLLM proxy
@@ -145,6 +144,9 @@ async def store_llm_settings(
                     logger.error(
                         f'Failed to get api_base from litellm for model {settings.llm_model}: {e}'
                     )
+        elif settings.llm_base_url == '':
+            # Explicitly cleared by the user (basic view save or advanced view clear)
+            settings.llm_base_url = None
         # Keep search API key if missing or empty
         if not settings.search_api_key:
             settings.search_api_key = existing_settings.search_api_key
@@ -181,6 +183,10 @@ async def store_settings(
                 settings.user_consents_to_analytics = (
                     existing_settings.user_consents_to_analytics
                 )
+
+            # Keep existing disabled_skills if not provided
+            if settings.disabled_skills is None:
+                settings.disabled_skills = existing_settings.disabled_skills
 
         # Update sandbox config with new settings
         if settings.remote_runtime_resource_factor is not None:

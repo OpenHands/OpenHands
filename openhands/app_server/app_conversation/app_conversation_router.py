@@ -234,7 +234,7 @@ async def search_app_conversations(
         Query(
             title='The max number of results in the page',
             gt=0,
-            lte=100,
+            le=100,
         ),
     ] = 100,
     include_sub_conversations: Annotated[
@@ -248,8 +248,6 @@ async def search_app_conversations(
     ),
 ) -> AppConversationPage:
     """Search / List sandboxed conversations."""
-    assert limit > 0
-    assert limit <= 100
     return await app_conversation_service.search_app_conversations(
         title__contains=title__contains,
         created_at__gte=created_at__gte,
@@ -422,7 +420,7 @@ async def search_app_conversation_start_tasks(
         Query(
             title='The max number of results in the page',
             gt=0,
-            lte=100,
+            le=100,
         ),
     ] = 100,
     app_conversation_start_task_service: AppConversationStartTaskService = (
@@ -430,8 +428,6 @@ async def search_app_conversation_start_tasks(
     ),
 ) -> AppConversationStartTaskPage:
     """Search / List conversation start tasks."""
-    assert limit > 0
-    assert limit <= 100
     return (
         await app_conversation_start_task_service.search_app_conversation_start_tasks(
             conversation_id__eq=conversation_id__eq,
@@ -472,7 +468,11 @@ async def batch_get_app_conversation_start_tasks(
     ),
 ) -> list[AppConversationStartTask | None]:
     """Get a batch of start app conversation tasks given their ids. Return None for any missing."""
-    assert len(ids) < 100
+    if len(ids) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Cannot request more than 100 start tasks at once, got {len(ids)}',
+        )
     start_tasks = await app_conversation_start_task_service.batch_get_app_conversation_start_tasks(
         ids
     )

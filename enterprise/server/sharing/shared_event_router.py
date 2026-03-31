@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from server.sharing.shared_event_service import (
     SharedEventService,
     SharedEventServiceInjector,
@@ -33,6 +33,12 @@ def get_shared_event_service_injector() -> SharedEventServiceInjector:
         )
 
         return AwsSharedEventServiceInjector()
+    elif provider == StorageProvider.FILESYSTEM:
+        from server.sharing.filesystem_shared_event_service import (
+            FilesystemSharedEventServiceInjector,
+        )
+
+        return FilesystemSharedEventServiceInjector()
     else:
         # GCP is the default for shared events (including filesystem fallback)
         from server.sharing.google_cloud_shared_event_service import (
@@ -77,13 +83,11 @@ async def search_shared_events(
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, lte=100),
+        Query(title='The max number of results in the page', gt=0, le=100),
     ] = 100,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> EventPage:
     """Search / List events for a shared conversation."""
-    assert limit > 0
-    assert limit <= 100
     return await shared_event_service.search_shared_events(
         conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
@@ -134,7 +138,11 @@ async def batch_get_shared_events(
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> list[Event | None]:
     """Get a batch of events for a shared conversation given their ids, returning null for any missing event."""
-    assert len(id) <= 100
+    if len(id) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Cannot request more than 100 events at once, got {len(id)}',
+        )
     event_ids = [UUID(id_) for id_ in id]
     events = await shared_event_service.batch_get_shared_events(
         UUID(conversation_id), event_ids

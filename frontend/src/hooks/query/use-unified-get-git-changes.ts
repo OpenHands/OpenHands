@@ -5,6 +5,7 @@ import V1GitService from "#/api/git-service/v1-git-service.api";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
+import { useSettings } from "#/hooks/query/use-settings";
 import { getGitPath } from "#/utils/get-git-path";
 import type { GitChange } from "#/api/open-hands.types";
 
@@ -16,6 +17,7 @@ import type { GitChange } from "#/api/open-hands.types";
 export const useUnifiedGetGitChanges = () => {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
+  const { data: settings } = useSettings();
   const [orderedChanges, setOrderedChanges] = React.useState<GitChange[]>([]);
   const previousDataRef = React.useRef<GitChange[] | null>(null);
   const runtimeIsReady = useRuntimeIsReady();
@@ -25,10 +27,15 @@ export const useUnifiedGetGitChanges = () => {
   const sessionApiKey = conversation?.session_api_key;
   const selectedRepository = conversation?.selected_repository;
 
-  // Calculate git path based on selected repository
+  // Sandbox grouping is enabled when strategy is not NO_GROUPING
+  const useSandboxGrouping =
+    settings?.sandbox_grouping_strategy !== "NO_GROUPING" &&
+    settings?.sandbox_grouping_strategy !== undefined;
+
+  // Calculate git path based on selected repository and sandbox grouping strategy
   const gitPath = React.useMemo(
-    () => getGitPath(conversationId, selectedRepository),
-    [selectedRepository],
+    () => getGitPath(conversationId, selectedRepository, useSandboxGrouping),
+    [conversationId, selectedRepository, useSandboxGrouping],
   );
 
   const result = useQuery({
@@ -57,6 +64,7 @@ export const useUnifiedGetGitChanges = () => {
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
+    refetchOnMount: "always", // Always refetch when mounting (e.g. navigating between conversations that share a sandbox)
     enabled: runtimeIsReady && !!conversationId,
     meta: {
       disableToast: true,

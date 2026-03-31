@@ -603,16 +603,28 @@ async def _try_delete_v1_conversation(
             )
         )
         if app_conversation_info:
+            # Check if the sandbox is shared with other conversations
+            # (e.g. multiple conversations can share a sandbox via /new).
+            # If shared, skip the agent server DELETE call to avoid
+            # destabilizing the runtime for the remaining conversations.
+            sandbox_id = app_conversation_info.sandbox_id
+            sandbox_is_shared = False
+            if sandbox_id:
+                conversation_count = await app_conversation_info_service.count_conversations_by_sandbox_id(
+                    sandbox_id
+                )
+                sandbox_is_shared = conversation_count > 1
+
             # This is a V1 conversation, delete it using the app conversation service
-            # Pass the conversation ID for secure deletion
             result = await app_conversation_service.delete_app_conversation(
-                app_conversation_info.id
+                app_conversation_info.id,
+                skip_agent_server_delete=sandbox_is_shared,
             )
 
             # Manually commit so that the conversation will vanish from the list
             await db_session.commit()
 
-            # Delete the sandbox in the background
+            # Delete the sandbox in the background (checks remaining conversations first)
             asyncio.create_task(
                 _finalize_delete_and_close_connections(
                     sandbox_service,

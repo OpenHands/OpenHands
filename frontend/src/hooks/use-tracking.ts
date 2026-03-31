@@ -129,6 +129,29 @@ export const useTracking = () => {
     });
   };
 
+  const trackEnterpriseLeadFormSubmitted = ({
+    requestType,
+    name,
+    company,
+    email,
+    message,
+  }: {
+    requestType: "saas" | "self-hosted";
+    name: string;
+    company: string;
+    email: string;
+    message: string;
+  }) => {
+    posthog.capture("enterprise_lead_form_submitted", {
+      request_type: requestType,
+      name,
+      company,
+      email,
+      message,
+      ...commonProperties,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -142,5 +165,6 @@ export const useTracking = () => {
     trackAddTeamMembersButtonClick,
     trackOnboardingCompleted,
     trackSaasSelfhostedInquiry,
+    trackEnterpriseLeadFormSubmitted,
   };
 };
