@@ -285,10 +285,14 @@ describe("Content", () => {
     });
 
     it("should render the advanced form if the switch is toggled", async () => {
-      // Use OSS mode so agent-input is visible
+      // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
+      });
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        v1_enabled: false,
       });
 
       renderLlmSettingsScreen();
@@ -325,10 +329,14 @@ describe("Content", () => {
     });
 
     it("should render the default advanced settings", async () => {
-      // Use OSS mode so agent-input is visible
+      // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
+      });
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        v1_enabled: false,
       });
 
       renderLlmSettingsScreen();
@@ -370,7 +378,7 @@ describe("Content", () => {
     });
 
     it("should render existing advanced settings correctly", async () => {
-      // Use OSS mode so agent-input is visible
+      // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
@@ -386,6 +394,7 @@ describe("Content", () => {
         confirmation_mode: true,
         enable_default_condenser: false,
         security_analyzer: "none",
+        v1_enabled: false,
       });
 
       renderLlmSettingsScreen();
@@ -738,10 +747,14 @@ describe("Form submission", () => {
   });
 
   it("should submit the advanced form with the correct values", async () => {
-    // Use OSS mode so agent-input is visible
+    // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
     mockUseConfig.mockReturnValue({
       data: { app_mode: "oss" },
       isLoading: false,
+    });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      v1_enabled: false,
     });
 
     const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
@@ -852,7 +865,7 @@ describe("Form submission", () => {
   });
 
   it("should disable the button if there are no changes in the advanced form", async () => {
-    // Use OSS mode so agent-input is visible
+    // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
     mockUseConfig.mockReturnValue({
       data: { app_mode: "oss" },
       isLoading: false,
@@ -865,6 +878,7 @@ describe("Form submission", () => {
       llm_base_url: "https://api.openai.com/v1/chat/completions",
       llm_api_key_set: true,
       confirmation_mode: true,
+      v1_enabled: false,
     });
 
     renderLlmSettingsScreen();

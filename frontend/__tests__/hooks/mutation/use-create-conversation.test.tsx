@@ -11,11 +11,8 @@ vi.mock("#/hooks/query/use-settings", async () => {
   );
   return {
     ...actual,
-    useSettings: vi.fn().mockReturnValue({
-      data: {
-        v1_enabled: true,
-      },
-      isLoading: false,
+    getSettingsQueryFn: vi.fn().mockResolvedValue({
+      v1_enabled: true,
     }),
   };
 });
@@ -24,6 +21,10 @@ vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackConversationCreated: vi.fn(),
   }),
+}));
+
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({ organizationId: null }),
 }));
 
 describe("useCreateConversation", () => {
