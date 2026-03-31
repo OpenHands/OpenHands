@@ -184,6 +184,10 @@ async def store_settings(
                     existing_settings.user_consents_to_analytics
                 )
 
+            # Keep existing disabled_skills if not provided
+            if settings.disabled_skills is None:
+                settings.disabled_skills = existing_settings.disabled_skills
+
         # Update sandbox config with new settings
         if settings.remote_runtime_resource_factor is not None:
             config.sandbox.remote_runtime_resource_factor = (

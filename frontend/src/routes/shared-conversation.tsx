@@ -10,6 +10,7 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { OpenHandsEvent } from "#/types/v1/core";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
+import { useInfiniteScroll } from "#/hooks/use-infinite-scroll";
 
 export default function SharedConversation() {
   const { t } = useTranslation();
@@ -24,13 +25,19 @@ export default function SharedConversation() {
     data: eventsData,
     isLoading: isLoadingEvents,
     error: eventsError,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
   } = useSharedConversationEvents(conversationId);
 
   const isLoading = isLoadingConversation || isLoadingEvents;
   const error = conversationError || eventsError;
 
-  // Transform shared events to V1 format
-  const v1Events = eventsData?.items || [];
+  // Flatten all pages of events into a single array
+  const v1Events = React.useMemo(() => {
+    if (!eventsData?.pages) return [];
+    return eventsData.pages.flatMap((page) => page.items);
+  }, [eventsData?.pages]);
 
   // Reconstruct the same UI event stream used in live conversations so
   // completed tool calls render as a single action/observation unit.
@@ -43,6 +50,13 @@ export default function SharedConversation() {
         .filter(shouldRenderEvent),
     [v1Events],
   );
+
+  // Set up infinite scroll to load more events when user scrolls to bottom
+  const scrollContainerRef = useInfiniteScroll({
+    hasNextPage: !!hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  });
 
   if (isLoading) {
     return (
@@ -98,7 +112,10 @@ export default function SharedConversation() {
       </div>
 
       {/* Chat panel - read-only */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2"
+      >
         <div className="max-w-4xl mx-auto p-4 border border-neutral-700 rounded">
           {renderableEvents.length > 0 ? (
             <V1Messages messages={renderableEvents} allEvents={v1Events} />
@@ -107,6 +124,11 @@ export default function SharedConversation() {
               <div className="text-center text-neutral-400 py-8">
                 {t(I18nKey.CONVERSATION$NO_HISTORY_AVAILABLE)}
               </div>
+            </div>
+          )}
+          {isFetchingNextPage && (
+            <div className="flex justify-center py-4">
+              <LoadingSpinner size="small" />
             </div>
           )}
         </div>

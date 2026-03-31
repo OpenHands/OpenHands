@@ -33,28 +33,33 @@ jobs:
     runs-on: blacksmith
     outputs:
       base_image: ${{ steps.define-base-images.outputs.base_image }}
+      platforms: ${{ steps.define-base-images.outputs.platforms }}
     steps:
       - name: Define base images
         shell: bash
         id: define-base-images
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" }
+            platforms="linux/amd64"
+            json=$(jq -n -c --arg platforms "$platforms" '[
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik", platforms: $platforms }
               ]')
           else
-            json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
-                { image: "ubuntu:24.04", tag: "ubuntu" }
+            platforms="linux/amd64,linux/arm64"
+            json=$(jq -n -c --arg platforms "$platforms" '[
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik", platforms: $platforms },
+                { image: "ubuntu:24.04", tag: "ubuntu", platforms: $platforms }
               ]')
           fi
           echo "base_image=$json" >> "$GITHUB_OUTPUT"
+          echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
 
   # Builds the OpenHands Docker images
   ghcr_build_app:
     name: Build App Image
     runs-on: blacksmith-4vcpu-ubuntu-2204
     if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ext-v'))"
+    needs: define-matrix
     permissions:
       contents: read
       packages: write
@@ -82,7 +87,7 @@ jobs:
       - name: Build and push app image
         if: "!github.event.pull_request.head.repo.fork"
         run: |
-          ./containers/build.sh -i openhands -o ${{ env.REPO_OWNER }} --push
+          ./containers/build.sh -i openhands -o ${{ env.REPO_OWNER }} --push -p ${{ needs.define-matrix.outputs.platforms }}
 
   # Builds the runtime Docker images
   ghcr_build_runtime:
@@ -136,7 +141,7 @@ jobs:
         shell: bash
         run: |
 
-          ./containers/build.sh -i runtime -o ${{ env.REPO_OWNER }} -t ${{ matrix.base_image.tag }} --dry
+          ./containers/build.sh -i runtime -o ${{ env.REPO_OWNER }} -t ${{ matrix.base_image.tag }} --dry -p ${{ matrix.base_image.platforms }}
 
           DOCKER_BUILD_JSON=$(jq -c . < docker-build-dry.json)
           echo "DOCKER_TAGS=$(echo "$DOCKER_BUILD_JSON" | jq -r '.tags | join(",")')" >> $GITHUB_ENV

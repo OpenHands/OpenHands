@@ -31,6 +31,7 @@ class UserSettings(Base):  # type: ignore
     user_version = Column(Integer, nullable=False, default=0)
     accepted_tos = Column(DateTime, nullable=True)
     mcp_config = Column(JSON, nullable=True)
+    disabled_skills = Column(JSON, nullable=True)
     search_api_key = Column(String, nullable=True)
     sandbox_api_key = Column(String, nullable=True)
     max_budget_per_task = Column(Float, nullable=True)

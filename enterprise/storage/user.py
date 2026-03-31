@@ -5,6 +5,7 @@ SQLAlchemy model for User.
 from uuid import uuid4
 
 from sqlalchemy import (
+    JSON,
     UUID,
     Boolean,
     Column,
@@ -34,6 +35,7 @@ class User(Base):  # type: ignore
     git_user_name = Column(String, nullable=True)
     git_user_email = Column(String, nullable=True)
     sandbox_grouping_strategy = Column(String, nullable=True)
+    disabled_skills = Column(JSON, nullable=True)
 
     # Relationships
     role = relationship('Role', back_populates='users')

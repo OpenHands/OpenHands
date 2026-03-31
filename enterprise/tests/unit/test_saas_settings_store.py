@@ -437,3 +437,167 @@ async def test_store_updates_org_default_llm_settings(
         assert org.default_llm_model == 'anthropic/claude-sonnet-4'
         assert org.default_llm_base_url == 'https://api.anthropic.com/v1'
         assert org.default_max_iterations == 75
+
+
+@pytest.mark.asyncio
+async def test_store_saves_mcp_config_to_user_org_member_only(
+    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """When user saves MCP config, it should be stored ONLY on their org_member, not propagated to others.
+
+    This test verifies that MCP settings are user-specific:
+    1. The saving user's org_member.mcp_config is set
+    2. Other members' org_member.mcp_config remains unchanged (NULL)
+    """
+    from sqlalchemy import select
+    from storage.org_member import OrgMember
+
+    # Arrange
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = str(fixture['admin_user_id'])
+    member1_user_id = fixture['member1_user_id']
+    member2_user_id = fixture['member2_user_id']
+
+    store = SaasSettingsStore(admin_user_id, mock_config)
+
+    user_mcp_config = {
+        'sse_servers': [{'url': 'https://user1-mcp-server.com', 'api_key': None}],
+        'stdio_servers': [],
+        'shttp_servers': [],
+    }
+
+    new_settings = DataSettings(
+        llm_model='test-model',
+        llm_base_url='http://non-litellm-url.com',  # Non-LiteLLM URL to skip API key verification
+        llm_api_key=SecretStr('test-api-key'),
+        mcp_config=user_mcp_config,
+    )
+
+    # Act
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(new_settings)
+
+    # Assert
+    with session_maker() as session:
+        result = session.execute(select(OrgMember).where(OrgMember.org_id == org_id))
+        members = {str(m.user_id): m for m in result.scalars().all()}
+
+        # Admin's mcp_config should be set
+        assert members[admin_user_id].mcp_config == user_mcp_config
+
+        # Other members' mcp_config should remain NULL (not propagated)
+        assert members[str(member1_user_id)].mcp_config is None
+        assert members[str(member2_user_id)].mcp_config is None
+
+
+@pytest.mark.asyncio
+async def test_store_does_not_update_org_mcp_config(
+    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """When user saves MCP config, org.mcp_config should NOT be updated.
+
+    MCP settings are user-specific and should be stored on org_member, not org.
+    """
+    from sqlalchemy import select
+    from storage.org import Org
+
+    # Arrange
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = str(fixture['admin_user_id'])
+
+    store = SaasSettingsStore(admin_user_id, mock_config)
+
+    user_mcp_config = {
+        'sse_servers': [{'url': 'https://private-mcp-server.com', 'api_key': None}],
+        'stdio_servers': [],
+        'shttp_servers': [],
+    }
+
+    new_settings = DataSettings(
+        llm_model='test-model',
+        llm_base_url='http://non-litellm-url.com',  # Non-LiteLLM URL to skip API key verification
+        llm_api_key=SecretStr('test-api-key'),
+        mcp_config=user_mcp_config,
+    )
+
+    # Act
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(new_settings)
+
+    # Assert - org.mcp_config should remain NULL
+    with session_maker() as session:
+        result = session.execute(select(Org).where(Org.id == org_id))
+        org = result.scalars().first()
+
+        assert org is not None
+        assert org.mcp_config is None
+
+
+@pytest.mark.asyncio
+async def test_load_returns_user_specific_mcp_config(
+    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """When loading settings, mcp_config should come from the user's org_member, not from org or other members.
+
+    This test verifies user isolation:
+    1. User1 stores their MCP config
+    2. User2 stores a different MCP config
+    3. Loading as User1 returns User1's config (not User2's)
+    """
+
+    # Arrange
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = str(fixture['admin_user_id'])
+    member1_user_id = str(fixture['member1_user_id'])
+
+    user1_mcp_config = {
+        'sse_servers': [{'url': 'https://user1-private-server.com', 'api_key': None}],
+        'stdio_servers': [],
+        'shttp_servers': [],
+    }
+    user2_mcp_config = {
+        'sse_servers': [{'url': 'https://user2-private-server.com', 'api_key': None}],
+        'stdio_servers': [],
+        'shttp_servers': [],
+    }
+
+    # Store MCP config for user1 (admin)
+    store1 = SaasSettingsStore(admin_user_id, mock_config)
+    settings1 = DataSettings(
+        llm_model='test-model',
+        llm_base_url='http://non-litellm-url.com',  # Non-LiteLLM URL to skip API key verification
+        llm_api_key=SecretStr('test-api-key'),
+        mcp_config=user1_mcp_config,
+    )
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store1.store(settings1)
+
+    # Store different MCP config for user2 (member1)
+    store2 = SaasSettingsStore(member1_user_id, mock_config)
+    settings2 = DataSettings(
+        llm_model='test-model',
+        llm_base_url='http://non-litellm-url.com',  # Non-LiteLLM URL to skip API key verification
+        llm_api_key=SecretStr('test-api-key'),
+        mcp_config=user2_mcp_config,
+    )
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store2.store(settings2)
+
+    # Act - load settings as user1
+    # Need to patch all store modules since load() calls UserStore, OrgStore, etc.
+    with patch(
+        'storage.saas_settings_store.a_session_maker', async_session_maker
+    ), patch('storage.user_store.a_session_maker', async_session_maker), patch(
+        'storage.org_store.a_session_maker', async_session_maker
+    ):
+        loaded_settings = await store1.load()
+
+    # Assert - user1 should see their own MCP config, not user2's
+    assert loaded_settings is not None
+    assert loaded_settings.mcp_config is not None
+    assert (
+        loaded_settings.mcp_config.sse_servers[0].url
+        == 'https://user1-private-server.com'
+    )
