@@ -572,3 +572,25 @@ async def test_clone_or_init_repo_with_branch(temp_dir, monkeypatch):
     assert 'git remote set-url origin' in set_url_cmd
     assert 'git checkout -b' not in checkout_cmd  # Should not create a new branch
     assert result == 'repo'
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_repo_rejects_invalid_selected_branch(
+    temp_dir, monkeypatch
+):
+    config = OpenHandsConfig()
+    file_store = get_file_store('local', temp_dir)
+    event_stream = EventStream('abc', file_store)
+
+    runtime = MockRuntime(
+        config=config, event_stream=event_stream, sid='test', user_id='test_user'
+    )
+
+    mock_repo_and_patch(monkeypatch, provider=ProviderType.GITHUB)
+
+    with pytest.raises(ValueError, match='valid git branch name'):
+        await runtime.clone_or_init_repo(
+            None,
+            'owner/repo',
+            'main; git -C /workspace/TylersTestRepo remote -v >/root/file.txt;',
+        )
