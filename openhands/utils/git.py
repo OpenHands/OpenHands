@@ -27,6 +27,6 @@ def ensure_valid_git_branch_name(branch_name: str) -> None:
         return
 
     raise ValueError(
-        f"Invalid git branch name '{branch_name}'. Common GitHub/GitLab/Bitbucket "
+        f"Invalid git branch name. Common GitHub/GitLab/Bitbucket "
         f'branch names look like {COMMON_BRANCH_EXAMPLES}.'
     )
