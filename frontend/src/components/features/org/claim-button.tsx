@@ -13,15 +13,15 @@ type ButtonState =
 
 const BUTTON_STYLES: Record<ButtonState, string> = {
   claiming:
-    "bg-[#050505] border border-[#242424] text-[#fafafa] opacity-50 cursor-not-allowed max-w-[57.828px] flex items-center justify-center",
+    "bg-[#050505] border border-[#242424] text-[#fafafa] opacity-50 cursor-not-allowed flex items-center justify-center",
   disconnecting:
     "bg-[#050505] border border-[#242424] text-[#fafafa] opacity-50 cursor-not-allowed",
   disconnect:
     "bg-[rgba(244,63,94,0.15)] border border-[rgba(244,63,94,0.6)] text-[#fda4af] font-medium cursor-pointer",
   claimed:
-    "bg-[rgba(16,185,129,0.2)] border border-[rgba(16,185,129,0.6)] text-[#6ee7b7] font-medium cursor-pointer max-w-[63px] flex items-center justify-center",
+    "bg-[rgba(16,185,129,0.2)] border border-[rgba(16,185,129,0.6)] text-[#6ee7b7] font-medium cursor-pointer flex items-center justify-center",
   unclaimed:
-    "bg-[#050505] border border-[#242424] text-[#fafafa] cursor-pointer max-w-[57.828px] flex items-center justify-center",
+    "bg-[#050505] border border-[#242424] text-[#fafafa] cursor-pointer flex items-center justify-center",
 };
 
 const BUTTON_HOVER_STYLES: Partial<Record<ButtonState, string>> = {
