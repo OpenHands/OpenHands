@@ -140,6 +140,31 @@ async def on_conversation_update(
     if conversation_info.execution_status == ConversationExecutionStatus.DELETING:
         return Success()
 
+    # Extract and merge tags from incoming conversation info
+    # SDK can set tags via Conversation(tags=...) which includes automation context
+    incoming_tags = dict(conversation_info.tags) if conversation_info.tags else {}
+    merged_tags = {**existing.tags, **incoming_tags}  # Incoming tags override existing
+
+    # Determine trigger - check if tags indicate automation, then fall back to existing
+    trigger = existing.trigger
+    if trigger is None and merged_tags:
+        # Check if tags indicate this is an automation conversation
+        if merged_tags.get('trigger') or merged_tags.get('automation_id'):
+            from openhands.storage.data_models.conversation_metadata import (
+                ConversationTrigger,
+            )
+
+            trigger = ConversationTrigger.AUTOMATION
+            _logger.info(
+                'Applied automation trigger from conversation tags',
+                extra={
+                    'conversation_id': str(conversation_info.id),
+                    'sandbox_id': sandbox_info.id,
+                    'automation_id': merged_tags.get('automation_id'),
+                    'trigger_type': merged_tags.get('trigger'),
+                },
+            )
+
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
@@ -150,11 +175,13 @@ async def on_conversation_update(
         selected_repository=existing.selected_repository,
         selected_branch=existing.selected_branch,
         git_provider=existing.git_provider,
-        trigger=existing.trigger,
+        trigger=trigger,
         pr_number=existing.pr_number,
         # Preserve parent/child relationship and other metadata
         parent_conversation_id=existing.parent_conversation_id,
         metrics=conversation_info.stats.get_combined_metrics(),
+        # Store merged tags (includes automation context, skills, etc.)
+        tags=merged_tags,
     )
     await app_conversation_info_service.save_app_conversation_info(
         app_conversation_info
