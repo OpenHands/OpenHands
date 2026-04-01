@@ -18,6 +18,8 @@ type ManageAPIKeysPermission = "manage_api_keys";
 type ViewLLMSettingsPermission = "view_llm_settings";
 type EditLLMSettingsPermission = "edit_llm_settings";
 
+type ManageOrgClaimsPermission = "manage_org_claims";
+
 // Union of all permission keys
 export type PermissionKey =
   | UserRoleChangePermissionKey
@@ -32,7 +34,8 @@ export type PermissionKey =
   | ManageApplicationSettingsPermission
   | ManageAPIKeysPermission
   | ViewLLMSettingsPermission
-  | EditLLMSettingsPermission;
+  | EditLLMSettingsPermission
+  | ManageOrgClaimsPermission;
 
 /* PERMISSION ARRAYS */
 const memberPerms: PermissionKey[] = [
@@ -51,6 +54,7 @@ const adminOnly: PermissionKey[] = [
   "invite_user_to_organization",
   "change_user_role:member",
   "change_user_role:admin",
+  "manage_org_claims",
 ];
 
 const ownerOnly: PermissionKey[] = [
