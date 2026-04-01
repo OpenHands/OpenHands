@@ -16,6 +16,10 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
     SQLAppConversationInfoService,
     StoredConversationMetadata,
 )
+from openhands.app_server.event_callback.webhook_router import (
+    detect_automation_trigger,
+    merge_conversation_tags,
+)
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
@@ -149,30 +153,12 @@ async def test_save_conversation_with_none_tags(async_session, service):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_tag_merging_incoming_overrides_existing(async_session, service):
+def test_merge_conversation_tags_incoming_overrides_existing():
     """Test that incoming tags override existing tags with same key."""
-    conversation_id = uuid4()
-
-    # Create conversation with initial tags
-    stored = StoredConversationMetadata(
-        conversation_id=str(conversation_id),
-        sandbox_id='sandbox_123',
-        title='Test Conversation',
-        tags={'key1': 'original', 'key2': 'keep_this'},
-        conversation_version='V1',
-        created_at=datetime.now(timezone.utc),
-        last_updated_at=datetime.now(timezone.utc),
-    )
-    async_session.add(stored)
-    await async_session.commit()
-
-    # Simulate tag merging logic from webhook_router
-    existing = await service.get_app_conversation_info(conversation_id)
+    existing_tags = {'key1': 'original', 'key2': 'keep_this'}
     incoming_tags = {'key1': 'updated', 'key3': 'new_value'}
 
-    # Merge: incoming overrides existing
-    merged_tags = {**existing.tags, **incoming_tags}
+    merged_tags = merge_conversation_tags(existing_tags, incoming_tags)
 
     assert merged_tags == {
         'key1': 'updated',  # Overridden
@@ -181,29 +167,31 @@ async def test_tag_merging_incoming_overrides_existing(async_session, service):
     }
 
 
-@pytest.mark.asyncio
-async def test_tag_merging_with_empty_incoming(async_session, service):
+def test_merge_conversation_tags_with_empty_incoming():
     """Test that empty incoming tags preserves existing tags."""
-    conversation_id = uuid4()
-
-    stored = StoredConversationMetadata(
-        conversation_id=str(conversation_id),
-        sandbox_id='sandbox_123',
-        title='Test Conversation',
-        tags={'existing': 'value'},
-        conversation_version='V1',
-        created_at=datetime.now(timezone.utc),
-        last_updated_at=datetime.now(timezone.utc),
-    )
-    async_session.add(stored)
-    await async_session.commit()
-
-    existing = await service.get_app_conversation_info(conversation_id)
+    existing_tags = {'existing': 'value'}
     incoming_tags = {}
 
-    merged_tags = {**existing.tags, **incoming_tags}
+    merged_tags = merge_conversation_tags(existing_tags, incoming_tags)
 
     assert merged_tags == {'existing': 'value'}
+
+
+def test_merge_conversation_tags_with_none_existing():
+    """Test merging when existing tags is None."""
+    existing_tags = None
+    incoming_tags = {'new': 'value'}
+
+    merged_tags = merge_conversation_tags(existing_tags, incoming_tags)
+
+    assert merged_tags == {'new': 'value'}
+
+
+def test_merge_conversation_tags_with_both_none():
+    """Test merging when both are None."""
+    merged_tags = merge_conversation_tags(None, None)
+
+    assert merged_tags == {}
 
 
 # ---------------------------------------------------------------------------
@@ -211,67 +199,47 @@ async def test_tag_merging_with_empty_incoming(async_session, service):
 # ---------------------------------------------------------------------------
 
 
-def test_automation_trigger_detection_by_trigger_tag():
+def test_detect_automation_trigger_by_trigger_tag():
     """Test that 'trigger' tag triggers AUTOMATION detection."""
     merged_tags = {'trigger': 'cron', 'automation_id': 'auto-123'}
 
-    # Simulate the logic from webhook_router
-    trigger = None
-    if trigger is None and merged_tags:
-        if merged_tags.get('trigger') or merged_tags.get('automation_id'):
-            trigger = ConversationTrigger.AUTOMATION
+    trigger = detect_automation_trigger(None, merged_tags)
 
     assert trigger == ConversationTrigger.AUTOMATION
 
 
-def test_automation_trigger_detection_by_automation_id():
+def test_detect_automation_trigger_by_automation_id():
     """Test that 'automation_id' tag alone triggers AUTOMATION detection."""
     merged_tags = {'automation_id': 'auto-123'}
 
-    trigger = None
-    if trigger is None and merged_tags:
-        if merged_tags.get('trigger') or merged_tags.get('automation_id'):
-            trigger = ConversationTrigger.AUTOMATION
+    trigger = detect_automation_trigger(None, merged_tags)
 
     assert trigger == ConversationTrigger.AUTOMATION
 
 
-def test_automation_trigger_not_set_without_relevant_tags():
+def test_detect_automation_trigger_not_set_without_relevant_tags():
     """Test that trigger is not set without automation-related tags."""
     merged_tags = {'some_other_key': 'value'}
 
-    trigger = None
-    if trigger is None and merged_tags:
-        if merged_tags.get('trigger') or merged_tags.get('automation_id'):
-            trigger = ConversationTrigger.AUTOMATION
+    trigger = detect_automation_trigger(None, merged_tags)
 
     assert trigger is None
 
 
-def test_automation_trigger_not_overridden_if_already_set():
+def test_detect_automation_trigger_not_overridden_if_already_set():
     """Test that existing trigger is not overridden."""
     merged_tags = {'trigger': 'cron', 'automation_id': 'auto-123'}
 
     # Trigger already set (e.g., from previous update)
-    trigger = ConversationTrigger.GUI
-
-    # The logic should NOT override existing trigger
-    if trigger is None and merged_tags:
-        if merged_tags.get('trigger') or merged_tags.get('automation_id'):
-            trigger = ConversationTrigger.AUTOMATION
+    trigger = detect_automation_trigger(ConversationTrigger.GUI, merged_tags)
 
     # Should remain GUI, not AUTOMATION
     assert trigger == ConversationTrigger.GUI
 
 
-def test_automation_trigger_with_empty_tags():
+def test_detect_automation_trigger_with_empty_tags():
     """Test that empty tags don't set trigger."""
-    merged_tags = {}
-
-    trigger = None
-    if trigger is None and merged_tags:
-        if merged_tags.get('trigger') or merged_tags.get('automation_id'):
-            trigger = ConversationTrigger.AUTOMATION
+    trigger = detect_automation_trigger(None, {})
 
     assert trigger is None
 

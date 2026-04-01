@@ -56,6 +56,50 @@ app_mode = get_global_config().app_mode
 _logger = logging.getLogger(__name__)
 
 
+def merge_conversation_tags(
+    existing_tags: dict[str, str] | None,
+    incoming_tags: dict[str, str] | None,
+) -> dict[str, str]:
+    """Merge conversation tags with incoming tags overriding existing ones.
+
+    Args:
+        existing_tags: Tags from the existing conversation (may be None)
+        incoming_tags: Tags from the incoming update (may be None)
+
+    Returns:
+        Merged tags dict (empty dict if both inputs are None/empty)
+    """
+    existing = existing_tags or {}
+    incoming = incoming_tags or {}
+    return {**existing, **incoming}
+
+
+def detect_automation_trigger(
+    current_trigger: ConversationTrigger | None,
+    merged_tags: dict[str, str],
+) -> ConversationTrigger | None:
+    """Detect if conversation should have AUTOMATION trigger based on tags.
+
+    Only sets AUTOMATION trigger if:
+    - Current trigger is None (don't override existing trigger)
+    - Tags contain 'trigger' or 'automation_id' key
+
+    Args:
+        current_trigger: The existing trigger value (may be None)
+        merged_tags: Merged tags dict to inspect
+
+    Returns:
+        ConversationTrigger.AUTOMATION if detected, otherwise current_trigger
+    """
+    if current_trigger is not None:
+        return current_trigger
+
+    if merged_tags and (merged_tags.get('trigger') or merged_tags.get('automation_id')):
+        return ConversationTrigger.AUTOMATION
+
+    return None
+
+
 async def valid_sandbox(
     request: Request,
     session_api_key: str = Depends(
@@ -144,23 +188,20 @@ async def on_conversation_update(
     # Extract and merge tags from incoming conversation info
     # SDK can set tags via Conversation(tags=...) which includes automation context
     incoming_tags = conversation_info.tags.copy() if conversation_info.tags else {}
-    merged_tags = {**existing.tags, **incoming_tags}  # Incoming tags override existing
+    merged_tags = merge_conversation_tags(existing.tags, incoming_tags)
 
     # Determine trigger - check if tags indicate automation, then fall back to existing
-    trigger = existing.trigger
-    if trigger is None and merged_tags:
-        # Check if tags indicate this is an automation conversation
-        if merged_tags.get('trigger') or merged_tags.get('automation_id'):
-            trigger = ConversationTrigger.AUTOMATION
-            _logger.info(
-                'Applied automation trigger from conversation tags',
-                extra={
-                    'conversation_id': str(conversation_info.id),
-                    'sandbox_id': sandbox_info.id,
-                    'automation_id': merged_tags.get('automation_id'),
-                    'trigger_type': merged_tags.get('trigger'),
-                },
-            )
+    trigger = detect_automation_trigger(existing.trigger, merged_tags)
+    if trigger == ConversationTrigger.AUTOMATION and existing.trigger is None:
+        _logger.info(
+            'Applied automation trigger from conversation tags',
+            extra={
+                'conversation_id': str(conversation_info.id),
+                'sandbox_id': sandbox_info.id,
+                'automation_id': merged_tags.get('automation_id'),
+                'trigger_type': merged_tags.get('trigger'),
+            },
+        )
 
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
