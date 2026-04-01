@@ -12,9 +12,6 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from openhands.app_server.app_conversation.app_conversation_models import (
-    AppConversationInfo,
-)
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
     StoredConversationMetadata,
@@ -22,7 +19,6 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
