@@ -85,6 +85,7 @@ async def test_save_conversation_with_tags(async_session, service):
         title='Test Conversation with Tags',
         tags=tags,
         conversation_version='V1',
+        pr_number=[],
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
@@ -112,6 +113,7 @@ async def test_save_conversation_with_empty_tags(async_session, service):
         title='Test Conversation',
         tags={},
         conversation_version='V1',
+        pr_number=[],
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
@@ -135,6 +137,7 @@ async def test_save_conversation_with_none_tags(async_session, service):
         title='Test Conversation',
         tags=None,
         conversation_version='V1',
+        pr_number=[],
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
@@ -270,6 +273,7 @@ async def test_full_tag_roundtrip_with_automation_context(async_session, service
         tags=initial_tags,
         trigger='automation',
         conversation_version='V1',
+        pr_number=[],
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
