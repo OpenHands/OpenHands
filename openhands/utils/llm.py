@@ -34,6 +34,12 @@ OPENHANDS_MODELS = [
     'openhands/glm-5',
 ]
 
+NOVITA_MODELS = [
+    'novita/moonshotai/kimi-k2.5',
+    'novita/zai-org/glm-5',
+    'novita/minimax/minimax-m2.5',
+]
+
 CLARIFAI_MODELS = [
     'clarifai/openai.chat-completion.gpt-oss-120b',
     'clarifai/openai.chat-completion.gpt-oss-20b',
@@ -158,6 +164,6 @@ def get_supported_llm_models(
 
     # Use database-backed models if provided (SaaS), otherwise use hardcoded list
     openhands_models = verified_models if verified_models else OPENHANDS_MODELS
-    model_list = openhands_models + CLARIFAI_MODELS + model_list
+    model_list = openhands_models + CLARIFAI_MODELS + NOVITA_MODELS + model_list
 
     return sorted(set(model_list))
