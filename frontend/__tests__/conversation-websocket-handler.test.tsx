@@ -21,6 +21,7 @@ import {
   createMockMessageEvent,
   createMockUserMessageEvent,
   createMockConversationErrorEvent,
+  createMockServerErrorEvent,
   createMockAgentErrorEvent,
   createMockBrowserObservationEvent,
   createMockBrowserNavigateActionEvent,
@@ -362,6 +363,119 @@ describe("Conversation WebSocket Handler", () => {
           "STATUS$ERROR_LLM_OUT_OF_CREDITS",
         );
       });
+    });
+
+    it("should update error message store on ServerErrorEvent", async () => {
+      // ServerErrorEvent represents server-side errors (e.g., MCP configuration errors)
+      // that should be shown as a banner to the user.
+      const mockServerErrorEvent = createMockServerErrorEvent();
+
+      // Set up MSW to send the error event when connection is established
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          // Send the mock error event after connection
+          client.send(JSON.stringify(mockServerErrorEvent));
+        }),
+      );
+
+      // Render components that use both WebSocket and error message store
+      renderWithWebSocketContext(<ErrorMessageStoreComponent />);
+
+      // Initially should show "none"
+      expect(screen.getByTestId("error-message")).toHaveTextContent("none");
+
+      // Wait for connection and error event processing
+      await waitFor(() => {
+        expect(screen.getByTestId("error-message")).toHaveTextContent(
+          "MCP server connection failed: Invalid configuration",
+        );
+      });
+    });
+
+    it("should handle different ServerErrorEvent error codes", async () => {
+      // Test different error codes for ServerErrorEvent
+      const mockServerErrorEvent = createMockServerErrorEvent({
+        code: "RuntimeError",
+        detail: "Agent server runtime error: Out of memory",
+      });
+
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.send(JSON.stringify(mockServerErrorEvent));
+        }),
+      );
+
+      renderWithWebSocketContext(<ErrorMessageStoreComponent />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("error-message")).toHaveTextContent(
+          "Agent server runtime error: Out of memory",
+        );
+      });
+    });
+
+    it("should clear error message when a successful event is received after a ServerErrorEvent", async () => {
+      // This test verifies that error banners disappear when follow-up messages
+      // are sent and received after a ServerErrorEvent.
+      // Note: This test was originally commented out because the implementation
+      // didn't properly clear ServerErrorEvent errors on subsequent events.
+      // After the fix using isDisplayableErrorEvent, this now works correctly.
+      const conversationId = "test-server-error-clear";
+
+      // Set up MSW to mock event count API and send events
+      mswServer.use(
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(2),
+        ),
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+
+          // Send ServerErrorEvent first (sets the error banner)
+          const mockServerErrorEvent = createMockServerErrorEvent();
+          client.send(JSON.stringify(mockServerErrorEvent));
+
+          // Send a successful (non-error) event immediately after
+          // This simulates the user sending a follow-up message and receiving a response
+          const mockSuccessEvent = createMockMessageEvent({
+            id: "success-event-after-server-error",
+          });
+          client.send(JSON.stringify(mockSuccessEvent));
+        }),
+      );
+
+      // Verify error message store is initially empty
+      expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+
+      // Render with WebSocket context (minimal component just to trigger connection)
+      renderWithWebSocketContext(
+        <ConnectionStatusComponent />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      // Wait for connection
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("connection-state")).toHaveTextContent(
+            "OPEN",
+          );
+        },
+        { timeout: 5000 },
+      );
+
+      // Wait for both events to be received and error to be cleared
+      // The error was set by the first event (ServerErrorEvent),
+      // then cleared by the second successful event (MessageEvent).
+      await waitFor(
+        () => {
+          expect(useEventStore.getState().events.length).toBe(2);
+          expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+        },
+        { timeout: 5000 },
+      );
     });
 
     it("should show friendly i18n message for budget ConversationErrorEvent", async () => {
@@ -936,7 +1050,9 @@ describe("Conversation WebSocket Handler", () => {
         http.get(
           `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
           async () => {
-            await new Promise((resolve) => setTimeout(resolve, 10));
+            await new Promise<void>((resolve) => {
+              setTimeout(resolve, 10);
+            });
             return HttpResponse.json({
               items: mockHistoryEvents,
             });
@@ -1057,7 +1173,9 @@ describe("Conversation WebSocket Handler", () => {
         http.get(
           `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
           async () => {
-            await new Promise((resolve) => setTimeout(resolve, 10));
+            await new Promise<void>((resolve) => {
+              setTimeout(resolve, 10);
+            });
             return HttpResponse.json({
               items: mockHistoryEvents,
             });

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConversationTabsContextMenu } from "#/components/features/conversation/conversation-tabs/conversation-tabs-context-menu";
+import { useConversationStore } from "#/stores/conversation-store";
 
 const CONVERSATION_ID = "conv-abc123";
 
@@ -21,6 +22,11 @@ describe("ConversationTabsContextMenu", () => {
   beforeEach(() => {
     localStorage.clear();
     mockHasTaskList = false;
+    useConversationStore.setState({
+      selectedTab: "editor",
+      isRightPanelShown: true,
+      hasRightPanelToggled: true,
+    });
   });
 
   it("should render nothing when isOpen is false", () => {
@@ -67,6 +73,33 @@ describe("ConversationTabsContextMenu", () => {
       localStorage.getItem(`conversation-state-${CONVERSATION_ID}`)!,
     );
     expect(storedState.unpinnedTabs).not.toContain("terminal");
+  });
+
+  it("should close the right panel when unpinning the currently active tab", async () => {
+    const user = userEvent.setup();
+
+    render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+
+    await user.click(screen.getByText("COMMON$CHANGES"));
+
+    const storeState = useConversationStore.getState();
+    expect(storeState.hasRightPanelToggled).toBe(false);
+
+    const storedState = JSON.parse(
+      localStorage.getItem(`conversation-state-${CONVERSATION_ID}`)!,
+    );
+    expect(storedState.rightPanelShown).toBe(false);
+  });
+
+  it("should not close the right panel when unpinning a non-active tab", async () => {
+    const user = userEvent.setup();
+
+    render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+
+    await user.click(screen.getByText("COMMON$TERMINAL"));
+
+    const storeState = useConversationStore.getState();
+    expect(storeState.hasRightPanelToggled).toBe(true);
   });
 
   describe("with tasklist", () => {
