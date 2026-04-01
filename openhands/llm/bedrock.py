@@ -20,7 +20,7 @@ def _create_bedrock_client(
     When explicit credentials (aws_access_key_id + aws_secret_access_key) are provided,
     they are passed directly to boto3. Otherwise, boto3's default credential chain is used,
     which supports IAM roles (EC2/ECS/Lambda), SSO, AWS_PROFILE, environment variables,
-    and ~/.aws/credentials.
+    ~/.aws/credentials, and Bedrock API keys (AWS_BEARER_TOKEN_BEDROCK).
     """
     kwargs: dict = {'service_name': 'bedrock'}
     if aws_region_name:
@@ -67,6 +67,7 @@ def list_foundation_models(
             '%s. To list Bedrock models, configure AWS credentials via one of: '
             'config.toml [llm] aws_access_key_id/aws_secret_access_key, '
             'environment variables (AWS_ACCESS_KEY_ID, AWS_PROFILE, AWS_ROLE_ARN), '
+            'Bedrock API key (AWS_BEARER_TOKEN_BEDROCK), '
             'IAM instance role, or ~/.aws/credentials.',
             err,
         )
