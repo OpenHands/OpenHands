@@ -11,7 +11,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2204
     if: github.repository == 'OpenHands/OpenHands'
     steps:
-      - uses: actions/stale@v9
+      - uses: actions/stale@v10
         with:
           stale-issue-message: 'This issue is stale because it has been open for 40 days with no activity. Remove the stale label or leave a comment, otherwise it will be closed in 10 days.'
           stale-pr-message: 'This PR is stale because it has been open for 40 days with no activity. Remove the stale label or leave a comment, otherwise it will be closed in 10 days.'
