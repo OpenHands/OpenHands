@@ -12,7 +12,13 @@ import { I18nKey } from "#/i18n/declaration";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string) => {
+      if (key === I18nKey.TIPS$SAVE_WORK) {
+        return "Be sure to regularly save your work, either by pushing to GitHub or by downloading your files via VS Code.";
+      }
+
+      return key;
+    },
   }),
 }));
 
@@ -138,5 +144,34 @@ describe("Changes Tab", () => {
     expect(
       screen.queryByText(I18nKey.TIPS$GITHUB_HOOK),
     ).not.toBeInTheDocument();
+  });
+
+  it("replaces GitHub with the active provider name in the save-work tip", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.35);
+
+    vi.mocked(useUnifiedGetGitChanges).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+      isSuccess: true,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    vi.mocked(useActiveConversation).mockReturnValue({
+      data: {
+        git_provider: ProviderOptions.gitlab,
+      },
+    } as ReturnType<typeof useActiveConversation>);
+
+    render(<GitChanges />, { wrapper });
+
+    expect(
+      screen.getByText(/pushing to GitLab/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/pushing to GitHub/i)).not.toBeInTheDocument();
   });
 });
