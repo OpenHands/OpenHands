@@ -83,6 +83,8 @@ class SaasConversationStore(ConversationStore):
         kwargs.pop('per_turn_token', None)
         kwargs.pop('parent_conversation_id', None)
         kwargs.pop('public')
+        # tags column exists in DB but not in ConversationMetadata dataclass
+        kwargs.pop('tags', None)
 
         return ConversationMetadata(**kwargs)
 
