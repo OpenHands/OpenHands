@@ -42,6 +42,7 @@ from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.server.types import AppMode
+from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
@@ -142,7 +143,7 @@ async def on_conversation_update(
 
     # Extract and merge tags from incoming conversation info
     # SDK can set tags via Conversation(tags=...) which includes automation context
-    incoming_tags = dict(conversation_info.tags) if conversation_info.tags else {}
+    incoming_tags = conversation_info.tags.copy() if conversation_info.tags else {}
     merged_tags = {**existing.tags, **incoming_tags}  # Incoming tags override existing
 
     # Determine trigger - check if tags indicate automation, then fall back to existing
@@ -150,10 +151,6 @@ async def on_conversation_update(
     if trigger is None and merged_tags:
         # Check if tags indicate this is an automation conversation
         if merged_tags.get('trigger') or merged_tags.get('automation_id'):
-            from openhands.storage.data_models.conversation_metadata import (
-                ConversationTrigger,
-            )
-
             trigger = ConversationTrigger.AUTOMATION
             _logger.info(
                 'Applied automation trigger from conversation tags',
