@@ -6554,7 +6554,7 @@ pyyaml = ">=6.0.2"
 qtconsole = ">=5.6.1"
 rapidfuzz = ">=3.9"
 redis = ">=5.2,<7"
-requests = ">=2.32.5"
+requests = ">=2.33.0"
 setuptools = ">=78.1.1"
 shellingham = ">=1.5.4"
 sqlalchemy = {version = ">=2.0.40", extras = ["asyncio"]}
