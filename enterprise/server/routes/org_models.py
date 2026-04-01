@@ -507,7 +507,7 @@ class GitOrgClaimRequest(BaseModel):
     @field_validator('git_organization')
     @classmethod
     def validate_git_organization(cls, v: str) -> str:
-        v = v.strip()
+        v = v.strip().lower()
         if not v:
             raise ValueError('git_organization must not be empty')
         return v

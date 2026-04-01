@@ -1322,16 +1322,23 @@ async def claim_git_organization(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         )
-    except IntegrityError:
-        # Race condition: another request claimed it between our check and create
+    except IntegrityError as e:
+        # Only treat the unique constraint violation as a duplicate claim.
+        # Other integrity errors (e.g. FK violations) should surface as 500s.
+        if 'uq_provider_git_org' in str(e.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(
+                    GitOrgAlreadyClaimedError(
+                        provider=request.provider,
+                        git_organization=request.git_organization,
+                    )
+                ),
+            )
+        logger.exception('Integrity error claiming Git organization')
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(
-                GitOrgAlreadyClaimedError(
-                    provider=request.provider,
-                    git_organization=request.git_organization,
-                )
-            ),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to claim Git organization',
         )
     except Exception:
         logger.exception('Error claiming Git organization')
