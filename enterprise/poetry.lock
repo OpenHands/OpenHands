@@ -6477,7 +6477,7 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-ai"
-version = "1.6.0"
+version = "1.5.0"
 description = "OpenHands: Code Less, Make More"
 optional = false
 python-versions = "^3.12,<3.14"
@@ -6554,7 +6554,7 @@ pyyaml = ">=6.0.2"
 qtconsole = ">=5.6.1"
 rapidfuzz = ">=3.9"
 redis = ">=5.2,<7"
-requests = ">=2.33.0"
+requests = ">=2.32.5"
 setuptools = ">=78.1.1"
 shellingham = ">=1.5.4"
 sqlalchemy = {version = ">=2.0.40", extras = ["asyncio"]}
