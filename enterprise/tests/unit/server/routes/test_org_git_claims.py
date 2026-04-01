@@ -17,6 +17,7 @@ from server.routes.orgs import (
     disconnect_git_organization,
     get_git_claims,
 )
+from sqlalchemy.exc import IntegrityError
 from storage.org_git_claim import OrgGitClaim
 
 
@@ -215,6 +216,36 @@ class TestClaimGitOrganization:
                 )
 
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    @pytest.mark.asyncio
+    async def test_claim_race_condition_returns_409(self, org_id, user_id):
+        """
+        GIVEN: Pre-check passes but a concurrent request claims the org first
+        WHEN: create_claim raises IntegrityError (DB unique constraint)
+        THEN: A 409 Conflict error is returned instead of 500
+        """
+        # Arrange
+        request = MagicMock()
+        request.provider = 'github'
+        request.git_organization = 'RaceOrg'
+
+        with (
+            patch(
+                'server.routes.orgs.OrgGitClaimStore.get_claim_by_provider_and_git_org',
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                'server.routes.orgs.OrgGitClaimStore.create_claim',
+                AsyncMock(side_effect=IntegrityError('', '', Exception())),
+            ),
+        ):
+            # Act & Assert
+            with pytest.raises(Exception) as exc_info:
+                await claim_git_organization(
+                    org_id=org_id, request=request, user_id=user_id
+                )
+
+            assert exc_info.value.status_code == status.HTTP_409_CONFLICT
 
 
 # =============================================================================

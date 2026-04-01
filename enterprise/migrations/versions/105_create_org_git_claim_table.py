@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.Column('git_organization', sa.String(), nullable=False),
         sa.Column('claimed_by', sa.UUID(), nullable=False),
         sa.Column('claimed_at', sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(['org_id'], ['org.id']),
+        sa.ForeignKeyConstraint(['org_id'], ['org.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['claimed_by'], ['user.id']),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('provider', 'git_organization', name='uq_provider_git_org'),

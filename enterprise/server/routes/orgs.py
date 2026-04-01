@@ -49,6 +49,7 @@ from server.services.org_llm_settings_service import (
 )
 from server.services.org_member_financial_service import OrgMemberFinancialService
 from server.services.org_member_service import OrgMemberService
+from sqlalchemy.exc import IntegrityError
 from storage.org_git_claim_store import OrgGitClaimStore
 from storage.org_service import OrgService
 from storage.user_store import UserStore
@@ -1286,7 +1287,7 @@ async def claim_git_organization(
         HTTPException 403: If user lacks permission
     """
     try:
-        # Check if this Git org is already claimed
+        # Check if this Git org is already claimed (early feedback for the common case)
         existing_claim = await OrgGitClaimStore.get_claim_by_provider_and_git_org(
             provider=request.provider,
             git_organization=request.git_organization,
@@ -1298,7 +1299,8 @@ async def claim_git_organization(
                 git_organization=request.git_organization,
             )
 
-        # Create the claim
+        # Create the claim — the DB unique constraint handles the race condition
+        # where two concurrent requests both pass the check above.
         claim = await OrgGitClaimStore.create_claim(
             org_id=org_id,
             provider=request.provider,
@@ -1319,6 +1321,17 @@ async def claim_git_organization(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
+        )
+    except IntegrityError:
+        # Race condition: another request claimed it between our check and create
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(
+                GitOrgAlreadyClaimedError(
+                    provider=request.provider,
+                    git_organization=request.git_organization,
+                )
+            ),
         )
     except Exception:
         logger.exception('Error claiming Git organization')

@@ -2,7 +2,7 @@
 Store class for managing Git organization claims.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -40,7 +40,7 @@ class OrgGitClaimStore:
                 provider=provider,
                 git_organization=git_organization,
                 claimed_by=claimed_by,
-                claimed_at=datetime.utcnow(),
+                claimed_at=datetime.now(timezone.utc),
             )
             session.add(claim)
             await session.commit()

@@ -15,7 +15,9 @@ class OrgGitClaim(Base):  # type: ignore
     __tablename__ = 'org_git_claim'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey('org.id'), nullable=False)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey('org.id', ondelete='CASCADE'), nullable=False
+    )
     provider = Column(String, nullable=False)
     git_organization = Column(String, nullable=False)
     claimed_by = Column(UUID(as_uuid=True), ForeignKey('user.id'), nullable=False)

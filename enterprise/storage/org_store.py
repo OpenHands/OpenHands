@@ -332,10 +332,6 @@ class OrgStore:
                     text('DELETE FROM stripe_customers WHERE org_id = :org_id'),
                     {'org_id': str(org_id)},
                 )
-                await session.execute(
-                    text('DELETE FROM org_git_claim WHERE org_id = :org_id'),
-                    {'org_id': str(org_id)},
-                )
 
                 # 3. Handle users with this as current_org_id BEFORE deleting memberships
                 # Single query to find orphaned users (those with no alternative org)
