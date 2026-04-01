@@ -1,21 +1,21 @@
-<!-- Keep this PR as draft until it is actually ready for review. -->
+<!-- Keep this PR as draft until it is ready for review. -->
 
 ## Summary
 
-<!-- 1-3 short bullets: what changed? -->
+<!-- 1-3 bullets describing what changed. -->
 - 
 
 ## Why
 
-<!-- Why is this needed? Link the issue, incident, or context if there is one. -->
+<!-- Problem, motivation, or linked issue/context. -->
 
 ## How to Test
 
 <!--
-REQUIRED: include at least one of the following:
-- exact steps to verify
+Required. Provide at least one:
+- exact verification steps
 - screenshot/video for UI changes
-- preview/artifact/link reviewers can use
+- preview, artifact, or other reviewer-friendly proof
 
 If you could not test this, say why.
 -->
@@ -26,19 +26,13 @@ If you could not test this, say why.
 - [ ] Feature
 - [ ] Refactor
 - [ ] Breaking change
-- [ ] Docs / chore / other
+- [ ] Docs / chore
 
-## Risk / Notes
+## Notes
 
-<!-- Optional: migrations, config changes, rollout concerns, follow-ups, or anything reviewers should watch for. -->
+<!-- Optional: migrations, config changes, rollout concerns, follow-ups, or anything reviewers should know. -->
 
 ---
 
-<!--
-FOR AI/LLM AGENTS:
-- Be concise, but specific.
-- Do NOT check the box below—only a human can do that.
-- "How to Test" is required. If you could not test, say so explicitly.
--->
-
+<!-- AI/LLM agents: be concise and specific. Do not check the box below. -->
 - [ ] A human has tested these changes.
