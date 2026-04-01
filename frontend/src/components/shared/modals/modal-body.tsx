@@ -20,7 +20,7 @@ export function ModalBody({
     <div
       data-testid={testID}
       className={cn(
-        "bg-base-secondary flex flex-col gap-6 items-center p-6 rounded-xl",
+        "modal-body bg-base-secondary flex flex-col gap-6 items-center p-6 rounded-xl",
         width === "small" && "w-[384px]",
         width === "medium" && "w-[700px]",
         className,

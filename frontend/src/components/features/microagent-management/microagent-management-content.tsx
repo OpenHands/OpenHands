@@ -338,7 +338,7 @@ export function MicroagentManagementContent() {
   }
 
   return (
-    <div className="w-full h-full flex rounded-lg border border-[#525252] bg-[#24272E] overflow-hidden">
+    <div className="microagent-container w-full h-full flex rounded-lg border border-[#525252] bg-[#24272E] overflow-hidden">
       {providersAreSet && <MicroagentManagementSidebar providers={providers} />}
       <div className="flex-1">
         <MicroagentManagementMain />

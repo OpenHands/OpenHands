@@ -40,9 +40,25 @@ html.light {
 }
 
 /* Light theme: chat message bubble overrides */
+html.light .microagent-container,
+html.light .microagent-container > * {
+  background: #ffffff !important;
+  border-color: rgba(200, 195, 220, 0.5) !important;
+}
+
+html.light .microagent-container * {
+  color: #0f172a !important;
+}
+
+html.light .microagent-container input,
+html.light .microagent-container textarea {
+  background: #f5f5f5 !important;
+}
+
 html.light .conversation-top-bar {
   flex-shrink: 0 !important;
   padding: 4px 12px !important;
+  margin: 0px 5px 0px 15px !important;
   background: rgba(255, 255, 255, 0.92) !important;
   border: 1px solid rgba(200, 195, 220, 0.5) !important;
   border-radius: 16px !important;
@@ -72,6 +88,68 @@ html.light .tab-container {
   background: transparent !important;
 }
 
+html.light .modal-body.bg-base-secondary {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.light .modal-body * {
+  color: inherit;
+}
+
+[data-testid="user-message"] li,
+[data-testid="user-message"] ul,
+[data-testid="agent-message"] li,
+[data-testid="agent-message"] ul {
+  line-height: 2;
+}
+
+/* Inline code only (not code inside pre) */
+html.light [data-testid="user-message"] code:not(pre code),
+html.light [data-testid="agent-message"] code:not(pre code) {
+  background-color: #ECECEC !important;
+  color: #606060 !important;
+  border-color: #d1d5db !important;
+}
+
+/* Code blocks: pre, syntax-highlighted divs */
+html.light [data-testid="user-message"] pre,
+html.light [data-testid="agent-message"] pre,
+html.light [data-testid="agent-message"] div[class*="language-"] {
+  background-color: #f5f5f5 !important;
+  border-color: #d1d5db !important;
+}
+
+html.light [data-testid="conversation-name-context-menu"],
+html.light [data-testid="tools-context-menu"],
+html.light [data-testid="account-settings-context-menu"],
+html.light [data-testid="macros-submenu"] {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.light [data-testid="account-settings-context-menu"] * {
+  color: #0f172a !important;
+}
+
+html.light [data-testid="account-settings-context-menu"] li:hover {
+  background: rgba(0, 87, 255, 0.08) !important;
+}
+
+html.light [data-testid="toggle-button"]:hover {
+  background: rgba(0, 87, 255, 0.08) !important;
+}
+
+html.light [data-testid="conversation-name-context-menu"] div:hover,
+html.light [data-testid="tools-context-menu"] div:hover,
+html.light [data-testid="account-settings-context-menu"] div:hover,
+html.light [data-testid="macros-submenu"] div:hover,
+html.light [data-testid="context-menu-list-item"]:hover,
+html.light [data-testid="settings-navbar"] a:hover,
+html.light [data-testid="settings-navbar"] a.bg-\[\#454545\] {
+  background: rgba(0, 87, 255, 0.08) !important;
+}
+
 html.light [data-testid="scroll-to-bottom"] svg path,
 html.light [data-testid="copy-to-clipboard"] svg path {
   fill: #0f172a !important;
@@ -80,6 +158,11 @@ html.light [data-testid="copy-to-clipboard"] svg path {
 html.light [data-testid="scroll-to-bottom"],
 html.light [data-testid="copy-to-clipboard"] {
   border: none !important;
+}
+
+html.light .chat-input-container {
+  margin-left: 15px;
+  margin-right: 25px;
 }
 
 html.light [data-testid="interactive-chat-box"] .bg-base-secondary {
