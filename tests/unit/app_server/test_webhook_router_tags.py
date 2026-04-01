@@ -80,6 +80,7 @@ async def test_save_conversation_with_tags(async_session, service):
         sandbox_id='sandbox_123',
         title='Test Conversation with Tags',
         tags=tags,
+        conversation_version='V1',
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
@@ -106,6 +107,7 @@ async def test_save_conversation_with_empty_tags(async_session, service):
         sandbox_id='sandbox_123',
         title='Test Conversation',
         tags={},
+        conversation_version='V1',
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
@@ -128,6 +130,7 @@ async def test_save_conversation_with_none_tags(async_session, service):
         sandbox_id='sandbox_123',
         title='Test Conversation',
         tags=None,
+        conversation_version='V1',
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
@@ -157,6 +160,7 @@ async def test_tag_merging_incoming_overrides_existing(async_session, service):
         sandbox_id='sandbox_123',
         title='Test Conversation',
         tags={'key1': 'original', 'key2': 'keep_this'},
+        conversation_version='V1',
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
@@ -187,6 +191,7 @@ async def test_tag_merging_with_empty_incoming(async_session, service):
         sandbox_id='sandbox_123',
         title='Test Conversation',
         tags={'existing': 'value'},
+        conversation_version='V1',
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )
@@ -296,6 +301,7 @@ async def test_full_tag_roundtrip_with_automation_context(async_session, service
         title='Automation Conversation',
         tags=initial_tags,
         trigger='automation',
+        conversation_version='V1',
         created_at=datetime.now(timezone.utc),
         last_updated_at=datetime.now(timezone.utc),
     )

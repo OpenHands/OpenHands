@@ -96,6 +96,9 @@ def mock_conversation_info() -> ConversationInfo:
     conversation_info.stats = MagicMock()
     conversation_info.stats.get_combined_metrics.return_value = None
 
+    # Mock tags (required by on_conversation_update)
+    conversation_info.tags = {}
+
     return conversation_info
 
 
