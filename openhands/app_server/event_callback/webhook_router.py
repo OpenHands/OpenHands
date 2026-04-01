@@ -185,10 +185,9 @@ async def on_conversation_update(
     if conversation_info.execution_status == ConversationExecutionStatus.DELETING:
         return Success()
 
-    # Extract and merge tags from incoming conversation info
+    # Merge tags from incoming conversation info
     # SDK can set tags via Conversation(tags=...) which includes automation context
-    incoming_tags = conversation_info.tags.copy() if conversation_info.tags else {}
-    merged_tags = merge_conversation_tags(existing.tags, incoming_tags)
+    merged_tags = merge_conversation_tags(existing.tags, conversation_info.tags)
 
     # Determine trigger - check if tags indicate automation, then fall back to existing
     trigger = detect_automation_trigger(existing.trigger, merged_tags)
