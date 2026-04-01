@@ -243,14 +243,10 @@ def get_supported_llm_models(
         )
     )
     if has_explicit_creds or llm_config.aws_region_name or has_aws_env_hints:
+        # Explicit ak/sk from config are already exported to env vars by
+        # LLMConfig.model_post_init(), so boto3's default chain picks them up.
         bedrock_model_list = bedrock.list_foundation_models(
             aws_region_name=llm_config.aws_region_name,
-            aws_access_key_id=llm_config.aws_access_key_id.get_secret_value()
-            if llm_config.aws_access_key_id
-            else None,
-            aws_secret_access_key=llm_config.aws_secret_access_key.get_secret_value()
-            if llm_config.aws_secret_access_key
-            else None,
         )
     model_list = litellm_model_list_without_bedrock + bedrock_model_list
     for llm_config in config.llms.values():

@@ -12,34 +12,30 @@ from openhands.core.logger import openhands_logger as logger
 
 def _create_bedrock_client(
     aws_region_name: str | None = None,
-    aws_access_key_id: str | None = None,
-    aws_secret_access_key: str | None = None,
 ) -> boto3.client:
-    """Create a Bedrock client using explicit credentials or the default credential chain.
+    """Create a Bedrock client using boto3's default credential chain.
 
-    When explicit credentials (aws_access_key_id + aws_secret_access_key) are provided,
-    they are passed directly to boto3. Otherwise, boto3's default credential chain is used,
-    which supports IAM roles (EC2/ECS/Lambda), SSO, AWS_PROFILE, environment variables,
-    ~/.aws/credentials, and Bedrock API keys (AWS_BEARER_TOKEN_BEDROCK).
+    Credentials are resolved entirely by boto3's default chain, which
+    supports (in order): environment variables (AWS_ACCESS_KEY_ID, etc.),
+    AWS_PROFILE, assume role / web identity, SSO, shared credentials file,
+    container credentials (ECS/EKS), EC2 instance metadata (IAM roles),
+    and Bedrock API keys (AWS_BEARER_TOKEN_BEDROCK via bearer token auth).
+
+    Explicit ak/sk from config.toml are already exported to environment
+    variables by LLMConfig.model_post_init(), so they are picked up
+    automatically — no need to pass them here.
     """
     kwargs: dict = {'service_name': 'bedrock'}
     if aws_region_name:
         kwargs['region_name'] = aws_region_name
-    if aws_access_key_id and aws_secret_access_key:
-        kwargs['aws_access_key_id'] = aws_access_key_id
-        kwargs['aws_secret_access_key'] = aws_secret_access_key
     return boto3.client(**kwargs)
 
 
 def list_foundation_models(
     aws_region_name: str | None = None,
-    aws_access_key_id: str | None = None,
-    aws_secret_access_key: str | None = None,
 ) -> list[str]:
     try:
-        client = _create_bedrock_client(
-            aws_region_name, aws_access_key_id, aws_secret_access_key
-        )
+        client = _create_bedrock_client(aws_region_name)
         foundation_models_list = client.list_foundation_models(
             byOutputModality='TEXT', byInferenceType='ON_DEMAND'
         )

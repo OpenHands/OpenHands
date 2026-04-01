@@ -14,26 +14,12 @@ from openhands.llm.bedrock import (
 
 
 class TestCreateBedrockClient:
-    """Verify the helper passes explicit creds when provided, otherwise relies
-    on the default credential chain."""
+    """Verify the helper only passes region and delegates all credential
+    resolution to boto3's default chain."""
 
     @patch('openhands.llm.bedrock.boto3.client')
-    def test_explicit_credentials(self, mock_boto_client):
-        _create_bedrock_client(
-            aws_region_name='us-west-2',
-            aws_access_key_id='AKID',
-            aws_secret_access_key='SECRET',
-        )
-        mock_boto_client.assert_called_once_with(
-            service_name='bedrock',
-            region_name='us-west-2',
-            aws_access_key_id='AKID',
-            aws_secret_access_key='SECRET',
-        )
-
-    @patch('openhands.llm.bedrock.boto3.client')
-    def test_default_chain_no_creds(self, mock_boto_client):
-        """When no explicit creds are given, only service_name should be passed
+    def test_default_chain_no_args(self, mock_boto_client):
+        """When no args are given, only service_name should be passed
         so boto3 falls back to its default credential chain."""
         _create_bedrock_client()
         mock_boto_client.assert_called_once_with(service_name='bedrock')
@@ -44,12 +30,6 @@ class TestCreateBedrockClient:
         mock_boto_client.assert_called_once_with(
             service_name='bedrock', region_name='eu-west-1'
         )
-
-    @patch('openhands.llm.bedrock.boto3.client')
-    def test_partial_creds_ignored(self, mock_boto_client):
-        """If only one of key/secret is set, neither should be passed."""
-        _create_bedrock_client(aws_access_key_id='AKID')
-        mock_boto_client.assert_called_once_with(service_name='bedrock')
 
 
 # ---------------------------------------------------------------------------
@@ -130,16 +110,16 @@ class TestListFoundationModels:
         assert result == []
 
     @patch('openhands.llm.bedrock._create_bedrock_client')
-    def test_default_chain_called_without_creds(self, mock_create):
+    def test_default_chain_called_without_region(self, mock_create):
         mock_create.return_value = _mock_client_with_models(['m1'])
         list_foundation_models()
-        mock_create.assert_called_once_with(None, None, None)
+        mock_create.assert_called_once_with(None)
 
     @patch('openhands.llm.bedrock._create_bedrock_client')
-    def test_explicit_creds_forwarded(self, mock_create):
+    def test_region_forwarded(self, mock_create):
         mock_create.return_value = _mock_client_with_models(['m1'])
-        list_foundation_models('us-west-2', 'AK', 'SK')
-        mock_create.assert_called_once_with('us-west-2', 'AK', 'SK')
+        list_foundation_models('us-west-2')
+        mock_create.assert_called_once_with('us-west-2')
 
 
 # ---------------------------------------------------------------------------
