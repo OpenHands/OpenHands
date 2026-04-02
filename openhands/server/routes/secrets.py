@@ -187,7 +187,7 @@ async def unset_provider_tokens(
 # =================================================
 
 
-@app.get('/secrets', response_model=GETCustomSecrets)
+@app.get('/secrets', response_model=GETCustomSecrets, deprecated=True)
 async def load_custom_secrets_names(
     user_secrets: Secrets | None = Depends(get_secrets),
 ) -> GETCustomSecrets | JSONResponse:
@@ -215,7 +215,7 @@ async def load_custom_secrets_names(
         )
 
 
-@app.post('/secrets', response_model=dict[str, str])
+@app.post('/secrets', response_model=dict[str, str], deprecated=True)
 async def create_custom_secret(
     incoming_secret: CustomSecretModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
@@ -263,7 +263,7 @@ async def create_custom_secret(
         )
 
 
-@app.put('/secrets/{secret_id}', response_model=dict[str, str])
+@app.put('/secrets/{secret_id}', response_model=dict[str, str], deprecated=True)
 async def update_custom_secret(
     secret_id: str,
     incoming_secret: CustomSecretWithoutValueModel,
@@ -315,7 +315,7 @@ async def update_custom_secret(
         )
 
 
-@app.delete('/secrets/{secret_id}')
+@app.delete('/secrets/{secret_id}', deprecated=True)
 async def delete_custom_secret(
     secret_id: str,
     secrets_store: SecretsStore = Depends(get_secrets_store),

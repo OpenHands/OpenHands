@@ -11,6 +11,7 @@ from openhands.app_server.pending_messages.pending_message_router import (
 from openhands.app_server.sandbox import sandbox_router, sandbox_spec_router
 from openhands.app_server.settings import routes as settings_router
 from openhands.app_server.git_providers import routes as git_providers_router
+from openhands.app_server.secrets import routes as secrets_router
 from openhands.app_server.user import skills_router, user_router
 from openhands.app_server.web_client import web_client_router
 
@@ -23,6 +24,7 @@ router.include_router(sandbox_router.router)
 router.include_router(sandbox_spec_router.router)
 router.include_router(settings_router.router)
 router.include_router(git_providers_router.router)
+router.include_router(secrets_router.router)
 router.include_router(user_router.router)
 router.include_router(skills_router.router)
 router.include_router(webhook_router.router)
