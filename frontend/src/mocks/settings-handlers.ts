@@ -46,6 +46,7 @@ export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
   security_analyzer: DEFAULT_SETTINGS.security_analyzer,
   remote_runtime_resource_factor:
     DEFAULT_SETTINGS.remote_runtime_resource_factor,
+  v1_enabled: false,
   provider_tokens_set: {},
   enable_default_condenser: DEFAULT_SETTINGS.enable_default_condenser,
   condenser_max_size: DEFAULT_SETTINGS.condenser_max_size,
@@ -60,12 +61,12 @@ export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
 const MOCK_USER_PREFERENCES: {
   settings: Settings | null;
 } = {
-  settings: null,
+  settings: { ...MOCK_DEFAULT_USER_SETTINGS },
 };
 
 // Reset mock
 export const resetTestHandlersMockSettings = () => {
-  MOCK_USER_PREFERENCES.settings = MOCK_DEFAULT_USER_SETTINGS;
+  MOCK_USER_PREFERENCES.settings = { ...MOCK_DEFAULT_USER_SETTINGS };
 };
 
 // --- Handlers for options/config/settings ---
