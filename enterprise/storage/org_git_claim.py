@@ -21,7 +21,7 @@ class OrgGitClaim(Base):  # type: ignore
     provider = Column(String, nullable=False)
     git_organization = Column(String, nullable=False)
     claimed_by = Column(UUID(as_uuid=True), ForeignKey('user.id'), nullable=False)
-    claimed_at = Column(DateTime, nullable=False)
+    claimed_at = Column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
         UniqueConstraint('provider', 'git_organization', name='uq_provider_git_org'),
