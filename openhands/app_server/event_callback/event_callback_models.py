@@ -56,7 +56,12 @@ class LoggingCallbackProcessor(EventCallbackProcessor):
         callback: EventCallback,
         event: Event,
     ) -> EventCallbackResult:
-        _logger.info(f'Callback {callback.id} Invoked for event {event}')
+        _logger.info(
+            'Callback %s Invoked for event type=%s id=%s',
+            callback.id,
+            type(event).__name__,
+            event.id,
+        )
         return EventCallbackResult(
             status=EventCallbackResultStatus.SUCCESS,
             event_callback_id=callback.id,

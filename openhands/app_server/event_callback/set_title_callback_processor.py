@@ -88,7 +88,12 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             get_httpx_client,
         )
 
-        _logger.info(f'Callback {callback.id} Invoked for event {event}')
+        _logger.info(
+            'Callback %s Invoked for event type=%s id=%s',
+            callback.id,
+            type(event).__name__,
+            event.id,
+        )
 
         state = InjectorState()
         setattr(state, USER_CONTEXT_ATTR, ADMIN)
