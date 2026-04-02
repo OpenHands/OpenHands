@@ -27,6 +27,9 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
+from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname_for_docker,
+)
 
 
 def _make_mock_app_conversation(
@@ -458,7 +461,7 @@ class TestReadConversationFile:
         assert result == 'plan body'
         mock_sandbox_spec_service.get_default_sandbox_spec.assert_called_once()
         remote_workspace_cls.assert_called_once_with(
-            host='http://host.docker.internal:8000',
+            host=replace_localhost_hostname_for_docker('http://localhost:8000'),
             api_key='test-api-key',
             working_dir='/workspace',
         )
