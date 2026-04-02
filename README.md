@@ -42,7 +42,7 @@ Define agents in code, then run them locally, or scale to 1000s of agents in the
 The CLI is the easiest way to start using OpenHands. The experience will be familiar to anyone who has worked
 with e.g. Claude Code or Codex. You can power it with Claude, GPT, or any other LLM.
 
-[Check out the docs](https://docs.openhands.dev/openhands/usage/run-openhands/cli-mode) or [view the source](https://github.com/OpenHands/OpenHands-CLI)
+[Check out the docs](https://docs.openhands.dev/openhands/usage/cli/terminal) or [view the source](https://github.com/OpenHands/OpenHands-CLI)
 
 ### OpenHands Local GUI
 Use the Local GUI for running agents on your laptop. It comes with a REST API and a single-page React application.
