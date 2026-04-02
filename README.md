@@ -140,6 +140,10 @@ If you need help with anything, or just want to chat, [come find us on Slack](ht
 
 ## Contributors
 
+<div align="center">
+
 Thanks to all the contributors!
 
 [![OpenHands Contributors](https://assets.openhands.dev/readme/20260401-openhands-openhands-contributors.svg)](https://github.com/OpenHands/OpenHands/graphs/contributors)
+
+</div>
