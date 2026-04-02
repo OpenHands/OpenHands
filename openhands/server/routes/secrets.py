@@ -106,7 +106,7 @@ async def check_provider_tokens(
     return msg
 
 
-@app.post('/add-git-providers')
+@app.post('/add-git-providers', deprecated=True)
 async def store_provider_tokens(
     provider_info: POSTProviderModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
@@ -159,7 +159,7 @@ async def store_provider_tokens(
         )
 
 
-@app.post('/unset-provider-tokens', response_model=dict[str, str])
+@app.post('/unset-provider-tokens', response_model=dict[str, str], deprecated=True)
 async def unset_provider_tokens(
     secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> JSONResponse:
