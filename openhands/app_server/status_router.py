@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from openhands.runtime.utils.system_stats import get_system_info
 
-router = APIRouter(tags=['Health'])
+router = APIRouter(tags=['Status'])
 
 
 @router.get('/alive')
@@ -41,7 +41,7 @@ async def ready() -> str:
     """Endpoint for readiness probes.
 
     For now this is functionally the same as the liveness probe, but should
-    be need to establish further invariants in the future, having a separate
+    we need to establish further invariants in the future, having a separate
     endpoint will mean we don't need to change client code.
     """
     return 'OK'
