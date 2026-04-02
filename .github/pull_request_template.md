@@ -12,12 +12,16 @@
 ## How to Test
 
 <!--
-Required. Provide at least one:
-- exact verification steps
-- screenshot/video for UI changes
-- preview, artifact, or other reviewer-friendly proof
+Required. Share the steps for the reviewer to be able to test your PR. e.g. You can test by running `npm install` then `npm build dev`.
 
 If you could not test this, say why.
+-->
+
+## Video/Screenshots
+
+<!--
+Prodive a video or screenshots of testing your PR. e.g. you added a new feature to the gui, show us the video of you testing it successfully.
+
 -->
 
 ## Type
