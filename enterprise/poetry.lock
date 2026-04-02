@@ -3671,6 +3671,7 @@ anyio = "*"
 certifi = "*"
 httpcore = "==1.*"
 idna = "*"
+socksio = {version = "==1.*", optional = true, markers = "extra == \"socks\""}
 
 [package.extras]
 brotli = ["brotli ; platform_python_implementation == \"CPython\"", "brotlicffi ; platform_python_implementation != \"CPython\""]
@@ -6197,14 +6198,14 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.16.0"
+version = "1.16.1"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.16.0-py3-none-any.whl", hash = "sha256:9498e9b54a16197b38edc0d92eef56ebaf4c3b4f8ec0154fa45f660e851ad35b"},
-    {file = "openhands_agent_server-1.16.0.tar.gz", hash = "sha256:363260ceb64587e08eb458aa44f83526486817b8c524737c5915f2555d3979c5"},
+    {file = "openhands_agent_server-1.16.1-py3-none-any.whl", hash = "sha256:015983b300510c9c329c8eace49fbd4117d31d0895a125e419c31a9964be4155"},
+    {file = "openhands_agent_server-1.16.1.tar.gz", hash = "sha256:489151d35250a424dede8646396bef7b7095adb25e5c973ca8bc6dcbd19cdf07"},
 ]
 
 [package.dependencies]
@@ -6266,9 +6267,9 @@ memory-profiler = ">=0.61"
 numpy = "*"
 openai = "2.8"
 openhands-aci = "0.3.3"
-openhands-agent-server = "1.16"
-openhands-sdk = "1.16"
-openhands-tools = "1.16"
+openhands-agent-server = "1.16.1"
+openhands-sdk = "1.16.1"
+openhands-tools = "1.16.1"
 opentelemetry-api = ">=1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = ">=1.33.1"
 orjson = ">=3.11.6"
@@ -6285,7 +6286,7 @@ pybase62 = ">=1"
 pygithub = ">=2.5"
 pyjwt = ">=2.12"
 pylatexenc = "*"
-pypdf = ">=6.9.1"
+pypdf = ">=6.9.2"
 python-docx = "*"
 python-dotenv = "*"
 python-frontmatter = ">=1.1"
@@ -6323,14 +6324,14 @@ url = ".."
 
 [[package]]
 name = "openhands-sdk"
-version = "1.16.0"
+version = "1.16.1"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.16.0-py3-none-any.whl", hash = "sha256:53e8be16352946bc80b7349780bfa6edcdbd4d54ea150849c5e79942da23d6d2"},
-    {file = "openhands_sdk-1.16.0.tar.gz", hash = "sha256:770a6906a2fbbfccc4f65451d699df0e3f67928e5bb669fc4a5155b9605c6a7b"},
+    {file = "openhands_sdk-1.16.1-py3-none-any.whl", hash = "sha256:0b487929e03e8c87ac6d99f37ff5314df3db6af70a06b516b0858327f9744f2b"},
+    {file = "openhands_sdk-1.16.1.tar.gz", hash = "sha256:12f203c3766800bdf5d9dd4dd0a7988b88e13ff4954b0c208903778111e29567"},
 ]
 
 [package.dependencies]
@@ -6339,7 +6340,7 @@ deprecation = ">=2.1.0"
 fakeredis = {version = ">=2.32.1", extras = ["lua"]}
 fastmcp = ">=3.0.0"
 filelock = ">=3.20.1"
-httpx = ">=0.27.0"
+httpx = {version = ">=0.27.0", extras = ["socks"]}
 litellm = "1.80.10"
 lmnr = ">=0.7.24"
 pydantic = ">=2.12.5"
@@ -6353,14 +6354,14 @@ boto3 = ["boto3 (>=1.35.0)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.16.0"
+version = "1.16.1"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.16.0-py3-none-any.whl", hash = "sha256:91ca5e77ebf52ddc0eaff0f45e94f69d0e542c0a6c1eea96f456507a8c8c6c72"},
-    {file = "openhands_tools-1.16.0.tar.gz", hash = "sha256:cae482c95069a7213c75d5cd9f9c9db4b60ae2c887fbf1cfce75dc9e22140825"},
+    {file = "openhands_tools-1.16.1-py3-none-any.whl", hash = "sha256:f7fd1eb205571d02ee480ad71e96cac0c34c57c0938c4074fe135a579a7538d7"},
+    {file = "openhands_tools-1.16.1.tar.gz", hash = "sha256:64488f2d7705ff90f4bfb7dfd1a2f1fbb4f379059d96e0073677c168d97135e7"},
 ]
 
 [package.dependencies]
@@ -11594,14 +11595,14 @@ diagrams = ["jinja2", "railroad-diagrams"]
 
 [[package]]
 name = "pypdf"
-version = "6.9.1"
+version = "6.9.2"
 description = "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "pypdf-6.9.1-py3-none-any.whl", hash = "sha256:f35a6a022348fae47e092a908339a8f3dc993510c026bb39a96718fc7185e89f"},
-    {file = "pypdf-6.9.1.tar.gz", hash = "sha256:ae052407d33d34de0c86c5c729be6d51010bf36e03035a8f23ab449bca52377d"},
+    {file = "pypdf-6.9.2-py3-none-any.whl", hash = "sha256:662cf29bcb419a36a1365232449624ab40b7c2d0cfc28e54f42eeecd1fd7e844"},
+    {file = "pypdf-6.9.2.tar.gz", hash = "sha256:7f850faf2b0d4ab936582c05da32c52214c2b089d61a316627b5bfb5b0dab46c"},
 ]
 
 [package.extras]
@@ -13263,6 +13264,18 @@ groups = ["main", "test"]
 files = [
     {file = "sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"},
     {file = "sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"},
+]
+
+[[package]]
+name = "socksio"
+version = "1.0.0"
+description = "Sans-I/O implementation of SOCKS4, SOCKS4A, and SOCKS5."
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "socksio-1.0.0-py3-none-any.whl", hash = "sha256:95dc1f15f9b34e8d7b16f06d74b8ccf48f609af32ab33c608d08761c5dcbb1f3"},
+    {file = "socksio-1.0.0.tar.gz", hash = "sha256:f88beb3da5b5c38b9890469de67d0cb0f9d494b78b106ca1845f96c10b91c4ac"},
 ]
 
 [[package]]
