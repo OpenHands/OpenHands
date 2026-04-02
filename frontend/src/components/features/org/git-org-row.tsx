@@ -1,6 +1,6 @@
 import { cn } from "#/utils/utils";
 import { Text } from "#/ui/typography";
-import type { GitOrg } from "#/hooks/organizations/use-git-conversation-routing";
+import type { GitOrg } from "#/types/org";
 import { ClaimButton } from "./claim-button";
 
 interface GitOrgRowProps {
