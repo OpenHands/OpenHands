@@ -21,7 +21,7 @@ from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
-from openhands.sdk import Event, MessageEvent
+from openhands.sdk import Event, MessageEvent, TextContent
 
 _logger = logging.getLogger(__name__)
 
@@ -29,6 +29,40 @@ _logger = logging.getLogger(__name__)
 _POLL_DELAY_S = 3
 # Number of attempts to poll title
 _NUM_POLL_ATTEMPTS = 4
+
+_TITLE_MAX_LENGTH = 50
+
+
+def _extract_text_from_event(event: MessageEvent) -> str | None:
+    """Extract the first text content from a MessageEvent.
+
+    Returns:
+        The text content, or None if no text is found.
+    """
+    if not event.llm_message or not event.llm_message.content:
+        return None
+    for item in event.llm_message.content:
+        if isinstance(item, TextContent) and item.text and item.text.strip():
+            return item.text.strip()
+    return None
+
+
+def _generate_title_from_text(text: str, max_length: int = _TITLE_MAX_LENGTH) -> str:
+    """Generate a concise title by truncating the message text.
+
+    Args:
+        text: The user message text.
+        max_length: Maximum title length.
+
+    Returns:
+        A truncated title string.
+    """
+    first_line = text.split('\n', 1)[0].strip()
+    if not first_line:
+        first_line = text.strip()
+    if len(first_line) <= max_length:
+        return first_line
+    return first_line[: max_length - 3] + '...'
 
 
 async def _poll_for_title(
@@ -115,7 +149,22 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             )
 
             if not title:
-                # Keep the callback active so later message events can retry.
+                # Polling the agent server did not yield a title (common for
+                # API-triggered conversations where the agent server may not
+                # auto-generate titles).  Fall back to deriving one from the
+                # message event that triggered this callback.
+                message_text = _extract_text_from_event(event)
+                if message_text:
+                    title = _generate_title_from_text(message_text)
+                    _logger.info(
+                        'Generated fallback title from message for '
+                        'conversation %s: %s',
+                        conversation_id,
+                        title,
+                    )
+
+            if not title:
+                # Still no title — keep the callback active for a future event.
                 _logger.info(
                     f'Conversation {conversation_id} title not available yet; '
                     'will retry on a future message event.'

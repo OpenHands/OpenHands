@@ -16,6 +16,8 @@ from openhands.app_server.event_callback.event_callback_models import (
 )
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
+    _extract_text_from_event,
+    _generate_title_from_text,
 )
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
@@ -48,6 +50,70 @@ class _FailingHttpxClient:
 @asynccontextmanager
 async def _ctx(obj):
     yield obj
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for helper functions
+# ---------------------------------------------------------------------------
+
+
+def test_extract_text_from_event_with_text():
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[TextContent(text='Fix the bug')]),
+    )
+    assert _extract_text_from_event(event) == 'Fix the bug'
+
+
+def test_extract_text_from_event_with_whitespace_only():
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[TextContent(text='   ')]),
+    )
+    assert _extract_text_from_event(event) is None
+
+
+def test_extract_text_from_event_with_empty_content():
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[]),
+    )
+    assert _extract_text_from_event(event) is None
+
+
+def test_extract_text_from_event_no_text_content():
+    """MessageEvent with a message that has no TextContent items."""
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[]),
+    )
+    assert _extract_text_from_event(event) is None
+
+
+def test_generate_title_from_text_short():
+    assert _generate_title_from_text('Fix the login bug') == 'Fix the login bug'
+
+
+def test_generate_title_from_text_long():
+    long_msg = 'A' * 100
+    title = _generate_title_from_text(long_msg)
+    assert len(title) == 50
+    assert title.endswith('...')
+
+
+def test_generate_title_from_text_multiline():
+    msg = 'Fix the authentication bug in login.py\nAlso check the session handling'
+    assert _generate_title_from_text(msg) == 'Fix the authentication bug in login.py'
+
+
+def test_generate_title_from_text_exact_max_length():
+    msg = 'A' * 50
+    assert _generate_title_from_text(msg) == msg
+
+
+# ---------------------------------------------------------------------------
+# Integration tests for the callback processor
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -135,7 +201,9 @@ async def test_set_title_callback_processor_fetches_title_from_conversation():
 
 
 @pytest.mark.asyncio
-async def test_set_title_callback_processor_no_title_yet_returns_none():
+async def test_set_title_callback_processor_fallback_to_message_text():
+    """When the agent server never returns a title, the processor should
+    fall back to generating one from the MessageEvent content."""
     conversation_id = uuid4()
     session_api_key = 'test-session-key'
     conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
@@ -174,7 +242,91 @@ async def test_set_title_callback_processor_no_title_yet_returns_none():
     )
     event = MessageEvent(
         source='user',
-        llm_message=Message(role='user', content=[TextContent(text='hi')]),
+        llm_message=Message(
+            role='user',
+            content=[TextContent(text='Fix the authentication bug in login.py')],
+        ),
+    )
+
+    processor = SetTitleCallbackProcessor()
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            get_app_conversation_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            get_app_conversation_info_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            get_event_callback_service,
+        ),
+        patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor.asyncio.sleep',
+            new=AsyncMock(),
+        ),
+    ):
+        result = await processor(conversation_id, callback, event)
+
+    assert result is not None
+
+    app_conversation_info_service.save_app_conversation_info.assert_called_once()
+    saved_info = app_conversation_info_service.save_app_conversation_info.call_args[0][
+        0
+    ]
+    assert saved_info.title == 'Fix the authentication bug in login.py'
+
+    assert callback.status == EventCallbackStatus.DISABLED
+    event_callback_service.save_event_callback.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_set_title_callback_processor_no_title_and_no_text_returns_none():
+    """When polling fails and the event has no text content, the processor
+    should return None and keep the callback active."""
+    conversation_id = uuid4()
+    session_api_key = 'test-session-key'
+    conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
+
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+        session_api_key=session_api_key,
+    )
+
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+
+    httpx_client = _FakeHttpxClient(titles=[None])
+
+    def get_app_conversation_service(_state):
+        return _ctx(app_conversation_service)
+
+    def get_app_conversation_info_service(_state):
+        return _ctx(app_conversation_info_service)
+
+    def get_event_callback_service(_state):
+        return _ctx(event_callback_service)
+
+    def get_httpx_client(_state):
+        return _ctx(httpx_client)
+
+    callback = EventCallback(
+        conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+    )
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[]),
     )
 
     processor = SetTitleCallbackProcessor()
@@ -209,7 +361,9 @@ async def test_set_title_callback_processor_no_title_yet_returns_none():
 
 
 @pytest.mark.asyncio
-async def test_set_title_callback_processor_request_errors_return_none():
+async def test_set_title_callback_processor_request_errors_fallback_to_message():
+    """When all HTTP requests fail, the processor should fall back to
+    generating a title from the message content."""
     conversation_id = uuid4()
     session_api_key = 'test-session-key'
     conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
@@ -255,7 +409,99 @@ async def test_set_title_callback_processor_request_errors_return_none():
     )
     event = MessageEvent(
         source='user',
-        llm_message=Message(role='user', content=[TextContent(text='hi')]),
+        llm_message=Message(
+            role='user',
+            content=[TextContent(text='Refactor the database layer')],
+        ),
+    )
+
+    processor = SetTitleCallbackProcessor()
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            get_app_conversation_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            get_app_conversation_info_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            get_event_callback_service,
+        ),
+        patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor.asyncio.sleep',
+            new=AsyncMock(),
+        ),
+    ):
+        result = await processor(conversation_id, callback, event)
+
+    assert result is not None
+    assert len(httpx_client.calls) == 4
+
+    app_conversation_info_service.save_app_conversation_info.assert_called_once()
+    saved_info = app_conversation_info_service.save_app_conversation_info.call_args[0][
+        0
+    ]
+    assert saved_info.title == 'Refactor the database layer'
+
+    assert callback.status == EventCallbackStatus.DISABLED
+    event_callback_service.save_event_callback.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_set_title_callback_processor_request_errors_no_text_returns_none():
+    """When all HTTP requests fail and the event has no text, the processor
+    should return None."""
+    conversation_id = uuid4()
+    session_api_key = 'test-session-key'
+    conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
+
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+        session_api_key=session_api_key,
+    )
+
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+
+    httpx_client = _FailingHttpxClient(
+        httpx.RequestError(
+            'boom',
+            request=httpx.Request(
+                'GET', replace_localhost_hostname_for_docker(conversation_url)
+            ),
+        )
+    )
+
+    def get_app_conversation_service(_state):
+        return _ctx(app_conversation_service)
+
+    def get_app_conversation_info_service(_state):
+        return _ctx(app_conversation_info_service)
+
+    def get_event_callback_service(_state):
+        return _ctx(event_callback_service)
+
+    def get_httpx_client(_state):
+        return _ctx(httpx_client)
+
+    callback = EventCallback(
+        conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+    )
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[]),
     )
 
     processor = SetTitleCallbackProcessor()
@@ -292,3 +538,83 @@ async def test_set_title_callback_processor_request_errors_return_none():
     app_conversation_info_service.save_app_conversation_info.assert_not_called()
     event_callback_service.save_event_callback.assert_not_called()
     assert callback.status == EventCallbackStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_set_title_callback_processor_polled_title_preferred_over_fallback():
+    """The agent-server polled title should take precedence even when the
+    event also has text content."""
+    conversation_id = uuid4()
+    session_api_key = 'test-session-key'
+    conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
+
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+        session_api_key=session_api_key,
+    )
+
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+
+    httpx_client = _FakeHttpxClient(titles=['LLM Generated Title'])
+
+    def get_app_conversation_service(_state):
+        return _ctx(app_conversation_service)
+
+    def get_app_conversation_info_service(_state):
+        return _ctx(app_conversation_info_service)
+
+    def get_event_callback_service(_state):
+        return _ctx(event_callback_service)
+
+    def get_httpx_client(_state):
+        return _ctx(httpx_client)
+
+    callback = EventCallback(
+        conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+    )
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(
+            role='user',
+            content=[TextContent(text='This is the raw message text')],
+        ),
+    )
+
+    processor = SetTitleCallbackProcessor()
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            get_app_conversation_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            get_app_conversation_info_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            get_event_callback_service,
+        ),
+        patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor.asyncio.sleep',
+            new=AsyncMock(),
+        ),
+    ):
+        result = await processor(conversation_id, callback, event)
+
+    assert result is not None
+
+    saved_info = app_conversation_info_service.save_app_conversation_info.call_args[0][
+        0
+    ]
+    assert saved_info.title == 'LLM Generated Title'
