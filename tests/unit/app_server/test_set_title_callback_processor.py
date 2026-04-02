@@ -81,13 +81,19 @@ def test_extract_text_from_event_with_empty_content():
     assert _extract_text_from_event(event) is None
 
 
-def test_extract_text_from_event_no_text_content():
-    """MessageEvent with a message that has no TextContent items."""
+def test_extract_text_from_event_multiple_items_returns_first():
+    """When multiple TextContent items exist, return the first non-empty one."""
     event = MessageEvent(
         source='user',
-        llm_message=Message(role='user', content=[]),
+        llm_message=Message(
+            role='user',
+            content=[
+                TextContent(text='   '),
+                TextContent(text='Second message'),
+            ],
+        ),
     )
-    assert _extract_text_from_event(event) is None
+    assert _extract_text_from_event(event) == 'Second message'
 
 
 def test_generate_title_from_text_short():
