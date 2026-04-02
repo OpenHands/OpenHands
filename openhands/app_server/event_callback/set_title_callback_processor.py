@@ -157,8 +157,7 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
                 if message_text:
                     title = _generate_title_from_text(message_text)
                     _logger.info(
-                        'Generated fallback title from message for '
-                        'conversation %s: %s',
+                        'Generated fallback title from message for conversation %s: %s',
                         conversation_id,
                         title,
                     )
