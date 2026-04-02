@@ -233,6 +233,8 @@ yarn-debug.log*
 yarn-error.log*
 
 logs
+.windows-cache/
+.windows-tools/
 
 ralph/
 

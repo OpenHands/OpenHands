@@ -12,6 +12,7 @@ Select your operating system to see the specific setup instructions:
 
 - [macOS](#macos-setup)
 - [Linux](#linux-setup)
+- [Windows Native Quick Start](#windows-native-quick-start)
 - [Windows WSL](#windows-wsl-setup)
 - [Dev Container](#dev-container)
 - [Developing in Docker](#developing-in-docker)
@@ -195,6 +196,61 @@ Access the frontend at `http://localhost:3001` from your Windows browser.
 
 ---
 
+## Windows Native Quick Start
+
+Native Windows is useful for quick frontend reviews and reproducing UI issues without setting up WSL first.
+
+### What this mode does
+
+- Bootstraps **Python 3.12** if it is missing
+- Installs **Poetry** into your Python 3.12 user environment
+- Downloads a **portable Node.js** runtime into `.windows-tools/`
+- Installs frontend dependencies and starts the **mock UI** at `http://127.0.0.1:12000`
+
+### What this mode does not do
+
+- It does **not** provide the full OpenHands backend/runtime on native Windows
+- Browser/runtime workflows still target **WSL2 or Linux**
+
+### One-click start
+
+From the repository root, double-click:
+
+```bat
+Start-Windows.bat
+```
+
+Or run it from a terminal:
+
+```powershell
+.\Start-Windows.bat
+```
+
+This command keeps the console open, shows the frontend logs, and opens the mock UI in your browser when it is ready.
+
+### Useful flags
+
+```powershell
+.\Start-Windows.bat -SetupOnly
+.\Start-Windows.bat -InstallBackendDeps
+.\Start-Windows.bat -NoBrowser
+.\Start-Windows.bat -Port 13000
+```
+
+- `-SetupOnly` installs the Windows prerequisites without starting the UI
+- `-InstallBackendDeps` also runs `poetry install --with dev,test,runtime` so the Python environment is ready for follow-up work
+- `-NoBrowser` skips automatically opening the browser
+- `-Port` changes the mock UI port
+
+### Stop the mock UI
+
+```bat
+Stop-Windows.bat
+```
+
+The script only stops Windows mock-UI processes launched from this repository.
+
+---
 ## Dev Container
 
 There is a [dev container](https://containers.dev/) available which provides a
