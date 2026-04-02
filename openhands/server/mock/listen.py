@@ -62,7 +62,7 @@ def read_llm_models() -> dict:
     }
 
 
-@app.get('/api/options/agents')
+@app.get('/api/options/agents', deprecated=True)
 def read_llm_agents() -> list[str]:
     return [
         'CodeActAgent',
@@ -80,7 +80,7 @@ def get_config() -> dict[str, str]:
     return {'APP_MODE': 'saas'}
 
 
-@app.get('/api/options/security-analyzers')
+@app.get('/api/options/security-analyzers', deprecated=True)
 def get_analyzers() -> list[str]:
     return []
 
