@@ -24,7 +24,7 @@ app = APIRouter(
 )
 
 
-@app.get('/trajectory')
+@app.get('/trajectory', deprecated=True)
 async def get_trajectory(
     metadata: ConversationMetadata = Depends(get_conversation_metadata),
 ) -> JSONResponse:

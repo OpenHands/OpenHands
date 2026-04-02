@@ -83,7 +83,7 @@ def _get_v0_conversation_config(
     }
 
 
-@app.get('/config')
+@app.get('/config', deprecated=True)
 async def get_remote_runtime_config(
     conversation_id: str,
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
