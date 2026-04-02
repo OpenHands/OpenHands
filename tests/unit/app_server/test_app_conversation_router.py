@@ -4,7 +4,7 @@ This module tests the batch_get_app_conversations endpoint,
 focusing on UUID string parsing, validation, and error handling.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 from uuid import uuid4
 
 import pytest
@@ -17,9 +17,16 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_router import (
     batch_get_app_conversations,
     count_app_conversations,
+    read_conversation_file,
     search_app_conversations,
 )
-from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.app_server.sandbox.sandbox_models import (
+    AGENT_SERVER,
+    ExposedUrl,
+    SandboxInfo,
+    SandboxStatus,
+)
+from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 
 
 def _make_mock_app_conversation(
@@ -374,3 +381,134 @@ class TestCountAppConversations:
         assert call_kwargs.get('sandbox_id__eq') == sandbox_id
         assert call_kwargs.get('title__contains') == 'test'
         assert result == 3
+
+
+@pytest.mark.asyncio
+class TestReadConversationFile:
+    """Test suite for read_conversation_file endpoint."""
+
+    async def test_uses_default_sandbox_spec_when_original_is_missing(self):
+        """Test file reads keep working when an old sandbox spec record is missing."""
+        conversation_id = uuid4()
+        sandbox_id = str(uuid4())
+        sandbox_spec_id = str(uuid4())
+
+        mock_service = _make_mock_service(
+            get_conversation_return=_make_mock_app_conversation(
+                conversation_id=conversation_id,
+                sandbox_id=sandbox_id,
+            )
+        )
+
+        mock_sandbox_service = MagicMock()
+        mock_sandbox_service.get_sandbox = AsyncMock(
+            return_value=SandboxInfo(
+                id=sandbox_id,
+                created_by_user_id='test-user',
+                status=SandboxStatus.RUNNING,
+                sandbox_spec_id=sandbox_spec_id,
+                session_api_key='test-api-key',
+                exposed_urls=[
+                    ExposedUrl(
+                        name=AGENT_SERVER, url='http://localhost:8000', port=8000
+                    )
+                ],
+            )
+        )
+
+        default_sandbox_spec = SandboxSpecInfo(
+            id=str(uuid4()), command=None, working_dir='/workspace'
+        )
+        mock_sandbox_spec_service = MagicMock()
+        mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(return_value=None)
+        mock_sandbox_spec_service.get_default_sandbox_spec = AsyncMock(
+            return_value=default_sandbox_spec
+        )
+
+        remote_workspace = MagicMock()
+        remote_workspace.file_download = AsyncMock(
+            return_value=MagicMock(success=True)
+        )
+
+        with (
+            patch(
+                'openhands.app_server.app_conversation.app_conversation_router.AsyncRemoteWorkspace',
+                return_value=remote_workspace,
+            ) as remote_workspace_cls,
+            patch(
+                'openhands.app_server.app_conversation.app_conversation_router.tempfile.NamedTemporaryFile'
+            ) as named_tempfile,
+            patch(
+                'openhands.app_server.app_conversation.app_conversation_router.open',
+                mock_open(read_data='plan body'),
+                create=True,
+            ),
+            patch(
+                'openhands.app_server.app_conversation.app_conversation_router.os.unlink'
+            ),
+        ):
+            named_tempfile.return_value.__enter__.return_value.name = '/tmp/test-plan'
+
+            result = await read_conversation_file(
+                conversation_id=conversation_id,
+                file_path='/workspace/project/PLAN.md',
+                app_conversation_service=mock_service,
+                sandbox_service=mock_sandbox_service,
+                sandbox_spec_service=mock_sandbox_spec_service,
+            )
+
+        assert result == 'plan body'
+        mock_sandbox_spec_service.get_default_sandbox_spec.assert_called_once()
+        remote_workspace_cls.assert_called_once_with(
+            host='http://host.docker.internal:8000',
+            api_key='test-api-key',
+            working_dir='/workspace',
+        )
+        remote_workspace.file_download.assert_called_once_with(
+            source_path='/workspace/project/PLAN.md',
+            destination_path='/tmp/test-plan',
+        )
+
+    async def test_returns_empty_string_when_default_sandbox_spec_is_unavailable(self):
+        """Test file reads fail closed when both original and default specs are missing."""
+        conversation_id = uuid4()
+        sandbox_id = str(uuid4())
+
+        mock_service = _make_mock_service(
+            get_conversation_return=_make_mock_app_conversation(
+                conversation_id=conversation_id,
+                sandbox_id=sandbox_id,
+            )
+        )
+
+        mock_sandbox_service = MagicMock()
+        mock_sandbox_service.get_sandbox = AsyncMock(
+            return_value=SandboxInfo(
+                id=sandbox_id,
+                created_by_user_id='test-user',
+                status=SandboxStatus.RUNNING,
+                sandbox_spec_id=str(uuid4()),
+                session_api_key='test-api-key',
+                exposed_urls=[
+                    ExposedUrl(
+                        name=AGENT_SERVER, url='http://localhost:8000', port=8000
+                    )
+                ],
+            )
+        )
+
+        mock_sandbox_spec_service = MagicMock()
+        mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(return_value=None)
+        mock_sandbox_spec_service.get_default_sandbox_spec = AsyncMock(
+            side_effect=RuntimeError('No sandbox specs available!')
+        )
+
+        result = await read_conversation_file(
+            conversation_id=conversation_id,
+            file_path='/workspace/project/PLAN.md',
+            app_conversation_service=mock_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
+
+        assert result == ''

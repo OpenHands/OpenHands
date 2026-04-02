@@ -516,7 +516,11 @@ async def read_conversation_file(
     # Get the sandbox spec to find the working directory
     sandbox_spec = await sandbox_spec_service.get_sandbox_spec(sandbox.sandbox_spec_id)
     if not sandbox_spec:
-        return ''
+        logger.warning('Sandbox spec not found while reading file - using default.')
+        try:
+            sandbox_spec = await sandbox_spec_service.get_default_sandbox_spec()
+        except Exception:
+            return ''
 
     # Get the agent server URL
     if not sandbox.exposed_urls:
