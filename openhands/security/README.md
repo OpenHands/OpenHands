@@ -45,11 +45,11 @@ provides).
 
 ## How to implement your own Security Analyzer
 
-1. Create a submodule in [security](/openhands/security/) with your analyzer's desired name
-    * Have your main class inherit from [SecurityAnalyzer](/openhands/security/analyzer.py)
+1. Create a submodule in [security](.) with your analyzer's desired name
+    * Have your main class inherit from [SecurityAnalyzer](./analyzer.py)
     * Optional: define API endpoints for `/api/security/{path:path}` to manage settings,
-2. Add your analyzer class to the [options](/openhands/security/options.py) to have it be visible from the frontend combobox
-3. Optional: implement your modal frontend (for when you click on the lock) in [security](/frontend/src/components/modals/security/) and add your component to [Security.tsx](/frontend/src/components/modals/security/Security.tsx)
+2. Add your analyzer class to the [options](./options.py) to have it be visible from the frontend combobox
+3. Optional: wire any related frontend changes into the settings / confirmation-mode UI, such as the [security lock control](../../frontend/src/components/features/controls/security-lock.tsx)
 
 ## Implemented Security Analyzers
 
