@@ -26,6 +26,7 @@
 </div>
 
 <hr>
+
 🙌 Welcome to OpenHands, a [community](COMMUNITY.md) focused on AI-driven development. We’d love for you to [join us on Slack](https://dub.sh/openhands).
 
 There are a few ways to work with OpenHands:
