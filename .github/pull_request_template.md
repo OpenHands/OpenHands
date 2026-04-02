@@ -3,11 +3,14 @@
 ## Summary
 
 <!-- 1-3 bullets describing what changed. -->
-- 
+-
+
+## Issue Number
+<!-- Required if there is a relevant issue to this PR. -->
 
 ## Why
 
-<!-- Problem, motivation, or linked issue/context. -->
+<!-- Describe problem, motivation, etc.-->
 
 ## How to Test
 
