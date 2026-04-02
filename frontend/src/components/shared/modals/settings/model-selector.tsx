@@ -7,11 +7,6 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { mapProvider } from "#/utils/map-provider";
-import {
-  VERIFIED_MODELS,
-  VERIFIED_PROVIDERS,
-  VERIFIED_OPENHANDS_MODELS,
-} from "#/utils/verified-models";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { cn } from "#/utils/utils";
 import { HelpLink } from "#/ui/help-link";
@@ -20,6 +15,10 @@ import { PRODUCT_URL } from "#/utils/constants";
 interface ModelSelectorProps {
   isDisabled?: boolean;
   models: Record<string, { separator: string; models: string[] }>;
+  /** Model names (no provider prefix) the backend considers verified. */
+  verifiedModels: string[];
+  /** Provider names the backend considers verified. */
+  verifiedProviders: string[];
   currentModel?: string;
   onChange?: (provider: string | null, model: string | null) => void;
   onDefaultValuesChanged?: (
@@ -33,6 +32,8 @@ interface ModelSelectorProps {
 export function ModelSelector({
   isDisabled,
   models,
+  verifiedModels,
+  verifiedProviders,
   currentModel,
   onChange,
   onDefaultValuesChanged,
@@ -44,14 +45,6 @@ export function ModelSelector({
     null,
   );
   const [selectedModel, setSelectedModel] = React.useState<string | null>(null);
-
-  // Get the appropriate verified models array based on the selected provider
-  const getVerifiedModels = () => {
-    if (selectedProvider === "openhands") {
-      return VERIFIED_OPENHANDS_MODELS;
-    }
-    return VERIFIED_MODELS;
-  };
 
   React.useEffect(() => {
     if (currentModel) {
@@ -130,23 +123,23 @@ export function ModelSelector({
           }}
         >
           <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
-            {VERIFIED_PROVIDERS.filter((provider) => models[provider]).map(
-              (provider) => (
+            {verifiedProviders
+              .filter((provider) => models[provider])
+              .map((provider) => (
                 <AutocompleteItem
                   data-testid={`provider-item-${provider}`}
                   key={provider}
                 >
                   {mapProvider(provider)}
                 </AutocompleteItem>
-              ),
-            )}
+              ))}
           </AutocompleteSection>
           {Object.keys(models).some(
-            (provider) => !VERIFIED_PROVIDERS.includes(provider),
+            (provider) => !verifiedProviders.includes(provider),
           ) ? (
             <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$OTHERS)}>
               {Object.keys(models)
-                .filter((provider) => !VERIFIED_PROVIDERS.includes(provider))
+                .filter((provider) => !verifiedProviders.includes(provider))
                 .map((provider) => (
                   <AutocompleteItem key={provider}>
                     {mapProvider(provider)}
@@ -197,7 +190,7 @@ export function ModelSelector({
           }}
         >
           <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
-            {getVerifiedModels()
+            {verifiedModels
               .filter((model) =>
                 models[selectedProvider || ""]?.models?.includes(model),
               )
@@ -206,11 +199,11 @@ export function ModelSelector({
               ))}
           </AutocompleteSection>
           {models[selectedProvider || ""]?.models?.some(
-            (model) => !getVerifiedModels().includes(model),
+            (model) => !verifiedModels.includes(model),
           ) ? (
             <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$OTHERS)}>
               {models[selectedProvider || ""]?.models
-                .filter((model) => !getVerifiedModels().includes(model))
+                .filter((model) => !verifiedModels.includes(model))
                 .map((model) => (
                   <AutocompleteItem
                     data-testid={`model-item-${model}`}

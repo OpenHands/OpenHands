@@ -215,6 +215,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            type=match,pattern=cloud-\d+\.\d+\.\d+
           flavor: |
             latest=auto
             prefix=
