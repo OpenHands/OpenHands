@@ -4,7 +4,11 @@ import { organizationService } from "#/api/organization-service/organization-ser
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { I18nKey } from "#/i18n/declaration";
 import { gitClaimsQueryKey } from "#/hooks/query/use-git-organizations";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
+import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 export const useDisconnectGitOrg = () => {
   const queryClient = useQueryClient();
@@ -25,5 +29,10 @@ export const useDisconnectGitOrg = () => {
         queryKey: gitClaimsQueryKey(organizationId),
       });
     },
+    onError: (error) => {
+      const errorMessage = retrieveAxiosErrorMessage(error);
+      displayErrorToast(errorMessage || t(I18nKey.ORG$DISCONNECT_ERROR));
+    },
+    meta: { disableToast: true },
   });
 };

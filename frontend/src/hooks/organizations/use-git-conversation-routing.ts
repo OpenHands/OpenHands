@@ -8,7 +8,7 @@ import { useDisconnectGitOrg } from "#/hooks/mutation/use-disconnect-git-org";
 import type { GitOrg } from "#/types/org";
 
 function buildOrgId(provider: string, name: string): string {
-  return `${provider}:${name.toLowerCase()}`;
+  return `${provider.toLowerCase()}:${name.toLowerCase()}`;
 }
 
 export function useGitConversationRouting() {

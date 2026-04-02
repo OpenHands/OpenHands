@@ -42,6 +42,12 @@ export function GitConversationRouting() {
           ))}
         </div>
       )}
+
+      {!isLoading && orgs.length === 0 && (
+        <Paragraph className="text-center py-4 text-[#8c8c8c] text-sm">
+          {t(I18nKey.ORG$NO_GIT_ORGANIZATIONS)}
+        </Paragraph>
+      )}
     </div>
   );
 }
