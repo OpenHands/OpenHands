@@ -94,7 +94,9 @@ def detect_automation_trigger(
     if current_trigger is not None:
         return current_trigger
 
-    if merged_tags and (merged_tags.get('automation_trigger') or merged_tags.get('automation_id')):
+    if merged_tags and (
+        merged_tags.get('automation_trigger') or merged_tags.get('automation_id')
+    ):
         return ConversationTrigger.AUTOMATION
 
     return None
@@ -202,8 +204,7 @@ async def on_conversation_update(
             },
         )
 
-
-    _logger.info(f"Effective tags: {merged_tags}")
+    _logger.info(f'Effective tags: {merged_tags}')
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
