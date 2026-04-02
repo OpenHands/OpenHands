@@ -1,5 +1,5 @@
 import { StepOption } from "./step-option";
-import { StepInput } from "./step-input";
+import { FormInput } from "./form-input";
 
 export interface Option {
   id: string;
@@ -43,7 +43,7 @@ export function StepContent({
         />
       ))}
       {inputFields?.map((field) => (
-        <StepInput
+        <FormInput
           key={field.id}
           id={field.id}
           label={field.label}

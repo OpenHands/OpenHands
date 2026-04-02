@@ -9,7 +9,9 @@ import { InteractiveChip } from "#/ui/interactive-chip";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
+import { ENABLE_ORG_CLAIMS_RESOLVER_ROUTING } from "#/utils/feature-flags";
 import { DeleteOrgConfirmationModal } from "#/components/features/org/delete-org-confirmation-modal";
+import { GitConversationRouting } from "#/components/features/org/git-conversation-routing";
 import { ChangeOrgNameModal } from "#/components/features/org/change-org-name-modal";
 import { AddCreditsModal } from "#/components/features/org/add-credits-modal";
 import { useBalance } from "#/hooks/query/use-balance";
@@ -37,6 +39,7 @@ function ManageOrg() {
   const canChangeOrgName = !!me && hasPermission("change_organization_name");
   const canDeleteOrg = !!me && hasPermission("delete_organization");
   const canAddCredits = !!me && hasPermission("add_credits");
+  const canManageOrgClaims = !!me && hasPermission("manage_org_claims");
   const shouldHideBilling = isBillingHidden(
     config,
     hasPermission("view_billing"),
@@ -112,6 +115,10 @@ function ManageOrg() {
         >
           {t(I18nKey.ORG$DELETE_ORGANIZATION)}
         </button>
+      )}
+
+      {canManageOrgClaims && ENABLE_ORG_CLAIMS_RESOLVER_ROUTING() && (
+        <GitConversationRouting />
       )}
     </div>
   );

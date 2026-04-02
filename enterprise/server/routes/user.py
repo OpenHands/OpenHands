@@ -9,6 +9,7 @@ from utils.identity import resolve_display_name
 
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
 )
 from openhands.integrations.service_types import (
     Branch,
@@ -65,6 +66,53 @@ async def saas_get_user_installations(
         access_token=access_token,
         user_id=user_id,
     )
+
+
+@saas_user_router.get('/git-organizations')
+async def saas_get_user_git_organizations(
+    provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
+    access_token: SecretStr | None = Depends(get_access_token),
+    user_id: str | None = Depends(get_user_id),
+):
+    if not provider_tokens:
+        retval = await _check_idp(
+            access_token=access_token,
+            default_value={},
+        )
+        if retval is not None:
+            return retval
+        # _check_idp returned None (tokens refreshed on Keycloak side),
+        # but provider_tokens is still None for this request.
+        return JSONResponse(
+            content='Git provider token required.',
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    client = ProviderHandler(
+        provider_tokens=provider_tokens,
+        external_auth_token=access_token,
+        external_auth_id=user_id,
+    )
+
+    # SaaS users sign in with one provider at a time
+    provider = next(iter(provider_tokens))
+
+    if provider == ProviderType.GITHUB:
+        orgs = await client.get_github_organizations()
+    elif provider == ProviderType.GITLAB:
+        orgs = await client.get_gitlab_groups()
+    elif provider == ProviderType.BITBUCKET:
+        orgs = await client.get_bitbucket_workspaces()
+    else:
+        return JSONResponse(
+            content=f"Provider {provider.value} doesn't support git organizations",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return {
+        'provider': provider.value,
+        'organizations': orgs,
+    }
 
 
 @saas_user_router.get('/repositories', response_model=list[Repository])

@@ -34,7 +34,7 @@ export function ErrorMessageBanner({
       <div className="min-w-0 flex-1">
         <div
           className={cn(
-            "whitespace-pre-wrap wrap-break-words",
+            "whitespace-pre-wrap break-words",
             isCollapsed && "line-clamp-3",
           )}
           data-testid="error-message-banner-content"

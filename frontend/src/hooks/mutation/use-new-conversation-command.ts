@@ -44,6 +44,7 @@ export const useNewConversationCommand = () => {
         undefined, // trigger
         undefined, // parent_conversation_id
         undefined, // agent_type
+        undefined, // plugins
         conversation.sandbox_id ?? undefined, // sandbox_id - reuse the same sandbox
         llmModel ?? undefined, // llm_model - preserve the LLM model
       );

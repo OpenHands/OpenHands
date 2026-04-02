@@ -3,8 +3,22 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import OptionService from "#/api/option-service/option-service.api";
-import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
+import {
+  useSettingsNavItems,
+  SettingsNavRenderedItem,
+} from "#/hooks/use-settings-nav-items";
 import { WebClientFeatureFlags } from "#/api/option-service/option.types";
+
+// Helper to find an item by path in rendered items
+const findItemByPath = (
+  items: SettingsNavRenderedItem[],
+  path: string,
+): SettingsNavRenderedItem | undefined =>
+  items.find((item) => item.type === "item" && item.item.to === path);
+
+// Helper to get only nav items (excluding headers and dividers)
+const getNavItems = (items: SettingsNavRenderedItem[]) =>
+  items.filter((item) => item.type === "item");
 
 // Mock useOrgTypeAndAccess
 const mockOrgTypeAndAccess = vi.hoisted(() => ({
@@ -95,14 +109,13 @@ describe("useSettingsNavItems", () => {
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {
-      expect(result.current).toEqual(
-        SAAS_NAV_ITEMS.filter(
-          (item) =>
-            item.to !== "/settings/billing" &&
-            item.to !== "/settings/org" &&
-            item.to !== "/settings/org-members",
-        ),
-      );
+      // Members should not see billing, org, or org-members routes
+      expect(findItemByPath(result.current, "/settings/billing")).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings/org")).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings/org-members")).toBeUndefined();
+      // But should see other items
+      expect(findItemByPath(result.current, "/settings")).toBeDefined();
+      expect(findItemByPath(result.current, "/settings/user")).toBeDefined();
     });
   });
 
@@ -112,7 +125,13 @@ describe("useSettingsNavItems", () => {
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {
-      expect(result.current).toEqual(OSS_NAV_ITEMS);
+      // OSS mode should return items matching OSS_NAV_ITEMS paths
+      const navItems = getNavItems(result.current);
+      const ossPaths = OSS_NAV_ITEMS.map((item) => item.to);
+      const resultPaths = navItems.map((item) =>
+        item.type === "item" ? item.item.to : null,
+      );
+      expect(resultPaths).toEqual(ossPaths);
     });
   });
 
@@ -123,9 +142,7 @@ describe("useSettingsNavItems", () => {
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {
-      expect(
-        result.current.find((item) => item.to === "/settings"),
-      ).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings")).toBeUndefined();
     });
   });
 
@@ -142,16 +159,16 @@ describe("useSettingsNavItems", () => {
       await waitFor(() => {
         expect(result.current.length).toBeGreaterThan(0);
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
       });
 
       // Org routes should be included for team org admin
       expect(
-        result.current.find((item) => item.to === "/settings/org"),
+        findItemByPath(result.current, "/settings/org"),
       ).toBeDefined();
       expect(
-        result.current.find((item) => item.to === "/settings/org-members"),
+        findItemByPath(result.current, "/settings/org-members"),
       ).toBeDefined();
     });
 
@@ -167,16 +184,16 @@ describe("useSettingsNavItems", () => {
       await waitFor(() => {
         expect(result.current.length).toBeGreaterThan(0);
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
       });
 
       // Org routes should be filtered out for personal orgs
       expect(
-        result.current.find((item) => item.to === "/settings/org"),
+        findItemByPath(result.current, "/settings/org"),
       ).toBeUndefined();
       expect(
-        result.current.find((item) => item.to === "/settings/org-members"),
+        findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
     });
 
@@ -192,16 +209,16 @@ describe("useSettingsNavItems", () => {
       await waitFor(() => {
         expect(result.current.length).toBeGreaterThan(0);
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
       });
 
       // Org routes should be hidden for members
       expect(
-        result.current.find((item) => item.to === "/settings/org"),
+        findItemByPath(result.current, "/settings/org"),
       ).toBeUndefined();
       expect(
-        result.current.find((item) => item.to === "/settings/org-members"),
+        findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
     });
 
@@ -218,16 +235,16 @@ describe("useSettingsNavItems", () => {
       await waitFor(() => {
         expect(result.current.length).toBeGreaterThan(0);
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
       });
 
       // Org routes should be hidden when no org is selected
       expect(
-        result.current.find((item) => item.to === "/settings/org"),
+        findItemByPath(result.current, "/settings/org"),
       ).toBeUndefined();
       expect(
-        result.current.find((item) => item.to === "/settings/org-members"),
+        findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
     });
 
@@ -243,13 +260,13 @@ describe("useSettingsNavItems", () => {
       await waitFor(() => {
         expect(result.current.length).toBeGreaterThan(0);
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
       });
 
       // Billing should be hidden for team orgs
       expect(
-        result.current.find((item) => item.to === "/settings/billing"),
+        findItemByPath(result.current, "/settings/billing"),
       ).toBeUndefined();
     });
 
@@ -266,13 +283,13 @@ describe("useSettingsNavItems", () => {
       await waitFor(() => {
         expect(result.current.length).toBeGreaterThan(0);
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
       });
 
       // Billing should be visible for personal orgs
       expect(
-        result.current.find((item) => item.to === "/settings/billing"),
+        findItemByPath(result.current, "/settings/billing"),
       ).toBeDefined();
     });
   });
@@ -292,14 +309,14 @@ describe("useSettingsNavItems", () => {
 
       await waitFor(() => {
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeUndefined();
         // Other pages should still be present
         expect(
-          result.current.find((item) => item.to === "/settings/integrations"),
+          findItemByPath(result.current, "/settings/integrations"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/billing"),
+          findItemByPath(result.current, "/settings/billing"),
         ).toBeDefined();
       });
     });
@@ -310,14 +327,14 @@ describe("useSettingsNavItems", () => {
 
       await waitFor(() => {
         expect(
-          result.current.find((item) => item.to === "/settings/billing"),
+          findItemByPath(result.current, "/settings/billing"),
         ).toBeUndefined();
         // Other pages should still be present
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/integrations"),
+          findItemByPath(result.current, "/settings/integrations"),
         ).toBeDefined();
       });
     });
@@ -328,14 +345,14 @@ describe("useSettingsNavItems", () => {
 
       await waitFor(() => {
         expect(
-          result.current.find((item) => item.to === "/settings/integrations"),
+          findItemByPath(result.current, "/settings/integrations"),
         ).toBeUndefined();
         // Other pages should still be present
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/billing"),
+          findItemByPath(result.current, "/settings/billing"),
         ).toBeDefined();
       });
     });
@@ -350,26 +367,26 @@ describe("useSettingsNavItems", () => {
 
       await waitFor(() => {
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeUndefined();
         expect(
-          result.current.find((item) => item.to === "/settings/billing"),
+          findItemByPath(result.current, "/settings/billing"),
         ).toBeUndefined();
         expect(
-          result.current.find((item) => item.to === "/settings/integrations"),
+          findItemByPath(result.current, "/settings/integrations"),
         ).toBeUndefined();
         // Non-hidden pages should still be present
         expect(
-          result.current.find((item) => item.to === "/settings"),
+          findItemByPath(result.current, "/settings"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/app"),
+          findItemByPath(result.current, "/settings/app"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/secrets"),
+          findItemByPath(result.current, "/settings/secrets"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/mcp"),
+          findItemByPath(result.current, "/settings/mcp"),
         ).toBeDefined();
       });
     });
@@ -381,19 +398,19 @@ describe("useSettingsNavItems", () => {
       await waitFor(() => {
         // All SAAS pages should be present
         expect(
-          result.current.find((item) => item.to === "/settings/user"),
+          findItemByPath(result.current, "/settings/user"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/billing"),
+          findItemByPath(result.current, "/settings/billing"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/integrations"),
+          findItemByPath(result.current, "/settings/integrations"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings"),
+          findItemByPath(result.current, "/settings"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/app"),
+          findItemByPath(result.current, "/settings/app"),
         ).toBeDefined();
       });
     });
@@ -404,17 +421,17 @@ describe("useSettingsNavItems", () => {
 
       await waitFor(() => {
         expect(
-          result.current.find((item) => item.to === "/settings/integrations"),
+          findItemByPath(result.current, "/settings/integrations"),
         ).toBeUndefined();
         // Other OSS pages should still be present
         expect(
-          result.current.find((item) => item.to === "/settings"),
+          findItemByPath(result.current, "/settings"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/mcp"),
+          findItemByPath(result.current, "/settings/mcp"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/app"),
+          findItemByPath(result.current, "/settings/app"),
         ).toBeDefined();
       });
     });
@@ -428,20 +445,20 @@ describe("useSettingsNavItems", () => {
 
       await waitFor(() => {
         expect(
-          result.current.find((item) => item.to === "/settings"),
+          findItemByPath(result.current, "/settings"),
         ).toBeUndefined();
         expect(
-          result.current.find((item) => item.to === "/settings/integrations"),
+          findItemByPath(result.current, "/settings/integrations"),
         ).toBeUndefined();
         // Other OSS pages should still be present
         expect(
-          result.current.find((item) => item.to === "/settings/mcp"),
+          findItemByPath(result.current, "/settings/mcp"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/app"),
+          findItemByPath(result.current, "/settings/app"),
         ).toBeDefined();
         expect(
-          result.current.find((item) => item.to === "/settings/secrets"),
+          findItemByPath(result.current, "/settings/secrets"),
         ).toBeDefined();
       });
     });

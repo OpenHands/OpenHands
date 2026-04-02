@@ -296,7 +296,7 @@ classpath = "my_package.my_module.MyCustomAgent"
 #user_id = 1000
 
 # Container image to use for the sandbox
-#base_container_image = "nikolaik/python-nodejs:python3.12-nodejs22"
+#base_container_image = "nikolaik/python-nodejs:python3.12-nodejs22-slim"
 
 # Use host network
 #use_host_network = false

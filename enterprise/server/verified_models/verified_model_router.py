@@ -17,7 +17,7 @@ from server.verified_models.verified_model_service import (
 
 from openhands.app_server.config import get_db_session
 from openhands.server.routes import public
-from openhands.utils.llm import get_supported_llm_models
+from openhands.utils.llm import ModelsResponse, get_supported_llm_models
 
 api_router = APIRouter(prefix='/api/admin/verified-models', tags=['Verified Models'])
 
@@ -117,7 +117,7 @@ async def delete_verified_model(
         )
 
 
-async def get_saas_llm_models_dependency(request: Request) -> list[str]:
+async def get_saas_llm_models_dependency(request: Request) -> ModelsResponse:
     """SaaS implementation for the LLM models endpoint."""
     async with get_db_session(request.state, request) as db_session:
         # Prevent circular import

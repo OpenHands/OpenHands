@@ -151,6 +151,7 @@ describe("useNewConversationCommand", () => {
         undefined,
         undefined,
         undefined,
+        undefined, // plugins
         "sandbox-456",
         "gpt-4o",
       );
@@ -268,6 +269,7 @@ describe("useNewConversationCommand", () => {
         undefined, // trigger
         undefined, // parent_conversation_id is NOT set
         undefined, // agent_type
+        undefined, // plugins
         "sandbox-456", // sandbox_id IS set to reuse the sandbox
         "gpt-4o", // llm_model IS inherited from the original conversation
       );

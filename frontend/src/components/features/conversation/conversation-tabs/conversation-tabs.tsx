@@ -145,7 +145,7 @@ export function ConversationTabs() {
     <div
       className={cn(
         "relative w-full",
-        "flex flex-row justify-start lg:justify-end items-center gap-4.5",
+        "flex flex-row justify-start lg:justify-end items-center gap-4.5 flex-wrap",
       )}
     >
       {visibleTabs.map(

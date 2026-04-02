@@ -3,6 +3,14 @@ import { V1SandboxStatus } from "../sandbox-service/sandbox-service.types";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 
+// Plugin specification for starting conversations with plugins
+export interface PluginSpec {
+  source: string; // Plugin source: 'github:owner/repo', git URL, or local path
+  ref?: string | null; // Optional branch, tag, or commit
+  repo_path?: string | null; // Subdirectory path within the git repository
+  parameters?: Record<string, unknown> | null; // User-provided configuration values
+}
+
 // V1 Metrics Types
 export interface V1TokenUsage {
   prompt_tokens: number;
@@ -54,6 +62,7 @@ export interface V1AppConversationStartRequest {
   pr_number?: number[];
   parent_conversation_id?: string | null;
   agent_type?: "default" | "plan";
+  plugins?: PluginSpec[] | null; // Plugins to load when starting the conversation
 }
 
 export type V1AppConversationStartTaskStatus =
@@ -144,7 +153,7 @@ export interface HookDefinition {
 
 export interface HookMatcher {
   matcher: string; // Pattern: '*', exact match, or regex
-  hooks: HookDefinition[];
+  hooks?: HookDefinition[]; // May be undefined while hooks are still executing on the server
 }
 
 export interface HookEvent {
