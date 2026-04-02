@@ -1,35 +1,8 @@
-# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
-# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
-# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
-#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
-#   - V1 application server (in this repo): openhands/app_server/
-# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
-# Tag: Legacy-V0
-# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
+# Legacy V0 health endpoints - now delegate to app_server
 from fastapi import FastAPI
-
-from openhands.runtime.utils.system_stats import get_system_info
 
 
 def add_health_endpoints(app: FastAPI):
-    @app.get('/alive')
-    async def alive():
-        """Endpoint for liveness probes. If this responds then the server is
-        considered alive."""
-        return {'status': 'ok'}
-
-    @app.get('/health')
-    async def health() -> str:
-        return 'OK'
-
-    @app.get('/server_info')
-    async def get_server_info():
-        return get_system_info()
-
-    @app.get('/ready')
-    async def ready() -> str:
-        """Endpoint for readiness probes. For now this is functionally the same as
-        the liveness probe, but should be need to establish further invariants in
-        the future, having a separate endpoint will mean we don't need to change
-        client code."""
-        return 'OK'
+    # Import and include the health routes from app_server
+    from openhands.app_server.routes.health_routes import router as health_router
+    app.include_router(health_router)

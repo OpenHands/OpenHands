@@ -30,6 +30,7 @@ from openhands.server.routes.conversation import app as conversation_api_router
 from openhands.server.routes.feedback import app as feedback_api_router
 from openhands.server.routes.files import app as files_api_router
 from openhands.server.routes.git import app as git_api_router
+from openhands.app_server.routes.health_routes import router as health_router
 from openhands.server.routes.health import add_health_endpoints
 from openhands.server.routes.manage_conversations import (
     app as manage_conversation_api_router,
