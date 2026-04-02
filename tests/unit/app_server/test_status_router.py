@@ -109,7 +109,9 @@ class TestAllStatusEndpoints:
 
         for endpoint in endpoints:
             response = test_client.get(endpoint)
-            assert response.status_code == 200, f"Endpoint {endpoint} returned {response.status_code}"
+            assert response.status_code == 200, (
+                f'Endpoint {endpoint} returned {response.status_code}'
+            )
 
     def test_alive_and_ready_are_functionally_similar(self, test_client):
         """Test that /alive and /ready return similar responses.
