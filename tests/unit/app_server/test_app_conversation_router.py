@@ -426,9 +426,7 @@ class TestReadConversationFile:
         )
 
         remote_workspace = MagicMock()
-        remote_workspace.file_download = AsyncMock(
-            return_value=MagicMock(success=True)
-        )
+        remote_workspace.file_download = AsyncMock(return_value=MagicMock(success=True))
 
         with (
             patch(
