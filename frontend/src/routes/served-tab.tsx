@@ -2,6 +2,7 @@ import React from "react";
 import { FaArrowRotateRight } from "react-icons/fa6";
 import { FaExternalLinkAlt, FaHome } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
+import { useConversationId } from "#/hooks/use-conversation-id";
 import { useUnifiedActiveHost } from "#/hooks/query/use-unified-active-host";
 import { PathForm } from "#/components/features/served-host/path-form";
 import { I18nKey } from "#/i18n/declaration";
@@ -9,14 +10,33 @@ import ServerProcessIcon from "#/icons/server-process.svg?react";
 
 function ServedApp() {
   const { t } = useTranslation();
+  const { conversationId } = useConversationId();
   const { activeHost } = useUnifiedActiveHost();
   const [refreshKey, setRefreshKey] = React.useState(0);
+
+  const storageKey = `served-app-path:${conversationId}`;
+  const savedPath = sessionStorage.getItem(storageKey);
+
   const [currentActiveHost, setCurrentActiveHost] = React.useState<
     string | null
   >(null);
-  const [path, setPath] = React.useState<string>("hello");
+  const [path, setPath] = React.useState<string>(savedPath ?? "hello");
 
   const formRef = React.useRef<HTMLFormElement>(null);
+
+  React.useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "route-change" && event.data.path) {
+        // Extract only the pathname, ignoring query params
+        // (activeHost already carries the default query params)
+        const pathname = event.data.path.split("?")[0];
+        setPath(pathname);
+        sessionStorage.setItem(storageKey, pathname);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [storageKey]);
 
   const handleOnBlur = () => {
     if (formRef.current) {
@@ -28,6 +48,7 @@ function ServedApp() {
 
         setCurrentActiveHost(url.origin);
         setPath(url.pathname);
+        sessionStorage.setItem(storageKey, url.pathname);
       }
     }
   };
@@ -35,6 +56,7 @@ function ServedApp() {
   const resetUrl = () => {
     setCurrentActiveHost(activeHost);
     setPath("");
+    sessionStorage.removeItem(storageKey);
 
     if (formRef.current) {
       formRef.current.reset();
@@ -42,7 +64,11 @@ function ServedApp() {
   };
 
   React.useEffect(() => {
-    resetUrl();
+    if (savedPath) {
+      setCurrentActiveHost(activeHost);
+    } else {
+      resetUrl();
+    }
   }, [activeHost]);
 
   if (!currentActiveHost) {
@@ -56,9 +82,16 @@ function ServedApp() {
     );
   }
 
-  const fullUrl = path
-    ? `${currentActiveHost.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`
-    : currentActiveHost;
+  const fullUrl = (() => {
+    if (!path) return currentActiveHost;
+    try {
+      const url = new URL(currentActiveHost);
+      url.pathname = path;
+      return url.toString();
+    } catch {
+      return currentActiveHost;
+    }
+  })();
 
   const externalUrl = (() => {
     try {
