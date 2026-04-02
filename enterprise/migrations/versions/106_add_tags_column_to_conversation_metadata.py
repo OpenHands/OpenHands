@@ -4,8 +4,8 @@ Tags store key-value pairs for automation context (trigger type, automation_id),
 skills used, and other metadata. This enables querying conversations by
 automation source and associating SDK-provided context with conversations.
 
-Revision ID: 105
-Revises: 104
+Revision ID: 106
+Revises: 105
 Create Date: 2026-03-31
 """
 
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '105'
-down_revision: Union[str, None] = '104'
+revision: str = '106'
+down_revision: Union[str, None] = '105'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
