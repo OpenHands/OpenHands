@@ -104,6 +104,7 @@ from openhands.tools.preset.planning import (
     get_planning_tools,
 )
 from openhands.utils.git import ensure_valid_git_branch_name
+from openhands.utils.log_utils import redact_mcp_config
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
@@ -1108,7 +1109,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Wrap in the mcpServers structure required by the SDK
         mcp_config = {'mcpServers': mcp_servers} if mcp_servers else {}
-        _logger.info(f'Final MCP configuration: {mcp_config}')
+        _logger.info(f'Final MCP configuration: {redact_mcp_config(mcp_config)}')
 
         return llm, mcp_config
 
