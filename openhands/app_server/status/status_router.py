@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from openhands.runtime.utils.system_stats import get_system_info
+from openhands.app_server.status.system_stats import get_system_info
 
 router = APIRouter(tags=['Status'])
 
