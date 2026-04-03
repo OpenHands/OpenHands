@@ -19,7 +19,7 @@ def test_client():
     """
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app)
     yield client
 
 
