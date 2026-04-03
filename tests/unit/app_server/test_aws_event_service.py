@@ -289,6 +289,16 @@ class TestGetDefaultAwsEndpointUrl:
         result = aws_event_service._get_default_aws_endpoint_url()
         assert result == 'http://minio.example.com:9000'
 
+    def test_endpoint_with_whitespace_false_uses_http(self, monkeypatch):
+        """Test whitespace-padded false still selects insecure http."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', ' false ')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'http://minio.example.com:9000'
+
     def test_secure_default_is_true(self, monkeypatch):
         """Test that secure defaults to true when not set."""
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
