@@ -204,17 +204,17 @@ async def test_llm_base_url_clear_round_trips_as_null(test_client):
         'llm_model': 'gpt-4',
         'llm_base_url': 'https://old-proxy.example.com',
     }
-    response = test_client.post('/api/settings', json=initial_settings)
+    response = test_client.post('/api/v1/settings', json=initial_settings)
     assert response.status_code == 200
 
     update_settings = {
         'llm_model': 'gpt-4',
         'llm_base_url': '',
     }
-    response = test_client.post('/api/settings', json=update_settings)
+    response = test_client.post('/api/v1/settings', json=update_settings)
     assert response.status_code == 200
 
-    response = test_client.get('/api/settings')
+    response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     assert response.json()['llm_model'] == 'gpt-4'
     assert response.json()['llm_base_url'] is None
