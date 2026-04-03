@@ -85,7 +85,7 @@ def get_default_web_url() -> str | None:
 
     If present, we assume we are running under https.
     """
-    web_host = os.getenv('WEB_HOST')
+    web_host = os.getenv('WEB_HOST', '').strip()
     if not web_host:
         return None
     return f'https://{web_host}'
@@ -106,7 +106,8 @@ def get_default_permitted_cors_origins() -> list[str]:
 
 def get_openhands_provider_base_url() -> str | None:
     """Return the base URL for the OpenHands provider, if configured."""
-    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or None
+    base_url = os.getenv('OPENHANDS_PROVIDER_BASE_URL', '').strip()
+    return base_url or None
 
 
 def _get_default_lifespan():
