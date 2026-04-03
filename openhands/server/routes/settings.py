@@ -17,10 +17,10 @@ from openhands.app_server.settings.settings_router import (
 from openhands.app_server.settings.settings_router import (
     store_settings as v1_store_settings,
 )
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
 )
-from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.server.settings import (
     GETSettingsModel,
 )
