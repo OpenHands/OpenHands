@@ -437,10 +437,10 @@ class TestGetProvidersConfigured:
 
     def test_excludes_enterprise_sso_when_flag_is_false(self):
         """When ENABLE_ENTERPRISE_SSO is 'false', do not include Enterprise SSO."""
+        from openhands.app_server.integrations.service_types import ProviderType
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_providers_configured,
         )
-        from openhands.integrations.service_types import ProviderType
 
         with patch.dict(os.environ, {'ENABLE_ENTERPRISE_SSO': 'false'}):
             result = _get_providers_configured()
@@ -483,7 +483,7 @@ class TestGetProvidersConfigured:
                 'BITBUCKET_APP_CLIENT_ID': '',
                 'BITBUCKET_DATA_CENTER_CLIENT_ID': 'bbdc-id',
                 'AZURE_DEVOPS_CLIENT_ID': 'azure-id',
-                'ENABLE_ENTERPRISE_SSO': 'enabled',
+                'ENABLE_ENTERPRISE_SSO': 'true',
             },
         ):
             result = _get_providers_configured()
@@ -494,6 +494,17 @@ class TestGetProvidersConfigured:
             assert ProviderType.AZURE_DEVOPS in result
             assert ProviderType.ENTERPRISE_SSO in result
             assert len(result) == 5
+
+    def test_excludes_enterprise_sso_when_not_true(self):
+        """Enterprise SSO stays hidden unless the env var is exactly 'true'."""
+        from openhands.app_server.integrations.service_types import ProviderType
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_providers_configured,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_ENTERPRISE_SSO': 'enabled'}):
+            result = _get_providers_configured()
+            assert ProviderType.ENTERPRISE_SSO not in result
 
 
 class TestGetGithubAppSlug:
