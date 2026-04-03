@@ -6486,7 +6486,7 @@ files = []
 develop = true
 
 [package.dependencies]
-aiohttp = ">=3.13.3"
+aiohttp = ">=3.13.5"
 anthropic = {version = "*", extras = ["vertex"]}
 anyio = "4.9"
 asyncpg = ">=0.30"

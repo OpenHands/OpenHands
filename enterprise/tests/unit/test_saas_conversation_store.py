@@ -216,8 +216,8 @@ class TestGetInstance:
             assert store.org_id is None
 
     @pytest.mark.asyncio
-    async def test_get_instance_passes_resolver_org_id(self):
-        """Verify get_instance forwards resolver_org_id from kwargs to the store."""
+    async def test_get_resolver_instance_passes_resolver_org_id(self):
+        """Verify get_resolver_instance forwards resolver_org_id to the store."""
         # Arrange
         user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
         resolver_org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
@@ -230,12 +230,31 @@ class TestGetInstance:
             AsyncMock(return_value=mock_user),
         ), patch('storage.saas_conversation_store.session_maker'):
             # Act
-            store = await SaasConversationStore.get_instance(
+            store = await SaasConversationStore.get_resolver_instance(
                 mock_config, user_id, resolver_org_id=resolver_org_id
             )
 
             # Assert
             assert store.resolver_org_id == resolver_org_id
+
+    @pytest.mark.asyncio
+    async def test_get_instance_does_not_have_resolver_org_id(self):
+        """Verify get_instance does not set resolver_org_id (it's not a resolver path)."""
+        # Arrange
+        user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
+        mock_user = MagicMock(spec=User)
+        mock_user.current_org_id = UUID(user_id)
+        mock_config = MagicMock(spec=OpenHandsConfig)
+
+        with patch(
+            'storage.saas_conversation_store.UserStore.get_user_by_id',
+            AsyncMock(return_value=mock_user),
+        ), patch('storage.saas_conversation_store.session_maker'):
+            # Act
+            store = await SaasConversationStore.get_instance(mock_config, user_id)
+
+            # Assert
+            assert store.resolver_org_id is None
 
 
 class TestResolverOrgIdRouting:

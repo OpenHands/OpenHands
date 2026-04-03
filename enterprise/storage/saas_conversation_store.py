@@ -248,11 +248,25 @@ class SaasConversationStore(ConversationStore):
         cls,
         config: OpenHandsConfig,
         user_id: str,  # type: ignore[override]
-        **kwargs,
     ) -> ConversationStore:
         # Use async version since callers now use asyncio.run_coroutine_threadsafe()
         # to dispatch to the main event loop where asyncpg connections work properly.
-        resolver_org_id: UUID | None = kwargs.get('resolver_org_id')
+        user = await UserStore.get_user_by_id(user_id)
+        org_id = user.current_org_id if user else None
+        return SaasConversationStore(user_id, org_id, session_maker)
+
+    @classmethod
+    async def get_resolver_instance(
+        cls,
+        config: OpenHandsConfig,
+        user_id: str,
+        resolver_org_id: UUID | None = None,
+    ) -> 'SaasConversationStore':
+        """Get a store for resolver conversations with explicit org routing.
+
+        Unlike get_instance, this accepts a resolver_org_id that overrides
+        the user's default org when saving conversation metadata.
+        """
         user = await UserStore.get_user_by_id(user_id)
         org_id = user.current_org_id if user else None
         return SaasConversationStore(user_id, org_id, session_maker, resolver_org_id)

@@ -47,6 +47,7 @@ from openhands.app_server.services.db_session_injector import set_db_session_kee
 from openhands.app_server.services.httpx_client_injector import (
     set_httpx_client_keep_open,
 )
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.logger import openhands_logger as logger
@@ -77,7 +78,6 @@ from openhands.server.data_models.conversation_info import ConversationInfo
 from openhands.server.data_models.conversation_info_result_set import (
     ConversationInfoResultSet,
 )
-from openhands.server.dependencies import get_dependencies
 from openhands.server.services.conversation_service import (
     create_new_conversation,
     setup_init_conversation_settings,
@@ -1594,4 +1594,5 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
         ],
         public=app_conversation.public,
         sandbox_id=app_conversation.sandbox_id,
+        llm_model=app_conversation.llm_model,
     )

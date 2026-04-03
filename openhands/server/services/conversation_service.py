@@ -45,14 +45,11 @@ async def initialize_conversation(
     selected_branch: str | None,
     conversation_trigger: ConversationTrigger = ConversationTrigger.GUI,
     git_provider: ProviderType | None = None,
-    **kwargs,
 ) -> ConversationMetadata:
     if conversation_id is None:
         conversation_id = uuid.uuid4().hex
 
-    conversation_store = await ConversationStoreImpl.get_instance(
-        config, user_id, **kwargs
-    )
+    conversation_store = await ConversationStoreImpl.get_instance(config, user_id)
 
     if not await conversation_store.exists(conversation_id):
         logger.info(

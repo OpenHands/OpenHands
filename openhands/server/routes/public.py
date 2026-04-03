@@ -11,9 +11,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
-from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import config, server_config
 from openhands.utils.llm import ModelsResponse, get_supported_llm_models
 
