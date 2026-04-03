@@ -96,6 +96,9 @@ def mock_conversation_info() -> ConversationInfo:
     conversation_info.stats = MagicMock()
     conversation_info.stats.get_combined_metrics.return_value = None
 
+    # Mock title (None = no title from agent server yet)
+    conversation_info.title = None
+
     # Mock tags (required by on_conversation_update)
     conversation_info.tags = {}
 
@@ -495,3 +498,115 @@ class TestOnConversationUpdateParentConversationId:
         assert saved_conv.parent_conversation_id == parent_id
         assert saved_conv.title is not None  # Title should be generated
         assert f'Conversation {conversation_id.hex}' in saved_conv.title
+
+
+class TestOnConversationUpdateTitlePriority:
+    """Test that conversation_info.title from the agent server takes priority."""
+
+    @pytest.mark.asyncio
+    async def test_agent_server_title_preferred_over_existing(
+        self,
+        async_session,
+        app_conversation_info_service,
+        sandbox_info,
+        mock_conversation_info,
+    ):
+        """When the agent server provides a title, it should override existing."""
+        conversation_id = mock_conversation_info.id
+        mock_conversation_info.title = 'Agent Server Generated Title'
+
+        existing_conv = AppConversationInfo(
+            id=conversation_id,
+            title='Old Fallback Title',
+            sandbox_id='sandbox_123',
+            created_by_user_id='user_123',
+        )
+
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
+
+        assert isinstance(result, Success)
+        saved = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id
+        )
+        assert saved is not None
+        assert saved.title == 'Agent Server Generated Title'
+
+    @pytest.mark.asyncio
+    async def test_existing_title_used_when_agent_server_has_none(
+        self,
+        async_session,
+        app_conversation_info_service,
+        sandbox_info,
+        mock_conversation_info,
+    ):
+        """When the agent server title is None, fall back to existing title."""
+        conversation_id = mock_conversation_info.id
+        mock_conversation_info.title = None
+
+        existing_conv = AppConversationInfo(
+            id=conversation_id,
+            title='Existing Title From Callback',
+            sandbox_id='sandbox_123',
+            created_by_user_id='user_123',
+        )
+
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
+
+        assert isinstance(result, Success)
+        saved = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id
+        )
+        assert saved is not None
+        assert saved.title == 'Existing Title From Callback'
+
+    @pytest.mark.asyncio
+    async def test_default_title_when_both_are_none(
+        self,
+        async_session,
+        app_conversation_info_service,
+        sandbox_info,
+        mock_conversation_info,
+    ):
+        """When both agent server and existing titles are None, use default."""
+        conversation_id = mock_conversation_info.id
+        mock_conversation_info.title = None
+
+        existing_conv = AppConversationInfo(
+            id=conversation_id,
+            title=None,
+            sandbox_id='sandbox_123',
+            created_by_user_id='user_123',
+        )
+
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
+
+        assert isinstance(result, Success)
+        saved = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id
+        )
+        assert saved is not None
+        assert saved.title == f'Conversation {conversation_id.hex}'
