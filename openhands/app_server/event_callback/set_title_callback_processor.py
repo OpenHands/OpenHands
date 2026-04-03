@@ -92,10 +92,9 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
         )
 
         _logger.info(
-            'Callback %s Invoked for event type=%s id=%s',
+            'Callback %s Invoked for event %s',
             callback.id,
-            type(event).__name__,
-            event.id,
+            redact_text_secrets(str(event)),
         )
 
         state = InjectorState()
