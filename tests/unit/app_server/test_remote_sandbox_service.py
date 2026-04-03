@@ -773,6 +773,33 @@ class TestSandboxSearch:
         remote_sandbox_service.db_session.execute.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_search_sandboxes_with_negative_page_id_starts_from_beginning(
+        self, remote_sandbox_service
+    ):
+        """Test sandbox search with negative page_id starts from the first page."""
+        stored_sandboxes = [create_stored_sandbox(f'sb{i}') for i in range(6)]
+
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = stored_sandboxes
+        mock_result = MagicMock()
+        mock_result.scalars.return_value = mock_scalars
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        mock_batch_response = MagicMock()
+        mock_batch_response.raise_for_status.return_value = None
+        mock_batch_response.json.return_value = {
+            'runtimes': [create_runtime_data(f'sb{i}') for i in range(6)]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_batch_response
+        )
+
+        result = await remote_sandbox_service.search_sandboxes(page_id='-1', limit=5)
+
+        assert len(result.items) == 5
+        assert result.next_page_id == '5'
+
+    @pytest.mark.asyncio
     async def test_get_runtimes_batch_success(self, remote_sandbox_service):
         """Test successful batch runtime retrieval."""
         # Setup
