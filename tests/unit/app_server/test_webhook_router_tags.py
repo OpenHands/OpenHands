@@ -203,8 +203,8 @@ def test_merge_conversation_tags_with_both_none():
 
 
 def test_detect_automation_trigger_by_trigger_tag():
-    """Test that 'trigger' tag triggers AUTOMATION detection."""
-    merged_tags = {'trigger': 'cron', 'automation_id': 'auto-123'}
+    """Test that 'automationtrigger' tag triggers AUTOMATION detection."""
+    merged_tags = {'automationtrigger': 'cron', 'automationid': 'auto-123'}
 
     trigger = detect_automation_trigger(None, merged_tags)
 
@@ -212,8 +212,17 @@ def test_detect_automation_trigger_by_trigger_tag():
 
 
 def test_detect_automation_trigger_by_automation_id():
-    """Test that 'automation_id' tag alone triggers AUTOMATION detection."""
-    merged_tags = {'automation_id': 'auto-123'}
+    """Test that 'automationid' tag alone triggers AUTOMATION detection."""
+    merged_tags = {'automationid': 'auto-123'}
+
+    trigger = detect_automation_trigger(None, merged_tags)
+
+    assert trigger == ConversationTrigger.AUTOMATION
+
+
+def test_detect_automation_trigger_by_automation_run_id():
+    """Test that 'automationrunid' tag alone triggers AUTOMATION detection."""
+    merged_tags = {'automationrunid': 'run-123'}
 
     trigger = detect_automation_trigger(None, merged_tags)
 
@@ -231,7 +240,7 @@ def test_detect_automation_trigger_not_set_without_relevant_tags():
 
 def test_detect_automation_trigger_not_overridden_if_already_set():
     """Test that existing trigger is not overridden."""
-    merged_tags = {'trigger': 'cron', 'automation_id': 'auto-123'}
+    merged_tags = {'automationtrigger': 'cron', 'automationid': 'auto-123'}
 
     # Trigger already set (e.g., from previous update)
     trigger = detect_automation_trigger(ConversationTrigger.GUI, merged_tags)
