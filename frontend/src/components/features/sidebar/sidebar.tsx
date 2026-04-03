@@ -14,6 +14,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { getHttpStatus } from "#/utils/get-http-status";
 
 export function Sidebar() {
   const { t } = useTranslation();
@@ -31,6 +32,7 @@ export function Sidebar() {
 
   const [conversationPanelIsOpen, setConversationPanelIsOpen] =
     React.useState(false);
+  const settingsErrorStatus = getHttpStatus(settingsError);
 
   React.useEffect(() => {
     if (pathname === "/settings") {
@@ -38,7 +40,7 @@ export function Sidebar() {
     } else if (
       !isFetchingSettings &&
       settingsIsError &&
-      settingsError?.status !== 404
+      settingsErrorStatus !== 404
     ) {
       // We don't show toast errors for settings in the global error handler
       // because we have a special case for 404 errors
@@ -47,7 +49,7 @@ export function Sidebar() {
       );
     } else if (
       config?.app_mode === "oss" &&
-      settingsError?.status === 404 &&
+      settingsErrorStatus === 404 &&
       !config?.feature_flags?.hide_llm_settings
     ) {
       setSettingsModalIsOpen(true);
@@ -57,6 +59,7 @@ export function Sidebar() {
     isFetchingSettings,
     settingsIsError,
     settingsError,
+    settingsErrorStatus,
     config?.app_mode,
     config?.feature_flags?.hide_llm_settings,
   ]);

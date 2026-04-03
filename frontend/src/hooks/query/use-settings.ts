@@ -3,6 +3,7 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
 import { Settings } from "#/types/settings";
+import { getHttpStatus } from "#/utils/get-http-status";
 import { useIsAuthed } from "./use-is-authed";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useConfig } from "./use-config";
@@ -42,7 +43,7 @@ export const useSettings = () => {
     // Only retry if the error is not a 404 because we
     // would want to show the modal immediately if the
     // settings are not found
-    retry: (_, error) => error.status !== 404,
+    retry: (_, error) => getHttpStatus(error) !== 404,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
@@ -59,7 +60,7 @@ export const useSettings = () => {
   // options to make their initial save. We don't set the defaults in `initialData` above because
   // that would prepopulate the data to the cache and mess with expectations. Read more:
   // https://tanstack.com/query/latest/docs/framework/react/guides/initial-query-data#using-initialdata-to-prepopulate-a-query
-  if (query.error?.status === 404) {
+  if (getHttpStatus(query.error) === 404) {
     // Create a new object with only the properties we need, avoiding rest destructuring
     return {
       data: DEFAULT_SETTINGS,
