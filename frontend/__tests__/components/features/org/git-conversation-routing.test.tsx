@@ -1,133 +1,104 @@
-import { screen, act, waitFor } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { GitConversationRouting } from "#/components/features/org/git-conversation-routing";
-import * as ToastHandlers from "#/utils/custom-toast-handlers";
+
+const mockMutate = vi.fn();
+const mockDisconnectMutate = vi.fn();
+
+vi.mock("#/hooks/query/use-git-organizations", () => ({
+  useUserGitOrganizations: () => ({
+    data: {
+      provider: "github",
+      organizations: ["OpenHands", "AcmeCo"],
+    },
+    isLoading: false,
+  }),
+  useGitClaims: () => ({
+    data: [
+      {
+        id: "claim-1",
+        org_id: "org-1",
+        provider: "github",
+        git_organization: "OpenHands",
+        claimed_by: "user-1",
+        claimed_at: "2026-01-01T00:00:00",
+      },
+    ],
+    isLoading: false,
+  }),
+}));
+
+vi.mock("#/hooks/mutation/use-claim-git-org", () => ({
+  useClaimGitOrg: () => ({
+    mutate: mockMutate,
+  }),
+}));
+
+vi.mock("#/hooks/mutation/use-disconnect-git-org", () => ({
+  useDisconnectGitOrg: () => ({
+    mutate: mockDisconnectMutate,
+  }),
+}));
 
 describe("GitConversationRouting", () => {
   beforeEach(() => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it("should render all mock organizations", () => {
-    // Arrange & Act
+  it("should render organizations from API data", () => {
     renderWithProviders(<GitConversationRouting />);
 
-    // Assert
-    expect(screen.getByTestId("org-row-1")).toHaveTextContent(
-      "GitHub/OpenHands",
-    );
-    expect(screen.getByTestId("org-row-2")).toHaveTextContent("GitHub/AcmeCo");
-    expect(screen.getByTestId("org-row-3")).toHaveTextContent(
-      "GitHub/already-claimed",
-    );
-    expect(screen.getByTestId("org-row-4")).toHaveTextContent(
-      "GitLab/OpenHands",
-    );
+    expect(
+      screen.getByTestId("org-row-github:openhands"),
+    ).toHaveTextContent("github/OpenHands");
+    expect(
+      screen.getByTestId("org-row-github:acmeco"),
+    ).toHaveTextContent("github/AcmeCo");
   });
 
-  it("should show pre-claimed org with 'Claimed' label", () => {
-    // Arrange & Act
+  it("should show claimed org with 'Claimed' label", () => {
     renderWithProviders(<GitConversationRouting />);
 
-    // Assert
-    const claimedButton = screen.getByTestId("claim-button-1");
+    const claimedButton = screen.getByTestId("claim-button-github:openhands");
     expect(claimedButton).toHaveTextContent("ORG$CLAIMED");
   });
 
   it("should show unclaimed orgs with 'Claim' label", () => {
-    // Arrange & Act
     renderWithProviders(<GitConversationRouting />);
 
-    // Assert
-    expect(screen.getByTestId("claim-button-2")).toHaveTextContent("ORG$CLAIM");
+    expect(
+      screen.getByTestId("claim-button-github:acmeco"),
+    ).toHaveTextContent("ORG$CLAIM");
   });
 
-  it("should claim an organization and show success toast", async () => {
-    // Arrange
-    const successToastSpy = vi.spyOn(ToastHandlers, "displaySuccessToast");
+  it("should call claim mutation when clicking claim on unclaimed org", async () => {
     renderWithProviders(<GitConversationRouting />);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
 
-    // Act
-    await user.click(screen.getByTestId("claim-button-2"));
-    // Move pointer away so hover state resets after transition
-    await user.unhover(screen.getByTestId("claim-button-2"));
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
+    await user.click(screen.getByTestId("claim-button-github:acmeco"));
 
-    // Assert
-    await waitFor(() => {
-      expect(screen.getByTestId("claim-button-2")).toHaveTextContent(
-        "ORG$CLAIMED",
-      );
-    });
-    expect(successToastSpy).toHaveBeenCalledWith("ORG$CLAIM_SUCCESS");
+    expect(mockMutate).toHaveBeenCalledWith(
+      { provider: "github", gitOrganization: "AcmeCo" },
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
   });
 
-  it("should show error toast when claiming an already-claimed org", async () => {
-    // Arrange
-    const errorToastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+  it("should call disconnect mutation when clicking disconnect on claimed org", async () => {
     renderWithProviders(<GitConversationRouting />);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
 
-    // Act
-    await user.click(screen.getByTestId("claim-button-3"));
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
+    await user.click(screen.getByTestId("claim-button-github:openhands"));
 
-    // Assert
-    await waitFor(() => {
-      expect(screen.getByTestId("claim-button-3")).toHaveTextContent(
-        "ORG$CLAIM",
-      );
-    });
-    expect(errorToastSpy).toHaveBeenCalledWith("ORG$CLAIM_ERROR");
+    expect(mockDisconnectMutate).toHaveBeenCalledWith(
+      { claimId: "claim-1" },
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
   });
 
-  it("should disconnect a claimed org and show success toast", async () => {
-    // Arrange
-    const successToastSpy = vi.spyOn(ToastHandlers, "displaySuccessToast");
-    renderWithProviders(<GitConversationRouting />);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-    // Act — disconnect the pre-claimed org (id: 1)
-    await user.click(screen.getByTestId("claim-button-1"));
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-
-    // Assert
-    await waitFor(() => {
-      expect(screen.getByTestId("claim-button-1")).toHaveTextContent(
-        "ORG$CLAIM",
-      );
-    });
-    expect(successToastSpy).toHaveBeenCalledWith("ORG$DISCONNECT_SUCCESS");
-  });
-
-  it("should disable the button during claiming transition", async () => {
-    // Arrange
-    renderWithProviders(<GitConversationRouting />);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-    // Act
-    await user.click(screen.getByTestId("claim-button-2"));
-
-    // Assert — button is disabled while claiming
-    expect(screen.getByTestId("claim-button-2")).toBeDisabled();
-
-    // Cleanup — advance timer to complete transition
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-  });
 });

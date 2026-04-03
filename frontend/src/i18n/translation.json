@@ -21747,5 +21747,39 @@
     "de": "Verbindung fehlgeschlagen. Organisation wurde bereits beansprucht.",
     "uk": "Помилка з'єднання. Організація вже заявлена.",
     "ca": "Error de connexió. L'organització ja ha estat reclamada."
+  },
+  "ORG$DISCONNECT_ERROR": {
+    "en": "Failed to disconnect organization.",
+    "ja": "組織の切断に失敗しました。",
+    "zh-CN": "断开组织连接失败。",
+    "zh-TW": "斷開組織連接失敗。",
+    "ko-KR": "조직 연결 해제에 실패했습니다.",
+    "no": "Kunne ikke koble fra organisasjonen.",
+    "it": "Impossibile disconnettere l'organizzazione.",
+    "pt": "Falha ao desconectar a organização.",
+    "es": "Error al desconectar la organización.",
+    "ar": "فشل في قطع اتصال المنظمة.",
+    "fr": "Échec de la déconnexion de l'organisation.",
+    "tr": "Organizasyon bağlantısı kesilemedi.",
+    "de": "Trennung der Organisation fehlgeschlagen.",
+    "uk": "Не вдалося від'єднати організацію.",
+    "ca": "No s'ha pogut desconnectar l'organització."
+  },
+  "ORG$NO_GIT_ORGANIZATIONS": {
+    "en": "No Git organizations found.",
+    "ja": "Git組織が見つかりません。",
+    "zh-CN": "未找到 Git 组织。",
+    "zh-TW": "未找到 Git 組織。",
+    "ko-KR": "Git 조직을 찾을 수 없습니다.",
+    "no": "Ingen Git-organisasjoner funnet.",
+    "it": "Nessuna organizzazione Git trovata.",
+    "pt": "Nenhuma organização Git encontrada.",
+    "es": "No se encontraron organizaciones Git.",
+    "ar": "لم يتم العثور على منظمات Git.",
+    "fr": "Aucune organisation Git trouvée.",
+    "tr": "Git organizasyonu bulunamadı.",
+    "de": "Keine Git-Organisationen gefunden.",
+    "uk": "Організації Git не знайдено.",
+    "ca": "No s'han trobat organitzacions Git."
   }
 }

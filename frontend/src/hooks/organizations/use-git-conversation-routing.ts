@@ -1,81 +1,113 @@
 import React from "react";
-import { useTranslation } from "react-i18next";
-import { I18nKey } from "#/i18n/declaration";
 import {
-  displaySuccessToast,
-  displayErrorToast,
-} from "#/utils/custom-toast-handlers";
+  useUserGitOrganizations,
+  useGitClaims,
+} from "#/hooks/query/use-git-organizations";
+import { useClaimGitOrg } from "#/hooks/mutation/use-claim-git-org";
+import { useDisconnectGitOrg } from "#/hooks/mutation/use-disconnect-git-org";
+import type { GitOrg } from "#/types/org";
 
-// TODO: This entire hook uses mock data and simulated async behavior.
-// Replace with real API calls (e.g., organizationService.claimOrg / disconnectOrg)
-// once the backend endpoints for organization claims are implemented.
-export interface GitOrg {
-  id: string;
-  provider: "GitHub" | "GitLab";
-  name: string;
-  status: "unclaimed" | "claimed" | "claiming" | "disconnecting";
+function buildOrgId(provider: string, name: string): string {
+  return `${provider.toLowerCase()}:${name.toLowerCase()}`;
 }
 
-// TODO: Remove mock data once the backend API for fetching available git organizations is ready.
-const INITIAL_ORGS: GitOrg[] = [
-  { id: "1", provider: "GitHub", name: "OpenHands", status: "claimed" },
-  { id: "2", provider: "GitHub", name: "AcmeCo", status: "unclaimed" },
-  {
-    id: "3",
-    provider: "GitHub",
-    name: "already-claimed",
-    status: "unclaimed",
-  },
-  { id: "4", provider: "GitLab", name: "OpenHands", status: "unclaimed" },
-];
-
 export function useGitConversationRouting() {
-  const { t } = useTranslation();
-  const [orgs, setOrgs] = React.useState<GitOrg[]>(INITIAL_ORGS);
+  const { data: userGitOrgs, isLoading: isLoadingUserOrgs } =
+    useUserGitOrganizations();
+  const { data: claims, isLoading: isLoadingClaims } = useGitClaims();
+  const { mutate: claimGitOrg } = useClaimGitOrg();
+  const { mutate: disconnectGitOrg } = useDisconnectGitOrg();
 
-  const updateOrgStatus = React.useCallback(
-    (id: string, status: GitOrg["status"]) => {
-      setOrgs((prev) =>
-        prev.map((org) => (org.id === id ? { ...org, status } : org)),
-      );
-    },
-    [],
+  const [pendingClaims, setPendingClaims] = React.useState<Set<string>>(
+    new Set(),
   );
+  const [pendingDisconnects, setPendingDisconnects] = React.useState<
+    Set<string>
+  >(new Set());
+
+  const orgs = React.useMemo<GitOrg[]>(() => {
+    if (!userGitOrgs) return [];
+
+    const claimMap = new Map(
+      (claims ?? []).map((c) => [
+        buildOrgId(c.provider, c.git_organization),
+        c,
+      ]),
+    );
+
+    return userGitOrgs.organizations.map((name) => {
+      const id = buildOrgId(userGitOrgs.provider, name);
+      const claim = claimMap.get(id);
+
+      let status: GitOrg["status"] = "unclaimed";
+      if (pendingClaims.has(id)) {
+        status = "claiming";
+      } else if (pendingDisconnects.has(id)) {
+        status = "disconnecting";
+      } else if (claim) {
+        status = "claimed";
+      }
+
+      return {
+        id,
+        claimId: claim?.id ?? null,
+        provider: userGitOrgs.provider,
+        name,
+        status,
+      };
+    });
+  }, [userGitOrgs, claims, pendingClaims, pendingDisconnects]);
+
+  const orgsRef = React.useRef(orgs);
+  orgsRef.current = orgs;
 
   const claimOrg = React.useCallback(
     (id: string) => {
-      const org = orgs.find((o) => o.id === id);
+      const org = orgsRef.current.find((o) => o.id === id);
       if (!org || org.status !== "unclaimed") return;
 
-      updateOrgStatus(id, "claiming");
+      setPendingClaims((prev) => new Set(prev).add(id));
 
-      setTimeout(() => {
-        if (org.name === "already-claimed") {
-          updateOrgStatus(id, "unclaimed");
-          displayErrorToast(t(I18nKey.ORG$CLAIM_ERROR));
-        } else {
-          updateOrgStatus(id, "claimed");
-          displaySuccessToast(t(I18nKey.ORG$CLAIM_SUCCESS));
-        }
-      }, 1000);
+      claimGitOrg(
+        { provider: org.provider, gitOrganization: org.name },
+        {
+          onSettled: () => {
+            setPendingClaims((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          },
+        },
+      );
     },
-    [orgs, updateOrgStatus, t],
+    [claimGitOrg],
   );
 
   const disconnectOrg = React.useCallback(
     (id: string) => {
-      const org = orgs.find((o) => o.id === id);
-      if (!org || org.status !== "claimed") return;
+      const org = orgsRef.current.find((o) => o.id === id);
+      if (!org || org.status !== "claimed" || !org.claimId) return;
 
-      updateOrgStatus(id, "disconnecting");
+      setPendingDisconnects((prev) => new Set(prev).add(id));
 
-      setTimeout(() => {
-        updateOrgStatus(id, "unclaimed");
-        displaySuccessToast(t(I18nKey.ORG$DISCONNECT_SUCCESS));
-      }, 1000);
+      disconnectGitOrg(
+        { claimId: org.claimId },
+        {
+          onSettled: () => {
+            setPendingDisconnects((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          },
+        },
+      );
     },
-    [orgs, updateOrgStatus, t],
+    [disconnectGitOrg],
   );
 
-  return { orgs, claimOrg, disconnectOrg };
+  const isLoading = isLoadingUserOrgs || isLoadingClaims;
+
+  return { orgs, claimOrg, disconnectOrg, isLoading };
 }

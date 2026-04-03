@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import SecretStr
 
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
@@ -32,7 +33,6 @@ from openhands.microagent.types import (
     MicroagentContentResponse,
     MicroagentResponse,
 )
-from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import server_config
 from openhands.server.user_auth import (
     get_access_token,
@@ -308,6 +308,7 @@ def _extract_repo_name(repository_name: str) -> str:
 @app.get(
     '/repository/{repository_name:path}/microagents',
     response_model=list[MicroagentResponse],
+    deprecated=True,
 )
 async def get_repository_microagents(
     repository_name: str,
@@ -316,6 +317,10 @@ async def get_repository_microagents(
     user_id: str | None = Depends(get_user_id),
 ) -> list[MicroagentResponse] | JSONResponse:
     """Scan the microagents directory of a repository and return the list of microagents.
+
+    .. deprecated::
+        This endpoint is deprecated. The microagents UI has already been removed
+        and is not supported in V1.
 
     The microagents directory location depends on the git provider and actual repository name:
     - If git provider is not GitLab and actual repository name is ".openhands": scans "microagents" folder
@@ -371,6 +376,7 @@ async def get_repository_microagents(
 @app.get(
     '/repository/{repository_name:path}/microagents/content',
     response_model=MicroagentContentResponse,
+    deprecated=True,
 )
 async def get_repository_microagent_content(
     repository_name: str,
@@ -382,6 +388,10 @@ async def get_repository_microagent_content(
     user_id: str | None = Depends(get_user_id),
 ) -> MicroagentContentResponse | JSONResponse:
     """Fetch the content of a specific microagent file from a repository.
+
+    .. deprecated::
+        This endpoint is deprecated. The microagents UI has already been removed
+        and is not supported in V1.
 
     Args:
         repository_name: Repository name in the format 'owner/repo' or 'domain/owner/repo'

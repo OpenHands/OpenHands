@@ -15,6 +15,7 @@ import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { MetricsModal } from "./metrics-modal/metrics-modal";
 import { ConversationVersionBadge } from "../conversation-panel/conversation-card/conversation-version-badge";
+import CircuitIcon from "#/icons/u-circuit.svg?react";
 
 export function ConversationName() {
   const { t } = useTranslation();
@@ -167,6 +168,17 @@ export function ConversationName() {
           <ConversationVersionBadge
             version={conversation.conversation_version}
           />
+        )}
+
+        {titleMode !== "edit" && conversation.llm_model && (
+          <span
+            className="text-xs text-[#A3A3A3] max-w-[150px] flex items-center gap-1 overflow-hidden"
+            title={conversation.llm_model}
+            data-testid="conversation-name-llm-model"
+          >
+            <CircuitIcon width={12} height={12} className="shrink-0" />
+            <span className="truncate">{conversation.llm_model}</span>
+          </span>
         )}
 
         {titleMode !== "edit" && (
