@@ -190,7 +190,7 @@ class RemoteSandboxService(SandboxService):
             return SandboxStatus.MISSING
 
         runtime_status = runtime.get('status')
-        if runtime_status:
+        if isinstance(runtime_status, str) and runtime_status:
             status = STATUS_MAPPING.get(runtime_status.lower(), None)
             if status is not None:
                 return status

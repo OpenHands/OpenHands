@@ -227,6 +227,17 @@ class TestStatusMapping:
         assert status == SandboxStatus.MISSING
 
     @pytest.mark.asyncio
+    async def test_get_sandbox_status_from_runtime_non_string_status(
+        self, remote_sandbox_service
+    ):
+        """Test status mapping with a non-string status field."""
+        runtime_data = create_runtime_data(status=['running'])
+
+        status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
+
+        assert status == SandboxStatus.MISSING
+
+    @pytest.mark.asyncio
     async def test_status_mapping_coverage(self, remote_sandbox_service):
         """Test all status mappings are handled correctly."""
         test_cases = [
