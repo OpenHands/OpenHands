@@ -512,7 +512,7 @@ class SlackManager(Manager[SlackViewInterface]):
         message: str | dict[str, Any],
         slack_view: SlackMessageView,
         ephemeral: bool = False,
-    ):
+    ) -> dict[str, Any] | None:
         """Send a message to Slack.
 
         Args:
@@ -525,14 +525,14 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         client = AsyncWebClient(token=slack_view.bot_access_token)
         if ephemeral and isinstance(message, str):
-            await client.chat_postEphemeral(
+            return await client.chat_postEphemeral(
                 channel=slack_view.channel_id,
                 markdown_text=message,
                 user=slack_view.slack_user_id,
                 thread_ts=slack_view.thread_ts,
             )
         elif ephemeral and isinstance(message, dict):
-            await client.chat_postEphemeral(
+            return await client.chat_postEphemeral(
                 channel=slack_view.channel_id,
                 user=slack_view.slack_user_id,
                 thread_ts=slack_view.thread_ts,
@@ -540,7 +540,7 @@ class SlackManager(Manager[SlackViewInterface]):
                 blocks=message['blocks'],
             )
         else:
-            await client.chat_postMessage(
+            return await client.chat_postMessage(
                 channel=slack_view.channel_id,
                 markdown_text=message,
                 thread_ts=slack_view.message_ts,
@@ -730,7 +730,15 @@ class SlackManager(Manager[SlackViewInterface]):
             except StartingConvoException as e:
                 msg_info = str(e)
 
-            await self.send_message(msg_info, slack_view)
+            response = await self.send_message(msg_info, slack_view)
+            if (
+                slack_view.v1_enabled
+                and isinstance(slack_view, SlackNewConversationView)
+                and response
+            ):
+                ack_message_ts = response.get('ts')
+                if ack_message_ts:
+                    slack_view.set_ack_message_ts_for_v1_callback(ack_message_ts)
 
         except Exception:
             logger.exception('[Slack]: Error starting job')

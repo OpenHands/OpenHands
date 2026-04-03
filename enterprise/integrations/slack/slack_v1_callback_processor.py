@@ -2,7 +2,7 @@ import logging
 from uuid import UUID
 
 import httpx
-from integrations.utils import get_summary_instruction
+from integrations.utils import CONVERSATION_URL, get_summary_instruction
 from integrations.v1_utils import handle_callback_error
 from pydantic import Field
 from slack_sdk import WebClient
@@ -56,7 +56,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
         try:
             summary = await self._request_summary(conversation_id)
-            await self._post_summary_to_slack(summary)
+            await self._post_summary_to_slack(summary, conversation_id)
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
@@ -72,7 +72,9 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 service_name='Slack',
                 service_logger=_logger,
                 can_post_error=True,  # Slack always attempts to post errors
-                post_error_func=self._post_summary_to_slack,
+                post_error_func=lambda message: self._post_summary_to_slack(
+                    message, conversation_id
+                ),
             )
 
             return EventCallbackResult(
@@ -96,8 +98,12 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
         return bot_access_token
 
-    async def _post_summary_to_slack(self, summary: str) -> None:
-        """Post a summary message to the configured Slack channel."""
+    def _build_final_slack_message(self, summary: str, conversation_id: UUID) -> str:
+        conversation_link = CONVERSATION_URL.format(str(conversation_id))
+        return f'{summary}\n\n[OpenHands conversation]({conversation_link})'
+
+    async def _post_summary_to_slack(self, summary: str, conversation_id: UUID) -> None:
+        """Post or update the final Slack message."""
         bot_access_token = await self._get_bot_access_token()
         if not bot_access_token:
             raise RuntimeError('Missing Slack bot access token')
@@ -106,18 +112,28 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         thread_ts = self.slack_view_data.get('thread_ts') or self.slack_view_data.get(
             'message_ts'
         )
+        ack_message_ts = self.slack_view_data.get('ack_message_ts')
+        final_message = self._build_final_slack_message(summary, conversation_id)
 
         client = WebClient(token=bot_access_token)
 
         try:
-            # Post the summary as a threaded reply
-            response = client.chat_postMessage(
-                channel=channel_id,
-                text=summary,
-                thread_ts=thread_ts,
-                unfurl_links=False,
-                unfurl_media=False,
-            )
+            if ack_message_ts:
+                response = client.chat_update(
+                    channel=channel_id,
+                    ts=ack_message_ts,
+                    text=final_message,
+                    unfurl_links=False,
+                    unfurl_media=False,
+                )
+            else:
+                response = client.chat_postMessage(
+                    channel=channel_id,
+                    text=final_message,
+                    thread_ts=thread_ts,
+                    unfurl_links=False,
+                    unfurl_media=False,
+                )
 
             if not response['ok']:
                 raise RuntimeError(
@@ -125,7 +141,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 )
 
             _logger.info(
-                '[Slack V1] Successfully posted summary to channel %s', channel_id
+                '[Slack V1] Successfully posted final message to channel %s', channel_id
             )
 
         except Exception as e:

@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
 from integrations.models import Message
@@ -79,6 +79,9 @@ class SlackNewConversationView(SlackViewInterface):
     conversation_id: str
     team_id: str
     v1_enabled: bool
+    slack_v1_callback_processor: SlackV1CallbackProcessor | None = field(
+        default=None, init=False
+    )
 
     def _get_initial_prompt(self, text: str, blocks: list[dict]):
         bot_id = self._get_bot_id(blocks)
@@ -185,7 +188,7 @@ class SlackNewConversationView(SlackViewInterface):
 
     def _create_slack_v1_callback_processor(self) -> SlackV1CallbackProcessor:
         """Create a SlackV1CallbackProcessor for V1 conversation handling."""
-        return SlackV1CallbackProcessor(
+        self.slack_v1_callback_processor = SlackV1CallbackProcessor(
             slack_view_data={
                 'channel_id': self.channel_id,
                 'message_ts': self.message_ts,
@@ -194,6 +197,13 @@ class SlackNewConversationView(SlackViewInterface):
                 'slack_user_id': self.slack_user_id,
             }
         )
+        return self.slack_v1_callback_processor
+
+    def set_ack_message_ts_for_v1_callback(self, ack_message_ts: str) -> None:
+        """Persist acknowledgement message ts for final in-place Slack update."""
+        if self.slack_v1_callback_processor is None:
+            return
+        self.slack_v1_callback_processor.slack_view_data['ack_message_ts'] = ack_message_ts
 
     async def create_or_update_conversation(self, jinja: Environment) -> str:
         """Only creates a new conversation"""

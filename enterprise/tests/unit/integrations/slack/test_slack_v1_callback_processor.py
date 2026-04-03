@@ -15,6 +15,7 @@ import pytest
 from integrations.slack.slack_v1_callback_processor import (
     SlackV1CallbackProcessor,
 )
+from integrations.utils import CONVERSATION_URL
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
@@ -257,11 +258,55 @@ class TestSlackV1CallbackProcessor:
         # Verify Slack posting
         mock_slack_client.chat_postMessage.assert_called_once_with(
             channel='C1234567890',
-            text='Test summary from agent',
+            text=f'Test summary from agent\n\n[OpenHands conversation]({CONVERSATION_URL.format(str(conversation_id))})',
             thread_ts='1234567890.123456',
             unfurl_links=False,
             unfurl_media=False,
         )
+
+    @patch('storage.slack_team_store.SlackTeamStore.get_instance')
+    @patch('integrations.slack.slack_v1_callback_processor.WebClient')
+    @patch.object(SlackV1CallbackProcessor, '_request_summary')
+    async def test_updates_ack_message_when_ack_ts_available(
+        self,
+        mock_request_summary,
+        mock_web_client,
+        mock_slack_team_store,
+        finish_event,
+        event_callback,
+    ):
+        conversation_id = uuid4()
+        processor = SlackV1CallbackProcessor(
+            slack_view_data={
+                'channel_id': 'C1234567890',
+                'message_ts': '1234567890.123456',
+                'team_id': 'T1234567890',
+                'ack_message_ts': '1234567890.654321',
+            }
+        )
+
+        mock_store = MagicMock()
+        mock_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
+        mock_slack_team_store.return_value = mock_store
+
+        mock_request_summary.return_value = 'Updated final answer'
+
+        mock_slack_client = MagicMock()
+        mock_slack_client.chat_update.return_value = {'ok': True}
+        mock_web_client.return_value = mock_slack_client
+
+        result = await processor(conversation_id, event_callback, finish_event)
+
+        assert result is not None
+        assert result.status == EventCallbackResultStatus.SUCCESS
+        mock_slack_client.chat_update.assert_called_once_with(
+            channel='C1234567890',
+            ts='1234567890.654321',
+            text=f'Updated final answer\n\n[OpenHands conversation]({CONVERSATION_URL.format(str(conversation_id))})',
+            unfurl_links=False,
+            unfurl_media=False,
+        )
+        mock_slack_client.chat_postMessage.assert_not_called()
 
     # -------------------------------------------------------------------------
     # Error handling tests (parameterized)
