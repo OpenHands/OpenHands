@@ -24,11 +24,15 @@ app = APIRouter(
 )
 
 
-@app.get('/trajectory')
+@app.get('/trajectory', deprecated=True)
 async def get_trajectory(
     metadata: ConversationMetadata = Depends(get_conversation_metadata),
 ) -> JSONResponse:
     """Get trajectory.
+
+    .. deprecated::
+        This endpoint is deprecated. Use the V1 endpoint
+        ``GET /app-conversation/{conversation_id}/download`` instead.
 
     This function retrieves the current trajectory and returns it.
     Uses the local EventStore which reads events from the file store,
