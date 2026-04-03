@@ -88,6 +88,7 @@ class TestGithubViewV1InitialUserMessage:
             view.previous_comments = [MagicMock(author='alice', body='old comment 1')]
 
         view._load_resolver_context = AsyncMock(side_effect=_load_context)  # type: ignore[method-assign]
+        view.resolved_org_id = None
 
         fake_service = _FakeAppConversationService()
         mock_get_app_conversation_service.return_value = (
@@ -144,6 +145,7 @@ class TestGithubViewV1InitialUserMessage:
             ]
 
         view._load_resolver_context = AsyncMock(side_effect=_load_context)  # type: ignore[method-assign]
+        view.resolved_org_id = None
 
         fake_service = _FakeAppConversationService()
         mock_get_app_conversation_service.return_value = (
@@ -200,6 +202,7 @@ class TestGithubViewV1InitialUserMessage:
             view.previous_comments = []
 
         view._load_resolver_context = AsyncMock(side_effect=_load_context)  # type: ignore[method-assign]
+        view.resolved_org_id = None
 
         fake_service = _FakeAppConversationService()
         mock_get_service.return_value = _fake_app_conversation_service_ctx(fake_service)

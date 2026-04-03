@@ -9,7 +9,6 @@
 import uuid
 from types import MappingProxyType
 from typing import Any
-from uuid import UUID
 
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.logger import openhands_logger as logger
@@ -46,14 +45,11 @@ async def initialize_conversation(
     selected_branch: str | None,
     conversation_trigger: ConversationTrigger = ConversationTrigger.GUI,
     git_provider: ProviderType | None = None,
-    **kwargs,
 ) -> ConversationMetadata:
     if conversation_id is None:
         conversation_id = uuid.uuid4().hex
 
-    conversation_store = await ConversationStoreImpl.get_instance(
-        config, user_id, **kwargs
-    )
+    conversation_store = await ConversationStoreImpl.get_instance(config, user_id)
 
     if not await conversation_store.exists(conversation_id):
         logger.info(
@@ -182,7 +178,6 @@ async def create_new_conversation(
     git_provider: ProviderType | None = None,
     conversation_id: str | None = None,
     mcp_config: MCPConfig | None = None,
-    resolver_org_id: UUID | None = None,
 ) -> AgentLoopInfo:
     conversation_metadata = await initialize_conversation(
         user_id,
@@ -191,7 +186,6 @@ async def create_new_conversation(
         selected_branch,
         conversation_trigger,
         git_provider,
-        resolver_org_id=resolver_org_id,
     )
 
     return await start_conversation(

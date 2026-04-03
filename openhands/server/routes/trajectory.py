@@ -9,12 +9,12 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.async_event_store_wrapper import AsyncEventStoreWrapper
 from openhands.events.event_filter import EventFilter
 from openhands.events.event_store import EventStore
 from openhands.events.serialization import event_to_trajectory
-from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import file_store
 from openhands.server.utils import get_conversation_metadata
 from openhands.storage.data_models.conversation_metadata import ConversationMetadata

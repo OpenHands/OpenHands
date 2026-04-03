@@ -13,7 +13,7 @@ from openhands.app_server.pending_messages.pending_message_models import (
 from openhands.app_server.pending_messages.pending_message_service import (
     PendingMessageService,
 )
-from openhands.server.dependencies import get_dependencies
+from openhands.app_server.utils.dependencies import get_dependencies
 
 logger = logging.getLogger(__name__)
 

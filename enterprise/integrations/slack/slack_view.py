@@ -18,7 +18,9 @@ from integrations.utils import (
     get_user_v1_enabled_setting,
 )
 from jinja2 import Environment
+from server.config import get_config
 from slack_sdk import WebClient
+from storage.saas_conversation_store import SaasConversationStore
 from storage.slack_conversation import SlackConversation
 from storage.slack_conversation_store import SlackConversationStore
 from storage.slack_team_store import SlackTeamStore
@@ -40,15 +42,17 @@ from openhands.events.serialization.event import event_to_dict
 from openhands.integrations.provider import ProviderHandler, ProviderType
 from openhands.sdk import TextContent
 from openhands.server.services.conversation_service import (
-    create_new_conversation,
     setup_init_conversation_settings,
+    start_conversation,
 )
 from openhands.server.shared import ConversationStoreImpl, config, conversation_manager
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
+    ConversationMetadata,
     ConversationTrigger,
 )
 from openhands.utils.async_utils import GENERAL_TIMEOUT
+from openhands.utils.conversation_summary import get_default_conversation_title
 
 # =================================================
 # SECTION: Slack view types
@@ -241,24 +245,44 @@ class SlackNewConversationView(SlackViewInterface):
             jinja
         )
 
-        agent_loop_info = await create_new_conversation(
-            user_id=self.slack_to_openhands_user.keycloak_user_id,
-            git_provider_tokens=provider_tokens,
+        user_id = self.slack_to_openhands_user.keycloak_user_id
+
+        # Create the conversation store with resolver org routing
+        # (bypasses initialize_conversation to avoid threading enterprise-only
+        # resolver_org_id through the generic OSS interface)
+        store = await SaasConversationStore.get_resolver_instance(
+            get_config(),
+            user_id,
+            self.resolved_org_id,
+        )
+
+        conversation_id = uuid4().hex
+        conversation_metadata = ConversationMetadata(
+            trigger=ConversationTrigger.SLACK,
+            conversation_id=conversation_id,
+            title=get_default_conversation_title(conversation_id),
+            user_id=user_id,
             selected_repository=self.selected_repo,
             selected_branch=None,
+            git_provider=self._resolved_git_provider,
+        )
+        await store.save_metadata(conversation_metadata)
+
+        await start_conversation(
+            user_id=user_id,
+            git_provider_tokens=provider_tokens,
+            custom_secrets=user_secrets.custom_secrets if user_secrets else None,
             initial_user_msg=user_instructions,
+            image_urls=None,
+            replay_json=None,
+            conversation_id=conversation_id,
+            conversation_metadata=conversation_metadata,
             conversation_instructions=(
                 conversation_instructions if conversation_instructions else None
             ),
-            image_urls=None,
-            replay_json=None,
-            conversation_trigger=ConversationTrigger.SLACK,
-            custom_secrets=user_secrets.custom_secrets if user_secrets else None,
-            git_provider=self._resolved_git_provider,
-            resolver_org_id=self.resolved_org_id,
         )
 
-        self.conversation_id = agent_loop_info.conversation_id
+        self.conversation_id = conversation_id
         logger.info(f'[Slack]: Created V0 conversation: {self.conversation_id}')
         await self.save_slack_convo(v1_enabled=False)
 

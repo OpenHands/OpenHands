@@ -12,7 +12,7 @@ from openhands.app_server.sandbox.sandbox_spec_models import (
 from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
 )
-from openhands.server.dependencies import get_dependencies
+from openhands.app_server.utils.dependencies import get_dependencies
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware

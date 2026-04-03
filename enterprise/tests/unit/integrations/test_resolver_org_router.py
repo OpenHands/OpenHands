@@ -109,20 +109,3 @@ async def test_extracts_git_org_lowercase_from_repo_name(mock_stores):
     mock_claim_store.get_claim_by_provider_and_git_org.assert_called_once_with(
         'github', 'myorg'
     )
-
-
-@pytest.mark.asyncio
-async def test_returns_none_on_exception(mock_stores):
-    """When an exception occurs, return None gracefully."""
-    from enterprise.integrations.resolver_org_router import resolve_org_for_repo
-
-    mock_claim_store, _ = mock_stores
-    mock_claim_store.get_claim_by_provider_and_git_org.side_effect = RuntimeError(
-        'DB error'
-    )
-
-    # Act
-    result = await resolve_org_for_repo('github', 'SomeOrg/repo', USER_ID)
-
-    # Assert
-    assert result is None

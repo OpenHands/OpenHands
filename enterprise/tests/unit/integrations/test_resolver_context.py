@@ -32,18 +32,25 @@ def resolver_context(mock_saas_user_auth):
     return ResolverUserContext(saas_user_auth=mock_saas_user_auth)
 
 
-def test_resolver_org_id_default_none(mock_saas_user_auth):
-    """Test that resolver_org_id defaults to None."""
+# ---------------------------------------------------------------------------
+# Tests for resolver_org_id - org routing for resolver conversations
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_org_id_defaults_to_none(mock_saas_user_auth):
+    """Test that resolver_org_id defaults to None when not provided."""
     ctx = ResolverUserContext(saas_user_auth=mock_saas_user_auth)
     assert ctx.resolver_org_id is None
 
 
-def test_resolver_org_id_set():
-    """Test that resolver_org_id can be set."""
+def test_resolver_org_id_can_be_set_via_constructor(mock_saas_user_auth):
+    """Test that resolver_org_id can be set via constructor for org routing."""
     from uuid import UUID
 
     org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
-    ctx = ResolverUserContext(saas_user_auth=AsyncMock(), resolver_org_id=org_id)
+    ctx = ResolverUserContext(
+        saas_user_auth=mock_saas_user_auth, resolver_org_id=org_id
+    )
     assert ctx.resolver_org_id == org_id
 
 
