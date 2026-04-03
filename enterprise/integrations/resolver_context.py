@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
@@ -12,8 +14,10 @@ class ResolverUserContext(UserContext):
     def __init__(
         self,
         saas_user_auth: UserAuth,
+        resolver_org_id: UUID | None = None,
     ):
         self.saas_user_auth = saas_user_auth
+        self.resolver_org_id = resolver_org_id
         self._provider_handler: ProviderHandler | None = None
 
     async def get_user_id(self) -> str | None:
