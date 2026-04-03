@@ -559,9 +559,16 @@ class CLIRuntime(Runtime):
             if os.path.isdir(file_path):
                 return ErrorObservation(f'Cannot read directory: {action.path}')
 
-            # Cannot read binary files
-            if is_binary(file_path):
-                return ErrorObservation('ERROR_BINARY_FILE')
+            # Cannot read binary files.
+            # Attempt UTF-8 decode first — binaryornot uses byte-frequency heuristics
+            # that incorrectly classify dense CJK (Chinese/Japanese/Korean) UTF-8 text
+            # as binary. A file that decodes cleanly as UTF-8 is always text.
+            try:
+                with open(file_path, 'rb') as _f:
+                    _f.read().decode('utf-8')
+            except (UnicodeDecodeError, OSError):
+                if is_binary(file_path):
+                    return ErrorObservation('ERROR_BINARY_FILE')
 
             # Read the file
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
@@ -662,9 +669,17 @@ class CLIRuntime(Runtime):
         # Ensure the path is within the workspace
         file_path = self._sanitize_filename(action.path)
 
-        # Check if it's a binary file
-        if os.path.exists(file_path) and is_binary(file_path):
-            return ErrorObservation('ERROR_BINARY_FILE')
+        # Check if it's a binary file.
+        # Attempt UTF-8 decode first — binaryornot uses byte-frequency heuristics
+        # that incorrectly classify dense CJK (Chinese/Japanese/Korean) UTF-8 text
+        # as binary. A file that decodes cleanly as UTF-8 is always text.
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'rb') as _f:
+                    _f.read().decode('utf-8')
+            except (UnicodeDecodeError, OSError):
+                if is_binary(file_path):
+                    return ErrorObservation('ERROR_BINARY_FILE')
 
         assert action.impl_source == FileEditSource.OH_ACI
 
