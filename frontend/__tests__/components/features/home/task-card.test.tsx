@@ -3,11 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
-import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
-import GitService from "#/api/git-service/git-service.api";
 import { TaskCard } from "#/components/features/home/tasks/task-card";
-import { GitRepository } from "#/types/git";
 import { SuggestedTask } from "#/utils/types";
+
+const mockCreateConversation = vi.fn();
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: mockCreateConversation,
+  }),
+}));
 
 vi.mock("#/hooks/query/use-settings", async () => {
   const actual = await vi.importActual<typeof import("#/hooks/query/use-settings")>(
@@ -31,14 +36,6 @@ const MOCK_TASK_1: SuggestedTask = {
   git_provider: "github",
 };
 
-const MOCK_RESPOSITORIES: GitRepository[] = [
-  { id: "1", full_name: "repo1", git_provider: "github", is_public: true },
-  { id: "2", full_name: "repo2", git_provider: "github", is_public: true },
-  { id: "3", full_name: "repo3", git_provider: "gitlab", is_public: true },
-  { id: "4", full_name: "repo4", git_provider: "gitlab", is_public: true },
-  { id: "5", full_name: "repo5", git_provider: "azure_devops", is_public: true },
-];
-
 const renderTaskCard = (task = MOCK_TASK_1) => {
   const RouterStub = createRoutesStub([
     {
@@ -61,6 +58,10 @@ const renderTaskCard = (task = MOCK_TASK_1) => {
 };
 
 describe("TaskCard", () => {
+  beforeEach(() => {
+    mockCreateConversation.mockReset();
+  });
+
   it("format the issue id", async () => {
     renderTaskCard();
 
@@ -69,139 +70,43 @@ describe("TaskCard", () => {
   });
 
   it("should call createConversation when clicking the launch button", async () => {
-    const createConversationSpy = vi
-      .spyOn(V1ConversationService, "createConversation")
-      .mockResolvedValue({
-        id: "task-id",
-        created_by_user_id: null,
-        status: "READY",
-        detail: null,
-        app_conversation_id: "conv-123",
-        sandbox_id: null,
-        agent_server_url: "http://agent-server.local",
-        request: {
-          sandbox_id: null,
-          initial_message: null,
-          processors: [],
-          llm_model: null,
-          selected_repository: null,
-          selected_branch: null,
-          git_provider: "github",
-          suggested_task: null,
-          title: null,
-          trigger: null,
-          pr_number: [],
-          parent_conversation_id: null,
-          agent_type: "default",
-        },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
     renderTaskCard();
 
     const launchButton = screen.getByTestId("task-launch-button");
     await userEvent.click(launchButton);
 
     await waitFor(() => {
-      expect(createConversationSpy).toHaveBeenCalled();
+      expect(mockCreateConversation).toHaveBeenCalled();
     });
   });
 
   describe("creating suggested task conversation", () => {
-    beforeEach(() => {
-      const retrieveUserGitRepositoriesSpy = vi.spyOn(
-        GitService,
-        "retrieveUserGitRepositories",
-      );
-      retrieveUserGitRepositoriesSpy.mockResolvedValue({
-        data: MOCK_RESPOSITORIES,
-        nextPage: null,
-      });
-    });
-
     it("should call create conversation with suggest task trigger and selected suggested task", async () => {
-      const createConversationSpy = vi
-        .spyOn(V1ConversationService, "createConversation")
-        .mockResolvedValue({
-          id: "task-id",
-          created_by_user_id: null,
-          status: "READY",
-          detail: null,
-          app_conversation_id: "conv-123",
-          sandbox_id: null,
-          agent_server_url: "http://agent-server.local",
-          request: {
-            sandbox_id: null,
-            initial_message: null,
-            processors: [],
-            llm_model: null,
-            selected_repository: MOCK_RESPOSITORIES[0].full_name,
-            selected_branch: null,
-            git_provider: "github",
-            suggested_task: null,
-            title: null,
-            trigger: null,
-            pr_number: [],
-            parent_conversation_id: null,
-            agent_type: "default",
-          },
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-
       renderTaskCard(MOCK_TASK_1);
 
       const launchButton = screen.getByTestId("task-launch-button");
       await userEvent.click(launchButton);
 
-      expect(createConversationSpy).toHaveBeenCalledWith(
-        MOCK_RESPOSITORIES[0].full_name,
-        MOCK_RESPOSITORIES[0].git_provider,
-        undefined,
-        undefined,
-        undefined,
+      expect(mockCreateConversation).toHaveBeenCalledWith(
         {
-          git_provider: "github",
-          issue_number: 123,
-          repo: "repo1",
-          task_type: "MERGE_CONFLICTS",
-          title: "Task 1",
+          repository: {
+            name: "repo1",
+            gitProvider: "github",
+          },
+          suggestedTask: MOCK_TASK_1,
         },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+        }),
       );
     });
   });
 
   it("should navigate to the conversation page after creating a conversation", async () => {
-    vi.spyOn(V1ConversationService, "createConversation").mockResolvedValue({
-      id: "task-id",
-      created_by_user_id: null,
-      status: "READY",
-      detail: null,
-      app_conversation_id: "test-conversation-id",
-      sandbox_id: null,
-      agent_server_url: "http://agent-server.local",
-      request: {
-        sandbox_id: null,
-        initial_message: null,
-        processors: [],
-        llm_model: null,
-        selected_repository: "repo1",
-        selected_branch: "main",
-        git_provider: "github",
-        suggested_task: null,
-        title: null,
-        trigger: null,
-        pr_number: [],
-        parent_conversation_id: null,
-        agent_type: "default",
-      },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+    mockCreateConversation.mockImplementation((_variables, options) => {
+      options?.onSuccess?.({
+        conversation_id: "test-conversation-id",
+      });
     });
 
     renderTaskCard();

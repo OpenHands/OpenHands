@@ -4,13 +4,26 @@ import userEvent from "@testing-library/user-event";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { createRoutesStub, Outlet } from "react-router";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import GitService from "#/api/git-service/git-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import { GitRepository } from "#/types/git";
 import { RepoConnector } from "#/components/features/home/repo-connector";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+
+const mockCreateConversation = vi.fn();
+const mockCreateConversationState = {
+  isPending: false,
+  isSuccess: false,
+};
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: mockCreateConversation,
+    isPending: mockCreateConversationState.isPending,
+    isSuccess: mockCreateConversationState.isSuccess,
+  }),
+}));
 
 const renderRepoConnector = () => {
   const mockRepoSelection = vi.fn();
@@ -66,6 +79,9 @@ const MOCK_RESPOSITORIES: GitRepository[] = [
 ];
 
 beforeEach(() => {
+  mockCreateConversation.mockReset();
+  mockCreateConversationState.isPending = false;
+  mockCreateConversationState.isSuccess = false;
   useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
   getSettingsSpy.mockResolvedValue({
@@ -314,34 +330,6 @@ describe("RepoConnector", () => {
   });
 
   it("should create a conversation and redirect with the selected repo when pressing the launch button", async () => {
-    const createConversationSpy = vi
-      .spyOn(V1ConversationService, "createConversation")
-      .mockResolvedValue({
-        id: "task-id",
-        created_by_user_id: null,
-        status: "READY",
-        detail: null,
-        app_conversation_id: "mock-conversation-id",
-        sandbox_id: null,
-        agent_server_url: "http://agent-server.local",
-        request: {
-          sandbox_id: null,
-          initial_message: null,
-          processors: [],
-          llm_model: null,
-          selected_repository: "rbren/polaris",
-          selected_branch: "main",
-          git_provider: "github",
-          suggested_task: null,
-          title: null,
-          trigger: null,
-          pr_number: [],
-          parent_conversation_id: null,
-          agent_type: "default",
-        },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
     const retrieveUserGitRepositoriesSpy = vi.spyOn(
       GitService,
       "retrieveUserGitRepositories",
@@ -359,7 +347,7 @@ describe("RepoConnector", () => {
     await userEvent.click(launchButton);
 
     // repo not selected yet
-    expect(createConversationSpy).not.toHaveBeenCalled();
+    expect(mockCreateConversation).not.toHaveBeenCalled();
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
@@ -401,27 +389,23 @@ describe("RepoConnector", () => {
 
     await userEvent.click(launchButton);
 
-    expect(createConversationSpy).toHaveBeenCalledOnce();
-    expect(createConversationSpy).toHaveBeenCalledWith(
-      "rbren/polaris",
-      "github",
-      undefined,
-      "main",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+    expect(mockCreateConversation).toHaveBeenCalledOnce();
+    expect(mockCreateConversation).toHaveBeenCalledWith(
+      {
+        repository: {
+          name: "rbren/polaris",
+          gitProvider: "github",
+          branch: "main",
+        },
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+      }),
     );
   });
 
   it("should change the launch button text to 'Loading...' when creating a conversation", async () => {
-    const createConversationSpy = vi.spyOn(
-      V1ConversationService,
-      "createConversation",
-    );
-    createConversationSpy.mockImplementation(() => new Promise(() => { })); // Never resolves to keep loading state
+    mockCreateConversationState.isPending = true;
     const retrieveUserGitRepositoriesSpy = vi.spyOn(
       GitService,
       "retrieveUserGitRepositories",

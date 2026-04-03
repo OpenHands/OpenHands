@@ -22,8 +22,21 @@ $PortableNodeExe = Join-Path $PortableNodeRoot "node.exe"
 $PortableNpmCmd = Join-Path $PortableNodeRoot "npm.cmd"
 $FrontendStamp = Join-Path $WindowsCacheDir "frontend-install.stamp"
 $BackendStamp = Join-Path $WindowsCacheDir "backend-install.stamp"
+$NodeVersionFile = Join-Path $RepoRoot ".nvmrc"
+$RequiredNodeMajor = 22
 $RequiredNodeVersion = [Version]"22.12.0"
 $UiUrl = "http://127.0.0.1:$Port/"
+
+if (Test-Path $NodeVersionFile) {
+    $nodeVersionLine = (Get-Content $NodeVersionFile -Raw).Trim()
+    $nodeMajorMatch = [regex]::Match($nodeVersionLine, "^\d+")
+    if ($nodeMajorMatch.Success) {
+        $RequiredNodeMajor = [int]$nodeMajorMatch.Value
+        if ($RequiredNodeMajor -ne 22) {
+            $RequiredNodeVersion = [Version]("{0}.0.0" -f $RequiredNodeMajor)
+        }
+    }
+}
 
 function Write-Step {
     param([string]$Message)
@@ -207,13 +220,19 @@ function Get-NodeVersion {
     }
 }
 
+function Test-SupportedNodeVersion {
+    param([Version]$Version)
+
+    return $Version -and $Version -ge $RequiredNodeVersion -and $Version.Major -eq $RequiredNodeMajor
+}
+
 function Ensure-PortableNode {
     if ($ForceNodeRefresh -and (Test-Path $PortableNodeRoot)) {
         Remove-Item -LiteralPath $PortableNodeRoot -Recurse -Force
     }
 
     $portableVersion = Get-NodeVersion -NodeExecutable $PortableNodeExe
-    if ($portableVersion -and $portableVersion -ge $RequiredNodeVersion) {
+    if (Test-SupportedNodeVersion -Version $portableVersion) {
         Write-Note "Using bundled Node.js $portableVersion"
         return $PortableNodeExe
     }
@@ -222,12 +241,13 @@ function Ensure-PortableNode {
     $index = Invoke-RestMethod -Uri "https://nodejs.org/dist/index.json"
     $nodeRelease = $index |
         Where-Object {
-            $_.lts -ne $false -and [Version]($_.version.TrimStart("v")) -ge $RequiredNodeVersion
+            $version = [Version]($_.version.TrimStart("v"))
+            $_.lts -ne $false -and $version.Major -eq $RequiredNodeMajor -and $version -ge $RequiredNodeVersion
         } |
         Select-Object -First 1
 
     if (-not $nodeRelease) {
-        throw "Could not find a suitable Node.js release for Windows."
+        throw ("Could not find a suitable Node.js {0}.x release for Windows." -f $RequiredNodeMajor)
     }
 
     $nodeVersion = $nodeRelease.version

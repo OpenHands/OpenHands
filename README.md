@@ -50,7 +50,7 @@ The experience will be familiar to anyone who has used Devin or Jules.
 
 [Check out the docs](https://docs.openhands.dev/openhands/usage/run-openhands/local-setup) or view the source in this repo.
 
-Need a fast native Windows smoke test for frontend changes? Run `Start-Windows.bat` from the repo root to bootstrap Python 3.12, a portable Node.js toolchain, and the mock UI. The current native Windows flow is for frontend/UI testing only; the full backend/runtime still targets WSL or Linux.
+Need a fast native Windows smoke test for frontend changes? Run `Start-Windows.bat` from the repo root to bootstrap Python 3.12, a portable Node.js toolchain that matches the repo's Node major version, and the mock UI. The current native Windows flow is for frontend/UI testing only; the full backend/runtime still targets WSL or Linux.
 
 ### OpenHands Cloud
 This is a deployment of OpenHands GUI, running on hosted infrastructure.
