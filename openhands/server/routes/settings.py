@@ -56,7 +56,9 @@ async def load_settings(
     settings: Settings = Depends(get_user_settings),
     secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> GETSettingsModel | JSONResponse:
-    return v1_load_settings(provider_tokens, settings_store, settings, secrets_store)
+    return await v1_load_settings(
+        provider_tokens, settings_store, settings, secrets_store
+    )
 
 
 @app.post(
@@ -72,4 +74,4 @@ async def store_settings(
     settings: Settings,
     settings_store: SettingsStore = Depends(get_user_settings_store),
 ) -> JSONResponse:
-    return v1_store_settings(settings, settings_store)
+    return await v1_store_settings(settings, settings_store)
