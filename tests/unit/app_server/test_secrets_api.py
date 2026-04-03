@@ -9,13 +9,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.secrets.secrets_router import (
+    router as secrets_router,
+)
 from openhands.integrations.provider import (
     CustomSecret,
     ProviderToken,
     ProviderType,
-)
-from openhands.server.routes.secrets import (
-    app as secrets_app,
 )
 from openhands.storage import get_file_store
 from openhands.storage.data_models.secrets import Secrets
@@ -26,12 +26,12 @@ from openhands.storage.secrets.file_secrets_store import FileSecretsStore
 def test_client():
     """Create a test client for the settings API."""
     app = FastAPI()
-    app.include_router(secrets_app)
+    app.include_router(secrets_router)
 
     # Mock SESSION_API_KEY to None to disable authentication in tests
     with patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False):
         # Clear the SESSION_API_KEY to disable auth dependency
-        with patch('openhands.server.dependencies._SESSION_API_KEY', None):
+        with patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None):
             yield TestClient(app)
 
 
@@ -70,7 +70,7 @@ async def test_load_custom_secrets_names(test_client, file_secrets_store):
     await file_secrets_store.store(user_secrets)
 
     # Make the GET request
-    response = test_client.get('/api/secrets')
+    response = test_client.get('/secrets')
     print(response)
     assert response.status_code == 200
 
@@ -107,7 +107,7 @@ async def test_load_custom_secrets_names_empty(test_client, file_secrets_store):
     await file_secrets_store.store(user_secrets)
 
     # Make the GET request
-    response = test_client.get('/api/secrets')
+    response = test_client.get('/secrets')
     assert response.status_code == 200
 
     # Check the response
@@ -130,7 +130,7 @@ async def test_add_custom_secret(test_client, file_secrets_store):
 
     # Make the POST request to add a custom secret
     add_secret_data = {'name': 'API_KEY', 'value': 'api-key-value', 'description': None}
-    response = test_client.post('/api/secrets', json=add_secret_data)
+    response = test_client.post('/secrets', json=add_secret_data)
     assert response.status_code == 201
 
     # Verify that the settings were stored with the new secret
@@ -158,7 +158,7 @@ async def test_create_custom_secret_with_no_existing_secrets(
         'value': 'new-api-key-value',
         'description': 'Test API Key',
     }
-    response = test_client.post('/api/secrets', json=add_secret_data)
+    response = test_client.post('/secrets', json=add_secret_data)
     assert response.status_code == 201
 
     # Verify that the settings were stored with the new secret
@@ -196,7 +196,7 @@ async def test_update_existing_custom_secret(test_client, file_secrets_store):
         'name': 'API_KEY',
         'description': None,
     }
-    response = test_client.put('/api/secrets/API_KEY', json=update_secret_data)
+    response = test_client.put('/secrets/API_KEY', json=update_secret_data)
     assert response.status_code == 200
 
     # Verify that the settings were stored with the updated secret
@@ -236,7 +236,7 @@ async def test_add_multiple_custom_secrets(test_client, file_secrets_store):
         'value': 'api-key-value',
         'description': None,
     }
-    response1 = test_client.post('/api/secrets', json=add_secret_data1)
+    response1 = test_client.post('/secrets', json=add_secret_data1)
     assert response1.status_code == 201
 
     # Make the POST request to add second custom secret
@@ -245,7 +245,7 @@ async def test_add_multiple_custom_secrets(test_client, file_secrets_store):
         'value': 'db-password-value',
         'description': None,
     }
-    response = test_client.post('/api/secrets', json=add_secret_data2)
+    response = test_client.post('/secrets', json=add_secret_data2)
     assert response.status_code == 201
 
     # Verify that the settings were stored with the new secrets
@@ -293,7 +293,7 @@ async def test_delete_custom_secret(test_client, file_secrets_store):
     await file_secrets_store.store(user_secrets)
 
     # Make the DELETE request to delete a custom secret
-    response = test_client.delete('/api/secrets/API_KEY')
+    response = test_client.delete('/secrets/API_KEY')
     assert response.status_code == 200
 
     # Verify that the settings were stored without the deleted secret
@@ -331,7 +331,7 @@ async def test_delete_nonexistent_custom_secret(test_client, file_secrets_store)
     await file_secrets_store.store(user_secrets)
 
     # Make the DELETE request to delete a nonexistent custom secret
-    response = test_client.delete('/api/secrets/NONEXISTENT_KEY')
+    response = test_client.delete('/secrets/NONEXISTENT_KEY')
     assert response.status_code == 404
 
     # Verify that the settings were stored without changes to existing secrets
@@ -360,7 +360,7 @@ async def test_add_git_providers_with_host(test_client, file_secrets_store):
 
     # Mock check_provider_tokens to return empty string (no error)
     with patch(
-        'openhands.server.routes.secrets.check_provider_tokens',
+        'openhands.app_server.secrets.secrets_router.check_provider_tokens',
         AsyncMock(return_value=''),
     ):
         # Add a GitHub provider with a host
@@ -369,7 +369,7 @@ async def test_add_git_providers_with_host(test_client, file_secrets_store):
                 'github': {'token': 'new-github-token', 'host': 'github.enterprise.com'}
             }
         }
-        response = test_client.post('/api/add-git-providers', json=add_provider_data)
+        response = test_client.post('/secrets/git-providers', json=add_provider_data)
         assert response.status_code == 200
 
         # Verify that the settings were stored with the new provider token and host
@@ -399,7 +399,7 @@ async def test_add_git_providers_update_host_only(test_client, file_secrets_stor
 
     # Mock check_provider_tokens to return empty string (no error)
     with patch(
-        'openhands.server.routes.secrets.check_provider_tokens',
+        'openhands.app_server.secrets.secrets_router.check_provider_tokens',
         AsyncMock(return_value=''),
     ):
         # Update only the host
@@ -411,7 +411,7 @@ async def test_add_git_providers_update_host_only(test_client, file_secrets_stor
                 }
             }
         }
-        response = test_client.post('/api/add-git-providers', json=update_host_data)
+        response = test_client.post('/secrets/git-providers', json=update_host_data)
         assert response.status_code == 200
 
         # Verify that the host was updated but the token remains the same
@@ -447,9 +447,9 @@ async def test_add_git_providers_invalid_token_with_host(
                 'github': {'token': 'invalid-token', 'host': 'github.enterprise.com'}
             }
         }
-        response = test_client.post('/api/add-git-providers', json=add_provider_data)
+        response = test_client.post('/secrets/git-providers', json=add_provider_data)
         assert response.status_code == 401
-        assert 'Invalid token' in response.json()['error']
+        assert 'Invalid token' in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -461,7 +461,7 @@ async def test_add_multiple_git_providers_with_hosts(test_client, file_secrets_s
 
     # Mock check_provider_tokens to return empty string (no error)
     with patch(
-        'openhands.server.routes.secrets.check_provider_tokens',
+        'openhands.app_server.secrets.secrets_router.check_provider_tokens',
         AsyncMock(return_value=''),
     ):
         # Add multiple providers with hosts
@@ -471,7 +471,7 @@ async def test_add_multiple_git_providers_with_hosts(test_client, file_secrets_s
                 'gitlab': {'token': 'gitlab-token', 'host': 'gitlab.enterprise.com'},
             }
         }
-        response = test_client.post('/api/add-git-providers', json=add_providers_data)
+        response = test_client.post('/secrets/git-providers', json=add_providers_data)
         assert response.status_code == 200
 
         # Verify that both providers were stored with their respective hosts
