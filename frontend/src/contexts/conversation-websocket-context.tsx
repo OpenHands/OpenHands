@@ -693,13 +693,15 @@ export function ConversationWebSocketProvider({
       resend_all: true,
     };
 
-    // Add session_api_key if available
-    if (sessionApiKey) {
-      queryParams.session_api_key = sessionApiKey;
-    }
+    // Build first-message auth payload so the token is never part of the URL
+    // (avoids leaking sk-oh-* tokens in reverse-proxy / load-balancer access logs).
+    const authMessage = sessionApiKey
+      ? { type: "auth", session_api_key: sessionApiKey }
+      : undefined;
 
     return {
       queryParams,
+      authMessage,
       reconnect: { enabled: true },
       onOpen: async () => {
         setMainConnectionState("OPEN");
@@ -755,15 +757,18 @@ export function ConversationWebSocketProvider({
       resend_all: true,
     };
 
-    // Add session_api_key if available
-    if (sessionApiKey) {
-      queryParams.session_api_key = sessionApiKey;
-    }
-
     const planningAgentConversation = subConversations?.[0];
+
+    // Use first-message auth so the token stays out of the URL.
+    const planningApiKey =
+      planningAgentConversation?.session_api_key ?? sessionApiKey;
+    const authMessage = planningApiKey
+      ? { type: "auth", session_api_key: planningApiKey }
+      : undefined;
 
     return {
       queryParams,
+      authMessage,
       reconnect: { enabled: true },
       onOpen: async () => {
         setPlanningConnectionState("OPEN");

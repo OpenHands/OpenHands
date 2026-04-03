@@ -2,6 +2,12 @@ import React from "react";
 
 export interface WebSocketHookOptions {
   queryParams?: Record<string, string | boolean>;
+  /**
+   * If provided, this JSON message is sent as the very first WebSocket frame
+   * after the connection opens (before the onOpen callback fires).  Used for
+   * first-message authentication so that secrets are never part of the URL.
+   */
+  authMessage?: Record<string, unknown>;
   onOpen?: (event: Event) => void;
   onClose?: (event: CloseEvent) => void;
   onMessage?: (event: MessageEvent) => void;
@@ -57,6 +63,12 @@ export const useWebSocket = <T = string>(
     allowedToReconnectRef.current.add(ws);
 
     ws.onopen = (event) => {
+      // Send first-message auth before signalling "open" to callers so that
+      // the server authenticates before any application messages are sent.
+      if (optionsRef.current?.authMessage) {
+        ws.send(JSON.stringify(optionsRef.current.authMessage));
+      }
+
       setIsConnected(true);
       setError(null); // Clear any previous errors
       setIsReconnecting(false);

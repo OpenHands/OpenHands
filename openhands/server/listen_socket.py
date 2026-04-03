@@ -167,10 +167,52 @@ async def disconnect(connection_id: str) -> None:
 
 
 def _invalid_session_api_key(query_params: dict[str, list[Any]]):
+    """Validate ``session_api_key`` from query params.
+
+    The query-parameter method is **deprecated** – callers should use the
+    ``auth`` socket.io event (first-message authentication) instead so that
+    tokens are never part of the URL and therefore never logged by
+    reverse-proxies.
+    """
     session_api_key = os.getenv('SESSION_API_KEY')
     if not session_api_key:
         return False
-    query_api_keys = query_params['session_api_key']
+    query_api_keys = query_params.get('session_api_key', [])
     if not query_api_keys:
-        return True
+        # No key in query params – may still authenticate via first-message auth
+        return False
+    logger.warning(
+        'session_api_key passed as query parameter is deprecated. '
+        'Use first-message auth instead.'
+    )
     return query_api_keys[0] != session_api_key
+
+
+# Track connections pending first-message authentication.
+# Key: connection_id, Value: True if authenticated.
+_pending_auth: dict[str, bool] = {}
+
+
+@sio.event
+async def auth(connection_id: str, data: dict[str, Any]) -> None:
+    """Handle first-message authentication for WebSocket connections.
+
+    Clients should emit this event immediately after connecting with a payload
+    of ``{"session_api_key": "sk-oh-..."}``.  This avoids putting the token in
+    the URL where it would be logged by Traefik/Datadog.
+    """
+    expected_key = os.getenv('SESSION_API_KEY')
+    if not expected_key:
+        # No auth configured – accept unconditionally.
+        _pending_auth[connection_id] = True
+        return
+
+    provided_key = data.get('session_api_key') if isinstance(data, dict) else None
+    if provided_key == expected_key:
+        _pending_auth[connection_id] = True
+    else:
+        logger.warning(
+            f'First-message auth failed for connection {connection_id}'
+        )
+        _pending_auth.pop(connection_id, None)
+        await sio.disconnect(connection_id)
