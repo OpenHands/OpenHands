@@ -32,6 +32,21 @@ def resolver_context(mock_saas_user_auth):
     return ResolverUserContext(saas_user_auth=mock_saas_user_auth)
 
 
+def test_resolver_org_id_default_none(mock_saas_user_auth):
+    """Test that resolver_org_id defaults to None."""
+    ctx = ResolverUserContext(saas_user_auth=mock_saas_user_auth)
+    assert ctx.resolver_org_id is None
+
+
+def test_resolver_org_id_set():
+    """Test that resolver_org_id can be set."""
+    from uuid import UUID
+
+    org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    ctx = ResolverUserContext(saas_user_auth=AsyncMock(), resolver_org_id=org_id)
+    assert ctx.resolver_org_id == org_id
+
+
 def create_custom_secret(value: str, description: str = 'Test secret') -> CustomSecret:
     """Helper to create CustomSecret instances."""
     return CustomSecret(secret=SecretStr(value), description=description)

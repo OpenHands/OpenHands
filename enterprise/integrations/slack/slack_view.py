@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
+from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.slack.slack_types import (
     SlackMessageView,
     SlackViewInterface,
@@ -202,6 +203,22 @@ class SlackNewConversationView(SlackViewInterface):
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
         user_secrets = await self.saas_user_auth.get_secrets()
 
+        # Determine git provider from repository (needed for both org routing and conversation creation)
+        self._resolved_git_provider = None
+        if self.selected_repo and provider_tokens:
+            provider_handler = ProviderHandler(provider_tokens)
+            repository = await provider_handler.verify_repo_provider(self.selected_repo)
+            self._resolved_git_provider = repository.git_provider
+
+        # Resolve target org based on claimed git organizations
+        self.resolved_org_id = None
+        if self._resolved_git_provider and self.selected_repo:
+            self.resolved_org_id = await resolve_org_for_repo(
+                provider=self._resolved_git_provider.value,
+                full_repo_name=self.selected_repo,
+                keycloak_user_id=self.slack_to_openhands_user.keycloak_user_id,
+            )
+
         # Check if V1 conversations are enabled for this user
         self.v1_enabled = await is_v1_enabled_for_slack_resolver(
             self.slack_to_openhands_user.keycloak_user_id
@@ -224,13 +241,6 @@ class SlackNewConversationView(SlackViewInterface):
             jinja
         )
 
-        # Determine git provider from repository
-        git_provider = None
-        if self.selected_repo and provider_tokens:
-            provider_handler = ProviderHandler(provider_tokens)
-            repository = await provider_handler.verify_repo_provider(self.selected_repo)
-            git_provider = repository.git_provider
-
         agent_loop_info = await create_new_conversation(
             user_id=self.slack_to_openhands_user.keycloak_user_id,
             git_provider_tokens=provider_tokens,
@@ -244,7 +254,8 @@ class SlackNewConversationView(SlackViewInterface):
             replay_json=None,
             conversation_trigger=ConversationTrigger.SLACK,
             custom_secrets=user_secrets.custom_secrets if user_secrets else None,
-            git_provider=git_provider,
+            git_provider=self._resolved_git_provider,
+            resolver_org_id=self.resolved_org_id,
         )
 
         self.conversation_id = agent_loop_info.conversation_id
@@ -265,13 +276,12 @@ class SlackNewConversationView(SlackViewInterface):
         # Create the Slack V1 callback processor
         slack_callback_processor = self._create_slack_v1_callback_processor()
 
-        # Determine git provider from repository
-        git_provider = None
-        provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        if self.selected_repo and provider_tokens:
-            provider_handler = ProviderHandler(provider_tokens)
-            repository = await provider_handler.verify_repo_provider(self.selected_repo)
-            git_provider = ProviderType(repository.git_provider.value)
+        # Use git provider resolved in create_or_update_conversation
+        git_provider = (
+            ProviderType(self._resolved_git_provider.value)
+            if self._resolved_git_provider
+            else None
+        )
 
         # Get the app conversation service and start the conversation
         injector_state = InjectorState()
@@ -292,7 +302,10 @@ class SlackNewConversationView(SlackViewInterface):
         )
 
         # Set up the Slack user context for the V1 system
-        slack_user_context = ResolverUserContext(saas_user_auth=self.saas_user_auth)
+        slack_user_context = ResolverUserContext(
+            saas_user_auth=self.saas_user_auth,
+            resolver_org_id=self.resolved_org_id,
+        )
         setattr(injector_state, USER_CONTEXT_ATTR, slack_user_context)
 
         async with get_app_conversation_service(

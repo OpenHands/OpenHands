@@ -103,7 +103,7 @@ class FileConversationStore(ConversationStore):
 
     @classmethod
     async def get_instance(
-        cls, config: OpenHandsConfig, user_id: str | None
+        cls, config: OpenHandsConfig, user_id: str | None, **kwargs
     ) -> FileConversationStore:
         file_store = get_file_store(
             file_store_type=config.file_store,
