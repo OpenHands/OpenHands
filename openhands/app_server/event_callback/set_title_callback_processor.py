@@ -22,7 +22,6 @@ from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.sdk import Event, MessageEvent
-from openhands.sdk.utils.redact import redact_text_secrets
 
 _logger = logging.getLogger(__name__)
 
@@ -90,9 +89,10 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
         )
 
         _logger.info(
-            'Callback %s Invoked for event %s',
+            'Callback %s Invoked for event type=%s id=%s',
             callback.id,
-            redact_text_secrets(str(event)),
+            type(event).__name__,
+            event.id,
         )
 
         state = InjectorState()
