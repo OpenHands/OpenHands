@@ -78,7 +78,9 @@ async def store_llm_settings(
         # Explicitly cleared by the user (basic view save or advanced view clear)
         settings.llm_base_url = None
 
-    settings.search_api_key = settings.search_api_key or existing_settings.search_api_key
+    settings.search_api_key = (
+        settings.search_api_key or existing_settings.search_api_key
+    )
     return settings
 
 
