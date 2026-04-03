@@ -213,7 +213,7 @@ async def create_custom_secret(
     if secret_name in custom_secrets:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Secret {secret_name} already exists',
+            detail=f'Secret {secret_name} already exists',
         )
 
     custom_secrets[secret_name] = CustomSecret(
