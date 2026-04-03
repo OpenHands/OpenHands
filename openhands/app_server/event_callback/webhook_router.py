@@ -215,7 +215,6 @@ async def on_conversation_update(
         sandbox_id=sandbox_info.id,
     )
 
-    _logger.info(f'Effective tags: {merged_tags}')
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
