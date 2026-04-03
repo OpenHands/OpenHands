@@ -60,6 +60,13 @@ LLM_RETRY_EXCEPTIONS: tuple[type[Exception], ...] = (
     LLMNoResponseError,
 )
 
+OPENROUTER_XIAOMI_UNSUPPORTED_PARAMS: tuple[str, ...] = (
+    'reasoning_effort',
+    'native_tool_calling',
+    'extended_thinking_budget',
+    'thinking',
+)
+
 
 class LLM(RetryMixin, DebugMixin):
     """The LLM class represents a Language Model instance.
@@ -218,6 +225,8 @@ class LLM(RetryMixin, DebugMixin):
         if self.config.completion_kwargs is not None:
             kwargs.update(self.config.completion_kwargs)
 
+        self._strip_openrouter_xiaomi_unsupported_params(kwargs)
+
         self._completion = partial(
             litellm_completion,
             model=self.config.model,
@@ -335,6 +344,8 @@ class LLM(RetryMixin, DebugMixin):
             # if we're not using litellm proxy, remove the extra_body
             if 'litellm_proxy' not in self.config.model:
                 kwargs.pop('extra_body', None)
+
+            self._strip_openrouter_xiaomi_unsupported_params(kwargs)
 
             # Record start time for latency measurement
             start_time = time.time()
@@ -830,6 +841,17 @@ class LLM(RetryMixin, DebugMixin):
 
     def __repr__(self) -> str:
         return str(self)
+
+    def _is_openrouter_xiaomi_model(self) -> bool:
+        return self.config.model.strip().lower().startswith('openrouter/xiaomi/')
+
+    def _strip_openrouter_xiaomi_unsupported_params(
+        self, request_kwargs: dict[str, Any]
+    ) -> None:
+        if not self._is_openrouter_xiaomi_model():
+            return
+        for param in OPENROUTER_XIAOMI_UNSUPPORTED_PARAMS:
+            request_kwargs.pop(param, None)
 
     def format_messages_for_llm(self, messages: Message | list[Message]) -> list[dict]:
         if isinstance(messages, Message):

@@ -76,6 +76,8 @@ class AsyncLLM(LLM):
             ):
                 kwargs['reasoning_effort'] = self.config.reasoning_effort
 
+            self._strip_openrouter_xiaomi_unsupported_params(kwargs)
+
             # ensure we work with a list of messages
             messages = messages if isinstance(messages, list) else [messages]
 

@@ -78,6 +78,8 @@ class StreamingLLM(AsyncLLM):
             ):
                 kwargs['reasoning_effort'] = self.config.reasoning_effort
 
+            self._strip_openrouter_xiaomi_unsupported_params(kwargs)
+
             self.log_prompt(messages)
 
             try:

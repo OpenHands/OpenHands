@@ -1434,6 +1434,33 @@ def test_non_gemini_uses_reasoning_effort(mock_completion):
     llm.completion(messages=sample_messages)
 
 
+@patch('openhands.llm.llm.litellm_completion')
+def test_openrouter_xiaomi_drops_incompatible_request_params(mock_completion):
+    mock_completion.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+    config = LLMConfig(
+        model='openrouter/xiaomi/mimo-v2-pro',
+        api_key='k',
+        reasoning_effort='high',
+        completion_kwargs={
+            'native_tool_calling': True,
+            'extended_thinking_budget': 1024,
+            'thinking': {'budget_tokens': 2048},
+        },
+    )
+    llm = LLM(config, service_id='svc')
+    llm.completion(
+        messages=[{'role': 'user', 'content': 'hi'}],
+        reasoning_effort='low',
+        native_tool_calling=True,
+        extended_thinking_budget=256,
+    )
+    call_kwargs = mock_completion.call_args[1]
+    assert 'reasoning_effort' not in call_kwargs
+    assert 'native_tool_calling' not in call_kwargs
+    assert 'extended_thinking_budget' not in call_kwargs
+    assert 'thinking' not in call_kwargs
+
+
 @patch('openhands.llm.async_llm.litellm_acompletion')
 @pytest.mark.asyncio
 async def test_async_reasoning_effort_passthrough(mock_acompletion):
@@ -1450,6 +1477,29 @@ async def test_async_reasoning_effort_passthrough(mock_acompletion):
     # Async path does not pop temperature/top_p (parity with main)
     assert call_kwargs.get('temperature') == 0.7
     assert call_kwargs.get('top_p') == 0.9
+
+
+@patch('openhands.llm.async_llm.litellm_acompletion')
+@pytest.mark.asyncio
+async def test_async_openrouter_xiaomi_drops_incompatible_request_params(
+    mock_acompletion,
+):
+    mock_acompletion.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+    config = LLMConfig(
+        model='openrouter/xiaomi/mimo-v2-pro',
+        api_key='k',
+        reasoning_effort='high',
+    )
+    llm = AsyncLLM(config, service_id='svc')
+    await llm.async_completion(
+        messages=[{'role': 'user', 'content': 'hi'}],
+        native_tool_calling=True,
+        extended_thinking_budget=256,
+    )
+    call_kwargs = mock_acompletion.call_args[1]
+    assert 'reasoning_effort' not in call_kwargs
+    assert 'native_tool_calling' not in call_kwargs
+    assert 'extended_thinking_budget' not in call_kwargs
 
 
 @patch('openhands.llm.streaming_llm.AsyncLLM._call_acompletion')
@@ -1475,6 +1525,35 @@ async def test_streaming_reasoning_effort_passthrough(mock_call):
     assert call_kwargs.get('reasoning_effort') == 'low'
     assert call_kwargs.get('temperature') == 0.7
     assert call_kwargs.get('top_p') == 0.9
+
+
+@patch('openhands.llm.streaming_llm.AsyncLLM._call_acompletion')
+@pytest.mark.asyncio
+async def test_streaming_openrouter_xiaomi_drops_incompatible_request_params(mock_call):
+    async def fake_stream(*args, **kwargs):
+        class Dummy:
+            async def __aiter__(self):
+                yield {'choices': [{'delta': {'content': 'x'}}]}
+
+        return Dummy()
+
+    mock_call.side_effect = fake_stream
+    config = LLMConfig(
+        model='openrouter/xiaomi/mimo-v2-pro',
+        api_key='k',
+        reasoning_effort='high',
+    )
+    sllm = StreamingLLM(config, service_id='svc')
+    async for _ in sllm.async_streaming_completion(
+        messages=[{'role': 'user', 'content': 'hi'}],
+        native_tool_calling=True,
+        extended_thinking_budget=256,
+    ):
+        break
+    call_kwargs = mock_call.call_args[1]
+    assert 'reasoning_effort' not in call_kwargs
+    assert 'native_tool_calling' not in call_kwargs
+    assert 'extended_thinking_budget' not in call_kwargs
 
 
 @patch('openhands.llm.async_llm.litellm_acompletion')
