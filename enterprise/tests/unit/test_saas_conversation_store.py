@@ -214,3 +214,106 @@ class TestGetInstance:
             # Assert
             assert store.user_id == user_id
             assert store.org_id is None
+
+    @pytest.mark.asyncio
+    async def test_get_instance_passes_resolver_org_id(self):
+        """Verify get_instance forwards resolver_org_id from kwargs to the store."""
+        # Arrange
+        user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
+        resolver_org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+        mock_user = MagicMock(spec=User)
+        mock_user.current_org_id = UUID(user_id)
+        mock_config = MagicMock(spec=OpenHandsConfig)
+
+        with patch(
+            'storage.saas_conversation_store.UserStore.get_user_by_id',
+            AsyncMock(return_value=mock_user),
+        ), patch('storage.saas_conversation_store.session_maker'):
+            # Act
+            store = await SaasConversationStore.get_instance(
+                mock_config, user_id, resolver_org_id=resolver_org_id
+            )
+
+            # Assert
+            assert store.resolver_org_id == resolver_org_id
+
+
+class TestResolverOrgIdRouting:
+    """Tests for resolver_org_id overriding org_id in save_metadata."""
+
+    @pytest.mark.asyncio
+    async def test_save_metadata_uses_resolver_org_id_over_default(self, session_maker):
+        """When resolver_org_id is set, save_metadata stores it instead of the default org_id."""
+        # Arrange
+        user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
+        default_org_id = UUID('5594c7b6-f959-4b81-92e9-b09c206f5081')
+        resolver_org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+        store = SaasConversationStore(
+            user_id, default_org_id, session_maker, resolver_org_id=resolver_org_id
+        )
+        metadata = ConversationMetadata(
+            conversation_id='resolver-routed-conv',
+            user_id=user_id,
+            selected_repository='ClaimedOrg/repo',
+            selected_branch=None,
+            created_at=datetime.now(UTC),
+            last_updated_at=datetime.now(UTC),
+        )
+
+        # Act
+        await store.save_metadata(metadata)
+
+        # Assert - verify the SaaS metadata record has the resolver org, not the default
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        with session_maker() as session:
+            saas_record = (
+                session.query(StoredConversationMetadataSaas)
+                .filter(
+                    StoredConversationMetadataSaas.conversation_id
+                    == 'resolver-routed-conv'
+                )
+                .first()
+            )
+            assert saas_record is not None
+            assert saas_record.org_id == resolver_org_id
+            assert saas_record.org_id != default_org_id
+
+    @pytest.mark.asyncio
+    async def test_save_metadata_uses_default_org_when_no_resolver_org(
+        self, session_maker
+    ):
+        """When resolver_org_id is None, save_metadata uses the default org_id."""
+        # Arrange
+        user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
+        default_org_id = UUID('5594c7b6-f959-4b81-92e9-b09c206f5081')
+        store = SaasConversationStore(user_id, default_org_id, session_maker)
+        metadata = ConversationMetadata(
+            conversation_id='default-org-conv',
+            user_id=user_id,
+            selected_repository='PersonalOrg/repo',
+            selected_branch=None,
+            created_at=datetime.now(UTC),
+            last_updated_at=datetime.now(UTC),
+        )
+
+        # Act
+        await store.save_metadata(metadata)
+
+        # Assert
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        with session_maker() as session:
+            saas_record = (
+                session.query(StoredConversationMetadataSaas)
+                .filter(
+                    StoredConversationMetadataSaas.conversation_id == 'default-org-conv'
+                )
+                .first()
+            )
+            assert saas_record is not None
+            assert saas_record.org_id == default_org_id

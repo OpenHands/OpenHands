@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
+from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
     ENABLE_V1_GITLAB_RESOLVER,
@@ -118,6 +119,14 @@ class GitlabIssue(ResolverViewInterface):
     async def initialize_new_conversation(self) -> ConversationMetadata:
         # v1_enabled is already set at construction time in the factory method
         # This is the source of truth for the conversation type
+
+        # Resolve target org based on claimed git organizations
+        self.resolved_org_id = await resolve_org_for_repo(
+            provider='gitlab',
+            full_repo_name=self.full_repo_name,
+            keycloak_user_id=self.user_info.keycloak_user_id,
+        )
+
         if self.v1_enabled:
             # Create dummy conversation metadata
             # Don't save to conversation store
@@ -135,6 +144,7 @@ class GitlabIssue(ResolverViewInterface):
             selected_branch=self._get_branch_name(),
             conversation_trigger=ConversationTrigger.RESOLVER,
             git_provider=ProviderType.GITLAB,
+            resolver_org_id=self.resolved_org_id,
         )
 
         self.conversation_id = conversation_metadata.conversation_id
@@ -228,7 +238,10 @@ class GitlabIssue(ResolverViewInterface):
         )
 
         # Set up the GitLab user context for the V1 system
-        gitlab_user_context = ResolverUserContext(saas_user_auth=saas_user_auth)
+        gitlab_user_context = ResolverUserContext(
+            saas_user_auth=saas_user_auth,
+            resolver_org_id=self.resolved_org_id,
+        )
         setattr(injector_state, USER_CONTEXT_ATTR, gitlab_user_context)
 
         async with get_app_conversation_service(
@@ -260,7 +273,7 @@ class GitlabIssue(ResolverViewInterface):
                 'is_mr': self.is_mr,
                 'discussion_id': getattr(self, 'discussion_id', None),
             },
-            send_summary_instruction=self.send_summary_instruction,
+            should_request_summary=self.send_summary_instruction,
         )
 
 
