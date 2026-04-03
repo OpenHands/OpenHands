@@ -89,7 +89,7 @@ dependencies = [
   "qtconsole>=5.6.1",
   "rapidfuzz>=3.9",
   "redis>=5.2,<7",
-  "requests>=2.32.5",
+  "requests>=2.33",
   "setuptools>=78.1.1",
   "shellingham>=1.5.4",
   "sqlalchemy[asyncio]>=2.0.40",
@@ -228,7 +228,7 @@ pypdf = "^6.9.2"
 pillow = "^12.1.1"
 starlette = "^0.49.1"
 urllib3 = "^2.6.3"
-requests = "^2.32.5"
+requests = "^2.33.0"
 setuptools = ">=78.1.1"
 
 # TODO: These are integrations that should probably be optional
