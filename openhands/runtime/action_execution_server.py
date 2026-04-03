@@ -449,9 +449,16 @@ class ActionExecutor:
     async def read(self, action: FileReadAction) -> Observation:
         assert self.bash_session is not None
 
-        # Cannot read binary files
-        if is_binary(action.path):
-            return ErrorObservation('ERROR_BINARY_FILE')
+        # Cannot read binary files.
+        # Attempt UTF-8 decode first — binaryornot uses byte-frequency heuristics
+        # that incorrectly classify dense CJK (Chinese/Japanese/Korean) UTF-8 text
+        # as binary. A file that decodes cleanly as UTF-8 is always text.
+        try:
+            with open(action.path, 'rb') as _f:
+                _f.read().decode('utf-8')
+        except (UnicodeDecodeError, OSError):
+            if is_binary(action.path):
+                return ErrorObservation('ERROR_BINARY_FILE')
 
         if action.impl_source == FileReadSource.OH_ACI:
             result_str, _ = _execute_file_editor(
