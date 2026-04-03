@@ -211,8 +211,6 @@ async def auth(connection_id: str, data: dict[str, Any]) -> None:
     if provided_key == expected_key:
         _pending_auth[connection_id] = True
     else:
-        logger.warning(
-            f'First-message auth failed for connection {connection_id}'
-        )
+        logger.warning(f'First-message auth failed for connection {connection_id}')
         _pending_auth.pop(connection_id, None)
         await sio.disconnect(connection_id)
