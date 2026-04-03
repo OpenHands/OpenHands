@@ -94,7 +94,7 @@ class WebSession:
         self.sio = sio
         self.last_active_ts = int(time.time())
         self.file_store = file_store
-        self.logger = OpenHandsLoggerAdapter(extra={'session_id': sid})
+        self.logger = OpenHandsLoggerAdapter(extra={"session_id": sid})
         self.llm_registry = llm_registry
         self.conversation_stats = conversation_stats
         self.agent_session = AgentSession(
@@ -121,9 +121,9 @@ class WebSession:
     async def close(self) -> None:
         if self.sio:
             await self.sio.emit(
-                'oh_event',
+                "oh_event",
                 event_to_dict(
-                    AgentStateChangedObservation('', AgentState.STOPPED.value)
+                    AgentStateChangedObservation("", AgentState.STOPPED.value)
                 ),
                 to=ROOM_KEY.format(sid=self.sid),
             )
@@ -138,7 +138,7 @@ class WebSession:
         replay_json: str | None,
     ) -> None:
         self.agent_session.event_stream.add_event(
-            AgentStateChangedObservation('', AgentState.LOADING),
+            AgentStateChangedObservation("", AgentState.LOADING),
             EventSource.ENVIRONMENT,
         )
         agent_cls = settings.agent or self.config.default_agent
@@ -164,10 +164,10 @@ class WebSession:
         )
 
         # Set Git user configuration if provided in settings
-        git_user_name = getattr(settings, 'git_user_name', None)
+        git_user_name = getattr(settings, "git_user_name", None)
         if git_user_name is not None:
             self.config.git_user_name = git_user_name
-        git_user_email = getattr(settings, 'git_user_email', None)
+        git_user_email = getattr(settings, "git_user_email", None)
         if git_user_email is not None:
             self.config.git_user_email = git_user_email
         max_iterations = settings.max_iterations or self.config.max_iterations
@@ -185,15 +185,17 @@ class WebSession:
 
         # NOTE: this need to happen AFTER the config is updated with the search_api_key
         self.logger.debug(
-            f'MCP configuration before setup - self.config.mcp_config: {redact_mcp_config_model(self.config.mcp)}'
+            f"MCP configuration before setup - self.config.mcp_config: {redact_mcp_config_model(self.config.mcp)}"
         )
 
         # Check if settings has custom mcp_config
-        mcp_config = getattr(settings, 'mcp_config', None)
+        mcp_config = getattr(settings, "mcp_config", None)
         if mcp_config is not None:
             # Use the provided MCP SHTTP servers instead of default setup
             self.config.mcp = self.config.mcp.merge(mcp_config)
-            self.logger.debug(f'Merged custom MCP Config: {redact_mcp_config_model(mcp_config)}')
+            self.logger.debug(
+                f"Merged custom MCP Config: {redact_mcp_config_model(mcp_config)}"
+            )
 
         # Add OpenHands' MCP server by default
         (
@@ -205,19 +207,19 @@ class WebSession:
 
         if openhands_mcp_server:
             self.config.mcp.shttp_servers.append(openhands_mcp_server)
-            self.logger.debug('Added default MCP HTTP server to config')
+            self.logger.debug("Added default MCP HTTP server to config")
 
             self.config.mcp.stdio_servers.extend(openhands_mcp_stdio_servers)
 
         self.logger.debug(
-            f'MCP configuration after setup - self.config.mcp: {redact_mcp_config_model(self.config.mcp)}'
+            f"MCP configuration after setup - self.config.mcp: {redact_mcp_config_model(self.config.mcp)}"
         )
 
         # TODO: override other LLM config & agent config groups (#2075)
         agent_config = self.config.get_agent_config(agent_cls)
         # Pass runtime information to agent config for runtime-specific tool behavior
         agent_config.runtime = self.config.runtime
-        agent_name = agent_cls if agent_cls is not None else 'agent'
+        agent_name = agent_cls if agent_cls is not None else "agent"
         llm_config = self.config.get_llm_config_from_agent(agent_name)
         if settings.enable_default_condenser:
             # Default condenser chains three condensers together:
@@ -243,11 +245,11 @@ class WebSession:
             )
 
             self.logger.info(
-                f'Enabling pipeline condenser with:'
-                f' browser_output_masking(attention_window=2), '
+                f"Enabling pipeline condenser with:"
+                f" browser_output_masking(attention_window=2), "
                 f' llm(model="{llm_config.model}", '
                 f' base_url="{llm_config.base_url}", '
-                f' keep_first=4, max_size={max_events_for_condenser})'
+                f" keep_first=4, max_size={max_events_for_condenser})"
             )
             agent_config.condenser = default_condenser_config
         agent = Agent.get_cls(agent_cls)(agent_config, self.llm_registry)
@@ -284,33 +286,33 @@ class WebSession:
                 replay_json=replay_json,
             )
         except MicroagentValidationError as e:
-            self.logger.exception(f'Error creating agent_session: {e}')
+            self.logger.exception(f"Error creating agent_session: {e}")
             # For microagent validation errors, provide more helpful information
-            await self.send_error(f'Failed to create agent session: {str(e)}')
+            await self.send_error(f"Failed to create agent session: {str(e)}")
             return
         except ValueError as e:
-            self.logger.exception(f'Error creating agent_session: {e}')
+            self.logger.exception(f"Error creating agent_session: {e}")
             error_message = str(e)
             # For ValueError related to microagents, provide more helpful information
-            if 'microagent' in error_message.lower():
+            if "microagent" in error_message.lower():
                 await self.send_error(
-                    f'Failed to create agent session: {error_message}'
+                    f"Failed to create agent session: {error_message}"
                 )
             else:
                 # For other ValueErrors, just show the error class
-                await self.send_error('Failed to create agent session: ValueError')
+                await self.send_error("Failed to create agent session: ValueError")
             return
         except Exception as e:
-            self.logger.exception(f'Error creating agent_session: {e}')
+            self.logger.exception(f"Error creating agent_session: {e}")
             # For other errors, just show the error class to avoid exposing sensitive information
             await self.send_error(
-                f'Failed to create agent session: {e.__class__.__name__}'
+                f"Failed to create agent session: {e.__class__.__name__}"
             )
             return
 
     def _notify_on_llm_retry(self, retries: int, max: int) -> None:
         self.queue_status_message(
-            'info', RuntimeStatus.LLM_RETRY, f'Retrying LLM request, {retries} / {max}'
+            "info", RuntimeStatus.LLM_RETRY, f"Retrying LLM request, {retries} / {max}"
         )
 
     def on_event(self, event: Event) -> None:
@@ -339,20 +341,20 @@ class WebSession:
         ):
             # feedback from the environment to agent actions is understood as agent events by the UI
             event_dict = event_to_dict(event)
-            event_dict['source'] = EventSource.AGENT
+            event_dict["source"] = EventSource.AGENT
             await self.send(event_dict)
             if (
                 isinstance(event, AgentStateChangedObservation)
                 and event.agent_state == AgentState.ERROR
             ):
                 self.logger.error(
-                    f'Agent status error: {event.reason}',
-                    extra={'signal': 'agent_status_error'},
+                    f"Agent status error: {event.reason}",
+                    extra={"signal": "agent_status_error"},
                 )
         elif isinstance(event, ErrorObservation):
             # send error events as agent events to the UI
             event_dict = event_to_dict(event)
-            event_dict['source'] = EventSource.AGENT
+            event_dict["source"] = EventSource.AGENT
             await self.send(event_dict)
 
     async def dispatch(self, data: dict) -> None:
@@ -363,12 +365,12 @@ class WebSession:
             if controller:
                 if controller.agent.llm.config.disable_vision:
                     await self.send_error(
-                        'Support for images is disabled for this model, try without an image.'
+                        "Support for images is disabled for this model, try without an image."
                     )
                     return
                 if not controller.agent.llm.vision_is_active():
                     await self.send_error(
-                        'Model does not support image upload, change to a different model or try without an image.'
+                        "Model does not support image upload, change to a different model or try without an image."
                     )
                     return
         self.agent_session.event_stream.add_event(event, EventSource.USER)
@@ -396,7 +398,7 @@ class WebSession:
                 # Get timeout from configuration, default to 30 seconds
                 client_wait_timeout = self.config.client_wait_timeout
                 self.logger.debug(
-                    f'Using client wait timeout: {client_wait_timeout}s for session {self.sid}'
+                    f"Using client wait timeout: {client_wait_timeout}s for session {self.sid}"
                 )
 
                 # Wait once during initialization to avoid event push failures during websocket connection intervals
@@ -404,7 +406,7 @@ class WebSession:
                     time.time() - _start_time < client_wait_timeout
                 ):
                     if bool(
-                        self.sio.manager.rooms.get('/', {}).get(
+                        self.sio.manager.rooms.get("/", {}).get(
                             ROOM_KEY.format(sid=self.sid)
                         )
                     ):
@@ -416,45 +418,45 @@ class WebSession:
                     # Log every 2 seconds to reduce spam
                     if _waiting_times % (20 if sleep_duration == 0.1 else 2) == 0:
                         self.logger.debug(
-                            f'There is no listening client in the current room,'
-                            f' waiting for the {_waiting_times}th attempt (timeout: {client_wait_timeout}s): {self.sid}'
+                            f"There is no listening client in the current room,"
+                            f" waiting for the {_waiting_times}th attempt (timeout: {client_wait_timeout}s): {self.sid}"
                         )
                     _waiting_times += 1
                     await asyncio.sleep(sleep_duration)
                 self._wait_websocket_initial_complete = False
-                await self.sio.emit('oh_event', data, to=ROOM_KEY.format(sid=self.sid))
+                await self.sio.emit("oh_event", data, to=ROOM_KEY.format(sid=self.sid))
 
             await asyncio.sleep(0.001)  # This flushes the data to the client
             self.last_active_ts = int(time.time())
             return True
         except RuntimeError as e:
-            self.logger.error(f'Error sending data to websocket: {str(e)}')
+            self.logger.error(f"Error sending data to websocket: {str(e)}")
             self.is_alive = False
             return False
 
     async def send_error(self, message: str) -> None:
         """Sends an error message to the client."""
-        await self.send({'error': True, 'message': message})
+        await self.send({"error": True, "message": message})
 
     async def _send_status_message(
         self, msg_type: str, runtime_status: RuntimeStatus, message: str
     ) -> None:
         """Sends a status message to the client."""
-        if msg_type == 'error':
+        if msg_type == "error":
             agent_session = self.agent_session
             controller = self.agent_session.controller
             if controller is not None and not agent_session.is_closed():
                 await controller.set_agent_state_to(AgentState.ERROR)
             self.logger.error(
-                f'Agent status error: {message}',
-                extra={'signal': 'agent_status_error'},
+                f"Agent status error: {message}",
+                extra={"signal": "agent_status_error"},
             )
         await self.send(
             {
-                'status_update': True,
-                'type': msg_type,
-                'id': runtime_status.value,
-                'message': message,
+                "status_update": True,
+                "type": msg_type,
+                "id": runtime_status.value,
+                "message": message,
             }
         )
 
