@@ -33,13 +33,6 @@ class TestAliveEndpoint:
         assert response.status_code == 200
         assert response.json() == {'status': 'ok'}
 
-    def test_alive_returns_string(self, test_client):
-        """Test that /alive returns a JSON object with status."""
-        response = test_client.get('/alive')
-
-        assert 'status' in response.json()
-        assert response.json()['status'] == 'ok'
-
 
 class TestHealthEndpoint:
     """Test suite for the /health endpoint."""
@@ -50,13 +43,6 @@ class TestHealthEndpoint:
 
         assert response.status_code == 200
         # FastAPI returns JSON-encoded string, so response.json() gives 'OK'
-        assert response.json() == 'OK'
-
-    def test_health_content_type(self, test_client):
-        """Test that /health returns JSON content."""
-        response = test_client.get('/health')
-
-        # Should return JSON with the string 'OK'
         assert response.json() == 'OK'
 
 
@@ -71,15 +57,6 @@ class TestServerInfoEndpoint:
         # Should return a dict with system info
         assert isinstance(response.json(), dict)
 
-    def test_server_info_contains_expected_fields(self, test_client):
-        """Test that /server_info returns expected system info fields."""
-        response = test_client.get('/server_info')
-
-        data = response.json()
-        # The exact fields depend on get_system_info implementation
-        # but it should return some dictionary
-        assert isinstance(data, dict)
-
 
 class TestReadyEndpoint:
     """Test suite for the /ready endpoint."""
@@ -90,13 +67,6 @@ class TestReadyEndpoint:
 
         assert response.status_code == 200
         # FastAPI returns JSON-encoded string, so response.json() gives 'OK'
-        assert response.json() == 'OK'
-
-    def test_ready_content_type(self, test_client):
-        """Test that /ready returns JSON content."""
-        response = test_client.get('/ready')
-
-        # Should return JSON with the string 'OK'
         assert response.json() == 'OK'
 
 
@@ -112,16 +82,3 @@ class TestAllStatusEndpoints:
             assert response.status_code == 200, (
                 f'Endpoint {endpoint} returned {response.status_code}'
             )
-
-    def test_alive_and_ready_are_functionally_similar(self, test_client):
-        """Test that /alive and /ready return similar responses.
-
-        According to the docstrings, /ready is functionally the same as /alive
-        for now, but they may diverge in the future.
-        """
-        alive_response = test_client.get('/alive')
-        ready_response = test_client.get('/ready')
-
-        # Both should return 'OK' (both return JSON with 'OK')
-        assert ready_response.json() == 'OK'
-        assert alive_response.json()['status'] == 'ok'
