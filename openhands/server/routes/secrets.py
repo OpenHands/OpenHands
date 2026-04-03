@@ -100,7 +100,6 @@ async def unset_provider_tokens(
 async def load_custom_secrets_names(
     user_secrets: Secrets | None = Depends(get_secrets),
 ) -> GETCustomSecrets | JSONResponse:
-    # Note: get_secrets dependency is not available in V1 router, so we handle it differently
     return await v1_load_custom_secrets_names(user_secrets)
 
 
