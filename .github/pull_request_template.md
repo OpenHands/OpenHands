@@ -1,5 +1,11 @@
 <!-- Keep this PR as draft until it is ready for review. -->
 
+<!-- AI/LLM agents: be concise and specific. Do not check the box below. -->
+
+- [ ] A human has tested these changes.
+
+---
+
 ## Summary
 
 <!-- 1-3 bullets describing what changed. -->
@@ -38,8 +44,3 @@ Provide a video or screenshots of testing your PR. e.g. you added a new feature 
 ## Notes
 
 <!-- Optional: migrations, config changes, rollout concerns, follow-ups, or anything reviewers should know. -->
-
----
-
-<!-- AI/LLM agents: be concise and specific. Do not check the box below. -->
-- [ ] A human has tested these changes.
