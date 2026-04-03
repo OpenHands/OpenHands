@@ -25,6 +25,7 @@ interface ConversationCardProps {
   conversationVersion?: "V0" | "V1";
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
+  llmModel?: string | null;
 }
 
 export function ConversationCard({
@@ -44,6 +45,7 @@ export function ConversationCard({
   conversationVersion,
   contextMenuOpen = false,
   onContextMenuToggle,
+  llmModel,
 }: ConversationCardProps) {
   const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -161,6 +163,7 @@ export function ConversationCard({
         lastUpdatedAt={lastUpdatedAt}
         createdAt={createdAt}
         conversationStatus={conversationStatus}
+        llmModel={llmModel}
       />
     </div>
   );

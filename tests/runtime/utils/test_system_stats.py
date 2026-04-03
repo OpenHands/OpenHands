@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import psutil
 
-from openhands.runtime.utils.system_stats import (
+from openhands.app_server.status.system_stats import (
     get_system_info,
     get_system_stats,
     update_last_execution_time,
@@ -146,12 +146,12 @@ def test_idle_time_calculation(mock_time):
     # Import the module again to reset the global variables with our mocked time
     import importlib
 
-    import openhands.runtime.utils.system_stats
+    import openhands.app_server.status.system_stats
 
-    importlib.reload(openhands.runtime.utils.system_stats)
+    importlib.reload(openhands.app_server.status.system_stats)
 
     # Get system info
-    from openhands.runtime.utils.system_stats import get_system_info
+    from openhands.app_server.status.system_stats import get_system_info
 
     info = get_system_info()
 
