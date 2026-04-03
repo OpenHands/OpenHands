@@ -723,11 +723,13 @@
         "https://$WEB_HOST/slack/keycloak-callback",
         "https://$WEB_HOST/oauth/device/keycloak-callback",
         "https://$WEB_HOST/api/email/verified",
-        "/realms/$KEYCLOAK_REALM_NAME/$KEYCLOAK_CLIENT_ID/*"
+        "/realms/$KEYCLOAK_REALM_NAME/$KEYCLOAK_CLIENT_ID/*",
+        "https://laminar.$WEB_HOST/api/auth/callback/keycloak"
       ],
       "webOrigins": [
         "https://$WEB_HOST",
-        "https://$AUTH_WEB_HOST"
+        "https://$AUTH_WEB_HOST",
+        "https://laminar.$WEB_HOST"
       ],
       "notBefore": 0,
       "bearerOnly": false,
