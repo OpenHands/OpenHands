@@ -148,7 +148,7 @@ class SQLEventCallbackService(EventCallbackService):
         if page_id is not None:
             # Parse page_id to get offset or cursor
             try:
-                offset = int(page_id)
+                offset = max(int(page_id), 0)
                 stmt = stmt.offset(offset)
             except ValueError:
                 # If page_id is not a valid integer, start from beginning

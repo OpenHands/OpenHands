@@ -267,6 +267,29 @@ class TestSQLEventCallbackService:
         assert len(next_result.items) == 2
         assert next_result.next_page_id is None
 
+    async def test_search_callbacks_with_negative_page_id(
+        self,
+        service: SQLEventCallbackService,
+        sample_processor: EventCallbackProcessor,
+    ):
+        """Test negative page_id falls back to the first page."""
+        for _ in range(3):
+            callback_request = CreateEventCallbackRequest(
+                conversation_id=uuid4(),
+                processor=sample_processor,
+                event_kind='ActionEvent',
+            )
+            await service.create_event_callback(callback_request)
+
+        first_page = await service.search_event_callbacks(limit=2)
+        negative_page = await service.search_event_callbacks(page_id='-1', limit=2)
+
+        assert len(negative_page.items) == 2
+        assert [item.id for item in negative_page.items] == [
+            item.id for item in first_page.items
+        ]
+        assert negative_page.next_page_id == first_page.next_page_id
+
     async def test_search_callbacks_with_null_filters(
         self,
         service: SQLEventCallbackService,
