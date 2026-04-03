@@ -45,6 +45,18 @@ class _FailingHttpxClient:
         raise self._error
 
 
+class _InvalidJsonShapeHttpxClient:
+    def __init__(self, payloads: list[object]):
+        self._payloads = payloads
+        self.calls: list[tuple[str, dict[str, str] | None]] = []
+
+    async def get(self, url: str, headers: dict[str, str] | None = None):
+        self.calls.append((url, headers))
+        idx = min(len(self.calls) - 1, len(self._payloads) - 1)
+        request = httpx.Request('GET', url)
+        return httpx.Response(200, json=self._payloads[idx], request=request)
+
+
 @asynccontextmanager
 async def _ctx(obj):
     yield obj
@@ -237,6 +249,85 @@ async def test_set_title_callback_processor_request_errors_return_none():
             ),
         )
     )
+
+    def get_app_conversation_service(_state):
+        return _ctx(app_conversation_service)
+
+    def get_app_conversation_info_service(_state):
+        return _ctx(app_conversation_info_service)
+
+    def get_event_callback_service(_state):
+        return _ctx(event_callback_service)
+
+    def get_httpx_client(_state):
+        return _ctx(httpx_client)
+
+    callback = EventCallback(
+        conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+    )
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[TextContent(text='hi')]),
+    )
+
+    processor = SetTitleCallbackProcessor()
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            get_app_conversation_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            get_app_conversation_info_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            get_event_callback_service,
+        ),
+        patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor.asyncio.sleep',
+            new=AsyncMock(),
+        ),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor._logger.warning'
+        ) as logger_warning,
+    ):
+        result = await processor(conversation_id, callback, event)
+
+    assert result is None
+    assert len(httpx_client.calls) == 4
+    assert logger_warning.call_count == 4
+    app_conversation_info_service.save_app_conversation_info.assert_not_called()
+    event_callback_service.save_event_callback.assert_not_called()
+    assert callback.status == EventCallbackStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_set_title_callback_processor_invalid_json_shape_returns_none():
+    conversation_id = uuid4()
+    session_api_key = 'test-session-key'
+    conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
+
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+        session_api_key=session_api_key,
+    )
+
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+
+    httpx_client = _InvalidJsonShapeHttpxClient(payloads=[['bad'], ['bad']])
 
     def get_app_conversation_service(_state):
         return _ctx(app_conversation_service)

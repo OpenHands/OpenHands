@@ -63,8 +63,25 @@ async def _poll_for_title(
                 exc,
             )
         else:
-            title = response.json().get('title')
-            if title:
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                _logger.warning(
+                    'Title poll returned invalid JSON for conversation %s: %s',
+                    url,
+                    exc,
+                )
+                continue
+
+            if not isinstance(payload, dict):
+                _logger.warning(
+                    'Title poll returned non-object JSON for conversation %s',
+                    url,
+                )
+                continue
+
+            title = payload.get('title')
+            if isinstance(title, str) and title:
                 return title
 
     return None
