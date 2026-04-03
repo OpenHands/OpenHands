@@ -200,7 +200,6 @@ class SlackNewConversationView(SlackViewInterface):
         return self.slack_v1_callback_processor
 
     def set_ack_message_ts_for_v1_callback(self, ack_message_ts: str) -> None:
-        """Persist acknowledgement message ts for final in-place Slack update."""
         if self.slack_v1_callback_processor is None:
             return
         self.slack_v1_callback_processor.slack_view_data['ack_message_ts'] = ack_message_ts

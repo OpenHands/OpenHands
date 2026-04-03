@@ -103,7 +103,6 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         return f'{summary}\n\n[OpenHands conversation]({conversation_link})'
 
     async def _post_summary_to_slack(self, summary: str, conversation_id: UUID) -> None:
-        """Post or update the final Slack message."""
         bot_access_token = await self._get_bot_access_token()
         if not bot_access_token:
             raise RuntimeError('Missing Slack bot access token')
