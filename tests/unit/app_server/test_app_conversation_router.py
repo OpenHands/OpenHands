@@ -4,7 +4,8 @@ This module tests the batch_get_app_conversations endpoint,
 focusing on UUID string parsing, validation, and error handling.
 """
 
-from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+import io
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -441,7 +442,7 @@ class TestReadConversationFile:
             ) as named_tempfile,
             patch(
                 'openhands.app_server.app_conversation.app_conversation_router.open',
-                mock_open(read_data='plan body'),
+                return_value=io.BytesIO(b'plan body'),
                 create=True,
             ),
             patch(
