@@ -3028,7 +3028,7 @@ class TestPluginSpecModel:
         )
 
         plugin = PluginSpec(source='https://github.com/owner/repo.git')
-        assert plugin.display_name == 'repo.git'
+        assert plugin.display_name == 'repo'
 
     def test_plugin_spec_display_name_local_path(self):
         """Test display_name extracts directory name from local path."""

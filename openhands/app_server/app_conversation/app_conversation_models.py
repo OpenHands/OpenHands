@@ -47,10 +47,11 @@ class PluginSpec(PluginSource):
 
         Examples:
             - 'github:owner/repo' -> 'repo'
-            - 'https://github.com/owner/repo.git' -> 'repo.git'
+            - 'https://github.com/owner/repo.git' -> 'repo'
             - '/local/path' -> 'path'
         """
-        return self.source.split('/')[-1] if '/' in self.source else self.source
+        display_name = self.source.split('/')[-1] if '/' in self.source else self.source
+        return display_name.removesuffix('.git')
 
     def format_params_as_text(self, indent: str = '') -> str | None:
         """Format parameters as a readable text block for display.
