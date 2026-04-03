@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       # put packages in their own group if they have a history of breaking the build or needing to be reverted
@@ -29,6 +31,8 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       docusaurus:
