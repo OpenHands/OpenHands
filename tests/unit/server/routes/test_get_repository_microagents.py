@@ -15,7 +15,7 @@ from openhands.integrations.service_types import (
     Repository,
 )
 from openhands.microagent.types import MicroagentContentResponse
-from openhands.server.dependencies import check_session_api_key
+from openhands.app_server.utils.dependencies import check_session_api_key
 from openhands.server.routes.git import app as git_app
 from openhands.server.user_auth import (
     get_access_token,

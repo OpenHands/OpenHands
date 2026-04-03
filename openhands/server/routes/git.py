@@ -32,7 +32,7 @@ from openhands.microagent.types import (
     MicroagentContentResponse,
     MicroagentResponse,
 )
-from openhands.server.dependencies import get_dependencies
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.server.shared import server_config
 from openhands.server.user_auth import (
     get_access_token,

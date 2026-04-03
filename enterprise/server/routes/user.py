@@ -23,7 +23,7 @@ from openhands.microagent.types import (
     MicroagentContentResponse,
     MicroagentResponse,
 )
-from openhands.server.dependencies import get_dependencies
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.server.routes.git import (
     get_repository_branches,
     get_repository_microagent_content,
