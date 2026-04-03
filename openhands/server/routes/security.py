@@ -15,7 +15,7 @@ from fastapi import (
     status,
 )
 
-from openhands.server.dependencies import get_dependencies
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.server.session.conversation import ServerConversation
 from openhands.server.utils import get_conversation
 
