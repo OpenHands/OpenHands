@@ -283,7 +283,7 @@ async def create_custom_secret(
         if secret_name in custom_secrets:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={'message': f'Secret {secret_name} already exists'},
+                content={'error': f'Secret {secret_name} already exists'},
             )
 
         custom_secrets[secret_name] = CustomSecret(
@@ -357,7 +357,7 @@ async def update_custom_secret(
             if secret_name != secret_id and secret_name in custom_secrets:
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    content={'message': f'Secret {secret_name} already exists'},
+                    content={'error': f'Secret {secret_name} already exists'},
                 )
 
             custom_secrets[secret_name] = CustomSecret(
