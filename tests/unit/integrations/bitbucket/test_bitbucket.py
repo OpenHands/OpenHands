@@ -412,7 +412,7 @@ async def test_check_provider_tokens_with_only_bitbucket():
 
     # Call check_provider_tokens with the patched validate_provider_token
     with patch(
-        'openhands.server.routes.secrets.validate_provider_token', mock_validate
+        'openhands.app_server.secrets.secrets_router.validate_provider_token', mock_validate
     ):
         await check_provider_tokens(post_model, None)
 

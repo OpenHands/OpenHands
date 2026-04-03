@@ -1,6 +1,7 @@
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from openhands.app_server.errors import AuthError
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -41,7 +42,7 @@ def test_client():
         patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.routes.secrets.check_provider_tokens',
+            'openhands.app_server.secrets.secrets_router.check_provider_tokens',
             AsyncMock(return_value=None),
         ),
     ):
@@ -77,7 +78,7 @@ async def test_check_provider_tokens_valid():
 
     # Mock the validate_provider_token function to return GITHUB for valid tokens
     with patch(
-        'openhands.server.routes.secrets.validate_provider_token'
+        'openhands.app_server.secrets.secrets_router.validate_provider_token'
     ) as mock_validate:
         mock_validate.return_value = ProviderType.GITHUB
         await check_provider_tokens(providers, existing_provider_tokens)
@@ -95,12 +96,12 @@ async def test_check_provider_tokens_invalid():
 
     # Mock the validate_provider_token function to return None for invalid tokens
     with patch(
-        'openhands.server.routes.secrets.validate_provider_token'
+        'openhands.app_server.secrets.secrets_router.validate_provider_token'
     ) as mock_validate:
         mock_validate.return_value = None
 
         # Should raise error for invalid token
-        with pytest.raises(ValueError):
+        with pytest.raises(AuthError):
             await check_provider_tokens(providers, existing_provider_tokens)
 
         mock_validate.assert_called_once()
