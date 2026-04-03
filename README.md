@@ -23,7 +23,6 @@
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=pt">Português</a> |
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=ru">Русский</a> |
   <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=zh">中文</a>
-
 </div>
 
 <hr>
@@ -84,3 +83,58 @@ All our work is available under the MIT license, except for the `enterprise/` di
 The core `openhands` and `agent-server` Docker images are fully MIT-licensed as well.
 
 If you need help with anything, or just want to chat, [come find us on Slack](https://dub.sh/openhands).
+
+<hr>
+
+<div align="center">
+  <strong>Trusted by engineers at</strong>
+  <br/><br/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/tiktok.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/tiktok.svg" alt="TikTok" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/vmware.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/vmware.svg" alt="VMware" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/roche.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/roche.svg" alt="Roche" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/amazon.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/amazon.svg" alt="Amazon" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/c3-ai.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/c3-ai.svg" alt="C3 AI" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/netflix.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/netflix.svg" alt="Netflix" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/mastercard.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/mastercard.svg" alt="Mastercard" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/red-hat.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/red-hat.svg" alt="Red Hat" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/mongodb.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/mongodb.svg" alt="MongoDB" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/apple.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/apple.svg" alt="Apple" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/nvidia.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/nvidia.svg" alt="NVIDIA" height="17" hspace="5">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/google.svg">
+    <img src="https://assets.openhands.dev/logos/external/black/google.svg" alt="Google" height="17" hspace="5">
+  </picture>
+</div>

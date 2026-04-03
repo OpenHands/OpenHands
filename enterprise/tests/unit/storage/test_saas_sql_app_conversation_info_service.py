@@ -280,6 +280,8 @@ class TestSaasSQLAppConversationInfoService:
         stored_metadata.reasoning_tokens = 0
         stored_metadata.context_window = 0
         stored_metadata.per_turn_token = 0
+        stored_metadata.public = None
+        stored_metadata.tags = {}
 
         saas_metadata = MagicMock(spec=StoredConversationMetadataSaas)
         saas_metadata.user_id = UUID('a1111111-1111-1111-1111-111111111111')

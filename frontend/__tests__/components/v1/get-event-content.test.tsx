@@ -62,7 +62,7 @@ describe("getEventContent", () => {
   it("uses the action summary as the full action title", () => {
     const { title } = getEventContent(terminalActionEvent);
 
-    render(<>{title}</>);
+    render(<span>{title}</span>);
 
     expect(screen.getByText("Check repository status")).toBeInTheDocument();
     expect(screen.queryByText("$ git status")).not.toBeInTheDocument();
@@ -72,7 +72,7 @@ describe("getEventContent", () => {
     const actionWithoutSummary = { ...terminalActionEvent, summary: undefined };
     const { title } = getEventContent(actionWithoutSummary);
 
-    render(<>{title}</>);
+    render(<span>{title}</span>);
 
     // Without i18n loaded, the translation key renders as the raw key
     expect(screen.getByText("ACTION_MESSAGE$RUN")).toBeInTheDocument();
@@ -81,13 +81,66 @@ describe("getEventContent", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("returns empty details for file view action instead of 'Unknown event'", () => {
+    const fileViewAction: ActionEvent = {
+      id: "action-2",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "FileEditorAction",
+        command: "view",
+        path: "/workspace/README.md",
+        file_text: null,
+        old_str: null,
+        new_str: null,
+        insert_line: null,
+        view_range: null,
+      },
+      tool_name: "file_editor",
+      tool_call_id: "tool-2",
+      tool_call: {
+        id: "tool-2",
+        type: "function",
+        function: {
+          name: "file_editor",
+          arguments: '{"command":"view","path":"/workspace/README.md"}',
+        },
+      },
+      llm_response_id: "response-2",
+      security_risk: SecurityRisk.LOW,
+    };
+
+    const { title, details } = getEventContent(fileViewAction);
+
+    render(<span>{title}</span>);
+    expect(screen.getByText("ACTION_MESSAGE$READ")).toBeInTheDocument();
+    expect(details).toBe("");
+  });
+
+  it("shows action kind for action-like events missing tool_name/tool_call_id", () => {
+    // Simulate an event that has an action object but fails the strict isActionEvent() guard
+    const malformedEvent = {
+      id: "action-3",
+      timestamp: new Date().toISOString(),
+      source: "agent" as const,
+      action: { kind: "FileEditorAction" },
+    };
+
+    const { title, details } = getEventContent(malformedEvent as any);
+
+    expect(title).toBe("FILEEDITOR");
+    expect(details).toBe("");
+  });
+
   it("reuses the action summary as the full paired observation title", () => {
     const { title } = getEventContent(
       terminalObservationEvent,
       terminalActionEvent,
     );
 
-    render(<>{title}</>);
+    render(<span>{title}</span>);
 
     expect(screen.getByText("Check repository status")).toBeInTheDocument();
     expect(screen.queryByText("$ git status")).not.toBeInTheDocument();

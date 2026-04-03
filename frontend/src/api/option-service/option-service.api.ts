@@ -1,16 +1,18 @@
 import { openHands } from "../open-hands-axios";
-import { WebClientConfig } from "./option.types";
+import { ModelsResponse, WebClientConfig } from "./option.types";
 
 /**
  * Service for handling API options endpoints
  */
 class OptionService {
   /**
-   * Retrieve the list of models available
-   * @returns List of models available
+   * Retrieve the structured models response from the backend.
+   *
+   * The backend is the single source of truth for verified models,
+   * verified providers, and provider assignment for bare model names.
    */
-  static async getModels(): Promise<string[]> {
-    const { data } = await openHands.get<string[]>("/api/options/models");
+  static async getModels(): Promise<ModelsResponse> {
+    const { data } = await openHands.get<ModelsResponse>("/api/options/models");
     return data;
   }
 

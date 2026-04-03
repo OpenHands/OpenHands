@@ -19,6 +19,7 @@ import {
   ConversationStateUpdateEventFullState,
   ConversationStateUpdateEventStats,
   ConversationErrorEvent,
+  ServerErrorEvent,
 } from "./core/events/conversation-state-event";
 import { HookExecutionEvent } from "./core/events/hook-execution-event";
 import { SystemPromptEvent } from "./core/events/system-event";
@@ -192,6 +193,21 @@ export const isConversationErrorEvent = (
   event: OpenHandsEvent,
 ): event is ConversationErrorEvent =>
   "kind" in event && event.kind === "ConversationErrorEvent";
+
+/**
+ * Type guard function to check if an event is a server error event
+ */
+export const isServerErrorEvent = (
+  event: OpenHandsEvent,
+): event is ServerErrorEvent =>
+  "kind" in event && event.kind === "ServerErrorEvent";
+
+/**
+ * Type guard function to check if an event is a displayable error event
+ * (ConversationErrorEvent or ServerErrorEvent) - both should show as error banners
+ */
+export const isDisplayableErrorEvent = (event: OpenHandsEvent): boolean =>
+  isConversationErrorEvent(event) || isServerErrorEvent(event);
 
 /**
  * Type guard function to check if an event is a hook execution event
