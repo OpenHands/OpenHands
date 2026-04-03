@@ -46,41 +46,39 @@ async def store_llm_settings(
     settings: Settings, existing_settings: Settings
 ) -> Settings:
     """Merge LLM settings with existing settings."""
-    # Convert to Settings model and merge with existing settings
-    if existing_settings:
-        # Keep existing LLM settings if not provided
-        if settings.llm_api_key is None:
-            settings.llm_api_key = existing_settings.llm_api_key
-        if settings.llm_model is None:
-            settings.llm_model = existing_settings.llm_model
-        if settings.llm_base_url is None:
-            # Not provided at all (e.g. MCP config save) - preserve existing or auto-detect
-            if existing_settings.llm_base_url:
-                settings.llm_base_url = existing_settings.llm_base_url
-            elif is_openhands_model(settings.llm_model):
-                # OpenHands models use the LiteLLM proxy
-                settings.llm_base_url = LITE_LLM_API_URL
-            elif settings.llm_model:
-                # For non-openhands models, try to get URL from litellm
-                try:
-                    api_base = get_provider_api_base(settings.llm_model)
-                    if api_base:
-                        settings.llm_base_url = api_base
-                    else:
-                        logger.debug(
-                            f'No api_base found in litellm for model: {settings.llm_model}'
-                        )
-                except Exception as e:
-                    logger.error(
-                        f'Failed to get api_base from litellm for model {settings.llm_model}: {e}'
-                    )
-        elif settings.llm_base_url == '':
-            # Explicitly cleared by the user (basic view save or advanced view clear)
-            settings.llm_base_url = None
-        # Keep search API key if missing or empty
-        if not settings.search_api_key:
-            settings.search_api_key = existing_settings.search_api_key
+    if not existing_settings:
+        return settings
 
+    # Preserve unset LLM settings
+    settings.llm_api_key = settings.llm_api_key or existing_settings.llm_api_key
+    settings.llm_model = settings.llm_model or existing_settings.llm_model
+
+    if settings.llm_base_url is None:
+        # Not provided at all (e.g. MCP config save) - preserve existing or auto-detect
+        if existing_settings.llm_base_url:
+            settings.llm_base_url = existing_settings.llm_base_url
+        elif is_openhands_model(settings.llm_model):
+            # OpenHands models use the LiteLLM proxy
+            settings.llm_base_url = LITE_LLM_API_URL
+        elif settings.llm_model:
+            # For non-openhands models, try to get URL from litellm
+            try:
+                api_base = get_provider_api_base(settings.llm_model)
+                if api_base:
+                    settings.llm_base_url = api_base
+                else:
+                    logger.debug(
+                        f'No api_base found in litellm for model: {settings.llm_model}'
+                    )
+            except Exception as e:
+                logger.error(
+                    f'Failed to get api_base from litellm for model {settings.llm_model}: {e}'
+                )
+    elif settings.llm_base_url == '':
+        # Explicitly cleared by the user (basic view save or advanced view clear)
+        settings.llm_base_url = None
+
+    settings.search_api_key = settings.search_api_key or existing_settings.search_api_key
     return settings
 
 
