@@ -449,7 +449,7 @@ async def test_add_git_providers_invalid_token_with_host(
         }
         response = test_client.post('/secrets/git-providers', json=add_provider_data)
         assert response.status_code == 401
-        assert 'Invalid token' in response.json()['error']
+        assert 'Invalid token' in response.json()['detail']
 
 
 @pytest.mark.asyncio

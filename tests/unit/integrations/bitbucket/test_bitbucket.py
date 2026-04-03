@@ -414,7 +414,7 @@ async def test_check_provider_tokens_with_only_bitbucket():
     with patch(
         'openhands.server.routes.secrets.validate_provider_token', mock_validate
     ):
-        result = await check_provider_tokens(post_model, None)
+        await check_provider_tokens(post_model, None)
 
         # Verify that validate_provider_token was called only once (for Bitbucket)
         assert mock_validate.call_count == 1
@@ -422,9 +422,6 @@ async def test_check_provider_tokens_with_only_bitbucket():
         # Verify that the token passed to validate_provider_token was the Bitbucket token
         args, kwargs = mock_validate.call_args
         assert args[0].get_secret_value() == 'username:app_password'
-
-        # Verify that no error message was returned
-        assert result == ''
 
 
 @pytest.mark.asyncio

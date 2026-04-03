@@ -42,7 +42,7 @@ def test_client():
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
             'openhands.server.routes.secrets.check_provider_tokens',
-            AsyncMock(return_value=''),
+            AsyncMock(return_value=None),
         ),
     ):
         client = TestClient(test_app)
@@ -80,11 +80,7 @@ async def test_check_provider_tokens_valid():
         'openhands.server.routes.secrets.validate_provider_token'
     ) as mock_validate:
         mock_validate.return_value = ProviderType.GITHUB
-
-        result = await check_provider_tokens(providers, existing_provider_tokens)
-
-        # Should return empty string for valid token
-        assert result == ''
+        await check_provider_tokens(providers, existing_provider_tokens)
         mock_validate.assert_called_once()
 
 
@@ -103,10 +99,10 @@ async def test_check_provider_tokens_invalid():
     ) as mock_validate:
         mock_validate.return_value = None
 
-        result = await check_provider_tokens(providers, existing_provider_tokens)
+        # Should raise error for invalid token
+        with pytest.raises(ValueError):
+            await check_provider_tokens(providers, existing_provider_tokens)
 
-        # Should return error message for invalid token
-        assert 'Invalid token' in result
         mock_validate.assert_called_once()
 
 
@@ -120,10 +116,7 @@ async def test_check_provider_tokens_wrong_type():
     # Empty existing provider tokens
     existing_provider_tokens = {}
 
-    result = await check_provider_tokens(providers, existing_provider_tokens)
-
-    # Should return empty string for no providers
-    assert result == ''
+    await check_provider_tokens(providers, existing_provider_tokens)
 
 
 @pytest.mark.asyncio
@@ -134,10 +127,7 @@ async def test_check_provider_tokens_no_tokens():
     # Empty existing provider tokens
     existing_provider_tokens = {}
 
-    result = await check_provider_tokens(providers, existing_provider_tokens)
-
-    # Should return empty string when no tokens provided
-    assert result == ''
+    await check_provider_tokens(providers, existing_provider_tokens)
 
 
 # Tests for store_llm_settings

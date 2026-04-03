@@ -6,8 +6,7 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
-from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, status
 
 from openhands.app_server.secrets.secrets_router import (
     create_custom_secret as v1_create_custom_secret,
@@ -28,6 +27,7 @@ from openhands.app_server.secrets.secrets_router import (
     update_custom_secret as v1_update_custom_secret,
 )
 from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.app_server.utils.models import EditResponse
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
 from openhands.server.settings import (
     CustomSecretModel,
@@ -80,14 +80,14 @@ async def store_provider_tokens(
     provider_info: POSTProviderModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
-) -> JSONResponse:
+) -> EditResponse:
     return await v1_store_provider_tokens(provider_info, secrets_store, provider_tokens)
 
 
-@app.post('/unset-provider-tokens', response_model=dict[str, str], deprecated=True)
+@app.post('/unset-provider-tokens', deprecated=True)
 async def unset_provider_tokens(
     secrets_store: SecretsStore = Depends(get_secrets_store),
-) -> JSONResponse:
+) -> EditResponse:
     return await v1_unset_provider_tokens(secrets_store)
 
 
@@ -99,24 +99,24 @@ async def unset_provider_tokens(
 @app.get('/secrets', response_model=GETCustomSecrets, deprecated=True)
 async def load_custom_secrets_names(
     user_secrets: Secrets | None = Depends(get_secrets),
-) -> GETCustomSecrets | JSONResponse:
+) -> GETCustomSecrets:
     return await v1_load_custom_secrets_names(user_secrets)
 
 
-@app.post('/secrets', response_model=dict[str, str], deprecated=True)
+@app.post('/secrets', status_code=status.HTTP_201_CREATED, deprecated=True)
 async def create_custom_secret(
     incoming_secret: CustomSecretModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
-) -> JSONResponse:
+) -> EditResponse:
     return await v1_create_custom_secret(incoming_secret, secrets_store)
 
 
-@app.put('/secrets/{secret_id}', response_model=dict[str, str], deprecated=True)
+@app.put('/secrets/{secret_id}', deprecated=True)
 async def update_custom_secret(
     secret_id: str,
     incoming_secret: CustomSecretWithoutValueModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
-) -> JSONResponse:
+) -> EditResponse:
     return await v1_update_custom_secret(secret_id, incoming_secret, secrets_store)
 
 
@@ -124,5 +124,5 @@ async def update_custom_secret(
 async def delete_custom_secret(
     secret_id: str,
     secrets_store: SecretsStore = Depends(get_secrets_store),
-) -> JSONResponse:
+) -> EditResponse:
     return await v1_delete_custom_secret(secret_id, secrets_store)
