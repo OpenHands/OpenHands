@@ -1,5 +1,6 @@
 from unittest import TestCase, mock
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
 from integrations.github.github_view import GithubFactory, GithubIssue, get_oh_labels
@@ -215,3 +216,119 @@ class TestGithubV1ConversationRouting(TestCase):
             jinja_env, saas_user_auth, conversation_metadata
         )
         mock_create_v0.assert_not_called()
+
+
+class TestGithubOrgRouting(TestCase):
+    """Test org routing for GitHub resolver conversations."""
+
+    def setUp(self):
+        self.user_data = UserData(
+            user_id=123, username='testuser', keycloak_user_id='test-keycloak-id'
+        )
+        self.raw_payload = Message(
+            source=SourceType.GITHUB,
+            message={
+                'payload': {
+                    'action': 'opened',
+                    'issue': {'number': 42},
+                }
+            },
+        )
+        self.resolved_org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+    def _create_github_issue(self):
+        return GithubIssue(
+            user_info=self.user_data,
+            full_repo_name='ClaimedOrg/repo',
+            issue_number=42,
+            installation_id=456,
+            conversation_id='',
+            should_extract=True,
+            send_summary_instruction=False,
+            is_public_repo=True,
+            raw_payload=self.raw_payload,
+            uuid='test-uuid',
+            title='',
+            description='',
+            previous_comments=[],
+            v1_enabled=False,
+        )
+
+    @pytest.mark.asyncio
+    @patch(
+        'integrations.github.github_view.SaasConversationStore.get_resolver_instance'
+    )
+    @patch('integrations.github.github_view.resolve_org_for_repo')
+    @patch('integrations.github.github_view.get_user_v1_enabled_setting')
+    async def test_v0_passes_resolver_org_id_to_get_resolver_instance(
+        self, mock_v1_setting, mock_resolve_org, mock_get_resolver
+    ):
+        """V0 path creates store via get_resolver_instance with resolver_org_id."""
+        # Arrange
+        mock_v1_setting.return_value = False
+        mock_resolve_org.return_value = self.resolved_org_id
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver.return_value = mock_store
+
+        github_issue = self._create_github_issue()
+
+        # Act
+        await github_issue.initialize_new_conversation()
+
+        # Assert
+        mock_resolve_org.assert_called_once_with(
+            provider='github',
+            full_repo_name='ClaimedOrg/repo',
+            keycloak_user_id='test-keycloak-id',
+        )
+        # get_resolver_instance(config, user_id, resolver_org_id)
+        args, _ = mock_get_resolver.call_args
+        assert args[1] == 'test-keycloak-id'
+        assert args[2] == self.resolved_org_id
+
+    @pytest.mark.asyncio
+    @patch('integrations.github.github_view.get_app_conversation_service')
+    @patch('integrations.github.github_view.resolve_org_for_repo')
+    @patch('integrations.github.github_view.get_user_v1_enabled_setting')
+    async def test_v1_passes_resolver_org_id_to_resolver_user_context(
+        self, mock_v1_setting, mock_resolve_org, mock_get_service
+    ):
+        """V1 path passes resolved org_id to ResolverUserContext."""
+        # Arrange
+        mock_v1_setting.return_value = True
+        mock_resolve_org.return_value = self.resolved_org_id
+
+        github_issue = self._create_github_issue()
+
+        # Initialize to set resolved_org_id and v1_enabled
+        await github_issue.initialize_new_conversation()
+
+        # Assert
+        assert github_issue.resolved_org_id == self.resolved_org_id
+
+    @pytest.mark.asyncio
+    @patch(
+        'integrations.github.github_view.SaasConversationStore.get_resolver_instance'
+    )
+    @patch('integrations.github.github_view.resolve_org_for_repo')
+    @patch('integrations.github.github_view.get_user_v1_enabled_setting')
+    async def test_no_claim_passes_none_resolver_org_id(
+        self, mock_v1_setting, mock_resolve_org, mock_get_resolver
+    ):
+        """When no claim exists, resolver_org_id is None (falls back to personal workspace)."""
+        # Arrange
+        mock_v1_setting.return_value = False
+        mock_resolve_org.return_value = None
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver.return_value = mock_store
+
+        github_issue = self._create_github_issue()
+
+        # Act
+        await github_issue.initialize_new_conversation()
+
+        # Assert
+        args, _ = mock_get_resolver.call_args
+        assert args[2] is None
