@@ -3,18 +3,17 @@
 This module provides the V1 API routes for user settings under /api/v1/settings.
 """
 
-import logging
 import os
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
 )
-from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.server.routes.secrets import invalidate_legacy_secrets_store
 from openhands.server.settings import (
     GETSettingsModel,

@@ -6,27 +6,24 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
-from openhands.app_server.settings.settings_router import (
-    load_settings as v1_load_settings,
-    store_settings as v1_store_settings,
-)
-
 import os
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.settings.settings_router import (
+    load_settings as v1_load_settings,
+)
+from openhands.app_server.settings.settings_router import (
+    store_settings as v1_store_settings,
+)
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
-    ProviderType,
 )
 from openhands.server.dependencies import get_dependencies
-from openhands.server.routes.secrets import invalidate_legacy_secrets_store
 from openhands.server.settings import (
     GETSettingsModel,
 )
-from openhands.server.shared import config
 from openhands.server.user_auth import (
     get_provider_tokens,
     get_secrets_store,
@@ -36,7 +33,6 @@ from openhands.server.user_auth import (
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
-from openhands.utils.llm import get_provider_api_base, is_openhands_model
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
