@@ -369,7 +369,7 @@ async def test_add_git_providers_with_host(test_client, file_secrets_store):
                 'github': {'token': 'new-github-token', 'host': 'github.enterprise.com'}
             }
         }
-        response = test_client.post('/secrets/add-git-providers', json=add_provider_data)
+        response = test_client.post('/secrets/git-providers', json=add_provider_data)
         assert response.status_code == 200
 
         # Verify that the settings were stored with the new provider token and host
@@ -411,7 +411,7 @@ async def test_add_git_providers_update_host_only(test_client, file_secrets_stor
                 }
             }
         }
-        response = test_client.post('/add-git-providers', json=update_host_data)
+        response = test_client.post('/secrets/git-providers', json=update_host_data)
         assert response.status_code == 200
 
         # Verify that the host was updated but the token remains the same
@@ -447,7 +447,7 @@ async def test_add_git_providers_invalid_token_with_host(
                 'github': {'token': 'invalid-token', 'host': 'github.enterprise.com'}
             }
         }
-        response = test_client.post('/add-git-providers', json=add_provider_data)
+        response = test_client.post('/secrets/git-providers', json=add_provider_data)
         assert response.status_code == 401
         assert 'Invalid token' in response.json()['error']
 
@@ -471,7 +471,7 @@ async def test_add_multiple_git_providers_with_hosts(test_client, file_secrets_s
                 'gitlab': {'token': 'gitlab-token', 'host': 'gitlab.enterprise.com'},
             }
         }
-        response = test_client.post('/add-git-providers', json=add_providers_data)
+        response = test_client.post('/secrets/git-providers', json=add_providers_data)
         assert response.status_code == 200
 
         # Verify that both providers were stored with their respective hosts
