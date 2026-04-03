@@ -216,6 +216,27 @@ class TestGetFeatureFlags:
             result = _get_feature_flags()
             assert result.enable_linear is True
 
+    def test_feature_flags_strip_whitespace_and_ignore_case(self):
+        """Whitespace and case differences should not disable explicit true flags."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                'ENABLE_BILLING': ' True ',
+                'HIDE_LLM_SETTINGS': ' TRUE ',
+                'ENABLE_JIRA': ' false ',
+                'ENABLE_LINEAR': ' TrUe ',
+            },
+        ):
+            result = _get_feature_flags()
+            assert result.enable_billing is True
+            assert result.hide_llm_settings is True
+            assert result.enable_jira is False
+            assert result.enable_linear is True
+
     def test_multiple_flags_can_be_set(self):
         """Multiple feature flags can be enabled simultaneously."""
         from openhands.app_server.web_client.default_web_client_config_injector import (

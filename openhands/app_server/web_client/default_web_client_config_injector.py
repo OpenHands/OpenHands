@@ -26,6 +26,11 @@ def _get_recaptcha_site_key() -> str | None:
 _OSS_POSTHOG_KEY = 'phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA'
 
 
+def _is_enabled_env(name: str) -> bool:
+    """Return True only when an env var is explicitly set to true."""
+    return os.getenv(name, 'false').strip().lower() == 'true'
+
+
 def _get_posthog_client_key() -> str:
     """Get PostHog client key from environment variable.
 
@@ -121,16 +126,16 @@ def _get_feature_flags() -> WebClientFeatureFlags:
     only if the corresponding env var is exactly 'true', otherwise False.
     """
     return WebClientFeatureFlags(
-        enable_billing=os.getenv('ENABLE_BILLING', 'false') == 'true',
-        hide_llm_settings=os.getenv('HIDE_LLM_SETTINGS', 'false') == 'true',
-        enable_jira=os.getenv('ENABLE_JIRA', 'false') == 'true',
-        enable_jira_dc=os.getenv('ENABLE_JIRA_DC', 'false') == 'true',
-        enable_linear=os.getenv('ENABLE_LINEAR', 'false') == 'true',
-        hide_users_page=os.getenv('HIDE_USERS_PAGE', 'false') == 'true',
-        hide_billing_page=os.getenv('HIDE_BILLING_PAGE', 'false') == 'true',
-        hide_integrations_page=os.getenv('HIDE_INTEGRATIONS_PAGE', 'false') == 'true',
-        enable_acp=os.getenv('ENABLE_ACP', 'false') == 'true',
-        enable_onboarding=os.getenv('OH_ENABLE_ONBOARDING', 'false') == 'true',
+        enable_billing=_is_enabled_env('ENABLE_BILLING'),
+        hide_llm_settings=_is_enabled_env('HIDE_LLM_SETTINGS'),
+        enable_jira=_is_enabled_env('ENABLE_JIRA'),
+        enable_jira_dc=_is_enabled_env('ENABLE_JIRA_DC'),
+        enable_linear=_is_enabled_env('ENABLE_LINEAR'),
+        hide_users_page=_is_enabled_env('HIDE_USERS_PAGE'),
+        hide_billing_page=_is_enabled_env('HIDE_BILLING_PAGE'),
+        hide_integrations_page=_is_enabled_env('HIDE_INTEGRATIONS_PAGE'),
+        enable_acp=_is_enabled_env('ENABLE_ACP'),
+        enable_onboarding=_is_enabled_env('OH_ENABLE_ONBOARDING'),
     )
 
 
