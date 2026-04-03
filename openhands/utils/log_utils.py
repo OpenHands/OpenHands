@@ -1,4 +1,8 @@
-"""Utilities for safe logging, including credential redaction."""
+"""Utilities for safe logging, including credential redaction.
+
+Delegates core dict redaction to ``openhands.sdk.utils.redact.sanitize_dict``
+and adds URL-query-param redaction on top (which the SDK does not yet handle).
+"""
 
 from __future__ import annotations
 
@@ -7,19 +11,13 @@ import re
 from typing import Any
 from urllib.parse import parse_qs, urlparse, urlunparse
 
-_REDACTED = '***'
+from openhands.sdk.utils.redact import sanitize_dict
 
-# Header names (case-insensitive) that contain credentials
-_SENSITIVE_HEADERS = frozenset(
-    {
-        'authorization',
-        'x-session-api-key',
-        'x-api-key',
-        'api-key',
-    }
-)
+_REDACTED = '<redacted>'
 
-# URL query parameter names (case-insensitive) that contain credentials
+# URL query parameter names (case-insensitive) that contain credentials.
+# The SDK's sanitize_dict handles dict keys but not URL query params embedded
+# in string values, so we keep this layer.
 _SENSITIVE_QUERY_PARAMS = frozenset(
     {
         'apikey',
@@ -29,30 +27,6 @@ _SENSITIVE_QUERY_PARAMS = frozenset(
         'access_token',
         'secret',
         'key',
-    }
-)
-
-# Dict keys that may hold credential values
-_SENSITIVE_KEYS = frozenset(
-    {
-        'api_key',
-        'apiKey',
-        'api-key',
-        'secret',
-        'password',
-        'token',
-        'access_token',
-    }
-)
-
-# Environment variable names that commonly hold secrets
-_SENSITIVE_ENV_VARS = frozenset(
-    {
-        'TAVILY_API_KEY',
-        'API_KEY',
-        'SECRET_KEY',
-        'ACCESS_TOKEN',
-        'AUTH_TOKEN',
     }
 )
 
@@ -75,31 +49,18 @@ def _redact_url(url: str) -> str:
         return urlunparse(parsed._replace(query=redacted_query))
     except Exception:
         # If URL parsing fails, redact any query string entirely
-        return re.sub(r'\?.*', '?***', url)
+        return re.sub(r'\?.*', '?<redacted>', url)
 
 
-def _redact_headers(headers: dict[str, Any]) -> dict[str, Any]:
-    """Redact values for sensitive header keys."""
-    redacted = {}
-    for key, value in headers.items():
-        if key.lower() in _SENSITIVE_HEADERS:
-            redacted[key] = _REDACTED
-        else:
-            redacted[key] = value
-    return redacted
-
-
-def _redact_env(env: dict[str, str]) -> dict[str, str]:
-    """Redact values for sensitive environment variable keys."""
-    redacted = {}
-    for key, value in env.items():
-        if key.upper() in _SENSITIVE_ENV_VARS or any(
-            s in key.upper() for s in ('API_KEY', 'SECRET', 'TOKEN', 'PASSWORD')
-        ):
-            redacted[key] = _REDACTED
-        else:
-            redacted[key] = value
-    return redacted
+def _walk_redact_urls(obj: Any) -> Any:
+    """Walk a nested dict/list and apply ``_redact_url`` to every string value."""
+    if isinstance(obj, dict):
+        return {k: _walk_redact_urls(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_walk_redact_urls(item) for item in obj]
+    if isinstance(obj, str) and '?' in obj:
+        return _redact_url(obj)
+    return obj
 
 
 def redact_mcp_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -107,74 +68,50 @@ def redact_mcp_config(config: dict[str, Any]) -> dict[str, Any]:
 
     Handles the V1 dict format: ``{'mcpServers': {'name': {'url': ..., 'headers': ...}}}``
 
-    Redacts:
-    - Sensitive header values (Authorization, X-Session-API-Key, etc.)
-    - Credential-bearing URL query parameters (tavilyApiKey, api_key, token, etc.)
-    - Known sensitive dict keys (api_key, secret, password, token, etc.)
-    - Sensitive environment variables (TAVILY_API_KEY, etc.)
+    Uses the SDK's ``sanitize_dict`` for key-based redaction (headers, env,
+    api_key, secret, token, etc.) then applies URL-query-param redaction on
+    string values that contain ``?``.
     """
     config = copy.deepcopy(config)
-    mcp_servers = config.get('mcpServers', {})
-    for _server_name, server_cfg in mcp_servers.items():
-        if not isinstance(server_cfg, dict):
-            continue
-
-        # Redact URL query params
-        if 'url' in server_cfg and isinstance(server_cfg['url'], str):
-            server_cfg['url'] = _redact_url(server_cfg['url'])
-
-        # Redact headers
-        if 'headers' in server_cfg and isinstance(server_cfg['headers'], dict):
-            server_cfg['headers'] = _redact_headers(server_cfg['headers'])
-
-        # Redact env vars (e.g. stdio servers)
-        if 'env' in server_cfg and isinstance(server_cfg['env'], dict):
-            server_cfg['env'] = _redact_env(server_cfg['env'])
-
-        # Redact any top-level sensitive keys in the server config
-        for key in list(server_cfg.keys()):
-            if key.lower() in _SENSITIVE_KEYS:
-                server_cfg[key] = _REDACTED
-
+    # SDK handles key-based redaction (headers, env, api_key, token, etc.)
+    config = sanitize_dict(config)
+    # Walk the result to redact sensitive URL query params in string values
+    config = _walk_redact_urls(config)
     return config
 
 
 def redact_mcp_config_model(config: Any) -> str:
     """Return a safe string representation of an MCPConfig pydantic model.
 
-    Handles the V0 model format with ``.sse_servers``, ``.shttp_servers``, ``.stdio_servers``.
+    Handles the V0 model format with ``.sse_servers``, ``.shttp_servers``,
+    ``.stdio_servers``.
 
-    Redacts API keys, auth headers, and sensitive env vars from the string output.
+    Redacts API keys, auth headers, and sensitive env vars from the string
+    output using regex on the ``str(model)`` representation.
     """
     text = str(config)
-    # Redact api_key='...' patterns
+
+    # Redact api_key='...' patterns (single or double quotes)
+    text = re.sub(r"api_key='[^']*'", "api_key='<redacted>'", text)
+    text = re.sub(r'api_key="[^"]*"', 'api_key="<redacted>"', text)
+
+    # Redact sensitive env var values in dict representation.
+    # Match any key containing KEY, SECRET, TOKEN, PASSWORD (case-insensitive).
     text = re.sub(
-        r"""(api_key=)(['"])[^'"]*\2""",
-        r"\1'\2***\2'",
+        r"('[A-Z_]*(?:KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*':\s*')[^']*(')",
+        r'\g<1><redacted>\2',
         text,
     )
-    # Simpler approach: redact api_key='...' with single or double quotes
-    text = re.sub(r"api_key='[^']*'", "api_key='***'", text)
-    text = re.sub(r'api_key="[^"]*"', 'api_key="***"', text)
-
-    # Redact sensitive env var values in dict representation
-    # Pattern: 'TAVILY_API_KEY': 'value'
-    for env_var in _SENSITIVE_ENV_VARS:
-        text = re.sub(
-            rf"('{env_var}':\s*')[^']*(')",
-            r'\g<1>***\2',
-            text,
-        )
-        text = re.sub(
-            rf'("{env_var}":\s*")[^"]*(")',
-            r'\g<1>***\2',
-            text,
-        )
+    text = re.sub(
+        r'("[A-Z_]*(?:KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*":\s*")[^"]*(")',
+        r'\g<1><redacted>\2',
+        text,
+    )
 
     # Redact URLs with sensitive query params
     text = re.sub(
         r'((?:tavilyApiKey|apiKey|api_key|token|access_token|secret|key)=)[^&\s\'")\]]+',
-        r'\g<1>***',
+        r'\g<1><redacted>',
         text,
         flags=re.IGNORECASE,
     )
@@ -182,14 +119,14 @@ def redact_mcp_config_model(config: Any) -> str:
     # Redact Authorization header values
     text = re.sub(
         r"('Authorization':\s*')[^']*(')",
-        r'\g<1>***\2',
+        r'\g<1><redacted>\2',
         text,
     )
 
     # Redact X-Session-API-Key header values
     text = re.sub(
         r"('X-Session-API-Key':\s*')[^']*(')",
-        r'\g<1>***\2',
+        r'\g<1><redacted>\2',
         text,
     )
 

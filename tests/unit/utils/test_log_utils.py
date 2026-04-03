@@ -19,13 +19,16 @@ class TestRedactMcpConfig:
             }
         }
         result = redact_mcp_config(config)
-        assert result['mcpServers']['default']['headers']['X-Session-API-Key'] == '***'
-        # Non-sensitive header should be preserved
+        assert (
+            result['mcpServers']['default']['headers']['X-Session-API-Key']
+            == '<redacted>'
+        )
+        # SDK redacts ALL values under 'headers' (REDACT_ALL_VALUES_KEYS)
         assert (
             result['mcpServers']['default']['headers'][
                 'X-OpenHands-ServerConversation-ID'
             ]
-            == 'conv-123'
+            == '<redacted>'
         )
 
     def test_redacts_tavily_api_key_in_url(self):
@@ -38,7 +41,7 @@ class TestRedactMcpConfig:
         }
         result = redact_mcp_config(config)
         assert 'tvly-prod-secret123' not in result['mcpServers']['tavily']['url']
-        assert 'tavilyApiKey=***' in result['mcpServers']['tavily']['url']
+        assert 'tavilyApiKey=<redacted>' in result['mcpServers']['tavily']['url']
 
     def test_redacts_authorization_header(self):
         config = {
@@ -51,7 +54,10 @@ class TestRedactMcpConfig:
             }
         }
         result = redact_mcp_config(config)
-        assert result['mcpServers']['custom_sse']['headers']['Authorization'] == '***'
+        assert (
+            result['mcpServers']['custom_sse']['headers']['Authorization']
+            == '<redacted>'
+        )
 
     def test_redacts_env_vars(self):
         config = {
@@ -67,8 +73,12 @@ class TestRedactMcpConfig:
             }
         }
         result = redact_mcp_config(config)
-        assert result['mcpServers']['tavily_stdio']['env']['TAVILY_API_KEY'] == '***'
-        assert result['mcpServers']['tavily_stdio']['env']['HOME'] == '/home/user'
+        assert (
+            result['mcpServers']['tavily_stdio']['env']['TAVILY_API_KEY']
+            == '<redacted>'
+        )
+        # SDK redacts ALL values under 'env' (REDACT_ALL_VALUES_KEYS)
+        assert result['mcpServers']['tavily_stdio']['env']['HOME'] == '<redacted>'
 
     def test_does_not_mutate_original(self):
         config = {
@@ -120,9 +130,14 @@ class TestRedactMcpConfig:
             }
         }
         result = redact_mcp_config(config)
-        assert result['mcpServers']['default']['headers']['X-Session-API-Key'] == '***'
+        assert (
+            result['mcpServers']['default']['headers']['X-Session-API-Key']
+            == '<redacted>'
+        )
         assert 'tvly-prod-key' not in result['mcpServers']['tavily']['url']
-        assert result['mcpServers']['custom']['headers']['Authorization'] == '***'
+        assert (
+            result['mcpServers']['custom']['headers']['Authorization'] == '<redacted>'
+        )
 
     def test_redacts_api_key_field(self):
         config = {
@@ -134,7 +149,7 @@ class TestRedactMcpConfig:
             }
         }
         result = redact_mcp_config(config)
-        assert result['mcpServers']['server']['api_key'] == '***'
+        assert result['mcpServers']['server']['api_key'] == '<redacted>'
 
 
 class TestRedactMcpConfigModel:
@@ -144,13 +159,13 @@ class TestRedactMcpConfigModel:
         text = "MCPConfig(sse_servers=[MCPSSEServerConfig(url='https://example.com', api_key='secret123')])"
         result = redact_mcp_config_model(text)
         assert 'secret123' not in result
-        assert "api_key='***'" in result
+        assert "api_key='<redacted>'" in result
 
     def test_redacts_tavily_api_key_in_url(self):
         text = "url='https://mcp.tavily.com/mcp/?tavilyApiKey=tvly-prod-secret123'"
         result = redact_mcp_config_model(text)
         assert 'tvly-prod-secret123' not in result
-        assert 'tavilyApiKey=***' in result
+        assert 'tavilyApiKey=<redacted>' in result
 
     def test_redacts_env_var_in_string(self):
         text = "env={'TAVILY_API_KEY': 'tvly-prod-secret123', 'HOME': '/home/user'}"
