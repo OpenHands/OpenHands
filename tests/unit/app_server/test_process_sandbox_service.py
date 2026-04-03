@@ -13,6 +13,7 @@ from openhands.app_server.sandbox.process_sandbox_service import (
     ProcessInfo,
     ProcessSandboxService,
     ProcessSandboxServiceInjector,
+    _processes,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
@@ -160,6 +161,41 @@ class TestProcessSandboxService:
 
         assert len(result.items) == 0
         assert result.next_page_id is None
+
+    @pytest.mark.asyncio
+    async def test_search_sandboxes_negative_page_id(
+        self, process_sandbox_service
+    ):
+        """Test negative page_id falls back to the first page."""
+        sandbox_ids = ['sandbox-1', 'sandbox-2', 'sandbox-3']
+        created_times = [
+            datetime(2024, 1, 1, 10, 0, 0),
+            datetime(2024, 1, 1, 11, 0, 0),
+            datetime(2024, 1, 1, 12, 0, 0),
+        ]
+
+        for sandbox_id, created_at in zip(sandbox_ids, created_times, strict=False):
+            _processes[sandbox_id] = ProcessInfo(
+                pid=1000,
+                port=9000,
+                user_id='test-user-id',
+                working_dir='/tmp/test',
+                session_api_key='test-key',
+                created_at=created_at,
+                sandbox_spec_id='test-spec',
+            )
+
+        with patch.object(
+            process_sandbox_service,
+            '_get_process_status',
+            return_value=SandboxStatus.RUNNING,
+        ):
+            page = await process_sandbox_service.search_sandboxes(
+                page_id='-1', limit=2
+            )
+
+        assert [sandbox.id for sandbox in page.items] == ['sandbox-3', 'sandbox-2']
+        assert page.next_page_id == '2'
 
     @pytest.mark.asyncio
     async def test_get_sandbox_not_found(self, process_sandbox_service):
