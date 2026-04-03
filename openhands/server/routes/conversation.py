@@ -92,8 +92,8 @@ async def get_remote_runtime_config(
     """Retrieve the runtime configuration.
 
     .. deprecated::
-        This endpoint is deprecated. The config is now returned as part of the
-        app-conversation. Use the V1 endpoint instead.
+        This endpoint is deprecated. The config is now returned as part of
+        GET /api/v1/app-conversation/{conversation_id}. Use that endpoint instead.
 
     For V0 conversations: returns runtime_id and session_id from the runtime.
     For V1 conversations: returns sandbox_id as runtime_id and conversation_id as session_id.
