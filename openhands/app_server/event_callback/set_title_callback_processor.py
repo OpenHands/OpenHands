@@ -23,6 +23,9 @@ from openhands.app_server.utils.docker_utils import (
 )
 from openhands.sdk import Event, MessageEvent
 
+# TODO(OpenHands/evaluation#418): import from openhands.sdk.utils.redact
+from openhands.utils._redact_compat import redact_text_secrets
+
 _logger = logging.getLogger(__name__)
 
 # Delay between attempts to poll title

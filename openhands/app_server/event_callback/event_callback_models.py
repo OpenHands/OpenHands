@@ -22,6 +22,9 @@ from openhands.sdk.utils.models import (
     get_known_concrete_subclasses,
 )
 
+# TODO(OpenHands/evaluation#418): import from openhands.sdk.utils.redact
+from openhands.utils._redact_compat import redact_text_secrets
+
 _logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     EventKind = str
