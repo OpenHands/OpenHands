@@ -1594,4 +1594,5 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
         ],
         public=app_conversation.public,
         sandbox_id=app_conversation.sandbox_id,
+        llm_model=app_conversation.llm_model,
     )

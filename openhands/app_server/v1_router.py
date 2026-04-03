@@ -5,13 +5,13 @@ from openhands.app_server.event import event_router
 from openhands.app_server.event_callback import (
     webhook_router,
 )
+from openhands.app_server.git_providers import routes as git_providers_router
 from openhands.app_server.pending_messages.pending_message_router import (
     router as pending_message_router,
 )
 from openhands.app_server.sandbox import sandbox_router, sandbox_spec_router
-from openhands.app_server.settings import routes as settings_router
-from openhands.app_server.git_providers import routes as git_providers_router
 from openhands.app_server.secrets import routes as secrets_router
+from openhands.app_server.settings import routes as settings_router
 from openhands.app_server.user import skills_router, user_router
 from openhands.app_server.web_client import web_client_router
 
