@@ -17,7 +17,7 @@ from openhands.resolver.interfaces.issue import Issue
 from openhands.resolver.interfaces.issue_definitions import ServiceContextIssue
 from openhands.resolver.send_pull_request import PR_SIGNATURE, send_pull_request
 from openhands.runtime.base import Runtime
-from openhands.server.routes.secrets import check_provider_tokens
+from openhands.app_server.secrets.secrets_router import check_provider_tokens
 from openhands.server.settings import POSTProviderModel
 from openhands.server.types import AppMode
 

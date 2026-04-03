@@ -13,7 +13,7 @@ from openhands.integrations.service_types import ProviderType
 from openhands.server.routes.secrets import (
     app as secrets_router,
 )
-from openhands.server.routes.secrets import (
+from openhands.app_server.secrets.secrets_router import (
     check_provider_tokens,
 )
 from openhands.server.settings import POSTProviderModel
