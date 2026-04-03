@@ -1,12 +1,12 @@
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from openhands.app_server.errors import AuthError
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.errors import AuthError
 from openhands.app_server.secrets.secrets_router import (
     check_provider_tokens,
 )
