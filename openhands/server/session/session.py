@@ -37,13 +37,13 @@ from openhands.events.serialization import event_from_dict, event_to_dict
 from openhands.events.stream import EventStreamSubscriber
 from openhands.llm.llm_registry import LLMRegistry
 from openhands.runtime.runtime_status import RuntimeStatus
+from openhands.sdk.utils.redact import redact_text_secrets
 from openhands.server.constants import ROOM_KEY
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.server.session.agent_session import AgentSession
 from openhands.server.session.conversation_init_data import ConversationInitData
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
-from openhands.utils.log_utils import redact_mcp_config_model
 
 
 class WebSession:
@@ -185,7 +185,7 @@ class WebSession:
 
         # NOTE: this need to happen AFTER the config is updated with the search_api_key
         self.logger.debug(
-            f'MCP configuration before setup - self.config.mcp_config: {redact_mcp_config_model(self.config.mcp)}'
+            f'MCP configuration before setup - self.config.mcp_config: {redact_text_secrets(self.config.mcp)}'
         )
 
         # Check if settings has custom mcp_config
@@ -194,7 +194,7 @@ class WebSession:
             # Use the provided MCP SHTTP servers instead of default setup
             self.config.mcp = self.config.mcp.merge(mcp_config)
             self.logger.debug(
-                f'Merged custom MCP Config: {redact_mcp_config_model(mcp_config)}'
+                f'Merged custom MCP Config: {redact_text_secrets(mcp_config)}'
             )
 
         # Add OpenHands' MCP server by default
@@ -212,7 +212,7 @@ class WebSession:
             self.config.mcp.stdio_servers.extend(openhands_mcp_stdio_servers)
 
         self.logger.debug(
-            f'MCP configuration after setup - self.config.mcp: {redact_mcp_config_model(self.config.mcp)}'
+            f'MCP configuration after setup - self.config.mcp: {redact_text_secrets(self.config.mcp)}'
         )
 
         # TODO: override other LLM config & agent config groups (#2075)
