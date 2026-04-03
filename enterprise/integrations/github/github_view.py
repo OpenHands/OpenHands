@@ -342,7 +342,7 @@ class GithubIssue(ResolverViewInterface):
                 'full_repo_name': self.full_repo_name,
                 'installation_id': self.installation_id,
             },
-            send_summary_instruction=self.send_summary_instruction,
+            should_request_summary=self.send_summary_instruction,
         )
 
 
@@ -496,7 +496,7 @@ class GithubInlinePRComment(GithubPRComment):
                 'comment_id': self.comment_id,
             },
             inline_pr_comment=True,
-            send_summary_instruction=self.send_summary_instruction,
+            should_request_summary=self.send_summary_instruction,
         )
 
 
