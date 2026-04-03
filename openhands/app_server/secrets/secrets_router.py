@@ -4,7 +4,6 @@ This module provides the V1 API routes for secrets under /api/v1/secrets.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 
 from openhands.app_server.errors import AuthError
 from openhands.app_server.utils.dependencies import get_dependencies
@@ -254,9 +253,9 @@ async def update_custom_secret(
     if existing_secrets:
         # Check if the secret to update exists
         if secret_id not in existing_secrets.custom_secrets:
-            return JSONResponse(
+            return HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={'error': f'Secret with ID {secret_id} not found'},
+                detail=f'Secret with ID {secret_id} not found',
             )
 
         secret_name = incoming_secret.name
