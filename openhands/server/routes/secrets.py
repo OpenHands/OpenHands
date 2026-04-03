@@ -6,15 +6,25 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from openhands.app_server.secrets.secrets_router import (
     create_custom_secret as v1_create_custom_secret,
+)
+from openhands.app_server.secrets.secrets_router import (
     delete_custom_secret as v1_delete_custom_secret,
+)
+from openhands.app_server.secrets.secrets_router import (
     load_custom_secrets_names as v1_load_custom_secrets_names,
+)
+from openhands.app_server.secrets.secrets_router import (
     store_provider_tokens as v1_store_provider_tokens,
+)
+from openhands.app_server.secrets.secrets_router import (
     unset_provider_tokens as v1_unset_provider_tokens,
+)
+from openhands.app_server.secrets.secrets_router import (
     update_custom_secret as v1_update_custom_secret,
 )
 from openhands.app_server.utils.dependencies import get_dependencies
