@@ -9,13 +9,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.secrets.secrets_router import (
+    router as secrets_router,
+)
 from openhands.integrations.provider import (
     CustomSecret,
     ProviderToken,
     ProviderType,
-)
-from openhands.app_server.secrets.secrets_router import (
-    router as secrets_router,
 )
 from openhands.storage import get_file_store
 from openhands.storage.data_models.secrets import Secrets

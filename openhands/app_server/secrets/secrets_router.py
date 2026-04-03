@@ -65,7 +65,9 @@ async def check_provider_tokens(
                 confirmed_token_type = await validate_provider_token(
                     token_value.token, token_value.host
                 )  # FE always sends latest host
-                msg = get_token_validation_error_message(confirmed_token_type, token_type)
+                msg = get_token_validation_error_message(
+                    confirmed_token_type, token_type
+                )
 
             existing_token = (
                 existing_provider_tokens.get(token_type, None)
