@@ -5,7 +5,7 @@ and passes resolver_org_id through V0 and V1 conversation paths.
 """
 
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
@@ -52,15 +52,19 @@ class TestGitlabOrgRouting(TestCase):
         )
 
     @pytest.mark.asyncio
-    @patch('integrations.gitlab.gitlab_view.initialize_conversation')
+    @patch(
+        'integrations.gitlab.gitlab_view.SaasConversationStore.get_resolver_instance'
+    )
     @patch('integrations.gitlab.gitlab_view.resolve_org_for_repo')
-    async def test_v0_passes_resolver_org_id_to_initialize_conversation(
-        self, mock_resolve_org, mock_init_conv
+    async def test_v0_passes_resolver_org_id_to_get_resolver_instance(
+        self, mock_resolve_org, mock_get_resolver
     ):
-        """V0 path passes resolved org_id through kwargs to initialize_conversation."""
+        """V0 path creates store via get_resolver_instance with resolver_org_id."""
         # Arrange
         mock_resolve_org.return_value = self.resolved_org_id
-        mock_init_conv.return_value = MagicMock(conversation_id='new-conv-id')
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver.return_value = mock_store
 
         gitlab_issue = self._create_gitlab_issue()
 
@@ -73,8 +77,10 @@ class TestGitlabOrgRouting(TestCase):
             full_repo_name='ClaimedOrg/repo',
             keycloak_user_id='test-keycloak-id',
         )
-        _, kwargs = mock_init_conv.call_args
-        assert kwargs['resolver_org_id'] == self.resolved_org_id
+        # get_resolver_instance(config, user_id, resolver_org_id)
+        args, _ = mock_get_resolver.call_args
+        assert args[1] == 'test-keycloak-id'
+        assert args[2] == self.resolved_org_id
 
     @pytest.mark.asyncio
     @patch('integrations.gitlab.gitlab_view.get_app_conversation_service')
@@ -96,15 +102,19 @@ class TestGitlabOrgRouting(TestCase):
         assert gitlab_issue.resolved_org_id == self.resolved_org_id
 
     @pytest.mark.asyncio
-    @patch('integrations.gitlab.gitlab_view.initialize_conversation')
+    @patch(
+        'integrations.gitlab.gitlab_view.SaasConversationStore.get_resolver_instance'
+    )
     @patch('integrations.gitlab.gitlab_view.resolve_org_for_repo')
     async def test_no_claim_passes_none_resolver_org_id(
-        self, mock_resolve_org, mock_init_conv
+        self, mock_resolve_org, mock_get_resolver
     ):
         """When no claim exists, resolver_org_id is None (falls back to personal workspace)."""
         # Arrange
         mock_resolve_org.return_value = None
-        mock_init_conv.return_value = MagicMock(conversation_id='new-conv-id')
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver.return_value = mock_store
 
         gitlab_issue = self._create_gitlab_issue()
 
@@ -112,5 +122,5 @@ class TestGitlabOrgRouting(TestCase):
         await gitlab_issue.initialize_new_conversation()
 
         # Assert
-        _, kwargs = mock_init_conv.call_args
-        assert kwargs['resolver_org_id'] is None
+        args, _ = mock_get_resolver.call_args
+        assert args[2] is None
