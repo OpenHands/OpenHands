@@ -110,7 +110,11 @@ class EventServiceBase(EventService, ABC):
         start_offset = 0
         next_page_id = None
         if page_id:
-            start_offset = int(page_id)
+            try:
+                start_offset = int(page_id)
+            except ValueError:
+                # Invalid cursors fall back to the first page, matching other V1 services.
+                start_offset = 0
             items = items[start_offset:]
         if len(items) > limit:
             next_page_id = str(start_offset + limit)

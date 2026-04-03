@@ -231,6 +231,23 @@ class TestFilesystemEventServiceSearchEvents:
         assert page_count == expected_pages
 
     @pytest.mark.asyncio
+    async def test_search_events_invalid_page_id_starts_from_beginning(
+        self, service: FilesystemEventService
+    ):
+        """Test that invalid page_id values fall back to the first page."""
+        conversation_id = uuid4()
+
+        for _ in range(4):
+            await service.save_event(conversation_id, create_token_event())
+
+        result = await service.search_events(
+            conversation_id, page_id='invalid', limit=2
+        )
+
+        assert len(result.items) == 2
+        assert result.next_page_id == '2'
+
+    @pytest.mark.asyncio
     async def test_search_events_pagination_with_filters(
         self, service: FilesystemEventService
     ):
