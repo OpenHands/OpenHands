@@ -76,9 +76,9 @@ async def check_provider_tokens(
             ):
                 confirmed_token_type = await validate_provider_token(
                     existing_token.token, token_value.host
-                )  # Host has changed, check it against existing token
-                if not confirmed_token_type or confirmed_token_type != token_type:
-                    _check_token_type(confirmed_token_type, token_type)
+                )
+                # Host has changed, check it against existing token
+                _check_token_type(confirmed_token_type, token_type)
 
 
 # =================================================
