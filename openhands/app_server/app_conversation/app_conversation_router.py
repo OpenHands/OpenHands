@@ -70,7 +70,7 @@ from openhands.app_server.utils.docker_utils import (
 )
 from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.server.dependencies import get_dependencies
+from openhands.app_server.utils.dependencies import get_dependencies
 
 # Handle anext compatibility for Python < 3.10
 if sys.version_info >= (3, 10):
