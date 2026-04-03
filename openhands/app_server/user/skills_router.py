@@ -32,6 +32,16 @@ class SkillPage(BaseModel):
     next_page_id: str | None = None
 
 
+def _make_page_cursor(skill: SkillInfo) -> str:
+    """Create an opaque cursor that stays unique across sources."""
+    return f'{skill.source}:{skill.name}'
+
+
+def _matches_page_cursor(skill: SkillInfo, page_id: str) -> bool:
+    """Match both new opaque cursors and legacy name-only cursors."""
+    return page_id == _make_page_cursor(skill) or page_id == skill.name
+
+
 def _parse_skill_frontmatter(file_path: Path) -> dict | None:
     """Parse YAML frontmatter from a skill markdown file.
 
@@ -143,13 +153,15 @@ async def search_skills(
     start = 0
     if page_id is not None:
         for i, skill in enumerate(skills):
-            if skill.name == page_id:
+            if _matches_page_cursor(skill, page_id):
                 start = i + 1
                 break
 
     page = skills[start : start + limit]
     next_page_id = (
-        page[-1].name if len(page) == limit and start + limit < len(skills) else None
+        _make_page_cursor(page[-1])
+        if len(page) == limit and start + limit < len(skills)
+        else None
     )
 
     return SkillPage(items=page, next_page_id=next_page_id)
