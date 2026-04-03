@@ -13,6 +13,13 @@ interface ServerError {
 
 const isServerError = (data: object): data is ServerError => "error" in data;
 
+const isAgentError = (data: object): boolean =>
+  "source" in data &&
+  data.source === "agent" &&
+  "tool_name" in data &&
+  "tool_call_id" in data &&
+  "error" in data;
+
 export const useHandleWSEvents = () => {
   const { send } = useSendMessage();
   const events = useEventStore((state) => state.events);
@@ -22,6 +29,11 @@ export const useHandleWSEvents = () => {
       return;
     }
     const event = events[events.length - 1];
+
+    // Skip AgentErrorEvents — they are already displayed inline in the chat
+    if (isAgentError(event)) {
+      return;
+    }
 
     if (isServerError(event)) {
       if (event.error_code === 401) {
