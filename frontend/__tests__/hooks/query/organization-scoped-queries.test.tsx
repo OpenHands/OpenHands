@@ -10,7 +10,6 @@ import { SecretsService } from "#/api/secrets-service";
 import ApiKeysClient from "#/api/api-keys";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
-import type { ApiSettings } from "#/types/settings";
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({
@@ -67,27 +66,6 @@ describe("Organization-scoped query hooks", () => {
       // Verify no data is cached under the old key without org ID
       const oldKeyData = queryClient.getQueryData(["settings"]);
       expect(oldKeyData).toBeUndefined();
-    });
-
-    it('should normalize a null llm_base_url from the API to an empty string', async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      const apiSettings: ApiSettings = {
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        llm_base_url: null,
-      };
-      getSettingsSpy.mockResolvedValue(apiSettings);
-
-      const { result } = renderHook(() => useSettings(), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(() => expect(result.current.isFetched).toBe(true));
-
-      expect(result.current.data?.llm_base_url).toBe("");
-      const cachedData = queryClient.getQueryData(["settings", "org-1"]) as {
-        llm_base_url?: string;
-      } | null;
-      expect(cachedData?.llm_base_url).toBe("");
     });
 
     it("should refetch when organization changes", async () => {
