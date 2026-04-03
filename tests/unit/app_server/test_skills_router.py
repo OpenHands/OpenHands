@@ -9,7 +9,7 @@ def _write_skill(directory: Path, name: str, *, frontmatter_name: str | None = N
     skill_name = frontmatter_name or name
     directory.mkdir(parents=True, exist_ok=True)
     (directory / f'{name}.md').write_text(
-        f"---\nname: {skill_name}\ntype: knowledge\ntriggers:\n  - demo\n---\n# {skill_name}\n",
+        f'---\nname: {skill_name}\ntype: knowledge\ntriggers:\n  - demo\n---\n# {skill_name}\n',
         encoding='utf-8',
     )
 

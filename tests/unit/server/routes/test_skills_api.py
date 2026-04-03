@@ -217,7 +217,7 @@ async def test_skills_search_pagination(test_client, tmp_path):
         assert len(data['items']) == 2
         assert data['items'][0]['name'] == 'skill_a'
         assert data['items'][1]['name'] == 'skill_b'
-        assert data['next_page_id'] == 'skill_b'
+        assert data['next_page_id'] == 'global:skill_b'
 
         # Second page using next_page_id
         response = test_client.get(
