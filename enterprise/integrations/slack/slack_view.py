@@ -39,7 +39,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
 from openhands.events.action import MessageAction
 from openhands.events.serialization.event import event_to_dict
-from openhands.integrations.provider import ProviderHandler, ProviderType
+from openhands.integrations.provider import ProviderHandler
 from openhands.sdk import TextContent
 from openhands.server.services.conversation_service import (
     setup_init_conversation_settings,
@@ -301,11 +301,7 @@ class SlackNewConversationView(SlackViewInterface):
         slack_callback_processor = self._create_slack_v1_callback_processor()
 
         # Use git provider resolved in create_or_update_conversation
-        git_provider = (
-            ProviderType(self._resolved_git_provider.value)
-            if self._resolved_git_provider
-            else None
-        )
+        git_provider = self._resolved_git_provider
 
         # Get the app conversation service and start the conversation
         injector_state = InjectorState()

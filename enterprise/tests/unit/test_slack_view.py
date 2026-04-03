@@ -96,17 +96,20 @@ class TestSlackV0ConversationRouting:
     @patch('integrations.slack.slack_view.resolve_org_for_repo', new_callable=AsyncMock)
     @patch('integrations.slack.slack_view.ProviderHandler')
     @patch(
-        'integrations.slack.slack_view.create_new_conversation', new_callable=AsyncMock
+        'integrations.slack.slack_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
     )
+    @patch('integrations.slack.slack_view.start_conversation', new_callable=AsyncMock)
     async def test_v0_passes_resolver_org_id(
         self,
-        mock_create_convo,
+        mock_start_convo,
+        mock_get_resolver_instance,
         mock_provider_handler_cls,
         mock_resolve_org,
         mock_v1_enabled,
         slack_view,
     ):
-        """V0 path should pass resolver_org_id to create_new_conversation."""
+        """V0 path should pass resolver_org_id to SaasConversationStore.get_resolver_instance."""
         # Arrange
         mock_repo = MagicMock()
         mock_repo.git_provider = ProviderType.GITHUB
@@ -115,7 +118,10 @@ class TestSlackV0ConversationRouting:
         mock_provider_handler_cls.return_value = mock_handler
 
         mock_resolve_org.return_value = CLAIMING_ORG_ID
-        mock_create_convo.return_value = MagicMock(conversation_id='test-conv-id')
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_start_convo.return_value = MagicMock(conversation_id='test-conv-id')
 
         mock_jinja = MagicMock()
 
@@ -137,10 +143,13 @@ class TestSlackV0ConversationRouting:
             full_repo_name='OpenHands/foo',
             keycloak_user_id=KEYCLOAK_USER_ID,
         )
-        mock_create_convo.assert_called_once()
-        call_kwargs = mock_create_convo.call_args[1]
-        assert call_kwargs['resolver_org_id'] == CLAIMING_ORG_ID
-        assert call_kwargs['git_provider'] == ProviderType.GITHUB
+        mock_get_resolver_instance.assert_called_once()
+        call_args = mock_get_resolver_instance.call_args
+        assert call_args[0][1] == KEYCLOAK_USER_ID  # user_id
+        assert call_args[0][2] == CLAIMING_ORG_ID  # resolver_org_id
+        mock_store.save_metadata.assert_called_once()
+        saved_metadata = mock_store.save_metadata.call_args[0][0]
+        assert saved_metadata.git_provider == ProviderType.GITHUB
 
     @pytest.mark.asyncio
     @patch(
@@ -151,11 +160,14 @@ class TestSlackV0ConversationRouting:
     @patch('integrations.slack.slack_view.resolve_org_for_repo', new_callable=AsyncMock)
     @patch('integrations.slack.slack_view.ProviderHandler')
     @patch(
-        'integrations.slack.slack_view.create_new_conversation', new_callable=AsyncMock
+        'integrations.slack.slack_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
     )
+    @patch('integrations.slack.slack_view.start_conversation', new_callable=AsyncMock)
     async def test_v0_passes_none_when_no_claim(
         self,
-        mock_create_convo,
+        mock_start_convo,
+        mock_get_resolver_instance,
         mock_provider_handler_cls,
         mock_resolve_org,
         mock_v1_enabled,
@@ -170,7 +182,10 @@ class TestSlackV0ConversationRouting:
         mock_provider_handler_cls.return_value = mock_handler
 
         mock_resolve_org.return_value = None
-        mock_create_convo.return_value = MagicMock(conversation_id='test-conv-id')
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_start_convo.return_value = MagicMock(conversation_id='test-conv-id')
 
         mock_jinja = MagicMock()
 
@@ -187,8 +202,8 @@ class TestSlackV0ConversationRouting:
             await slack_view.create_or_update_conversation(mock_jinja)
 
         # Assert
-        call_kwargs = mock_create_convo.call_args[1]
-        assert call_kwargs['resolver_org_id'] is None
+        call_args = mock_get_resolver_instance.call_args
+        assert call_args[0][2] is None  # resolver_org_id is None
 
 
 class TestSlackV1ConversationRouting:
@@ -267,18 +282,24 @@ class TestSlackNoRepoRouting:
     )
     @patch('integrations.slack.slack_view.resolve_org_for_repo', new_callable=AsyncMock)
     @patch(
-        'integrations.slack.slack_view.create_new_conversation', new_callable=AsyncMock
+        'integrations.slack.slack_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
     )
+    @patch('integrations.slack.slack_view.start_conversation', new_callable=AsyncMock)
     async def test_no_repo_skips_org_resolution(
         self,
-        mock_create_convo,
+        mock_start_convo,
+        mock_get_resolver_instance,
         mock_resolve_org,
         mock_v1_enabled,
         slack_view_no_repo,
     ):
         """When selected_repo is None, org resolution should be skipped."""
         # Arrange
-        mock_create_convo.return_value = MagicMock(conversation_id='test-conv-id')
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_start_convo.return_value = MagicMock(conversation_id='test-conv-id')
         mock_jinja = MagicMock()
 
         # Act
@@ -298,9 +319,10 @@ class TestSlackNoRepoRouting:
 
         # Assert
         mock_resolve_org.assert_not_called()
-        call_kwargs = mock_create_convo.call_args[1]
-        assert call_kwargs['resolver_org_id'] is None
-        assert call_kwargs['git_provider'] is None
+        call_args = mock_get_resolver_instance.call_args
+        assert call_args[0][2] is None  # resolver_org_id is None
+        saved_metadata = mock_store.save_metadata.call_args[0][0]
+        assert saved_metadata.git_provider is None
 
 
 async def aiter_empty():
