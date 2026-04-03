@@ -6,15 +6,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.secrets.secrets_router import (
+    check_provider_tokens,
+)
 from openhands.app_server.settings.settings_router import store_llm_settings
 from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
 from openhands.server.routes.secrets import (
     app as secrets_router,
-)
-from openhands.app_server.secrets.secrets_router import (
-    check_provider_tokens,
 )
 from openhands.server.settings import POSTProviderModel
 from openhands.storage import get_file_store

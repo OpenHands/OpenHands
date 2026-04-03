@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
+from openhands.app_server.secrets.secrets_router import check_provider_tokens
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import OwnerType, Repository
@@ -17,7 +18,6 @@ from openhands.resolver.interfaces.issue import Issue
 from openhands.resolver.interfaces.issue_definitions import ServiceContextIssue
 from openhands.resolver.send_pull_request import PR_SIGNATURE, send_pull_request
 from openhands.runtime.base import Runtime
-from openhands.app_server.secrets.secrets_router import check_provider_tokens
 from openhands.server.settings import POSTProviderModel
 from openhands.server.types import AppMode
 
