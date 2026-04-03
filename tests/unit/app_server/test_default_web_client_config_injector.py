@@ -435,6 +435,17 @@ class TestGetProvidersConfigured:
             result = _get_providers_configured()
             assert ProviderType.ENTERPRISE_SSO in result
 
+    def test_excludes_enterprise_sso_when_flag_is_false(self):
+        """When ENABLE_ENTERPRISE_SSO is 'false', do not include Enterprise SSO."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_providers_configured,
+        )
+        from openhands.integrations.service_types import ProviderType
+
+        with patch.dict(os.environ, {'ENABLE_ENTERPRISE_SSO': 'false'}):
+            result = _get_providers_configured()
+            assert ProviderType.ENTERPRISE_SSO not in result
+
     def test_excludes_provider_when_env_var_empty(self):
         """When env var is empty string, do not include provider."""
         from openhands.app_server.integrations.service_types import ProviderType
