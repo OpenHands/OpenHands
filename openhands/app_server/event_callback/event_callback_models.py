@@ -21,6 +21,7 @@ from openhands.sdk.utils.models import (
     OpenHandsModel,
     get_known_concrete_subclasses,
 )
+from openhands.sdk.utils.redact import redact_text_secrets
 
 _logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
@@ -57,10 +58,9 @@ class LoggingCallbackProcessor(EventCallbackProcessor):
         event: Event,
     ) -> EventCallbackResult:
         _logger.info(
-            'Callback %s Invoked for event type=%s id=%s',
+            'Callback %s Invoked for event %s',
             callback.id,
-            type(event).__name__,
-            event.id,
+            redact_text_secrets(str(event)),
         )
         return EventCallbackResult(
             status=EventCallbackResultStatus.SUCCESS,
