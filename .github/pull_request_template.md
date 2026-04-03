@@ -23,7 +23,7 @@ If you could not test this, say why.
 ## Video/Screenshots
 
 <!--
-Prodive a video or screenshots of testing your PR. e.g. you added a new feature to the gui, show us the video of you testing it successfully.
+Provide a video or screenshots of testing your PR. e.g. you added a new feature to the gui, show us the video of you testing it successfully.
 
 -->
 
