@@ -1929,6 +1929,16 @@ describe("Contextual info messages", () => {
     // Assert
     expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
   });
+
+  it("should show OpenAI-compatible provider help text in advanced settings", async () => {
+    renderLlmSettingsScreen("1");
+    await screen.findByTestId("llm-settings-screen");
+    const advancedForm = await screen.findByTestId("llm-settings-form-advanced");
+
+    const help = within(advancedForm).getByTestId("llm-openai-compatible-help");
+    expect(help).toHaveTextContent("SETTINGS$OPENAI_COMPATIBLE_MODEL_HELP");
+    expect(help).toHaveTextContent("SETTINGS$OPENAI_COMPATIBLE_BASE_URL_HELP");
+  });
 });
 
 describe("clientLoader permission checks", () => {
