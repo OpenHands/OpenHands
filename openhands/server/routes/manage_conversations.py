@@ -704,13 +704,18 @@ async def _delete_v0_conversation(conversation_id: str, user_id: str | None) -> 
     return True
 
 
-@app.get('/conversations/{conversation_id}/remember-prompt')
+@app.get('/conversations/{conversation_id}/remember-prompt', deprecated=True)
 async def get_prompt(
     event_id: int,
     conversation_id: str = Depends(validate_conversation_id),
     user_settings: SettingsStore = Depends(get_user_settings_store),
     metadata: ConversationMetadata = Depends(get_conversation_metadata),
 ):
+    """Get the remember prompt for the microagent UI.
+
+    .. deprecated::
+        This endpoint is deprecated. Microagent UI is deprecated in V1.
+    """
     # get event store for the conversation
     event_store = EventStore(
         sid=conversation_id, file_store=file_store, user_id=metadata.user_id
@@ -1467,7 +1472,7 @@ def _create_combined_page_id(
     return base64.b64encode(json.dumps(next_page_data).encode()).decode()
 
 
-@app.get('/microagent-management/conversations')
+@app.get('/microagent-management/conversations', deprecated=True)
 async def get_microagent_management_conversations(
     selected_repository: str,
     page_id: str | None = None,
@@ -1477,6 +1482,9 @@ async def get_microagent_management_conversations(
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
 ) -> ConversationInfoResultSet:
     """Get conversations for the microagent management page with pagination support.
+
+    .. deprecated::
+        This endpoint is deprecated. Microagent UI is deprecated in V1.
 
     This endpoint returns conversations with conversation_trigger = 'microagent_management'
     and only includes conversations with active PRs. Pagination is supported.

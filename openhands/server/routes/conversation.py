@@ -83,13 +83,17 @@ def _get_v0_conversation_config(
     }
 
 
-@app.get('/config')
+@app.get('/config', deprecated=True)
 async def get_remote_runtime_config(
     conversation_id: str,
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
     user_id: str | None = Depends(get_user_id),
 ) -> JSONResponse:
     """Retrieve the runtime configuration.
+
+    .. deprecated::
+        This endpoint is deprecated. The config is now returned as part of
+        GET /api/v1/app-conversation/{conversation_id}. Use that endpoint instead.
 
     For V0 conversations: returns runtime_id and session_id from the runtime.
     For V1 conversations: returns sandbox_id as runtime_id and conversation_id as session_id.
