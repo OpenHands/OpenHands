@@ -2,6 +2,10 @@
 
 Delegates core dict redaction to ``openhands.sdk.utils.redact.sanitize_dict``
 and adds URL-query-param redaction on top (which the SDK does not yet handle).
+
+Source of truth for sanitize_dict / is_secret_key:
+    openhands-sdk/openhands/sdk/utils/redact.py
+    in repo: https://github.com/OpenHands/software-agent-sdk
 """
 
 from __future__ import annotations
