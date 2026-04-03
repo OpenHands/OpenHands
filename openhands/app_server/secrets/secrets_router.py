@@ -41,9 +41,10 @@ router = APIRouter(
 # =================================================
 
 
-def process_token_validation_result(
+def get_token_validation_error_message(
     confirmed_token_type: ProviderType | None, token_type: ProviderType
 ) -> str:
+    """Returns error message if token type doesn't match, empty string otherwise."""
     if not confirmed_token_type or confirmed_token_type != token_type:
         return (
             f'Invalid token. Please make sure it is a valid {token_type.value} token.'
@@ -64,7 +65,7 @@ async def check_provider_tokens(
                 confirmed_token_type = await validate_provider_token(
                     token_value.token, token_value.host
                 )  # FE always sends latest host
-                msg = process_token_validation_result(confirmed_token_type, token_type)
+                msg = get_token_validation_error_message(confirmed_token_type, token_type)
 
             existing_token = (
                 existing_provider_tokens.get(token_type, None)
@@ -80,7 +81,7 @@ async def check_provider_tokens(
                     existing_token.token, token_value.host
                 )  # Host has changed, check it against existing token
                 if not confirmed_token_type or confirmed_token_type != token_type:
-                    msg = process_token_validation_result(
+                    msg = get_token_validation_error_message(
                         confirmed_token_type, token_type
                     )
 
