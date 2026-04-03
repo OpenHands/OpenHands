@@ -126,6 +126,22 @@ class TestQueuePendingMessage:
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
         assert 'Invalid request body' in exc_info.value.detail
 
+    async def test_returns_400_for_non_object_json_body(self):
+        """Test that non-object JSON bodies return 400 instead of failing later."""
+        conversation_id = f'task-{uuid4().hex}'
+        mock_service = _make_mock_service()
+        mock_request = _make_mock_request([{'type': 'text', 'text': 'hello'}])
+
+        with pytest.raises(HTTPException) as exc_info:
+            await queue_pending_message(
+                conversation_id=conversation_id,
+                request=mock_request,
+                pending_service=mock_service,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Invalid request body' in exc_info.value.detail
+
     async def test_returns_400_when_content_is_missing(self):
         """Test that missing content returns 400 Bad Request."""
         # Arrange
