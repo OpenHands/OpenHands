@@ -67,17 +67,44 @@ const START_TASKS = new Map<string, V1AppConversationStartTask>();
 let nextConversationNumber = 4;
 let nextTaskNumber = 1;
 
+const getNextConversationNumber = () => {
+  const conversationNumber = nextConversationNumber;
+  nextConversationNumber += 1;
+  return conversationNumber;
+};
+
+const getNextTaskNumber = () => {
+  const taskNumber = nextTaskNumber;
+  nextTaskNumber += 1;
+  return taskNumber;
+};
+
 const sortByLastUpdated = (items: Conversation[]) =>
   [...items].sort((left, right) =>
     right.last_updated_at.localeCompare(left.last_updated_at),
   );
+
+const getSandboxStatus = (
+  conversationStatus: Conversation["status"],
+): V1AppConversation["sandbox_status"] => {
+  if (conversationStatus === "STOPPED") {
+    return "STOPPED";
+  }
+
+  if (conversationStatus === "STARTING") {
+    return "STARTING";
+  }
+
+  return "RUNNING";
+};
 
 const createMockConversation = (
   overrides: Partial<Conversation> = {},
 ): Conversation => {
   const now = new Date().toISOString();
   const conversationId =
-    overrides.conversation_id ?? `mock-conversation-${nextConversationNumber++}`;
+    overrides.conversation_id ??
+    `mock-conversation-${getNextConversationNumber()}`;
 
   return {
     conversation_id: conversationId,
@@ -156,12 +183,7 @@ const toV1Conversation = (
   metrics: null,
   created_at: conversation.created_at,
   updated_at: conversation.last_updated_at,
-  sandbox_status:
-    conversation.status === "STOPPED"
-      ? "STOPPED"
-      : conversation.status === "STARTING"
-        ? "STARTING"
-        : "RUNNING",
+  sandbox_status: getSandboxStatus(conversation.status),
   execution_status: conversation.status === "STOPPED" ? "STOPPED" : "RUNNING",
   conversation_url: conversation.url,
   session_api_key: conversation.session_api_key,
@@ -215,7 +237,7 @@ const createStartTask = (
   const now = new Date().toISOString();
 
   const task: V1AppConversationStartTask = {
-    id: `mock-start-task-${nextTaskNumber++}`,
+    id: `mock-start-task-${getNextTaskNumber()}`,
     created_by_user_id: null,
     status: "READY",
     detail: null,
@@ -301,9 +323,8 @@ export const CONVERSATION_HANDLERS = [
     return HttpResponse.json({ runtime_id: runtimeId });
   }),
 
-  http.get(
-    "/api/conversations/:conversationId/web-hosts",
-    async () => HttpResponse.json({ hosts: {} }),
+  http.get("/api/conversations/:conversationId/web-hosts", async () =>
+    HttpResponse.json({ hosts: {} }),
   ),
 
   http.get("/api/conversations/:conversationId/trajectory", async () =>
@@ -328,33 +349,35 @@ export const CONVERSATION_HANDLERS = [
     return HttpResponse.json(conversation);
   }),
 
-  http.post(
-    "/api/v1/app-conversations",
-    async ({ request }) => {
-      await delay();
-      const body = (await request.json()) as V1AppConversationStartRequest;
+  http.post("/api/v1/app-conversations", async ({ request }) => {
+    await delay();
+    const body = (await request.json()) as V1AppConversationStartRequest;
+    const conversationNumber = getNextConversationNumber();
 
-      const conversation = createMockConversation({
-        conversation_id: `mock-conversation-${nextConversationNumber++}`,
-        title: body.title ?? "New Conversation",
-        selected_repository: body.selected_repository ?? null,
-        selected_branch: body.selected_branch ?? null,
-        git_provider: body.git_provider ?? null,
-        conversation_version: "V1",
-        sandbox_id: body.sandbox_id ?? `sandbox-mock-${nextConversationNumber}`,
-      });
+    const conversation = createMockConversation({
+      conversation_id: `mock-conversation-${conversationNumber}`,
+      title: body.title ?? "New Conversation",
+      selected_repository: body.selected_repository ?? null,
+      selected_branch: body.selected_branch ?? null,
+      git_provider: body.git_provider ?? null,
+      conversation_version: "V1",
+      sandbox_id: body.sandbox_id ?? `sandbox-mock-${conversationNumber}`,
+    });
 
-      upsertConversation(conversation);
-      const v1Conversation = upsertV1Conversation(
-        toV1Conversation(conversation, {
-          llm_model: body.llm_model ?? null,
-        }),
-      );
-      const task = createStartTask(body, v1Conversation.id, v1Conversation.sandbox_id);
+    upsertConversation(conversation);
+    const v1Conversation = upsertV1Conversation(
+      toV1Conversation(conversation, {
+        llm_model: body.llm_model ?? null,
+      }),
+    );
+    const task = createStartTask(
+      body,
+      v1Conversation.id,
+      v1Conversation.sandbox_id,
+    );
 
-      return HttpResponse.json(task, { status: 201 });
-    },
-  ),
+    return HttpResponse.json(task, { status: 201 });
+  }),
 
   http.get("/api/v1/app-conversations/start-tasks", async ({ request }) => {
     const url = new URL(request.url);
@@ -363,18 +386,15 @@ export const CONVERSATION_HANDLERS = [
     return HttpResponse.json(tasks);
   }),
 
-  http.get(
-    "/api/v1/app-conversations/start-tasks/search",
-    async () => {
-      const page: V1AppConversationStartTaskPage = {
-        items: Array.from(START_TASKS.values()).sort((left, right) =>
-          right.updated_at.localeCompare(left.updated_at),
-        ),
-        next_page_id: null,
-      };
-      return HttpResponse.json(page);
-    },
-  ),
+  http.get("/api/v1/app-conversations/start-tasks/search", async () => {
+    const page: V1AppConversationStartTaskPage = {
+      items: Array.from(START_TASKS.values()).sort((left, right) =>
+        right.updated_at.localeCompare(left.updated_at),
+      ),
+      next_page_id: null,
+    };
+    return HttpResponse.json(page);
+  }),
 
   http.get("/api/v1/app-conversations", async ({ request }) => {
     const url = new URL(request.url);
@@ -416,14 +436,12 @@ export const CONVERSATION_HANDLERS = [
     },
   ),
 
-  http.get(
-    "/api/v1/app-conversations/:conversationId/skills",
-    async () => HttpResponse.json({ skills: [] }),
+  http.get("/api/v1/app-conversations/:conversationId/skills", async () =>
+    HttpResponse.json({ skills: [] }),
   ),
 
-  http.get(
-    "/api/v1/app-conversations/:conversationId/hooks",
-    async () => HttpResponse.json({ hooks: [] }),
+  http.get("/api/v1/app-conversations/:conversationId/hooks", async () =>
+    HttpResponse.json({ hooks: [] }),
   ),
 
   http.post(
