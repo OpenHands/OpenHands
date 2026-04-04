@@ -7,6 +7,7 @@ following TDD best practices with AAA structure.
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import status
 
@@ -36,6 +37,7 @@ def _make_service_mock(
     conversation_return: AppConversation | None = None,
     skills_return: list[Skill] | None = None,
     raise_on_load: bool = False,
+    load_exception: Exception | None = None,
 ):
     """Create a mock service that passes the isinstance check and returns the desired values."""
 
@@ -47,6 +49,8 @@ def _make_service_mock(
     service.get_app_conversation = AsyncMock(return_value=conversation_return)
 
     async def _load_skills(*_args, **_kwargs):
+        if load_exception is not None:
+            raise load_exception
         if raise_on_load:
             raise Exception('Skill loading failed')
         return skills_return or []
@@ -429,6 +433,121 @@ class TestGetConversationSkills:
         data = json.loads(content)
         assert 'error' in data
         assert 'Error getting skills' in data['error']
+
+    async def test_get_skills_returns_502_when_agent_server_unreachable(self):
+        """Test endpoint returns 502 for skill-loader connectivity failures."""
+        conversation_id = uuid4()
+        sandbox_id = str(uuid4())
+
+        mock_conversation = AppConversation(
+            id=conversation_id,
+            created_by_user_id='test-user',
+            sandbox_id=sandbox_id,
+            sandbox_status=SandboxStatus.RUNNING,
+        )
+
+        mock_sandbox = SandboxInfo(
+            id=sandbox_id,
+            created_by_user_id='test-user',
+            status=SandboxStatus.RUNNING,
+            sandbox_spec_id=str(uuid4()),
+            session_api_key='test-api-key',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:8000', port=8000)
+            ],
+        )
+
+        mock_sandbox_spec = SandboxSpecInfo(
+            id=str(uuid4()), command=None, working_dir='/workspace'
+        )
+
+        request = httpx.Request('POST', 'http://localhost:8000/api/skills')
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
+            load_exception=httpx.RequestError('Connection failed', request=request),
+        )
+
+        mock_sandbox_service = MagicMock()
+        mock_sandbox_service.get_sandbox = AsyncMock(return_value=mock_sandbox)
+
+        mock_sandbox_spec_service = MagicMock()
+        mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+
+        response = await get_conversation_skills(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
+        data = __import__('json').loads(response.body.decode('utf-8'))
+        assert 'error' in data
+
+    async def test_get_skills_returns_502_when_agent_server_returns_error(self):
+        """Test endpoint returns 502 for skill-loader HTTP failures."""
+        conversation_id = uuid4()
+        sandbox_id = str(uuid4())
+
+        mock_conversation = AppConversation(
+            id=conversation_id,
+            created_by_user_id='test-user',
+            sandbox_id=sandbox_id,
+            sandbox_status=SandboxStatus.RUNNING,
+        )
+
+        mock_sandbox = SandboxInfo(
+            id=sandbox_id,
+            created_by_user_id='test-user',
+            status=SandboxStatus.RUNNING,
+            sandbox_spec_id=str(uuid4()),
+            session_api_key='test-api-key',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:8000', port=8000)
+            ],
+        )
+
+        mock_sandbox_spec = SandboxSpecInfo(
+            id=str(uuid4()), command=None, working_dir='/workspace'
+        )
+
+        request = httpx.Request('POST', 'http://localhost:8000/api/skills')
+        response = httpx.Response(
+            status_code=503,
+            request=request,
+            text='Service Unavailable',
+        )
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
+            load_exception=httpx.HTTPStatusError(
+                'Server error', request=request, response=response
+            ),
+        )
+
+        mock_sandbox_service = MagicMock()
+        mock_sandbox_service.get_sandbox = AsyncMock(return_value=mock_sandbox)
+
+        mock_sandbox_spec_service = MagicMock()
+        mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+
+        response = await get_conversation_skills(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
+        data = __import__('json').loads(response.body.decode('utf-8'))
+        assert 'error' in data
 
     async def test_get_skills_returns_empty_list_when_no_skills_loaded(self):
         """Test endpoint returns empty skills list when no skills are found.

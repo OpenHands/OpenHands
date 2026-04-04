@@ -624,6 +624,7 @@ async def get_conversation_skills(
                 ctx.conversation.selected_repository,
                 project_dir,
                 ctx.agent_server_url,
+                raise_on_error=True,
             )
 
         logger.info(
@@ -665,6 +666,26 @@ async def get_conversation_skills(
             content={'skills': [s.model_dump() for s in skills_response]},
         )
 
+    except httpx.HTTPStatusError as e:
+        logger.warning(
+            f'Agent-server returned {e.response.status_code} when loading skills '
+            f'for conversation {conversation_id}: {e.response.text}'
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={
+                'error': f'Agent-server returned status {e.response.status_code} when loading skills'
+            },
+        )
+    except httpx.RequestError as e:
+        logger.warning(
+            f'Failed to reach agent-server when loading skills '
+            f'for conversation {conversation_id}: {e}'
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={'error': 'Failed to reach agent-server when loading skills'},
+        )
     except Exception as e:
         logger.error(f'Error getting skills for conversation {conversation_id}: {e}')
         return JSONResponse(

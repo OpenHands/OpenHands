@@ -10,6 +10,7 @@ from types import MethodType
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from openhands.app_server.app_conversation.app_conversation_models import AgentType
@@ -1197,3 +1198,35 @@ class TestLoadAndMergeAllSkills:
 
             # Assert
             assert result == []
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.fetch_skills_from_agent_server'
+    )
+    async def test_propagates_exception_when_requested(self, mock_fetch_skills):
+        """Test explicit query paths can surface agent-server failures."""
+        mock_user_context = Mock(spec=UserContext)
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            from openhands.app_server.sandbox.sandbox_models import ExposedUrl
+
+            sandbox = Mock(spec=SandboxInfo)
+            exposed_url = ExposedUrl(
+                name='AGENT_SERVER', url='http://localhost:8000', port=8000
+            )
+            sandbox.exposed_urls = [exposed_url]
+            sandbox.session_api_key = 'test-key'
+
+            mock_fetch_skills.side_effect = httpx.RequestError('Network error')
+
+            with pytest.raises(httpx.RequestError):
+                await service.load_and_merge_all_skills(
+                    sandbox,
+                    'owner/repo',
+                    '/workspace/repo',
+                    'http://localhost:8000',
+                    raise_on_error=True,
+                )

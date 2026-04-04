@@ -24,6 +24,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 from openhands.app_server.app_conversation.skill_loader import (
     build_org_config,
     build_sandbox_config,
+    fetch_skills_from_agent_server,
     load_skills_from_agent_server,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
@@ -99,6 +100,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         selected_repository: str | None,
         project_dir: str,
         agent_server_url: str,
+        raise_on_error: bool = False,
     ) -> list[Skill]:
         """Load skills from all sources via the agent-server.
 
@@ -133,7 +135,13 @@ class AppConversationServiceBase(AppConversationService, ABC):
             sandbox_config = build_sandbox_config(sandbox)
 
             # Single API call to agent-server for ALL skills
-            all_skills = await load_skills_from_agent_server(
+            loader = (
+                fetch_skills_from_agent_server
+                if raise_on_error
+                else load_skills_from_agent_server
+            )
+
+            all_skills = await loader(
                 agent_server_url=agent_server_url,
                 session_api_key=sandbox.session_api_key,
                 project_dir=project_dir,
@@ -153,6 +161,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
             return all_skills
 
         except Exception as e:
+            if raise_on_error:
+                raise
             _logger.warning(f'Failed to load skills: {e}', exc_info=True)
             # Return empty list on failure - skills will be loaded again later if needed
             return []
