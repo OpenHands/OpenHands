@@ -22,6 +22,7 @@ from openhands.app_server.app_conversation.skill_loader import (
     _is_gitlab_repository,
     build_org_config,
     build_sandbox_config,
+    fetch_skills_from_agent_server,
     load_skills_from_agent_server,
 )
 from openhands.app_server.sandbox.sandbox_models import (
@@ -354,6 +355,38 @@ class TestLoadSkillsFromAgentServer:
 
     @pytest.mark.asyncio
     @patch('httpx.AsyncClient')
+    async def test_fetches_skills_successfully(self, mock_client_class):
+        """Test the raising variant successfully loads skills."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'skills': [
+                {
+                    'name': 'skill1',
+                    'content': 'Content 1',
+                    'triggers': ['keyword1'],
+                }
+            ],
+            'sources': {'public': 1},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        result = await fetch_skills_from_agent_server(
+            agent_server_url='http://localhost:8000',
+            session_api_key='test-key',
+            project_dir='/workspace/project',
+        )
+
+        assert len(result) == 1
+        assert result[0].name == 'skill1'
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
     async def test_loads_skills_successfully(self, mock_client_class):
         """Test successfully loading skills from agent-server."""
         # Arrange
@@ -436,6 +469,31 @@ class TestLoadSkillsFromAgentServer:
 
     @pytest.mark.asyncio
     @patch('httpx.AsyncClient')
+    async def test_fetch_raises_http_status_error(self, mock_client_class):
+        """Test the raising variant preserves HTTP status errors."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = 'Internal Server Error'
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Server error', request=MagicMock(), response=mock_response
+            )
+        )
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await fetch_skills_from_agent_server(
+                agent_server_url='http://localhost:8000',
+                session_api_key='test-key',
+                project_dir='/workspace',
+            )
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
     async def test_handles_request_error(self, mock_client_class):
         """Test handling request error (connection failure)."""
         # Arrange
@@ -456,6 +514,25 @@ class TestLoadSkillsFromAgentServer:
 
         # Assert
         assert result == []
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
+    async def test_fetch_raises_request_error(self, mock_client_class):
+        """Test the raising variant preserves request errors."""
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(
+            side_effect=httpx.RequestError('Connection failed')
+        )
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(httpx.RequestError):
+            await fetch_skills_from_agent_server(
+                agent_server_url='http://localhost:8000',
+                session_api_key='test-key',
+                project_dir='/workspace',
+            )
 
 
 # ===== Tests for Organization Skills Functions (Still Existing) =====
