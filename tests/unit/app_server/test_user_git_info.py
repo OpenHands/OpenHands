@@ -5,8 +5,9 @@ Tests:
 - get_current_user_git_info function
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestGetCurrentUserGitInfo:
