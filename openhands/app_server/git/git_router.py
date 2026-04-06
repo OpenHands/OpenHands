@@ -5,7 +5,6 @@ with pagination support. These endpoints are designed to replace the legacy V0 e
 in openhands/server/routes/git.py.
 """
 
-import base64
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated
 
@@ -18,6 +17,11 @@ from openhands.app_server.git.git_models import (
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.app_server.utils.paging_utils import (
+    decode_page_id,
+    encode_page_id,
+    paginate_results,
+)
 from openhands.integrations.provider import ProviderHandler
 from openhands.integrations.service_types import ProviderType
 
@@ -32,65 +36,6 @@ router = APIRouter(
     dependencies=get_dependencies(),
 )
 user_context_dependency = depends_user_context()
-
-
-def _encode_page_id(value: int) -> str:
-    """Encode an integer page identifier as an opaque base64 string.
-
-    Args:
-        value: The integer value to encode.
-
-    Returns:
-        Base64-encoded string (URL-safe, without padding).
-    """
-    return base64.urlsafe_b64encode(str(value).encode()).decode().rstrip('=')
-
-
-def _decode_page_id(page_id: str | None) -> int | None:
-    """Decode an opaque page identifier back to an integer.
-
-    Args:
-        page_id: The base64-encoded page ID string.
-
-    Returns:
-        The decoded integer value, or None if page_id is None/empty.
-    """
-    if not page_id:
-        return None
-    try:
-        # Add padding back if needed
-        padded = page_id + '=' * (4 - len(page_id) % 4)
-        decoded = base64.urlsafe_b64decode(padded.encode()).decode()
-        return int(decoded)
-    except (ValueError, Exception):
-        return None
-
-
-def _paginate_results(
-    items: list, page_id: str | None, limit: int
-) -> tuple[list, str | None]:
-    """Apply pagination to a list of items.
-
-    Args:
-        items: Full list of items to paginate.
-        page_id: Optional page token from previous request.
-        limit: Maximum number of items per page.
-
-    Returns:
-        Tuple of (paginated_items, next_page_id).
-    """
-    start_offset = 0
-    decoded_page_id = _decode_page_id(page_id)
-    if decoded_page_id is not None:
-        start_offset = decoded_page_id
-
-    end_offset = start_offset + limit
-    paginated_items = items[start_offset:end_offset]
-    next_page_id = None
-    if end_offset < len(items):
-        next_page_id = _encode_page_id(end_offset)
-
-    return paginated_items, next_page_id
 
 
 @router.get('/installations')
@@ -140,7 +85,7 @@ async def get_user_installations(
             detail=f"Provider {provider} doesn't support installations",
         )
 
-    items, next_page_id = _paginate_results(installations, page_id, limit)
+    items, next_page_id = paginate_results(installations, page_id, limit)
     return InstallationPage(items=items, next_page_id=next_page_id)
 
 
@@ -180,7 +125,7 @@ async def get_user_repositories(
     )
 
     page = 1
-    decoded_page_id = _decode_page_id(page_id)
+    decoded_page_id = decode_page_id(page_id)
     if decoded_page_id is not None:
         page = decoded_page_id
 
@@ -197,6 +142,6 @@ async def get_user_repositories(
     next_page_id = None
     if len(items) > limit:
         items = items[:-1]
-        next_page_id = _encode_page_id(page + 1)
+        next_page_id = encode_page_id(page + 1)
 
     return RepositoryPage(items=items, next_page_id=next_page_id)

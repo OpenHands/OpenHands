@@ -11,13 +11,12 @@ from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
 from openhands.app_server.git.git_router import (
-    _encode_page_id,
-    _paginate_results,
     get_user_installations,
     router,
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import check_session_api_key
+from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
 
@@ -29,30 +28,30 @@ class TestPagination:
         """Test that first page is returned when no page_id is provided."""
         items = ['a', 'b', 'c', 'd', 'e']
 
-        result, next_page_id = _paginate_results(items, None, 2)
+        result, next_page_id = paginate_results(items, None, 2)
 
         assert result == ['a', 'b']
         # next_page_id is base64-encoded
-        assert next_page_id == _encode_page_id(2)
+        assert next_page_id == encode_page_id(2)
 
     def test_returns_second_page_when_page_id_provided(self):
         """Test that correct page is returned when page_id is provided."""
         items = ['a', 'b', 'c', 'd', 'e']
         # Use base64-encoded page_id
-        encoded_page_id = _encode_page_id(2)
+        encoded_page_id = encode_page_id(2)
 
-        result, next_page_id = _paginate_results(items, encoded_page_id, 2)
+        result, next_page_id = paginate_results(items, encoded_page_id, 2)
 
         assert result == ['c', 'd']
-        assert next_page_id == _encode_page_id(4)
+        assert next_page_id == encode_page_id(4)
 
     def test_returns_empty_when_page_id_exceeds_length(self):
         """Test that empty list is returned when page_id exceeds length."""
         items = ['a', 'b', 'c']
         # Use base64-encoded page_id
-        encoded_page_id = _encode_page_id(10)
+        encoded_page_id = encode_page_id(10)
 
-        result, next_page_id = _paginate_results(items, encoded_page_id, 2)
+        result, next_page_id = paginate_results(items, encoded_page_id, 2)
 
         assert result == []
         assert next_page_id is None
@@ -61,9 +60,9 @@ class TestPagination:
         """Test that next_page_id is None on last page."""
         items = ['a', 'b', 'c']
         # Use base64-encoded page_id
-        encoded_page_id = _encode_page_id(2)
+        encoded_page_id = encode_page_id(2)
 
-        result, next_page_id = _paginate_results(items, encoded_page_id, 2)
+        result, next_page_id = paginate_results(items, encoded_page_id, 2)
 
         assert result == ['c']
         assert next_page_id is None
@@ -72,7 +71,7 @@ class TestPagination:
         """Test that limit is respected."""
         items = ['a', 'b', 'c', 'd', 'e']
 
-        result, next_page_id = _paginate_results(items, None, 5)
+        result, next_page_id = paginate_results(items, None, 5)
 
         assert result == items
         assert next_page_id is None
@@ -195,7 +194,7 @@ class TestGetUserInstallations:
         # Assert
         assert result.items == ['inst-1', 'inst-2']
         # next_page_id is base64-encoded
-        assert result.next_page_id == _encode_page_id(2)
+        assert result.next_page_id == encode_page_id(2)
 
     async def test_returns_second_page(self):
         """Test that second page is returned correctly."""
@@ -206,15 +205,15 @@ class TestGetUserInstallations:
         )
 
         # We need to test with the pagination logic directly
-        # by calling _paginate_results
+        # by calling paginate_results
         items = ['inst-1', 'inst-2', 'inst-3', 'inst-4', 'inst-5']
         # Use base64-encoded page_id
-        encoded_page_id = _encode_page_id(2)
+        encoded_page_id = encode_page_id(2)
 
-        result, next_page_id = _paginate_results(items, encoded_page_id, 2)
+        result, next_page_id = paginate_results(items, encoded_page_id, 2)
 
         assert result == ['inst-3', 'inst-4']
-        assert next_page_id == _encode_page_id(4)
+        assert next_page_id == encode_page_id(4)
 
 
 @pytest.mark.asyncio
@@ -235,7 +234,7 @@ class TestGetUserRepositories:
         # The actual integration would test more thoroughly
         items = ['repo-1', 'repo-2']
 
-        result, next_page_id = _paginate_results(items, None, 10)
+        result, next_page_id = paginate_results(items, None, 10)
 
         assert result == items
         assert next_page_id is None
