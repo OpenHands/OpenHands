@@ -1,5 +1,5 @@
-import React from "react";
 import { cn } from "#/utils/utils";
+import { Spinner } from "#/components/shared/spinner";
 
 interface LoadingSpinnerProps {
   hasSelection: boolean;
@@ -12,15 +12,13 @@ export function LoadingSpinner({
 }: LoadingSpinnerProps) {
   return (
     <div
+      data-testid={testId}
       className={cn(
         "absolute top-1/2 transform -translate-y-1/2",
         hasSelection ? "right-11" : "right-6",
       )}
     >
-      <div
-        className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"
-        data-testid={testId}
-      />
+      <Spinner size="sm" className="text-blue-500" />
     </div>
   );
 }
