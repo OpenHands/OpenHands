@@ -4,7 +4,7 @@ This module tests the git router endpoints,
 focusing on pagination and error handling.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, status
@@ -161,29 +161,28 @@ class TestRepositoriesEndpoint:
 class TestGetUserInstallations:
     """Test suite for get_user_installations function."""
 
-    async def test_returns_paginated_installations(self):
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_returns_paginated_installations(self, mock_handler_cls):
         """Test that installations are returned with pagination."""
         # Arrange
+        mock_handler = _make_mock_provider_handler()
+        mock_handler_cls.return_value = mock_handler
+
         mock_context = _make_mock_user_context(
             provider_tokens={
                 ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
             },
             user_id='user-123',
         )
-        _make_mock_provider_handler()
 
         # Act
-        with pytest.MonkeyPatch.context() as m:
-            m.setattr(
-                'openhands.app_server.git.git_router.UserContext',
-                lambda: mock_context,
-            )
-            result = await get_user_installations(
-                provider=ProviderType.GITHUB,
-                page_id=None,
-                limit=2,
-                user_context=mock_context,
-            )
+        result = await get_user_installations(
+            provider=ProviderType.GITHUB,
+            page_id=None,
+            limit=2,
+            user_context=mock_context,
+        )
 
         # Assert
         assert result.items == ['inst-1', 'inst-2']

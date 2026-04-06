@@ -6,7 +6,7 @@ in openhands/server/routes/git.py.
 """
 
 from types import MappingProxyType
-from typing import Annotated, cast
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -17,8 +17,11 @@ from openhands.app_server.git.git_models import (
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
+from openhands.integrations.provider import ProviderHandler
 from openhands.integrations.service_types import ProviderType
+
+if TYPE_CHECKING:
+    from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
@@ -82,8 +85,10 @@ async def get_user_installations(
         )
 
     user_id = await user_context.get_user_id()
+    # Wrap in MappingProxyType as required by ProviderHandler
+    # Type ignore: we validated provider_tokens exists, but mypy can't narrow the union type
     client = ProviderHandler(
-        provider_tokens=provider_tokens,
+        provider_tokens=MappingProxyType(provider_tokens),  # type: ignore[arg-type]
         external_auth_id=user_id,
     )
 
@@ -133,8 +138,10 @@ async def get_user_repositories(
         )
 
     user_id = await user_context.get_user_id()
+    # Cast to the expected type since we validated provider_tokens exists
+    typed_provider_tokens: PROVIDER_TOKEN_TYPE = provider_tokens  # type: ignore[assignment]
     client = ProviderHandler(
-        provider_tokens=MappingProxyType(provider_tokens),
+        provider_tokens=MappingProxyType(typed_provider_tokens),
         external_auth_id=user_id,
     )
 
