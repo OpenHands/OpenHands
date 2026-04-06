@@ -1,6 +1,7 @@
 import time
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import Any
 from uuid import UUID
 
 import jwt
@@ -15,7 +16,7 @@ from server.auth.auth_error import (
     NoCredentialsError,
 )
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
-from server.auth.token_manager import TokenManager
+from server.auth.token_manager import KeycloakUserInfo, TokenManager
 from server.config import get_config
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
@@ -27,6 +28,7 @@ from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
+from storage.user_store import UserStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from openhands.integrations.provider import (
@@ -34,6 +36,7 @@ from openhands.integrations.provider import (
     ProviderToken,
     ProviderType,
 )
+from openhands.integrations.service_types import UserGitInfo
 from openhands.server.settings import Settings
 from openhands.server.user_auth.user_auth import AuthType, UserAuth
 from openhands.storage.data_models.secrets import Secrets
@@ -242,6 +245,38 @@ class SaasUserAuth(UserAuth):
             )
         return mcp_api_key
 
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        provider_tokens = await self.get_provider_tokens()
+        if not provider_tokens:
+            return None
+
+        access_token = await self.get_access_token()
+        if not self.access_token:
+            return None
+
+        user_info = await token_manager.get_user_info(access_token.get_secret_value())
+        # Prefer email from DB; fall back to Keycloak if not yet persisted
+        email = user_info.email
+        sub = user_info.sub
+        if sub:
+            db_user = await UserStore.get_user_by_id(sub)
+            if db_user and db_user.email is not None:
+                email = db_user.email
+
+        retval = await _check_idp(
+            access_token=access_token,
+            default_value=UserGitInfo(
+                id=sub,
+                login=user_info.preferred_username or '',
+                avatar_url='',
+                email=email,
+                name=resolve_display_name(user_info),
+                company=user_info.company,
+            ),
+            user_info=user_info,
+        )
+        return retval
+
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         logger.debug('saas_user_auth_get_instance')
@@ -384,3 +419,46 @@ async def get_user_auth_from_keycloak_id(keycloak_user_id: str) -> UserAuth:
         refresh_token=SecretStr(offline_token),
     )
     return user_auth
+
+
+def resolve_display_name(user_info: KeycloakUserInfo) -> str | None:
+    """Resolve the best available display name from Keycloak user_info claims.
+
+    Fallback chain: name → given_name + family_name → None
+
+    Does NOT fall back to preferred_username/username — callers that need
+    a guaranteed non-None value should handle that separately. This keeps
+    the helper focused on real-name claims so that the /api/user/info route
+    can return name=None when no real name is available, while user_store
+    callers can append their own username fallback.
+    """
+    name = user_info.name or ''
+    if name and name.strip():
+        return name.strip()
+
+    given = (user_info.given_name or '').strip()
+    family = (user_info.family_name or '').strip()
+    combined = f'{given} {family}'.strip()
+    if combined:
+        return combined
+
+    return None
+
+
+async def _check_idp(
+    access_token: SecretStr,
+    default_value: Any,
+    user_info: KeycloakUserInfo,
+):
+    idp: str | None = user_info.identity_provider
+    if not idp:
+        return None
+    if ':' in idp:
+        idp, _ = idp.rsplit(':', 1)
+
+    # Will return empty dict if IDP doesn't support provider tokens
+    if not await token_manager.get_idp_tokens_from_keycloak(
+        access_token.get_secret_value(), ProviderType(idp)
+    ):
+        return default_value
+    return None

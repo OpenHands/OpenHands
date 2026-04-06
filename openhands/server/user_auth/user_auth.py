@@ -15,6 +15,7 @@ from fastapi import Request
 from pydantic import SecretStr
 
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
+from openhands.integrations.service_types import UserGitInfo
 from openhands.server.settings import Settings
 from openhands.server.shared import server_config
 from openhands.storage.data_models.secrets import Secrets
@@ -86,6 +87,10 @@ class UserAuth(ABC):
     @abstractmethod
     async def get_mcp_api_key(self) -> str | None:
         """Get an mcp api key for the user"""
+
+    @abstractmethod
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        """Get an meta for the current user"""
 
     @classmethod
     @abstractmethod

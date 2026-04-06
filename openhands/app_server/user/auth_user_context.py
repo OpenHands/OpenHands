@@ -14,6 +14,7 @@ from openhands.integrations.provider import (
     ProviderHandler,
     ProviderType,
 )
+from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
@@ -116,6 +117,9 @@ class AuthUserContext(UserContext):
     async def get_mcp_api_key(self) -> str | None:
         mcp_api_key = await self.user_auth.get_mcp_api_key()
         return mcp_api_key
+
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        return await self.user_auth.get_user_git_info()
 
 
 USER_ID_ATTR = 'user_id'

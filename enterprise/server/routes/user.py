@@ -146,12 +146,13 @@ async def saas_get_user_repositories(
     )
 
 
-@saas_user_router.get('/info', response_model=User)
+@saas_user_router.get('/info', response_model=User, deprecated=True)
 async def saas_get_user(
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
 ) -> User | JSONResponse:
+    """Get the current user git info. Use GET /api/v1/users/git-info instead"""
     if not provider_tokens:
         if not access_token:
             return JSONResponse(

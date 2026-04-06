@@ -126,13 +126,17 @@ class CreateMicroagent(BaseModel):
     title: str | None = None
 
 
-class User(BaseModel):
+class UserGitInfo(BaseModel):
     id: str
     login: str
     avatar_url: str
     company: str | None = None
     name: str | None = None
     email: str | None = None
+
+
+# Keep old name of UserGitInfo for now for backwards compatibility
+User = UserGitInfo
 
 
 class Branch(BaseModel):

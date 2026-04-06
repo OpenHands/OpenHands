@@ -6,6 +6,7 @@ from openhands.app_server.errors import OpenHandsError
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource
 
 
@@ -38,6 +39,9 @@ class SpecifyUserContext(UserContext):
         raise NotImplementedError()
 
     async def get_mcp_api_key(self) -> str | None:
+        raise NotImplementedError()
+
+    async def get_user_git_info(self) -> UserGitInfo | None:
         raise NotImplementedError()
 
 
