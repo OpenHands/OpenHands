@@ -12,13 +12,14 @@ from fastapi.testclient import TestClient
 
 from openhands.app_server.git.git_router import (
     get_user_installations,
+    get_user_repositories,
     router,
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import check_session_api_key
 from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
 from openhands.integrations.provider import ProviderToken
-from openhands.integrations.service_types import ProviderType
+from openhands.integrations.service_types import ProviderType, Repository
 
 
 class TestPagination:
@@ -196,45 +197,242 @@ class TestGetUserInstallations:
         # next_page_id is base64-encoded
         assert result.next_page_id == encode_page_id(2)
 
-    async def test_returns_second_page(self):
-        """Test that second page is returned correctly."""
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_returns_second_page_correctly(self, mock_handler_cls):
+        """Test that second page of installations is returned correctly."""
         # Arrange
-        _make_mock_user_context(
-            provider_tokens={'github': 'token'},
+        mock_handler = _make_mock_provider_handler()
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
             user_id='user-123',
         )
 
-        # We need to test with the pagination logic directly
-        # by calling paginate_results
-        items = ['inst-1', 'inst-2', 'inst-3', 'inst-4', 'inst-5']
-        # Use base64-encoded page_id
-        encoded_page_id = encode_page_id(2)
+        # Act - request second page
+        result = await get_user_installations(
+            provider=ProviderType.GITHUB,
+            page_id=encode_page_id(2),  # Second page starts at offset 2
+            limit=2,
+            user_context=mock_context,
+        )
 
-        result, next_page_id = paginate_results(items, encoded_page_id, 2)
-
-        assert result == ['inst-3', 'inst-4']
-        assert next_page_id == encode_page_id(4)
+        # Assert
+        assert result.items == ['inst-3', 'inst-4']
+        assert result.next_page_id == encode_page_id(4)
 
 
 @pytest.mark.asyncio
 class TestGetUserRepositories:
     """Test suite for get_user_repositories function."""
 
-    async def test_passes_sort_parameter(self):
-        """Test that sort parameter is passed to provider."""
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_returns_repositories_with_correct_structure(self, mock_handler_cls):
+        """Test that get_user_repositories returns correct RepositoryPage structure."""
         # Arrange
-        _make_mock_user_context(
-            provider_tokens={'github': 'token'},
+        mock_handler = MagicMock()
+        mock_handler.get_repositories = AsyncMock(
+            return_value=[
+                Repository(
+                    id='1',
+                    full_name='user/repo1',
+                    git_provider=ProviderType.GITHUB,
+                    is_public=True,
+                ),
+                Repository(
+                    id='2',
+                    full_name='user/repo2',
+                    git_provider=ProviderType.GITHUB,
+                    is_public=False,
+                ),
+                Repository(
+                    id='3',
+                    full_name='user/repo3',
+                    git_provider=ProviderType.GITHUB,
+                    is_public=True,
+                ),
+            ]
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
             user_id='user-123',
         )
-        mock_handler = _make_mock_provider_handler()
-        mock_handler.get_repositories = AsyncMock(return_value=['repo-1', 'repo-2'])
 
-        # This test verifies that the sort parameter flows through
-        # The actual integration would test more thoroughly
-        items = ['repo-1', 'repo-2']
+        # Act
+        result = await get_user_repositories(
+            provider=ProviderType.GITHUB,
+            sort='updated',
+            installation_id=None,
+            page_id=None,
+            limit=10,
+            user_context=mock_context,
+        )
 
-        result, next_page_id = paginate_results(items, None, 10)
+        # Assert
+        assert len(result.items) == 3
+        assert result.items[0].id == '1'
+        assert result.items[1].id == '2'
+        assert result.items[2].id == '3'
+        assert result.next_page_id is None  # No more pages
 
-        assert result == items
-        assert next_page_id is None
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_pagination_works_across_pages(self, mock_handler_cls):
+        """Test that pagination works correctly across multiple pages.
+
+        Note: This endpoint uses page-based pagination (passing page number to provider),
+        not offset-based pagination like installations. The provider returns limit+1 items,
+        and we check if there are more to determine next_page_id.
+        """
+        # Arrange
+        mock_handler = MagicMock()
+
+        # We'll set up the mock to return different data based on the page parameter
+        # First call (page=1): return 3 items (limit+1), meaning there's a next page
+        # Second call (page=2): return 3 items, meaning there's a next page
+        # Third call (page=3): return 2 items, meaning it's the last page
+        def mock_get_repositories(**kwargs):
+            page = kwargs.get('page', 1)
+            if page == 1:
+                return [
+                    Repository(
+                        id=str(i),
+                        full_name=f'user/repo{i}',
+                        git_provider=ProviderType.GITHUB,
+                        is_public=True,
+                    )
+                    for i in range(1, 4)  # 3 items = limit+1
+                ]
+            elif page == 2:
+                return [
+                    Repository(
+                        id=str(i),
+                        full_name=f'user/repo{i}',
+                        git_provider=ProviderType.GITHUB,
+                        is_public=True,
+                    )
+                    for i in range(4, 7)  # 3 items = limit+1
+                ]
+            else:
+                return [
+                    Repository(
+                        id=str(i),
+                        full_name=f'user/repo{i}',
+                        git_provider=ProviderType.GITHUB,
+                        is_public=True,
+                    )
+                    for i in range(7, 9)  # 2 items < limit+1 = last page
+                ]
+
+        mock_handler.get_repositories = AsyncMock(side_effect=mock_get_repositories)
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act - First page (page=1)
+        result_page1 = await get_user_repositories(
+            provider=ProviderType.GITHUB,
+            sort='pushed',
+            installation_id=None,
+            page_id=None,  # This means page 1
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert - First page returns 2 items (truncated from limit+1=3), with next_page_id
+        assert len(result_page1.items) == 2
+        assert result_page1.items[0].id == '1'
+        assert result_page1.items[1].id == '2'
+        assert result_page1.next_page_id == encode_page_id(2)
+
+        # Act - Second page (page=2)
+        result_page2 = await get_user_repositories(
+            provider=ProviderType.GITHUB,
+            sort='pushed',
+            installation_id=None,
+            page_id=encode_page_id(2),  # This means page 2
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert - Second page returns next 2 items
+        assert len(result_page2.items) == 2
+        assert result_page2.items[0].id == '4'
+        assert result_page2.items[1].id == '5'
+        # next_page_id = page + 1 = 2 + 1 = 3, encoded as base64 = 'Mw'
+        assert result_page2.next_page_id == encode_page_id(3)
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_passes_sort_parameter_to_provider(self, mock_handler_cls):
+        """Test that sort parameter is passed through to the provider handler."""
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.get_repositories = AsyncMock(return_value=[])
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act
+        await get_user_repositories(
+            provider=ProviderType.GITHUB,
+            sort='stars',
+            installation_id=None,
+            page_id=None,
+            limit=10,
+            user_context=mock_context,
+        )
+
+        # Assert - verify get_repositories was called with the sort parameter
+        mock_handler.get_repositories.assert_called_once()
+        call_kwargs = mock_handler.get_repositories.call_args.kwargs
+        assert call_kwargs.get('sort') == 'stars'
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_passes_installation_id_to_provider(self, mock_handler_cls):
+        """Test that installation_id filtering is passed through to the provider."""
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.get_repositories = AsyncMock(return_value=[])
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act
+        await get_user_repositories(
+            provider=ProviderType.GITHUB,
+            sort='pushed',
+            installation_id='app-123',
+            page_id=None,
+            limit=10,
+            user_context=mock_context,
+        )
+
+        # Assert - verify get_repositories was called with installation_id
+        mock_handler.get_repositories.assert_called_once()
+        call_kwargs = mock_handler.get_repositories.call_args.kwargs
+        assert call_kwargs.get('installation_id') == 'app-123'
