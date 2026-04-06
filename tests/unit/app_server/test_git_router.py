@@ -160,7 +160,7 @@ class TestInstallationsEndpoint:
 
 
 class TestRepositoriesEndpoint:
-    """Test suite for /repositories endpoint."""
+    """Test suite for /search/repositories endpoint (handles both user repos and search)."""
 
     def test_returns_401_when_no_provider_tokens(self, test_client, monkeypatch):
         """Test that 401 is returned when no provider tokens."""
@@ -170,9 +170,26 @@ class TestRepositoriesEndpoint:
             lambda: mock_context,
         )
 
-        response = test_client.get('/git/repositories', params={'provider': 'github'})
+        response = test_client.get('/git/search/repositories', params={'provider': 'github'})
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_returns_user_repos_without_query(self, test_client, monkeypatch):
+        """Test that /search/repositories returns user repos when query is not provided."""
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            }
+        )
+        monkeypatch.setattr(
+            'openhands.app_server.git.git_router.depends_user_context',
+            lambda: mock_context,
+        )
+
+        response = test_client.get('/git/search/repositories', params={'provider': 'github'})
+
+        # Should return 200 (not 401) since provider tokens exist
+        assert response.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.asyncio
