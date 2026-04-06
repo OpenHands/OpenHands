@@ -55,19 +55,7 @@ class RepositoryPage(BaseModel):
     next_page_id: str | None = None
 
 
-class SearchRepositoriesPage(BaseModel):
-    """Paginated response for repository search results.
-
-    Attributes:
-        items: List of repositories in the current page.
-        next_page_id: ID for the next page, or None if there are no more pages.
-    """
-
-    items: list[Repository]
-    next_page_id: str | None = None
-
-
-class SearchBranchesPage(BaseModel):
+class BranchPage(BaseModel):
     """Paginated response for branch search results.
 
     Attributes:
@@ -79,7 +67,7 @@ class SearchBranchesPage(BaseModel):
     next_page_id: str | None = None
 
 
-class SuggestedTasksPage(BaseModel):
+class SuggestedTaskPage(BaseModel):
     """Paginated response for suggested tasks.
 
     Attributes:
@@ -88,16 +76,4 @@ class SuggestedTasksPage(BaseModel):
     """
 
     items: list[SuggestedTask]
-    next_page_id: str | None = None
-
-
-class RepositoryBranchesPage(BaseModel):
-    """Paginated response for repository branches.
-
-    Attributes:
-        items: List of branches in the current page.
-        next_page_id: ID for the next page, or None if there are no more pages.
-    """
-
-    items: list[Branch]
     next_page_id: str | None = None

@@ -13,11 +13,10 @@ from fastapi import APIRouter, HTTPException, Query, status
 from openhands.app_server.config import depends_user_context, get_global_config
 from openhands.app_server.git.git_models import (
     InstallationPage,
-    RepositoryBranchesPage,
-    SearchBranchesPage,
-    SearchRepositoriesPage,
+    BranchPage,
+    RepositoryPage,
     SortOrder,
-    SuggestedTasksPage,
+    SuggestedTaskPage,
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
@@ -29,7 +28,6 @@ from openhands.app_server.utils.paging_utils import (
 from openhands.integrations.provider import ProviderHandler
 from openhands.integrations.service_types import (
     Branch,
-    PaginatedBranchesResponse,
     ProviderType,
     Repository,
     SuggestedTask,
@@ -49,7 +47,7 @@ user_context_dependency = depends_user_context()
 
 
 @router.get('/installations')
-async def get_user_installations(
+async def search_user_installations(
     provider: ProviderType,
     page_id: Annotated[
         str | None,
@@ -129,7 +127,7 @@ async def search_repositories(
         Query(title='Sort order for search results (e.g., stars-desc, forks-asc)'),
     ] = None,
     user_context: UserContext = user_context_dependency,
-) -> SearchRepositoriesPage:
+) -> RepositoryPage:
     """Get or search repositories.
 
     If query is provided, searches repositories across the git provider.
@@ -188,7 +186,7 @@ async def search_repositories(
         repos = repos[:-1]
         next_page_id = encode_page_id(page + 1)
 
-    return SearchRepositoriesPage(items=repos, next_page_id=next_page_id)
+    return RepositoryPage(items=repos, next_page_id=next_page_id)
 
 
 @router.get('/branches/search')
@@ -211,7 +209,7 @@ async def search_branches(
         Query(title='The max number of results in the page', gt=0, le=100),
     ] = 30,
     user_context: UserContext = user_context_dependency,
-) -> SearchBranchesPage:
+) -> BranchPage:
     """Search branches in a repository.
 
     Returns a paginated list of branches matching the search query.
@@ -250,11 +248,11 @@ async def search_branches(
         branches = branches[:-1]
         next_page_id = encode_page_id(page + 1)
 
-    return SearchBranchesPage(items=branches, next_page_id=next_page_id)
+    return BranchPage(items=branches, next_page_id=next_page_id)
 
 
-@router.get('/suggested-tasks')
-async def get_suggested_tasks(
+@router.get('/suggested-tasks/search')
+async def search_suggested_tasks(
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -264,7 +262,7 @@ async def get_suggested_tasks(
         Query(title='The max number of results in the page', gt=0, le=100),
     ] = 30,
     user_context: UserContext = user_context_dependency,
-) -> SuggestedTasksPage:
+) -> SuggestedTaskPage:
     """Get suggested tasks for the user.
 
     Returns a paginated list of suggested tasks including:
@@ -305,64 +303,4 @@ async def get_suggested_tasks(
     if end_idx < len(all_tasks):
         next_page_id = encode_page_id(page + 1)
 
-    return SuggestedTasksPage(items=paginated_tasks, next_page_id=next_page_id)
-
-
-@router.get('/repository/branches')
-async def get_repository_branches(
-    provider: ProviderType,
-    repository: Annotated[
-        str,
-        Query(title='Repository name in format owner/repo'),
-    ],
-    page_id: Annotated[
-        str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
-    ] = None,
-    limit: Annotated[
-        int,
-        Query(title='The max number of results in the page', gt=0, le=100),
-    ] = 30,
-    user_context: UserContext = user_context_dependency,
-) -> RepositoryBranchesPage:
-    """Get branches for a repository.
-
-    Returns a paginated list of branches for the specified repository.
-    """
-    # Get provider tokens from user context
-    provider_tokens = await user_context.get_provider_tokens()
-    if not provider_tokens:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Git provider token required (such as GitHub).',
-        )
-
-    user_id = await user_context.get_user_id()
-    # Cast to the expected type since we validated provider_tokens exists
-    typed_provider_tokens: PROVIDER_TOKEN_TYPE = provider_tokens  # type: ignore[assignment]
-    client = ProviderHandler(
-        provider_tokens=MappingProxyType(typed_provider_tokens),
-        external_auth_id=user_id,
-    )
-
-    page = 1
-    decoded_page_id = decode_page_id(page_id)
-    if decoded_page_id is not None:
-        page = decoded_page_id
-
-    # Get branches - we'll handle pagination ourselves
-    branches_response: PaginatedBranchesResponse = await client.get_branches(
-        repository=repository,
-        specified_provider=provider,
-        page=page,
-        per_page=limit + 1,  # We'll handle pagination ourselves
-    )
-
-    # Manual pagination since get_branches returns PaginatedBranchesResponse
-    branches = branches_response.branches
-    next_page_id = None
-    if len(branches) > limit:
-        branches = branches[:-1]
-        next_page_id = encode_page_id(page + 1)
-
-    return RepositoryBranchesPage(items=branches, next_page_id=next_page_id)
+    return SuggestedTaskPage(items=paginated_tasks, next_page_id=next_page_id)
