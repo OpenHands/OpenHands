@@ -24,13 +24,17 @@ app = APIRouter(
 )
 
 
-@app.post('/submit-feedback')
+@app.post('/submit-feedback', deprecated=True)
 async def submit_feedback(
     request: Request, conversation: ServerConversation = Depends(get_conversation)
 ) -> JSONResponse:
     """Submit user feedback.
 
     This function stores the provided feedback data.
+
+    .. deprecated::
+        Submitting feedback in OSS doesn't really make sense. This endpoint is deprecated
+        and will be removed.
 
     To submit feedback:
     ```sh
