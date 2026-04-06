@@ -51,7 +51,7 @@ jobs:
             # Always checkout main branch for security - cannot test script changes in PRs
             - name: Checkout extensions repository
               if: steps.check-trace.outputs.trace_exists == 'true'
-              uses: actions/checkout@v5
+              uses: actions/checkout@v6
               with:
                   repository: OpenHands/extensions
                   path: extensions

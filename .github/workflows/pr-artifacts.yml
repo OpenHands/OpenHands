@@ -31,7 +31,7 @@ jobs:
                     echo "is_fork=false" >> $GITHUB_OUTPUT
                   fi
 
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@v6
               if: steps.check-fork.outputs.is_fork == 'false'
               with:
                   ref: ${{ github.event.pull_request.head.ref }}
@@ -93,7 +93,7 @@ jobs:
             contents: read
             pull-requests: write
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@v6
 
             - name: Check for .pr/ directory
               id: check
