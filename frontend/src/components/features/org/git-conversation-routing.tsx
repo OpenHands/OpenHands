@@ -2,11 +2,13 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { Text, Paragraph } from "#/ui/typography";
 import { useGitConversationRouting } from "#/hooks/organizations/use-git-conversation-routing";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { GitOrgRow } from "./git-org-row";
 
 export function GitConversationRouting() {
   const { t } = useTranslation();
-  const { orgs, claimOrg, disconnectOrg } = useGitConversationRouting();
+  const { orgs, claimOrg, disconnectOrg, isLoading } =
+    useGitConversationRouting();
 
   return (
     <div
@@ -21,17 +23,31 @@ export function GitConversationRouting() {
         {t(I18nKey.ORG$GIT_CONVERSATION_ROUTING_DESCRIPTION)}
       </Paragraph>
 
-      <div className="border border-[#242424] rounded-[6px] overflow-hidden">
-        {orgs.map((org, index) => (
-          <GitOrgRow
-            key={org.id}
-            org={org}
-            isLast={index === orgs.length - 1}
-            onClaim={claimOrg}
-            onDisconnect={disconnectOrg}
-          />
-        ))}
-      </div>
+      {isLoading && (
+        <div className="flex justify-center py-4">
+          <LoadingSpinner size="small" />
+        </div>
+      )}
+
+      {!isLoading && orgs.length > 0 && (
+        <div className="border border-[#242424] rounded-[6px] overflow-hidden">
+          {orgs.map((org, index) => (
+            <GitOrgRow
+              key={org.id}
+              org={org}
+              isLast={index === orgs.length - 1}
+              onClaim={claimOrg}
+              onDisconnect={disconnectOrg}
+            />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && orgs.length === 0 && (
+        <Paragraph className="text-center py-4 text-[#8c8c8c] text-sm">
+          {t(I18nKey.ORG$NO_GIT_ORGANIZATIONS)}
+        </Paragraph>
+      )}
     </div>
   );
 }

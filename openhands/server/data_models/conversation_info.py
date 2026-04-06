@@ -39,3 +39,4 @@ class ConversationInfo:
     sub_conversation_ids: list[str] = field(default_factory=list)
     public: bool | None = None
     sandbox_id: str | None = None
+    llm_model: str | None = None

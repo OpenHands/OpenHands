@@ -72,21 +72,38 @@ export const resetTestHandlersMockSettings = () => {
 
 export const SETTINGS_HANDLERS = [
   http.get("/api/options/models", async () =>
-    HttpResponse.json([
-      "gpt-3.5-turbo",
-      "gpt-4o",
-      "gpt-4o-mini",
-      "anthropic/claude-3.5",
-      "anthropic/claude-sonnet-4-20250514",
-      "anthropic/claude-sonnet-4-5-20250929",
-      "anthropic/claude-haiku-4-5-20251001",
-      "anthropic/claude-opus-4-5-20251101",
-      "openhands/claude-sonnet-4-20250514",
-      "openhands/claude-sonnet-4-5-20250929",
-      "openhands/claude-haiku-4-5-20251001",
-      "openhands/claude-opus-4-5-20251101",
-      "sambanova/Meta-Llama-3.1-8B-Instruct",
-    ]),
+    HttpResponse.json({
+      models: [
+        "anthropic/claude-3.5",
+        "anthropic/claude-sonnet-4-20250514",
+        "anthropic/claude-sonnet-4-5-20250929",
+        "anthropic/claude-haiku-4-5-20251001",
+        "anthropic/claude-opus-4-5-20251101",
+        "openai/gpt-3.5-turbo",
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+        "openhands/claude-sonnet-4-20250514",
+        "openhands/claude-sonnet-4-5-20250929",
+        "openhands/claude-haiku-4-5-20251001",
+        "openhands/claude-opus-4-5-20251101",
+        "sambanova/Meta-Llama-3.1-8B-Instruct",
+      ],
+      verified_models: [
+        "claude-opus-4-5-20251101",
+        "claude-sonnet-4-5-20250929",
+      ],
+      verified_providers: [
+        "openhands",
+        "anthropic",
+        "openai",
+        "mistral",
+        "gemini",
+        "deepseek",
+        "moonshot",
+        "minimax",
+      ],
+      default_model: "openhands/claude-opus-4-5-20251101",
+    }),
   ),
 
   http.get("/api/options/agents", async () =>

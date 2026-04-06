@@ -34,10 +34,17 @@ class SaasConversationStore(ConversationStore):
     session_maker: sessionmaker
     org_id: UUID | None = None  # will be fetched automatically
 
-    def __init__(self, user_id: str, org_id: UUID, session_maker: sessionmaker):
+    def __init__(
+        self,
+        user_id: str,
+        org_id: UUID,
+        session_maker: sessionmaker,
+        resolver_org_id: UUID | None = None,
+    ):
         self.user_id = user_id
         self.org_id = org_id
         self.session_maker = session_maker
+        self.resolver_org_id = resolver_org_id
 
     def _select_by_id(self, session, conversation_id: str):
         # Join StoredConversationMetadata with ConversationMetadataSaas to filter by user/org
@@ -103,6 +110,13 @@ class SaasConversationStore(ConversationStore):
 
         stored_metadata = StoredConversationMetadata(**kwargs)
 
+        # Override with resolver org_id if set (from git org claim resolution),
+        # same pattern as V1's save_app_conversation_info in
+        # saas_app_conversation_info_injector.py
+        org_id = self.org_id
+        if self.resolver_org_id is not None:
+            org_id = self.resolver_org_id
+
         def _save_metadata():
             with self.session_maker() as session:
                 # Save the main conversation metadata
@@ -122,13 +136,13 @@ class SaasConversationStore(ConversationStore):
                     saas_metadata = StoredConversationMetadataSaas(
                         conversation_id=stored_metadata.conversation_id,
                         user_id=UUID(self.user_id),
-                        org_id=self.org_id,
+                        org_id=org_id,
                     )
                     session.add(saas_metadata)
                 else:
                     # Validate
                     expected_user_id = UUID(self.user_id)
-                    expected_org_id = self.org_id
+                    expected_org_id = org_id
 
                     if saas_metadata.user_id != expected_user_id:
                         raise ValueError(
@@ -240,3 +254,19 @@ class SaasConversationStore(ConversationStore):
         user = await UserStore.get_user_by_id(user_id)
         org_id = user.current_org_id if user else None
         return SaasConversationStore(user_id, org_id, session_maker)
+
+    @classmethod
+    async def get_resolver_instance(
+        cls,
+        config: OpenHandsConfig,
+        user_id: str,
+        resolver_org_id: UUID | None = None,
+    ) -> 'SaasConversationStore':
+        """Get a store for resolver conversations with explicit org routing.
+
+        Unlike get_instance, this accepts a resolver_org_id that overrides
+        the user's default org when saving conversation metadata.
+        """
+        user = await UserStore.get_user_by_id(user_id)
+        org_id = user.current_org_id if user else None
+        return SaasConversationStore(user_id, org_id, session_maker, resolver_org_id)

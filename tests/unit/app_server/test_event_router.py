@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 
 from openhands.app_server.event.event_router import batch_get_events, router
-from openhands.server.dependencies import check_session_api_key
+from openhands.app_server.utils.dependencies import check_session_api_key
 
 
 def _make_mock_event_service(search_return=None, batch_get_return=None):
