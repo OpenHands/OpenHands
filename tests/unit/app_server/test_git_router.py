@@ -592,7 +592,7 @@ class TestSearchRepositories:
         )
 
         response = test_client.get(
-            '/git/search/repositories',
+            '/git/repositories/search',
             params={'provider': 'github', 'query': 'test'},
         )
 
@@ -611,9 +611,9 @@ class TestSearchBranches:
         mock_handler = MagicMock()
         mock_handler.search_branches = AsyncMock(
             return_value=[
-                Branch(name='main', commit_sha='abc123'),
-                Branch(name='develop', commit_sha='def456'),
-                Branch(name='feature-branch', commit_sha='ghi789'),
+                Branch(name='main', commit_sha='abc123', protected=False),
+                Branch(name='develop', commit_sha='def456', protected=False),
+                Branch(name='feature-branch', commit_sha='ghi789', protected=False),
             ]
         )
         mock_handler_cls.return_value = mock_handler
@@ -684,7 +684,7 @@ class TestSearchBranches:
         )
 
         response = test_client.get(
-            '/git/search/branches',
+            '/git/branches/search',
             params={'provider': 'github', 'repository': 'user/repo', 'query': 'main'},
         )
 

@@ -99,7 +99,7 @@ async def get_user_installations(
     return InstallationPage(items=items, next_page_id=next_page_id)
 
 
-@router.get('/search/repositories')
+@router.get('/repositories/search')
 async def search_repositories(
     provider: ProviderType,
     query: Annotated[
@@ -191,7 +191,7 @@ async def search_repositories(
     return SearchRepositoriesPage(items=repos, next_page_id=next_page_id)
 
 
-@router.get('/search/branches')
+@router.get('/branches/search')
 async def search_branches(
     provider: ProviderType,
     repository: Annotated[
