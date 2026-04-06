@@ -83,7 +83,7 @@ async def get_user_installations(
     '/repositories',
     response_model=list[Repository],
     deprecated=True,
-    description='Deprecated: Use `/api/v1/git/repositories` instead.',
+    description='Deprecated: Use `/api/v1/git/search/repositories` instead.',
 )
 async def get_user_repositories(
     sort: str = 'pushed',

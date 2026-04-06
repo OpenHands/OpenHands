@@ -14,7 +14,6 @@ from openhands.app_server.config import depends_user_context, get_global_config
 from openhands.app_server.git.git_models import (
     InstallationPage,
     RepositoryBranchesPage,
-    RepositoryPage,
     SearchBranchesPage,
     SearchRepositoriesPage,
     SortOrder,
@@ -100,11 +99,21 @@ async def get_user_installations(
     return InstallationPage(items=items, next_page_id=next_page_id)
 
 
-@router.get('/repositories')
-async def get_user_repositories(
+@router.get('/search/repositories')
+async def search_repositories(
     provider: ProviderType,
-    sort: str = 'pushed',
-    installation_id: str | None = None,
+    query: Annotated[
+        str | None,
+        Query(title='Search query for finding repositories. If not provided, returns user repositories.'),
+    ] = None,
+    sort: Annotated[
+        str,
+        Query(title='Sort order (stars, forks, updated, pushed)'),
+    ] = 'pushed',
+    installation_id: Annotated[
+        str | None,
+        Query(title='Filter by installation/app ID'),
+    ] = None,
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -113,77 +122,16 @@ async def get_user_repositories(
         int,
         Query(title='The max number of results in the page', gt=0, le=100),
     ] = 100,
-    user_context: UserContext = user_context_dependency,
-) -> RepositoryPage:
-    """Get user repositories.
-
-    Returns a paginated list of repositories for the authenticated user.
-    """
-    # Get provider tokens from user context
-    provider_tokens = await user_context.get_provider_tokens()
-    if not provider_tokens:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Git provider token required (such as GitHub).',
-        )
-
-    user_id = await user_context.get_user_id()
-    # Cast to the expected type since we validated provider_tokens exists
-    typed_provider_tokens: PROVIDER_TOKEN_TYPE = provider_tokens  # type: ignore[assignment]
-    client = ProviderHandler(
-        provider_tokens=MappingProxyType(typed_provider_tokens),
-        external_auth_id=user_id,
-    )
-
-    page = 1
-    decoded_page_id = decode_page_id(page_id)
-    if decoded_page_id is not None:
-        page = decoded_page_id
-
-    # Get repositories - we'll handle pagination ourselves
-    items = await client.get_repositories(
-        sort=sort,
-        app_mode=get_global_config().app_mode,
-        selected_provider=provider,
-        page=page,
-        per_page=limit + 1,  # We'll handle pagination ourselves
-        installation_id=installation_id,
-    )
-
-    next_page_id = None
-    if len(items) > limit:
-        items = items[:-1]
-        next_page_id = encode_page_id(page + 1)
-
-    return RepositoryPage(items=items, next_page_id=next_page_id)
-
-
-@router.get('/search/repositories')
-async def search_repositories(
-    provider: ProviderType,
-    query: Annotated[
-        str,
-        Query(title='Search query for finding repositories'),
-    ],
-    page_id: Annotated[
-        str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
-    ] = None,
-    limit: Annotated[
-        int,
-        Query(title='The max number of results in the page', gt=0, le=100),
-    ] = 5,
     sort_order: Annotated[
-        SortOrder,
-        Query(
-            title='Sort order for results (e.g., stars-desc, forks-asc, updated-desc)'
-        ),
-    ] = SortOrder.STAR_DESC,
+        SortOrder | None,
+        Query(title='Sort order for search results (e.g., stars-desc, forks-asc)'),
+    ] = None,
     user_context: UserContext = user_context_dependency,
 ) -> SearchRepositoriesPage:
-    """Search repositories across the git provider.
+    """Get or search repositories.
 
-    Returns a paginated list of repositories matching the search query.
+    If query is provided, searches repositories across the git provider.
+    If query is not provided, returns a paginated list of the authenticated user's repositories.
     """
     # Get provider tokens from user context
     provider_tokens = await user_context.get_provider_tokens()
@@ -206,18 +154,32 @@ async def search_repositories(
     if decoded_page_id is not None:
         page = decoded_page_id
 
-    # Parse sort_order into sort and order components
-    sort_field, order = sort_order.value.rsplit('-', 1)
+    # If query is provided, use search; otherwise get user's repositories
+    if query:
+        # Parse sort_order into sort and order components (if provided)
+        if sort_order:
+            search_sort, order = sort_order.value.rsplit('-', 1)
+        else:
+            search_sort = 'stars'
+            order = 'desc'
 
-    # Get search results - we'll handle pagination ourselves
-    repos: list[Repository] = await client.search_repositories(
-        selected_provider=provider,
-        query=query,
-        per_page=limit + 1,  # We'll handle pagination ourselves
-        sort=sort_field,
-        order=order,
-        app_mode=get_global_config().app_mode,
-    )
+        repos: list[Repository] = await client.search_repositories(
+            selected_provider=provider,
+            query=query,
+            per_page=limit + 1,
+            sort=search_sort,
+            order=order,
+            app_mode=get_global_config().app_mode,
+        )
+    else:
+        repos = await client.get_repositories(
+            sort=sort,
+            app_mode=get_global_config().app_mode,
+            selected_provider=provider,
+            page=page,
+            per_page=limit + 1,
+            installation_id=installation_id,
+        )
 
     next_page_id = None
     if len(repos) > limit:

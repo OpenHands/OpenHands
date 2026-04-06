@@ -15,7 +15,6 @@ from openhands.app_server.git.git_router import (
     get_repository_branches,
     get_suggested_tasks,
     get_user_installations,
-    get_user_repositories,
     router,
     search_branches,
     search_repositories,
@@ -237,13 +236,13 @@ class TestGetUserInstallations:
 
 
 @pytest.mark.asyncio
-class TestGetUserRepositories:
-    """Test suite for get_user_repositories function."""
+class TestSearchRepositories:
+    """Test suite for search_repositories function (handles both user repos and search)."""
 
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
-    async def test_returns_repositories_with_correct_structure(self, mock_handler_cls):
-        """Test that get_user_repositories returns correct RepositoryPage structure."""
+    async def test_returns_user_repositories_without_query(self, mock_handler_cls):
+        """Test that search_repositories returns user repositories when no query is provided."""
         # Arrange
         mock_handler = MagicMock()
         mock_handler.get_repositories = AsyncMock(
@@ -277,13 +276,15 @@ class TestGetUserRepositories:
             user_id='user-123',
         )
 
-        # Act
-        result = await get_user_repositories(
+        # Act - call without query to get user repos
+        result = await search_repositories(
             provider=ProviderType.GITHUB,
+            query=None,
             sort='updated',
             installation_id=None,
             page_id=None,
             limit=10,
+            sort_order=None,
             user_context=mock_context,
         )
 
@@ -354,12 +355,14 @@ class TestGetUserRepositories:
         )
 
         # Act - First page (page=1)
-        result_page1 = await get_user_repositories(
+        result_page1 = await search_repositories(
             provider=ProviderType.GITHUB,
+            query=None,
             sort='pushed',
             installation_id=None,
             page_id=None,  # This means page 1
             limit=2,
+            sort_order=None,
             user_context=mock_context,
         )
 
@@ -370,12 +373,14 @@ class TestGetUserRepositories:
         assert result_page1.next_page_id == encode_page_id(2)
 
         # Act - Second page (page=2)
-        result_page2 = await get_user_repositories(
+        result_page2 = await search_repositories(
             provider=ProviderType.GITHUB,
+            query=None,
             sort='pushed',
             installation_id=None,
             page_id=encode_page_id(2),  # This means page 2
             limit=2,
+            sort_order=None,
             user_context=mock_context,
         )
 
@@ -403,12 +408,14 @@ class TestGetUserRepositories:
         )
 
         # Act
-        await get_user_repositories(
+        await search_repositories(
             provider=ProviderType.GITHUB,
+            query=None,
             sort='stars',
             installation_id=None,
             page_id=None,
             limit=10,
+            sort_order=None,
             user_context=mock_context,
         )
 
@@ -434,12 +441,14 @@ class TestGetUserRepositories:
         )
 
         # Act
-        await get_user_repositories(
+        await search_repositories(
             provider=ProviderType.GITHUB,
+            query=None,
             sort='pushed',
             installation_id='app-123',
             page_id=None,
             limit=10,
+            sort_order=None,
             user_context=mock_context,
         )
 
@@ -448,21 +457,10 @@ class TestGetUserRepositories:
         call_kwargs = mock_handler.get_repositories.call_args.kwargs
         assert call_kwargs.get('installation_id') == 'app-123'
 
-
-# =============================================================================
-# Tests for new endpoints: search_repositories, search_branches,
-#                          get_suggested_tasks, get_repository_branches
-# =============================================================================
-
-
-@pytest.mark.asyncio
-class TestSearchRepositories:
-    """Test suite for search_repositories function."""
-
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
-    async def test_returns_paginated_repositories(self, mock_handler_cls):
-        """Test that search repositories are returned with pagination."""
+    async def test_returns_paginated_search_results(self, mock_handler_cls):
+        """Test that search repositories are returned with pagination when query is provided."""
         # Arrange
         mock_handler = MagicMock()
         mock_handler.search_repositories = AsyncMock(
