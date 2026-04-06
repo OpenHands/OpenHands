@@ -19,34 +19,35 @@ jobs:
   # Run lint on the frontend code
   lint-frontend:
     name: Lint frontend
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
       - name: Install Node.js 22
-        uses: useblacksmith/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
-        run: |
-          cd frontend
-          npm install --frozen-lockfile
+        working-directory: ./frontend
+        run: npm ci
       - name: Lint, TypeScript compilation, and translation checks
         run: |
           cd frontend
           npm run lint
-          npm run make-i18n && tsc
+          npm run make-i18n && npx tsc
           npm run check-translation-completeness
 
   # Run lint on the python code
   lint-python:
     name: Lint python
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Set up python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
           cache: "pip"
@@ -57,13 +58,13 @@ jobs:
 
   lint-enterprise-python:
     name: Lint enterprise python
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Set up python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
           cache: "pip"

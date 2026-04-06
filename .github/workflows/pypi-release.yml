@@ -17,14 +17,14 @@ on:
 
 jobs:
   release:
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     # Run when manually dispatched for "app server" OR for tag pushes that don't contain '-cli' and don't start with 'cloud-'
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.reason == 'app server')
       || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-cli') && !startsWith(github.ref, 'refs/tags/cloud-'))
     steps:
       - uses: actions/checkout@v6
-      - uses: useblacksmith/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.12
       - name: Install Poetry
