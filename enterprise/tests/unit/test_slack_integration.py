@@ -262,21 +262,20 @@ class TestBuildRepoOptions:
 
         options = slack_manager._build_repo_options(repos)
 
-        # Should have 3 options: "No Repository" + 2 repos
-        assert len(options) == 3
-        assert options[0]['value'] == '-'
-        assert options[0]['text']['text'] == 'No Repository'
-        assert options[1]['value'] == 'owner/repo1'
-        assert options[2]['value'] == 'owner/repo2'
+        # Should have 2 options (repos only - "No Repository" is now a button)
+        assert len(options) == 2
+        assert options[0]['value'] == 'owner/repo1'
+        assert options[1]['value'] == 'owner/repo2'
 
     def test_build_options_empty_repos(self, slack_manager):
-        """Test building options with empty repo list still includes No Repository."""
+        """Test building options with empty repo list returns empty list.
+
+        Note: "No Repository" is now handled by a separate button in the form.
+        """
         options = slack_manager._build_repo_options([])
 
-        # Should have 1 option: just "No Repository"
-        assert len(options) == 1
-        assert options[0]['value'] == '-'
-        assert options[0]['text']['text'] == 'No Repository'
+        # Should have 0 options (empty list)
+        assert len(options) == 0
 
     def test_build_options_truncates_long_names(self, slack_manager):
         """Test that repo names longer than 75 chars are truncated."""
@@ -293,12 +292,12 @@ class TestBuildRepoOptions:
 
         options = slack_manager._build_repo_options(repos)
 
-        # First option is "No Repository", second is the repo
-        assert len(options) == 2
+        # Should have 1 option (the repo only - "No Repository" is a button)
+        assert len(options) == 1
         # Text should be truncated to 75 chars
-        assert len(options[1]['text']['text']) == 75
+        assert len(options[0]['text']['text']) == 75
         # But value should have full name
-        assert options[1]['value'] == long_name
+        assert options[0]['value'] == long_name
 
 
 class TestSearchRepositories:
@@ -428,23 +427,23 @@ class TestSearchRepositories:
         options = slack_manager._build_repo_options(search_results)
 
         # Verify: Options are correctly built from search results
-        assert len(options) == 4  # "No Repository" + 3 repos
+        # Note: "No Repository" is now a button, not in the dropdown
+        assert len(options) == 3  # 3 repos only
 
-        # First option should be "No Repository"
-        assert options[0]['value'] == '-'
-        assert options[0]['text']['text'] == 'No Repository'
-
-        # Remaining options should be the repos in order
-        assert options[1]['value'] == 'myorg/react-dashboard'
-        assert options[1]['text']['text'] == 'myorg/react-dashboard'
-        assert options[2]['value'] == 'myorg/python-api'
-        assert options[3]['value'] == 'myorg/docs-site'
+        # Options should be the repos in order
+        assert options[0]['value'] == 'myorg/react-dashboard'
+        assert options[0]['text']['text'] == 'myorg/react-dashboard'
+        assert options[1]['value'] == 'myorg/python-api'
+        assert options[2]['value'] == 'myorg/docs-site'
 
     @patch('integrations.slack.slack_manager.ProviderHandler')
-    async def test_search_with_empty_results_builds_no_repo_only_option(
+    async def test_search_with_empty_results_builds_empty_options(
         self, mock_provider_handler_class, slack_manager, mock_user_auth
     ):
-        """Test that when search returns no results, only 'No Repository' option is shown."""
+        """Test that when search returns no results, empty options list is returned.
+
+        Note: "No Repository" is now handled by a separate button in the form.
+        """
         # Setup: No matching repos
         mock_provider_handler = MagicMock()
         mock_provider_handler.search_repositories = AsyncMock(return_value=[])
@@ -462,10 +461,8 @@ class TestSearchRepositories:
         )
         options = slack_manager._build_repo_options(search_results)
 
-        # Verify: Only "No Repository" option
-        assert len(options) == 1
-        assert options[0]['value'] == '-'
-        assert options[0]['text']['text'] == 'No Repository'
+        # Verify: Empty options list (button handles "No Repository")
+        assert len(options) == 0
 
 
 class TestUserMsgStorage:
