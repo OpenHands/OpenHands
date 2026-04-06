@@ -58,6 +58,18 @@ def _get_kvm_enabled_default() -> bool:
     return value.lower() in ('true', '1', 'yes')
 
 
+def _get_sysbox_enabled_default() -> bool:
+    """Get the default value for sysbox_enabled from environment variables."""
+    value = os.getenv('SANDBOX_SYSBOX_ENABLED', '')
+    return value.lower() in ('true', '1', 'yes')
+
+
+def _get_sysbox_start_dockerd_default() -> bool:
+    """Get the default value for sysbox_start_dockerd from environment variables."""
+    value = os.getenv('SANDBOX_SYSBOX_START_DOCKERD', '')
+    return value.lower() in ('true', '1', 'yes')
+
+
 class VolumeMount(BaseModel):
     """Mounted volume within the container."""
 
@@ -102,6 +114,8 @@ class DockerSandboxService(SandboxService):
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
     kvm_enabled: bool = False
+    sysbox_enabled: bool = False
+    sysbox_start_dockerd: bool = False
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -136,6 +150,64 @@ class DockerSandboxService(SandboxService):
                 # Handle cases where an environment variable might not have a value
                 result[env_var] = None
         return result
+
+    async def _start_dockerd_in_container(self, container, container_name: str) -> None:
+        """Start Docker daemon inside a sysbox container.
+
+        This enables Docker-in-Docker functionality for sysbox containers.
+        The daemon is started in the background and logs to /var/log/dockerd.log.
+        The openhands user is added to the docker group to allow running docker
+        commands without sudo.
+        """
+        try:
+            # Give the container a moment to fully initialize
+            await asyncio.sleep(1)
+
+            # Add openhands user to docker group so they can run docker commands
+            exit_code, output = container.exec_run(
+                'usermod -aG docker openhands',
+                user='root',
+                detach=False,
+            )
+            if exit_code != 0:
+                _logger.warning(
+                    f'Failed to add openhands to docker group in {container_name}: '
+                    f'exit_code={exit_code}, output={output.decode() if output else "none"}'
+                )
+
+            # Start dockerd in the background, then wait for socket and fix permissions.
+            # The chmod ensures the openhands user can access docker even if group
+            # membership isn't picked up by already-running processes.
+            startup_script = """
+                nohup dockerd > /var/log/dockerd.log 2>&1 &
+                for i in $(seq 1 30); do
+                    if [ -S /var/run/docker.sock ]; then
+                        chmod 666 /var/run/docker.sock
+                        exit 0
+                    fi
+                    sleep 0.5
+                done
+                exit 1
+            """
+            exit_code, output = container.exec_run(
+                ['sh', '-c', startup_script],
+                user='root',
+                detach=False,
+            )
+
+            if exit_code == 0:
+                _logger.info(
+                    f'Started Docker daemon inside sysbox container {container_name}'
+                )
+            else:
+                _logger.warning(
+                    f'Failed to start Docker daemon in {container_name}: '
+                    f'exit_code={exit_code}, output={output.decode() if output else "none"}'
+                )
+        except Exception as e:
+            _logger.warning(
+                f'Error starting Docker daemon in sysbox container {container_name}: {e}'
+            )
 
     async def _container_to_sandbox_info(self, container) -> SandboxInfo | None:
         """Convert Docker container to SandboxInfo."""
@@ -439,6 +511,9 @@ class DockerSandboxService(SandboxService):
         # Determine network mode
         network_mode = 'host' if self.use_host_network else None
 
+        # Determine runtime (sysbox for Docker-in-Docker support)
+        runtime = 'sysbox-runc' if self.sysbox_enabled else None
+
         if self.use_host_network:
             _logger.info(f'Starting sandbox {container_name} with host network mode')
 
@@ -448,6 +523,11 @@ class DockerSandboxService(SandboxService):
         if self.kvm_enabled:
             _logger.info(
                 f'Starting sandbox {container_name} with KVM device passthrough'
+            )
+
+        if self.sysbox_enabled:
+            _logger.info(
+                f'Starting sandbox {container_name} with sysbox runtime for Docker-in-Docker support'
             )
 
         try:
@@ -464,8 +544,8 @@ class DockerSandboxService(SandboxService):
                 labels=labels,
                 detach=True,
                 # Use Docker's tini init process to ensure proper signal handling and reaping of
-                # zombie child processes.
-                init=True,
+                # zombie child processes. Note: init is incompatible with sysbox runtime.
+                init=not self.sysbox_enabled,
                 # Allow agent-server containers to resolve host.docker.internal
                 # and other custom hostnames for LAN deployments
                 # Note: extra_hosts is not needed with host network mode
@@ -476,7 +556,13 @@ class DockerSandboxService(SandboxService):
                 network_mode=network_mode,
                 # Device passthrough for KVM hardware virtualization
                 devices=devices,
+                # Runtime: 'sysbox-runc' for Docker-in-Docker support, None for default
+                runtime=runtime,
             )
+
+            # Start Docker daemon inside sysbox container if requested
+            if self.sysbox_enabled and self.sysbox_start_dockerd:
+                await self._start_dockerd_in_container(container, container_name)
 
             sandbox_info = await self._container_to_sandbox_info(container)
             assert sandbox_info is not None
@@ -647,6 +733,26 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Configure via SANDBOX_KVM_ENABLED environment variable.'
         ),
     )
+    sysbox_enabled: bool = Field(
+        default_factory=_get_sysbox_enabled_default,
+        description=(
+            'Whether to use the sysbox runtime for sandbox containers. '
+            'When enabled, sandboxes can run Docker, systemd, and other system '
+            'services inside the container without requiring privileged mode. '
+            'Requires sysbox to be installed on the host. '
+            'Configure via SANDBOX_SYSBOX_ENABLED environment variable.'
+        ),
+    )
+    sysbox_start_dockerd: bool = Field(
+        default_factory=_get_sysbox_start_dockerd_default,
+        description=(
+            'Whether to automatically start the Docker daemon inside sysbox containers. '
+            'When enabled, dockerd is started in the background after container creation, '
+            'enabling Docker-in-Docker functionality without manual intervention. '
+            'Only takes effect when sysbox_enabled is also true. '
+            'Configure via SANDBOX_SYSBOX_START_DOCKERD environment variable.'
+        ),
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -682,4 +788,6 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 startup_grace_seconds=self.startup_grace_seconds,
                 use_host_network=self.use_host_network,
                 kvm_enabled=self.kvm_enabled,
+                sysbox_enabled=self.sysbox_enabled,
+                sysbox_start_dockerd=self.sysbox_start_dockerd,
             )
