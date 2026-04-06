@@ -1,7 +1,6 @@
 import time
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
 from uuid import UUID
 
 import jwt
