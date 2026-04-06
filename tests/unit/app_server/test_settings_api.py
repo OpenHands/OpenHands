@@ -116,7 +116,7 @@ async def test_settings_api_endpoints(test_client):
     assert response.status_code == 200
 
     # Test the unset-provider-tokens endpoint
-    response = test_client.post('/api/unset-provider-tokens')
+    response = test_client.delete('/api/v1/secrets/git-providers')
     assert response.status_code == 200
 
 
