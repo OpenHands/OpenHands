@@ -58,26 +58,6 @@ SLACK_USER_MSG_KEY_PREFIX = 'slack_user_msg'
 # Arbitrary timeout based on typical user attention span; may be tuned based on feedback
 SLACK_USER_MSG_EXPIRATION = 300
 
-# "No Repository" option for Slack external_select dropdown
-# This option is always available as the first choice in the repository search results,
-# allowing users to proceed without selecting a specific repository
-NO_REPOSITORY_OPTION: dict[str, Any] = {
-    'text': {'type': 'plain_text', 'text': 'No Repository'},
-    'value': '-',
-}
-
-
-def get_no_repository_options() -> list[dict[str, Any]]:
-    """Return the default options list with just the "No Repository" option.
-
-    This is used to provide a fallback option when the repository search
-    fails or returns an error, ensuring users can always proceed.
-
-    Returns:
-        List containing only the "No Repository" option
-    """
-    return [NO_REPOSITORY_OPTION.copy()]
-
 
 class SlackManager(Manager[SlackViewInterface]):
     def __init__(self, token_manager):
@@ -320,8 +300,11 @@ class SlackManager(Manager[SlackViewInterface]):
     def _build_repo_options(self, repos: list[Repository]) -> list[dict[str, Any]]:
         """Build Slack options list from repositories.
 
-        Always includes a "No Repository" option at the top, followed by up to 99
-        repositories (Slack has a 100 option limit for external_select).
+        Returns up to 100 repositories formatted as Slack options
+        (Slack has a 100 option limit for external_select).
+
+        Note: "No Repository" is handled by a separate button in the form,
+        so it's not included in the dropdown options.
 
         Args:
             repos: List of Repository objects
@@ -329,8 +312,7 @@ class SlackManager(Manager[SlackViewInterface]):
         Returns:
             List of Slack option objects
         """
-        options = get_no_repository_options()
-        options.extend(
+        return [
             {
                 'text': {
                     'type': 'plain_text',
@@ -338,9 +320,8 @@ class SlackManager(Manager[SlackViewInterface]):
                 },
                 'value': repo.full_name,
             }
-            for repo in repos[:99]  # Leave room for "No Repository" option
-        )
-        return options
+            for repo in repos[:100]
+        ]
 
     async def search_repos_for_slack(
         self, user_auth: UserAuth, query: str, per_page: int = 20

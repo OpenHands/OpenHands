@@ -12,7 +12,7 @@ from fastapi.responses import (
 )
 from integrations.models import Message, SourceType
 from integrations.slack.slack_errors import SlackError, SlackErrorCode
-from integrations.slack.slack_manager import SlackManager, get_no_repository_options
+from integrations.slack.slack_manager import SlackManager
 from integrations.utils import (
     HOST_URL,
 )
@@ -335,24 +335,21 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     2. Searches for repositories matching the user's query
     3. Returns up to 100 options for the dropdown
 
-    Note: This endpoint always returns at least the "No Repository" option to ensure
-    users can proceed even if repository search fails or is slow.
+    Note: "No Repository" is handled by a separate button in the form, so it's
+    not included in the dropdown options. Error cases return an empty list.
 
     Configuration: Set the Options Load URL in Slack App settings to:
     https://your-domain/slack/on-options-load
     """
-    # Always include the "No Repository" option as a fallback
-    default_options = get_no_repository_options()
-
     if not SLACK_WEBHOOKS_ENABLED:
-        return JSONResponse({'options': default_options})
+        return JSONResponse({'options': []})
 
     body = await request.body()
     form = await request.form()
     payload_str = form.get('payload')
     if not payload_str:
         logger.warning('slack_on_options_load: No payload in request')
-        return JSONResponse({'options': default_options})
+        return JSONResponse({'options': []})
 
     payload = json.loads(payload_str)
 
@@ -371,7 +368,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
         logger.warning(
             f"slack_on_options_load: Unexpected payload type: {payload.get('type')}"
         )
-        return JSONResponse({'options': default_options})
+        return JSONResponse({'options': []})
 
     slack_user_id = payload['user']['id']
     search_value = payload.get('value', '')  # What user typed in the search box
@@ -390,7 +387,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
                 log_context={'slack_user_id': slack_user_id},
             ),
         )
-        return JSONResponse({'options': default_options})
+        return JSONResponse({'options': []})
 
     try:
         # Search for repositories matching the query
@@ -421,7 +418,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
                 log_context={'slack_user_id': slack_user_id, 'error': str(e)},
             ),
         )
-        return JSONResponse({'options': default_options})
+        return JSONResponse({'options': []})
 
     except Exception as e:
         logger.exception(
@@ -441,7 +438,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
                 log_context={'slack_user_id': slack_user_id, 'error': str(e)},
             ),
         )
-        return JSONResponse({'options': default_options})
+        return JSONResponse({'options': []})
 
 
 @slack_router.post('/on-form-interaction')
