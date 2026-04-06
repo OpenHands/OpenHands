@@ -175,7 +175,9 @@ async def search_repositories(
     ] = 5,
     sort_order: Annotated[
         SortOrder,
-        Query(title='Sort order for results (e.g., stars-desc, forks-asc, updated-desc)'),
+        Query(
+            title='Sort order for results (e.g., stars-desc, forks-asc, updated-desc)'
+        ),
     ] = SortOrder.STAR_DESC,
     user_context: UserContext = user_context_dependency,
 ) -> SearchRepositoriesPage:
