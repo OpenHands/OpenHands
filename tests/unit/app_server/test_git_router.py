@@ -139,7 +139,7 @@ class TestInstallationsEndpoint:
             AsyncMock(return_value=None),
         ):
             response = test_client.get(
-                '/git/installations', params={'provider': 'github'}
+                '/git/installations/search', params={'provider': 'github'}
             )
             assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -150,7 +150,7 @@ class TestInstallationsEndpoint:
             AsyncMock(return_value={'github': 'token'}),
         ):
             response = test_client.get(
-                '/git/installations', params={'provider': 'invalid'}
+                '/git/installations/search', params={'provider': 'invalid'}
             )
             assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
