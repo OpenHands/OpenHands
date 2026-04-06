@@ -28,11 +28,11 @@ from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
-from storage.user_store import UserStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
     ProviderToken,
     ProviderType,
 )
@@ -251,31 +251,12 @@ class SaasUserAuth(UserAuth):
             return None
 
         access_token = await self.get_access_token()
-        if not self.access_token:
-            return None
-
-        user_info = await token_manager.get_user_info(access_token.get_secret_value())
-        # Prefer email from DB; fall back to Keycloak if not yet persisted
-        email = user_info.email
-        sub = user_info.sub
-        if sub:
-            db_user = await UserStore.get_user_by_id(sub)
-            if db_user and db_user.email is not None:
-                email = db_user.email
-
-        retval = await _check_idp(
-            access_token=access_token,
-            default_value=UserGitInfo(
-                id=sub,
-                login=user_info.preferred_username or '',
-                avatar_url='',
-                email=email,
-                name=resolve_display_name(user_info),
-                company=user_info.company,
-            ),
-            user_info=user_info,
+        client = ProviderHandler(
+            provider_tokens=provider_tokens, external_auth_token=access_token
         )
-        return retval
+
+        user: UserGitInfo = await client.get_user()
+        return user
 
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
@@ -442,23 +423,4 @@ def resolve_display_name(user_info: KeycloakUserInfo) -> str | None:
     if combined:
         return combined
 
-    return None
-
-
-async def _check_idp(
-    access_token: SecretStr,
-    default_value: Any,
-    user_info: KeycloakUserInfo,
-):
-    idp: str | None = user_info.identity_provider
-    if not idp:
-        return None
-    if ':' in idp:
-        idp, _ = idp.rsplit(':', 1)
-
-    # Will return empty dict if IDP doesn't support provider tokens
-    if not await token_manager.get_idp_tokens_from_keycloak(
-        access_token.get_secret_value(), ProviderType(idp)
-    ):
-        return default_value
     return None
