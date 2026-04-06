@@ -22,17 +22,17 @@ from openhands.utils.tenacity_stop import stop_if_should_exit
 class RetryMixin:
     """Mixin class for retry logic."""
 
-    def retry_decorator(self, **kwargs: Any) -> Callable:
+    def retry_decorator(self, num_retries: int, **kwargs: Any) -> Callable:
         """Create a LLM retry decorator with customizable parameters. This is used for 429 errors, and a few other exceptions in LLM classes.
 
         Args:
+            num_retries: Number of retry attempts.
             **kwargs: Keyword arguments to override default retry behavior.
-                      Keys: num_retries, retry_exceptions, retry_min_wait, retry_max_wait, retry_multiplier
+                      Keys: retry_exceptions, retry_min_wait, retry_max_wait, retry_multiplier
 
         Returns:
             A retry decorator with the parameters customizable in configuration.
         """
-        num_retries = kwargs.get('num_retries')
         retry_exceptions: tuple = kwargs.get('retry_exceptions', ())
         retry_min_wait = kwargs.get('retry_min_wait')
         retry_max_wait = kwargs.get('retry_max_wait')
@@ -67,10 +67,11 @@ class RetryMixin:
             retry=(
                 retry_if_exception_type(retry_exceptions)
             ),  # retry only for these types
+            # TODO: Type errors here probably mean the defaults are being ignored.
             wait=wait_exponential(
-                multiplier=retry_multiplier,
-                min=retry_min_wait,
-                max=retry_max_wait,
+                multiplier=retry_multiplier,  # type: ignore[arg-type]
+                min=retry_min_wait,  # type: ignore[arg-type]
+                max=retry_max_wait,  # type: ignore[arg-type]
             ),
         )
         return retry_decorator

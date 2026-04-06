@@ -368,7 +368,7 @@ def _convert_skill_info_to_skill(skill_info: SkillInfo) -> Skill:
     Returns:
         Skill object
     """
-    trigger = None
+    trigger: TaskTrigger | KeywordTrigger | None = None
 
     if skill_info.triggers:
         # Determine trigger type based on content

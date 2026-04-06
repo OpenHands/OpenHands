@@ -61,10 +61,10 @@ if os.name == 'nt' or platform.release().endswith('microsoft-standard-WSL2'):
     APP_PORT_RANGE_2 = (45000, 49151)
 
 
-def _is_retryablewait_until_alive_error(exception: Exception) -> bool:
+def _is_retryablewait_until_alive_error(exception: BaseException) -> bool:
     if isinstance(exception, tenacity.RetryError):
         cause = exception.last_attempt.exception()
-        return _is_retryablewait_until_alive_error(cause)
+        return cause is not None and _is_retryablewait_until_alive_error(cause)
 
     return isinstance(
         exception,

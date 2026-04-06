@@ -5,7 +5,7 @@ import tempfile
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -412,14 +412,18 @@ class AppConversationServiceBase(AppConversationService, ABC):
             project_dir: Project root directory (repo root when a repo is selected).
         """
         command = 'mkdir -p .git/hooks && chmod +x .openhands/pre-commit.sh'
-        result = await workspace.execute_command(command, project_dir)
-        if result.exit_code:
+        pre_commit_command_result = await workspace.execute_command(
+            command, project_dir
+        )
+        if pre_commit_command_result.exit_code:
             return
 
         # Check if there's an existing pre-commit hook
         with tempfile.TemporaryFile(mode='w+t') as temp_file:
-            result = await workspace.file_download(PRE_COMMIT_HOOK, str(temp_file))
-            if result.success:
+            download_result = await workspace.file_download(
+                PRE_COMMIT_HOOK, str(temp_file)
+            )
+            if download_result.success:
                 _logger.info('Preserving existing pre-commit hook')
                 # an existing pre-commit hook exists
                 if 'This hook was installed by OpenHands' not in temp_file.read():
@@ -428,10 +432,12 @@ class AppConversationServiceBase(AppConversationService, ABC):
                         f'mv {PRE_COMMIT_HOOK} {PRE_COMMIT_LOCAL} &&'
                         f'chmod +x {PRE_COMMIT_LOCAL}'
                     )
-                    result = await workspace.execute_command(command, project_dir)
-                    if result.exit_code != 0:
+                    mv_chmod_result = await workspace.execute_command(
+                        command, project_dir
+                    )
+                    if mv_chmod_result.exit_code != 0:
                         _logger.error(
-                            f'Failed to preserve existing pre-commit hook: {result.stderr}',
+                            f'Failed to preserve existing pre-commit hook: {mv_chmod_result.stderr}',
                         )
                         return
 
@@ -442,9 +448,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
         )
 
         # Make the pre-commit hook executable
-        result = await workspace.execute_command(f'chmod +x {PRE_COMMIT_HOOK}')
-        if result.exit_code:
-            _logger.error(f'Failed to make pre-commit hook executable: {result.stderr}')
+        chmod_result = await workspace.execute_command(f'chmod +x {PRE_COMMIT_HOOK}')
+        if chmod_result.exit_code:
+            _logger.error(
+                f'Failed to make pre-commit hook executable: {chmod_result.stderr}'
+            )
             return
 
         _logger.info('Git pre-commit hook installed successfully')
@@ -466,7 +474,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             Configured LLMSummarizingCondenser instance
         """
         # LLMSummarizingCondenser SDK defaults: max_size=240, keep_first=2
-        condenser_kwargs = {
+        condenser_kwargs: dict[str, Any] = {
             'llm': llm.model_copy(
                 update={
                     'usage_id': (

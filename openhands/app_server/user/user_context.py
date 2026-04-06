@@ -5,6 +5,7 @@ from openhands.app_server.user.user_models import (
     UserInfo,
 )
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
@@ -57,6 +58,10 @@ class UserContext(ABC):
     @abstractmethod
     async def get_mcp_api_key(self) -> str | None:
         """Get an MCP API Key."""
+
+    @abstractmethod
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        """Get an User Meta"""
 
 
 class UserContextInjector(DiscriminatedUnionMixin, Injector[UserContext], ABC):

@@ -9,6 +9,7 @@ import json
 from typing import Any
 
 import httpx
+from httpx import HTTPStatusError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from openhands.utils.http_session import HttpSession
@@ -58,10 +59,11 @@ def send_request(
             _json = None
         finally:
             response.close()
+
         raise RequestHTTPError(
             e,
             request=e.request,
-            response=e.response,
+            response=e.response if isinstance(e, HTTPStatusError) else None,
             detail=_json.get('detail') if _json is not None else None,
         ) from e
     return response

@@ -674,9 +674,14 @@ async def _get_num_conversations_in_sandbox(
         agent_server_url = next(
             u for u in sandbox.exposed_urls if u.name == AGENT_SERVER
         )
+        headers = (
+            {'X-Session-API-Key': sandbox.session_api_key}
+            if sandbox.session_api_key
+            else {}
+        )
         response = await httpx_client.get(
             f'{agent_server_url.url}/api/conversations/count',
-            headers={'X-Session-API-Key': sandbox.session_api_key},
+            headers=headers,
         )
         result = int(response.content)
         return result
@@ -1570,9 +1575,12 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
             ConversationExecutionStatus.FINISHED: RuntimeStatus.READY,
             ConversationExecutionStatus.STUCK: RuntimeStatus.ERROR,
         }
-        runtime_status = runtime_status_mapping.get(
-            app_conversation.execution_status, RuntimeStatus.ERROR
-        )
+        if app_conversation.execution_status:
+            runtime_status = runtime_status_mapping.get(
+                app_conversation.execution_status, RuntimeStatus.ERROR
+            )
+        else:
+            runtime_status = RuntimeStatus.ERROR
     else:
         runtime_status = None
 

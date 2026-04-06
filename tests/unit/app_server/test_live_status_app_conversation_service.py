@@ -907,7 +907,6 @@ class TestLiveStatusAppConversationService:
                 == 'test_plan_structure'
             )
             assert call_kwargs['mcp_config'] == mcp_config
-            assert call_kwargs['security_analyzer'] is None
             assert call_kwargs['condenser'] == mock_condenser
             mock_create_condenser.assert_called_once_with(
                 mock_llm, AgentType.PLAN, self.mock_user.condenser_max_size

@@ -10,6 +10,7 @@ from openhands.app_server.sandbox.session_auth import validate_session_key
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.integrations.service_types import UserGitInfo
 
 _logger = logging.getLogger(__name__)
 
@@ -41,6 +42,17 @@ async def get_current_user(
         return JSONResponse(  # type: ignore[return-value]
             content=user.model_dump(mode='json', context={'expose_secrets': True})
         )
+    return user
+
+
+@router.get('/git-info')
+async def get_current_user_git_info(
+    user_context: UserContext = user_dependency,
+) -> UserGitInfo:
+    """Get the current authenticated user's metadata from the git provider."""
+    user = await user_context.get_user_git_info()
+    if user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
     return user
 
 

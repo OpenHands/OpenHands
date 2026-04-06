@@ -40,7 +40,15 @@ from openhands.runtime.utils.command import (
 from openhands.runtime.utils.request import send_request
 from openhands.runtime.utils.runtime_build import build_runtime_image
 from openhands.utils.async_utils import call_sync_from_async
-from openhands.utils.tenacity_stop import stop_if_should_exit
+from openhands.utils.tenacity_stop import stop_base, stop_if_should_exit
+
+
+class _StopIfClosed(stop_base):
+    def __init__(self, runtime: ActionExecutionClient):
+        self.runtime = runtime
+
+    def __call__(self, retry_state):
+        return self.runtime._runtime_closed
 
 
 class RemoteRuntime(ActionExecutionClient):
@@ -189,18 +197,26 @@ class RemoteRuntime(ActionExecutionClient):
             self.log('info', f'Found runtime with status: {status}')
             if status == 'running' or status == 'paused':
                 self._parse_runtime_response(response)
-        except httpx.HTTPError as e:
+        except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 self.log(
                     'info', f'No existing runtime found for session ID: {self.sid}'
                 )
                 return False
-            self.log('error', f'Error while looking for remote runtime: {e}')
+            self.log(
+                'error', f'Error while looking for remote runtime: {e}', exc_info=True
+            )
+            raise
+        except httpx.HTTPError as e:
+            self.log(
+                'error', f'Error while looking for remote runtime: {e}', exc_info=True
+            )
             raise
         except json.decoder.JSONDecodeError as e:
             self.log(
                 'error',
                 f'Invalid JSON response from runtime API: {e}. URL: {self.config.sandbox.remote_runtime_api_url}/sessions/{self.sid}. Response: {response}',
+                exc_info=True,
             )
             raise
 
@@ -413,7 +429,7 @@ class RemoteRuntime(ActionExecutionClient):
                 self.config.sandbox.remote_runtime_init_timeout
             )
             | stop_if_should_exit()
-            | self._stop_if_closed,
+            | _StopIfClosed(self),
             reraise=True,
             retry=tenacity.retry_if_exception_type(AgentRuntimeNotReadyError),
             wait=tenacity.wait_fixed(2),
@@ -545,8 +561,11 @@ class RemoteRuntime(ActionExecutionClient):
             retry=tenacity.retry_if_exception_type(httpx.NetworkError),
             stop=tenacity.stop_after_attempt(3)
             | stop_if_should_exit()
-            | self._stop_if_closed,
-            before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+            | _StopIfClosed(self),
+            before_sleep=tenacity.before_sleep_log(
+                logger,  # type: ignore[arg-type]
+                logging.WARNING,
+            ),
             wait=tenacity.wait_exponential(multiplier=1, min=4, max=60),
         )
         return retry_decorator(self._send_action_server_request_impl)(

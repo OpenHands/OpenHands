@@ -171,16 +171,18 @@ class JupyterPlugin(Plugin):
             await self.kernel.initialize()
 
         # Execute the code and get structured output
-        output = await self.kernel.execute(action.code, timeout=action.timeout)
-
+        if action.timeout:
+            output = await self.kernel.execute(action.code, timeout=int(action.timeout))
+        else:
+            output = await self.kernel.execute(action.code)
         # Extract text content and image URLs from the structured output
         text_content = output.get('text', '')
         image_urls = output.get('images', [])
 
         return IPythonRunCellObservation(
-            content=text_content,
+            content=text_content,  # type: ignore[arg-type]
             code=action.code,
-            image_urls=image_urls if image_urls else None,
+            image_urls=image_urls if image_urls else None,  # type: ignore[arg-type]
         )
 
     async def run(self, action: Action) -> IPythonRunCellObservation:
