@@ -189,6 +189,54 @@ class TestRepoVerificationHandling:
         assert elements[1].get('type') == 'external_select'
         assert elements[1].get('action_id').startswith('repository_select:')
 
+    @pytest.mark.asyncio
+    @patch('integrations.slack.slack_manager.sio')
+    async def test_no_repository_button_click_processes_correctly(
+        self,
+        mock_sio,
+        slack_manager,
+    ):
+        """Test that clicking 'No Repository' button correctly processes the interaction.
+
+        This verifies the button click path through receive_form_interaction, ensuring
+        the no_repository: action_id is correctly parsed and processed.
+        """
+        # Setup: Mock Redis to return a stored user message
+        mock_redis = AsyncMock()
+        mock_sio.manager.redis = mock_redis
+        stored_msg = json.dumps({'text': 'Hello, help me with code', 'user': 'U123'})
+        mock_redis.get = AsyncMock(return_value=stored_msg)
+
+        # Simulate button click payload (what Slack sends when button is clicked)
+        button_payload = {
+            'type': 'block_actions',
+            'actions': [
+                {
+                    'action_id': 'no_repository:1234567890.123456:None',
+                    'type': 'button',
+                    'value': '-',
+                }
+            ],
+            'user': {'id': 'U123'},
+            'container': {'channel_id': 'C123'},
+            'team': {'id': 'T123'},
+        }
+
+        # Mock receive_message to capture what's passed to it
+        with patch.object(
+            slack_manager, 'receive_message', new_callable=AsyncMock
+        ) as mock_receive:
+            await slack_manager.receive_form_interaction(button_payload)
+
+            # Verify receive_message was called
+            mock_receive.assert_called_once()
+
+            # Verify the message payload has selected_repo as None
+            call_args = mock_receive.call_args[0][0]
+            assert call_args.message['selected_repo'] is None
+            assert call_args.message['message_ts'] == '1234567890.123456'
+            assert call_args.message['thread_ts'] is None
+
     @patch('integrations.slack.slack_manager.sio')
     @patch('integrations.slack.slack_manager.ProviderHandler')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
@@ -238,8 +286,8 @@ class TestRepoVerificationHandling:
 class TestBuildRepoOptions:
     """Test the _build_repo_options helper method.
 
-    Note: _build_repo_options always includes the "No Repository" option at the top.
-    This is by design for the external_select dropdown.
+    Note: _build_repo_options returns only actual repositories. The "No Repository"
+    option is now handled by a separate button in the form, not the dropdown.
     """
 
     def test_build_options_with_repos(self, slack_manager):

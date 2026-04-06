@@ -371,6 +371,37 @@ class SlackManager(Manager[SlackViewInterface]):
                 SlackError(SlackErrorCode.UNEXPECTED_ERROR),
             )
 
+    def _parse_form_action(self, action: dict) -> tuple[str, str | None, str] | None:
+        """Parse action payload and extract message_ts, thread_ts, and selected value.
+
+        This handles the different payload structures for button clicks vs dropdown
+        selections in the repository selection form.
+
+        Args:
+            action: The action object from the Slack payload
+
+        Returns:
+            Tuple of (message_ts, thread_ts, selected_value) if action is recognized,
+            None if the action_id is unknown.
+        """
+        action_id = action['action_id']
+
+        if action_id.startswith('no_repository:'):
+            # Button click - value is in 'value' field
+            attribs = action_id.split('no_repository:')[-1]
+            selected_value = action.get('value', '-')
+        elif action_id.startswith('repository_select:'):
+            # Dropdown selection - value is in 'selected_option'
+            attribs = action_id.split('repository_select:')[-1]
+            selected_value = action['selected_option']['value']
+        else:
+            return None
+
+        message_ts, thread_ts = attribs.split(':')
+        thread_ts = None if thread_ts == 'None' else thread_ts
+
+        return message_ts, thread_ts, selected_value
+
     async def receive_form_interaction(self, slack_payload: dict):
         """Process a Slack form interaction (repository selection or button click).
 
@@ -384,30 +415,23 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         # Extract fields from the Slack interaction payload
         action = slack_payload['actions'][0]
-        action_id = action['action_id']
-
         slack_user_id = slack_payload['user']['id']
         channel_id = slack_payload['container']['channel_id']
         team_id = slack_payload['team']['id']
 
-        # Determine action type and extract message_ts/thread_ts and selected value
-        if action_id.startswith('no_repository:'):
-            # Button click - value is in 'value' field
-            attribs = action_id.split('no_repository:')[-1]
-            selected_value = action.get('value', '-')
-        elif action_id.startswith('repository_select:'):
-            # Dropdown selection - value is in 'selected_option'
-            attribs = action_id.split('repository_select:')[-1]
-            selected_value = action['selected_option']['value']
-        else:
+        # Parse the action to extract message_ts, thread_ts, and selected value
+        parsed = self._parse_form_action(action)
+        if parsed is None:
             logger.warning(
                 'slack_unknown_action_id',
-                extra={'action_id': action_id, 'slack_user_id': slack_user_id},
+                extra={
+                    'action_id': action['action_id'],
+                    'slack_user_id': slack_user_id,
+                },
             )
             return
 
-        message_ts, thread_ts = attribs.split(':')
-        thread_ts = None if thread_ts == 'None' else thread_ts
+        message_ts, thread_ts, selected_value = parsed
 
         # Build partial payload for error handling
         payload = {
