@@ -5,6 +5,7 @@ with pagination support. These endpoints are designed to replace the legacy V0 e
 in openhands/server/routes/git.py.
 """
 
+import base64
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated
 
@@ -33,6 +34,38 @@ router = APIRouter(
 user_context_dependency = depends_user_context()
 
 
+def _encode_page_id(value: int) -> str:
+    """Encode an integer page identifier as an opaque base64 string.
+
+    Args:
+        value: The integer value to encode.
+
+    Returns:
+        Base64-encoded string (URL-safe, without padding).
+    """
+    return base64.urlsafe_b64encode(str(value).encode()).decode().rstrip('=')
+
+
+def _decode_page_id(page_id: str | None) -> int | None:
+    """Decode an opaque page identifier back to an integer.
+
+    Args:
+        page_id: The base64-encoded page ID string.
+
+    Returns:
+        The decoded integer value, or None if page_id is None/empty.
+    """
+    if not page_id:
+        return None
+    try:
+        # Add padding back if needed
+        padded = page_id + '=' * (4 - len(page_id) % 4)
+        decoded = base64.urlsafe_b64decode(padded.encode()).decode()
+        return int(decoded)
+    except (ValueError, Exception):
+        return None
+
+
 def _paginate_results(
     items: list, page_id: str | None, limit: int
 ) -> tuple[list, str | None]:
@@ -47,14 +80,15 @@ def _paginate_results(
         Tuple of (paginated_items, next_page_id).
     """
     start_offset = 0
-    if page_id:
-        start_offset = int(page_id)
+    decoded_page_id = _decode_page_id(page_id)
+    if decoded_page_id is not None:
+        start_offset = decoded_page_id
 
     end_offset = start_offset + limit
     paginated_items = items[start_offset:end_offset]
     next_page_id = None
     if end_offset < len(items):
-        next_page_id = str(end_offset)
+        next_page_id = _encode_page_id(end_offset)
 
     return paginated_items, next_page_id
 
@@ -145,7 +179,10 @@ async def get_user_repositories(
         external_auth_id=user_id,
     )
 
-    page = int(page_id) if page_id else 1
+    page = 1
+    decoded_page_id = _decode_page_id(page_id)
+    if decoded_page_id is not None:
+        page = decoded_page_id
 
     # Get repositories - we'll handle pagination ourselves
     items = await client.get_repositories(
@@ -160,6 +197,6 @@ async def get_user_repositories(
     next_page_id = None
     if len(items) > limit:
         items = items[:-1]
-        next_page_id = str(page + 1)
+        next_page_id = _encode_page_id(page + 1)
 
     return RepositoryPage(items=items, next_page_id=next_page_id)

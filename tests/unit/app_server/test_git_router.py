@@ -11,6 +11,7 @@ from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
 from openhands.app_server.git.git_router import (
+    _encode_page_id,
     _paginate_results,
     get_user_installations,
     router,
@@ -31,22 +32,27 @@ class TestPagination:
         result, next_page_id = _paginate_results(items, None, 2)
 
         assert result == ['a', 'b']
-        assert next_page_id == '2'
+        # next_page_id is base64-encoded
+        assert next_page_id == _encode_page_id(2)
 
     def test_returns_second_page_when_page_id_provided(self):
         """Test that correct page is returned when page_id is provided."""
         items = ['a', 'b', 'c', 'd', 'e']
+        # Use base64-encoded page_id
+        encoded_page_id = _encode_page_id(2)
 
-        result, next_page_id = _paginate_results(items, '2', 2)
+        result, next_page_id = _paginate_results(items, encoded_page_id, 2)
 
         assert result == ['c', 'd']
-        assert next_page_id == '4'
+        assert next_page_id == _encode_page_id(4)
 
     def test_returns_empty_when_page_id_exceeds_length(self):
         """Test that empty list is returned when page_id exceeds length."""
         items = ['a', 'b', 'c']
+        # Use base64-encoded page_id
+        encoded_page_id = _encode_page_id(10)
 
-        result, next_page_id = _paginate_results(items, '10', 2)
+        result, next_page_id = _paginate_results(items, encoded_page_id, 2)
 
         assert result == []
         assert next_page_id is None
@@ -54,8 +60,10 @@ class TestPagination:
     def test_returns_none_next_page_when_last_page(self):
         """Test that next_page_id is None on last page."""
         items = ['a', 'b', 'c']
+        # Use base64-encoded page_id
+        encoded_page_id = _encode_page_id(2)
 
-        result, next_page_id = _paginate_results(items, '2', 2)
+        result, next_page_id = _paginate_results(items, encoded_page_id, 2)
 
         assert result == ['c']
         assert next_page_id is None
@@ -186,7 +194,8 @@ class TestGetUserInstallations:
 
         # Assert
         assert result.items == ['inst-1', 'inst-2']
-        assert result.next_page_id == '2'
+        # next_page_id is base64-encoded
+        assert result.next_page_id == _encode_page_id(2)
 
     async def test_returns_second_page(self):
         """Test that second page is returned correctly."""
@@ -199,11 +208,13 @@ class TestGetUserInstallations:
         # We need to test with the pagination logic directly
         # by calling _paginate_results
         items = ['inst-1', 'inst-2', 'inst-3', 'inst-4', 'inst-5']
+        # Use base64-encoded page_id
+        encoded_page_id = _encode_page_id(2)
 
-        result, next_page_id = _paginate_results(items, '2', 2)
+        result, next_page_id = _paginate_results(items, encoded_page_id, 2)
 
         assert result == ['inst-3', 'inst-4']
-        assert next_page_id == '4'
+        assert next_page_id == _encode_page_id(4)
 
 
 @pytest.mark.asyncio
