@@ -27,4 +27,28 @@ describe("ConfirmDeleteModal", () => {
 
     expect(screen.getByText(/My Test Conversation/)).toBeInTheDocument();
   });
+
+  it("should display bulk delete warning with count", () => {
+    renderWithProviders(
+      <ConfirmDeleteModal
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+        bulkCount={5}
+      />,
+    );
+
+    expect(
+      screen.getByText("CONVERSATION$BULK_DELETE_WARNING"),
+    ).toBeInTheDocument();
+  });
+
+  it("should display generic warning when no title or bulkCount", () => {
+    renderWithProviders(
+      <ConfirmDeleteModal onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    expect(
+      screen.getByText("CONVERSATION$DELETE_WARNING"),
+    ).toBeInTheDocument();
+  });
 });

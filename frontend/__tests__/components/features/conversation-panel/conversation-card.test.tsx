@@ -474,6 +474,70 @@ describe("ConversationCard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("should render a checkbox when onSelectionToggle is provided", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        onSelectionToggle={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-select-checkbox"),
+    ).toBeInTheDocument();
+  });
+
+  it("should not render a checkbox when onSelectionToggle is not provided", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-select-checkbox"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should call onSelectionToggle when checkbox is clicked", async () => {
+    const user = userEvent.setup();
+    const onSelectionToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        onSelectionToggle={onSelectionToggle}
+      />,
+    );
+
+    const checkbox = screen.getByTestId("conversation-select-checkbox");
+    await user.click(checkbox);
+
+    expect(onSelectionToggle).toHaveBeenCalledOnce();
+  });
+
+  it("should reflect isSelected state on checkbox", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        isSelected
+        onSelectionToggle={vi.fn()}
+      />,
+    );
+
+    const checkbox = screen.getByTestId(
+      "conversation-select-checkbox",
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+  });
+
   const statusTable: [V1SandboxStatus, boolean][] = [
     ["RUNNING", true],
     ["STARTING", true],

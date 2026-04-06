@@ -12,24 +12,33 @@ interface ConfirmDeleteModalProps {
   onConfirm: () => void;
   onCancel: () => void;
   conversationTitle?: string;
+  bulkCount?: number;
 }
 
 export function ConfirmDeleteModal({
   onConfirm,
   onCancel,
   conversationTitle,
+  bulkCount,
 }: ConfirmDeleteModalProps) {
   const { t } = useTranslation();
 
-  const confirmationMessage = conversationTitle ? (
-    <Trans
-      i18nKey={I18nKey.CONVERSATION$DELETE_WARNING_WITH_TITLE}
-      values={{ title: conversationTitle }}
-      components={{ title: <span className="text-white" /> }}
-    />
-  ) : (
-    t(I18nKey.CONVERSATION$DELETE_WARNING)
-  );
+  let confirmationMessage: React.ReactNode;
+  if (bulkCount && bulkCount > 1) {
+    confirmationMessage = t(I18nKey.CONVERSATION$BULK_DELETE_WARNING, {
+      count: bulkCount,
+    });
+  } else if (conversationTitle) {
+    confirmationMessage = (
+      <Trans
+        i18nKey={I18nKey.CONVERSATION$DELETE_WARNING_WITH_TITLE}
+        values={{ title: conversationTitle }}
+        components={{ title: <span className="text-white" /> }}
+      />
+    );
+  } else {
+    confirmationMessage = t(I18nKey.CONVERSATION$DELETE_WARNING);
+  }
 
   return (
     <ModalBackdrop onClose={onCancel}>

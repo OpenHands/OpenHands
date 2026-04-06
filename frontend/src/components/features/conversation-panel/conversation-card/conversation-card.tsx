@@ -26,6 +26,8 @@ interface ConversationCardProps {
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
   llmModel?: string | null;
+  isSelected?: boolean;
+  onSelectionToggle?: () => void;
 }
 
 export function ConversationCard({
@@ -45,6 +47,8 @@ export function ConversationCard({
   contextMenuOpen = false,
   onContextMenuToggle,
   llmModel,
+  isSelected = false,
+  onSelectionToggle,
 }: ConversationCardProps) {
   const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -129,6 +133,17 @@ export function ConversationCard({
       )}
     >
       <div className="flex items-center justify-between w-full">
+        {onSelectionToggle && (
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onSelectionToggle()}
+            onClick={(e) => e.stopPropagation()}
+            className="mr-2 w-4 h-4 shrink-0 cursor-pointer accent-white"
+            aria-label={`Select ${title}`}
+            data-testid="conversation-select-checkbox"
+          />
+        )}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <ConversationCardHeader
             title={title}
