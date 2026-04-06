@@ -335,6 +335,9 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     2. Searches for repositories matching the user's query
     3. Returns up to 100 options for the dropdown
 
+    Note: "No Repository" is handled by a separate button in the form, so it's
+    not included in the dropdown options. Error cases return an empty list.
+
     Configuration: Set the Options Load URL in Slack App settings to:
     https://your-domain/slack/on-options-load
     """
