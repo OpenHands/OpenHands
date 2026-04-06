@@ -104,7 +104,9 @@ async def search_repositories(
     provider: ProviderType,
     query: Annotated[
         str | None,
-        Query(title='Search query for finding repositories. If not provided, returns user repositories.'),
+        Query(
+            title='Search query for finding repositories. If not provided, returns user repositories.'
+        ),
     ] = None,
     sort: Annotated[
         str,
