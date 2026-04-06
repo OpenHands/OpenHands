@@ -87,4 +87,4 @@ class ResolverUserContext(UserContext):
         return await self.saas_user_auth.get_mcp_api_key()
 
     async def get_user_git_info(self) -> UserGitInfo | None:
-        return self.saas_user_auth.get_user_git_info()
+        return await self.saas_user_auth.get_user_git_info()
