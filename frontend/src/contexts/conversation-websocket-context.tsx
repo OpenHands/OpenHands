@@ -144,16 +144,16 @@ export function ConversationWebSocketProvider({
   const handleNonErrorEvent = useCallback(
     (event: { source?: string }) => {
       const currentError = useErrorMessageStore.getState().errorMessage;
-      if (
-        currentError &&
-        currentError === I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS
-      ) {
-        if (event.source === "agent") {
-          removeErrorMessage();
-        }
-      } else {
-        removeErrorMessage();
+      const isBudgetError =
+        currentError === I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS;
+      const isAgentEvent = event.source === "agent";
+
+      // Budget errors persist until agent proves LLM is working
+      if (isBudgetError && !isAgentEvent) {
+        return; // Keep budget error visible
       }
+
+      removeErrorMessage();
     },
     [removeErrorMessage],
   );
