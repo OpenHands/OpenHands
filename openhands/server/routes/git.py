@@ -151,7 +151,12 @@ async def get_user(
     raise AuthenticationError('Git provider token required. (such as GitHub).')
 
 
-@app.get('/search/repositories', response_model=list[Repository])
+@app.get(
+    '/search/repositories',
+    response_model=list[Repository],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/search/repositories` instead.',
+)
 async def search_repositories(
     query: str,
     per_page: int = 5,
@@ -186,7 +191,12 @@ async def search_repositories(
     raise AuthenticationError('Git provider token required.')
 
 
-@app.get('/search/branches', response_model=list[Branch])
+@app.get(
+    '/search/branches',
+    response_model=list[Branch],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/search/branches` instead.',
+)
 async def search_branches(
     repository: str,
     query: str,
@@ -229,7 +239,12 @@ async def search_branches(
     )
 
 
-@app.get('/suggested-tasks', response_model=list[SuggestedTask])
+@app.get(
+    '/suggested-tasks',
+    response_model=list[SuggestedTask],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/suggested-tasks` instead.',
+)
 async def get_suggested_tasks(
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
@@ -258,7 +273,12 @@ async def get_suggested_tasks(
     raise AuthenticationError('No providers set.')
 
 
-@app.get('/repository/branches', response_model=PaginatedBranchesResponse)
+@app.get(
+    '/repository/branches',
+    response_model=PaginatedBranchesResponse,
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/repository/branches` instead.',
+)
 async def get_repository_branches(
     repository: str,
     page: int = 1,
