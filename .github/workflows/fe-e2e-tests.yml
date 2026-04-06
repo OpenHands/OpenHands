@@ -17,7 +17,7 @@ concurrency:
 jobs:
   fe-e2e-test:
     name: FE E2E Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         node-version: [22]
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Set up Node.js
-        uses: useblacksmith/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies

@@ -19,11 +19,11 @@ jobs:
   # Run lint on the frontend code
   lint-frontend:
     name: Lint frontend
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
       - name: Install Node.js 22
-        uses: useblacksmith/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install dependencies
@@ -40,13 +40,13 @@ jobs:
   # Run lint on the python code
   lint-python:
     name: Lint python
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Set up python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
           cache: "pip"
@@ -57,13 +57,13 @@ jobs:
 
   lint-enterprise-python:
     name: Lint enterprise python
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Set up python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
           cache: "pip"

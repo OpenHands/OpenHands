@@ -18,7 +18,7 @@ concurrency:
 jobs:
   check-version:
     name: Check if version has changed
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     defaults:
       run:
         shell: bash
@@ -55,7 +55,7 @@ jobs:
 
   publish:
     name: Publish to npm
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     needs: check-version
     if: needs.check-version.outputs.should-publish == 'true'
     defaults:
