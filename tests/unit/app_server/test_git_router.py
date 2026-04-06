@@ -260,11 +260,10 @@ class TestSearchRepositories:
         result = await search_repositories(
             provider=ProviderType.GITHUB,
             query=None,
-            sort='updated',
             installation_id=None,
             page_id=None,
             limit=10,
-            sort_order=None,
+            sort_order=SortOrder.UPDATED_ASC,
             user_context=mock_context,
         )
 
@@ -314,11 +313,10 @@ class TestSearchRepositories:
         result = await search_repositories(
             provider=ProviderType.GITHUB,
             query='my-search-term',
-            sort='updated',
             installation_id=None,
             page_id=None,
             limit=10,
-            sort_order='stars-desc',  # This should be parsed into sort='stars', order='desc'
+            sort_order=SortOrder.STAR_DESC,  # This should be parsed into sort='stars', order='desc'
             user_context=mock_context,
         )
 
@@ -358,14 +356,13 @@ class TestSearchRepositories:
         )
 
         # Act - call with sort_order ascending
-        result = await search_repositories(
+        await search_repositories(
             provider=ProviderType.GITHUB,
             query='test',
-            sort='updated',
             installation_id=None,
             page_id=None,
             limit=10,
-            sort_order='forks-asc',
+            sort_order=SortOrder.FORKS_ASC,
             user_context=mock_context,
         )
 
@@ -394,7 +391,6 @@ class TestSearchRepositories:
         result = await search_repositories(
             provider=ProviderType.GITHUB,
             query='test',
-            sort='updated',
             installation_id=None,
             page_id=None,
             limit=10,
@@ -470,7 +466,6 @@ class TestSearchRepositories:
         result_page1 = await search_repositories(
             provider=ProviderType.GITHUB,
             query=None,
-            sort='pushed',
             installation_id=None,
             page_id=None,  # This means page 1
             limit=2,
@@ -488,7 +483,6 @@ class TestSearchRepositories:
         result_page2 = await search_repositories(
             provider=ProviderType.GITHUB,
             query=None,
-            sort='pushed',
             installation_id=None,
             page_id=encode_page_id(2),  # This means page 2
             limit=2,
@@ -523,18 +517,17 @@ class TestSearchRepositories:
         await search_repositories(
             provider=ProviderType.GITHUB,
             query=None,
-            sort='stars',
             installation_id=None,
             page_id=None,
             limit=10,
-            sort_order=None,
+            sort_order=SortOrder.STAR_DESC,
             user_context=mock_context,
         )
 
         # Assert - verify get_repositories was called with the sort parameter
         mock_handler.get_repositories.assert_called_once()
         call_kwargs = mock_handler.get_repositories.call_args.kwargs
-        assert call_kwargs.get('sort') == 'stars'
+        assert call_kwargs.get('sort') == 'pushed'
 
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
@@ -556,7 +549,6 @@ class TestSearchRepositories:
         await search_repositories(
             provider=ProviderType.GITHUB,
             query=None,
-            sort='pushed',
             installation_id='app-123',
             page_id=None,
             limit=10,

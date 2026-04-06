@@ -106,10 +106,6 @@ async def search_repositories(
             title='Search query for finding repositories. If not provided, returns user repositories.'
         ),
     ] = None,
-    sort: Annotated[
-        str,
-        Query(title='Sort order (stars, forks, updated, pushed)'),
-    ] = 'pushed',
     installation_id: Annotated[
         str | None,
         Query(title='Filter by installation/app ID'),
@@ -172,8 +168,10 @@ async def search_repositories(
             app_mode=get_global_config().app_mode,
         )
     else:
+        # TODO: The underlying API needs refactoring. THe get_repositories method does not
+        # support sorting in the same way as the search method.
         repos = await client.get_repositories(
-            sort=sort,
+            sort='pushed',
             app_mode=get_global_config().app_mode,
             selected_provider=provider,
             page=page,
