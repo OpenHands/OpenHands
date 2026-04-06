@@ -46,7 +46,7 @@ router = APIRouter(
 user_context_dependency = depends_user_context()
 
 
-@router.get('/installations')
+@router.get('/installations/search')
 async def search_user_installations(
     provider: ProviderType,
     page_id: Annotated[
