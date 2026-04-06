@@ -35,6 +35,7 @@ class UserSettings(Base):  # type: ignore
     search_api_key = Column(String, nullable=True)
     sandbox_api_key = Column(String, nullable=True)
     max_budget_per_task = Column(Float, nullable=True)
+    llm_max_output_tokens = Column(Integer, nullable=True)
     enable_solvability_analysis = Column(Boolean, nullable=True, default=False)
     email = Column(String, nullable=True)
     email_verified = Column(Boolean, nullable=True)

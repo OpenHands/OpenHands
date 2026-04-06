@@ -172,8 +172,12 @@ def test_llm_max_output_tokens_valid_values():
 
 
 def test_llm_max_output_tokens_invalid_value():
-    with pytest.raises(ValidationError, match='llm_max_output_tokens must be at least 1'):
+    with pytest.raises(
+        ValidationError, match='llm_max_output_tokens must be at least 1'
+    ):
         Settings(llm_max_output_tokens=0)
 
-    with pytest.raises(ValidationError, match='llm_max_output_tokens must be at least 1'):
+    with pytest.raises(
+        ValidationError, match='llm_max_output_tokens must be at least 1'
+    ):
         Settings(llm_max_output_tokens=-100)
