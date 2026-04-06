@@ -168,8 +168,13 @@ async def search_repositories(
             app_mode=get_global_config().app_mode,
         )
     else:
-        # TODO: The underlying API needs refactoring. THe get_repositories method does not
-        # support sorting in the same way as the search method.
+        if sort_order:
+            # TODO: This is a temporary state until we refactor the underlying API.
+            # The get_repositories method does not support sorting in the same way as
+            # the search method - those should be merged into a single paginated
+            # method
+            raise ValueError('sort_order_not_supported')
+        # TODO: The underlying API needs refactoring.
         repos = await client.get_repositories(
             sort='pushed',
             app_mode=get_global_config().app_mode,

@@ -263,7 +263,6 @@ class TestSearchRepositories:
             installation_id=None,
             page_id=None,
             limit=10,
-            sort_order=SortOrder.UPDATED_ASC,
             user_context=mock_context,
         )
 
@@ -520,7 +519,6 @@ class TestSearchRepositories:
             installation_id=None,
             page_id=None,
             limit=10,
-            sort_order=SortOrder.STAR_DESC,
             user_context=mock_context,
         )
 
