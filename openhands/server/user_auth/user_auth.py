@@ -89,7 +89,7 @@ class UserAuth(ABC):
         """Get an mcp api key for the user"""
 
     async def get_user_git_info(self) -> UserGitInfo | None:
-        """Get an meta for the current user"""
+        """Get git meta for the current user"""
         provider_tokens = await self.get_provider_tokens()
         if not provider_tokens:
             return None
