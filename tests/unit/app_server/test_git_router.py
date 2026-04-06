@@ -388,7 +388,7 @@ class TestSearchRepositories:
         )
 
         # Act - call with query but no sort_order (uses default: stars, desc)
-        result = await search_repositories(
+        await search_repositories(
             provider=ProviderType.GITHUB,
             query='test',
             installation_id=None,
