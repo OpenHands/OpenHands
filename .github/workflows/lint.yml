@@ -35,7 +35,7 @@ jobs:
         run: |
           cd frontend
           npm run lint
-          npm run make-i18n && tsc
+          npm run make-i18n && npx tsc
           npm run check-translation-completeness
 
   # Run lint on the python code
