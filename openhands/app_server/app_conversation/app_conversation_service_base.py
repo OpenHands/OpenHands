@@ -1,5 +1,6 @@
 import logging
 import os
+import shlex
 import tempfile
 from abc import ABC
 from dataclasses import dataclass
@@ -41,6 +42,7 @@ from openhands.sdk.security.confirmation_policy import (
 )
 from openhands.sdk.security.llm_analyzer import LLMSecurityAnalyzer
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.utils.git import ensure_valid_git_branch_name
 
 _logger = logging.getLogger(__name__)
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
@@ -323,7 +325,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         # Create the projects directory if it does not exist yet
         parent = Path(workspace.working_dir).parent
         result = await workspace.execute_command(
-            f'mkdir {workspace.working_dir}', parent
+            f'mkdir -p {workspace.working_dir}', parent
         )
         if result.exit_code:
             _logger.warning(f'mkdir failed: {result.stderr}')
@@ -352,9 +354,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
             raise ValueError('Missing either Git token or valid repository')
 
         dir_name = request.selected_repository.split('/')[-1]
+        quoted_remote_repo_url = shlex.quote(remote_repo_url)
+        quoted_dir_name = shlex.quote(dir_name)
 
         # Clone the repo - this is the slow part!
-        clone_command = f'git clone {remote_repo_url} {dir_name}'
+        clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
         )
@@ -363,12 +367,15 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         # Checkout the appropriate branch
         if request.selected_branch:
-            checkout_command = f'git checkout {request.selected_branch}'
+            ensure_valid_git_branch_name(request.selected_branch)
+            checkout_command = f'git checkout {shlex.quote(request.selected_branch)}'
         else:
             # Generate a random branch name to avoid conflicts
             random_str = base62.encodebytes(os.urandom(16))
             openhands_workspace_branch = f'openhands-workspace-{random_str}'
-            checkout_command = f'git checkout -b {openhands_workspace_branch}'
+            checkout_command = (
+                f'git checkout -b {shlex.quote(openhands_workspace_branch)}'
+            )
         git_dir = Path(workspace.working_dir) / dir_name
         result = await workspace.execute_command(checkout_command, git_dir)
         if result.exit_code:

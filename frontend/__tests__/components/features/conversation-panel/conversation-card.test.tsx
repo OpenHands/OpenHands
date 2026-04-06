@@ -434,6 +434,46 @@ describe("ConversationCard", () => {
     expect(screen.queryByTestId("ellipsis-button")).not.toBeInTheDocument();
   });
 
+  it("should render the llm model when provided", () => {
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="anthropic/claude-sonnet-4-20250514"
+      />,
+    );
+
+    const model = screen.getByTestId("conversation-card-llm-model");
+    expect(model).toBeInTheDocument();
+    expect(model).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
+    expect(model).toHaveAttribute("title", "anthropic/claude-sonnet-4-20250514");
+    expect(model.querySelector("svg")).toBeInTheDocument();
+
+    // Verify truncation structure: text is wrapped in a span with truncate class
+    const textSpan = model.querySelector("span.truncate");
+    expect(textSpan).toBeInTheDocument();
+    expect(textSpan).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
+  });
+
+  it("should not render the llm model when not provided", () => {
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
   const statusTable: [ConversationStatus, boolean][] = [
     ["RUNNING", true],
     ["STARTING", true],

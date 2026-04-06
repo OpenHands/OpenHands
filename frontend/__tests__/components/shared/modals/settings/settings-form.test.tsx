@@ -17,6 +17,8 @@ describe("SettingsForm", () => {
         <SettingsForm
           settings={DEFAULT_SETTINGS}
           models={[DEFAULT_SETTINGS.llm_model]}
+          verifiedModels={[]}
+          verifiedProviders={["openhands"]}
           onClose={onCloseMock}
         />
       ),

@@ -27,12 +27,16 @@ import {
   isStatsConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
-  isConversationErrorEvent,
+  isDisplayableErrorEvent,
   isPlanningFileEditorObservationEvent,
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
 } from "#/types/v1/type-guards";
 import { ConversationStateUpdateEventStats } from "#/types/v1/core/events/conversation-state-event";
+import type {
+  ConversationErrorEvent,
+  ServerErrorEvent,
+} from "#/types/v1/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
 import { buildWebSocketUrl } from "#/utils/websocket-url";
 import type {
@@ -134,6 +138,25 @@ export function ConversationWebSocketProvider({
 
   const isPlanFilePath = (path: string | null): boolean =>
     path?.toUpperCase().endsWith("PLAN.MD") ?? false;
+
+  // Helper to handle error clearing logic for non-error events.
+  // Budget/credit errors persist until an agent event proves the LLM is working.
+  const handleNonErrorEvent = useCallback(
+    (event: { source?: string }) => {
+      const currentError = useErrorMessageStore.getState().errorMessage;
+      const isBudgetError =
+        currentError === I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS;
+      const isAgentEvent = event.source === "agent";
+
+      // Budget errors persist until agent proves LLM is working
+      if (isBudgetError && !isAgentEvent) {
+        return; // Keep budget error visible
+      }
+
+      removeErrorMessage();
+    },
+    [removeErrorMessage],
+  );
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -352,29 +375,31 @@ export function ConversationWebSocketProvider({
         if (isV1Event(event)) {
           addEvent(event);
 
-          // Handle ConversationErrorEvent specifically - show error banner
+          // Handle displayable error events - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
-          if (isConversationErrorEvent(event)) {
+          if (isDisplayableErrorEvent(event)) {
+            const errorEvent = event as
+              | ConversationErrorEvent
+              | ServerErrorEvent;
             trackError({
-              message: event.detail,
+              message: errorEvent.detail,
               source: "conversation",
               metadata: {
-                eventId: event.id,
-                errorCode: event.code,
+                eventId: errorEvent.id,
+                errorCode: errorEvent.code,
               },
               posthog,
             });
-            if (isBudgetOrCreditError(event.detail)) {
+            if (isBudgetOrCreditError(errorEvent.detail)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
               trackCreditLimitReached({
                 conversationId: conversationId || "unknown",
               });
             } else {
-              setErrorMessage(event.detail);
+              setErrorMessage(errorEvent.detail);
             }
           } else {
-            // Clear error message on any non-ConversationErrorEvent
-            removeErrorMessage();
+            handleNonErrorEvent(event);
           }
 
           // Track credit limit reached if AgentErrorEvent has budget-related error
@@ -389,15 +414,7 @@ export function ConversationWebSocketProvider({
               },
               posthog,
             });
-            // Use friendly i18n message for budget/credit errors instead of raw error
-            if (isBudgetOrCreditError(event.error)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
-              trackCreditLimitReached({
-                conversationId: conversationId || "unknown",
-              });
-            } else {
-              setErrorMessage(event.error);
-            }
+            setErrorMessage(event.error);
           }
 
           // Clear optimistic user message when a user message is confirmed
@@ -515,29 +532,31 @@ export function ConversationWebSocketProvider({
           };
           addEvent(eventWithPlanningFlag);
 
-          // Handle ConversationErrorEvent specifically - show error banner
+          // Handle displayable error events - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
-          if (isConversationErrorEvent(event)) {
+          if (isDisplayableErrorEvent(event)) {
+            const errorEvent = event as
+              | ConversationErrorEvent
+              | ServerErrorEvent;
             trackError({
-              message: event.detail,
+              message: errorEvent.detail,
               source: "planning_conversation",
               metadata: {
-                eventId: event.id,
-                errorCode: event.code,
+                eventId: errorEvent.id,
+                errorCode: errorEvent.code,
               },
               posthog,
             });
-            if (isBudgetOrCreditError(event.detail)) {
+            if (isBudgetOrCreditError(errorEvent.detail)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
               trackCreditLimitReached({
                 conversationId: conversationId || "unknown",
               });
             } else {
-              setErrorMessage(event.detail);
+              setErrorMessage(errorEvent.detail);
             }
           } else {
-            // Clear error message on any non-ConversationErrorEvent
-            removeErrorMessage();
+            handleNonErrorEvent(event);
           }
 
           // Handle AgentErrorEvent specifically
@@ -552,15 +571,7 @@ export function ConversationWebSocketProvider({
               },
               posthog,
             });
-            // Use friendly i18n message for budget/credit errors instead of raw error
-            if (isBudgetOrCreditError(event.error)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
-              trackCreditLimitReached({
-                conversationId: conversationId || "unknown",
-              });
-            } else {
-              setErrorMessage(event.error);
-            }
+            setErrorMessage(event.error);
           }
 
           // Clear optimistic user message when a user message is confirmed

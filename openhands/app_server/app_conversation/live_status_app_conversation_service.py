@@ -92,6 +92,7 @@ from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
+from openhands.sdk.utils.redact import sanitize_dict
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
@@ -103,6 +104,7 @@ from openhands.tools.preset.planning import (
     format_plan_structure,
     get_planning_tools,
 )
+from openhands.utils.git import ensure_valid_git_branch_name
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
@@ -895,7 +897,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """
         model: str = llm_model or user.llm_model or LLM.model_fields['model'].default
         base_url = user.llm_base_url
-        if model and model.startswith('openhands/'):
+        if model and (
+            model.startswith('openhands/') or model.startswith('litellm_proxy/')
+        ):
             base_url = user.llm_base_url or self.openhands_provider_base_url
 
         return LLM(
@@ -1110,7 +1114,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Wrap in the mcpServers structure required by the SDK
         mcp_config = {'mcpServers': mcp_servers} if mcp_servers else {}
-        _logger.info(f'Final MCP configuration: {mcp_config}')
+        _logger.info(f'Final MCP configuration: {sanitize_dict(mcp_config)}')
 
         return llm, mcp_config
 
@@ -1712,9 +1716,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if 'selected_branch' in request.model_fields_set:
             branch = request.selected_branch
             if branch is not None:
-                # Sanitize: check for dangerous characters
-                if any(c in branch for c in [';', '&', '|', '$', '`', '\n', '\r', ' ']):
-                    raise ValueError(f"Invalid characters in branch name: '{branch}'")
+                ensure_valid_git_branch_name(branch)
 
     async def update_app_conversation(
         self, conversation_id: UUID, request: AppConversationUpdateRequest

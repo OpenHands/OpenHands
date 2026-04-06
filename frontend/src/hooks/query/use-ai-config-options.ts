@@ -1,11 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import OptionService from "#/api/option-service/option-service.api";
 
-const fetchAiConfigOptions = async () => ({
-  models: await OptionService.getModels(),
-  agents: await OptionService.getAgents(),
-  securityAnalyzers: await OptionService.getSecurityAnalyzers(),
-});
+const fetchAiConfigOptions = async () => {
+  const modelsResponse = await OptionService.getModels();
+  return {
+    models: modelsResponse.models,
+    verifiedModels: modelsResponse.verified_models,
+    verifiedProviders: modelsResponse.verified_providers,
+    defaultModel: modelsResponse.default_model,
+    agents: await OptionService.getAgents(),
+    securityAnalyzers: await OptionService.getSecurityAnalyzers(),
+  };
+};
 
 export const useAIConfigOptions = () =>
   useQuery({

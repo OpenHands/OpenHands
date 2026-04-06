@@ -5,6 +5,7 @@ and the recent bug fixes for git checkout operations.
 """
 
 import subprocess
+from pathlib import Path
 from types import MethodType
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
@@ -759,6 +760,33 @@ def _create_service_with_mock_user_context(
 def mock_workspace():
     """Create a mock workspace instance for testing."""
     return MockWorkspace(working_dir='/workspace/project')
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_git_repo_quotes_selected_branch_before_checkout(
+    mock_workspace,
+):
+    user_info = MockUserInfo()
+    service, mock_user_context = _create_service_with_mock_user_context(
+        user_info, bind_methods=('clone_or_init_git_repo',)
+    )
+    service.init_git_in_empty_workspace = True
+    mock_user_context.get_authenticated_git_url = AsyncMock(
+        return_value='https://github.com/owner/repo.git'
+    )
+
+    task = Mock()
+    task.request = Mock(
+        selected_repository='owner/repo',
+        selected_branch='feature>tmp',
+    )
+
+    await service.clone_or_init_git_repo(task, mock_workspace)
+
+    mock_workspace.execute_command.assert_any_call(
+        "git checkout 'feature>tmp'",
+        Path(mock_workspace.working_dir) / 'repo',
+    )
 
 
 @pytest.mark.asyncio

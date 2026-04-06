@@ -9,12 +9,12 @@
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.async_event_store_wrapper import AsyncEventStoreWrapper
 from openhands.events.event_filter import EventFilter
 from openhands.events.serialization import event_to_dict
 from openhands.server.data_models.feedback import FeedbackDataModel, store_feedback
-from openhands.server.dependencies import get_dependencies
 from openhands.server.session.conversation import ServerConversation
 from openhands.server.utils import get_conversation
 from openhands.utils.async_utils import call_sync_from_async
@@ -24,13 +24,17 @@ app = APIRouter(
 )
 
 
-@app.post('/submit-feedback')
+@app.post('/submit-feedback', deprecated=True)
 async def submit_feedback(
     request: Request, conversation: ServerConversation = Depends(get_conversation)
 ) -> JSONResponse:
     """Submit user feedback.
 
     This function stores the provided feedback data.
+
+    .. deprecated::
+        Submitting feedback in OSS doesn't really make sense. This endpoint is deprecated
+        and will be removed.
 
     To submit feedback:
     ```sh

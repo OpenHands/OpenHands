@@ -280,6 +280,8 @@ class TestSaasSQLAppConversationInfoService:
         stored_metadata.reasoning_tokens = 0
         stored_metadata.context_window = 0
         stored_metadata.per_turn_token = 0
+        stored_metadata.public = None
+        stored_metadata.tags = {}
 
         saas_metadata = MagicMock(spec=StoredConversationMetadataSaas)
         saas_metadata.user_id = UUID('a1111111-1111-1111-1111-111111111111')
@@ -1304,3 +1306,100 @@ class TestApiKeyOrgIdHandling:
         conv_from_org1 = await user_service_org1.get_app_conversation_info(conv_id)
         assert conv_from_org1 is not None
         assert conv_from_org1.id == conv_id
+
+
+class TestResolverOrgIdRouting:
+    """Test that resolver_org_id on user_context overrides the default org_id."""
+
+    @pytest.mark.asyncio
+    async def test_save_uses_resolver_org_id_when_set_on_context(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """When user_context has resolver_org_id, conversation is saved in that org."""
+        from unittest.mock import AsyncMock
+
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from enterprise.integrations.resolver_context import ResolverUserContext
+
+        # Arrange: user1 is in ORG1, but resolver routes to ORG2
+        # Use spec to prevent MagicMock from auto-creating undefined attributes
+        mock_context = MagicMock(spec=ResolverUserContext)
+        mock_context.get_user_id = AsyncMock(return_value=str(USER1_ID))
+        mock_context.resolver_org_id = ORG2_ID
+
+        service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=mock_context,
+        )
+
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_resolver',
+            title='Resolver Routed Conversation',
+        )
+
+        # Act
+        await service.save_app_conversation_info(conv_info)
+
+        # Assert: conversation is stored in ORG2, not user's default ORG1
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None
+        assert saas_metadata.org_id == ORG2_ID
+        assert saas_metadata.user_id == USER1_ID
+
+    @pytest.mark.asyncio
+    async def test_save_uses_default_org_when_resolver_org_id_is_none(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """When resolver_org_id is None, conversation uses user's default org."""
+        from unittest.mock import AsyncMock
+
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from enterprise.integrations.resolver_context import ResolverUserContext
+
+        # Arrange: user1 in ORG1 with no resolver override
+        # Use spec to prevent MagicMock from auto-creating undefined attributes
+        mock_context = MagicMock(spec=ResolverUserContext)
+        mock_context.get_user_id = AsyncMock(return_value=str(USER1_ID))
+        mock_context.resolver_org_id = None
+
+        service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=mock_context,
+        )
+
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_default',
+            title='Default Org Conversation',
+        )
+
+        # Act
+        await service.save_app_conversation_info(conv_info)
+
+        # Assert: conversation stored in user's default ORG1
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None
+        assert saas_metadata.org_id == ORG1_ID

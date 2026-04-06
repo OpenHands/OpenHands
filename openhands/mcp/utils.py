@@ -24,6 +24,7 @@ from openhands.mcp.client import MCPClient
 from openhands.mcp.error_collector import mcp_error_collector
 from openhands.runtime.base import Runtime
 from openhands.runtime.impl.cli.cli_runtime import CLIRuntime
+from openhands.sdk.utils.redact import sanitize_dict
 
 
 def convert_mcp_clients_to_tools(mcp_clients: list[MCPClient] | None) -> list[dict]:
@@ -177,7 +178,9 @@ async def fetch_mcp_tools_from_config(
     mcp_clients = []
     mcp_tools = []
     try:
-        logger.debug(f'Creating MCP clients with config: {mcp_config}')
+        logger.debug(
+            f'Creating MCP clients with config: {sanitize_dict(mcp_config.model_dump())}'
+        )
 
         # Create clients - this will fetch tools but not maintain active connections
         mcp_clients = await create_mcp_clients(

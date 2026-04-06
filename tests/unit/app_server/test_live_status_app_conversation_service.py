@@ -549,6 +549,40 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://llm-proxy.app.all-hands.dev/'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_litellm_proxy_model_uses_provider_default(
+        self,
+    ):
+        """litellm_proxy/* model (inherited by sub-conversations) falls back to provider base URL."""
+        # Arrange — simulates a sub-conversation inheriting the SDK-transformed model name
+        self.mock_user.llm_base_url = None
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, 'litellm_proxy/minimax-2.5', self.conversation_id
+        )
+
+        # Assert
+        assert llm.base_url == 'https://provider.example.com'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_litellm_proxy_model_prefers_user_base_url(
+        self,
+    ):
+        """litellm_proxy/* model uses user.llm_base_url when provided."""
+        # Arrange
+        self.mock_user.llm_base_url = 'https://user-llm.example.com'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, 'litellm_proxy/minimax-2.5', self.conversation_id
+        )
+
+        # Assert
+        assert llm.base_url == 'https://user-llm.example.com'
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_non_openhands_model_ignores_provider(self):
         """Non-openhands model ignores provider base URL and uses user base URL."""
         # Arrange

@@ -485,6 +485,56 @@ class OrgAppSettingsUpdate(BaseModel):
         return v
 
 
+VALID_GIT_PROVIDERS = {'github', 'gitlab', 'bitbucket'}
+
+
+class GitOrgClaimRequest(BaseModel):
+    """Request model for claiming a Git organization."""
+
+    provider: str
+    git_organization: str
+
+    @field_validator('provider')
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in VALID_GIT_PROVIDERS:
+            raise ValueError(
+                f'Invalid provider: "{v}". Must be one of: {", ".join(sorted(VALID_GIT_PROVIDERS))}'
+            )
+        return v
+
+    @field_validator('git_organization')
+    @classmethod
+    def validate_git_organization(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not v:
+            raise ValueError('git_organization must not be empty')
+        return v
+
+
+class GitOrgClaimResponse(BaseModel):
+    """Response model for a Git organization claim."""
+
+    id: str
+    org_id: str
+    provider: str
+    git_organization: str
+    claimed_by: str
+    claimed_at: str
+
+
+class GitOrgAlreadyClaimedError(Exception):
+    """Raised when a Git organization is already claimed by another OpenHands org."""
+
+    def __init__(self, provider: str, git_organization: str):
+        self.provider = provider
+        self.git_organization = git_organization
+        super().__init__(
+            f'Git organization "{git_organization}" on {provider} is already claimed by another organization'
+        )
+
+
 class OrgMemberFinancialResponse(BaseModel):
     """Financial data for a single organization member."""
 
