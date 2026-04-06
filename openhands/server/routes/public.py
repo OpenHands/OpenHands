@@ -11,9 +11,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
-from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import config, server_config
 from openhands.utils.llm import ModelsResponse, get_supported_llm_models
 
@@ -36,9 +36,13 @@ async def get_litellm_models(
     return models
 
 
-@app.get('/agents', response_model=list[str])
+@app.get('/agents', response_model=list[str], deprecated=True)
 async def get_agents() -> list[str]:
     """Get all agents supported by LiteLLM.
+
+    .. deprecated::
+        This endpoint is deprecated. The agent definitions are now part of the
+        OpenAPI schema so this is no longer required.
 
     To get the agents:
     ```sh
@@ -51,9 +55,13 @@ async def get_agents() -> list[str]:
     return sorted(Agent.list_agents())
 
 
-@app.get('/security-analyzers', response_model=list[str])
+@app.get('/security-analyzers', response_model=list[str], deprecated=True)
 async def get_security_analyzers() -> list[str]:
     """Get all supported security analyzers.
+
+    .. deprecated::
+        This endpoint is deprecated. The security analyzers are now part of the
+        OpenAPI schema so this is no longer required.
 
     To get the security analyzers:
     ```sh

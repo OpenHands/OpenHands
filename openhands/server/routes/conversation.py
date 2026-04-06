@@ -19,6 +19,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
 from openhands.app_server.config import depends_app_conversation_info_service
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action.message import MessageAction
 from openhands.events.event_filter import EventFilter
@@ -27,7 +28,6 @@ from openhands.events.serialization.event import event_to_dict
 from openhands.memory.memory import Memory
 from openhands.microagent.types import InputMetadata
 from openhands.runtime.base import Runtime
-from openhands.server.dependencies import get_dependencies
 from openhands.server.session.conversation import ServerConversation
 from openhands.server.shared import conversation_manager, file_store
 from openhands.server.user_auth import get_user_id
@@ -83,13 +83,17 @@ def _get_v0_conversation_config(
     }
 
 
-@app.get('/config')
+@app.get('/config', deprecated=True)
 async def get_remote_runtime_config(
     conversation_id: str,
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
     user_id: str | None = Depends(get_user_id),
 ) -> JSONResponse:
     """Retrieve the runtime configuration.
+
+    .. deprecated::
+        This endpoint is deprecated. The config is now returned as part of
+        GET /api/v1/app-conversation/{conversation_id}. Use that endpoint instead.
 
     For V0 conversations: returns runtime_id and session_id from the runtime.
     For V1 conversations: returns sandbox_id as runtime_id and conversation_id as session_id.
