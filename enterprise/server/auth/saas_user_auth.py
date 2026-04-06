@@ -15,7 +15,7 @@ from server.auth.auth_error import (
     NoCredentialsError,
 )
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
-from server.auth.token_manager import KeycloakUserInfo, TokenManager
+from server.auth.token_manager import TokenManager
 from server.config import get_config
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
@@ -31,11 +31,9 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fi
 
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
-    ProviderHandler,
     ProviderToken,
     ProviderType,
 )
-from openhands.integrations.service_types import UserGitInfo
 from openhands.server.settings import Settings
 from openhands.server.user_auth.user_auth import AuthType, UserAuth
 from openhands.storage.data_models.secrets import Secrets

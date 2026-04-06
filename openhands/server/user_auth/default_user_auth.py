@@ -11,8 +11,7 @@ from dataclasses import dataclass
 from fastapi import Request
 from pydantic import SecretStr
 
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
-from openhands.integrations.service_types import UserGitInfo
+from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
 from openhands.server import shared
 from openhands.server.settings import Settings
 from openhands.server.user_auth.user_auth import UserAuth
