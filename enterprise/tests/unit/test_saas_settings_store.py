@@ -536,6 +536,99 @@ async def test_store_does_not_update_org_mcp_config(
 
 
 @pytest.mark.asyncio
+async def test_store_skips_ensure_api_key_for_non_openhands_model_without_base_url(
+    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """When saving a non-OpenHands model with no base URL (basic view BYOR),
+    _ensure_api_key should NOT be called, preserving the user's custom API key.
+
+    This is the primary bug fix: users selecting e.g. OpenAI in basic view and
+    providing their own API key should not have it overwritten by a proxy key.
+    """
+    # Arrange
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = str(fixture['admin_user_id'])
+    store = SaasSettingsStore(admin_user_id, mock_config)
+
+    custom_api_key = 'sk-user-custom-openai-key'
+    settings = DataSettings(
+        llm_model='openai/gpt-5.2',
+        llm_base_url=None,  # Basic view: no base URL provided
+        llm_api_key=SecretStr(custom_api_key),
+    )
+
+    # Act
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch.object(store, '_ensure_api_key', new_callable=AsyncMock) as mock_ensure,
+    ):
+        await store.store(settings)
+
+    # Assert
+    mock_ensure.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_store_calls_ensure_api_key_for_openhands_model_without_base_url(
+    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """When saving an OpenHands model with no base URL, _ensure_api_key should
+    still be called to generate/verify the proxy key.
+
+    This guards the edge case of switching from a non-OpenHands provider to
+    OpenHands in basic view, where a stale BYOR key needs to be replaced.
+    """
+    # Arrange
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = str(fixture['admin_user_id'])
+    store = SaasSettingsStore(admin_user_id, mock_config)
+
+    settings = DataSettings(
+        llm_model='openhands/claude-opus-4-5-20251101',
+        llm_base_url=None,
+        llm_api_key=SecretStr('sk-stale-openai-key'),
+    )
+
+    # Act
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch.object(store, '_ensure_api_key', new_callable=AsyncMock) as mock_ensure,
+    ):
+        await store.store(settings)
+
+    # Assert
+    mock_ensure.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_store_calls_ensure_api_key_when_base_url_is_litellm_proxy(
+    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """When the base URL is explicitly the LiteLLM proxy, _ensure_api_key should
+    be called regardless of the model type."""
+    # Arrange
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = str(fixture['admin_user_id'])
+    store = SaasSettingsStore(admin_user_id, mock_config)
+
+    settings = DataSettings(
+        llm_model='openai/gpt-5.2',
+        llm_base_url=LITE_LLM_API_URL,
+        llm_api_key=SecretStr('sk-some-key'),
+    )
+
+    # Act
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch.object(store, '_ensure_api_key', new_callable=AsyncMock) as mock_ensure,
+    ):
+        await store.store(settings)
+
+    # Assert
+    mock_ensure.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_load_returns_user_specific_mcp_config(
     session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
 ):
