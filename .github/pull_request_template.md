@@ -6,6 +6,10 @@
 
 ---
 
+## Why
+
+<!-- Describe problem, motivation, etc.-->
+
 ## Summary
 
 <!-- 1-3 bullets describing what changed. -->
@@ -13,10 +17,6 @@
 
 ## Issue Number
 <!-- Required if there is a relevant issue to this PR. -->
-
-## Why
-
-<!-- Describe problem, motivation, etc.-->
 
 ## How to Test
 
