@@ -244,19 +244,6 @@ class SaasUserAuth(UserAuth):
             )
         return mcp_api_key
 
-    async def get_user_git_info(self) -> UserGitInfo | None:
-        provider_tokens = await self.get_provider_tokens()
-        if not provider_tokens:
-            return None
-
-        access_token = await self.get_access_token()
-        client = ProviderHandler(
-            provider_tokens=provider_tokens, external_auth_token=access_token
-        )
-
-        user: UserGitInfo = await client.get_user()
-        return user
-
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         logger.debug('saas_user_auth_get_instance')
