@@ -12,8 +12,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from openhands.app_server.config import depends_user_context, get_global_config
 from openhands.app_server.git.git_models import (
-    InstallationPage,
     BranchPage,
+    InstallationPage,
     RepositoryPage,
     SortOrder,
     SuggestedTaskPage,

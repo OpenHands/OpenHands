@@ -14,8 +14,8 @@ from openhands.app_server.git.git_models import SortOrder
 from openhands.app_server.git.git_router import (
     router,
     search_branches,
-    search_suggested_tasks,
     search_repositories,
+    search_suggested_tasks,
     search_user_installations,
 )
 from openhands.app_server.user.user_context import UserContext
@@ -135,18 +135,25 @@ class TestInstallationsEndpoint:
     def test_returns_401_when_no_provider_tokens(self, test_client):
         """Test that 401 is returned when no provider tokens."""
         with patch(
-            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens', AsyncMock(return_value=None)
+            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
+            AsyncMock(return_value=None),
         ):
-            response = test_client.get('/git/installations', params={'provider': 'github'})
+            response = test_client.get(
+                '/git/installations', params={'provider': 'github'}
+            )
             assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_returns_422_for_unsupported_provider(self, test_client):
         """Test that 422 is returned for unsupported provider."""
         with patch(
-            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens', AsyncMock(return_value={'github': 'token'})
+            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
+            AsyncMock(return_value={'github': 'token'}),
         ):
-            response = test_client.get('/git/installations', params={'provider': 'invalid'})
+            response = test_client.get(
+                '/git/installations', params={'provider': 'invalid'}
+            )
             assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
 
 @pytest.mark.asyncio
 class TestUserInstallationsSearch:
@@ -559,7 +566,8 @@ class TestSearchRepositories:
     def test_returns_401_when_no_provider_tokens(self, test_client, monkeypatch):
         """Test that 401 is returned when no provider tokens."""
         with patch(
-            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens', AsyncMock(return_value=None)
+            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
+            AsyncMock(return_value=None),
         ):
             response = test_client.get(
                 '/git/repositories/search',
@@ -647,11 +655,16 @@ class TestSearchBranches:
     def test_returns_401_when_no_provider_tokens(self, test_client):
         """Test that 401 is returned when no provider tokens."""
         with patch(
-            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens', AsyncMock(return_value=None)
+            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
+            AsyncMock(return_value=None),
         ):
             response = test_client.get(
                 '/git/branches/search',
-                params={'provider': 'github', 'repository': 'user/repo', 'query': 'main'},
+                params={
+                    'provider': 'github',
+                    'repository': 'user/repo',
+                    'query': 'main',
+                },
             )
             assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -795,7 +808,8 @@ class TestGetSuggestedTasks:
     def test_returns_401_when_no_provider_tokens(self, test_client):
         """Test that 401 is returned when no provider tokens."""
         with patch(
-            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens', AsyncMock(return_value=None)
+            'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
+            AsyncMock(return_value=None),
         ):
             response = test_client.get('/git/suggested-tasks/search')
             assert response.status_code == status.HTTP_401_UNAUTHORIZED
