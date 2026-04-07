@@ -6,7 +6,9 @@ import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
-import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
+import { V1AppConversation, V1ConversationExecutionStatus } from "#/api/conversation-service/v1-conversation-service.types";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
+import type { Provider } from "#/types/settings";
 
 // Mock the unified stop conversation hook
 const mockStopConversationMutate = vi.fn();
@@ -15,6 +17,29 @@ vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
     mutate: mockStopConversationMutate,
   }),
 }));
+
+
+// Helper to create complete V1AppConversation mock data
+const createMockConversation = (overrides: Partial<V1AppConversation> = {}): V1AppConversation => ({
+  id: "test-id",
+  title: "Test Conversation",
+  selected_repository: null,
+  git_provider: null,
+  selected_branch: null,
+  updated_at: "2021-10-01T12:00:00Z",
+  created_at: "2021-10-01T12:00:00Z",
+  sandbox_status: "STOPPED" as V1SandboxStatus,
+  execution_status: "FINISHED" as V1ConversationExecutionStatus,
+  conversation_url: null,
+  created_by_user_id: "user1",
+  metrics: null,
+  llm_model: null,
+  sandbox_id: "sandbox1",
+  trigger: null,
+  pr_number: [],
+  session_api_key: null,
+  ...overrides,
+});
 
 // Mock toast handlers to prevent unhandled rejection errors
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -50,63 +75,9 @@ describe("ConversationPanel", () => {
   });
 
   const mockConversations: V1AppConversation[] = [
-    {
-      id: "1",
-      title: "Conversation 1",
-      selected_repository: null,
-      git_provider: null,
-      selected_branch: null,
-      updated_at: "2021-10-01T12:00:00Z",
-      created_at: "2021-10-01T12:00:00Z",
-      sandbox_status: "STOPPED",
-      execution_status: "FINISHED",
-      conversation_url: null,
-      created_by_user_id: "user1",
-      metrics: null,
-      llm_model: null,
-      sandbox_id: "sandbox1",
-      trigger: null,
-      pr_number: [],
-      session_api_key: null,
-    },
-    {
-      id: "2",
-      title: "Conversation 2",
-      selected_repository: null,
-      git_provider: null,
-      selected_branch: null,
-      updated_at: "2021-10-02T12:00:00Z",
-      created_at: "2021-10-02T12:00:00Z",
-      sandbox_status: "STOPPED",
-      execution_status: "FINISHED",
-      conversation_url: null,
-      created_by_user_id: "user1",
-      metrics: null,
-      llm_model: null,
-      sandbox_id: "sandbox2",
-      trigger: null,
-      pr_number: [],
-      session_api_key: null,
-    },
-    {
-      id: "3",
-      title: "Conversation 3",
-      selected_repository: null,
-      git_provider: null,
-      selected_branch: null,
-      updated_at: "2021-10-03T12:00:00Z",
-      created_at: "2021-10-03T12:00:00Z",
-      sandbox_status: "STOPPED",
-      execution_status: "FINISHED",
-      conversation_url: null,
-      created_by_user_id: "user1",
-      metrics: null,
-      llm_model: null,
-      sandbox_id: "sandbox3",
-      trigger: null,
-      pr_number: [],
-      session_api_key: null,
-    },
+    createMockConversation({ id: "1", title: "Conversation 1", updated_at: "2021-10-01T12:00:00Z", sandbox_id: "sandbox1" }),
+    createMockConversation({ id: "2", title: "Conversation 2", updated_at: "2021-10-02T12:00:00Z", sandbox_id: "sandbox2" }),
+    createMockConversation({ id: "3", title: "Conversation 3", updated_at: "2021-10-03T12:00:00Z", sandbox_id: "sandbox3" }),
   ];
 
   beforeEach(() => {
@@ -196,45 +167,9 @@ describe("ConversationPanel", () => {
   it("should delete a conversation", async () => {
     const user = userEvent.setup();
     const mockData: V1AppConversation[] = [
-      {
-        id: "1",
-        title: "Conversation 1",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-01T12:00:00Z",
-        created_at: "2021-10-01T12:00:00Z",
-        sandbox_status: "STOPPED" as const,
-        
-        
-        
-      },
-      {
-        id: "2",
-        title: "Conversation 2",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-02T12:00:00Z",
-        created_at: "2021-10-02T12:00:00Z",
-        sandbox_status: "STOPPED" as const,
-        
-        
-        
-      },
-      {
-        id: "3",
-        title: "Conversation 3",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-03T12:00:00Z",
-        created_at: "2021-10-03T12:00:00Z",
-        sandbox_status: "STOPPED" as const,
-        
-        
-        
-      },
+      createMockConversation({ id: "1", title: "Conversation 1", updated_at: "2021-10-01T12:00:00Z", sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Conversation 2", updated_at: "2021-10-02T12:00:00Z", sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Conversation 3", updated_at: "2021-10-03T12:00:00Z", sandbox_id: "sandbox3" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -348,45 +283,9 @@ describe("ConversationPanel", () => {
 
     // Create mock data with a RUNNING conversation
     const mockRunningConversations: V1AppConversation[] = [
-      {
-        id: "1",
-        title: "Running Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-01T12:00:00Z",
-        created_at: "2021-10-01T12:00:00Z",
-        status: "RUNNING" as const,
-        
-        
-        
-      },
-      {
-        id: "2",
-        title: "Starting Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-02T12:00:00Z",
-        created_at: "2021-10-02T12:00:00Z",
-        status: "STARTING" as const,
-        
-        
-        
-      },
-      {
-        id: "3",
-        title: "Stopped Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-03T12:00:00Z",
-        created_at: "2021-10-03T12:00:00Z",
-        sandbox_status: "STOPPED" as const,
-        
-        
-        
-      },
+      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: "RUNNING", sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox3" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -431,32 +330,9 @@ describe("ConversationPanel", () => {
     const user = userEvent.setup();
 
     const mockData: V1AppConversation[] = [
-      {
-        id: "1",
-        title: "Running Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-01T12:00:00Z",
-        created_at: "2021-10-01T12:00:00Z",
-        status: "RUNNING" as const,
-        
-        
-        
-      },
-      {
-        id: "2",
-        title: "Starting Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-02T12:00:00Z",
-        created_at: "2021-10-02T12:00:00Z",
-        status: "STARTING" as const,
-        
-        
-        
-      },
+      createMockConversation({ id: "1", title: "Conversation 1", updated_at: "2021-10-01T12:00:00Z", sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Conversation 2", updated_at: "2021-10-02T12:00:00Z", sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Conversation 3", updated_at: "2021-10-03T12:00:00Z", sandbox_id: "sandbox3" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -502,45 +378,8 @@ describe("ConversationPanel", () => {
     const user = userEvent.setup();
 
     const mockMixedStatusConversations: V1AppConversation[] = [
-      {
-        id: "1",
-        title: "Running Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-01T12:00:00Z",
-        created_at: "2021-10-01T12:00:00Z",
-        status: "RUNNING" as const,
-        
-        
-        
-      },
-      {
-        id: "2",
-        title: "Starting Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-02T12:00:00Z",
-        created_at: "2021-10-02T12:00:00Z",
-        status: "STARTING" as const,
-        
-        
-        
-      },
-      {
-        id: "3",
-        title: "Stopped Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-03T12:00:00Z",
-        created_at: "2021-10-03T12:00:00Z",
-        sandbox_status: "STOPPED" as const,
-        
-        
-        
-      },
+      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Paused Conversation", sandbox_status: "PAUSED", execution_status: "PAUSED", sandbox_id: "sandbox2" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -937,19 +776,9 @@ describe("ConversationPanel", () => {
 
     // Create mock data with a RUNNING conversation
     const mockRunningConversations: V1AppConversation[] = [
-      {
-        id: "1",
-        title: "Running Conversation",
-        selected_repository: null,
-        git_provider: null,
-        selected_branch: null,
-        updated_at: "2021-10-01T12:00:00Z",
-        created_at: "2021-10-01T12:00:00Z",
-        status: "RUNNING" as const,
-        
-        
-        
-      },
+      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: "RUNNING", sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox3" }),
     ];
 
     vi.spyOn(V1ConversationService, "searchConversations").mockResolvedValue({
