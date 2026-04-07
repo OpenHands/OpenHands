@@ -53,7 +53,21 @@ const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
 
   const summaryTitle = getSummaryTitleForActionEvent(event);
   if (summaryTitle) {
-    return summaryTitle;
+    // Skip SDK-generated raw JSON default summaries for ThinkAction and
+    // FileEditorAction; fall through to the translation-key path so the UI
+    // shows "Thinking" / "Editing …" instead of a raw JSON dump.
+    // The SDK produces defaults in the form "{tool_name}: {json_args}" when
+    // the LLM provides no human-readable summary. (See: #13690)
+    const actionType = event.action.kind;
+    const isRawJsonSummary =
+      (actionType === "ThinkAction" &&
+        String(summaryTitle).startsWith("think: {")) ||
+      ((actionType === "FileEditorAction" ||
+        actionType === "StrReplaceEditorAction") &&
+        String(summaryTitle).startsWith("file_editor: {"));
+    if (!isRawJsonSummary) {
+      return summaryTitle;
+    }
   }
 
   const actionType = event.action.kind;
