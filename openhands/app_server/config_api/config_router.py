@@ -14,9 +14,9 @@ from openhands.app_server.utils.paging_utils import (
     paginate_results,
 )
 from openhands.utils.llm import (
+    _SDK_VERIFIED_MODELS,
     OPENHANDS_MODELS,
     _derive_verified_models,
-    _SDK_VERIFIED_MODELS,
 )
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
@@ -35,7 +35,7 @@ def _get_all_models_with_verified() -> list[LLMModel]:
         List of LLMModel objects with verified status.
     """
     # Get verified models (without provider prefix)
-    verified_models = set(_derive_verified_models(OPENHANDS_MODELS))
+    set(_derive_verified_models(OPENHANDS_MODELS))
 
     all_models: list[LLMModel] = []
     for provider, models in _SDK_VERIFIED_MODELS.items():
@@ -77,9 +77,7 @@ async def search_models(
 
     if query is not None:
         query_lower = query.lower()
-        filtered_models = [
-            m for m in filtered_models if query_lower in m.name.lower()
-        ]
+        filtered_models = [m for m in filtered_models if query_lower in m.name.lower()]
 
     if verified__eq is not None:
         filtered_models = [m for m in filtered_models if m.verified == verified__eq]

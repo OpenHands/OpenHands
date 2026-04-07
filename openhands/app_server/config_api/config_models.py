@@ -12,7 +12,9 @@ class LLMModel(BaseModel):
     """
 
     name: str = Field(description='The model name')
-    verified: bool = Field(default=False, description='Whether the model is verified by OpenHands')
+    verified: bool = Field(
+        default=False, description='Whether the model is verified by OpenHands'
+    )
 
 
 class LLMModelPage(BaseModel):

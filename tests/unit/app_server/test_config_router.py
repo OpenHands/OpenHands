@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
-from openhands.app_server.config_api.config_models import LLMModel, LLMModelPage
+from openhands.app_server.config_api.config_models import LLMModel
 from openhands.app_server.config_api.config_router import (
     _get_all_models_with_verified,
     router,
@@ -142,7 +142,9 @@ class TestSearchModelsEndpoint:
 
     def test_filters_by_verified_eq_true(self, test_client):
         """Test that verified__eq=true filters to verified models only."""
-        response = test_client.get('/config/models/search', params={'verified__eq': True})
+        response = test_client.get(
+            '/config/models/search', params={'verified__eq': True}
+        )
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -153,7 +155,9 @@ class TestSearchModelsEndpoint:
         """Test that verified__eq=false filters to non-verified models only."""
         # Since all models from _SDK_VERIFIED_MODELS are verified,
         # we expect empty results when filtering for non-verified
-        response = test_client.get('/config/models/search', params={'verified__eq': False})
+        response = test_client.get(
+            '/config/models/search', params={'verified__eq': False}
+        )
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -163,8 +167,7 @@ class TestSearchModelsEndpoint:
     def test_combines_query_and_verified_filters(self, test_client):
         """Test that query and verified filters are combined."""
         response = test_client.get(
-            '/config/models/search',
-            params={'query': 'gpt', 'verified__eq': True}
+            '/config/models/search', params={'query': 'gpt', 'verified__eq': True}
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -183,7 +186,7 @@ class TestSearchModelsEndpoint:
         if data1.get('next_page_id'):
             response2 = test_client.get(
                 '/config/models/search',
-                params={'limit': 1, 'page_id': data1['next_page_id']}
+                params={'limit': 1, 'page_id': data1['next_page_id']},
             )
             data2 = response2.json()
 
