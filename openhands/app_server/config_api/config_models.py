@@ -11,7 +11,10 @@ class LLMModel(BaseModel):
         verified: Whether the model is verified by OpenHands.
     """
 
-    name: str = Field(description='The model name')
+    provider: str | None = Field(
+        default=None, description='The name of the provider for this model'
+    )
+    name: str = Field(description='The name of this model')
     verified: bool = Field(
         default=False, description='Whether the model is verified by OpenHands'
     )

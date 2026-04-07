@@ -15,6 +15,8 @@ from openhands.app_server.config_api.config_router import (
 )
 from openhands.app_server.utils.dependencies import check_session_api_key
 from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
+from openhands.server.shared import config
+from openhands.utils.llm import get_supported_llm_models
 
 
 class TestLLMModel:
@@ -22,16 +24,18 @@ class TestLLMModel:
 
     def test_create_model_with_name_and_verified(self):
         """Test that LLMModel can be created with name and verified."""
-        model = LLMModel(name='openai/gpt-4', verified=True)
+        model = LLMModel(provider='openai', name='gpt-4', verified=True)
 
-        assert model.name == 'openai/gpt-4'
+        assert model.provider == 'openai'
+        assert model.name == 'gpt-4'
         assert model.verified is True
 
     def test_create_model_with_default_verified_false(self):
         """Test that verified defaults to False."""
-        model = LLMModel(name='openai/gpt-4')
+        model = LLMModel(provider='openai', name='gpt-4')
 
-        assert model.name == 'openai/gpt-4'
+        assert model.provider == 'openai'
+        assert model.name == 'gpt-4'
         assert model.verified is False
 
 
@@ -41,9 +45,9 @@ class TestPagination:
     def test_returns_first_page_when_no_page_id(self):
         """Test that first page is returned when no page_id is provided."""
         models = [
-            LLMModel(name='openai/gpt-4', verified=True),
-            LLMModel(name='anthropic/claude-3', verified=True),
-            LLMModel(name='openai/gpt-3.5', verified=False),
+            LLMModel(provider='openai', name='gpt-4', verified=True),
+            LLMModel(provider='anthropic', name='claude-3', verified=True),
+            LLMModel(provider='openai', name='gpt-3.5', verified=False),
         ]
 
         result, next_page_id = paginate_results(models, None, 2)
@@ -54,16 +58,17 @@ class TestPagination:
     def test_returns_second_page_when_page_id_provided(self):
         """Test that correct page is returned when page_id is provided."""
         models = [
-            LLMModel(name='openai/gpt-4', verified=True),
-            LLMModel(name='anthropic/claude-3', verified=True),
-            LLMModel(name='openai/gpt-3.5', verified=False),
+            LLMModel(provider='openai', name='gpt-4', verified=True),
+            LLMModel(provider='anthropic', name='claude-3', verified=True),
+            LLMModel(provider='openai', name='gpt-3.5', verified=False),
         ]
         encoded_page_id = encode_page_id(2)
 
         result, next_page_id = paginate_results(models, encoded_page_id, 2)
 
         assert len(result) == 1
-        assert result[0].name == 'openai/gpt-3.5'
+        assert result[0].provider == 'openai'
+        assert result[0].name == 'gpt-3.5'
         assert next_page_id is None
 
 
@@ -72,23 +77,17 @@ class TestGetAllModelsWithVerified:
 
     def test_returns_list_of_llm_models(self):
         """Test that function returns list of LLMModel objects."""
-        models = _get_all_models_with_verified()
+        models = _get_all_models_with_verified(get_supported_llm_models(config))
 
         assert isinstance(models, list)
         assert all(isinstance(m, LLMModel) for m in models)
 
-    def test_all_models_have_provider_prefix(self):
-        """Test that all models have provider prefix."""
-        models = _get_all_models_with_verified()
+    def test_models_verified_mix(self):
+        """Test that models contains a mix of verified and unverified."""
+        models = _get_all_models_with_verified(get_supported_llm_models(config))
 
-        for model in models:
-            assert '/' in model.name
-
-    def test_all_models_are_verified(self):
-        """Test that all models are verified (since they're from VERIFIED_MODELS)."""
-        models = _get_all_models_with_verified()
-
-        assert all(m.verified is True for m in models)
+        assert any(m.verified is True for m in models)
+        assert any(m.verified is False for m in models)
 
 
 @pytest.fixture
