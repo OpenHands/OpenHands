@@ -243,3 +243,105 @@ class TestLinearV0OrgRouting:
         assert call_args[0][2] is None
         saved_metadata = mock_store.save_metadata.call_args[0][0]
         assert saved_metadata.git_provider is None
+
+    @pytest.mark.asyncio
+    @patch(
+        'integrations.linear.linear_view.resolve_org_for_repo', new_callable=AsyncMock
+    )
+    @patch('integrations.linear.linear_view.ProviderHandler')
+    @patch(
+        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
+    )
+    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
+    @patch(
+        'integrations.linear.linear_view.integration_store',
+    )
+    async def test_verify_repo_provider_failure_falls_back_to_personal_workspace(
+        self,
+        mock_integration_store,
+        mock_start_convo,
+        mock_get_resolver_instance,
+        mock_provider_handler_cls,
+        mock_resolve_org,
+        linear_view,
+    ):
+        """When verify_repo_provider fails, should fall back to personal workspace."""
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.verify_repo_provider = AsyncMock(
+            side_effect=Exception('Repository not found')
+        )
+        mock_provider_handler_cls.return_value = mock_handler
+
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_integration_store.create_conversation = AsyncMock()
+
+        mock_jinja = MagicMock()
+
+        # Act
+        with patch.object(
+            linear_view,
+            '_get_instructions',
+            new_callable=AsyncMock,
+            return_value=('instructions', 'user_msg'),
+        ):
+            await linear_view.create_or_update_conversation(mock_jinja)
+
+        # Assert - org resolution should be skipped, conversation created in personal workspace
+        mock_resolve_org.assert_not_called()
+        call_args = mock_get_resolver_instance.call_args
+        assert call_args[0][2] is None
+
+    @pytest.mark.asyncio
+    @patch(
+        'integrations.linear.linear_view.resolve_org_for_repo', new_callable=AsyncMock
+    )
+    @patch('integrations.linear.linear_view.ProviderHandler')
+    @patch(
+        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
+    )
+    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
+    @patch(
+        'integrations.linear.linear_view.integration_store',
+    )
+    async def test_resolve_org_failure_falls_back_to_personal_workspace(
+        self,
+        mock_integration_store,
+        mock_start_convo,
+        mock_get_resolver_instance,
+        mock_provider_handler_cls,
+        mock_resolve_org,
+        linear_view,
+    ):
+        """When resolve_org_for_repo fails, should fall back to personal workspace."""
+        # Arrange
+        mock_repo = MagicMock()
+        mock_repo.git_provider = ProviderType.GITHUB
+        mock_handler = MagicMock()
+        mock_handler.verify_repo_provider = AsyncMock(return_value=mock_repo)
+        mock_provider_handler_cls.return_value = mock_handler
+
+        mock_resolve_org.side_effect = Exception('Database connection failed')
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_integration_store.create_conversation = AsyncMock()
+
+        mock_jinja = MagicMock()
+
+        # Act
+        with patch.object(
+            linear_view,
+            '_get_instructions',
+            new_callable=AsyncMock,
+            return_value=('instructions', 'user_msg'),
+        ):
+            await linear_view.create_or_update_conversation(mock_jinja)
+
+        # Assert - conversation should be created with resolver_org_id=None
+        call_args = mock_get_resolver_instance.call_args
+        assert call_args[0][2] is None
