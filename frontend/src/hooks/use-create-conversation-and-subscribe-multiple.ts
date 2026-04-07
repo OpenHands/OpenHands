@@ -7,7 +7,8 @@ import { useUserProviders } from "./use-user-providers";
 import { useConversationSubscriptions } from "#/context/conversation-subscriptions-provider";
 import { Provider } from "#/types/settings";
 import { CreateMicroagent, Conversation } from "#/api/open-hands.types";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 import { renderConversationStartingToast } from "#/components/features/chat/microagent/microagent-status-toast";
 
 interface ConversationData {
@@ -45,10 +46,13 @@ export const useCreateConversationAndSubscribeMultiple = () => {
   const conversationQueries = useQueries({
     queries: conversationIdsToWatch.map((conversationId) => ({
       queryKey: ["conversation-ready-poll", conversationId],
-      queryFn: () => ConversationService.getConversation(conversationId),
+      queryFn: async () => {
+        const result = await V1ConversationService.batchGetAppConversations([conversationId]);
+        return result[0] || null;
+      },
       enabled: !!conversationId,
-      refetchInterval: (query: Query<Conversation | null, AxiosError>) => {
-        const status = query.state.data?.status;
+      refetchInterval: (query: Query<V1AppConversation | null, AxiosError>) => {
+        const status = query.state.data?.execution_status;
         if (status === "STARTING") {
           return 3000; // Poll every 3 seconds while STARTING
         }
@@ -58,8 +62,8 @@ export const useCreateConversationAndSubscribeMultiple = () => {
     })),
   });
 
-  // Extract stable values from queries for dependency array
-  const queryStatuses = conversationQueries.map((query) => query.data?.status);
+  // Extract stable values from dependency array
+  const queryStatuses = conversationQueries.map((query) => query.data?.execution_status);
   const queryDataExists = conversationQueries.map((query) => !!query.data);
 
   // Effect to handle subscription when conversations are ready

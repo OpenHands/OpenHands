@@ -247,16 +247,6 @@ class ConversationService {
     return data;
   }
 
-  static async getConversation(
-    conversationId: string,
-  ): Promise<Conversation | null> {
-    const { data } = await openHands.get<Conversation | null>(
-      `/api/conversations/${conversationId}`,
-    );
-
-    return data;
-  }
-
   static async startConversation(
     conversationId: string,
     providers?: Provider[],
