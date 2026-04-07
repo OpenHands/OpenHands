@@ -1,7 +1,7 @@
-import { Spinner } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { Typography } from "#/ui/typography";
+import { Spinner } from "#/components/shared/spinner";
 
 export function LoadingMicroagentBody() {
   const { t } = useTranslation();
