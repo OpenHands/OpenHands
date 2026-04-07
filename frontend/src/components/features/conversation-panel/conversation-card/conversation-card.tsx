@@ -5,11 +5,10 @@ import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 import { RepositorySelection } from "#/api/open-hands.types";
-import { ConversationStatus } from "#/types/conversation-status";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
-import { ConversationStatusBadges } from "./conversation-status-badges";
+import { SandboxStatusBadges } from "./sandbox-status-badges";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
@@ -23,7 +22,6 @@ interface ConversationCardProps {
   lastUpdatedAt: string; // ISO 8601
   createdAt?: string; // ISO 8601
   sandboxStatus?: V1SandboxStatus;
-  conversationStatus?: ConversationStatus; // For V0 conversations, or derived from sandboxStatus
   conversationId?: string; // Optional conversation ID for VS Code URL
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
@@ -44,7 +42,6 @@ export function ConversationCard({
   createdAt,
   conversationId,
   sandboxStatus,
-  conversationStatus,
   contextMenuOpen = false,
   onContextMenuToggle,
   llmModel,
@@ -139,9 +136,7 @@ export function ConversationCard({
             onTitleSave={onTitleSave}
             sandboxStatus={sandboxStatus}
           />
-          {conversationStatus && (
-            <ConversationStatusBadges conversationStatus={conversationStatus} />
-          )}
+          <SandboxStatusBadges sandboxStatus={sandboxStatus} />
         </div>
 
         {hasContextMenu && (
