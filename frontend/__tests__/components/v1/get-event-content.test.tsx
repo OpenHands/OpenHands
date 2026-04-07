@@ -58,6 +58,31 @@ const terminalObservationEvent: ObservationEvent = {
   },
 };
 
+const makeThinkActionEvent = (summary?: string): ActionEvent => ({
+  id: "think-1",
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  thought: [],
+  thinking_blocks: [],
+  action: {
+    kind: "ThinkAction",
+    thought: "The user is asking about Helm chart appVersion...",
+  },
+  tool_name: "think",
+  tool_call_id: "think-call-1",
+  tool_call: {
+    id: "think-call-1",
+    type: "function",
+    function: {
+      name: "think",
+      arguments: '{"thought":"The user is asking about Helm chart appVersion..."}',
+    },
+  },
+  llm_response_id: "response-think",
+  security_risk: SecurityRisk.LOW,
+  summary,
+});
+
 describe("getEventContent", () => {
   it("uses the action summary as the full action title", () => {
     const { title } = getEventContent(terminalActionEvent);
@@ -144,5 +169,71 @@ describe("getEventContent", () => {
 
     expect(screen.getByText("Check repository status")).toBeInTheDocument();
     expect(screen.queryByText("$ git status")).not.toBeInTheDocument();
+  });
+
+  it("falls back to ACTION_MESSAGE$THINK when ThinkAction has a raw JSON default summary", () => {
+    // The SDK generates "think: {json_args}" when the LLM provides no summary
+    const rawJsonSummary = 'think: {"thought": "The user is asking about Helm chart appVersion..."}';
+    const event = makeThinkActionEvent(rawJsonSummary);
+    const { title } = getEventContent(event);
+
+    render(<span>{title}</span>);
+
+    // Should use the translation key, not the raw JSON string
+    expect(screen.getByText("ACTION_MESSAGE$THINK")).toBeInTheDocument();
+    expect(screen.queryByText(rawJsonSummary)).not.toBeInTheDocument();
+  });
+
+  it("uses a human-readable ThinkAction summary when the LLM provides one", () => {
+    const goodSummary = "Planning the implementation approach";
+    const event = makeThinkActionEvent(goodSummary);
+    const { title } = getEventContent(event);
+
+    render(<span>{title}</span>);
+
+    expect(screen.getByText(goodSummary)).toBeInTheDocument();
+    expect(screen.queryByText("ACTION_MESSAGE$THINK")).not.toBeInTheDocument();
+  });
+
+  it("falls back to ACTION_MESSAGE$READ for FileEditorAction with a raw JSON default summary", () => {
+    const rawJsonSummary = 'file_editor: {"command":"view","path":"/workspace/README.md"}';
+    const fileViewAction: ActionEvent = {
+      id: "file-read-1",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "FileEditorAction",
+        command: "view",
+        path: "/workspace/README.md",
+        file_text: null,
+        old_str: null,
+        new_str: null,
+        insert_line: null,
+        view_range: null,
+      },
+      tool_name: "file_editor",
+      tool_call_id: "file-read-call-1",
+      tool_call: {
+        id: "file-read-call-1",
+        type: "function",
+        function: {
+          name: "file_editor",
+          arguments: '{"command":"view","path":"/workspace/README.md"}',
+        },
+      },
+      llm_response_id: "response-file-read",
+      security_risk: SecurityRisk.LOW,
+      summary: rawJsonSummary,
+    };
+
+    const { title } = getEventContent(fileViewAction);
+
+    render(<span>{title}</span>);
+
+    // Raw JSON summary should be ignored; fall through to translation key
+    expect(screen.getByText("ACTION_MESSAGE$READ")).toBeInTheDocument();
+    expect(screen.queryByText(rawJsonSummary)).not.toBeInTheDocument();
   });
 });
