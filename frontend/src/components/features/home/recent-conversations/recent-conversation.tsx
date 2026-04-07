@@ -6,45 +6,13 @@ import { GitProviderIcon } from "#/components/shared/git-provider-icon";
 import { Provider } from "#/types/settings";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { I18nKey } from "#/i18n/declaration";
-import { ConversationStatusIndicator } from "./conversation-status-indicator";
+import { SandboxStatusIndicator } from "./sandbox-status-indicator";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
-import { ConversationStatus } from "#/types/conversation-status";
 
 interface RecentConversationProps {
   conversation: V1AppConversation;
 }
-
-// Map V1 status to V0 ConversationStatus for the indicator
-const mapV1StatusToConversationStatus = (conversation: V1AppConversation): ConversationStatus => {
-  const sandboxStatus = conversation.sandbox_status;
-  const executionStatus = conversation.execution_status;
-
-  if (sandboxStatus === "STOPPED") {
-    return "STOPPED";
-  }
-  if (sandboxStatus === "PAUSED") {
-    return "PAUSED";
-  }
-  if (sandboxStatus === "MISSING") {
-    return "STOPPED";
-  }
-  switch (executionStatus) {
-    case "RUNNING":
-      return "RUNNING";
-    case "AWAITING_USER_INPUT":
-    case "AWAITING_USER_CONFIRMATION":
-      return "AWAITING_USER_INPUT";
-    case "FINISHED":
-      return "FINISHED";
-    case "PAUSED":
-      return "PAUSED";
-    case "STOPPED":
-      return "STOPPED";
-    default:
-      return "STOPPED";
-  }
-};
 
 export function RecentConversation({ conversation }: RecentConversationProps) {
   const { t } = useTranslation();
@@ -58,7 +26,7 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
       className="flex flex-col gap-1 p-[14px] cursor-pointer w-full rounded-lg hover:bg-[#5C5D62] transition-all duration-300 text-left"
     >
       <div className="flex items-center gap-2 pl-1">
-        <ConversationStatusIndicator conversationStatus={mapV1StatusToConversationStatus(conversation)} />
+        <SandboxStatusIndicator sandboxStatus={conversation.sandbox_status} />
         <span className="text-xs text-white leading-6 font-normal">
           {conversation.title}
         </span>
