@@ -9,7 +9,6 @@ import { InteractiveChip } from "#/ui/interactive-chip";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
-import { ENABLE_ORG_CLAIMS_RESOLVER_ROUTING } from "#/utils/feature-flags";
 import { DeleteOrgConfirmationModal } from "#/components/features/org/delete-org-confirmation-modal";
 import { GitConversationRouting } from "#/components/features/org/git-conversation-routing";
 import { ChangeOrgNameModal } from "#/components/features/org/change-org-name-modal";
@@ -117,9 +116,7 @@ function ManageOrg() {
         </button>
       )}
 
-      {canManageOrgClaims && ENABLE_ORG_CLAIMS_RESOLVER_ROUTING() && (
-        <GitConversationRouting />
-      )}
+      {canManageOrgClaims && <GitConversationRouting />}
     </div>
   );
 }
