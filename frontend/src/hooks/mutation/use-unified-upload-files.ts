@@ -20,7 +20,7 @@ interface UnifiedUploadFilesVariables {
  */
 export const useUnifiedUploadFiles = () => {
   const { data: conversation } = useActiveConversation();
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true // All conversations are now V1;
 
   // Initialize both hooks
   const v0Upload = useUploadFiles();
@@ -37,7 +37,7 @@ export const useUnifiedUploadFiles = () => {
       if (isV1Conversation) {
         // V1: Use conversation URL and session API key
         return v1Upload.mutateAsync({
-          conversationUrl: conversation?.url,
+          conversationUrl: conversation?.conversation_url,
           sessionApiKey: conversation?.session_api_key,
           files,
         });

@@ -52,8 +52,8 @@ export const useCreateConversationAndSubscribeMultiple = () => {
       },
       enabled: !!conversationId,
       refetchInterval: (query: Query<V1AppConversation | null, AxiosError>) => {
-        const status = query.state.data?.execution_status;
-        if (status === "STARTING") {
+        const sandboxStatus = query.state.data?.sandbox_status;
+        if (sandboxStatus === "STARTING") {
           return 3000; // Poll every 3 seconds while STARTING
         }
         return false; // Stop polling once not STARTING
@@ -63,7 +63,7 @@ export const useCreateConversationAndSubscribeMultiple = () => {
   });
 
   // Extract stable values from dependency array
-  const queryStatuses = conversationQueries.map((query) => query.data?.execution_status);
+  const queryStatuses = conversationQueries.map((query) => query.data?.sandbox_status);
   const queryDataExists = conversationQueries.map((query) => !!query.data);
 
   // Effect to handle subscription when conversations are ready
@@ -71,43 +71,45 @@ export const useCreateConversationAndSubscribeMultiple = () => {
     conversationQueries.forEach((query, index) => {
       const conversationId = conversationIdsToWatch[index];
       const conversationData = createdConversations[conversationId];
+      const conversation = query.data;
 
-      if (!query.data || !conversationData) return;
+      // Check if conversation is ready (sandbox is running)
+      if (conversation?.sandbox_status === "RUNNING" && conversationData && !conversationData.isSubscribed) {
+        const { execution_status, conversation_url: url, session_api_key: sessionApiKey } = conversation;
 
-      const { status, url, session_api_key: sessionApiKey } = query.data;
+        let { baseUrl } = conversationData;
+        if (url && !url.startsWith("/")) {
+          baseUrl = new URL(url).host;
+        }
 
-      let { baseUrl } = conversationData;
-      if (url && !url.startsWith("/")) {
-        baseUrl = new URL(url).host;
-      }
+        if (execution_status === "RUNNING") {
+          // Conversation is ready - subscribe to WebSocket
+          subscribeToConversation({
+            conversationId,
+            sessionApiKey,
+            providersSet: providers as Provider[],
+            baseUrl,
+            socketPath: conversationData.socketPath,
+            onEvent: conversationData.onEventCallback,
+          });
 
-      if (status === "RUNNING") {
-        // Conversation is ready - subscribe to WebSocket
-        subscribeToConversation({
-          conversationId,
-          sessionApiKey,
-          providersSet: providers as Provider[],
-          baseUrl,
-          socketPath: conversationData.socketPath,
-          onEvent: conversationData.onEventCallback,
-        });
+          // Remove from created conversations (cleanup)
+          setCreatedConversations((prev) => {
+            const newCreated = { ...prev };
+            delete newCreated[conversationId];
+            return newCreated;
+          });
+        } else if (execution_status === "STOPPED") {
+          // Dismiss the starting toast
+          toast.dismiss(`starting-${conversationId}`);
 
-        // Remove from created conversations (cleanup)
-        setCreatedConversations((prev) => {
-          const newCreated = { ...prev };
-          delete newCreated[conversationId];
-          return newCreated;
-        });
-      } else if (status === "STOPPED") {
-        // Dismiss the starting toast
-        toast.dismiss(`starting-${conversationId}`);
-
-        // Remove from created conversations (cleanup)
-        setCreatedConversations((prev) => {
-          const newCreated = { ...prev };
-          delete newCreated[conversationId];
-          return newCreated;
-        });
+          // Remove from created conversations (cleanup)
+          setCreatedConversations((prev) => {
+            const newCreated = { ...prev };
+            delete newCreated[conversationId];
+            return newCreated;
+          });
+        }
       }
     });
   }, [

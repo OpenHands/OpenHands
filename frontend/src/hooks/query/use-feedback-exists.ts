@@ -12,7 +12,7 @@ export const useFeedbackExists = (eventId?: number) => {
   const { data: config } = useConfig();
   const { data: conversation } = useActiveConversation();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true // All conversations are now V1;
 
   return useQuery<FeedbackData>({
     queryKey: [...getFeedbackQueryKey(conversationId), eventId],

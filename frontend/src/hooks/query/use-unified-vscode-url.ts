@@ -25,7 +25,7 @@ export const useUnifiedVSCodeUrl = () => {
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true // All conversations are now V1;
 
   // Fetch V1 app conversation to get sandbox_id
   const appConversationsQuery = useBatchAppConversations(

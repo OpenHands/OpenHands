@@ -38,7 +38,7 @@ export const useSlashCommand = (
   const [filterText, setFilterText] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true; // All conversations are now V1
 
   // Build slash command items from built-in commands + skills:
   // - Built-in commands (like /new) are included for V1 conversations

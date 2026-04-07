@@ -22,8 +22,8 @@ export const useUnifiedGetGitChanges = () => {
   const previousDataRef = React.useRef<GitChange[] | null>(null);
   const runtimeIsReady = useRuntimeIsReady();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
-  const conversationUrl = conversation?.url;
+  const isV1Conversation = true; // All conversations are now V1
+  const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
   const selectedRepository = conversation?.selected_repository;
 

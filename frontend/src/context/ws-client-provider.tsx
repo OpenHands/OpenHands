@@ -346,6 +346,7 @@ export function WsClientProvider({
       !conversation ||
       conversation.status !== "RUNNING" ||
       !conversation.runtime_status ||
+      conversation.runtime_status === "STOPPED" ||
       conversation.runtime_status === "STATUS$STOPPED"
     ) {
       if (sioRef.current) {

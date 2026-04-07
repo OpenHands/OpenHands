@@ -166,7 +166,7 @@ export function ConversationName() {
 
         {titleMode !== "edit" && (
           <ConversationVersionBadge
-            version={conversation.conversation_version}
+            version="V1"
           />
         )}
 

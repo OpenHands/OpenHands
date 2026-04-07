@@ -164,7 +164,7 @@ export function useConversationNameContextMenu({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    if (conversationId && conversation?.conversation_version === "V1") {
+    if (conversationId && true // All conversations are now V1) {
       await downloadConversation(conversationId);
     }
     onContextMenuToggle?.(false);
@@ -272,7 +272,7 @@ export function useConversationNameContextMenu({
     shouldShowDownloadConversation: Boolean(
       conversationId &&
       showOptions &&
-      conversation?.conversation_version === "V1",
+      true // All conversations are now V1,
     ),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
@@ -280,7 +280,7 @@ export function useConversationNameContextMenu({
     shouldShowHooks: Boolean(
       showOptions &&
       conversationId &&
-      conversation?.conversation_version === "V1" &&
+      true // All conversations are now V1 &&
       conversationStatus === "RUNNING",
     ),
   };

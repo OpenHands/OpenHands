@@ -130,7 +130,7 @@ export function ChatInterface() {
 
   const optimisticUserMessage = getOptimisticUserMessage();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true // All conversations are now V1;
 
   // Show V1 messages immediately if events exist in store (e.g., remount),
   // or once loading completes. This replaces the old transition-observation

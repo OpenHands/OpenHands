@@ -18,7 +18,7 @@ export function useUnifiedWebSocketStatus(): V0_WebSocketStatus {
   // Check if this is a V1 conversation:
   const isV1Conversation =
     conversationId.startsWith("task-") ||
-    conversation?.conversation_version === "V1";
+    true // All conversations are now V1;
 
   const webSocketStatus = useMemo(() => {
     if (isV1Conversation) {

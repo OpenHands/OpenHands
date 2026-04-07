@@ -21,7 +21,7 @@ export const useUnifiedActiveHost = () => {
   const { data: conversationConfig, isLoading: isLoadingConfig } =
     useConversationConfig();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true // All conversations are now V1;
   const sandboxId = conversationConfig?.runtime_id;
 
   // Fetch sandbox data for V1 conversations

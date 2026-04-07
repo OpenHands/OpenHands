@@ -122,7 +122,7 @@ export function LikertScale({
 
   // TODO: Hide LikertScale for V1 conversations
   // This is a temporary measure and may be re-enabled in the future
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true // All conversations are now V1;
 
   // Don't render anything for V1 conversations
   if (isV1Conversation) {

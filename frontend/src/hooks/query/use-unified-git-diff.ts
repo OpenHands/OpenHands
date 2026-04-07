@@ -24,8 +24,8 @@ export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
   const { data: conversation } = useActiveConversation();
   const { data: settings } = useSettings();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
-  const conversationUrl = conversation?.url;
+  const isV1Conversation = true; // All conversations are now V1
+  const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
   const selectedRepository = conversation?.selected_repository;
 

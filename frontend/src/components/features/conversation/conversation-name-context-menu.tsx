@@ -70,7 +70,7 @@ export function ConversationNameContextMenu({
   const { data: config } = useConfig();
 
   // This is a temporary measure and may be re-enabled in the future
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true // All conversations are now V1;
 
   // Check if we should show the public sharing option
   // Only show for V1 conversations in SAAS mode

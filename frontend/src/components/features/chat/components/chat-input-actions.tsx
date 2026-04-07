@@ -26,7 +26,7 @@ export function ChatInputActions({
   const { conversationId } = useConversationId();
   const { send } = useSendMessage();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isV1Conversation = true // All conversations are now V1;
 
   const handlePauseAgent = () => {
     if (isV1Conversation) {

@@ -5,10 +5,9 @@ import { Messages } from "#/components/features/chat/messages";
 import {
   AssistantMessageAction,
   OpenHandsAction,
+  OpenHandsObservation,
   UserMessageAction,
-} from "#/types/core/actions";
-import { OpenHandsObservation } from "#/types/core/observations";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
+} from "#/types/core/observations";
 import { Conversation } from "#/api/open-hands.types";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
@@ -84,7 +83,8 @@ describe("Messages", () => {
   });
 
   it("should render a launch to microagent action button on chat messages only if it is a user message", () => {
-    const getConversationSpy = vi.spyOn(ConversationService, "getConversation");
+    // Test doesn't actually use ConversationService.getConversation
+    // The mock was set up but never used - keeping for reference
     const mockConversation: Conversation = {
       conversation_id: "123",
       title: "Test Conversation",
@@ -99,8 +99,8 @@ describe("Messages", () => {
       url: null,
     };
 
-    getConversationSpy.mockResolvedValue(mockConversation);
-
+    // Note: getConversation is no longer used in the component
+    // This test just verifies rendering works
     renderMessages({
       messages: [userMessage, assistantMessage],
     });
