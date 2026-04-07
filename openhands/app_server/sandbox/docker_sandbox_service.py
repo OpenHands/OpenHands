@@ -499,6 +499,12 @@ class DockerSandboxService(SandboxService):
             'sandbox_spec_id': sandbox_spec.id,
         }
 
+        # Add sysbox labels for restart detection
+        if self.sysbox_enabled:
+            labels['openhands.sysbox_enabled'] = 'true'
+        if self.sysbox_start_dockerd:
+            labels['openhands.sysbox_start_dockerd'] = 'true'
+
         # Prepare volumes
         volumes = {
             mount.host_path: {
@@ -585,6 +591,15 @@ class DockerSandboxService(SandboxService):
                 container.unpause()
             elif container.status == 'exited':
                 container.start()
+
+                # Restart Docker daemon if this is a sysbox container with dockerd enabled.
+                # When a container is stopped, all processes are killed. On restart, only
+                # the main entrypoint runs - dockerd was started via exec_run during initial
+                # creation, so it needs to be restarted here.
+                # Note: This is not needed after unpause since processes are preserved.
+                labels = container.labels or {}
+                if labels.get('openhands.sysbox_start_dockerd') == 'true':
+                    await self._start_dockerd_in_container(container, sandbox_id)
 
             return True
         except (NotFound, APIError):
