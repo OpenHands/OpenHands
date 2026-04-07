@@ -48,7 +48,7 @@ export function SandboxStatusIndicator({
     }
   }, [sandboxStatus]);
 
-  const statusLabel = t(getSandboxStatusLabel(sandboxStatus) as any);
+  const statusLabel = t(getSandboxStatusLabel(sandboxStatus));
 
   return (
     <StyledTooltip
@@ -58,10 +58,7 @@ export function SandboxStatusIndicator({
       tooltipClassName="bg-[#1a1a1a] text-white text-xs shadow-lg"
     >
       <div
-        className={cn(
-          "w-1.5 h-1.5 rounded-full",
-          sandboxStatusBackgroundColor,
-        )}
+        className={cn("w-1.5 h-1.5 rounded-full", sandboxStatusBackgroundColor)}
       />
     </StyledTooltip>
   );
