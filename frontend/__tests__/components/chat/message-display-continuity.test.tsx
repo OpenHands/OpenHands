@@ -131,7 +131,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
     beforeEach(() => {
       // Set up V1 conversation
       vi.mocked(useActiveConversation).mockReturnValue({
-        data: { conversation_version: "V1" },
+        data: {},
       } as ReturnType<typeof useActiveConversation>);
     });
 

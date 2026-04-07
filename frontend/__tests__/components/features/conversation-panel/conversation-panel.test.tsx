@@ -38,6 +38,7 @@ const createMockConversation = (overrides: Partial<V1AppConversation> = {}): V1A
   trigger: null,
   pr_number: [],
   session_api_key: null,
+  sub_conversation_ids: [],
   ...overrides,
 });
 

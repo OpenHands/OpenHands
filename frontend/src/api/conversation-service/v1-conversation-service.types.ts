@@ -126,6 +126,7 @@ export interface V1AppConversation {
   conversation_url: string | null;
   session_api_key: string | null;
   public?: boolean;
+  sub_conversation_ids: string[];
 }
 
 export interface V1AppConversationPage {
