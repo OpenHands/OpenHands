@@ -19,14 +19,12 @@ export function SkillContent({ content }: SkillContentProps) {
         size="default"
         font="mono"
         lineHeight="relaxed"
-        background="dark"
-        textColor="light"
         padding="medium"
         borderRadius="medium"
         shadow="inner"
         maxHeight="small"
         overflow="auto"
-        className="mt-2"
+        className="mt-2 bg-base text-content border border-tertiary"
       >
         {content || t(I18nKey.SKILLS_MODAL$NO_CONTENT)}
       </Pre>

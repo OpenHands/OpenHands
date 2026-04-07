@@ -12,6 +12,7 @@ from fastapi import status
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
+    AppConversationStartTaskPage,
 )
 from openhands.app_server.app_conversation.app_conversation_router import (
     get_conversation_skills,
@@ -28,6 +29,15 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk.context.skills import KeywordTrigger, Skill, TaskTrigger
+
+
+def _make_start_task_service_mock():
+    """Create a mock start task service that returns no start tasks."""
+    mock = MagicMock()
+    mock.search_app_conversation_start_tasks = AsyncMock(
+        return_value=AppConversationStartTaskPage(items=[], next_page_id=None)
+    )
+    return mock
 
 
 def _make_service_mock(
@@ -133,6 +143,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            app_conversation_start_task_service=_make_start_task_service_mock(),
         )
 
         # Assert
@@ -187,6 +198,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            app_conversation_start_task_service=_make_start_task_service_mock(),
         )
 
         # Assert
@@ -233,6 +245,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            app_conversation_start_task_service=_make_start_task_service_mock(),
         )
 
         # Assert
@@ -287,6 +300,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            app_conversation_start_task_service=_make_start_task_service_mock(),
         )
 
         # Assert
@@ -359,6 +373,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            app_conversation_start_task_service=_make_start_task_service_mock(),
         )
 
         # Assert
@@ -426,6 +441,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            app_conversation_start_task_service=_make_start_task_service_mock(),
         )
 
         # Assert
@@ -491,6 +507,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            app_conversation_start_task_service=_make_start_task_service_mock(),
         )
 
         # Assert

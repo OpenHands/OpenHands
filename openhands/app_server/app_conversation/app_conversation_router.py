@@ -58,6 +58,7 @@ from openhands.app_server.config import (
 )
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
+    WORKER_1,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
@@ -437,6 +438,9 @@ async def get_conversation_skills(
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
     sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    app_conversation_start_task_service: AppConversationStartTaskService = (
+        app_conversation_start_task_service_dependency
+    ),
 ) -> JSONResponse:
     """Get all skills associated with the conversation.
 
@@ -515,6 +519,28 @@ async def get_conversation_skills(
                 sandbox_spec.working_dir,
                 agent_server_url,
             )
+
+            # Include API-provided skills from the start request
+            try:
+                start_tasks_page = await app_conversation_start_task_service.search_app_conversation_start_tasks(
+                    conversation_id__eq=conversation_id,
+                    limit=1,
+                )
+                if start_tasks_page.items:
+                    start_task = start_tasks_page.items[0]
+                    if start_task.request.skills:
+                        api_skills = (
+                            app_conversation_service._convert_skill_inputs_to_skills(
+                                start_task.request.skills
+                            )
+                        )
+                        all_skills = app_conversation_service._merge_skills(
+                            [all_skills, api_skills]
+                        )
+            except Exception as e:
+                logger.warning(
+                    f'Failed to load API skills for conversation {conversation_id}: {e}'
+                )
 
         logger.info(
             f'Loaded {len(all_skills)} skills for conversation {conversation_id}: '
@@ -599,6 +625,111 @@ async def export_conversation(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f'Failed to download trajectory: {str(e)}'
+        )
+
+
+@router.get('/{conversation_id}/mcps')
+async def get_conversation_mcps(
+    conversation_id: UUID,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    app_conversation_start_task_service: AppConversationStartTaskService = (
+        app_conversation_start_task_service_dependency
+    ),
+) -> JSONResponse:
+    """Get MCP servers configured for the conversation.
+
+    Returns MCP server configurations from:
+    - API-provided MCP servers (from the start request)
+    - Environment MCP servers (if environment_url was provided)
+
+    Returns:
+        JSONResponse: A JSON response containing the list of MCP servers.
+    """
+    try:
+        conversation = await app_conversation_service.get_app_conversation(
+            conversation_id
+        )
+        if not conversation:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': f'Conversation {conversation_id} not found'},
+            )
+
+        mcp_servers: dict[str, dict] = {}
+
+        # Get API-provided MCP servers from the start task
+        try:
+            start_tasks_page = await app_conversation_start_task_service.search_app_conversation_start_tasks(
+                conversation_id__eq=conversation_id,
+                limit=1,
+            )
+            if start_tasks_page.items:
+                start_task = start_tasks_page.items[0]
+                request = start_task.request
+
+                # Add environment MCP servers
+                if request.environment_url:
+                    env_url = request.environment_url.rstrip('/')
+                    mcp_servers['environment-blueprint'] = {
+                        'url': f'{env_url}/service/swat/mcp/blueprint/dev',
+                        'transport': 'http',
+                        'source': 'environment',
+                    }
+                    mcp_servers['environment-knowledge'] = {
+                        'url': f'{env_url}/service/swat/mcp/knowledge/dev',
+                        'transport': 'http',
+                        'source': 'environment',
+                    }
+
+                # Add API-provided MCP servers
+                if request.mcp_servers:
+                    # Resolve {environment_url} placeholders
+                    sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
+                    env_url_replacement = request.environment_url
+                    if not env_url_replacement and sandbox and sandbox.exposed_urls:
+                        worker_eu = next(
+                            (eu for eu in sandbox.exposed_urls if eu.name == WORKER_1),
+                            None,
+                        )
+                        if worker_eu:
+                            env_url_replacement = worker_eu.url
+                    resolved = {}
+                    for sname, sconfig in request.mcp_servers.items():
+                        rc = {}
+                        for k, v in sconfig.items():
+                            if isinstance(v, str) and env_url_replacement:
+                                v = v.replace(
+                                    '{environment_url}',
+                                    env_url_replacement.rstrip('/'),
+                                )
+                            rc[k] = v
+                        resolved[sname] = rc
+
+                    for name, config in resolved.items():
+                        mcp_servers[name] = {**config, 'source': 'api'}
+        except Exception as e:
+            logger.warning(
+                f'Failed to load MCP config from start task for '
+                f'conversation {conversation_id}: {e}'
+            )
+
+        servers_list = [
+            {'name': name, **config} for name, config in mcp_servers.items()
+        ]
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={'mcp_servers': servers_list},
+        )
+
+    except Exception as e:
+        logger.error(f'Error getting MCPs for conversation {conversation_id}: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': f'Error getting MCPs: {str(e)}'},
         )
 
 

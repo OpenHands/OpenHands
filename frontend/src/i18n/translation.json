@@ -16031,6 +16031,12 @@
     "tr": "Kullanılabilir yetenekler",
     "uk": "Доступні навички"
   },
+  "MCPS_MODAL$TITLE": {
+    "en": "Available MCP Servers"
+  },
+  "CONVERSATION$SHOW_MCPS": {
+    "en": "Show MCP Servers"
+  },
   "CONVERSATION$SHARE_PUBLICLY": {
     "en": "Public Share",
     "ja": "公開で共有",

@@ -20,6 +20,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
     AppConversationStartTask,
     AppConversationStartTaskStatus,
+    SkillInput,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
@@ -35,6 +36,7 @@ from openhands.sdk import Agent
 from openhands.sdk.context.agent_context import AgentContext
 from openhands.sdk.context.condenser import LLMSummarizingCondenser
 from openhands.sdk.context.skills import Skill
+from openhands.sdk.context.skills.trigger import KeywordTrigger, TaskTrigger
 from openhands.sdk.llm import LLM
 from openhands.sdk.security.analyzer import SecurityAnalyzerBase
 from openhands.sdk.security.confirmation_policy import (
@@ -194,6 +196,36 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 skills_by_name[skill.name] = skill
 
         return list(skills_by_name.values())
+
+    def _convert_skill_inputs_to_skills(
+        self, skill_inputs: list[SkillInput]
+    ) -> list[Skill]:
+        """Convert API-provided SkillInput objects to SDK Skill objects.
+
+        Args:
+            skill_inputs: List of SkillInput from the start request
+
+        Returns:
+            List of Skill objects ready to merge into agent context
+        """
+        skills = []
+        for si in skill_inputs:
+            trigger = None
+            if si.triggers:
+                if any(t.startswith('/') for t in si.triggers):
+                    trigger = TaskTrigger(triggers=si.triggers)
+                else:
+                    trigger = KeywordTrigger(keywords=si.triggers)
+            skills.append(
+                Skill(
+                    name=si.name,
+                    content=si.content,
+                    trigger=trigger,
+                    source='api',
+                    description=si.description,
+                )
+            )
+        return skills
 
     async def _load_skills_and_update_agent(
         self,

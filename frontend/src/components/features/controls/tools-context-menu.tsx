@@ -27,6 +27,7 @@ const contextMenuListItemClassName = cn(
 interface ToolsContextMenuProps {
   onClose: () => void;
   onShowSkills: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onShowMcps: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools: (event: React.MouseEvent<HTMLButtonElement>) => void;
   shouldShowAgentTools?: boolean;
 }
@@ -34,6 +35,7 @@ interface ToolsContextMenuProps {
 export function ToolsContextMenu({
   onClose,
   onShowSkills,
+  onShowMcps,
   onShowAgentTools,
   shouldShowAgentTools = true,
 }: ToolsContextMenuProps) {
@@ -137,6 +139,18 @@ export function ToolsContextMenu({
         <ToolsContextMenuIconText
           icon={<RobotIcon width={16} height={16} />}
           text={t(I18nKey.CONVERSATION$SHOW_SKILLS)}
+          className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
+        />
+      </ContextMenuListItem>
+
+      <ContextMenuListItem
+        testId="show-mcps-button"
+        onClick={onShowMcps}
+        className={contextMenuListItemClassName}
+      >
+        <ToolsContextMenuIconText
+          icon={<ToolsIcon width={16} height={16} />}
+          text={t(I18nKey.CONVERSATION$SHOW_MCPS)}
           className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
         />
       </ContextMenuListItem>

@@ -12,6 +12,8 @@ import type {
   V1AppConversationStartTaskPage,
   V1AppConversation,
   GetSkillsResponse,
+  GetMcpsResponse,
+  SkillInput,
 } from "./v1-conversation-service.types";
 
 class V1ConversationService {
@@ -63,6 +65,8 @@ class V1ConversationService {
     trigger?: ConversationTrigger,
     parent_conversation_id?: string,
     agent_type?: "default" | "plan",
+    skills?: SkillInput[],
+    mcpServers?: Record<string, Record<string, unknown>>,
   ): Promise<V1AppConversationStartTask> {
     const body: V1AppConversationStartRequest = {
       selected_repository: selectedRepository,
@@ -72,6 +76,8 @@ class V1ConversationService {
       trigger,
       parent_conversation_id: parent_conversation_id || null,
       agent_type,
+      skills: skills || null,
+      mcp_servers: mcpServers || null,
     };
 
     // Add initial message if provided
@@ -393,6 +399,18 @@ class V1ConversationService {
   static async getSkills(conversationId: string): Promise<GetSkillsResponse> {
     const { data } = await openHands.get<GetSkillsResponse>(
       `/api/v1/app-conversations/${conversationId}/skills`,
+    );
+    return data;
+  }
+
+  /**
+   * Get all MCP servers associated with a V1 conversation
+   * @param conversationId The conversation ID
+   * @returns The MCP servers configured for the conversation
+   */
+  static async getMcps(conversationId: string): Promise<GetMcpsResponse> {
+    const { data } = await openHands.get<GetMcpsResponse>(
+      `/api/v1/app-conversations/${conversationId}/mcps`,
     );
     return data;
   }

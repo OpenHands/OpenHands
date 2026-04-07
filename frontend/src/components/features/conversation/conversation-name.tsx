@@ -10,6 +10,7 @@ import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
 import { SkillsModal } from "../conversation-panel/skills-modal";
+import { McpsModal } from "../conversation-panel/mcps-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { MetricsModal } from "./metrics-modal/metrics-modal";
@@ -34,6 +35,7 @@ export function ConversationName() {
     handleDisplayCost,
     handleShowAgentTools,
     handleShowSkills,
+    handleShowMcps,
     handleExportConversation,
     handleTogglePublic,
     handleCopyShareLink,
@@ -46,6 +48,8 @@ export function ConversationName() {
     setSystemModalVisible,
     skillsModalVisible,
     setSkillsModalVisible,
+    mcpsModalVisible,
+    setMcpsModalVisible,
     confirmDeleteModalVisible,
     setConfirmDeleteModalVisible,
     confirmStopModalVisible,
@@ -58,6 +62,7 @@ export function ConversationName() {
     shouldShowDisplayCost,
     shouldShowAgentTools,
     shouldShowSkills,
+    shouldShowMcps,
   } = useConversationNameContextMenu({
     conversationId,
     conversationStatus: conversation?.status,
@@ -180,6 +185,7 @@ export function ConversationName() {
                   shouldShowAgentTools ? handleShowAgentTools : undefined
                 }
                 onShowSkills={shouldShowSkills ? handleShowSkills : undefined}
+                onShowMcps={shouldShowMcps ? handleShowMcps : undefined}
                 onExportConversation={
                   shouldShowExport ? handleExportConversation : undefined
                 }
@@ -217,6 +223,11 @@ export function ConversationName() {
       {/* Skills Modal */}
       {skillsModalVisible && (
         <SkillsModal onClose={() => setSkillsModalVisible(false)} />
+      )}
+
+      {/* MCPs Modal */}
+      {mcpsModalVisible && (
+        <McpsModal onClose={() => setMcpsModalVisible(false)} />
       )}
 
       {/* Confirm Delete Modal */}

@@ -19,6 +19,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
+    SkillInput,
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
@@ -952,6 +953,89 @@ class TestLiveStatusAppConversationService:
                 result.agent == mock_updated_agent
             )  # Should still use the experiment-modified agent
             mock_logger.warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.ExperimentManagerImpl'
+    )
+    async def test_finalize_conversation_request_with_api_skills(
+        self, mock_experiment_manager
+    ):
+        """Test _finalize_conversation_request merges API-provided skills."""
+        # Arrange
+        mock_agent = Mock(spec=Agent)
+
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model = 'gpt-4'
+        mock_llm.usage_id = 'agent'
+
+        mock_updated_agent = Mock(spec=Agent)
+        mock_updated_agent.llm = mock_llm
+        mock_updated_agent.condenser = None
+        mock_experiment_manager.run_agent_variant_tests__v1.return_value = (
+            mock_updated_agent
+        )
+
+        workspace = LocalWorkspace(working_dir='/test')
+        secrets = {'test': StaticSecret(value='secret')}
+
+        # API-provided skills
+        skill_inputs = [
+            SkillInput(
+                name='custom-skill',
+                content='# Custom Skill\nDo something custom.',
+                type='knowledge',
+                triggers=['custom', 'special'],
+                description='A custom skill from API',
+            ),
+            SkillInput(
+                name='repo-skill',
+                content='# Repo Skill\nAlways active.',
+            ),
+        ]
+
+        # Mock _create_agent_with_skills to track calls
+        agent_with_api_skills = Mock(spec=Agent)
+        self.service._create_agent_with_skills = Mock(
+            return_value=agent_with_api_skills
+        )
+        self.service._convert_skill_inputs_to_skills = Mock(
+            wraps=self.service._convert_skill_inputs_to_skills
+        )
+
+        # Act
+        result = await self.service._finalize_conversation_request(
+            mock_agent,
+            None,
+            self.mock_user,
+            workspace,
+            None,
+            secrets,
+            self.mock_sandbox,
+            None,  # no remote workspace
+            None,
+            '/test/dir',
+            skill_inputs=skill_inputs,
+        )
+
+        # Assert
+        assert isinstance(result, StartConversationRequest)
+        assert result.agent == agent_with_api_skills
+
+        # Verify skill conversion was called
+        self.service._convert_skill_inputs_to_skills.assert_called_once_with(
+            skill_inputs
+        )
+
+        # Verify _create_agent_with_skills was called with converted skills
+        self.service._create_agent_with_skills.assert_called_once()
+        call_args = self.service._create_agent_with_skills.call_args
+        converted_skills = call_args[0][1]
+        assert len(converted_skills) == 2
+        assert converted_skills[0].name == 'custom-skill'
+        assert converted_skills[0].source == 'api'
+        assert converted_skills[1].name == 'repo-skill'
+        assert converted_skills[1].trigger is None
 
     @pytest.mark.asyncio
     async def test_build_start_conversation_request_for_user_integration(self):

@@ -53,6 +53,7 @@ export function useConversationNameContextMenu({
   const [metricsModalVisible, setMetricsModalVisible] = React.useState(false);
   const [systemModalVisible, setSystemModalVisible] = React.useState(false);
   const [skillsModalVisible, setSkillsModalVisible] = React.useState(false);
+  const [mcpsModalVisible, setMcpsModalVisible] = React.useState(false);
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
@@ -187,6 +188,12 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
+  const handleShowMcps = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setMcpsModalVisible(true);
+    onContextMenuToggle?.(false);
+  };
+
   const handleTogglePublic = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -233,6 +240,7 @@ export function useConversationNameContextMenu({
     handleDisplayCost,
     handleShowAgentTools,
     handleShowSkills,
+    handleShowMcps,
     handleTogglePublic,
     handleCopyShareLink,
     shareUrl,
@@ -246,6 +254,8 @@ export function useConversationNameContextMenu({
     setSystemModalVisible,
     skillsModalVisible,
     setSkillsModalVisible,
+    mcpsModalVisible,
+    setMcpsModalVisible,
     confirmDeleteModalVisible,
     setConfirmDeleteModalVisible,
     confirmStopModalVisible,
@@ -267,5 +277,6 @@ export function useConversationNameContextMenu({
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
     shouldShowSkills: Boolean(showOptions && conversationId),
+    shouldShowMcps: Boolean(showOptions && conversationId),
   };
 }

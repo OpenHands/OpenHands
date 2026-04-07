@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import type { SkillInput } from "#/api/conversation-service/v1-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
 import { Provider } from "#/types/settings";
 import { CreateMicroagent, Conversation } from "#/api/open-hands.types";
@@ -19,6 +20,8 @@ interface CreateConversationVariables {
   createMicroagent?: CreateMicroagent;
   parentConversationId?: string;
   agentType?: "default" | "plan";
+  skills?: SkillInput[];
+  mcpServers?: Record<string, Record<string, unknown>>;
 }
 
 // Response type that combines both V1 and legacy responses
@@ -49,6 +52,8 @@ export const useCreateConversation = () => {
         createMicroagent,
         parentConversationId,
         agentType,
+        skills,
+        mcpServers,
       } = variables;
 
       const useV1 = !!settings?.v1_enabled && !createMicroagent;
@@ -64,6 +69,8 @@ export const useCreateConversation = () => {
           undefined, // trigger - will be set by backend
           parentConversationId,
           agentType,
+          skills,
+          mcpServers,
         );
 
         // Return a special task ID that the frontend will recognize

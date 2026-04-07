@@ -93,6 +93,16 @@ class AppConversationPage(BaseModel):
     next_page_id: str | None = None
 
 
+class SkillInput(BaseModel):
+    """Inline skill provided via API when starting a conversation."""
+
+    name: str
+    content: str
+    type: Literal['repo', 'knowledge'] = 'repo'
+    triggers: list[str] = Field(default_factory=list)
+    description: str | None = None
+
+
 class AppConversationStartRequest(OpenHandsModel):
     """Start conversation request object.
 
@@ -123,6 +133,13 @@ class AppConversationStartRequest(OpenHandsModel):
     environment_conversation_id: str | None = None
 
     public: bool | None = None
+
+    # Inline skills to load into the conversation
+    skills: list[SkillInput] | None = None
+
+    # MCP server configurations to merge into the conversation
+    # Format: {'server-name': {'url': '...', 'transport': 'http'}, ...}
+    mcp_servers: dict[str, dict] | None = None
 
     @field_validator('environment_url')
     @classmethod
