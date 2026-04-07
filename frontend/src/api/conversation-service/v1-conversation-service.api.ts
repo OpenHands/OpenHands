@@ -492,6 +492,15 @@ class V1ConversationService {
 
     return data;
   }
+
+  /**
+   * Delete a V1 conversation
+   * @param conversationId The conversation ID to delete
+   * @returns void on success
+   */
+  static async deleteConversation(conversationId: string): Promise<void> {
+    await openHands.delete(`/api/v1/app-conversations/${conversationId}`);
+  }
 }
 
 export default V1ConversationService;

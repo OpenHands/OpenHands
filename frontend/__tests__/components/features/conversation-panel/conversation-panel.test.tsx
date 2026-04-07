@@ -186,7 +186,7 @@ describe("ConversationPanel", () => {
       "deleteConversation",
     );
     deleteConversationSpy.mockImplementation(async (id: string) => {
-      const index = mockData.findIndex((conv) => conv.conversation_id === id);
+      const index = mockData.findIndex((conv) => conv.id === id);
       if (index !== -1) {
         mockData.splice(index, 1);
       }
@@ -496,7 +496,7 @@ describe("ConversationPanel", () => {
       V1ConversationService,
       "updateConversationPublicFlag",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
 
     renderConversationPanel();
 
@@ -530,7 +530,7 @@ describe("ConversationPanel", () => {
       V1ConversationService,
       "updateConversationPublicFlag",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
 
     renderConversationPanel();
 
@@ -562,7 +562,7 @@ describe("ConversationPanel", () => {
       V1ConversationService,
       "updateConversationPublicFlag",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
 
     renderConversationPanel();
 
@@ -594,7 +594,7 @@ describe("ConversationPanel", () => {
       V1ConversationService,
       "updateConversationPublicFlag",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
 
     renderConversationPanel();
 
@@ -624,6 +624,7 @@ describe("ConversationPanel", () => {
       "updateConversationPublicFlag",
     );
     updateConversationPublicFlagSpy.mockRejectedValue(new Error("API Error"));
+      // Provide return type for mock
 
     renderConversationPanel();
 
@@ -689,7 +690,7 @@ describe("ConversationPanel", () => {
       V1ConversationService,
       "updateConversationPublicFlag",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
 
     renderConversationPanel();
 
@@ -718,7 +719,7 @@ describe("ConversationPanel", () => {
       V1ConversationService,
       "updateConversationPublicFlag",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
 
     renderConversationPanel();
 
