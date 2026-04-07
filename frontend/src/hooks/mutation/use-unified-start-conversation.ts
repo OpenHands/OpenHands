@@ -5,7 +5,7 @@ import {
   getConversationVersionFromQueryCache,
   resumeV1ConversationSandbox,
   startV0Conversation,
-  updateConversationStatusInCache,
+  updateConversationSandboxStatusInCache,
   invalidateConversationQueries,
 } from "./conversation-mutation-utils";
 
@@ -85,10 +85,10 @@ export const useUnifiedResumeConversationSandbox = () => {
       // Clear error messages when starting/resuming conversation
       removeErrorMessage();
 
-      updateConversationStatusInCache(
+      updateConversationSandboxStatusInCache(
         queryClient,
         variables.conversationId,
-        "RUNNING",
+        "STARTING",
       );
     },
   });

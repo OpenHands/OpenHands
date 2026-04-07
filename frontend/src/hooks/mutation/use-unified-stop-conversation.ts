@@ -8,7 +8,7 @@ import {
   getConversationVersionFromQueryCache,
   pauseV1ConversationSandbox,
   stopV0Conversation,
-  updateConversationStatusInCache,
+  updateConversationSandboxStatusInCache,
 } from "./conversation-mutation-utils";
 
 /**
@@ -81,10 +81,10 @@ export const useUnifiedPauseConversationSandbox = () => {
       }
       toast.success(t(I18nKey.TOAST$CONVERSATION_STOPPED), TOAST_OPTIONS);
 
-      updateConversationStatusInCache(
+      updateConversationSandboxStatusInCache(
         queryClient,
         variables.conversationId,
-        "STOPPED",
+        "PAUSED",
       );
 
       // Only redirect if we're stopping the conversation we're currently viewing
