@@ -22,5 +22,3 @@ export const ENABLE_PROJ_USER_JOURNEY = () =>
   loadFeatureFlag("PROJ_USER_JOURNEY");
 export const ENABLE_SANDBOX_GROUPING = () =>
   loadFeatureFlag("SANDBOX_GROUPING");
-export const ENABLE_ORG_CLAIMS_RESOLVER_ROUTING = () =>
-  loadFeatureFlag("ORG_CLAIMS_RESOLVER_ROUTING");
