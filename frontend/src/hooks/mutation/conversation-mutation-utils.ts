@@ -113,7 +113,13 @@ export const updateConversationSandboxStatusInCache = (
     ["user", "conversation", conversationId],
     (oldData) => {
       if (!oldData) return oldData;
-      return { ...oldData, sandbox_status };
+      let status = sandbox_status;
+      if (status === "PAUSED") {
+        status = "STOPPED";
+      } else if (status === "MISSING") {
+        status = "ARCHIVED";
+      }
+      return { ...oldData, status };
     },
   );
 
