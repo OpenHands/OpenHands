@@ -29,27 +29,33 @@ class TestLinearNewConversationView:
         assert 'Test Issue' in user_msg
         assert 'Fix this bug @openhands' in user_msg
 
-    @patch('integrations.linear.linear_view.create_new_conversation')
+    @patch(
+        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
+    )
+    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
     @patch('integrations.linear.linear_view.integration_store')
     async def test_create_or_update_conversation_success(
         self,
-        mock_store,
-        mock_create_conversation,
+        mock_integration_store,
+        mock_start_convo,
+        mock_get_resolver_instance,
         new_conversation_view,
         mock_jinja_env,
-        mock_agent_loop_info,
     ):
         """Test successful conversation creation"""
-        mock_create_conversation.return_value = mock_agent_loop_info
-        mock_store.create_conversation = AsyncMock()
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_integration_store.create_conversation = AsyncMock()
 
         result = await new_conversation_view.create_or_update_conversation(
             mock_jinja_env
         )
 
-        assert result == 'conv-123'
-        mock_create_conversation.assert_called_once()
-        mock_store.create_conversation.assert_called_once()
+        assert result is not None
+        mock_start_convo.assert_called_once()
+        mock_integration_store.create_conversation.assert_called_once()
 
     async def test_create_or_update_conversation_no_repo(
         self, new_conversation_view, mock_jinja_env
@@ -60,12 +66,23 @@ class TestLinearNewConversationView:
         with pytest.raises(StartingConvoException, match='No repository selected'):
             await new_conversation_view.create_or_update_conversation(mock_jinja_env)
 
-    @patch('integrations.linear.linear_view.create_new_conversation')
+    @patch(
+        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
+    )
+    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
     async def test_create_or_update_conversation_failure(
-        self, mock_create_conversation, new_conversation_view, mock_jinja_env
+        self,
+        mock_start_convo,
+        mock_get_resolver_instance,
+        new_conversation_view,
+        mock_jinja_env,
     ):
         """Test conversation creation failure"""
-        mock_create_conversation.side_effect = Exception('Creation failed')
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_start_convo.side_effect = Exception('Creation failed')
 
         with pytest.raises(
             StartingConvoException, match='Failed to create conversation'
@@ -300,43 +317,57 @@ class TestLinearFactory:
 class TestLinearViewEdgeCases:
     """Tests for edge cases and error scenarios"""
 
-    @patch('integrations.linear.linear_view.create_new_conversation')
+    @patch(
+        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
+    )
+    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
     @patch('integrations.linear.linear_view.integration_store')
     async def test_conversation_creation_with_no_user_secrets(
         self,
-        mock_store,
-        mock_create_conversation,
+        mock_integration_store,
+        mock_start_convo,
+        mock_get_resolver_instance,
         new_conversation_view,
         mock_jinja_env,
-        mock_agent_loop_info,
     ):
         """Test conversation creation when user has no secrets"""
-        new_conversation_view.saas_user_auth.get_secrets.return_value = None
-        mock_create_conversation.return_value = mock_agent_loop_info
-        mock_store.create_conversation = AsyncMock()
+        new_conversation_view.saas_user_auth.get_secrets = AsyncMock(return_value=None)
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_integration_store.create_conversation = AsyncMock()
 
         result = await new_conversation_view.create_or_update_conversation(
             mock_jinja_env
         )
 
-        assert result == 'conv-123'
-        # Verify create_new_conversation was called with custom_secrets=None
-        call_kwargs = mock_create_conversation.call_args[1]
+        assert result is not None
+        # Verify start_conversation was called with custom_secrets=None
+        call_kwargs = mock_start_convo.call_args[1]
         assert call_kwargs['custom_secrets'] is None
 
-    @patch('integrations.linear.linear_view.create_new_conversation')
+    @patch(
+        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
+        new_callable=AsyncMock,
+    )
+    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
     @patch('integrations.linear.linear_view.integration_store')
     async def test_conversation_creation_store_failure(
         self,
-        mock_store,
-        mock_create_conversation,
+        mock_integration_store,
+        mock_start_convo,
+        mock_get_resolver_instance,
         new_conversation_view,
         mock_jinja_env,
-        mock_agent_loop_info,
     ):
         """Test conversation creation when store creation fails"""
-        mock_create_conversation.return_value = mock_agent_loop_info
-        mock_store.create_conversation = AsyncMock(side_effect=Exception('Store error'))
+        mock_store = MagicMock()
+        mock_store.save_metadata = AsyncMock()
+        mock_get_resolver_instance.return_value = mock_store
+        mock_integration_store.create_conversation = AsyncMock(
+            side_effect=Exception('Store error')
+        )
 
         with pytest.raises(
             StartingConvoException, match='Failed to create conversation'

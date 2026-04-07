@@ -47,7 +47,7 @@ app = APIRouter(prefix='/api/user', dependencies=get_dependencies())
     '/installations',
     response_model=list[str],
     deprecated=True,
-    description='Deprecated: Use `/api/v1/git/installations` instead.',
+    description='Deprecated: Use `/api/v1/git/installations/search` instead.',
 )
 async def get_user_installations(
     provider: ProviderType,
@@ -83,7 +83,7 @@ async def get_user_installations(
     '/repositories',
     response_model=list[Repository],
     deprecated=True,
-    description='Deprecated: Use `/api/v1/git/repositories` instead.',
+    description='Deprecated: Use `/api/v1/git/repositories/search` instead.',
 )
 async def get_user_repositories(
     sort: str = 'pushed',
@@ -151,7 +151,12 @@ async def get_user(
     raise AuthenticationError('Git provider token required. (such as GitHub).')
 
 
-@app.get('/search/repositories', response_model=list[Repository])
+@app.get(
+    '/search/repositories',
+    response_model=list[Repository],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/repositories/search` instead.',
+)
 async def search_repositories(
     query: str,
     per_page: int = 5,
@@ -186,7 +191,12 @@ async def search_repositories(
     raise AuthenticationError('Git provider token required.')
 
 
-@app.get('/search/branches', response_model=list[Branch])
+@app.get(
+    '/search/branches',
+    response_model=list[Branch],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/branches/search` instead.',
+)
 async def search_branches(
     repository: str,
     query: str,
@@ -229,7 +239,12 @@ async def search_branches(
     )
 
 
-@app.get('/suggested-tasks', response_model=list[SuggestedTask])
+@app.get(
+    '/suggested-tasks',
+    response_model=list[SuggestedTask],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/suggested-tasks/search` instead.',
+)
 async def get_suggested_tasks(
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
@@ -258,7 +273,12 @@ async def get_suggested_tasks(
     raise AuthenticationError('No providers set.')
 
 
-@app.get('/repository/branches', response_model=PaginatedBranchesResponse)
+@app.get(
+    '/repository/branches',
+    response_model=PaginatedBranchesResponse,
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/branches/search` instead.',
+)
 async def get_repository_branches(
     repository: str,
     page: int = 1,
@@ -302,18 +322,6 @@ async def get_repository_branches(
         f'Returning 401 Unauthorized - Git provider token required for user_id: {user_id}'
     )
     raise AuthenticationError('Git provider token required. (such as GitHub).')
-
-
-def _extract_repo_name(repository_name: str) -> str:
-    """Extract the actual repository name from the full repository path.
-
-    Args:
-        repository_name: Repository name in format 'owner/repo' or 'domain/owner/repo'
-
-    Returns:
-        The actual repository name (last part after the last '/')
-    """
-    return repository_name.split('/')[-1]
 
 
 @app.get(
