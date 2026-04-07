@@ -501,6 +501,23 @@ class V1ConversationService {
   static async deleteConversation(conversationId: string): Promise<void> {
     await openHands.delete(`/api/v1/app-conversations/${conversationId}`);
   }
+
+  /**
+   * Update a V1 conversation's title
+   * @param conversationId The conversation ID
+   * @param title The new title
+   * @returns Updated conversation info
+   */
+  static async updateConversationTitle(
+    conversationId: string,
+    title: string,
+  ): Promise<V1AppConversation> {
+    const { data } = await openHands.patch<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      { title },
+    );
+    return data;
+  }
 }
 
 export default V1ConversationService;

@@ -330,9 +330,9 @@ describe("ConversationPanel", () => {
     const user = userEvent.setup();
 
     const mockData: V1AppConversation[] = [
-      createMockConversation({ id: "1", title: "Conversation 1", updated_at: "2021-10-01T12:00:00Z", sandbox_id: "sandbox1" }),
-      createMockConversation({ id: "2", title: "Conversation 2", updated_at: "2021-10-02T12:00:00Z", sandbox_id: "sandbox2" }),
-      createMockConversation({ id: "3", title: "Conversation 3", updated_at: "2021-10-03T12:00:00Z", sandbox_id: "sandbox3" }),
+      createMockConversation({ id: "1", title: "Conversation 1", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Conversation 2", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Conversation 3", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox3" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -379,7 +379,8 @@ describe("ConversationPanel", () => {
 
     const mockMixedStatusConversations: V1AppConversation[] = [
       createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
-      createMockConversation({ id: "2", title: "Paused Conversation", sandbox_status: "PAUSED", execution_status: "PAUSED", sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: "RUNNING", sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox3" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -491,12 +492,12 @@ describe("ConversationPanel", () => {
   it("should successfully update conversation title", async () => {
     const user = userEvent.setup();
 
-    // Mock the updateConversationPublicFlag API call
-    const updateConversationPublicFlagSpy = vi.spyOn(
+    // Mock the updateConversationTitle API call
+    const updateConversationTitleSpy = vi.spyOn(
       V1ConversationService,
-      "updateConversationPublicFlag",
+      "updateConversationTitle",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
+    updateConversationTitleSpy.mockResolvedValue(createMockConversation({ id: "1", title: "Updated Title" }));
 
     renderConversationPanel();
 
@@ -518,7 +519,7 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API call was made with correct parameters
-    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith("1", {
       title: "Updated Title",
     });
   });
@@ -526,11 +527,11 @@ describe("ConversationPanel", () => {
   it("should save title when Enter key is pressed", async () => {
     const user = userEvent.setup();
 
-    const updateConversationPublicFlagSpy = vi.spyOn(
+    const updateConversationTitleSpy = vi.spyOn(
       V1ConversationService,
-      "updateConversationPublicFlag",
+      "updateConversationTitle",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
+    updateConversationTitleSpy.mockResolvedValue(createMockConversation({ id: "1", title: "Updated Title" }));
 
     renderConversationPanel();
 
@@ -550,7 +551,7 @@ describe("ConversationPanel", () => {
     await user.keyboard("{Enter}");
 
     // Verify API call was made
-    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith("1", {
       title: "Title Updated via Enter",
     });
   });
@@ -558,11 +559,11 @@ describe("ConversationPanel", () => {
   it("should trim whitespace from title", async () => {
     const user = userEvent.setup();
 
-    const updateConversationPublicFlagSpy = vi.spyOn(
+    const updateConversationTitleSpy = vi.spyOn(
       V1ConversationService,
-      "updateConversationPublicFlag",
+      "updateConversationTitle",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
+    updateConversationTitleSpy.mockResolvedValue(createMockConversation({ id: "1", title: "Updated Title" }));
 
     renderConversationPanel();
 
@@ -582,7 +583,7 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API call was made with trimmed title
-    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith("1", {
       title: "Trimmed Title",
     });
   });
@@ -590,11 +591,11 @@ describe("ConversationPanel", () => {
   it("should revert to original title when empty", async () => {
     const user = userEvent.setup();
 
-    const updateConversationPublicFlagSpy = vi.spyOn(
+    const updateConversationTitleSpy = vi.spyOn(
       V1ConversationService,
-      "updateConversationPublicFlag",
+      "updateConversationTitle",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
+    updateConversationTitleSpy.mockResolvedValue(createMockConversation({ id: "1", title: "Updated Title" }));
 
     renderConversationPanel();
 
@@ -613,17 +614,17 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API was not called
-    expect(updateConversationPublicFlagSpy).not.toHaveBeenCalled();
+    expect(updateConversationTitleSpy).not.toHaveBeenCalled();
   });
 
   it("should handle API error when updating title", async () => {
     const user = userEvent.setup();
 
-    const updateConversationPublicFlagSpy = vi.spyOn(
+    const updateConversationTitleSpy = vi.spyOn(
       V1ConversationService,
-      "updateConversationPublicFlag",
+      "updateConversationTitle",
     );
-    updateConversationPublicFlagSpy.mockRejectedValue(new Error("API Error"));
+    updateConversationTitleSpy.mockRejectedValue(new Error("API Error"));
       // Provide return type for mock
 
     renderConversationPanel();
@@ -644,13 +645,13 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API call was made
-    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith("1", {
       title: "Failed Update",
     });
 
     // Wait for error handling
     await waitFor(() => {
-      expect(updateConversationPublicFlagSpy).toHaveBeenCalled();
+      expect(updateConversationTitleSpy).toHaveBeenCalled();
     });
   });
 
@@ -686,11 +687,11 @@ describe("ConversationPanel", () => {
   it("should not call API when title is unchanged", async () => {
     const user = userEvent.setup();
 
-    const updateConversationPublicFlagSpy = vi.spyOn(
+    const updateConversationTitleSpy = vi.spyOn(
       V1ConversationService,
-      "updateConversationPublicFlag",
+      "updateConversationTitle",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
+    updateConversationTitleSpy.mockResolvedValue(createMockConversation({ id: "1", title: "Updated Title" }));
 
     renderConversationPanel();
 
@@ -707,7 +708,7 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API was NOT called with the same title (since handleConversationTitleChange will always be called)
-    expect(updateConversationPublicFlagSpy).not.toHaveBeenCalledWith("1", {
+    expect(updateConversationTitleSpy).not.toHaveBeenCalledWith("1", {
       title: "Conversation 1",
     });
   });
@@ -715,11 +716,11 @@ describe("ConversationPanel", () => {
   it("should handle special characters in title", async () => {
     const user = userEvent.setup();
 
-    const updateConversationPublicFlagSpy = vi.spyOn(
+    const updateConversationTitleSpy = vi.spyOn(
       V1ConversationService,
-      "updateConversationPublicFlag",
+      "updateConversationTitle",
     );
-    updateConversationPublicFlagSpy.mockResolvedValue(createMockConversation({ id: "1", public: true }));
+    updateConversationTitleSpy.mockResolvedValue(createMockConversation({ id: "1", title: "Updated Title" }));
 
     renderConversationPanel();
 
@@ -739,7 +740,7 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API call was made with special characters
-    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith("1", {
       title: "Special @#$%^&*()_+ Characters",
     });
   });

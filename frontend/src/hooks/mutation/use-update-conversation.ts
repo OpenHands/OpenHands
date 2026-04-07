@@ -1,14 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 
 export const useUpdateConversation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (variables: { conversationId: string; newTitle: string }) =>
-      ConversationService.updateConversation(variables.conversationId, {
-        title: variables.newTitle,
-      }),
+      V1ConversationService.updateConversationTitle(
+        variables.conversationId,
+        variables.newTitle,
+      ),
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
       const previousConversations = queryClient.getQueryData([
@@ -18,9 +19,9 @@ export const useUpdateConversation = () => {
 
       queryClient.setQueryData(
         ["user", "conversations"],
-        (old: { conversation_id: string; title: string }[] | undefined) =>
+        (old: { id: string; title: string }[] | undefined) =>
           old?.map((conv) =>
-            conv.conversation_id === variables.conversationId
+            conv.id === variables.conversationId
               ? { ...conv, title: variables.newTitle }
               : conv,
           ),
