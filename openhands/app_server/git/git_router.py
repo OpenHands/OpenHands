@@ -173,7 +173,10 @@ async def search_repositories(
             # The get_repositories method does not support sorting in the same way as
             # the search method - those should be merged into a single paginated
             # method
-            raise ValueError('sort_order_not_supported')
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='sort_order is not supported when listing user repositories. It will be supported after API refactoring.',
+            )
         # TODO: The underlying API needs refactoring.
         repos = await client.get_repositories(
             sort='pushed',

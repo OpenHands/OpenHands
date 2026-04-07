@@ -156,8 +156,8 @@ class TestInstallationsEndpoint:
 
 
 @pytest.mark.asyncio
-class TestUserInstallationsSearch:
-    """Test suite for user_installations_search function."""
+class TestSearchUserInstallations:
+    """Test suite for search_user_installations function."""
 
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
@@ -217,7 +217,7 @@ class TestUserInstallationsSearch:
 
 @pytest.mark.asyncio
 class TestSearchRepositories:
-    """Test suite for repositories_search function (handles both user repos and search)."""
+    """Test suite for search_repositories function (handles both user repos and search)."""
 
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
@@ -700,7 +700,7 @@ class TestSearchRepositories:
 
 @pytest.mark.asyncio
 class TestSearchBranches:
-    """Test suite for branches_search function."""
+    """Test suite for search_branches function."""
 
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
@@ -792,8 +792,8 @@ class TestSearchBranches:
 
 
 @pytest.mark.asyncio
-class TestGetSuggestedTasks:
-    """Test suite for suggested_tasks_search function."""
+class TestSearchSuggestedTasks:
+    """Test suite for search_suggested_tasks function."""
 
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
