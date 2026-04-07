@@ -79,6 +79,16 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     threshold: 200, // Load more when 200px from bottom
   });
 
+  // Helper to derive ConversationStatus from V1 API fields
+  const getConversationStatus = (
+    sandboxStatus: string | undefined,
+    executionStatus: string | null,
+  ): "ARCHIVED" | "ERROR" | undefined => {
+    if (sandboxStatus === "MISSING") return "ARCHIVED";
+    if (executionStatus === "ERROR") return "ERROR";
+    return undefined;
+  };
+
   const handleDeleteProject = (conversationId: string, title: string) => {
     setConfirmDeleteModalVisible(true);
     setSelectedConversationId(conversationId);
@@ -205,6 +215,10 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
             lastUpdatedAt={conversation.updated_at}
             createdAt={conversation.created_at}
             sandboxStatus={conversation.sandbox_status}
+            conversationStatus={getConversationStatus(
+              conversation.sandbox_status,
+              conversation.execution_status,
+            )}
             conversationId={conversation.id}
             contextMenuOpen={openContextMenuId === conversation.id}
             onContextMenuToggle={(isOpen) =>
