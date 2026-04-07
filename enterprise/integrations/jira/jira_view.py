@@ -176,23 +176,33 @@ class JiraNewConversationView(JiraViewInterface):
         try:
             user_id = self.jira_user.keycloak_user_id
 
-            # Determine git provider from repository
+            # Resolve git provider from repository
             resolved_git_provider = None
             if provider_tokens:
-                provider_handler = ProviderHandler(provider_tokens)
-                repository = await provider_handler.verify_repo_provider(
-                    self.selected_repo
-                )
-                resolved_git_provider = repository.git_provider
+                try:
+                    provider_handler = ProviderHandler(provider_tokens)
+                    repository = await provider_handler.verify_repo_provider(
+                        self.selected_repo
+                    )
+                    resolved_git_provider = repository.git_provider
+                except Exception as e:
+                    logger.warning(
+                        f'[Jira] Failed to resolve git provider for {self.selected_repo}: {e}'
+                    )
 
             # Resolve target org based on claimed git organizations
             resolved_org_id = None
             if resolved_git_provider and self.selected_repo:
-                resolved_org_id = await resolve_org_for_repo(
-                    provider=resolved_git_provider.value,
-                    full_repo_name=self.selected_repo,
-                    keycloak_user_id=user_id,
-                )
+                try:
+                    resolved_org_id = await resolve_org_for_repo(
+                        provider=resolved_git_provider.value,
+                        full_repo_name=self.selected_repo,
+                        keycloak_user_id=user_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f'[Jira] Failed to resolve org for {self.selected_repo}: {e}'
+                    )
 
             # Create the conversation store with resolver org routing
             store = await SaasConversationStore.get_resolver_instance(

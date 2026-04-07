@@ -129,6 +129,8 @@ class TestJiraNewConversationView:
         )
 
         assert result is not None
+        assert isinstance(result, str)
+        assert len(result) == 32  # uuid4().hex format
         mock_start_convo.assert_called_once()
         mock_integration_store.create_conversation.assert_called_once()
 
