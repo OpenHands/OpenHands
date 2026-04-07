@@ -5,8 +5,8 @@ import { createRoutesStub } from "react-router";
 import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { Conversation } from "#/api/open-hands.types";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 
 // Mock the unified stop conversation hook
 const mockStopConversationMutate = vi.fn();
@@ -49,44 +49,62 @@ describe("ConversationPanel", () => {
     }));
   });
 
-  const mockConversations: Conversation[] = [
+  const mockConversations: V1AppConversation[] = [
     {
-      conversation_id: "1",
+      id: "1",
       title: "Conversation 1",
       selected_repository: null,
       git_provider: null,
       selected_branch: null,
-      last_updated_at: "2021-10-01T12:00:00Z",
+      updated_at: "2021-10-01T12:00:00Z",
       created_at: "2021-10-01T12:00:00Z",
-      status: "STOPPED" as const,
-      runtime_status: null,
-      url: null,
+      sandbox_status: "STOPPED",
+      execution_status: "FINISHED",
+      conversation_url: null,
+      created_by_user_id: "user1",
+      metrics: null,
+      llm_model: null,
+      sandbox_id: "sandbox1",
+      trigger: null,
+      pr_number: [],
       session_api_key: null,
     },
     {
-      conversation_id: "2",
+      id: "2",
       title: "Conversation 2",
       selected_repository: null,
       git_provider: null,
       selected_branch: null,
-      last_updated_at: "2021-10-02T12:00:00Z",
+      updated_at: "2021-10-02T12:00:00Z",
       created_at: "2021-10-02T12:00:00Z",
-      status: "STOPPED" as const,
-      runtime_status: null,
-      url: null,
+      sandbox_status: "STOPPED",
+      execution_status: "FINISHED",
+      conversation_url: null,
+      created_by_user_id: "user1",
+      metrics: null,
+      llm_model: null,
+      sandbox_id: "sandbox2",
+      trigger: null,
+      pr_number: [],
       session_api_key: null,
     },
     {
-      conversation_id: "3",
+      id: "3",
       title: "Conversation 3",
       selected_repository: null,
       git_provider: null,
       selected_branch: null,
-      last_updated_at: "2021-10-03T12:00:00Z",
+      updated_at: "2021-10-03T12:00:00Z",
       created_at: "2021-10-03T12:00:00Z",
-      status: "STOPPED" as const,
-      runtime_status: null,
-      url: null,
+      sandbox_status: "STOPPED",
+      execution_status: "FINISHED",
+      conversation_url: null,
+      created_by_user_id: "user1",
+      metrics: null,
+      llm_model: null,
+      sandbox_id: "sandbox3",
+      trigger: null,
+      pr_number: [],
       session_api_key: null,
     },
   ];
@@ -94,9 +112,9 @@ describe("ConversationPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockStopConversationMutate.mockClear();
-    // Setup default mock for getUserConversations
-    vi.spyOn(ConversationService, "getUserConversations").mockResolvedValue({
-      results: [...mockConversations],
+    // Setup default mock for V1 searchConversations
+    vi.spyOn(V1ConversationService, "searchConversations").mockResolvedValue({
+      items: [...mockConversations],
       next_page_id: null,
     });
   });
@@ -111,12 +129,12 @@ describe("ConversationPanel", () => {
   });
 
   it("should display an empty state when there are no conversations", async () => {
-    const getUserConversationsSpy = vi.spyOn(
-      ConversationService,
-      "getUserConversations",
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
     );
-    getUserConversationsSpy.mockResolvedValue({
-      results: [],
+    searchConversationsSpy.mockResolvedValue({
+      items: [],
       next_page_id: null,
     });
 
@@ -127,11 +145,11 @@ describe("ConversationPanel", () => {
   });
 
   it("should handle an error when fetching conversations", async () => {
-    const getUserConversationsSpy = vi.spyOn(
-      ConversationService,
-      "getUserConversations",
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
     );
-    getUserConversationsSpy.mockRejectedValue(
+    searchConversationsSpy.mockRejectedValue(
       new Error("Failed to fetch conversations"),
     );
 
@@ -177,62 +195,62 @@ describe("ConversationPanel", () => {
 
   it("should delete a conversation", async () => {
     const user = userEvent.setup();
-    const mockData: Conversation[] = [
+    const mockData: V1AppConversation[] = [
       {
-        conversation_id: "1",
+        id: "1",
         title: "Conversation 1",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-01T12:00:00Z",
+        updated_at: "2021-10-01T12:00:00Z",
         created_at: "2021-10-01T12:00:00Z",
-        status: "STOPPED" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        sandbox_status: "STOPPED" as const,
+        
+        
+        
       },
       {
-        conversation_id: "2",
+        id: "2",
         title: "Conversation 2",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-02T12:00:00Z",
+        updated_at: "2021-10-02T12:00:00Z",
         created_at: "2021-10-02T12:00:00Z",
-        status: "STOPPED" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        sandbox_status: "STOPPED" as const,
+        
+        
+        
       },
       {
-        conversation_id: "3",
+        id: "3",
         title: "Conversation 3",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-03T12:00:00Z",
+        updated_at: "2021-10-03T12:00:00Z",
         created_at: "2021-10-03T12:00:00Z",
-        status: "STOPPED" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        sandbox_status: "STOPPED" as const,
+        
+        
+        
       },
     ];
 
-    const getUserConversationsSpy = vi.spyOn(
-      ConversationService,
-      "getUserConversations",
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
     );
-    getUserConversationsSpy.mockImplementation(async () => ({
-      results: mockData,
+    searchConversationsSpy.mockImplementation(async () => ({
+      items: mockData,
       next_page_id: null,
     }));
 
-    const deleteUserConversationSpy = vi.spyOn(
-      ConversationService,
-      "deleteUserConversation",
+    const deleteConversationSpy = vi.spyOn(
+      V1ConversationService,
+      "deleteConversation",
     );
-    deleteUserConversationSpy.mockImplementation(async (id: string) => {
+    deleteConversationSpy.mockImplementation(async (id: string) => {
       const index = mockData.findIndex((conv) => conv.conversation_id === id);
       if (index !== -1) {
         mockData.splice(index, 1);
@@ -279,12 +297,12 @@ describe("ConversationPanel", () => {
 
   it("should refetch data on rerenders", async () => {
     const user = userEvent.setup();
-    const getUserConversationsSpy = vi.spyOn(
-      ConversationService,
-      "getUserConversations",
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
     );
-    getUserConversationsSpy.mockResolvedValue({
-      results: [...mockConversations],
+    searchConversationsSpy.mockResolvedValue({
+      items: [...mockConversations],
       next_page_id: null,
     });
 
@@ -329,54 +347,54 @@ describe("ConversationPanel", () => {
     const user = userEvent.setup();
 
     // Create mock data with a RUNNING conversation
-    const mockRunningConversations: Conversation[] = [
+    const mockRunningConversations: V1AppConversation[] = [
       {
-        conversation_id: "1",
+        id: "1",
         title: "Running Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-01T12:00:00Z",
+        updated_at: "2021-10-01T12:00:00Z",
         created_at: "2021-10-01T12:00:00Z",
         status: "RUNNING" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        
+        
+        
       },
       {
-        conversation_id: "2",
+        id: "2",
         title: "Starting Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-02T12:00:00Z",
+        updated_at: "2021-10-02T12:00:00Z",
         created_at: "2021-10-02T12:00:00Z",
         status: "STARTING" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        
+        
+        
       },
       {
-        conversation_id: "3",
+        id: "3",
         title: "Stopped Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-03T12:00:00Z",
+        updated_at: "2021-10-03T12:00:00Z",
         created_at: "2021-10-03T12:00:00Z",
-        status: "STOPPED" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        sandbox_status: "STOPPED" as const,
+        
+        
+        
       },
     ];
 
-    const getUserConversationsSpy = vi.spyOn(
-      ConversationService,
-      "getUserConversations",
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
     );
-    getUserConversationsSpy.mockResolvedValue({
-      results: mockRunningConversations,
+    searchConversationsSpy.mockResolvedValue({
+      items: mockRunningConversations,
       next_page_id: null,
     });
 
@@ -412,41 +430,41 @@ describe("ConversationPanel", () => {
   it("should stop a conversation", async () => {
     const user = userEvent.setup();
 
-    const mockData: Conversation[] = [
+    const mockData: V1AppConversation[] = [
       {
-        conversation_id: "1",
+        id: "1",
         title: "Running Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-01T12:00:00Z",
+        updated_at: "2021-10-01T12:00:00Z",
         created_at: "2021-10-01T12:00:00Z",
         status: "RUNNING" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        
+        
+        
       },
       {
-        conversation_id: "2",
+        id: "2",
         title: "Starting Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-02T12:00:00Z",
+        updated_at: "2021-10-02T12:00:00Z",
         created_at: "2021-10-02T12:00:00Z",
         status: "STARTING" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        
+        
+        
       },
     ];
 
-    const getUserConversationsSpy = vi.spyOn(
-      ConversationService,
-      "getUserConversations",
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
     );
-    getUserConversationsSpy.mockImplementation(async () => ({
-      results: mockData,
+    searchConversationsSpy.mockImplementation(async () => ({
+      items: mockData,
       next_page_id: null,
     }));
 
@@ -483,54 +501,54 @@ describe("ConversationPanel", () => {
   it("should only show stop button for STARTING or RUNNING conversations", async () => {
     const user = userEvent.setup();
 
-    const mockMixedStatusConversations: Conversation[] = [
+    const mockMixedStatusConversations: V1AppConversation[] = [
       {
-        conversation_id: "1",
+        id: "1",
         title: "Running Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-01T12:00:00Z",
+        updated_at: "2021-10-01T12:00:00Z",
         created_at: "2021-10-01T12:00:00Z",
         status: "RUNNING" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        
+        
+        
       },
       {
-        conversation_id: "2",
+        id: "2",
         title: "Starting Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-02T12:00:00Z",
+        updated_at: "2021-10-02T12:00:00Z",
         created_at: "2021-10-02T12:00:00Z",
         status: "STARTING" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        
+        
+        
       },
       {
-        conversation_id: "3",
+        id: "3",
         title: "Stopped Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-03T12:00:00Z",
+        updated_at: "2021-10-03T12:00:00Z",
         created_at: "2021-10-03T12:00:00Z",
-        status: "STOPPED" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        sandbox_status: "STOPPED" as const,
+        
+        
+        
       },
     ];
 
-    const getUserConversationsSpy = vi.spyOn(
-      ConversationService,
-      "getUserConversations",
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
     );
-    getUserConversationsSpy.mockResolvedValue({
-      results: mockMixedStatusConversations,
+    searchConversationsSpy.mockResolvedValue({
+      items: mockMixedStatusConversations,
       next_page_id: null,
     });
 
@@ -634,12 +652,12 @@ describe("ConversationPanel", () => {
   it("should successfully update conversation title", async () => {
     const user = userEvent.setup();
 
-    // Mock the updateConversation API call
-    const updateConversationSpy = vi.spyOn(
-      ConversationService,
-      "updateConversation",
+    // Mock the updateConversationPublicFlag API call
+    const updateConversationPublicFlagSpy = vi.spyOn(
+      V1ConversationService,
+      "updateConversationPublicFlag",
     );
-    updateConversationSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(true);
 
     renderConversationPanel();
 
@@ -661,7 +679,7 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API call was made with correct parameters
-    expect(updateConversationSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
       title: "Updated Title",
     });
   });
@@ -669,11 +687,11 @@ describe("ConversationPanel", () => {
   it("should save title when Enter key is pressed", async () => {
     const user = userEvent.setup();
 
-    const updateConversationSpy = vi.spyOn(
-      ConversationService,
-      "updateConversation",
+    const updateConversationPublicFlagSpy = vi.spyOn(
+      V1ConversationService,
+      "updateConversationPublicFlag",
     );
-    updateConversationSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(true);
 
     renderConversationPanel();
 
@@ -693,7 +711,7 @@ describe("ConversationPanel", () => {
     await user.keyboard("{Enter}");
 
     // Verify API call was made
-    expect(updateConversationSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
       title: "Title Updated via Enter",
     });
   });
@@ -701,11 +719,11 @@ describe("ConversationPanel", () => {
   it("should trim whitespace from title", async () => {
     const user = userEvent.setup();
 
-    const updateConversationSpy = vi.spyOn(
-      ConversationService,
-      "updateConversation",
+    const updateConversationPublicFlagSpy = vi.spyOn(
+      V1ConversationService,
+      "updateConversationPublicFlag",
     );
-    updateConversationSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(true);
 
     renderConversationPanel();
 
@@ -725,7 +743,7 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API call was made with trimmed title
-    expect(updateConversationSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
       title: "Trimmed Title",
     });
   });
@@ -733,11 +751,11 @@ describe("ConversationPanel", () => {
   it("should revert to original title when empty", async () => {
     const user = userEvent.setup();
 
-    const updateConversationSpy = vi.spyOn(
-      ConversationService,
-      "updateConversation",
+    const updateConversationPublicFlagSpy = vi.spyOn(
+      V1ConversationService,
+      "updateConversationPublicFlag",
     );
-    updateConversationSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(true);
 
     renderConversationPanel();
 
@@ -756,17 +774,17 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API was not called
-    expect(updateConversationSpy).not.toHaveBeenCalled();
+    expect(updateConversationPublicFlagSpy).not.toHaveBeenCalled();
   });
 
   it("should handle API error when updating title", async () => {
     const user = userEvent.setup();
 
-    const updateConversationSpy = vi.spyOn(
-      ConversationService,
-      "updateConversation",
+    const updateConversationPublicFlagSpy = vi.spyOn(
+      V1ConversationService,
+      "updateConversationPublicFlag",
     );
-    updateConversationSpy.mockRejectedValue(new Error("API Error"));
+    updateConversationPublicFlagSpy.mockRejectedValue(new Error("API Error"));
 
     renderConversationPanel();
 
@@ -786,13 +804,13 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API call was made
-    expect(updateConversationSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
       title: "Failed Update",
     });
 
     // Wait for error handling
     await waitFor(() => {
-      expect(updateConversationSpy).toHaveBeenCalled();
+      expect(updateConversationPublicFlagSpy).toHaveBeenCalled();
     });
   });
 
@@ -828,11 +846,11 @@ describe("ConversationPanel", () => {
   it("should not call API when title is unchanged", async () => {
     const user = userEvent.setup();
 
-    const updateConversationSpy = vi.spyOn(
-      ConversationService,
-      "updateConversation",
+    const updateConversationPublicFlagSpy = vi.spyOn(
+      V1ConversationService,
+      "updateConversationPublicFlag",
     );
-    updateConversationSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(true);
 
     renderConversationPanel();
 
@@ -849,7 +867,7 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API was NOT called with the same title (since handleConversationTitleChange will always be called)
-    expect(updateConversationSpy).not.toHaveBeenCalledWith("1", {
+    expect(updateConversationPublicFlagSpy).not.toHaveBeenCalledWith("1", {
       title: "Conversation 1",
     });
   });
@@ -857,11 +875,11 @@ describe("ConversationPanel", () => {
   it("should handle special characters in title", async () => {
     const user = userEvent.setup();
 
-    const updateConversationSpy = vi.spyOn(
-      ConversationService,
-      "updateConversation",
+    const updateConversationPublicFlagSpy = vi.spyOn(
+      V1ConversationService,
+      "updateConversationPublicFlag",
     );
-    updateConversationSpy.mockResolvedValue(true);
+    updateConversationPublicFlagSpy.mockResolvedValue(true);
 
     renderConversationPanel();
 
@@ -881,7 +899,7 @@ describe("ConversationPanel", () => {
     await user.tab();
 
     // Verify API call was made with special characters
-    expect(updateConversationSpy).toHaveBeenCalledWith("1", {
+    expect(updateConversationPublicFlagSpy).toHaveBeenCalledWith("1", {
       title: "Special @#$%^&*()_+ Characters",
     });
   });
@@ -918,24 +936,24 @@ describe("ConversationPanel", () => {
     const user = userEvent.setup();
 
     // Create mock data with a RUNNING conversation
-    const mockRunningConversations: Conversation[] = [
+    const mockRunningConversations: V1AppConversation[] = [
       {
-        conversation_id: "1",
+        id: "1",
         title: "Running Conversation",
         selected_repository: null,
         git_provider: null,
         selected_branch: null,
-        last_updated_at: "2021-10-01T12:00:00Z",
+        updated_at: "2021-10-01T12:00:00Z",
         created_at: "2021-10-01T12:00:00Z",
         status: "RUNNING" as const,
-        runtime_status: null,
-        url: null,
-        session_api_key: null,
+        
+        
+        
       },
     ];
 
-    vi.spyOn(ConversationService, "getUserConversations").mockResolvedValue({
-      results: mockRunningConversations,
+    vi.spyOn(V1ConversationService, "searchConversations").mockResolvedValue({
+      items: mockRunningConversations,
       next_page_id: null,
     });
 
