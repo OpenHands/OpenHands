@@ -25,13 +25,14 @@ export function ConversationCardFooter({
 }: ConversationCardFooterProps) {
   const { t } = useTranslation();
 
-  const isConversationStopped = sandboxStatus === "STOPPED";
+  const isConversationArchived =
+    sandboxStatus === "STOPPED" || sandboxStatus === "MISSING";
 
   return (
     <div
       className={cn(
         "flex flex-row justify-between items-center mt-1",
-        isConversationStopped && "opacity-60",
+        isConversationArchived && "opacity-60",
       )}
     >
       {selectedRepository?.selected_repository ? (

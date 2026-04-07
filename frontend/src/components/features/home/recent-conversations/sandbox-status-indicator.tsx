@@ -20,7 +20,7 @@ const getSandboxStatusLabel = (status: V1SandboxStatus): string => {
     case "PAUSED":
       return "COMMON$PAUSED";
     case "MISSING":
-      return "COMMON$MISSING";
+      return "COMMON$ARCHIVED";
     default:
       return "COMMON$STOPPED";
   }
@@ -42,7 +42,7 @@ export function SandboxStatusIndicator({
       case "STOPPED":
         return "bg-[#3C3C49]"; // Stopped - dark grey
       case "MISSING":
-        return "bg-[#FF684E]"; // Missing - red
+        return "bg-[#A3A3A3]"; // Missing - grey (archived)
       default:
         return "bg-[#3C3C49]"; // Default to grey for unknown states
     }
