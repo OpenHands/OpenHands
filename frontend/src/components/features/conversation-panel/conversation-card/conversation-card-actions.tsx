@@ -1,6 +1,6 @@
 import React from "react";
 import { cn } from "#/utils/utils";
-import { ConversationStatus } from "#/types/conversation-status";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 import { ConversationCardContextMenu } from "./conversation-card-context-menu";
 import EllipsisIcon from "#/icons/ellipsis.svg?react";
 
@@ -12,7 +12,7 @@ interface ConversationCardActionsProps {
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  conversationStatus?: ConversationStatus;
+  sandboxStatus?: V1SandboxStatus;
   conversationId?: string;
   showOptions?: boolean;
 }
@@ -25,11 +25,11 @@ export function ConversationCardActions({
   onEdit,
   onDownloadViaVSCode,
   onDownloadConversation,
-  conversationStatus,
+  sandboxStatus,
   conversationId,
   showOptions,
 }: ConversationCardActionsProps) {
-  const isConversationArchived = conversationStatus === "ARCHIVED";
+  const isConversationStopped = sandboxStatus === "STOPPED";
 
   return (
     <div className="group">
@@ -43,7 +43,7 @@ export function ConversationCardActions({
         }}
         className={cn(
           "cursor-pointer w-6 h-6 flex flex-row items-center justify-center translate-x-2.5",
-          isConversationArchived && "opacity-60",
+          isConversationStopped && "opacity-60",
         )}
       >
         <EllipsisIcon />
@@ -60,8 +60,7 @@ export function ConversationCardActions({
           onClose={() => onContextMenuToggle(false)}
           onDelete={onDelete}
           onStop={
-            conversationStatus === "RUNNING" ||
-            conversationStatus === "STARTING"
+            sandboxStatus === "RUNNING" || sandboxStatus === "STARTING"
               ? onStop
               : undefined
           }

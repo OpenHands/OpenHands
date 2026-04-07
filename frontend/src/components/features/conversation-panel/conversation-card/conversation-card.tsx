@@ -3,7 +3,7 @@ import { usePostHog } from "posthog-js/react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { ConversationStatus } from "#/types/conversation-status";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
@@ -20,9 +20,8 @@ interface ConversationCardProps {
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string; // ISO 8601
   createdAt?: string; // ISO 8601
-  conversationStatus?: ConversationStatus;
+  sandboxStatus?: V1SandboxStatus;
   conversationId?: string; // Optional conversation ID for VS Code URL
-  conversationVersion?: "V0" | "V1";
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
   llmModel?: string | null;
@@ -41,8 +40,7 @@ export function ConversationCard({
   lastUpdatedAt,
   createdAt,
   conversationId,
-  conversationStatus,
-  conversationVersion,
+  sandboxStatus,
   contextMenuOpen = false,
   onContextMenuToggle,
   llmModel,
@@ -111,7 +109,7 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
 
-    if (conversationId && conversationVersion === "V1") {
+    if (conversationId) {
       await downloadConversation(conversationId);
     }
     onContextMenuToggle?.(false);
@@ -134,8 +132,7 @@ export function ConversationCard({
           title={title}
           titleMode={titleMode}
           onTitleSave={onTitleSave}
-          conversationStatus={conversationStatus}
-          conversationVersion={conversationVersion}
+          sandboxStatus={sandboxStatus}
         />
 
         {hasContextMenu && (
@@ -146,12 +143,8 @@ export function ConversationCard({
             onStop={onStop && handleStop}
             onEdit={onChangeTitle && handleEdit}
             onDownloadViaVSCode={handleDownloadViaVSCode}
-            onDownloadConversation={
-              conversationVersion === "V1"
-                ? handleDownloadConversation
-                : undefined
-            }
-            conversationStatus={conversationStatus}
+            onDownloadConversation={handleDownloadConversation}
+            sandboxStatus={sandboxStatus}
             conversationId={conversationId}
             showOptions={showOptions}
           />
@@ -162,7 +155,7 @@ export function ConversationCard({
         selectedRepository={selectedRepository}
         lastUpdatedAt={lastUpdatedAt}
         createdAt={createdAt}
-        conversationStatus={conversationStatus}
+        sandboxStatus={sandboxStatus}
         llmModel={llmModel}
       />
     </div>

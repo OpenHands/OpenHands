@@ -29,7 +29,7 @@ export function RecentConversations() {
   });
 
   const conversations =
-    conversationsList?.pages.flatMap((page) => page.results) ?? [];
+    conversationsList?.pages.flatMap((page) => page.items) ?? [];
 
   // Get the conversations to display based on expansion state
   const displayLimit = isExpanded ? 10 : 3;
@@ -92,7 +92,7 @@ export function RecentConversations() {
               <div ref={scrollContainerRef} className="flex flex-col">
                 {displayedConversations.map((conversation) => (
                   <RecentConversation
-                    key={conversation.conversation_id}
+                    key={conversation.id}
                     conversation={conversation}
                   />
                 ))}

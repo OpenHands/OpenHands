@@ -194,23 +194,6 @@ class ConversationService {
     return data;
   }
 
-  static async getUserConversations(
-    limit: number = 20,
-    pageId?: string,
-  ): Promise<ResultSet<Conversation>> {
-    const params = new URLSearchParams();
-    params.append("limit", limit.toString());
-
-    if (pageId) {
-      params.append("page_id", pageId);
-    }
-
-    const { data } = await openHands.get<ResultSet<Conversation>>(
-      `/api/conversations?${params.toString()}`,
-    );
-    return data;
-  }
-
   static async searchConversations(
     selectedRepository?: string,
     conversationTrigger?: string,
