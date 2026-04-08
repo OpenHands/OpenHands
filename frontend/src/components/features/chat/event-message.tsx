@@ -11,7 +11,6 @@ import {
   isTaskTrackingObservation,
 } from "#/types/core/guards";
 import { OpenHandsObservation } from "#/types/core/observations";
-import { MicroagentStatus } from "#/types/microagent-status";
 import { useConfig } from "#/hooks/query/use-config";
 import { useFeedbackExists } from "#/hooks/query/use-feedback-exists";
 import {
@@ -30,14 +29,6 @@ interface EventMessageProps {
   hasObservationPair: boolean;
   isAwaitingUserConfirmation: boolean;
   isLastMessage: boolean;
-  microagentStatus?: MicroagentStatus | null;
-  microagentConversationId?: string;
-  microagentPRUrl?: string;
-  actions?: Array<{
-    icon: React.ReactNode;
-    onClick: () => void;
-    tooltip?: string;
-  }>;
   isInLast10Actions: boolean;
 }
 
@@ -47,10 +38,6 @@ export function EventMessage({
   hasObservationPair,
   isAwaitingUserConfirmation,
   isLastMessage,
-  microagentStatus,
-  microagentConversationId,
-  microagentPRUrl,
-  actions,
   isInLast10Actions,
 }: EventMessageProps) {
   const shouldShowConfirmationButtons =
@@ -65,10 +52,6 @@ export function EventMessage({
 
   // Common props for components that need them
   const commonProps = {
-    microagentStatus,
-    microagentConversationId,
-    microagentPRUrl,
-    actions,
     isLastMessage,
     isInLast10Actions,
     config,
@@ -84,13 +67,7 @@ export function EventMessage({
   // Observation pairs with OpenHands actions
   if (hasObservationPair && isOpenHandsAction(event)) {
     return (
-      <ObservationPairEventMessage
-        event={event}
-        microagentStatus={microagentStatus}
-        microagentConversationId={microagentConversationId}
-        microagentPRUrl={microagentPRUrl}
-        actions={actions}
-      />
+      <ObservationPairEventMessage event={event} />
     );
   }
 

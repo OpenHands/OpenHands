@@ -18,7 +18,7 @@ import {
   renderConversationErroredToast,
   renderConversationCreatedToast,
   renderConversationFinishedToast,
-} from "#/components/features/chat/microagent/microagent-status-toast";
+} from "#/components/shared/conversation-toast";
 import { Provider } from "#/types/settings";
 
 interface ConversationSocket {
