@@ -3,7 +3,6 @@ import { OpenHandsObservation } from "#/types/core/observations";
 import { isErrorObservation } from "#/types/core/guards";
 import { ErrorMessage } from "../error-message";
 import { MicroagentStatusWrapper } from "./microagent-status-wrapper";
-import { LikertScaleWrapper } from "./likert-scale-wrapper";
 import { MicroagentStatus } from "#/types/microagent-status";
 
 interface ErrorEventMessageProps {
@@ -16,15 +15,6 @@ interface ErrorEventMessageProps {
     onClick: () => void;
     tooltip?: string;
   }>;
-  isLastMessage: boolean;
-  isInLast10Actions: boolean;
-  config?: { app_mode?: string } | null;
-  isCheckingFeedback: boolean;
-  feedbackData: {
-    exists: boolean;
-    rating?: number;
-    reason?: string;
-  };
 }
 
 export function ErrorEventMessage({
@@ -33,11 +23,6 @@ export function ErrorEventMessage({
   microagentConversationId,
   microagentPRUrl,
   actions,
-  isLastMessage,
-  isInLast10Actions,
-  config,
-  isCheckingFeedback,
-  feedbackData,
 }: ErrorEventMessageProps) {
   if (!isErrorObservation(event)) {
     return null;
@@ -54,14 +39,6 @@ export function ErrorEventMessage({
         microagentConversationId={microagentConversationId}
         microagentPRUrl={microagentPRUrl}
         actions={actions}
-      />
-      <LikertScaleWrapper
-        event={event}
-        isLastMessage={isLastMessage}
-        isInLast10Actions={isInLast10Actions}
-        config={config}
-        isCheckingFeedback={isCheckingFeedback}
-        feedbackData={feedbackData}
       />
     </div>
   );
