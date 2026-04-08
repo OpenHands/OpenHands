@@ -16,15 +16,16 @@ import { openHands } from "../open-hands-axios";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { BatchFeedbackData } from "#/hooks/query/use-batch-feedback";
+import { V1AppConversation } from "./v1-conversation-service.types";
 
 class ConversationService {
-  private static currentConversation: Conversation | null = null;
+  private static currentConversation: V1AppConversation | null = null;
 
   /**
    * Get a current conversation
    * @return the current conversation
    */
-  static getCurrentConversation(): Conversation | null {
+  static getCurrentConversation(): V1AppConversation | null {
     return this.currentConversation;
   }
 
@@ -33,7 +34,7 @@ class ConversationService {
    * @param url Custom URL to use for conversation endpoints
    */
   static setCurrentConversation(
-    currentConversation: Conversation | null,
+    currentConversation: V1AppConversation | null,
   ): void {
     this.currentConversation = currentConversation;
   }
@@ -42,9 +43,9 @@ class ConversationService {
    * Get the url for the conversation. If
    */
   static getConversationUrl(conversationId: string): string {
-    if (this.currentConversation?.conversation_id === conversationId) {
-      if (this.currentConversation.url) {
-        return this.currentConversation.url;
+    if (this.currentConversation?.id === conversationId) {
+      if (this.currentConversation.conversation_url) {
+        return this.currentConversation.conversation_url;
       }
     }
     return `/api/conversations/${conversationId}`;
