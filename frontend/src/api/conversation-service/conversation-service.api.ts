@@ -6,7 +6,6 @@ import {
   GetTrajectoryResponse,
   GetMicroagentsResponse,
   GetMicroagentPromptResponse,
-  CreateMicroagent,
   FileUploadSuccessResponse,
   GetFilesResponse,
 } from "../open-hands.types";
@@ -125,7 +124,6 @@ class ConversationService {
     suggested_task?: SuggestedTask,
     selected_branch?: string,
     conversationInstructions?: string,
-    createMicroagent?: CreateMicroagent,
   ): Promise<Conversation> {
     const body = {
       repository: selectedRepository,
@@ -134,7 +132,6 @@ class ConversationService {
       initial_user_msg: initialUserMsg,
       suggested_task,
       conversation_instructions: conversationInstructions,
-      create_microagent: createMicroagent,
     };
 
     const { data } = await openHands.post<Conversation>(
