@@ -30,7 +30,6 @@ import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files
 import { validateFiles } from "#/utils/file-validation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConfirmationModeEnabled from "./confirmation-mode-enabled";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
@@ -50,7 +49,6 @@ function getEntryPoint(
 export function ChatInterface() {
   const posthog = usePostHog();
   const { setMessageToSend } = useConversationStore();
-  const { data: conversation } = useActiveConversation();
   const { errorMessage, removeErrorMessage } = useErrorMessageStore();
   const { isLoadingMessages } = useWsClient();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
@@ -122,8 +120,6 @@ export function ChatInterface() {
 
   const optimisticUserMessage = getOptimisticUserMessage();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
-
   // Show V1 messages immediately if events exist in store (e.g., remount),
   // or once loading completes. This replaces the old transition-observation
   // pattern (useState + useEffect watching loading→loaded) which always showed
@@ -134,9 +130,7 @@ export function ChatInterface() {
   const isReturningToConversation = !!params.conversationId;
   // Only show loading skeleton when genuinely loading AND no events in store yet.
   // If events exist (e.g., remount after data was already fetched), skip skeleton.
-  const isHistoryLoading =
-    (isLoadingMessages && !isV1Conversation && v0Events.length === 0) ||
-    (isV1Conversation && !showV1Messages);
+  const isHistoryLoading = !showV1Messages;
   const isChatLoading = isHistoryLoading && !isTask;
 
   const handleSendMessage = async (
@@ -146,10 +140,6 @@ export function ChatInterface() {
   ) => {
     // Handle /new command for V1 conversations
     if (content.trim() === "/new") {
-      if (!isV1Conversation) {
-        displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_V1_ONLY));
-        return;
-      }
       if (!params.conversationId) {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_NO_ID));
         return;

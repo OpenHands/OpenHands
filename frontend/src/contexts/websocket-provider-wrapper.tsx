@@ -47,7 +47,7 @@ export function WebSocketProviderWrapper({
   // Does NOT resume on WebSocket disconnect (server pauses after 20 min inactivity)
   useSandboxRecovery({
     conversationId,
-    conversationStatus: conversation?.status,
+    sandboxStatus: conversation?.sandbox_status,
     refetchConversation: isConversationReady ? refetchConversation : undefined,
   });
 

@@ -15,8 +15,7 @@ export function ConversationCardHeader({
   onTitleSave,
   sandboxStatus,
 }: ConversationCardHeaderProps) {
-  const isConversationArchived =
-    sandboxStatus === "STOPPED" || sandboxStatus === "MISSING";
+  const isConversationArchived = sandboxStatus === "MISSING";
 
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden mr-2">

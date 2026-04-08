@@ -6,9 +6,9 @@ import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
-import { V1AppConversation, V1ConversationExecutionStatus } from "#/api/conversation-service/v1-conversation-service.types";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
-import type { Provider } from "#/types/settings";
+import { V1ExecutionStatus } from "#/types/v1/core";
 
 // Mock the unified stop conversation hook
 const mockStopConversationMutate = vi.fn();
@@ -29,7 +29,7 @@ const createMockConversation = (overrides: Partial<V1AppConversation> = {}): V1A
   updated_at: "2021-10-01T12:00:00Z",
   created_at: "2021-10-01T12:00:00Z",
   sandbox_status: "STOPPED" as V1SandboxStatus,
-  execution_status: "FINISHED" as V1ConversationExecutionStatus,
+  execution_status: V1ExecutionStatus.FINISHED,
   conversation_url: null,
   created_by_user_id: "user1",
   metrics: null,
@@ -38,6 +38,7 @@ const createMockConversation = (overrides: Partial<V1AppConversation> = {}): V1A
   trigger: null,
   pr_number: [],
   session_api_key: null,
+  sub_conversation_ids: [],
   ...overrides,
 });
 
@@ -279,9 +280,9 @@ describe("ConversationPanel", () => {
 
     // Create mock data with a RUNNING conversation
     const mockRunningConversations: V1AppConversation[] = [
-      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
-      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: "RUNNING", sandbox_id: "sandbox2" }),
-      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox3" }),
+      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: V1ExecutionStatus.RUNNING, sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: V1ExecutionStatus.RUNNING, sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "MISSING", execution_status: V1ExecutionStatus.FINISHED, sandbox_id: "sandbox3" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -326,9 +327,9 @@ describe("ConversationPanel", () => {
     const user = userEvent.setup();
 
     const mockData: V1AppConversation[] = [
-      createMockConversation({ id: "1", title: "Conversation 1", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
-      createMockConversation({ id: "2", title: "Conversation 2", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox2" }),
-      createMockConversation({ id: "3", title: "Conversation 3", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox3" }),
+      createMockConversation({ id: "1", title: "Conversation 1", sandbox_status: "RUNNING", execution_status: V1ExecutionStatus.RUNNING, sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Conversation 2", sandbox_status: "MISSING", execution_status: V1ExecutionStatus.FINISHED, sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Conversation 3", sandbox_status: "MISSING", execution_status: V1ExecutionStatus.FINISHED, sandbox_id: "sandbox3" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -375,9 +376,9 @@ describe("ConversationPanel", () => {
     const user = userEvent.setup();
 
     const mockMixedStatusConversations: V1AppConversation[] = [
-      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
-      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: "RUNNING", sandbox_id: "sandbox2" }),
-      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox3" }),
+      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: V1ExecutionStatus.RUNNING, sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: V1ExecutionStatus.RUNNING, sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "MISSING", execution_status: V1ExecutionStatus.FINISHED, sandbox_id: "sandbox3" }),
     ];
 
     const searchConversationsSpy = vi.spyOn(
@@ -765,9 +766,9 @@ describe("ConversationPanel", () => {
 
     // Create mock data with a RUNNING conversation
     const mockRunningConversations: V1AppConversation[] = [
-      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: "RUNNING", sandbox_id: "sandbox1" }),
-      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: "RUNNING", sandbox_id: "sandbox2" }),
-      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "STOPPED", execution_status: "FINISHED", sandbox_id: "sandbox3" }),
+      createMockConversation({ id: "1", title: "Running Conversation", sandbox_status: "RUNNING", execution_status: V1ExecutionStatus.RUNNING, sandbox_id: "sandbox1" }),
+      createMockConversation({ id: "2", title: "Starting Conversation", sandbox_status: "STARTING", execution_status: V1ExecutionStatus.RUNNING, sandbox_id: "sandbox2" }),
+      createMockConversation({ id: "3", title: "Stopped Conversation", sandbox_status: "MISSING", execution_status: V1ExecutionStatus.FINISHED, sandbox_id: "sandbox3" }),
     ];
 
     vi.spyOn(V1ConversationService, "searchConversations").mockResolvedValue({

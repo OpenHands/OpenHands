@@ -322,7 +322,7 @@ export function WsClientProvider({
     }
 
     // Clear error messages when conversation is intentionally stopped
-    if (conversation && conversation.status === "STOPPED") {
+    if (conversation && conversation.sandbox_status === "MISSING") {
       const existingSocket = sioRef.current;
       if (existingSocket) {
         existingSocket.disconnect();
@@ -335,7 +335,7 @@ export function WsClientProvider({
     }
 
     // Set connecting status when conversation is starting
-    if (conversation && conversation.status === "STARTING") {
+    if (conversation && conversation.sandbox_status === "STARTING") {
       removeErrorMessage();
       setWebSocketStatus("CONNECTING");
       return () => undefined; // conversation is starting, will connect when ready
@@ -344,9 +344,8 @@ export function WsClientProvider({
     // Only connect when conversation is fully loaded and running
     if (
       !conversation ||
-      conversation.status !== "RUNNING" ||
-      !conversation.runtime_status ||
-      conversation.runtime_status === "STATUS$STOPPED"
+      conversation.sandbox_status !== "RUNNING" ||
+      !conversation.execution_status
     ) {
       if (sioRef.current) {
         sioRef.current.disconnect();
@@ -374,8 +373,11 @@ export function WsClientProvider({
 
     let baseUrl: string | null = null;
     let socketPath: string;
-    if (conversation.url && !conversation.url.startsWith("/")) {
-      const u = new URL(conversation.url);
+    if (
+      conversation.conversation_url &&
+      !conversation.conversation_url.startsWith("/")
+    ) {
+      const u = new URL(conversation.conversation_url);
       baseUrl = u.host;
       const pathBeforeApi = u.pathname.split("/api/conversations")[0] || "/";
       // Socket.IO server default path is /socket.io; prefix with pathBeforeApi for path mode
@@ -411,9 +413,9 @@ export function WsClientProvider({
     };
   }, [
     conversationId,
-    conversation?.url,
-    conversation?.status,
-    conversation?.runtime_status,
+    conversation?.conversation_url,
+    conversation?.execution_status,
+    conversation?.sandbox_status,
     providers,
   ]);
 

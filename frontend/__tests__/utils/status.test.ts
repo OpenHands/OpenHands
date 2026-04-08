@@ -2,31 +2,16 @@ import { describe, it, expect } from "vitest";
 import { getStatusCode, getIndicatorColor, IndicatorColor } from "#/utils/status";
 import { AgentState } from "#/types/agent-state";
 import { I18nKey } from "#/i18n/declaration";
+import { V1ExecutionStatus } from "#/types/v1/core";
 
 describe("getStatusCode", () => {
-  it("should prioritize agent readiness over stale runtime status", () => {
-    // Test case: Agent is ready (AWAITING_USER_INPUT) but runtime status is still starting
-    const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
-      "CONNECTED", // webSocketStatus
-      "RUNNING", // conversationStatus
-      "STATUS$STARTING_RUNTIME", // runtimeStatus (stale)
-      AgentState.AWAITING_USER_INPUT, // agentState (ready)
-    );
-
-    // Should return agent state message, not runtime status
-    expect(result).toBe(I18nKey.AGENT_STATUS$WAITING_FOR_TASK);
-  });
-
-  it("should show runtime status when agent is not ready", () => {
+  it("should show sandbox status when agent is not ready", () => {
     // Test case: Agent is loading - but since conversationStatus is not STARTING,
     // it should fall through to runtime status check
     const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
-      "CONNECTED", // webSocketStatus
-      "RUNNING", // conversationStatus (not STARTING)
-      "STATUS$STARTING_RUNTIME", // runtimeStatus
-      AgentState.LOADING, // agentState (not ready)
+      "OPEN", // webSocketStatus
+      null,
+      "STARTING", // sandboxStatus
     );
 
     // Should return runtime status since conversation is RUNNING
@@ -36,11 +21,9 @@ describe("getStatusCode", () => {
   it("should handle agent running state with stale runtime status", () => {
     // Test case: Agent is running but runtime status is stale
     const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
-      "CONNECTED", // webSocketStatus
-      "RUNNING", // conversationStatus
-      "STATUS$BUILDING_RUNTIME", // runtimeStatus (stale)
-      AgentState.RUNNING, // agentState (ready)
+      "OPEN", // webSocketStatus
+      V1ExecutionStatus.IDLE,
+      "RUNNING",
     );
 
     // Should return agent state message, not runtime status
@@ -50,11 +33,9 @@ describe("getStatusCode", () => {
   it("should handle agent finished state with stale runtime status", () => {
     // Test case: Agent is finished but runtime status is stale
     const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
-      "CONNECTED", // webSocketStatus
-      "RUNNING", // conversationStatus
-      "STATUS$SETTING_UP_WORKSPACE", // runtimeStatus (stale)
-      AgentState.FINISHED, // agentState (ready)
+      "OPEN", // webSocketStatus
+      V1ExecutionStatus.IDLE,
+      "RUNNING",
     );
 
     // Should return agent state message, not runtime status
@@ -64,11 +45,9 @@ describe("getStatusCode", () => {
   it("should still respect stopped states", () => {
     // Test case: Runtime is stopped - should always show stopped
     const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
-      "CONNECTED", // webSocketStatus
-      "STOPPED", // conversationStatus
-      "STATUS$STOPPED", // runtimeStatus
-      AgentState.RUNNING, // agentState
+      "OPEN", // webSocketStatus
+      V1ExecutionStatus.FINISHED,
+      "MISSING",
     );
 
     // Should return stopped status regardless of agent state
@@ -78,11 +57,10 @@ describe("getStatusCode", () => {
   it("should handle null agent state with conversation status STARTING", () => {
     // Test case: No agent state, conversation is STARTING
     const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
-      "CONNECTED", // webSocketStatus
-      "STARTING", // conversationStatus
-      "STATUS$STARTING_RUNTIME", // runtimeStatus
-      null, // agentState
+      "OPEN", // webSocketStatus
+      null,
+      null,
+      "STARTING_CONVERSATION", // taskStatus
     );
 
     // Should return STARTING since conversationStatus takes priority
@@ -92,12 +70,9 @@ describe("getStatusCode", () => {
   it("should prioritize task ERROR status over websocket CONNECTING state", () => {
     // Test case: Task has errored but websocket is still trying to connect
     const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
       "CONNECTING", // webSocketStatus (stuck connecting)
-      null, // conversationStatus
-      null, // runtimeStatus
-      AgentState.LOADING, // agentState
-      "ERROR", // taskStatus (ERROR)
+      null, // executionStatus
+      "ERROR", // sandboxStatus
     );
 
     // Should return error message, not "Connecting..."
@@ -107,10 +82,9 @@ describe("getStatusCode", () => {
   it("should show Starting when conversation status is STARTING even with disconnected websocket", () => {
     // Test case: Server reports STARTING but websocket is disconnected (e.g., during resume)
     const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
-      "DISCONNECTED", // webSocketStatus
-      "STARTING", // conversationStatus (server reports STARTING)
-      "STATUS$STARTING_RUNTIME", // runtimeStatus
+      "CLOSED", // webSocketStatus
+      V1ExecutionStatus.IDLE,
+      "STARTING", // sandboxStatus
       null, // agentState
     );
 
@@ -121,11 +95,9 @@ describe("getStatusCode", () => {
   it("should show Connecting when task is working and websocket is connecting", () => {
     // Test case: Task is in progress and websocket is connecting normally
     const result = getStatusCode(
-      { id: "", message: "", type: "info", status_update: true }, // statusMessage
       "CONNECTING", // webSocketStatus
-      null, // conversationStatus
-      null, // runtimeStatus
-      AgentState.LOADING, // agentState
+      V1ExecutionStatus.IDLE,
+      "STARTING", // sandboxStatus
       "WORKING", // taskStatus (in progress)
     );
 

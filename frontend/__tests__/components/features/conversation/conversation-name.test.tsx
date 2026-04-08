@@ -497,40 +497,6 @@ describe("ConversationNameContextMenu", () => {
     expect(onShowSkills).toHaveBeenCalledTimes(1);
   });
 
-  it("should call export conversation handler when export conversation button is clicked", async () => {
-    const user = userEvent.setup();
-    const onExportConversation = vi.fn();
-
-    renderWithProviders(
-      <ConversationNameContextMenu
-        {...defaultProps}
-        onExportConversation={onExportConversation}
-      />,
-    );
-
-    const exportButton = screen.getByTestId("export-conversation-button");
-    await user.click(exportButton);
-
-    expect(onExportConversation).toHaveBeenCalledTimes(1);
-  });
-
-  it("should call download via VSCode handler when download via VSCode button is clicked", async () => {
-    const user = userEvent.setup();
-    const onDownloadViaVSCode = vi.fn();
-
-    renderWithProviders(
-      <ConversationNameContextMenu
-        {...defaultProps}
-        onDownloadViaVSCode={onDownloadViaVSCode}
-      />,
-    );
-
-    const downloadButton = screen.getByTestId("download-vscode-button");
-    await user.click(downloadButton);
-
-    expect(onDownloadViaVSCode).toHaveBeenCalledTimes(1);
-  });
-
   it("should render separators between logical groups", () => {
     const handlers = {
       onRename: vi.fn(),
