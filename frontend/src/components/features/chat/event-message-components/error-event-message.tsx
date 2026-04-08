@@ -2,7 +2,6 @@ import React from "react";
 import { OpenHandsObservation } from "#/types/core/observations";
 import { isErrorObservation } from "#/types/core/guards";
 import { ErrorMessage } from "../error-message";
-import { LikertScaleWrapper } from "./likert-scale-wrapper";
 
 interface ErrorEventMessageProps {
   event: OpenHandsObservation;
@@ -30,19 +29,9 @@ export function ErrorEventMessage({
   }
 
   return (
-    <div>
-      <ErrorMessage
-        errorId={event.extras.error_id}
-        defaultMessage={event.message}
-      />
-      <LikertScaleWrapper
-        event={event}
-        isLastMessage={isLastMessage}
-        isInLast10Actions={isInLast10Actions}
-        config={config}
-        isCheckingFeedback={isCheckingFeedback}
-        feedbackData={feedbackData}
-      />
-    </div>
+    <ErrorMessage
+      errorId={event.extras.error_id}
+      defaultMessage={event.message}
+    />
   );
 }

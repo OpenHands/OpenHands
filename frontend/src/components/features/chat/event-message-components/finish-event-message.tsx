@@ -2,7 +2,6 @@ import React from "react";
 import { OpenHandsAction } from "#/types/core/actions";
 import { isFinishAction } from "#/types/core/guards";
 import { ChatMessage } from "../chat-message";
-import { LikertScaleWrapper } from "./likert-scale-wrapper";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 
 interface FinishEventMessageProps {
@@ -31,16 +30,6 @@ export function FinishEventMessage({
   }
 
   return (
-    <>
-      <ChatMessage type="agent" message={getEventContent(event).details} />
-      <LikertScaleWrapper
-        event={event}
-        isLastMessage={isLastMessage}
-        isInLast10Actions={isInLast10Actions}
-        config={config}
-        isCheckingFeedback={isCheckingFeedback}
-        feedbackData={feedbackData}
-      />
-    </>
+    <ChatMessage type="agent" message={getEventContent(event).details} />
   );
 }

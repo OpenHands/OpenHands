@@ -6,5 +6,4 @@ export { McpEventMessage } from "./mcp-event-message";
 export { TaskTrackingEventMessage } from "./task-tracking-event-message";
 export { ObservationPairEventMessage } from "./observation-pair-event-message";
 export { GenericEventMessageWrapper } from "./generic-event-message-wrapper";
-export { LikertScaleWrapper } from "./likert-scale-wrapper";
 export { HookExecutionEventMessage } from "./hook-execution-event-message";
