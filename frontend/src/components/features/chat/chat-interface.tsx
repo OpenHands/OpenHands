@@ -27,7 +27,6 @@ import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-
 import { ErrorMessageBanner } from "./error-message-banner";
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
-import { useConfig } from "#/hooks/query/use-config";
 import { validateFiles } from "#/utils/file-validation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConfirmationModeEnabled from "./confirmation-mode-enabled";
@@ -79,7 +78,6 @@ export function ChatInterface() {
     setAutoScroll,
     setHitBottom,
   } = useScrollToBottom(scrollRef);
-  const { data: config } = useConfig();
   const {
     mutate: newConversationCommand,
     isPending: isNewConversationPending,
@@ -325,7 +323,6 @@ export function ChatInterface() {
                   status={serverStatusText}
                 />
               )}
-              
             </div>
 
             <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0">

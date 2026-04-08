@@ -1,7 +1,5 @@
 import { AxiosHeaders } from "axios";
 import {
-  Feedback,
-  FeedbackResponse,
   GetVSCodeUrlResponse,
   Conversation,
   ResultSet,

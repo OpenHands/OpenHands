@@ -1,4 +1,3 @@
-import React from "react";
 import { OpenHandsAction } from "#/types/core/actions";
 import { isUserMessage, isAssistantMessage } from "#/types/core/guards";
 import { ChatMessage } from "../chat-message";
@@ -10,25 +9,11 @@ import { parseMessageFromEvent } from "../event-content-helpers/parse-message-fr
 interface UserAssistantEventMessageProps {
   event: OpenHandsAction;
   shouldShowConfirmationButtons: boolean;
-  isLastMessage: boolean;
-  isInLast10Actions: boolean;
-  config?: { app_mode?: string } | null;
-  isCheckingFeedback: boolean;
-  feedbackData: {
-    exists: boolean;
-    rating?: number;
-    reason?: string;
-  };
 }
 
 export function UserAssistantEventMessage({
   event,
   shouldShowConfirmationButtons,
-  isLastMessage,
-  isInLast10Actions,
-  config,
-  isCheckingFeedback,
-  feedbackData,
 }: UserAssistantEventMessageProps) {
   if (!isUserMessage(event) && !isAssistantMessage(event)) {
     return null;

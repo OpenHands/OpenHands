@@ -41,7 +41,6 @@ describe("EventMessage", () => {
         hasObservationPair={false}
         isAwaitingUserConfirmation={false}
         isLastMessage={true}
-        isInLast10Actions={true}
       />
     );
 
@@ -70,7 +69,6 @@ describe("EventMessage", () => {
         hasObservationPair={false}
         isAwaitingUserConfirmation={false}
         isLastMessage={true}
-        isInLast10Actions={true}
       />
     );
 
@@ -98,7 +96,6 @@ describe("EventMessage", () => {
         hasObservationPair={false}
         isAwaitingUserConfirmation={false}
         isLastMessage={true}
-        isInLast10Actions={true}
       />
     );
 
@@ -126,7 +123,6 @@ describe("EventMessage", () => {
         hasObservationPair={false}
         isAwaitingUserConfirmation={false}
         isLastMessage={false}
-        isInLast10Actions={false}
       />
     );
 
@@ -154,7 +150,6 @@ describe("EventMessage", () => {
         hasObservationPair={false}
         isAwaitingUserConfirmation={false}
         isLastMessage={false}
-        isInLast10Actions={true}
       />
     );
 
@@ -182,7 +177,6 @@ describe("EventMessage", () => {
         hasObservationPair={false}
         isAwaitingUserConfirmation={false}
         isLastMessage={false}
-        isInLast10Actions={false}
       />
     );
 

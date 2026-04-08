@@ -38,7 +38,6 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             hasObservationPair={actionHasObservationPair(message)}
             isAwaitingUserConfirmation={isAwaitingUserConfirmation}
             isLastMessage={messages.length - 1 === index}
-            isInLast10Actions={messages.length - 1 - index < 10}
           />
         ))}
 
