@@ -37,11 +37,7 @@ export const useHandlePlanClick = () => {
     if (storedState.subConversationTaskId && !subConversationTaskId) {
       setSubConversationTaskId(storedState.subConversationTaskId);
     }
-  }, [
-    conversation?.id,
-    subConversationTaskId,
-    setSubConversationTaskId,
-  ]);
+  }, [conversation?.id, subConversationTaskId, setSubConversationTaskId]);
 
   const handlePlanClick = useCallback(
     (event?: React.MouseEvent<HTMLButtonElement> | KeyboardEvent) => {

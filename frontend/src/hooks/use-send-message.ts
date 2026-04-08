@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import { useWsClient } from "#/context/ws-client-provider";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { V1MessageContent } from "#/api/conversation-service/v1-conversation-service.types";
@@ -16,18 +15,14 @@ interface SendResult {
  */
 export function useSendMessage() {
   const { conversationId } = useConversationId();
-  const { data: conversation } = useActiveConversation();
   const { send: v0Send } = useWsClient();
 
   // Get V1 context (will be null if not in V1 provider)
   const v1Context = useConversationWebSocket();
 
-  // All conversations are now V1
-  const isV1Conversation = true;
-
   const send = useCallback(
     async (event: Record<string, unknown>): Promise<SendResult> => {
-      if (isV1Conversation && v1Context) {
+      if (v1Context) {
         // V1: Convert V0 event format to V1 message format
         const { action, args } = event as {
           action: string;
@@ -72,7 +67,7 @@ export function useSendMessage() {
       v0Send(event);
       return { queued: false };
     },
-    [isV1Conversation, v1Context, v0Send, conversationId],
+    [v1Context, v0Send, conversationId],
   );
 
   return { send };
