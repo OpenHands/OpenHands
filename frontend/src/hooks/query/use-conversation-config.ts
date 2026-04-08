@@ -82,17 +82,13 @@ export const useUnifiedConversationConfig = () => {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady();
-  const isV1Conversation = true // All conversations are now V1;
 
   const query = useQuery({
-    queryKey: ["conversation_config", conversationId, isV1Conversation],
+    queryKey: ["conversation_config", conversationId],
     queryFn: () => {
       if (!conversationId) throw new Error("No conversation ID");
 
-      if (isV1Conversation) {
-        return V1ConversationService.getConversationConfig(conversationId);
-      }
-      return ConversationService.getRuntimeId(conversationId);
+      return V1ConversationService.getConversationConfig(conversationId);
     },
     enabled: runtimeIsReady && !!conversationId && conversation !== undefined,
     staleTime: 1000 * 60 * 5, // 5 minutes
