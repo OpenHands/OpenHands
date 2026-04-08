@@ -1,10 +1,8 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import React from "react";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useBatchSandboxes } from "./use-batch-sandboxes";
 import { useConversationConfig } from "./use-conversation-config";
 
@@ -17,47 +15,31 @@ export const useUnifiedActiveHost = () => {
   const [activeHost, setActiveHost] = React.useState<string | null>(null);
   const { conversationId } = useConversationId();
   const runtimeIsReady = useRuntimeIsReady();
-  const { data: conversation } = useActiveConversation();
   const { data: conversationConfig, isLoading: isLoadingConfig } =
     useConversationConfig();
 
-  const isV1Conversation = true // All conversations are now V1;
   const sandboxId = conversationConfig?.runtime_id;
 
   // Fetch sandbox data for V1 conversations
   const sandboxesQuery = useBatchSandboxes(sandboxId ? [sandboxId] : []);
+  const sandbox = sandboxesQuery.data?.[0] || null;
 
   // Get worker URLs from V1 sandbox or legacy web hosts from V0
   const { data, isLoading: hostsQueryLoading } = useQuery({
-    queryKey: [conversationId, "unified", "hosts", isV1Conversation, sandboxId],
+    queryKey: ["hosts", sandbox],
     queryFn: async () => {
       // V1: Get worker URLs from sandbox exposed_urls
-      if (isV1Conversation) {
-        if (
-          !sandboxesQuery.data ||
-          sandboxesQuery.data.length === 0 ||
-          !sandboxesQuery.data[0]
-        ) {
-          return { hosts: [] };
-        }
-
-        const sandbox = sandboxesQuery.data[0];
-        const workerUrls =
-          sandbox.exposed_urls
-            ?.filter((url) => url.name.startsWith("WORKER_"))
-            .map((url) => url.url) || [];
-
-        return { hosts: workerUrls };
+      if (!sandbox) {
+        return { hosts: [] };
       }
+      const workerUrls =
+        sandbox.exposed_urls
+          ?.filter((url) => url.name.startsWith("WORKER_"))
+          .map((url) => url.url) || [];
 
-      // V0 (Legacy): Use the legacy API endpoint
-      const hosts = await ConversationService.getWebHosts(conversationId);
-      return { hosts };
+      return { hosts: workerUrls };
     },
-    enabled:
-      runtimeIsReady &&
-      !!conversationId &&
-      (!isV1Conversation || !!sandboxesQuery.data),
+    enabled: runtimeIsReady && !!conversationId && !!sandboxesQuery.data,
     initialData: { hosts: [] },
     meta: {
       disableToast: true,
@@ -91,9 +73,8 @@ export const useUnifiedActiveHost = () => {
   }, [appsData]);
 
   // Calculate overall loading state including dependent queries for V1
-  const isLoading = isV1Conversation
-    ? isLoadingConfig || sandboxesQuery.isLoading || hostsQueryLoading
-    : hostsQueryLoading;
+  const isLoading =
+    isLoadingConfig || sandboxesQuery.isLoading || hostsQueryLoading;
 
   return { activeHost, isLoading };
 };

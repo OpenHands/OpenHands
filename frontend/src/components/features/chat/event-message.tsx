@@ -13,7 +13,6 @@ import {
 import { OpenHandsObservation } from "#/types/core/observations";
 import { MicroagentStatus } from "#/types/microagent-status";
 import { useConfig } from "#/hooks/query/use-config";
-import { useFeedbackExists } from "#/hooks/query/use-feedback-exists";
 import {
   ErrorEventMessage,
   UserAssistantEventMessage,
@@ -58,11 +57,6 @@ export function EventMessage({
 
   const { data: config } = useConfig();
 
-  const {
-    data: feedbackData = { exists: false },
-    isLoading: isCheckingFeedback,
-  } = useFeedbackExists(event.id);
-
   // Common props for components that need them
   const commonProps = {
     microagentStatus,
@@ -72,8 +66,6 @@ export function EventMessage({
     isLastMessage,
     isInLast10Actions,
     config,
-    isCheckingFeedback,
-    feedbackData,
   };
 
   // Error observations

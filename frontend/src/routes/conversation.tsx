@@ -8,7 +8,6 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentStore } from "#/stores/agent-store";
 import { AgentState } from "#/types/agent-state";
 
-import { useBatchFeedback } from "#/hooks/query/use-batch-feedback";
 import { EventHandler } from "../wrapper/event-handler";
 import { useConversationConfig } from "#/hooks/query/use-conversation-config";
 
@@ -48,9 +47,6 @@ function AppContent() {
   const removeErrorMessage = useErrorMessageStore(
     (state) => state.removeErrorMessage,
   );
-
-  // Fetch batch feedback data when conversation is loaded
-  useBatchFeedback();
 
   // 1. Cleanup Effect - runs when navigating to a different conversation
   React.useEffect(() => {

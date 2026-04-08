@@ -14,8 +14,6 @@ import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
-// TODO: Implement V1 feedback functionality when API supports V1 event IDs
-// import { useFeedbackExists } from "#/hooks/query/use-feedback-exists";
 import {
   ErrorEventMessage,
   UserAssistantEventMessage,

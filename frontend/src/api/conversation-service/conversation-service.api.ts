@@ -15,7 +15,6 @@ import {
 import { openHands } from "../open-hands-axios";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
-import { BatchFeedbackData } from "#/hooks/query/use-batch-feedback";
 import { V1AppConversation } from "./v1-conversation-service.types";
 
 class ConversationService {
@@ -125,38 +124,6 @@ class ConversationService {
       // Error checking if feedback exists
       return { exists: false };
     }
-  }
-
-  /**
-   * Get feedback for multiple events in a conversation
-   * @param conversationId The conversation ID
-   * @returns Map of event IDs to feedback data including existence, rating, reason and metadata
-   */
-  static async getBatchFeedback(conversationId: string): Promise<
-    Record<
-      string,
-      {
-        exists: boolean;
-        rating?: number;
-        reason?: string;
-        metadata?: Record<string, BatchFeedbackData>;
-      }
-    >
-  > {
-    const url = `/feedback/conversation/${conversationId}/batch`;
-    const { data } = await openHands.get<
-      Record<
-        string,
-        {
-          exists: boolean;
-          rating?: number;
-          reason?: string;
-          metadata?: Record<string, BatchFeedbackData>;
-        }
-      >
-    >(url);
-
-    return data;
   }
 
   /**
