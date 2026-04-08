@@ -7,15 +7,11 @@ export function renderConversationErroredToast(
   toast.error(message);
 }
 
-export function renderConversationCreatedToast(
-  _conversationId: string,
-): void {
+export function renderConversationCreatedToast(): void {
   toast.success("Runtime started");
 }
 
-export function renderConversationFinishedToast(
-  _conversationId: string,
-): void {
+export function renderConversationFinishedToast(): void {
   toast.success("Conversation finished");
 }
 
