@@ -26,7 +26,9 @@ export const useUserConversation = (
       if (!cid) return null;
 
       // Use V1 API batch get endpoint
-      const result = await V1ConversationService.batchGetAppConversations([cid]);
+      const result = await V1ConversationService.batchGetAppConversations([
+        cid,
+      ]);
       return result[0] || null;
     },
     enabled: !!cid,
