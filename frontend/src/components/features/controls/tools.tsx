@@ -50,7 +50,7 @@ export function Tools() {
       >
         <ToolsIcon width={18} height={18} color="#959CB2" />
         <span className="text-sm font-normal leading-5 text-white">
-          {t(I18nKey.BUTTON$SHOW_AGENT_TOOLS_AND_METADATA)}
+          {t(I18nKey.MICROAGENTS_MODAL$TOOLS)}
         </span>
       </div>
       {contextMenuOpen && (
