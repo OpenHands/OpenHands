@@ -31,13 +31,10 @@ export function ConversationName() {
   const {
     handleDelete,
     handleStop,
-    handleDownloadViaVSCode,
-    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
     handleShowSkills,
     handleShowHooks,
-    handleExportConversation,
     handleTogglePublic,
     handleCopyShareLink,
     shareUrl,
@@ -57,9 +54,6 @@ export function ConversationName() {
     setConfirmStopModalVisible,
     systemMessage,
     shouldShowStop,
-    shouldShowDownload,
-    shouldShowExport,
-    shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
     shouldShowSkills,
@@ -194,20 +188,9 @@ export function ConversationName() {
                 }
                 onShowSkills={shouldShowSkills ? handleShowSkills : undefined}
                 onShowHooks={shouldShowHooks ? handleShowHooks : undefined}
-                onExportConversation={
-                  shouldShowExport ? handleExportConversation : undefined
-                }
-                onDownloadViaVSCode={
-                  shouldShowDownload ? handleDownloadViaVSCode : undefined
-                }
                 onTogglePublic={handleTogglePublic}
                 shareUrl={shareUrl}
                 onCopyShareLink={handleCopyShareLink}
-                onDownloadConversation={
-                  shouldShowDownloadConversation
-                    ? handleDownloadConversation
-                    : undefined
-                }
                 position="bottom"
               />
             )}
