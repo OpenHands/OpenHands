@@ -190,7 +190,7 @@ export function ChatInterface() {
 
     const { skipped_files: skippedFiles, uploaded_files: uploadedFiles } =
       files.length > 0
-        ? await uploadFiles({ conversationId: params.conversationId!, files })
+        ? await uploadFiles({ files })
         : { skipped_files: [], uploaded_files: [] };
 
     skippedFiles.forEach((f) => displayErrorToast(f.reason));
