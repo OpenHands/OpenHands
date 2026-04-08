@@ -477,7 +477,7 @@ describe("ConversationCard", () => {
   const statusTable: [V1SandboxStatus, boolean][] = [
     ["RUNNING", true],
     ["STARTING", true],
-    ["STOPPED", false],
+    ["ERROR", false],
     ["PAUSED", false],
     ["MISSING", false],
   ];

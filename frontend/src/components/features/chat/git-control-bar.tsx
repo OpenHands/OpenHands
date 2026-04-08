@@ -57,7 +57,7 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
   const hasRepository = !!selectedRepository;
 
   // Enable buttons only when conversation exists and WS is connected
-  const isConversationReady = !!conversation && webSocketStatus === "CONNECTED";
+  const isConversationReady = !!conversation && webSocketStatus === "OPEN";
 
   const handleLaunchRepository = (
     repository: GitRepository,
@@ -83,7 +83,7 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
       {
         onSuccess: () => {
           // Use ref to read the latest WebSocket status (avoids stale closure)
-          if (webSocketStatusRef.current !== "CONNECTED") {
+          if (webSocketStatusRef.current !== "OPEN") {
             displayErrorToast(
               t(I18nKey.CONVERSATION$CLONE_COMMAND_FAILED_DISCONNECTED),
             );

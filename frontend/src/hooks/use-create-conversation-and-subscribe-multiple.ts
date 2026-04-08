@@ -6,7 +6,7 @@ import { useCreateConversation } from "./mutation/use-create-conversation";
 import { useUserProviders } from "./use-user-providers";
 import { useConversationSubscriptions } from "#/context/conversation-subscriptions-provider";
 import { Provider } from "#/types/settings";
-import { CreateMicroagent, Conversation } from "#/api/open-hands.types";
+import { CreateMicroagent } from "#/api/open-hands.types";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 import { renderConversationStartingToast } from "#/components/features/chat/microagent/microagent-status-toast";
@@ -47,7 +47,9 @@ export const useCreateConversationAndSubscribeMultiple = () => {
     queries: conversationIdsToWatch.map((conversationId) => ({
       queryKey: ["conversation-ready-poll", conversationId],
       queryFn: async () => {
-        const result = await V1ConversationService.batchGetAppConversations([conversationId]);
+        const result = await V1ConversationService.batchGetAppConversations([
+          conversationId,
+        ]);
         return result[0] || null;
       },
       enabled: !!conversationId,
@@ -63,7 +65,9 @@ export const useCreateConversationAndSubscribeMultiple = () => {
   });
 
   // Extract stable values from dependency array
-  const queryStatuses = conversationQueries.map((query) => query.data?.sandbox_status);
+  const queryStatuses = conversationQueries.map(
+    (query) => query.data?.sandbox_status,
+  );
   const queryDataExists = conversationQueries.map((query) => !!query.data);
 
   // Effect to handle subscription when conversations are ready
@@ -74,15 +78,19 @@ export const useCreateConversationAndSubscribeMultiple = () => {
       const conversation = query.data;
 
       // Check if conversation is ready (sandbox is running)
-      if (conversation?.sandbox_status === "RUNNING" && conversationData && !conversationData.isSubscribed) {
-        const { execution_status, conversation_url: url, session_api_key: sessionApiKey } = conversation;
+      if (conversation?.sandbox_status === "RUNNING" && conversationData) {
+        const {
+          sandbox_status: sandboxStatus,
+          conversation_url: url,
+          session_api_key: sessionApiKey,
+        } = conversation;
 
         let { baseUrl } = conversationData;
         if (url && !url.startsWith("/")) {
           baseUrl = new URL(url).host;
         }
 
-        if (execution_status === "RUNNING") {
+        if (sandboxStatus === "RUNNING") {
           // Conversation is ready - subscribe to WebSocket
           subscribeToConversation({
             conversationId,
@@ -99,7 +107,7 @@ export const useCreateConversationAndSubscribeMultiple = () => {
             delete newCreated[conversationId];
             return newCreated;
           });
-        } else if (execution_status === "STOPPED") {
+        } else if (sandboxStatus === "MISSING") {
           // Dismiss the starting toast
           toast.dismiss(`starting-${conversationId}`);
 

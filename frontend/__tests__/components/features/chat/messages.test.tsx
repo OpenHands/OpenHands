@@ -5,8 +5,10 @@ import { Messages } from "#/components/features/chat/messages";
 import {
   AssistantMessageAction,
   OpenHandsAction,
-  OpenHandsObservation,
   UserMessageAction,
+} from "#/types/core/actions";
+import {
+  OpenHandsObservation,
 } from "#/types/core/observations";
 import { Conversation } from "#/api/open-hands.types";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";

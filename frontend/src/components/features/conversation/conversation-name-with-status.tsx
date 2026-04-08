@@ -25,7 +25,7 @@ export function ConversationNameWithStatus() {
 
   const isStartingStatus =
     curAgentState === AgentState.LOADING || curAgentState === AgentState.INIT;
-  const isStopStatus = conversation?.status === "STOPPED";
+  const isStopStatus = conversation?.sandbox_status === "MISSING";
 
   const statusColor = getStatusColor({
     isPausing: false,
@@ -62,12 +62,16 @@ export function ConversationNameWithStatus() {
         <ServerStatusContextMenu
           onClose={() => {}}
           onStopServer={
-            conversation?.status === "RUNNING" ? handleStopServer : undefined
+            conversation?.sandbox_status === "RUNNING"
+              ? handleStopServer
+              : undefined
           }
           onStartServer={
-            conversation?.status === "STOPPED" ? handleStartServer : undefined
+            conversation?.sandbox_status === "MISSING"
+              ? handleStartServer
+              : undefined
           }
-          conversationStatus={conversation?.status ?? null}
+          sandboxStatus={conversation?.sandbox_status ?? null}
           position="bottom"
           className="opacity-0 invisible pointer-events-none group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto bottom-full left-0 mt-0 min-h-fit"
           isPausing={false}

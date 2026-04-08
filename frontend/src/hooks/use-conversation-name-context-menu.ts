@@ -4,7 +4,6 @@ import { usePostHog } from "posthog-js/react";
 import { useParams, useNavigate } from "react-router";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import useMetricsStore from "#/stores/metrics-store";
-import { ConversationStatus } from "#/types/conversation-status";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversationSandbox } from "./mutation/use-unified-stop-conversation";
@@ -24,17 +23,18 @@ import {
   adaptSystemMessage,
   SystemMessageForModal,
 } from "#/utils/system-message-adapter";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
-  conversationStatus?: ConversationStatus;
+  sandboxStatus?: V1SandboxStatus;
   showOptions?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
 }
 
 export function useConversationNameContextMenu({
   conversationId,
-  conversationStatus = "STOPPED",
+  sandboxStatus = "MISSING",
   showOptions = false,
   onContextMenuToggle,
 }: UseConversationNameContextMenuProps) {
@@ -164,7 +164,7 @@ export function useConversationNameContextMenu({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    if (conversationId && true // All conversations are now V1) {
+    if (conversationId) {
       await downloadConversation(conversationId);
     }
     onContextMenuToggle?.(false);
@@ -266,22 +266,15 @@ export function useConversationNameContextMenu({
     systemMessage,
 
     // Computed values for conditional rendering
-    shouldShowStop: conversationStatus !== "STOPPED",
+    shouldShowStop: sandboxStatus !== "MISSING",
     shouldShowDownload: Boolean(conversationId && showOptions),
     shouldShowExport: Boolean(conversationId && showOptions),
-    shouldShowDownloadConversation: Boolean(
-      conversationId &&
-      showOptions &&
-      true // All conversations are now V1,
-    ),
+    shouldShowDownloadConversation: Boolean(conversationId && showOptions),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
     shouldShowSkills: Boolean(showOptions && conversationId),
     shouldShowHooks: Boolean(
-      showOptions &&
-      conversationId &&
-      true // All conversations are now V1 &&
-      conversationStatus === "RUNNING",
+      showOptions && conversationId && sandboxStatus === "RUNNING",
     ),
   };
 }

@@ -4,6 +4,7 @@ import { renderWithProviders } from "test-utils";
 import { BrowserRouter } from "react-router";
 import { RecentConversation } from "#/components/features/home/recent-conversations/recent-conversation";
 import type { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
+import { V1ExecutionStatus } from "#/types/v1/core";
 
 vi.mock("react-i18next", async () => {
   const actual = await vi.importActual("react-i18next");
@@ -28,7 +29,7 @@ const baseConversation: V1AppConversation = {
   id: "test-id",
   title: "Test Conversation",
   sandbox_status: "RUNNING",
-  execution_status: "RUNNING",
+  execution_status: V1ExecutionStatus.RUNNING,
   updated_at: "2021-10-01T12:00:00Z",
   created_at: "2021-10-01T12:00:00Z",
   selected_repository: null,
@@ -42,6 +43,7 @@ const baseConversation: V1AppConversation = {
   trigger: null,
   pr_number: [],
   session_api_key: null,
+  sub_conversation_ids: [],
 };
 
 const renderRecentConversation = (conversation: V1AppConversation) =>

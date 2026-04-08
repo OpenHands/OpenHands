@@ -29,7 +29,7 @@ export function ConversationCardActions({
   conversationId,
   showOptions,
 }: ConversationCardActionsProps) {
-  const isConversationStopped = sandboxStatus === "STOPPED";
+  const isConversationStopped = sandboxStatus === "MISSING";
 
   return (
     <div className="group">

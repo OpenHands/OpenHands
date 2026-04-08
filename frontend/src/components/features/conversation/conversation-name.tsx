@@ -66,7 +66,7 @@ export function ConversationName() {
     shouldShowHooks,
   } = useConversationNameContextMenu({
     conversationId,
-    conversationStatus: conversation?.status,
+    sandboxStatus: conversation?.sandbox_status,
     showOptions: true, // Enable all options for conversation name
     onContextMenuToggle: setContextMenuOpen,
   });
@@ -150,7 +150,7 @@ export function ConversationName() {
             onBlur={handleBlur}
             onKeyUp={handleKeyUp}
             type="text"
-            defaultValue={conversation.title}
+            defaultValue={conversation.title || ""}
             className="text-white leading-5 bg-transparent border-none outline-none text-base font-normal w-fit max-w-fit field-sizing-content"
           />
         ) : (
@@ -158,17 +158,13 @@ export function ConversationName() {
             className="text-white leading-5 w-fit max-w-fit truncate"
             data-testid="conversation-name-title"
             onDoubleClick={handleDoubleClick}
-            title={conversation.title}
+            title={conversation.title || ""}
           >
             {conversation.title}
           </div>
         )}
 
-        {titleMode !== "edit" && (
-          <ConversationVersionBadge
-            version="V1"
-          />
-        )}
+        {titleMode !== "edit" && <ConversationVersionBadge version="V1" />}
 
         {titleMode !== "edit" && conversation.llm_model && (
           <span
@@ -247,7 +243,7 @@ export function ConversationName() {
         <ConfirmDeleteModal
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmDeleteModalVisible(false)}
-          conversationTitle={conversation?.title}
+          conversationTitle={conversation?.title || ""}
         />
       )}
 

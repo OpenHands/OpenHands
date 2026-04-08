@@ -39,7 +39,7 @@ export function InteractiveChatBox({
   const { taskStatus: subConversationTaskStatus } =
     useSubConversationTaskPolling(
       subConversationTaskId,
-      conversation?.conversation_id || null,
+      conversation?.id || null,
     );
 
   // Helper function to validate and filter files
@@ -160,7 +160,7 @@ export function InteractiveChatBox({
         isNewConversationPending={disabled}
         onSubmit={handleSubmit}
         onFilesPaste={handleUpload}
-        conversationStatus={conversation?.status || null}
+        sandboxStatus={conversation?.sandbox_status || null}
       />
       <div className="mt-4">
         <GitControlBar onSuggestionsClick={handleSuggestionsClick} />

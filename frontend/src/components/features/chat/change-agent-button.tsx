@@ -24,7 +24,7 @@ export function ChangeAgentButton() {
 
   const webSocketStatus = useUnifiedWebSocketStatus();
 
-  const isWebSocketConnected = webSocketStatus === "CONNECTED";
+  const isWebSocketConnected = webSocketStatus === "OPEN";
 
   const { curAgentState } = useAgentState();
 
@@ -42,7 +42,7 @@ export function ChangeAgentButton() {
   // Poll sub-conversation task status
   const { taskStatus, subConversationId } = useSubConversationTaskPolling(
     subConversationTaskId,
-    conversation?.conversation_id || null,
+    conversation?.id || null,
   );
 
   // Invalidate parent conversation cache when task is ready (only once per task)
@@ -50,7 +50,7 @@ export function ChangeAgentButton() {
     if (
       taskStatus === "READY" &&
       subConversationId &&
-      conversation?.conversation_id &&
+      conversation?.id &&
       subConversationTaskId &&
       lastInvalidatedTaskIdRef.current !== subConversationTaskId
     ) {
@@ -58,13 +58,13 @@ export function ChangeAgentButton() {
       lastInvalidatedTaskIdRef.current = subConversationTaskId;
       // Invalidate the parent conversation to refetch with updated sub_conversation_ids
       queryClient.invalidateQueries({
-        queryKey: ["user", "conversation", conversation.conversation_id],
+        queryKey: ["user", "conversation", conversation.id],
       });
     }
   }, [
     taskStatus,
     subConversationId,
-    conversation?.conversation_id,
+    conversation?.id,
     subConversationTaskId,
     queryClient,
   ]);

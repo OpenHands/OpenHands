@@ -22,9 +22,9 @@ export function MetricsModal({ isOpen, onOpenChange }: MetricsModalProps) {
   const storeMetrics = useMetricsStore();
   const { data: conversation } = useActiveConversation();
 
-  const isV1 = true // All conversations are now V1;
-  const conversationId = conversation?.conversation_id;
-  const conversationUrl = conversation?.url;
+  const isV1 = true; // All conversations are now V1;
+  const conversationId = conversation?.id;
+  const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
 
   // For V1 conversations, fetch metrics directly from the sandbox

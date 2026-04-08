@@ -25,8 +25,7 @@ export function ConversationCardFooter({
 }: ConversationCardFooterProps) {
   const { t } = useTranslation();
 
-  const isConversationArchived =
-    sandboxStatus === "STOPPED" || sandboxStatus === "MISSING";
+  const isConversationArchived = sandboxStatus === "MISSING";
 
   return (
     <div

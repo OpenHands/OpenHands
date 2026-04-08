@@ -63,7 +63,7 @@ export function useSandboxRecovery({
        *   - SandboxStatus.PAUSED  → ConversationStatus.STOPPED : the runtime is not running but may be restarted
        *   - SandboxStatus.MISSING → ConversationStatus.ARCHIVED : the runtime is not running and will not restart due to deleted files.
        */
-      if (!conversationId || status !== "STOPPED" || isResuming) {
+      if (!conversationId || status !== "MISSING" || isResuming) {
         return;
       }
 
@@ -105,7 +105,7 @@ export function useSandboxRecovery({
 
     processedConversationIdRef.current = conversationId;
 
-    if (sandboxStatus === "STOPPED") {
+    if (sandboxStatus === "MISSING") {
       attemptRecovery();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

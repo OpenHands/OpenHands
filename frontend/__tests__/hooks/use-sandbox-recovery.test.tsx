@@ -81,7 +81,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -104,7 +104,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "RUNNING",
+            sandboxStatus: "RUNNING",
           }),
         { wrapper: createWrapper() },
       );
@@ -117,7 +117,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: undefined,
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -130,7 +130,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: undefined,
+            sandboxStatus: undefined,
           }),
         { wrapper: createWrapper() },
       );
@@ -143,7 +143,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -161,7 +161,7 @@ describe("useSandboxRecovery", () => {
         ({ conversationId }) =>
           useSandboxRecovery({
             conversationId,
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
           }),
         {
           wrapper: createWrapper(),
@@ -205,7 +205,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "RUNNING", // Cached status is RUNNING
+            sandboxStatus: "RUNNING", // Cached status is RUNNING
             refetchConversation: mockRefetch,
           }),
         { wrapper: createWrapper() },
@@ -239,7 +239,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "RUNNING",
+            sandboxStatus: "RUNNING",
             refetchConversation: mockRefetch,
           }),
         { wrapper: createWrapper() },
@@ -263,7 +263,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
             // No refetchConversation provided
           }),
         { wrapper: createWrapper() },
@@ -291,7 +291,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
             refetchConversation: mockRefetch,
           }),
         { wrapper: createWrapper() },
@@ -324,7 +324,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -369,7 +369,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "RUNNING",
+            sandboxStatus: "RUNNING",
             refetchConversation: mockRefetch,
           }),
         { wrapper: createWrapper() },
@@ -395,7 +395,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "RUNNING",
+            sandboxStatus: "RUNNING",
             refetchConversation: mockRefetch,
           }),
         { wrapper: createWrapper() },
@@ -426,7 +426,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "RUNNING",
+            sandboxStatus: "RUNNING",
           }),
         { wrapper: createWrapper() },
       );
@@ -457,7 +457,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -472,7 +472,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
             onSuccess,
           }),
         { wrapper: createWrapper() },
@@ -498,7 +498,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
             onError,
           }),
         { wrapper: createWrapper() },
@@ -541,7 +541,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "STOPPED",
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -564,7 +564,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            conversationStatus: "RUNNING",
+            sandboxStatus: "RUNNING",
           }),
         { wrapper: createWrapper() },
       );
