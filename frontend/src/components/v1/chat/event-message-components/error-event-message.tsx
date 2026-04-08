@@ -7,9 +7,7 @@ interface ErrorEventMessageProps {
   event: AgentErrorEvent;
 }
 
-export function ErrorEventMessage({
-  event,
-}: ErrorEventMessageProps) {
+export function ErrorEventMessage({ event }: ErrorEventMessageProps) {
   if (!isAgentErrorEvent(event)) {
     return null;
   }

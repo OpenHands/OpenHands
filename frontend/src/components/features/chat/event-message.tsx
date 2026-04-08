@@ -66,9 +66,7 @@ export function EventMessage({
 
   // Observation pairs with OpenHands actions
   if (hasObservationPair && isOpenHandsAction(event)) {
-    return (
-      <ObservationPairEventMessage event={event} />
-    );
+    return <ObservationPairEventMessage event={event} />;
   }
 
   // Finish actions
