@@ -90,7 +90,7 @@ export function CustomChatInput({
     messageToSend,
   );
 
-  const { handleSubmit, handleResumeAgent } = useChatSubmission(
+  const { handleSubmit } = useChatSubmission(
     chatInputRef as React.RefObject<HTMLDivElement | null>,
     fileInputRef as React.RefObject<HTMLInputElement | null>,
     smartResize,
@@ -155,7 +155,6 @@ export function CustomChatInput({
           chatInputRef={chatInputRef}
           handleFileIconClick={handleFileIconClick}
           handleSubmit={handleSubmit}
-          handleResumeAgent={handleResumeAgent}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
