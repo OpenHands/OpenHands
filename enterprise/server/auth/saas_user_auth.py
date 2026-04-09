@@ -14,6 +14,10 @@ from server.auth.auth_error import (
     ExpiredError,
     NoCredentialsError,
 )
+from server.auth.authorization import (
+    get_role_permissions,
+    get_user_org_role,
+)
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 from server.auth.token_manager import TokenManager
 from server.config import get_config
@@ -23,10 +27,12 @@ from sqlalchemy import delete, select
 from storage.api_key_store import ApiKeyStore
 from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
+from storage.org_store import OrgStore
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
+from storage.user_store import UserStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from openhands.integrations.provider import (
@@ -274,13 +280,6 @@ class SaasUserAuth(UserAuth):
         self._org_info_loaded = True
 
         try:
-            from server.auth.authorization import (
-                get_role_permissions,
-                get_user_org_role,
-            )
-            from storage.org_store import OrgStore
-            from storage.user_store import UserStore
-
             # Get user and their current org
             user = await UserStore.get_user_by_id(self.user_id)
             if not user:
