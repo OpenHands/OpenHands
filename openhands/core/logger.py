@@ -546,7 +546,7 @@ class RedactURLParamsFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        from openhands.sdk.utils.redact import redact_url_params
+        from openhands.utils._redact_compat import redact_url_params
 
         if record.args and isinstance(record.args, (tuple, list)):
             record.args = tuple(
