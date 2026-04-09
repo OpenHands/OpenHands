@@ -105,7 +105,9 @@ async def create_mcp_clients(
                 )
                 continue
 
-            logger.info(f'Initializing MCP agent for {redact_text_secrets(str(server))} with stdio connection...')
+            logger.info(
+                f'Initializing MCP agent for {redact_text_secrets(str(server))} with stdio connection...'
+            )
             client = MCPClient()
             try:
                 await client.connect_stdio(server)
@@ -123,7 +125,10 @@ async def create_mcp_clients(
                 mcp_clients.append(client)
             except Exception as e:
                 # Error is already logged and collected in client.connect_stdio()
-                logger.error(f'Failed to connect to {redact_text_secrets(str(server))}: {str(e)}', exc_info=True)
+                logger.error(
+                    f'Failed to connect to {redact_text_secrets(str(server))}: {str(e)}',
+                    exc_info=True,
+                )
             continue
 
         is_shttp = isinstance(server, MCPSHTTPServerConfig)
@@ -154,7 +159,10 @@ async def create_mcp_clients(
 
         except Exception as e:
             # Error is already logged and collected in client.connect_http()
-            logger.error(f'Failed to connect to {redact_text_secrets(str(server))}: {str(e)}', exc_info=True)
+            logger.error(
+                f'Failed to connect to {redact_text_secrets(str(server))}: {str(e)}',
+                exc_info=True,
+            )
 
     return mcp_clients
 
