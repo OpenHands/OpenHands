@@ -3229,6 +3229,23 @@
     "uk": "Користувацька модель",
     "ca": "Model personalitzat"
   },
+  "SETTINGS$CUSTOM_MODEL_HELP": {
+    "en": "For OpenAI-compatible providers, the model may need a provider prefix, for example `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "ja": "OpenAI互換プロバイダーでは、モデル名にプロバイダーのプレフィックスが必要な場合があります。例: `huggingface/Qwen/Qwen3-Coder-Next`。",
+    "zh-CN": "对于 OpenAI 兼容提供商，模型名可能需要带提供商前缀，例如 `huggingface/Qwen/Qwen3-Coder-Next`。",
+    "zh-TW": "對於 OpenAI 相容供應商，模型名稱可能需要加上供應商前綴，例如 `huggingface/Qwen/Qwen3-Coder-Next`。",
+    "ko-KR": "OpenAI 호환 제공자의 경우 모델에 제공자 접두사가 필요할 수 있습니다. 예: `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "de": "Bei OpenAI-kompatiblen Anbietern kann das Modell einen Anbieter-Präfix benötigen, zum Beispiel `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "no": "For OpenAI-kompatible leverandører kan modellen trenge et leverandørprefiks, for eksempel `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "it": "Per i provider compatibili con OpenAI, il modello potrebbe richiedere un prefisso del provider, ad esempio `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "pt": "Para provedores compatíveis com OpenAI, o modelo pode precisar de um prefixo do provedor, por exemplo `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "es": "Para proveedores compatibles con OpenAI, el modelo puede necesitar un prefijo del proveedor, por ejemplo `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "ar": "بالنسبة للموفرين المتوافقين مع OpenAI، قد يحتاج اسم النموذج إلى بادئة خاصة بالموفر، مثل `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "fr": "Pour les fournisseurs compatibles OpenAI, le modèle peut nécessiter un préfixe de fournisseur, par exemple `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "tr": "OpenAI uyumlu sağlayıcılarda modelin bir sağlayıcı öneki gerekebilir, örneğin `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "uk": "Для OpenAI-сумісних провайдерів модель може потребувати префікса провайдера, наприклад `huggingface/Qwen/Qwen3-Coder-Next`.",
+    "ca": "Per als proveïdors compatibles amb OpenAI, el model pot necessitar un prefix del proveïdor, per exemple `huggingface/Qwen/Qwen3-Coder-Next`."
+  },
   "GITHUB$CODE_NOT_IN_GITHUB": {
     "en": "Code not in GitHub?",
     "ja": "GitHubにないコード？",

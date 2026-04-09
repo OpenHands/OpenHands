@@ -611,6 +611,9 @@ function LlmSettingsScreen() {
                 onChange={handleCustomModelIsDirty}
                 isDisabled={isReadOnly}
               />
+              <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400 max-w-[680px]">
+                {t(I18nKey.SETTINGS$CUSTOM_MODEL_HELP)}
+              </p>
               {(settings.llm_model?.startsWith("openhands/") ||
                 currentSelectedModel?.startsWith("openhands/")) && (
                 <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
