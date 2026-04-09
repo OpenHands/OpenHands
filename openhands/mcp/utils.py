@@ -24,7 +24,11 @@ from openhands.mcp.client import MCPClient
 from openhands.mcp.error_collector import mcp_error_collector
 from openhands.runtime.base import Runtime
 from openhands.runtime.impl.cli.cli_runtime import CLIRuntime
-from openhands.sdk.utils.redact import sanitize_dict
+from openhands.utils._redact_compat import (
+    redact_text_secrets,
+    redact_url_params,
+    sanitize_config,
+)
 
 
 def convert_mcp_clients_to_tools(mcp_clients: list[MCPClient] | None) -> list[dict]:
@@ -101,7 +105,9 @@ async def create_mcp_clients(
                 )
                 continue
 
-            logger.info(f'Initializing MCP agent for {server} with stdio connection...')
+            logger.info(
+                f'Initializing MCP agent for {redact_text_secrets(str(server))} with stdio connection...'
+            )
             client = MCPClient()
             try:
                 await client.connect_stdio(server)
@@ -119,14 +125,17 @@ async def create_mcp_clients(
                 mcp_clients.append(client)
             except Exception as e:
                 # Error is already logged and collected in client.connect_stdio()
-                logger.error(f'Failed to connect to {server}: {str(e)}', exc_info=True)
+                logger.error(
+                    f'Failed to connect to {redact_text_secrets(str(server))}: {str(e)}',
+                    exc_info=True,
+                )
             continue
 
         is_shttp = isinstance(server, MCPSHTTPServerConfig)
 
         connection_type = 'SHTTP' if is_shttp else 'SSE'
         logger.info(
-            f'Initializing MCP agent for {server} with {connection_type} connection...'
+            f'Initializing MCP agent for {redact_text_secrets(str(server))} with {connection_type} connection...'
         )
         client = MCPClient()
 
@@ -141,7 +150,7 @@ async def create_mcp_clients(
             # Log which tools this specific server provides
             tool_names = [tool.name for tool in client.tools]
             logger.debug(
-                f'Successfully connected to MCP STTP server {server.url} - '
+                f'Successfully connected to MCP STTP server {redact_url_params(server.url)} - '
                 f'provides {len(tool_names)} tools: {tool_names}'
             )
 
@@ -150,7 +159,10 @@ async def create_mcp_clients(
 
         except Exception as e:
             # Error is already logged and collected in client.connect_http()
-            logger.error(f'Failed to connect to {server}: {str(e)}', exc_info=True)
+            logger.error(
+                f'Failed to connect to {redact_text_secrets(str(server))}: {str(e)}',
+                exc_info=True,
+            )
 
     return mcp_clients
 
@@ -179,7 +191,7 @@ async def fetch_mcp_tools_from_config(
     mcp_tools = []
     try:
         logger.debug(
-            f'Creating MCP clients with config: {sanitize_dict(mcp_config.model_dump())}'
+            f'Creating MCP clients with config: {sanitize_config(mcp_config.model_dump())}'
         )
 
         # Create clients - this will fetch tools but not maintain active connections

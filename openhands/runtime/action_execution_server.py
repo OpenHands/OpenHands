@@ -46,7 +46,7 @@ from openhands.app_server.status.system_stats import (
 )
 from openhands.core.config.mcp_config import MCPStdioServerConfig
 from openhands.core.exceptions import BrowserUnavailableException
-from openhands.core.logger import get_uvicorn_json_log_config
+from openhands.core.logger import get_uvicorn_log_config
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import (
     Action,
@@ -1078,8 +1078,5 @@ if __name__ == '__main__':
             return JSONResponse(content=[])
 
     logger.debug(f'Starting action execution API on port {args.port}')
-    # When LOG_JSON=1, provide a JSON log config to Uvicorn so error/access logs are structured
-    log_config = None
-    if os.getenv('LOG_JSON', '0') in ('1', 'true', 'True'):
-        log_config = get_uvicorn_json_log_config()
+    log_config = get_uvicorn_log_config()
     run(app, host='0.0.0.0', port=args.port, log_config=log_config, use_colors=False)
