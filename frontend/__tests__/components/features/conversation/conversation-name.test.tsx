@@ -365,6 +365,7 @@ describe("ConversationNameContextMenu", () => {
       onDisplayCost: vi.fn(),
       onShowAgentTools: vi.fn(),
       onShowSkills: vi.fn(),
+      onDownloadConversation: vi.fn(),
     };
 
     renderWithProviders(
