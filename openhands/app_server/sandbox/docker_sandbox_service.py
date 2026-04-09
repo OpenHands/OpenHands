@@ -253,8 +253,15 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                # Get the started_at from the docker container info and fallback to sandbox created_at
+                try:
+                    state = container.attrs.get('State')
+                    started_at = datetime.fromisoformat(state.get('StartedAt'))
+                except (KeyError, ValueError, AttributeError):
+                    started_at = sandbox_info.created_at
+
                 # If the server has exceeded the startup grace period, it's an error
-                if sandbox_info.created_at < utc_now() - timedelta(
+                if started_at < utc_now() - timedelta(
                     seconds=self.startup_grace_seconds
                 ):
                     _logger.info(
