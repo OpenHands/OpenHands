@@ -62,7 +62,6 @@ export function useSandboxRecovery({
       if (!conversationId || status !== "PAUSED" || isResuming) {
         return;
       }
-
       resumeSandbox(
         { conversationId, providers },
         {
@@ -101,7 +100,7 @@ export function useSandboxRecovery({
 
     processedConversationIdRef.current = conversationId;
 
-    if (sandboxStatus === "MISSING") {
+    if (sandboxStatus === "PAUSED") {
       attemptRecovery();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
