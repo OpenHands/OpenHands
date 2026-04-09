@@ -76,12 +76,12 @@ describe("useSandboxRecovery", () => {
   });
 
   describe("initial load recovery", () => {
-    it("should call resumeSandbox on initial load when conversation is STOPPED", () => {
+    it("should call resumeSandbox on initial load when conversation is PAUSED", () => {
       renderHook(
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING"
+            sandboxStatus: "PAUSED"
           }),
         { wrapper: createWrapper() },
       );
@@ -143,7 +143,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING"
+            sandboxStatus: "PAUSED"
           }),
         { wrapper: createWrapper() },
       );
@@ -161,7 +161,7 @@ describe("useSandboxRecovery", () => {
         ({ conversationId }) =>
           useSandboxRecovery({
             conversationId,
-            sandboxStatus: "MISSING"
+            sandboxStatus: "PAUSED"
           }),
         {
           wrapper: createWrapper(),
@@ -190,7 +190,7 @@ describe("useSandboxRecovery", () => {
   });
 
   describe("tab focus recovery", () => {
-    it("should call resumeSandbox when tab becomes visible and refetch returns STOPPED", async () => {
+    it("should call resumeSandbox when tab becomes visible and refetch returns PAUSED", async () => {
       // Start with tab hidden
       Object.defineProperty(document, "visibilityState", {
         value: "hidden",
@@ -198,7 +198,7 @@ describe("useSandboxRecovery", () => {
       });
 
       const mockRefetch = vi.fn().mockResolvedValue({
-        data: { status: "STOPPED" },
+        data: { status: "PAUSED" },
       });
 
       renderHook(
@@ -263,7 +263,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING",
+            sandboxStatus: "PAUSED",
             // No refetchConversation provided
           }),
         { wrapper: createWrapper() },
@@ -284,14 +284,14 @@ describe("useSandboxRecovery", () => {
 
     it("should NOT call resumeSandbox when tab becomes hidden", async () => {
       const mockRefetch = vi.fn().mockResolvedValue({
-        data: { sandbox_status: "MISSING" },
+        data: { sandbox_status: "PAUSED" },
       });
 
       renderHook(
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING",
+            sandboxStatus: "PAUSED",
             refetchConversation: mockRefetch,
           }),
         { wrapper: createWrapper() },
@@ -472,7 +472,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING",
+            sandboxStatus: "PAUSED",
             onSuccess,
           }),
         { wrapper: createWrapper() },
@@ -498,7 +498,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING",
+            sandboxStatus: "PAUSED",
             onError,
           }),
         { wrapper: createWrapper() },
