@@ -13395,7 +13395,6 @@
     "uk": "Немає доступного API-ключа",
     "ca": "No hi ha cap clau d'API disponible"
   },
-  "MICROAGENT_MANAGEMENT$TITLE": {
     "en": "Microagent Management",
     "ja": "マイクロエージェント管理",
     "zh-CN": "微代理管理",
@@ -13412,7 +13411,6 @@
     "uk": "Управління мікроагентами",
     "ca": "Gestió de Microagents"
   },
-  "MICROAGENT_MANAGEMENT$DESCRIPTION": {
     "en": "Manage Microagents",
     "ja": "マイクロエージェントを管理する",
     "zh-CN": "管理微代理",
@@ -13429,7 +13427,6 @@
     "uk": "Керування мікроагентами",
     "ca": "Gestiona els Microagents"
   },
-  "MICROAGENT_MANAGEMENT$USE_MICROAGENTS": {
     "en": "Use microagents to customize the behavior of OpenHands, teach it about your repositories, and help it work faster.",
     "ja": "マイクロエージェントを使ってOpenHandsの動作をカスタマイズし、リポジトリについて教え、より速く作業できるようにしましょう。",
     "zh-CN": "使用微代理自定义OpenHands的行为，让其了解您的仓库，并帮助其更快地工作。",
@@ -13769,7 +13766,6 @@
     "uk": "Створено",
     "ca": "Creat el"
   },
-  "MICROAGENT_MANAGEMENT$LEARN_THIS_REPO": {
     "en": "Learn this repo",
     "ja": "このリポジトリを学習する",
     "zh-CN": "学习此仓库",
@@ -13786,7 +13782,6 @@
     "uk": "Вивчити цей репозиторій",
     "ca": "Aprèn d'aquest repositori"
   },
-  "MICROAGENT_MANAGEMENT$READY_TO_ADD_MICROAGENT": {
     "en": "Ready to add a microagent?",
     "ja": "マイクロエージェントを追加する準備はできましたか？",
     "zh-CN": "准备好添加微代理了吗？",
@@ -13803,7 +13798,6 @@
     "uk": "Готові додати мікроагента?",
     "ca": "Preparat per afegir un microagent?"
   },
-  "MICROAGENT_MANAGEMENT$OPENHANDS_CAN_LEARN_ABOUT_REPOSITORIES": {
     "en": "OpenHands can automatically learn about your repositories and store its findings as markdown in a microagent. The microagent will help OpenHands run faster and more accurately in any future conversations.",
     "ja": "OpenHandsはあなたのリポジトリについて自動的に学習し、その結果をマイクロエージェント内のMarkdownとして保存できます。マイクロエージェントは今後の会話でOpenHandsがより速く、より正確に動作するのに役立ちます。",
     "zh-CN": "OpenHands 可以自动学习您的仓库，并将其发现以 markdown 形式存储在微代理中。微代理将帮助 OpenHands 在未来的对话中运行得更快、更准确。",
@@ -13820,7 +13814,6 @@
     "uk": "OpenHands може автоматично вивчати ваші репозиторії та зберігати свої висновки у вигляді markdown у мікроагенті. Мікроагент допоможе OpenHands працювати швидше та точніше у майбутніх розмовах.",
     "ca": "OpenHands pot aprendre automàticament sobre els vostres repositoris i desar els seus resultats com a markdown en un microagent. El microagent ajudarà OpenHands a funcionar més ràpidament i amb més precisió en futures converses."
   },
-  "MICROAGENT_MANAGEMENT$ADD_A_MICROAGENT_TO": {
     "en": "Add a Microagent to",
     "ja": "にマイクロエージェントを追加",
     "zh-CN": "添加微代理到",
@@ -13837,7 +13830,6 @@
     "uk": "Додати мікроагента до",
     "ca": "Afegeix un Microagent a"
   },
-  "MICROAGENT_MANAGEMENT$ADD_A_MICROAGENT": {
     "en": "Add a Microagent",
     "ja": "マイクロエージェントを追加",
     "zh-CN": "添加微代理",
@@ -13854,7 +13846,6 @@
     "uk": "Додати мікроагента",
     "ca": "Afegeix un Microagent"
   },
-  "MICROAGENT_MANAGEMENT$UPDATE_MICROAGENT": {
     "en": "Update microagent",
     "ja": "マイクロエージェントを更新",
     "zh-CN": "更新微代理",
@@ -13871,7 +13862,6 @@
     "uk": "Оновити мікроагента",
     "ca": "Actualitza el microagent"
   },
-  "MICROAGENT_MANAGEMENT$ADD_MICROAGENT_MODAL_DESCRIPTION": {
     "en": "OpenHands will create a new microagent based on your instructions.",
     "ja": "OpenHandsはあなたの指示に基づいて新しいマイクロエージェントを作成します。",
     "zh-CN": "OpenHands 将根据您的指示创建一个新的微代理。",
@@ -13888,7 +13878,6 @@
     "uk": "OpenHands створить нового мікроагента відповідно до ваших інструкцій.",
     "ca": "OpenHands crearà un nou microagent basat en les vostres instruccions."
   },
-  "MICROAGENT_MANAGEMENT$WHAT_TO_DO": {
     "en": "What would you like the Microagent to do?",
     "ja": "マイクロエージェントに何をさせたいですか？",
     "zh-CN": "您希望微代理做什么？",
@@ -13905,7 +13894,6 @@
     "uk": "Що в,и хочете, щоб зробив мікроагент?",
     "ca": "Què voleu que faci el Microagent?"
   },
-  "MICROAGENT_MANAGEMENT$DESCRIBE_WHAT_TO_DO": {
     "en": "Describe what you would like the Microagent to do.",
     "ja": "マイクロエージェントにしてほしいことを説明してください。",
     "zh-CN": "请描述您希望微代理执行的操作。",
@@ -13922,7 +13910,6 @@
     "uk": "Опишіть, що ви хочете, щоб зробив мікроагент.",
     "ca": "Descriviu el que voleu que faci el Microagent."
   },
-  "MICROAGENT_MANAGEMENT$ADD_TRIGGERS": {
     "en": "Define triggers for the Microagent",
     "ja": "マイクロエージェントのトリガーを定義する",
     "zh-CN": "为微代理定义触发器",
@@ -13939,7 +13926,6 @@
     "uk": "Визначте тригери для мікроагента",
     "ca": "Definiu disparadors per al Microagent"
   },
-  "MICROAGENT_MANAGEMENT$HELP_TEXT_DESCRIBING_VALID_TRIGGERS": {
     "en": "Enter a keyword that OpenHands will use to trigger this microagent (Optional).",
     "ja": "OpenHandsがこのマイクロエージェントを起動するために使用するキーワードを入力してください（任意）。",
     "zh-CN": "输入OpenHands将用于触发此微代理的关键字（可选）。",
@@ -14041,7 +14027,6 @@
     "uk": "Вивчити структуру файлів",
     "ca": "Aprèn l'estructura de fitxers"
   },
-  "MICROAGENT_MANAGEMENT$YOU_DO_NOT_HAVE_USER_LEVEL_MICROAGENTS": {
     "en": "You do not have user-level microagents",
     "ja": "ユーザーレベルのマイクロエージェントがありません",
     "zh-CN": "您没有用户级微代理",
@@ -14058,7 +14043,6 @@
     "uk": "У вас немає мікроагентів на рівні користувача",
     "ca": "No teniu microagents a nivell d'usuari"
   },
-  "MICROAGENT_MANAGEMENT$YOU_DO_NOT_HAVE_MICROAGENTS": {
     "en": "You do not have microagents",
     "ja": "マイクロエージェントがありません",
     "zh-CN": "您没有微代理",
@@ -14075,7 +14059,6 @@
     "uk": "У вас немає мікроагентів",
     "ca": "No teniu microagents"
   },
-  "MICROAGENT_MANAGEMENT$YOU_DO_NOT_HAVE_ORGANIZATION_LEVEL_MICROAGENTS": {
     "en": "You do not have organization-level microagents",
     "ja": "組織レベルのマイクロエージェントがありません",
     "zh-CN": "您没有组织级微代理",
@@ -14194,7 +14177,6 @@
     "uk": "В процесі виконання",
     "ca": "Treballant-hi"
   },
-  "MICROAGENT_MANAGEMENT$WE_ARE_WORKING_ON_IT": {
     "en": "We're working on it! Once OpenHands is done investigating, you'll be able to review its pull request before merging your new microagent.",
     "ja": "作業中です！OpenHandsの調査が完了すると、新しいマイクロエージェントをマージする前にプルリクエストを確認できます。",
     "zh-CN": "我们正在处理！OpenHands 调查完成后，您将能够在合并新微代理之前审查其拉取请求。",
@@ -14211,7 +14193,6 @@
     "uk": "Ми працюємо над цим! Після завершення розслідування OpenHands ви зможете переглянути його pull request перед об'єднанням нового мікроагента.",
     "ca": "Hi estem treballant! Un cop OpenHands hagi acabat d'investigar, podreu revisar la seva sol·licitud de canvis abans de fusionar el vostre nou microagent."
   },
-  "MICROAGENT_MANAGEMENT$YOUR_MICROAGENT_IS_READY": {
     "en": "Your microagent is ready! Merge the PR in GitHub to start using it.",
     "ja": "マイクロエージェントの準備ができました！GitHubでPRをマージして使い始めましょう。",
     "zh-CN": "您的微代理已准备就绪！在 GitHub 上合并 PR 即可开始使用。",
@@ -14330,7 +14311,6 @@
     "uk": "Зупинка...",
     "ca": "Aturant..."
   },
-  "MICROAGENT_MANAGEMENT$ERROR": {
     "en": "The system has encountered an error. Please try again later.",
     "ja": "システムでエラーが発生しました。後でもう一度お試しください。",
     "zh-CN": "系统遇到错误。请稍后再试。",
@@ -14347,7 +14327,6 @@
     "uk": "Система зіткнулася з помилкою. Будь ласка, спробуйте пізніше.",
     "ca": "El sistema ha trobat un error. Torneu-ho a intentar més tard."
   },
-  "MICROAGENT_MANAGEMENT$CONVERSATION_STOPPED": {
     "en": "The conversation has been stopped.",
     "ja": "会話が停止されました。",
     "zh-CN": "对话已被停止。",
@@ -14364,7 +14343,6 @@
     "uk": "Розмову зупинено.",
     "ca": "La conversa s'ha aturat."
   },
-  "MICROAGENT_MANAGEMENT$LEARN_THIS_REPO_MODAL_TITLE": {
     "en": "Learn this repository?",
     "ja": "このリポジトリを学習しますか？",
     "zh-CN": "要学习此存储库吗？",
@@ -14381,7 +14359,6 @@
     "uk": "Вивчити цей репозиторій?",
     "ca": "Aprendre d'aquest repositori?"
   },
-  "MICROAGENT_MANAGEMENT$LEARN_THIS_REPO_MODAL_DESCRIPTION": {
     "en": "Do you want OpenHands to launch a new conversation to help you understand this repository?",
     "ja": "OpenHandsがこのリポジトリを理解するための新しい会話を開始しますか？",
     "zh-CN": "您想让OpenHands启动一个新对话来帮助您了解此存储库吗？",
@@ -14398,7 +14375,6 @@
     "uk": "Бажаєте, щоб OpenHands розпочав нову розмову, щоб допомогти вам зрозуміти цей репозиторій?",
     "ca": "Voleu que OpenHands iniciï una nova conversa per ajudar-vos a entendre aquest repositori?"
   },
-  "MICROAGENT_MANAGEMENT$WHAT_YOU_WOULD_LIKE_TO_KNOW_ABOUT_THIS_REPO": {
     "en": "What would you like to know about this repository? (optional)",
     "ja": "このリポジトリについて知りたいことは何ですか？（任意）",
     "zh-CN": "您想了解此存储库的哪些内容？（可选）",
@@ -14415,7 +14391,6 @@
     "uk": "Що ви хотіли б дізнатися про цей репозиторій? (необов'язково)",
     "ca": "Què voleu saber sobre aquest repositori? (opcional)"
   },
-  "MICROAGENT_MANAGEMENT$DESCRIBE_WHAT_TO_KNOW_ABOUT_THIS_REPO": {
     "en": "Describe what you would like to know about this repository.",
     "ja": "このリポジトリについて知りたいことを説明してください。",
     "zh-CN": "请描述您想了解此存储库的内容。",
@@ -14432,7 +14407,6 @@
     "uk": "Опишіть, що ви хотіли б дізнатися про цей репозиторій.",
     "ca": "Descriviu el que voleu saber sobre aquest repositori."
   },
-  "MICROAGENT_MANAGEMENT$UPDATE_MICROAGENT_MODAL_DESCRIPTION": {
     "en": "OpenHands will update the microagent based on your instructions.",
     "ja": "OpenHandsはあなたの指示に基づいてマイクロエージェントを更新します。",
     "zh-CN": "OpenHands 将根据您的指示更新微代理。",
@@ -14959,7 +14933,6 @@
     "uk": "Ключ API не може містити пробіли",
     "ca": "La clau d'API no pot contenir espais"
   },
-  "MICROAGENT_MANAGEMENT$ERROR_LOADING_MICROAGENT_CONTENT": {
     "en": "Error loading microagent content.",
     "ja": "マイクロエージェントのコンテンツの読み込み中にエラーが発生しました。",
     "zh-CN": "加载微代理内容时出错。",
@@ -15520,7 +15493,6 @@
     "uk": "A server with this URL already exists for the selected type",
     "ca": "Les variables d'entorn han de seguir el format CLAU=valor"
   },
-  "MICROAGENT_MANAGEMENT$OPENING_PR_TO_CREATE_MICROAGENT": {
     "en": "Opening a PR to create the microagent for you...",
     "ja": "マイクロエージェントを作成するためのプルリクエストを作成しています...",
     "zh-CN": "正在为您创建微代理的拉取请求...",
@@ -15537,7 +15509,6 @@
     "uk": "Відкривається PR для створення мікроагента для вас...",
     "ca": "Obrint una PR per crear el microagent per a vosaltres..."
   },
-  "MICROAGENT_MANAGEMENT$PR_READY_FOR_REVIEW": {
     "en": "PR is ready for review! The microagent has been created successfully.",
     "ja": "PRのレビューが可能です！マイクロエージェントが正常に作成されました。",
     "zh-CN": "PR已准备好审核！微代理已成功创建。",
@@ -15554,7 +15525,6 @@
     "uk": "PR готовий до перегляду! Мікроагента успішно створено.",
     "ca": "La PR està preparada per a la revisió! El microagent s'ha creat correctament."
   },
-  "MICROAGENT_MANAGEMENT$PR_NOT_CREATED": {
     "en": "The agent has finished its task but was unable to create a PR.",
     "ja": "エージェントはタスクを完了しましたが、PRを作成できませんでした。",
     "zh-CN": "代理已完成任务，但无法创建 PR。",
@@ -15571,7 +15541,6 @@
     "uk": "Агент завершив завдання, але не зміг створити PR.",
     "ca": "L'agent ha acabat la seva tasca però no ha pogut crear una PR."
   },
-  "MICROAGENT_MANAGEMENT$ERROR_CREATING_MICROAGENT": {
     "en": "Something went wrong. Try initiating the microagent again.",
     "ja": "問題が発生しました。もう一度マイクロエージェントを開始してください。",
     "zh-CN": "出现了问题。请重试启动微代理。",
@@ -15639,7 +15608,6 @@
     "uk": "Розпочинається розмова...",
     "ca": "Iniciant la conversa..."
   },
-  "MICROAGENT_MANAGEMENT$EXISTING_MICROAGENTS": {
     "en": "Existing Microagents",
     "ja": "既存のマイクロエージェント",
     "zh-CN": "现有微代理",
