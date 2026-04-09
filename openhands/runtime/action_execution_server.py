@@ -819,7 +819,8 @@ if __name__ == '__main__':
         return response
 
     @app.post('/execute_action')
-    async def execute_action(action_request: ActionRequest):
+    async def execute_action(action_request: ActionRequest, request: Request):
+        verify_api_key(request.headers.get('X-Session-API-Key'))
         assert client is not None
         try:
             action = event_from_dict(action_request.action)
@@ -839,6 +840,7 @@ if __name__ == '__main__':
 
     @app.post('/update_mcp_server')
     async def update_mcp_server(request: Request):
+        verify_api_key(request.headers.get('X-Session-API-Key'))
         # Check if we're on Windows
         is_windows = sys.platform == 'win32'
 
