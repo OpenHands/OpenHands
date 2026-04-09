@@ -31,7 +31,7 @@ export const useUserConversation = (
       ]);
       return results[0] ?? null;
     },
-    enabled: !!cid,
+    enabled: !!cid && !cid.startsWith("task-"),
     retry: false,
     refetchInterval,
     staleTime: FIVE_MINUTES,
