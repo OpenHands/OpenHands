@@ -8,7 +8,7 @@ import { useConversationSubscriptions } from "#/context/conversation-subscriptio
 import { Provider } from "#/types/settings";
 import { CreateMicroagent, Conversation } from "#/api/open-hands.types";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { renderConversationStartingToast } from "#/components/features/chat/microagent/microagent-status-toast";
+import { renderConversationStartingToast } from "#/components/shared/conversation-toast";
 
 interface ConversationData {
   conversationId: string;

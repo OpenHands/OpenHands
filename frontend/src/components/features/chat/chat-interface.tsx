@@ -3,12 +3,10 @@ import { usePostHog } from "posthog-js/react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
-import { TrajectoryActions } from "../trajectory/trajectory-actions";
 import { createChatMessage } from "#/services/chat-service";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
-import { FeedbackModal } from "../feedback/feedback-modal";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { TypingIndicator } from "./typing-indicator";
 import { useWsClient } from "#/context/ws-client-provider";
@@ -29,7 +27,6 @@ import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-
 import { ErrorMessageBanner } from "./error-message-banner";
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
-import { useConfig } from "#/hooks/query/use-config";
 import { validateFiles } from "#/utils/file-validation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConfirmationModeEnabled from "./confirmation-mode-enabled";
@@ -81,7 +78,6 @@ export function ChatInterface() {
     setAutoScroll,
     setHitBottom,
   } = useScrollToBottom(scrollRef);
-  const { data: config } = useConfig();
   const {
     mutate: newConversationCommand,
     isPending: isNewConversationPending,
@@ -120,10 +116,6 @@ export function ChatInterface() {
     };
   }, [isAgentRunning, handleBuildPlanClick, scrollDomToBottom]);
 
-  const [feedbackPolarity, setFeedbackPolarity] = React.useState<
-    "positive" | "negative"
-  >("positive");
-  const [feedbackModalIsOpen, setFeedbackModalIsOpen] = React.useState(false);
   const { selectedRepository, replayJson } = useInitialQueryStore();
   const params = useParams();
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();
@@ -226,13 +218,6 @@ export function ChatInterface() {
       setOptimisticUserMessage(content);
     }
     setMessageToSend("");
-  };
-
-  const onClickShareFeedbackActionButton = async (
-    polarity: "positive" | "negative",
-  ) => {
-    setFeedbackModalIsOpen(true);
-    setFeedbackPolarity(polarity);
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -338,17 +323,6 @@ export function ChatInterface() {
                   status={serverStatusText}
                 />
               )}
-              {totalEvents > 0 && !isV1Conversation && (
-                <TrajectoryActions
-                  onPositiveFeedback={() =>
-                    onClickShareFeedbackActionButton("positive")
-                  }
-                  onNegativeFeedback={() =>
-                    onClickShareFeedbackActionButton("negative")
-                  }
-                  isSaasMode={config?.app_mode === "saas"}
-                />
-              )}
             </div>
 
             <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0">
@@ -370,14 +344,6 @@ export function ChatInterface() {
             disabled={isNewConversationPending}
           />
         </div>
-
-        {config?.app_mode !== "saas" && !isV1Conversation && (
-          <FeedbackModal
-            isOpen={feedbackModalIsOpen}
-            onClose={() => setFeedbackModalIsOpen(false)}
-            polarity={feedbackPolarity}
-          />
-        )}
       </div>
     </ScrollProvider>
   );

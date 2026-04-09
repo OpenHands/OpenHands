@@ -1,7 +1,5 @@
 import { AxiosHeaders } from "axios";
 import {
-  Feedback,
-  FeedbackResponse,
   GetVSCodeUrlResponse,
   Conversation,
   ResultSet,
@@ -15,7 +13,6 @@ import {
 import { openHands } from "../open-hands-axios";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
-import { BatchFeedbackData } from "#/hooks/query/use-batch-feedback";
 
 class ConversationService {
   private static currentConversation: Conversation | null = null;
@@ -60,105 +57,6 @@ class ConversationService {
   }
 
   /**
-   * Send feedback to the server
-   * @param data Feedback data
-   * @returns The stored feedback data
-   */
-  static async submitFeedback(
-    conversationId: string,
-    feedback: Feedback,
-  ): Promise<FeedbackResponse> {
-    const url = `/api/conversations/${conversationId}/submit-feedback`;
-    const { data } = await openHands.post<FeedbackResponse>(url, feedback);
-    return data;
-  }
-
-  /**
-   * Submit conversation feedback with rating
-   * @param conversationId The conversation ID
-   * @param rating The rating (1-5)
-   * @param eventId Optional event ID this feedback corresponds to
-   * @param reason Optional reason for the rating
-   * @returns Response from the feedback endpoint
-   */
-  static async submitConversationFeedback(
-    conversationId: string,
-    rating: number,
-    eventId?: number,
-    reason?: string,
-  ): Promise<{ status: string; message: string }> {
-    const url = `/feedback/conversation`;
-    const payload = {
-      conversation_id: conversationId,
-      event_id: eventId,
-      rating,
-      reason,
-      metadata: { source: "likert-scale" },
-    };
-    const { data } = await openHands.post<{ status: string; message: string }>(
-      url,
-      payload,
-    );
-    return data;
-  }
-
-  /**
-   * Check if feedback exists for a specific conversation and event
-   * @param conversationId The conversation ID
-   * @param eventId The event ID to check
-   * @returns Feedback data including existence, rating, and reason
-   */
-  static async checkFeedbackExists(
-    conversationId: string,
-    eventId: number,
-  ): Promise<{ exists: boolean; rating?: number; reason?: string }> {
-    try {
-      const url = `/feedback/conversation/${conversationId}/${eventId}`;
-      const { data } = await openHands.get<{
-        exists: boolean;
-        rating?: number;
-        reason?: string;
-      }>(url);
-      return data;
-    } catch {
-      // Error checking if feedback exists
-      return { exists: false };
-    }
-  }
-
-  /**
-   * Get feedback for multiple events in a conversation
-   * @param conversationId The conversation ID
-   * @returns Map of event IDs to feedback data including existence, rating, reason and metadata
-   */
-  static async getBatchFeedback(conversationId: string): Promise<
-    Record<
-      string,
-      {
-        exists: boolean;
-        rating?: number;
-        reason?: string;
-        metadata?: Record<string, BatchFeedbackData>;
-      }
-    >
-  > {
-    const url = `/feedback/conversation/${conversationId}/batch`;
-    const { data } = await openHands.get<
-      Record<
-        string,
-        {
-          exists: boolean;
-          rating?: number;
-          reason?: string;
-          metadata?: Record<string, BatchFeedbackData>;
-        }
-      >
-    >(url);
-
-    return data;
-  }
-
-  /**
    * Get the web hosts
    * @returns Array of web hosts
    */
@@ -191,23 +89,6 @@ class ConversationService {
     const { data } = await openHands.get<{ runtime_id: string }>(url, {
       headers: this.getConversationHeaders(),
     });
-    return data;
-  }
-
-  static async getUserConversations(
-    limit: number = 20,
-    pageId?: string,
-  ): Promise<ResultSet<Conversation>> {
-    const params = new URLSearchParams();
-    params.append("limit", limit.toString());
-
-    if (pageId) {
-      params.append("page_id", pageId);
-    }
-
-    const { data } = await openHands.get<ResultSet<Conversation>>(
-      `/api/conversations?${params.toString()}`,
-    );
     return data;
   }
 

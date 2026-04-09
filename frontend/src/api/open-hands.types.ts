@@ -80,6 +80,7 @@ export interface Conversation {
   sub_conversation_ids?: string[];
   public?: boolean;
   sandbox_id?: string | null;
+  llm_model?: string | null;
 }
 
 export interface ResultSet<T> {

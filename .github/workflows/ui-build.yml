@@ -19,7 +19,7 @@ concurrency:
 jobs:
   ui-build:
     name: Build openhands-ui
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6

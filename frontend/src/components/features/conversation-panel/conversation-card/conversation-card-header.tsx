@@ -1,51 +1,37 @@
-import { ConversationStatus } from "#/types/conversation-status";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 import { ConversationCardTitle } from "./conversation-card-title";
-import { ConversationStatusIndicator } from "../../home/recent-conversations/conversation-status-indicator";
-import { ConversationStatusBadges } from "./conversation-status-badges";
-import { ConversationVersionBadge } from "./conversation-version-badge";
+import { SandboxStatusIndicator } from "../../home/recent-conversations/sandbox-status-indicator";
 
 interface ConversationCardHeaderProps {
   title: string;
   titleMode: "view" | "edit";
   onTitleSave: (title: string) => void;
-  conversationStatus?: ConversationStatus;
-  conversationVersion?: "V0" | "V1";
+  sandboxStatus?: V1SandboxStatus;
 }
 
 export function ConversationCardHeader({
   title,
   titleMode,
   onTitleSave,
-  conversationStatus,
-  conversationVersion,
+  sandboxStatus,
 }: ConversationCardHeaderProps) {
-  const isConversationArchived = conversationStatus === "ARCHIVED";
+  const isConversationArchived =
+    sandboxStatus === "STOPPED" || sandboxStatus === "MISSING";
 
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden mr-2">
-      {/* Status Indicator */}
-      {conversationStatus && (
+      {/* Status Indicator - use V1 sandbox status directly */}
+      {sandboxStatus && (
         <div className="flex items-center">
-          <ConversationStatusIndicator
-            conversationStatus={conversationStatus}
-          />
+          <SandboxStatusIndicator sandboxStatus={sandboxStatus} />
         </div>
       )}
-      {/* Version Badge */}
-      <ConversationVersionBadge
-        version={conversationVersion}
-        isConversationArchived={isConversationArchived}
-      />
       <ConversationCardTitle
         title={title}
         titleMode={titleMode}
         onSave={onTitleSave}
         isConversationArchived={isConversationArchived}
       />
-      {/* Status Badges */}
-      {conversationStatus && (
-        <ConversationStatusBadges conversationStatus={conversationStatus} />
-      )}
     </div>
   );
 }

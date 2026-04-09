@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import type { GitOrg } from "#/hooks/organizations/use-git-conversation-routing";
+import type { GitOrg } from "#/types/org";
 
 type ButtonState =
   | "claiming"

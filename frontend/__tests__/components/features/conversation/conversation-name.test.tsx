@@ -296,6 +296,46 @@ describe("ConversationName", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("should render the llm model when available", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        llm_model: "openai/gpt-4o",
+      } as Conversation,
+    });
+
+    renderConversationNameWithRouter();
+
+    const model = screen.getByTestId("conversation-name-llm-model");
+    expect(model).toBeInTheDocument();
+    expect(model).toHaveTextContent("openai/gpt-4o");
+    expect(model).toHaveAttribute("title", "openai/gpt-4o");
+    expect(model.querySelector("svg")).toBeInTheDocument();
+
+    // Verify truncation structure: text is wrapped in a span with truncate class
+    const textSpan = model.querySelector("span.truncate");
+    expect(textSpan).toBeInTheDocument();
+    expect(textSpan).toHaveTextContent("openai/gpt-4o");
+  });
+
+  it("should not render the llm model when not available", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+      },
+    });
+
+    renderConversationNameWithRouter();
+
+    expect(
+      screen.queryByTestId("conversation-name-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
   it("should focus input when entering edit mode", async () => {
     const user = userEvent.setup();
     renderConversationNameWithRouter();

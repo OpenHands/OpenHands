@@ -49,6 +49,8 @@ export function SettingsModal({ onClose, settings }: SettingsModalProps) {
           <SettingsForm
             settings={settings || DEFAULT_SETTINGS}
             models={aiConfigOptions.data?.models}
+            verifiedModels={aiConfigOptions.data?.verifiedModels ?? []}
+            verifiedProviders={aiConfigOptions.data?.verifiedProviders ?? []}
             onClose={onClose}
           />
         )}

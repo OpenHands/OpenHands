@@ -413,7 +413,7 @@ def _build_integration_test_app(
         router as sandbox_router,
     )
     from openhands.app_server.user.user_router import router as user_router
-    from openhands.server.dependencies import check_session_api_key
+    from openhands.app_server.utils.dependencies import check_session_api_key
 
     app = FastAPI()
 

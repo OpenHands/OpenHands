@@ -40,6 +40,10 @@ from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from uvicorn import run
 
+from openhands.app_server.status.system_stats import (
+    get_system_stats,
+    update_last_execution_time,
+)
 from openhands.core.config.mcp_config import MCPStdioServerConfig
 from openhands.core.exceptions import BrowserUnavailableException
 from openhands.core.logger import get_uvicorn_json_log_config
@@ -78,10 +82,6 @@ from openhands.runtime.utils.bash import BashSession
 from openhands.runtime.utils.files import insert_lines, read_lines
 from openhands.runtime.utils.memory_monitor import MemoryMonitor
 from openhands.runtime.utils.runtime_init import init_user_and_working_directory
-from openhands.runtime.utils.system_stats import (
-    get_system_stats,
-    update_last_execution_time,
-)
 from openhands.utils.async_utils import call_sync_from_async, wait_all
 
 if sys.platform == 'win32':
