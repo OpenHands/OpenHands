@@ -9,7 +9,7 @@ This module tests the Docker sandbox service implementation, focusing on:
 - Edge cases with malformed container data
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -1670,17 +1670,20 @@ class TestDockerSandboxServiceHostNetwork:
         mock_utc_now.return_value = now
 
         # Container started 4 seconds ago (within 15s grace period)
-        container_started_within_grace_period = datetime(2024, 1, 15, 11, 59, 56, tzinfo=timezone.utc)
+        container_started_within_grace_period = datetime(
+            2024, 1, 15, 11, 59, 56, tzinfo=timezone.utc
+        )
         # Sandbox was created 5 days ago (way outside grace period)
         sandbox_created_long_ago = datetime(2024, 1, 10, 10, 0, 0, tzinfo=timezone.utc)
 
         container.attrs = {
             'Created': '2024-01-15T10:30:00.000000000Z',
-            'State': {
-                'StartedAt': container_started_within_grace_period.isoformat()
-            },
+            'State': {'StartedAt': container_started_within_grace_period.isoformat()},
             'Config': {
-                'Env': ['OH_SESSION_API_KEYS_0=session_key_123', 'OTHER_VAR=other_value'],
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=session_key_123',
+                    'OTHER_VAR=other_value',
+                ],
                 'WorkingDir': '/workspace',
             },
             'NetworkSettings': {
