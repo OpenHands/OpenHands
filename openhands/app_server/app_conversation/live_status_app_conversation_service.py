@@ -1217,6 +1217,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             agent = Agent(
                 llm=llm,
                 tools=get_default_tools(enable_browser=True),
+                system_prompt_filename='/opt/custom-prompts/system_prompt_v1.j2',
                 system_prompt_kwargs={'cli_mode': False},
                 condenser=condenser,
                 mcp_config=mcp_config,

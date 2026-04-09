@@ -19,6 +19,7 @@ services:
       - OH_SANDBOX__NETWORK=openhands-net
       - OH_SANDBOX__APP_HOSTNAME=openhands-app
       - 'OH_SANDBOX_CONTAINER_LABELS={"com.docker.compose.project": "openhands"}'
+      - SANDBOX_VOLUMES=${SANDBOX_VOLUMES:-$PWD/openhands/agenthub/codeact_agent/prompts:/opt/custom-prompts:ro}
       - OH_SANDBOX__PRIVILEGED=true
       - OH_SANDBOX__DIND_REGISTRY_MIRROR_URL=http://openhands-registry-cache:5000
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
