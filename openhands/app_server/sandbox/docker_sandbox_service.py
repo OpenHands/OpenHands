@@ -257,7 +257,8 @@ class DockerSandboxService(SandboxService):
                 try:
                     state = container.attrs.get('State')
                     started_at = datetime.fromisoformat(state.get('StartedAt'))
-                except (KeyError, ValueError, AttributeError):
+                except Exception:
+                    _logger.debug('Error getting container start time')
                     started_at = sandbox_info.created_at
 
                 # If the server has exceeded the startup grace period, it's an error
