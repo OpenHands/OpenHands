@@ -148,7 +148,7 @@ export function getStatusCode(
         return I18nKey.CONVERSATION$STARTING_CONVERSATION;
       case "PAUSED":
       case "MISSING":
-        return I18nKey.CHAT_INTERFACE$DISCONNECTED;
+        return I18nKey.CHAT_INTERFACE$STOPPED;
       default:
         throw new Error(`Unknown sandboxStatus: ${sandboxStatus}`);
     }

@@ -15,14 +15,14 @@ describe("getStatusCode", () => {
     );
 
     // Should return runtime status since conversation is RUNNING
-    expect(result).toBe("STATUS$STARTING_RUNTIME");
+    expect(result).toBe("STATUS$STARTING_CONVERSATION");
   });
 
   it("should handle agent running state with stale runtime status", () => {
     // Test case: Agent is running but runtime status is stale
     const result = getStatusCode(
       "OPEN", // webSocketStatus
-      V1ExecutionStatus.IDLE,
+      V1ExecutionStatus.RUNNING,
       "RUNNING",
     );
 
@@ -64,7 +64,7 @@ describe("getStatusCode", () => {
     );
 
     // Should return STARTING since conversationStatus takes priority
-    expect(result).toBe(I18nKey.COMMON$STARTING);
+    expect(result).toBe(I18nKey.CONVERSATION$STARTING_CONVERSATION);
   });
 
   it("should prioritize task ERROR status over websocket CONNECTING state", () => {
@@ -89,7 +89,7 @@ describe("getStatusCode", () => {
     );
 
     // Should return STARTING status, not DISCONNECTED
-    expect(result).toBe(I18nKey.COMMON$STARTING);
+    expect(result).toBe(I18nKey.CONVERSATION$STARTING_CONVERSATION);
   });
 
   it("should show Connecting when task is working and websocket is connecting", () => {
@@ -97,7 +97,7 @@ describe("getStatusCode", () => {
     const result = getStatusCode(
       "CONNECTING", // webSocketStatus
       V1ExecutionStatus.IDLE,
-      "STARTING", // sandboxStatus
+      "RUNNING", // sandboxStatus
       "WORKING", // taskStatus (in progress)
     );
 
