@@ -1,8 +1,6 @@
 import { delay, http, HttpResponse } from "msw";
 import { GitRepository, Branch, PaginatedBranchesResponse } from "#/types/git";
 import { Provider } from "#/types/settings";
-import { RepositoryMicroagent } from "#/types/microagent-management";
-import { MicroagentContentResponse } from "#/api/open-hands.types";
 
 // Generate a list of mock repositories with realistic data
 const generateMockRepositories = (
@@ -36,17 +34,6 @@ const generateMockBranches = (count: number): Branch[] =>
     ).toISOString(),
   }));
 
-// Generate mock microagents for a repository
-const generateMockMicroagents = (count: number): RepositoryMicroagent[] =>
-  Array.from({ length: count }, (_, i) => ({
-    name: `microagent-${i + 1}`,
-    path: `.openhands/microagents/microagent-${i + 1}.md`,
-    created_at: new Date(
-      Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000,
-    ).toISOString(),
-    git_provider: "github",
-  }));
-
 // Mock repositories for each provider
 const MOCK_REPOSITORIES = {
   github: generateMockRepositories(120, "github"),
@@ -56,9 +43,6 @@ const MOCK_REPOSITORIES = {
 
 // Mock branches (same for all repos for simplicity)
 const MOCK_BRANCHES = generateMockBranches(25);
-
-// Mock microagents (same for all repos for simplicity)
-const MOCK_MICROAGENTS = generateMockMicroagents(5);
 
 export const GIT_REPOSITORY_HANDLERS = [
   http.get("/api/user/repositories", async ({ request }) => {
@@ -246,80 +230,4 @@ export const GIT_REPOSITORY_HANDLERS = [
 
     return HttpResponse.json(limitedBranches);
   }),
-
-  // Repository microagents endpoint
-  http.get(
-    "/api/user/repository/:owner/:repo/microagents",
-    async ({ params }) => {
-      await delay(400);
-
-      const { owner, repo } = params;
-
-      if (!owner || !repo) {
-        return HttpResponse.json("Owner and repo parameters are required", {
-          status: 400,
-        });
-      }
-
-      return HttpResponse.json(MOCK_MICROAGENTS);
-    },
-  ),
-
-  // Repository microagent content endpoint
-  http.get(
-    "/api/user/repository/:owner/:repo/microagents/content",
-    async ({ request, params }) => {
-      await delay(300);
-
-      const { owner, repo } = params;
-      const url = new URL(request.url);
-      const filePath = url.searchParams.get("file_path");
-
-      if (!owner || !repo || !filePath) {
-        return HttpResponse.json(
-          "Owner, repo, and file_path parameters are required",
-          { status: 400 },
-        );
-      }
-
-      // Find the microagent by path
-      const microagent = MOCK_MICROAGENTS.find((m) => m.path === filePath);
-
-      if (!microagent) {
-        return HttpResponse.json("Microagent not found", { status: 404 });
-      }
-
-      const response: MicroagentContentResponse = {
-        content: `# ${microagent.name}
-
-A helpful microagent for repository tasks.
-
-## Instructions
-
-This microagent helps with specific tasks related to the repository.
-
-### Usage
-
-1. Describe your task clearly
-2. The microagent will analyze the context
-3. Follow the provided recommendations
-
-### Capabilities
-
-- Code analysis
-- Task automation
-- Best practice recommendations
-- Error detection and resolution
-
----
-
-*Generated mock content for ${microagent.name}*`,
-        path: microagent.path,
-        git_provider: "github",
-        triggers: ["code review", "bug fix", "feature development"],
-      };
-
-      return HttpResponse.json(response);
-    },
-  ),
 ];
