@@ -20,14 +20,9 @@ export function useSendMessage() {
   // Get V1 context (will be null if not in V1 provider)
   const v1Context = useConversationWebSocket();
 
-  // Check if this is a V1 conversation - match logic in useUnifiedWebSocketStatus
-  // Use both ID prefix and conversation_version to handle cases where conversation
-  // data is temporarily undefined during refetch
-  const isV1Conversation = conversationId.startsWith("task-");
-
   const send = useCallback(
     async (event: Record<string, unknown>): Promise<SendResult> => {
-      if (isV1Conversation && v1Context) {
+      if (v1Context) {
         // V1: Convert V0 event format to V1 message format
         const { action, args } = event as {
           action: string;
@@ -72,7 +67,7 @@ export function useSendMessage() {
       v0Send(event);
       return { queued: false };
     },
-    [isV1Conversation, v1Context, v0Send, conversationId],
+    [v1Context, v0Send, conversationId],
   );
 
   return { send };
