@@ -255,8 +255,8 @@ class DockerSandboxService(SandboxService):
             except Exception as exc:
                 # Get the started_at from the docker container info and fallback to sandbox created_at
                 try:
-                    state = container.attrs.get('State')
-                    started_at = datetime.fromisoformat(state.get('StartedAt'))
+                    state = container.attrs['State']
+                    started_at = datetime.fromisoformat(state['StartedAt'])
                 except Exception:
                     _logger.debug('Error getting container start time')
                     started_at = sandbox_info.created_at
