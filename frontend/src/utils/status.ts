@@ -1,4 +1,3 @@
-import { V0_WebSocketStatus } from "#/context/ws-client-provider";
 import { I18nKey } from "#/i18n/declaration";
 import { AgentState } from "#/types/agent-state";
 import { ConversationStatus } from "#/types/conversation-status";
@@ -46,13 +45,13 @@ export const AGENT_STATUS_MAP: {
 };
 
 export function getIndicatorColor(
-  webSocketStatus: V0_WebSocketStatus,
+  webSocketStatus: V1_WebSocketConnectionState,
   conversationStatus: ConversationStatus | null,
   runtimeStatus: RuntimeStatus | null,
   agentState: AgentState | null,
 ) {
   if (
-    webSocketStatus === "DISCONNECTED" ||
+    webSocketStatus === "CLOSED" ||
     conversationStatus === "STOPPED" ||
     runtimeStatus === "STATUS$STOPPED" ||
     agentState === AgentState.STOPPED ||

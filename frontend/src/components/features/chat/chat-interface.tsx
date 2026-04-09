@@ -9,8 +9,6 @@ import { AgentState } from "#/types/agent-state";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { TypingIndicator } from "./typing-indicator";
-import { useWsClient } from "#/context/ws-client-provider";
-import { Messages as V0Messages } from "./messages";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
 import { useInitialQueryStore } from "#/stores/initial-query-store";
@@ -50,7 +48,6 @@ export function ChatInterface() {
   const posthog = usePostHog();
   const { setMessageToSend } = useConversationStore();
   const { errorMessage, removeErrorMessage } = useErrorMessageStore();
-  const { isLoadingMessages } = useWsClient();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   const conversationWebSocket = useConversationWebSocket();
   const { send } = useSendMessage();
@@ -60,7 +57,6 @@ export function ChatInterface() {
     v1FullEvents,
     totalEvents,
     hasSubstantiveAgentActions,
-    v0UserEventsExist,
     v1UserEventsExist,
     userEventsExist,
   } = useFilteredEvents();
@@ -287,15 +283,6 @@ export function ChatInterface() {
             <div className="flex justify-center" data-testid="loading-spinner">
               <LoadingSpinner size="small" />
             </div>
-          )}
-
-          {(!isLoadingMessages || v0Events.length > 0) && v0UserEventsExist && (
-            <V0Messages
-              messages={v0Events}
-              isAwaitingUserConfirmation={
-                curAgentState === AgentState.AWAITING_USER_CONFIRMATION
-              }
-            />
           )}
 
           {showV1Messages && v1UserEventsExist && (

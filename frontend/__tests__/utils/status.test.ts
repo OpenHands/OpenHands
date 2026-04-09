@@ -110,7 +110,7 @@ describe("getIndicatorColor", () => {
   it("should prioritize agent readiness over stale runtime status for AWAITING_USER_INPUT", () => {
     // Test case: Agent is ready (AWAITING_USER_INPUT) but runtime status is still starting
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "RUNNING", // conversationStatus
       "STATUS$STARTING_RUNTIME", // runtimeStatus (stale)
       AgentState.AWAITING_USER_INPUT, // agentState (ready)
@@ -123,7 +123,7 @@ describe("getIndicatorColor", () => {
   it("should prioritize agent readiness over stale runtime status for RUNNING", () => {
     // Test case: Agent is running but runtime status is stale
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "RUNNING", // conversationStatus
       "STATUS$BUILDING_RUNTIME", // runtimeStatus (stale)
       AgentState.RUNNING, // agentState (ready)
@@ -136,7 +136,7 @@ describe("getIndicatorColor", () => {
   it("should prioritize agent readiness over stale runtime status for FINISHED", () => {
     // Test case: Agent is finished but runtime status is stale
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "RUNNING", // conversationStatus
       "STATUS$SETTING_UP_WORKSPACE", // runtimeStatus (stale)
       AgentState.FINISHED, // agentState (ready)
@@ -149,7 +149,7 @@ describe("getIndicatorColor", () => {
   it("should show yellow when agent is not ready and runtime is starting", () => {
     // Test case: Agent is loading and runtime is starting
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "STARTING", // conversationStatus
       "STATUS$STARTING_RUNTIME", // runtimeStatus
       AgentState.LOADING, // agentState (not ready)
@@ -162,7 +162,7 @@ describe("getIndicatorColor", () => {
   it("should show orange for AWAITING_USER_CONFIRMATION even with stale runtime", () => {
     // Test case: Agent is awaiting confirmation but runtime status is stale
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "RUNNING", // conversationStatus
       "STATUS$STARTING_RUNTIME", // runtimeStatus (stale)
       AgentState.AWAITING_USER_CONFIRMATION, // agentState (ready)
@@ -175,7 +175,7 @@ describe("getIndicatorColor", () => {
   it("should still respect stopped states", () => {
     // Test case: Runtime is stopped - should always show red
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "STOPPED", // conversationStatus
       "STATUS$STOPPED", // runtimeStatus
       AgentState.RUNNING, // agentState
@@ -188,7 +188,7 @@ describe("getIndicatorColor", () => {
   it("should handle null agent state with runtime status", () => {
     // Test case: No agent state, runtime is starting
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "STARTING", // conversationStatus
       "STATUS$STARTING_RUNTIME", // runtimeStatus
       null, // agentState
@@ -201,7 +201,7 @@ describe("getIndicatorColor", () => {
   it("should handle USER_CONFIRMED state with stale runtime status", () => {
     // Test case: Agent is in USER_CONFIRMED state but runtime status is stale
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "RUNNING", // conversationStatus
       "STATUS$BUILDING_RUNTIME", // runtimeStatus (stale)
       AgentState.USER_CONFIRMED, // agentState (ready)
@@ -214,7 +214,7 @@ describe("getIndicatorColor", () => {
   it("should handle USER_REJECTED state with stale runtime status", () => {
     // Test case: Agent is in USER_REJECTED state but runtime status is stale
     const result = getIndicatorColor(
-      "CONNECTED", // webSocketStatus
+      "OPEN", // webSocketStatus
       "RUNNING", // conversationStatus
       "STATUS$BUILDING_RUNTIME", // runtimeStatus (stale)
       AgentState.USER_REJECTED, // agentState (ready)

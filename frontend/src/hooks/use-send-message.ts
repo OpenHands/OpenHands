@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { useWsClient } from "#/context/ws-client-provider";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { V1MessageContent } from "#/api/conversation-service/v1-conversation-service.types";
@@ -15,7 +14,6 @@ interface SendResult {
  */
 export function useSendMessage() {
   const { conversationId } = useConversationId();
-  const { send: v0Send } = useWsClient();
 
   // Get V1 context (will be null if not in V1 provider)
   const v1Context = useConversationWebSocket();
@@ -58,16 +56,11 @@ export function useSendMessage() {
           });
           return result;
         }
-        // For non-message events, fall back to V0 send
-        // (e.g., agent state changes, other control events)
-        v0Send(event);
         return { queued: false };
       }
-      // V0: Use Socket.IO
-      v0Send(event);
       return { queued: false };
     },
-    [v1Context, v0Send, conversationId],
+    [v1Context, conversationId],
   );
 
   return { send };

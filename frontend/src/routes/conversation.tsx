@@ -105,7 +105,7 @@ function AppContent() {
   // Render WebSocket provider immediately to avoid mount/remount cycles
   // The providers internally handle waiting for conversation data to be ready
   return (
-    <WebSocketProviderWrapper version={1} conversationId={conversationId}>
+    <WebSocketProviderWrapper conversationId={conversationId}>
       {content}
     </WebSocketProviderWrapper>
   );
