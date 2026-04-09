@@ -12,7 +12,7 @@ from server.auth.saas_user_auth import SaasUserAuth
 from server.models.user_models import SaasUserInfo
 
 from openhands.app_server.config import depends_user_context
-from openhands.app_server.sandbox.session_auth import validate_session_key
+from openhands.app_server.sandbox.session_auth import validate_session_key_ownership
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
@@ -62,7 +62,7 @@ async def get_current_user_saas(
     user_info = SaasUserInfo(**user_info_data)
 
     if expose_secrets:
-        await _validate_session_key_ownership(user_context, x_session_api_key)
+        await validate_session_key_ownership(user_context, x_session_api_key)
         return JSONResponse(  # type: ignore[return-value]
             content=user_info.model_dump(mode='json', context={'expose_secrets': True})
         )
@@ -81,37 +81,6 @@ async def _get_org_info_from_context(user_context: UserContext) -> dict | None:
         if isinstance(user_auth, SaasUserAuth):
             return await user_auth.get_org_info()
     return None
-
-
-async def _validate_session_key_ownership(
-    user_context: UserContext,
-    session_api_key: str | None,
-) -> None:
-    """Verify the session key belongs to a sandbox owned by the caller.
-
-    Raises ``HTTPException`` if the key is missing, invalid, or belongs
-    to a sandbox owned by a different user.
-    """
-    sandbox_info = await validate_session_key(session_api_key)
-
-    # Verify the sandbox is owned by the authenticated user.
-    caller_id = await user_context.get_user_id()
-    if not caller_id:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            detail='Cannot determine authenticated user',
-        )
-
-    if sandbox_info.created_by_user_id != caller_id:
-        _logger.warning(
-            'Session key user mismatch: sandbox owner=%s, caller=%s',
-            sandbox_info.created_by_user_id,
-            caller_id,
-        )
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail='Session API key does not belong to the authenticated user',
-        )
 
 
 def override_users_me_endpoint(app: FastAPI) -> None:
