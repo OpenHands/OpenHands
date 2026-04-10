@@ -28,6 +28,7 @@ from openhands.server.user_auth import (
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
+from openhands.utils.chatgpt_oauth_tokens import is_chatgpt_oauth_bundle
 from openhands.utils.llm import get_provider_api_base, is_openhands_model
 
 LITE_LLM_API_URL = os.environ.get(
@@ -157,6 +158,11 @@ async def load_settings(
                 if provider_token.token or provider_token.user_id:
                     provider_tokens_set[provider_type] = provider_token.host
 
+        llm_sign_in_with_chatgpt = (
+            bool(settings.llm_model and settings.llm_model.startswith('chatgpt/'))
+            and settings.llm_api_key is not None
+            and is_chatgpt_oauth_bundle(settings.llm_api_key)
+        )
         settings_with_token_data = GETSettingsModel(
             **settings.model_dump(exclude={'secrets_store'}),
             llm_api_key_set=settings.llm_api_key is not None
@@ -164,6 +170,7 @@ async def load_settings(
             search_api_key_set=settings.search_api_key is not None
             and bool(settings.search_api_key),
             provider_tokens_set=provider_tokens_set,
+            llm_sign_in_with_chatgpt=llm_sign_in_with_chatgpt,
         )
 
         # If the base url matches the default for the provider, we don't send it
