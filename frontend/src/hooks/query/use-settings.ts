@@ -25,6 +25,9 @@ export const getSettingsQueryFn = async (): Promise<Settings> => {
     sandbox_grouping_strategy:
       settings.sandbox_grouping_strategy ??
       DEFAULT_SETTINGS.sandbox_grouping_strategy,
+    llm_sign_in_with_chatgpt:
+      settings.llm_sign_in_with_chatgpt ??
+      DEFAULT_SETTINGS.llm_sign_in_with_chatgpt,
   };
 };
 
