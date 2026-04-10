@@ -933,6 +933,37 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return user_search_key or service_tavily_key
 
+    def _get_current_web_url(self) -> str | None:
+        """Dynamically resolve the current web URL from environment variables.
+
+        The web_url captured at service initialization (self.web_url) can become
+        stale when the host IP changes between sandbox restarts or conversation
+        resumes. This method re-reads the environment variables each time it is
+        called so that MCP server URLs always point to the current address.
+
+        Resolution order:
+          1. OH_WEB_URL environment variable (highest priority)
+          2. WEB_HOST environment variable → https://{WEB_HOST}
+          3. self.web_url snapshot (backward-compatible fallback)
+          4. Docker host.docker.internal fallback when using DockerSandboxService
+        """
+        oh_web_url = os.getenv('OH_WEB_URL')
+        if oh_web_url:
+            return oh_web_url
+
+        web_host = os.getenv('WEB_HOST')
+        if web_host:
+            return f'https://{web_host}'
+
+        if self.web_url:
+            return self.web_url
+
+        # Docker fallback: use host.docker.internal if running in Docker
+        if isinstance(self.sandbox_service, DockerSandboxService):
+            return f'http://host.docker.internal:{self.sandbox_service.host_port}'
+
+        return None
+
     async def _add_system_mcp_servers(
         self, mcp_servers: dict[str, Any], user: UserInfo, conversation_id: UUID
     ) -> None:
@@ -943,11 +974,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user: User information for API keys
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
         """
-        if not self.web_url:
+        current_web_url = self._get_current_web_url()
+        if not current_web_url:
             return
 
         # Add default OpenHands MCP server
-        mcp_url = f'{self.web_url}/mcp/mcp'
+        mcp_url = f'{current_web_url}/mcp/mcp'
         mcp_servers['default'] = {
             'url': mcp_url,
             'headers': {'X-OpenHands-ServerConversation-ID': str(conversation_id)},
