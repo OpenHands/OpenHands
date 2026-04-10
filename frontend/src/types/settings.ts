@@ -64,6 +64,7 @@ export type Settings = {
   language: string;
   llm_api_key: string | null;
   llm_api_key_set: boolean;
+  llm_sign_in_with_chatgpt: boolean;
   search_api_key_set: boolean;
   confirmation_mode: boolean;
   security_analyzer: string | null;
