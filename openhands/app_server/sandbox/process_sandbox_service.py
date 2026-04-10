@@ -287,9 +287,15 @@ class ProcessSandboxService(SandboxService):
         return None
 
     async def start_sandbox(
-        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+        self,
+        sandbox_spec_id: str | None = None,
+        sandbox_id: str | None = None,
+        ssh_public_keys: list[str] | None = None,
     ) -> SandboxInfo:
         """Start a new sandbox."""
+        # Note: ssh_public_keys is accepted but not used in process sandbox service
+        # as SSH is only available in containerized environments
+
         # Get sandbox spec
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()

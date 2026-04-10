@@ -34,6 +34,15 @@ class SandboxGroupingStrategy(str, Enum):
     ADD_TO_ANY = 'ADD_TO_ANY'  # Add to any available sandbox (first found)
 
 
+class SSHPublicKey(BaseModel):
+    """An SSH public key with optional label."""
+
+    key: str = Field(description='The SSH public key (e.g., ssh-ed25519 AAAA... user@host)')
+    label: str | None = Field(
+        default=None, description='Optional label for the key (e.g., "Work Laptop")'
+    )
+
+
 class Settings(BaseModel):
     """Persisted settings for OpenHands sessions"""
 
@@ -73,6 +82,8 @@ class Settings(BaseModel):
     sandbox_grouping_strategy: SandboxGroupingStrategy = (
         SandboxGroupingStrategy.NO_GROUPING
     )
+    # SSH public keys for passwordless SSH access to sandboxes
+    ssh_public_keys: list[SSHPublicKey] = Field(default_factory=list)
 
     model_config = ConfigDict(
         validate_assignment=True,

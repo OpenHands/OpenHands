@@ -24,6 +24,7 @@ _logger = logging.getLogger(__name__)
 SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
 ALLOW_CORS_ORIGINS_VARIABLE = 'OH_ALLOW_CORS_ORIGINS_0'
+SSH_PUBLIC_KEYS_VARIABLE = 'OH_SSH_PUBLIC_KEYS'
 
 
 class SandboxService(ABC):
@@ -58,13 +59,18 @@ class SandboxService(ABC):
 
     @abstractmethod
     async def start_sandbox(
-        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+        self,
+        sandbox_spec_id: str | None = None,
+        sandbox_id: str | None = None,
+        ssh_public_keys: list[str] | None = None,
     ) -> SandboxInfo:
         """Begin the process of starting a sandbox.
 
         Return the info on the new sandbox. If no spec is selected, use the default.
         If sandbox_id is provided, it will be used as the sandbox identifier instead
         of generating a random one.
+        If ssh_public_keys is provided, they will be passed to the sandbox for
+        passwordless SSH access.
         """
 
     @abstractmethod

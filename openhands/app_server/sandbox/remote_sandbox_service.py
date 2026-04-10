@@ -428,9 +428,14 @@ class RemoteSandboxService(SandboxService):
         return await self._get_sandbox_by_session_api_key_legacy(session_api_key)
 
     async def start_sandbox(
-        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+        self,
+        sandbox_spec_id: str | None = None,
+        sandbox_id: str | None = None,
+        ssh_public_keys: list[str] | None = None,
     ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
+        # Note: ssh_public_keys would need to be passed to the runtime provider
+        # This is a placeholder for future implementation
         try:
             # Enforce sandbox limits by cleaning up old sandboxes
             await self.pause_old_sandboxes(self.max_num_sandboxes - 1)

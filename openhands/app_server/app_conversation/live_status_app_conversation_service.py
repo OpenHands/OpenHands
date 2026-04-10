@@ -671,6 +671,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # Return empty counts on error - will default to first sandbox
             return {}
 
+    async def _get_ssh_public_keys(self) -> list[str] | None:
+        """Get SSH public keys from user settings."""
+        try:
+            user_info = await self.user_context.get_user_info()
+            if user_info.ssh_public_keys:
+                return [k.key for k in user_info.ssh_public_keys]
+        except Exception as e:
+            _logger.warning(f'Failed to get SSH public keys: {e}')
+        return None
+
     async def _wait_for_sandbox_start(
         self, task: AppConversationStartTask
     ) -> AsyncGenerator[AppConversationStartTask, None]:
@@ -689,8 +699,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     else None
                 )
 
+                # Get SSH public keys from user settings
+                ssh_public_keys = await self._get_ssh_public_keys()
+
                 sandbox = await self.sandbox_service.start_sandbox(
-                    sandbox_id=sandbox_id_str
+                    sandbox_id=sandbox_id_str,
+                    ssh_public_keys=ssh_public_keys,
                 )
             task.sandbox_id = sandbox.id
         else:

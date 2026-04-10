@@ -56,6 +56,12 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     section: "personal",
   },
   {
+    icon: <KeyIcon width={22} height={22} />,
+    to: "/settings/ssh-keys",
+    text: "SETTINGS$NAV_SSH_KEYS",
+    section: "personal",
+  },
+  {
     icon: <ServerProcessIcon width={22} height={22} />,
     to: "/settings/mcp",
     text: "SETTINGS$NAV_MCP",
@@ -126,5 +132,10 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <KeyIcon width={22} height={22} />,
     to: "/settings/secrets",
     text: "SETTINGS$NAV_SECRETS",
+  },
+  {
+    icon: <KeyIcon width={22} height={22} />,
+    to: "/settings/ssh-keys",
+    text: "SETTINGS$NAV_SSH_KEYS",
   },
 ];

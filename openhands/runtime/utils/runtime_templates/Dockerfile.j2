@@ -206,6 +206,34 @@ RUN mkdir -p ${OPENVSCODE_SERVER_ROOT}/extensions/openhands-memory-monitor && \
 RUN rm -rf ${OPENVSCODE_SERVER_ROOT}/extensions/{handlebars,pug,json,diff,grunt,ini,npm}
 {% endmacro %}
 
+{% macro setup_ssh_server() %}
+# Setup SSH Server for local VSCode Remote-SSH access
+USER root
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssh-server && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    # Create SSH runtime directory
+    mkdir -p /run/sshd && \
+    # Generate host keys
+    ssh-keygen -A && \
+    # Configure sshd for both password and public key authentication
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords no/' /etc/ssh/sshd_config && \
+    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#AuthorizedKeysFile/AuthorizedKeysFile/' /etc/ssh/sshd_config && \
+    sed -i 's/#Port 22/Port 2222/' /etc/ssh/sshd_config && \
+    echo 'Port 2222' >> /etc/ssh/sshd_config && \
+    # Set password for openhands user (password: "openhands")
+    echo 'openhands:openhands' | chpasswd && \
+    # Create SSH directory for openhands user
+    mkdir -p /home/openhands/.ssh && \
+    chmod 700 /home/openhands/.ssh && \
+    touch /home/openhands/.ssh/authorized_keys && \
+    chmod 600 /home/openhands/.ssh/authorized_keys && \
+    chown -R openhands:openhands /home/openhands/.ssh
+{% endmacro %}
+
 {% macro install_dependencies_root() %}
 # Install system-level dependencies that require root
 USER root
@@ -353,6 +381,7 @@ RUN \
         -exec chown openhands:openhands {} + 2>/dev/null || true
 
 {{ setup_vscode_server() }}
+{{ setup_ssh_server() }}
 
 # ================================================================
 # Copy Project source files
