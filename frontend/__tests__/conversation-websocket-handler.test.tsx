@@ -500,16 +500,16 @@ describe("Conversation WebSocket Handler", () => {
         ),
         wsLink.addEventListener("connection", async ({ client, server }) => {
           server.connect();
-          
+
           // Wait for connection to be established
           await new Promise((resolve) => setTimeout(resolve, 100));
-          
+
           // Send budget error first
           client.send(JSON.stringify(mockBudgetError));
-          
+
           // Wait for budget error to be processed before sending user event
           await new Promise((resolve) => setTimeout(resolve, 200));
-          
+
           // Send user event - it should NOT clear the budget error
           client.send(JSON.stringify(mockUserEvent));
         }),
