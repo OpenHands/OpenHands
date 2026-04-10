@@ -1,7 +1,11 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { useSearchParams } from "react-router";
+import { ChatgptOauthApi } from "#/api/chatgpt-oauth.api";
+import { CHATGPT_SUBSCRIPTION_MODELS } from "#/constants/chatgpt-subscription-models";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { organizeModelsAndProviders } from "#/utils/organize-models-and-providers";
@@ -83,7 +87,11 @@ function LlmSettingsScreen() {
   const isReadOnly = isOssMode ? false : !hasPermission("edit_llm_settings");
 
   // Get organization type for contextual info messages
-  const { isTeamOrg } = useOrgTypeAndAccess();
+  const { isTeamOrg, isPersonalOrg } = useOrgTypeAndAccess();
+  const queryClient = useQueryClient();
+  const { organizationId } = useSelectedOrganizationId();
+  const canUseChatgptSignIn =
+    (isOssMode || Boolean(isPersonalOrg)) && !isReadOnly;
   const isAdminOrOwner = me?.role === "admin" || me?.role === "owner";
 
   const getLlmSettingsInfoMessage = (): I18nKey | null => {
@@ -131,6 +139,13 @@ function LlmSettingsScreen() {
   const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
     null,
   );
+
+  const [pendingChatgpt, setPendingChatgpt] = React.useState<{
+    session_id: string;
+    user_code: string;
+    verification_uri: string;
+  } | null>(null);
+  const [isChatgptPolling, setIsChatgptPolling] = React.useState(false);
 
   const modelsAndProviders = organizeModelsAndProviders(
     resources?.models || [],
@@ -218,6 +233,40 @@ function LlmSettingsScreen() {
     }
   }, [searchParams, setSearchParams, t]);
 
+  React.useEffect(() => {
+    if (!isChatgptPolling || !pendingChatgpt?.session_id) {
+      return undefined;
+    }
+    const sessionId = pendingChatgpt.session_id;
+    const intervalId = window.setInterval(() => {
+      ChatgptOauthApi.pollSession(sessionId)
+        .then(async (result) => {
+          if (result.status === "complete") {
+            setIsChatgptPolling(false);
+            setPendingChatgpt(null);
+            await queryClient.invalidateQueries({
+              queryKey: ["settings", organizationId],
+            });
+            displaySuccessToast(t(I18nKey.SETTINGS$SAVED_WARNING));
+          }
+        })
+        .catch((err) => {
+          displayErrorToast(
+            retrieveAxiosErrorMessage(err as AxiosError) ||
+              t(I18nKey.ERROR$GENERIC),
+          );
+          setIsChatgptPolling(false);
+        });
+    }, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [
+    isChatgptPolling,
+    pendingChatgpt?.session_id,
+    queryClient,
+    organizationId,
+    t,
+  ]);
+
   const handleSuccessfulMutation = () => {
     displaySuccessToast(t(I18nKey.SETTINGS$SAVED_WARNING));
     setDirtyInputs({
@@ -238,7 +287,64 @@ function LlmSettingsScreen() {
     displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
   };
 
+  const handleChatgptSignIn = async () => {
+    try {
+      const data = await ChatgptOauthApi.startDeviceSession();
+      setPendingChatgpt(data);
+      setIsChatgptPolling(true);
+    } catch (err) {
+      displayErrorToast(
+        retrieveAxiosErrorMessage(err as AxiosError) ||
+          t(I18nKey.ERROR$GENERIC),
+      );
+    }
+  };
+
+  const handleChatgptSignOut = () => {
+    saveSettings(
+      {
+        llm_model: DEFAULT_OPENHANDS_MODEL,
+        llm_api_key: null,
+        llm_base_url: null,
+      },
+      {
+        onSuccess: handleSuccessfulMutation,
+        onError: handleErrorMutation,
+      },
+    );
+  };
+
   const basicFormAction = (formData: FormData) => {
+    if (settings?.llm_sign_in_with_chatgpt) {
+      const chatgptModel = formData.get("llm-chatgpt-model-input")?.toString();
+      const searchApiKey = formData.get("search-api-key-input")?.toString();
+      const confirmationMode =
+        formData.get("enable-confirmation-mode-switch")?.toString() === "on";
+      const securityAnalyzer = formData
+        .get("security-analyzer-input")
+        ?.toString();
+
+      saveSettings(
+        {
+          llm_model: chatgptModel || settings.llm_model,
+          search_api_key: searchApiKey || "",
+          confirmation_mode: confirmationMode,
+          security_analyzer:
+            securityAnalyzer === "none"
+              ? null
+              : securityAnalyzer || DEFAULT_SETTINGS.security_analyzer,
+          llm_base_url: DEFAULT_SETTINGS.llm_base_url,
+          agent: DEFAULT_SETTINGS.agent,
+          enable_default_condenser: DEFAULT_SETTINGS.enable_default_condenser,
+        },
+        {
+          onSuccess: handleSuccessfulMutation,
+          onError: handleErrorMutation,
+        },
+      );
+      return;
+    }
+
     const providerDisplay = formData.get("llm-provider-input")?.toString();
     const provider = providerDisplay
       ? getProviderId(providerDisplay)
@@ -464,6 +570,11 @@ function LlmSettingsScreen() {
 
   const formIsDirty = Object.values(dirtyInputs).some((isDirty) => isDirty);
 
+  const showChatgptSignInBlock =
+    canUseChatgptSignIn &&
+    !shouldUseOpenHandsKey &&
+    !settings.llm_sign_in_with_chatgpt;
+
   const getSecurityAnalyzerOptions = () => {
     const analyzers = resources?.securityAnalyzers || [];
     const orderedItems = [];
@@ -537,7 +648,7 @@ function LlmSettingsScreen() {
             defaultIsToggled={view === "advanced"}
             onToggle={handleToggleAdvancedSettings}
             isToggled={view === "advanced"}
-            isDisabled={isReadOnly}
+            isDisabled={isReadOnly || settings.llm_sign_in_with_chatgpt}
           >
             {t(I18nKey.SETTINGS$ADVANCED)}
           </SettingsSwitch>
@@ -547,26 +658,93 @@ function LlmSettingsScreen() {
               data-testid="llm-settings-form-basic"
               className="flex flex-col gap-6"
             >
-              {!isLoading && !isFetching && (
-                <>
-                  <ModelSelector
-                    models={modelsAndProviders}
-                    verifiedModels={verifiedModels}
-                    verifiedProviders={verifiedProviders}
-                    currentModel={settings.llm_model || defaultModel}
-                    onChange={handleModelIsDirty}
-                    onDefaultValuesChanged={onDefaultValuesChanged}
-                    wrapperClassName="!flex-col !gap-6"
-                    isDisabled={isReadOnly}
-                  />
-                  {(settings.llm_model?.startsWith("openhands/") ||
-                    currentSelectedModel?.startsWith("openhands/")) && (
-                    <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
+              {!isLoading &&
+                !isFetching &&
+                (settings.llm_sign_in_with_chatgpt ? (
+                  <div className="flex flex-col gap-4 max-w-[680px]">
+                    <div className="flex flex-col gap-2">
+                      <span className="text-sm font-medium text-white">
+                        {t(I18nKey.SETTINGS$LLM_PROVIDER_OPENAI_LABEL)}
+                      </span>
+                      <label
+                        htmlFor="llm-chatgpt-model-select"
+                        className="text-sm text-tertiary-alt"
+                      >
+                        {t(I18nKey.LLM$MODEL)}
+                      </label>
+                      <select
+                        id="llm-chatgpt-model-select"
+                        key={settings.llm_model}
+                        name="llm-chatgpt-model-input"
+                        defaultValue={settings.llm_model}
+                        className="w-full rounded-md border border-gray-600 bg-[#1f2229] px-3 py-2 text-sm text-white"
+                        disabled={isReadOnly}
+                        onChange={() =>
+                          setDirtyInputs((prev) => ({
+                            ...prev,
+                            model: true,
+                          }))
+                        }
+                      >
+                        {CHATGPT_SUBSCRIPTION_MODELS.map((m) => (
+                          <option key={m} value={m}>
+                            {m.replace(/^chatgpt\//, "")}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <ModelSelector
+                      models={modelsAndProviders}
+                      verifiedModels={verifiedModels}
+                      verifiedProviders={verifiedProviders}
+                      currentModel={settings.llm_model || defaultModel}
+                      onChange={handleModelIsDirty}
+                      onDefaultValuesChanged={onDefaultValuesChanged}
+                      wrapperClassName="!flex-col !gap-6"
+                      isDisabled={isReadOnly}
+                    />
+                    {(settings.llm_model?.startsWith("openhands/") ||
+                      currentSelectedModel?.startsWith("openhands/")) && (
+                      <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
+                    )}
+                  </>
+                ))}
+
+              {!shouldUseOpenHandsKey && settings.llm_sign_in_with_chatgpt && (
+                <div
+                  data-testid="chatgpt-signed-in-block"
+                  className="flex flex-col gap-3 max-w-[680px]"
+                >
+                  <p className="text-sm text-white">
+                    {t(I18nKey.SETTINGS$SIGNED_IN_WITH_CHATGPT)}
+                  </p>
+                  {!isReadOnly && (
+                    <BrandButton
+                      type="button"
+                      testId="chatgpt-sign-out-button"
+                      variant="secondary"
+                      onClick={handleChatgptSignOut}
+                    >
+                      {t(I18nKey.SETTINGS$SIGN_OUT_CHATGPT)}
+                    </BrandButton>
                   )}
-                </>
+                  <p className="text-xs text-tertiary-alt">
+                    <a
+                      href="https://openai.com/policies/terms-of-use/"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="underline underline-offset-2"
+                    >
+                      {t(I18nKey.SETTINGS$CHATGPT_TOS_LINK)}
+                    </a>
+                  </p>
+                </div>
               )}
 
-              {!shouldUseOpenHandsKey && (
+              {!shouldUseOpenHandsKey && !settings.llm_sign_in_with_chatgpt && (
                 <>
                   <SettingsInput
                     testId="llm-api-key-input"
@@ -591,6 +769,48 @@ function LlmSettingsScreen() {
                     href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
                   />
                 </>
+              )}
+
+              {showChatgptSignInBlock && (
+                <div
+                  data-testid="chatgpt-sign-in-block"
+                  className="flex flex-col gap-3 max-w-[680px]"
+                >
+                  <BrandButton
+                    type="button"
+                    testId="chatgpt-sign-in-button"
+                    variant="secondary"
+                    onClick={handleChatgptSignIn}
+                    isDisabled={isChatgptPolling}
+                  >
+                    {t(I18nKey.SETTINGS$SIGN_IN_WITH_CHATGPT)}
+                  </BrandButton>
+                  {pendingChatgpt && (
+                    <p className="text-sm text-tertiary-alt">
+                      {t(I18nKey.SETTINGS$CHATGPT_DEVICE_INSTRUCTIONS, {
+                        code: pendingChatgpt.user_code,
+                      })}{" "}
+                      <a
+                        href={pendingChatgpt.verification_uri}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="underline underline-offset-2"
+                      >
+                        {pendingChatgpt.verification_uri}
+                      </a>
+                    </p>
+                  )}
+                  <p className="text-xs text-tertiary-alt">
+                    <a
+                      href="https://openai.com/policies/terms-of-use/"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="underline underline-offset-2"
+                    >
+                      {t(I18nKey.SETTINGS$CHATGPT_TOS_LINK)}
+                    </a>
+                  </p>
+                </div>
               )}
             </div>
           )}
