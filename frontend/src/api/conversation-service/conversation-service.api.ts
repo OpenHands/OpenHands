@@ -1,17 +1,12 @@
 import { AxiosHeaders } from "axios";
 import {
   GetVSCodeUrlResponse,
-  Conversation,
-  ResultSet,
   GetTrajectoryResponse,
-  GetMicroagentsResponse,
-  GetMicroagentPromptResponse,
   FileUploadSuccessResponse,
-  GetFilesResponse,
+  Conversation,
 } from "../open-hands.types";
 import { openHands } from "../open-hands-axios";
 import { Provider } from "#/types/settings";
-import { SuggestedTask } from "#/utils/types";
 import { V1AppConversation } from "./v1-conversation-service.types";
 
 class ConversationService {
@@ -57,18 +52,6 @@ class ConversationService {
   }
 
   /**
-   * Get the web hosts
-   * @returns Array of web hosts
-   */
-  static async getWebHosts(conversationId: string): Promise<string[]> {
-    const url = `${this.getConversationUrl(conversationId)}/web-hosts`;
-    const response = await openHands.get(url, {
-      headers: this.getConversationHeaders(),
-    });
-    return Object.keys(response.data.hosts);
-  }
-
-  /**
    * Get the VSCode URL
    * @returns VSCode URL
    */
@@ -82,65 +65,8 @@ class ConversationService {
     return data;
   }
 
-  static async getRuntimeId(
-    conversationId: string,
-  ): Promise<{ runtime_id: string }> {
-    const url = `${this.getConversationUrl(conversationId)}/config`;
-    const { data } = await openHands.get<{ runtime_id: string }>(url, {
-      headers: this.getConversationHeaders(),
-    });
-    return data;
-  }
-
-  static async searchConversations(
-    selectedRepository?: string,
-    conversationTrigger?: string,
-    limit: number = 100,
-  ): Promise<Conversation[]> {
-    const params = new URLSearchParams();
-    params.append("limit", limit.toString());
-
-    if (selectedRepository) {
-      params.append("selected_repository", selectedRepository);
-    }
-
-    if (conversationTrigger) {
-      params.append("conversation_trigger", conversationTrigger);
-    }
-
-    const { data } = await openHands.get<ResultSet<Conversation>>(
-      `/api/conversations?${params.toString()}`,
-    );
-    return data.results;
-  }
-
   static async deleteUserConversation(conversationId: string): Promise<void> {
     await openHands.delete(`/api/conversations/${conversationId}`);
-  }
-
-  static async createConversation(
-    selectedRepository?: string,
-    git_provider?: Provider,
-    initialUserMsg?: string,
-    suggested_task?: SuggestedTask,
-    selected_branch?: string,
-    conversationInstructions?: string,
-  ): Promise<Conversation> {
-    const body = {
-      repository: selectedRepository,
-      git_provider,
-      selected_branch,
-      initial_user_msg: initialUserMsg,
-      suggested_task,
-      conversation_instructions: conversationInstructions,
-    };
-
-    const { data } = await openHands.post<Conversation>(
-      "/api/conversations",
-      body,
-    );
-
-    return data;
   }
 
   static async getConversation(
@@ -182,65 +108,6 @@ class ConversationService {
     const { data } = await openHands.get<GetTrajectoryResponse>(url, {
       headers: this.getConversationHeaders(),
     });
-    return data;
-  }
-
-  /**
-   * Get the available microagents associated with a conversation
-   * @param conversationId The ID of the conversation
-   * @returns The available microagents associated with the conversation
-   */
-  static async getMicroagents(
-    conversationId: string,
-  ): Promise<GetMicroagentsResponse> {
-    const url = `${this.getConversationUrl(conversationId)}/microagents`;
-    const { data } = await openHands.get<GetMicroagentsResponse>(url, {
-      headers: this.getConversationHeaders(),
-    });
-    return data;
-  }
-
-  static async getMicroagentPrompt(
-    conversationId: string,
-    eventId: number,
-  ): Promise<string> {
-    const url = `${this.getConversationUrl(conversationId)}/remember-prompt`;
-    const { data } = await openHands.get<GetMicroagentPromptResponse>(url, {
-      params: { event_id: eventId },
-      headers: this.getConversationHeaders(),
-    });
-
-    return data.prompt;
-  }
-
-  static async updateConversation(
-    conversationId: string,
-    updates: { title: string },
-  ): Promise<boolean> {
-    const { data } = await openHands.patch<boolean>(
-      `/api/conversations/${conversationId}`,
-      updates,
-    );
-
-    return data;
-  }
-
-  /**
-   * Retrieve the list of files available in the workspace
-   * @param conversationId ID of the conversation
-   * @param path Path to list files from. If provided, it lists all the files in the given path
-   * @returns List of files available in the given path. If path is not provided, it lists all the files in the workspace
-   */
-  static async getFiles(
-    conversationId: string,
-    path?: string,
-  ): Promise<GetFilesResponse> {
-    const url = `${this.getConversationUrl(conversationId)}/list-files`;
-    const { data } = await openHands.get<GetFilesResponse>(url, {
-      params: { path },
-      headers: this.getConversationHeaders(),
-    });
-
     return data;
   }
 
