@@ -6,13 +6,14 @@ from fastapi import APIRouter, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from openhands.app_server.config import depends_user_context
+from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.sandbox.session_auth import validate_session_key
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.server.dependencies import get_dependencies
 
 _logger = logging.getLogger(__name__)
-_secrets_logger = logging.getLogger('openhands.security.secrets_access')
+_audit = logging.getLogger('openhands.security.secrets_access')
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
@@ -38,22 +39,19 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
     if expose_secrets:
-        user_id = await user_context.get_user_id()
-        try:
-            await _validate_session_key_ownership(user_context, x_session_api_key)
-        except HTTPException:
-            _secrets_logger.warning(
-                'secrets_access: route=/api/v1/users/me user_id=%s '
-                'sandbox_id=None actor_type=user secret_name=None '
-                'outcome=denied',
-                user_id,
-            )
-            raise
-        _secrets_logger.info(
-            'secrets_access: route=/api/v1/users/me user_id=%s '
-            'sandbox_id=None actor_type=user secret_name=None '
-            'outcome=allowed',
-            user_id,
+        sandbox_info = await _validate_session_key_ownership(
+            user_context, x_session_api_key
+        )
+        _audit.info(
+            'secrets_access',
+            extra={
+                'route': '/users/me',
+                'user_id': user.id,
+                'sandbox_id': sandbox_info.id,
+                'actor_type': 'user',
+                'secret_name': None,
+                'outcome': 'allowed',
+            },
         )
         return JSONResponse(  # type: ignore[return-value]
             content=user.model_dump(mode='json', context={'expose_secrets': True})
@@ -64,17 +62,43 @@ async def get_current_user(
 async def _validate_session_key_ownership(
     user_context: UserContext,
     session_api_key: str | None,
-) -> None:
+) -> SandboxInfo:
     """Verify the session key belongs to a sandbox owned by the caller.
 
     Raises ``HTTPException`` if the key is missing, invalid, or belongs
-    to a sandbox owned by a different user.
+    to a sandbox owned by a different user.  Returns the resolved
+    ``SandboxInfo`` on success so callers can access ``sandbox_id``.
     """
-    sandbox_info = await validate_session_key(session_api_key)
+    try:
+        sandbox_info = await validate_session_key(session_api_key)
+    except HTTPException:
+        _audit.warning(
+            'secrets_access',
+            extra={
+                'route': '/users/me',
+                'user_id': None,
+                'sandbox_id': None,
+                'actor_type': 'user',
+                'secret_name': None,
+                'outcome': 'denied',
+            },
+        )
+        raise
 
     # Verify the sandbox is owned by the authenticated user.
     caller_id = await user_context.get_user_id()
     if not caller_id:
+        _audit.warning(
+            'secrets_access',
+            extra={
+                'route': '/users/me',
+                'user_id': None,
+                'sandbox_id': sandbox_info.id,
+                'actor_type': 'user',
+                'secret_name': None,
+                'outcome': 'denied',
+            },
+        )
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             detail='Cannot determine authenticated user',
@@ -86,7 +110,20 @@ async def _validate_session_key_ownership(
             sandbox_info.created_by_user_id,
             caller_id,
         )
+        _audit.error(
+            'secrets_access',
+            extra={
+                'route': '/users/me',
+                'user_id': caller_id,
+                'sandbox_id': sandbox_info.id,
+                'actor_type': 'user',
+                'secret_name': None,
+                'outcome': 'denied',
+            },
+        )
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail='Session API key does not belong to the authenticated user',
         )
+
+    return sandbox_info
