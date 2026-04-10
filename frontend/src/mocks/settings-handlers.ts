@@ -39,6 +39,7 @@ export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
   llm_base_url: DEFAULT_SETTINGS.llm_base_url,
   llm_api_key: null,
   llm_api_key_set: DEFAULT_SETTINGS.llm_api_key_set,
+  llm_sign_in_with_chatgpt: DEFAULT_SETTINGS.llm_sign_in_with_chatgpt,
   search_api_key_set: DEFAULT_SETTINGS.search_api_key_set,
   agent: DEFAULT_SETTINGS.agent,
   language: DEFAULT_SETTINGS.language,
