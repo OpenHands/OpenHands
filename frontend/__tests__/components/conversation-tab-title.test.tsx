@@ -170,7 +170,11 @@ describe("ConversationTabTitle", () => {
       vi.mocked(useUnifiedGetGitChanges).mockReturnValue({
         refetch: mockRefetch,
         isFetching: false,
+        isError: false,
+        isLoading: false,
+        isSuccess: true,
         data: [],
+        error: null,
       });
 
       renderWithProviders(
