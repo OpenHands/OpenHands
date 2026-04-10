@@ -52,8 +52,7 @@ def poll_once(device_auth_id: str, user_code: str) -> dict[str, Any] | None:
     resp.raise_for_status()
     data = resp.json()
     if all(
-        k in data
-        for k in ('authorization_code', 'code_challenge', 'code_verifier')
+        k in data for k in ('authorization_code', 'code_challenge', 'code_verifier')
     ):
         return data
     return None
@@ -63,10 +62,10 @@ def exchange_authorization_code(code_data: dict[str, str]) -> dict[str, str]:
     redirect_uri = f'{CHATGPT_AUTH_BASE}/deviceauth/callback'
     body = (
         'grant_type=authorization_code'
-        f"&code={code_data['authorization_code']}"
+        f'&code={code_data["authorization_code"]}'
         f'&redirect_uri={redirect_uri}'
         f'&client_id={CHATGPT_CLIENT_ID}'
-        f"&code_verifier={code_data['code_verifier']}"
+        f'&code_verifier={code_data["code_verifier"]}'
     )
     with httpx.Client(timeout=30.0) as client:
         resp = client.post(

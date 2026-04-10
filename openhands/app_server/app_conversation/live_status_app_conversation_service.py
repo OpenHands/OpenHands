@@ -87,7 +87,6 @@ from openhands.app_server.utils.llm_metadata import (
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import SuggestedTask
 from openhands.llm.litellm_chatgpt_patch import apply_litellm_chatgpt_api_key_patch
-from openhands.utils.chatgpt_oauth_tokens import decode_chatgpt_access_token_for_llm
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
@@ -106,6 +105,7 @@ from openhands.tools.preset.planning import (
     get_planning_tools,
 )
 from openhands.utils._redact_compat import sanitize_config
+from openhands.utils.chatgpt_oauth_tokens import decode_chatgpt_access_token_for_llm
 from openhands.utils.git import ensure_valid_git_branch_name
 
 apply_litellm_chatgpt_api_key_patch()
