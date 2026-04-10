@@ -55,6 +55,12 @@ CLARIFAI_MODELS = [
     'clarifai/moonshotai.kimi.Kimi-K2-Instruct',
 ]
 
+# Models not yet indexed by litellm but accessible via their providers.
+EXTRA_LITELLM_MODELS = [
+    'zai/glm-5.1',
+    'zai/glm-5-turbo',
+]
+
 # ---------------------------------------------------------------------------
 # Provider-assignment tables — derived from the SDK.
 #
@@ -253,7 +259,10 @@ def get_supported_llm_models(
 
     # Assign canonical provider prefixes to bare LiteLLM names, then dedupe.
     all_models = (
-        openhands_models + CLARIFAI_MODELS + [_assign_provider(m) for m in model_list]
+        openhands_models
+        + CLARIFAI_MODELS
+        + EXTRA_LITELLM_MODELS
+        + [_assign_provider(m) for m in model_list]
     )
     unique_models = sorted(set(all_models))
 
