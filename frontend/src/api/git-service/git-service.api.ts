@@ -1,10 +1,5 @@
 import { openHands } from "../open-hands-axios";
-import {
-  GitRepository,
-  RepositoryPage,
-  BranchPage,
-  InstallationPage,
-} from "#/types/git";
+import { RepositoryPage, BranchPage, InstallationPage } from "#/types/git";
 import { GitChange, GitChangeDiff } from "../open-hands.types";
 import ConversationService from "../conversation-service/conversation-service.api";
 
@@ -90,11 +85,7 @@ class GitService {
     installations: string[],
     pageId?: string,
     limit = 30,
-  ): Promise<{
-    data: GitRepository[];
-    nextPageId: string | null;
-    installationIndex: number | null;
-  }> {
+  ): Promise<RepositoryPage> {
     const installationId = installations[installationIndex];
     const { data } = await openHands.get<RepositoryPage>(
       "/api/v1/git/repositories/search",
@@ -107,21 +98,7 @@ class GitService {
         },
       },
     );
-
-    const nextPageId = data.next_page_id;
-    let nextInstallation: number | null;
-    if (nextPageId) {
-      nextInstallation = installationIndex;
-    } else if (installationIndex + 1 < installations.length) {
-      nextInstallation = installationIndex + 1;
-    } else {
-      nextInstallation = null;
-    }
-    return {
-      data: data.items,
-      nextPageId,
-      installationIndex: nextInstallation,
-    };
+    return data;
   }
 
   /**
@@ -210,28 +187,6 @@ class GitService {
       },
     );
     return data;
-  }
-
-  /**
-   * Get the user installation IDs
-   * @param provider The provider to get installation IDs for (github, bitbucket, etc.)
-   * @returns List of installation IDs
-   */
-  static async getUserInstallationIds(
-    provider: string,
-    pageId?: string,
-  ): Promise<string[]> {
-    const { data } = await openHands.get<InstallationPage>(
-      "/api/v1/git/installations/search",
-      {
-        params: {
-          provider,
-          page_id: pageId,
-          limit: 100,
-        },
-      },
-    );
-    return data.items;
   }
 
   /**

@@ -2,7 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useConfig } from "./use-config";
 import { useUserProviders } from "../use-user-providers";
 import { useAppInstallations } from "./use-app-installations";
-import { GitRepository } from "../../types/git";
+import { RepositoryPage } from "../../types/git";
 import { Provider } from "../../types/settings";
 import GitService from "#/api/git-service/git-service.api";
 import { shouldUseInstallationRepos } from "#/utils/utils";
@@ -13,30 +13,18 @@ interface UseGitRepositoriesOptions {
   enabled?: boolean;
 }
 
-interface UserRepositoriesResponse {
-  data: GitRepository[];
-  nextPageId: string | null;
-}
-
-interface InstallationRepositoriesResponse {
-  data: GitRepository[];
-  nextPageId: string | null;
-  installationIndex: number | null;
-}
-
 export function useGitRepositories(options: UseGitRepositoriesOptions) {
   const { provider, pageSize = 30, enabled = true } = options;
   const { providers } = useUserProviders();
   const { data: config } = useConfig();
-  const { data: installations } = useAppInstallations(provider);
+  const { data: page } = useAppInstallations(provider);
+  const installations = page?.items;
 
   const useInstallationRepos = provider
     ? shouldUseInstallationRepos(provider, config?.app_mode)
     : false;
 
-  const repos = useInfiniteQuery<
-    UserRepositoriesResponse | InstallationRepositoriesResponse
-  >({
+  const repos = useInfiniteQuery<RepositoryPage>({
     queryKey: [
       "repositories",
       providers || [],
@@ -67,11 +55,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
           pageId ?? undefined,
           pageSize,
         );
-        return {
-          data: result.data,
-          nextPageId: result.nextPageId,
-          installationIndex: result.installationIndex,
-        };
+        return result;
       }
 
       // Use type assertion to ensure correct type
@@ -82,34 +66,9 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
         resolvedPageId,
         pageSize,
       );
-      return {
-        data: result.items,
-        nextPageId: result.next_page_id,
-      };
+      return result;
     },
-    getNextPageParam: (lastPage) => {
-      if (useInstallationRepos) {
-        const installationPage = lastPage as InstallationRepositoriesResponse;
-        if (installationPage.nextPageId) {
-          return {
-            installationIndex: installationPage.installationIndex,
-            pageId: installationPage.nextPageId,
-          };
-        }
-
-        if (installationPage.installationIndex !== null) {
-          return {
-            installationIndex: installationPage.installationIndex,
-            pageId: null,
-          };
-        }
-
-        return null;
-      }
-
-      const userPage = lastPage as UserRepositoriesResponse;
-      return userPage.nextPageId;
-    },
+    getNextPageParam: (lastPage) => lastPage.next_page_id,
     initialPageParam: useInstallationRepos
       ? { installationIndex: 0, pageId: null as string | null }
       : (null as string | null),

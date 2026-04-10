@@ -16,7 +16,7 @@ export const useAppInstallations = (selectedProvider: Provider | null) => {
 
   return useQuery({
     queryKey: ["installations", providers || [], selectedProvider],
-    queryFn: () => GitService.getUserInstallationIds(selectedProvider!),
+    queryFn: () => GitService.getUserInstallations(selectedProvider!),
     enabled:
       userIsAuthenticated &&
       !!selectedProvider &&
