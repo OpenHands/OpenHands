@@ -213,16 +213,20 @@ class GitService {
   }
 
   /**
-   * Get the user installation IDs (legacy helper)
+   * Get the user installation IDs
    * @param provider The provider to get installation IDs for (github, bitbucket, etc.)
    * @returns List of installation IDs
    */
-  static async getUserInstallationIds(provider: string): Promise<string[]> {
+  static async getUserInstallationIds(
+    provider: string,
+    pageId?: string,
+  ): Promise<string[]> {
     const { data } = await openHands.get<InstallationPage>(
       "/api/v1/git/installations/search",
       {
         params: {
           provider,
+          page_id: pageId,
           limit: 100,
         },
       },
