@@ -39,13 +39,27 @@ def read_root() -> dict[str, str]:
 
 
 @app.get('/api/options/models')
-def read_llm_models() -> list[str]:
-    return [
-        'gpt-4',
-        'gpt-4-turbo-preview',
-        'gpt-4-0314',
-        'gpt-4-0613',
-    ]
+def read_llm_models() -> dict:
+    return {
+        'models': [
+            'openai/gpt-4',
+            'openai/gpt-4-turbo-preview',
+            'openai/gpt-4-0314',
+            'openai/gpt-4-0613',
+        ],
+        'verified_models': [],
+        'verified_providers': [
+            'openhands',
+            'anthropic',
+            'openai',
+            'mistral',
+            'gemini',
+            'deepseek',
+            'moonshot',
+            'minimax',
+        ],
+        'default_model': 'openhands/claude-opus-4-5-20251101',
+    }
 
 
 @app.get('/api/options/agents')

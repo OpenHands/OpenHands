@@ -22,9 +22,8 @@ export function MetricsModal({ isOpen, onOpenChange }: MetricsModalProps) {
   const storeMetrics = useMetricsStore();
   const { data: conversation } = useActiveConversation();
 
-  const isV1 = conversation?.conversation_version === "V1";
-  const conversationId = conversation?.conversation_id;
-  const conversationUrl = conversation?.url;
+  const conversationId = conversation?.id;
+  const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
 
   // For V1 conversations, fetch metrics directly from the sandbox
@@ -33,12 +32,12 @@ export function MetricsModal({ isOpen, onOpenChange }: MetricsModalProps) {
     conversationId,
     conversationUrl,
     sessionApiKey,
-    isV1 && isOpen, // Only enable when modal is open
+    isOpen, // Only enable when modal is open
   );
 
   // Compute the metrics based on conversation version
   const metrics = useMemo(() => {
-    if (isV1 && sandboxMetrics) {
+    if (sandboxMetrics) {
       return {
         cost: sandboxMetrics.accumulated_cost,
         max_budget_per_task: sandboxMetrics.max_budget_per_task,
@@ -63,7 +62,7 @@ export function MetricsModal({ isOpen, onOpenChange }: MetricsModalProps) {
 
     // For non-V1 conversations, use the store metrics
     return storeMetrics;
-  }, [isV1, sandboxMetrics, storeMetrics]);
+  }, [sandboxMetrics, storeMetrics]);
 
   if (!isOpen) return null;
 

@@ -18,7 +18,7 @@ concurrency:
 jobs:
   check-version:
     name: Check if version has changed
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     defaults:
       run:
         shell: bash
@@ -27,7 +27,7 @@ jobs:
       current-version: ${{ steps.version-check.outputs.current-version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2 # Need previous commit to compare
 
@@ -55,7 +55,7 @@ jobs:
 
   publish:
     name: Publish to npm
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     needs: check-version
     if: needs.check-version.outputs.should-publish == 'true'
     defaults:
@@ -63,7 +63,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

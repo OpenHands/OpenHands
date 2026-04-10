@@ -6,10 +6,11 @@ import {
   ClaimButton,
   getButtonState,
 } from "#/components/features/org/claim-button";
-import type { GitOrg } from "#/hooks/organizations/use-git-conversation-routing";
+import type { GitOrg } from "#/types/org";
 
 const createOrg = (overrides: Partial<GitOrg> = {}): GitOrg => ({
   id: "1",
+  claimId: null,
   provider: "GitHub",
   name: "TestOrg",
   status: "unclaimed",
