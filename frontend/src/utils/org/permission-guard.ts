@@ -1,21 +1,15 @@
 import { redirect } from "react-router";
-import OptionService from "#/api/option-service/option-service.api";
-import { WebClientConfig } from "#/api/option-service/option.types";
-import { queryClient } from "#/query-client-config";
+import { fetchConfig } from "#/hooks/query/use-config";
 import { getFirstAvailablePath } from "#/utils/settings-utils";
 import { getActiveOrganizationUser } from "./permission-checks";
 import { PermissionKey, rolePermissions } from "./permissions";
 
 /**
- * Helper to get config, using cache or fetching if needed.
+ * Helper to get config, using TanStack Query's fetchConfig which properly
+ * handles caching and prevents duplicate requests on hot refresh.
  */
-async function getConfig(): Promise<WebClientConfig | undefined> {
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
-  if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
-  }
-  return config;
+async function getConfig() {
+  return fetchConfig();
 }
 
 /**

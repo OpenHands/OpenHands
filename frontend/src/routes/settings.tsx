@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Outlet, redirect, useLocation, useMatches } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Route } from "./+types/settings";
-import OptionService from "#/api/option-service/option-service.api";
+import { fetchConfig } from "#/hooks/query/use-config";
 import { queryClient } from "#/query-client-config";
 import { SettingsLayout } from "#/components/features/settings";
 import { WebClientConfig } from "#/api/option-service/option.types";
@@ -36,11 +36,8 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const { pathname } = url;
 
   // Step 1: Get config first (needed for all checks, no user data required)
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
-  if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
-  }
+  // Use fetchConfig for proper caching - avoids duplicate requests on hot refresh
+  const config = await fetchConfig();
 
   const isSaas = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;
