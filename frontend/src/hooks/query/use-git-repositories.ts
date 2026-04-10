@@ -2,7 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useConfig } from "./use-config";
 import { useUserProviders } from "../use-user-providers";
 import { useAppInstallations } from "./use-app-installations";
-import { GitRepository } from "../../types/git";
+import { GitRepository, RepositoryPage } from "../../types/git";
 import { Provider } from "../../types/settings";
 import GitService from "#/api/git-service/git-service.api";
 import { shouldUseInstallationRepos } from "#/utils/utils";
@@ -15,12 +15,12 @@ interface UseGitRepositoriesOptions {
 
 interface UserRepositoriesResponse {
   data: GitRepository[];
-  nextPage: number | null;
+  nextPageId: string | null;
 }
 
 interface InstallationRepositoriesResponse {
   data: GitRepository[];
-  nextPage: number | null;
+  nextPageId: string | null;
   installationIndex: number | null;
 }
 
@@ -51,44 +51,53 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
       }
 
       if (useInstallationRepos) {
-        const { repoPage, installationIndex } = pageParam as {
+        const { installationIndex, pageId } = pageParam as {
           installationIndex: number | null;
-          repoPage: number | null;
+          pageId: string | null;
         };
 
         if (!installations) {
           throw new Error("Missing installation list");
         }
 
-        return GitService.retrieveInstallationRepositories(
+        const result = await GitService.retrieveInstallationRepositories(
           provider,
           installationIndex || 0,
           installations,
-          repoPage || 1,
+          pageId ?? undefined,
           pageSize,
         );
+        return {
+          data: result.data,
+          nextPageId: result.nextPageId,
+          installationIndex: result.installationIndex,
+        };
       }
 
-      return GitService.retrieveUserGitRepositories(
+      const result = await GitService.retrieveUserGitRepositories(
         provider,
-        pageParam as number,
+        pageId ?? undefined,
         pageSize,
       );
+      return {
+        data: result.items,
+        nextPageId: result.next_page_id,
+      };
     },
     getNextPageParam: (lastPage) => {
       if (useInstallationRepos) {
         const installationPage = lastPage as InstallationRepositoriesResponse;
-        if (installationPage.nextPage) {
+        if (installationPage.nextPageId) {
           return {
             installationIndex: installationPage.installationIndex,
-            repoPage: installationPage.nextPage,
+            pageId: installationPage.nextPageId,
           };
         }
 
         if (installationPage.installationIndex !== null) {
           return {
             installationIndex: installationPage.installationIndex,
-            repoPage: 1,
+            pageId: null,
           };
         }
 
@@ -96,11 +105,11 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
       }
 
       const userPage = lastPage as UserRepositoriesResponse;
-      return userPage.nextPage;
+      return userPage.nextPageId;
     },
     initialPageParam: useInstallationRepos
-      ? { installationIndex: 0, repoPage: 1 }
-      : 1,
+      ? { installationIndex: 0, pageId: null as string | null }
+      : (null as string | null),
     enabled:
       enabled &&
       (providers || []).length > 0 &&
