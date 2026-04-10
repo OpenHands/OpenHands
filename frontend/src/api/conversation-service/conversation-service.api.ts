@@ -6,7 +6,6 @@ import {
   Conversation,
 } from "../open-hands.types";
 import { openHands } from "../open-hands-axios";
-import { Provider } from "#/types/settings";
 import { V1AppConversation } from "./v1-conversation-service.types";
 
 class ConversationService {
@@ -74,18 +73,6 @@ class ConversationService {
   ): Promise<Conversation | null> {
     const { data } = await openHands.get<Conversation | null>(
       `/api/conversations/${conversationId}`,
-    );
-
-    return data;
-  }
-
-  static async startConversation(
-    conversationId: string,
-    providers?: Provider[],
-  ): Promise<Conversation | null> {
-    const { data } = await openHands.post<Conversation | null>(
-      `/api/conversations/${conversationId}/start`,
-      providers ? { providers_set: providers } : {},
     );
 
     return data;
