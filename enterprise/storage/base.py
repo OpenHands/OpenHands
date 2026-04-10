@@ -1,18 +1,15 @@
 """
 Unified SQLAlchemy declarative base for all models.
 
-Uses SQLAlchemy 2.0 DeclarativeBase for proper type inference with Mapped types.
-This is backward compatible with existing Column() definitions while enabling
-gradual migration to mapped_column() with Mapped[T] type annotations.
+Re-exports the core Base to ensure enterprise and core models share the same
+metadata registry. This allows foreign key relationships between enterprise
+models (e.g., ConversationCallback) and core models (e.g., StoredConversationMetadata).
+
+The core Base now uses SQLAlchemy 2.0 DeclarativeBase for proper type inference
+with Mapped types, while remaining backward compatible with existing Column()
+definitions.
 """
 
-from sqlalchemy.orm import DeclarativeBase
-
-
-class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy models in the enterprise package."""
-
-    pass
-
+from openhands.app_server.utils.sql_utils import Base
 
 __all__ = ['Base']
