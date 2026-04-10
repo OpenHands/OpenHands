@@ -31,7 +31,7 @@ vi.mock("@tanstack/react-query", async () => {
 
 // Mock the active conversation hook
 const mockConversationData = {
-  conversation_id: "parent-conversation-123",
+  id: "parent-conversation-123",
   sub_conversation_ids: [],
 };
 
