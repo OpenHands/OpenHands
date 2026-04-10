@@ -40,6 +40,20 @@ SANDBOX_ID = 'sb-test-123'
 USER_ID = 'test-user-id'
 
 
+@pytest.fixture()
+def mock_sandbox_audit():
+    """Patch the audit logger in sandbox_router so tests can assert on calls."""
+    with patch('openhands.app_server.sandbox.sandbox_router._audit') as m:
+        yield m
+
+
+@pytest.fixture()
+def mock_user_audit():
+    """Patch the audit logger in user_router so tests can assert on calls."""
+    with patch('openhands.app_server.user.user_router._audit') as m:
+        yield m
+
+
 def _make_sandbox_info(
     sandbox_id: str = SANDBOX_ID,
     user_id: str | None = USER_ID,
@@ -152,7 +166,7 @@ class TestValidateSessionKey:
 class TestGetCurrentUserExposeSecrets:
     """Test suite for GET /users/me?expose_secrets=true."""
 
-    async def test_expose_secrets_returns_raw_api_key(self):
+    async def test_expose_secrets_returns_raw_api_key(self, mock_user_audit):
         """With valid session key, expose_secrets=true returns unmasked llm_api_key."""
         user_info = UserInfo(
             id=USER_ID,
@@ -167,7 +181,7 @@ class TestGetCurrentUserExposeSecrets:
         with patch(
             'openhands.app_server.user.user_router._validate_session_key_ownership'
         ) as mock_validate:
-            mock_validate.return_value = None
+            mock_validate.return_value = _make_sandbox_info()
             result = await get_current_user(
                 user_context=mock_context,
                 expose_secrets=True,
@@ -182,6 +196,14 @@ class TestGetCurrentUserExposeSecrets:
         assert body['llm_api_key'] == 'sk-test-key-123'
         assert body['llm_base_url'] == 'https://litellm.example.com'
 
+        # Audit log assertions
+        mock_user_audit.info.assert_called_once()
+        extra = mock_user_audit.info.call_args.kwargs['extra']
+        assert extra['outcome'] == 'allowed'
+        assert extra['user_id'] == USER_ID
+        assert extra['sandbox_id'] == SANDBOX_ID
+        assert extra['route'] == '/users/me'
+
     async def test_expose_secrets_rejects_missing_session_key(self):
         """expose_secrets=true without X-Session-API-Key is rejected."""
         mock_context = AsyncMock()
@@ -191,7 +213,7 @@ class TestGetCurrentUserExposeSecrets:
         assert exc_info.value.status_code == 401
         assert 'X-Session-API-Key' in exc_info.value.detail
 
-    async def test_expose_secrets_rejects_wrong_user(self):
+    async def test_expose_secrets_rejects_wrong_user(self, mock_user_audit):
         """expose_secrets=true with session key from different user is rejected."""
         mock_context = AsyncMock()
         mock_context.get_user_id = AsyncMock(return_value='user-A')
@@ -209,7 +231,14 @@ class TestGetCurrentUserExposeSecrets:
 
         assert exc_info.value.status_code == 403
 
-    async def test_expose_secrets_rejects_unknown_caller(self):
+        # User mismatch is suspicious and should be logged at error level
+        mock_user_audit.error.assert_called_once()
+        extra = mock_user_audit.error.call_args.kwargs['extra']
+        assert extra['outcome'] == 'denied'
+        assert extra['user_id'] == 'user-A'
+        assert extra['sandbox_id'] == SANDBOX_ID
+
+    async def test_expose_secrets_rejects_unknown_caller(self, mock_user_audit):
         """If caller_id cannot be determined, reject with 401."""
         mock_context = AsyncMock()
         mock_context.get_user_id = AsyncMock(return_value=None)
@@ -227,6 +256,11 @@ class TestGetCurrentUserExposeSecrets:
 
         assert exc_info.value.status_code == 401
         assert 'Cannot determine authenticated user' in exc_info.value.detail
+
+        mock_user_audit.warning.assert_called_once()
+        extra = mock_user_audit.warning.call_args.kwargs['extra']
+        assert extra['outcome'] == 'denied'
+        assert extra['sandbox_id'] == SANDBOX_ID
 
     async def test_default_masks_api_key(self):
         """Without expose_secrets, llm_api_key is masked (no session key needed)."""
@@ -258,7 +292,7 @@ class TestGetCurrentUserExposeSecrets:
 class TestListSecretNames:
     """Test suite for GET /sandboxes/{sandbox_id}/settings/secrets."""
 
-    async def test_returns_secret_names_without_values(self):
+    async def test_returns_secret_names_without_values(self, mock_sandbox_audit):
         """Response contains names and descriptions, NOT raw values."""
         secrets = {
             'GITHUB_TOKEN': StaticSecret(
@@ -293,6 +327,14 @@ class TestListSecretNames:
         # Verify no 'value' field is exposed
         assert not hasattr(gh, 'value')
 
+        # Audit log assertions
+        mock_sandbox_audit.info.assert_called_once()
+        extra = mock_sandbox_audit.info.call_args.kwargs['extra']
+        assert extra['outcome'] == 'allowed'
+        assert extra['sandbox_id'] == SANDBOX_ID
+        assert extra['user_id'] == USER_ID
+        assert extra['actor_type'] == 'sandbox'
+
     async def test_returns_empty_when_no_secrets(self):
         sandbox_info = _make_sandbox_info()
 
@@ -318,7 +360,7 @@ class TestListSecretNames:
 class TestGetSecretValue:
     """Test suite for GET /sandboxes/{sandbox_id}/settings/secrets/{name}."""
 
-    async def test_returns_raw_secret_value(self):
+    async def test_returns_raw_secret_value(self, mock_sandbox_audit):
         """Raw secret value returned as plain text."""
         secrets = {
             'GITHUB_TOKEN': StaticSecret(
@@ -344,7 +386,13 @@ class TestGetSecretValue:
         assert response.body == b'ghp_actual_secret'
         assert response.media_type == 'text/plain'
 
-    async def test_returns_404_for_unknown_secret(self):
+        mock_sandbox_audit.info.assert_called_once()
+        extra = mock_sandbox_audit.info.call_args.kwargs['extra']
+        assert extra['outcome'] == 'allowed'
+        assert extra['secret_name'] == 'GITHUB_TOKEN'
+        assert extra['sandbox_id'] == SANDBOX_ID
+
+    async def test_returns_404_for_unknown_secret(self, mock_sandbox_audit):
         """404 when requested secret doesn't exist in custom secrets or provider tokens."""
         sandbox_info = _make_sandbox_info()
 
@@ -364,7 +412,12 @@ class TestGetSecretValue:
 
         assert exc_info.value.status_code == 404
 
-    async def test_returns_404_for_none_value_secret(self):
+        mock_sandbox_audit.warning.assert_called_once()
+        extra = mock_sandbox_audit.warning.call_args.kwargs['extra']
+        assert extra['outcome'] == 'not_found'
+        assert extra['secret_name'] == 'NONEXISTENT'
+
+    async def test_returns_404_for_none_value_secret(self, mock_sandbox_audit):
         """404 when secret exists but has None value."""
         secrets = {
             'EMPTY_SECRET': StaticSecret(value=None),
@@ -386,6 +439,11 @@ class TestGetSecretValue:
                 )
 
         assert exc_info.value.status_code == 404
+
+        mock_sandbox_audit.warning.assert_called_once()
+        extra = mock_sandbox_audit.warning.call_args.kwargs['extra']
+        assert extra['outcome'] == 'not_found'
+        assert extra['secret_name'] == 'EMPTY_SECRET'
 
 
 # ===========================================================================
@@ -589,7 +647,9 @@ class TestSandboxSecretsIntegration:
         assert response.status_code == 401
         assert 'X-Session-API-Key' in response.json()['detail']
 
-    def test_secrets_list_with_invalid_session_key_returns_401(self):
+    def test_secrets_list_with_invalid_session_key_returns_401(
+        self, mock_sandbox_audit
+    ):
         """Invalid session key on secrets endpoint is rejected."""
         app = _build_integration_test_app()
         client = TestClient(app, raise_server_exceptions=False)
@@ -609,7 +669,14 @@ class TestSandboxSecretsIntegration:
         assert response.status_code == 401
         assert 'Invalid session API key' in response.json()['detail']
 
-    def test_secrets_list_with_mismatched_sandbox_id_returns_403(self):
+        mock_sandbox_audit.warning.assert_called_once()
+        extra = mock_sandbox_audit.warning.call_args.kwargs['extra']
+        assert extra['outcome'] == 'denied'
+        assert extra['sandbox_id'] == SANDBOX_ID
+
+    def test_secrets_list_with_mismatched_sandbox_id_returns_403(
+        self, mock_sandbox_audit
+    ):
         """Session key maps to a different sandbox than the URL path → 403."""
         app = _build_integration_test_app()
         client = TestClient(app, raise_server_exceptions=False)
@@ -632,6 +699,12 @@ class TestSandboxSecretsIntegration:
 
         assert response.status_code == 403
         assert 'does not match' in response.json()['detail']
+
+        # Sandbox mismatch is suspicious and should be logged at error level
+        mock_sandbox_audit.error.assert_called_once()
+        extra = mock_sandbox_audit.error.call_args.kwargs['extra']
+        assert extra['outcome'] == 'denied'
+        assert extra['sandbox_id'] == SANDBOX_ID
 
     def test_sandbox_without_user_returns_401_for_secret_value(self):
         """Sandbox with no owning user → 401 when fetching a secret value."""
