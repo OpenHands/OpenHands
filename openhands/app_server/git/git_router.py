@@ -241,13 +241,30 @@ async def search_branches(
     if decoded_page_id is not None:
         page = decoded_page_id
 
-    # Get search results - we'll handle pagination ourselves
-    branches: list[Branch] = await client.search_branches(
-        selected_provider=provider,
-        repository=repository,
-        query=query,
-        per_page=limit + 1,  # We'll handle pagination ourselves
-    )
+    if query:
+        if page != 1:
+            # TODO: This is a temporary state until we refactor the underlying API.
+            # The search_branches method does not support paging in the same way as
+            # get_branches - those should be merged into a single paginated method
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='sort_order is not supported when listing user repositories. It will be supported after API refactoring.',
+            )
+        # Get search results - we'll handle pagination ourselves
+        branches: list[Branch] = await client.search_branches(
+            selected_provider=provider,
+            repository=repository,
+            query=query,
+            per_page=limit + 1,
+        )
+    else:
+        current_page = await client.get_branches(
+            repository=repository,
+            specified_provider=provider,
+            page=page,
+            per_page=limit + 1
+        )
+        branches = current_page.branches
 
     next_page_id = None
     if len(branches) > limit:

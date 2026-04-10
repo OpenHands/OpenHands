@@ -28,7 +28,6 @@ class GitService {
     limit = 100,
     pageId?: string,
     installationId?: string,
-    sortOrder?: "asc" | "desc",
   ): Promise<RepositoryPage> {
     const { data } = await openHands.get<RepositoryPage>(
       "/api/v1/git/repositories/search",
@@ -39,7 +38,6 @@ class GitService {
           limit,
           page_id: pageId,
           installation_id: installationId,
-          sort_order: sortOrder,
         },
       },
     );
@@ -61,7 +59,6 @@ class GitService {
     pageId?: string,
     limit = 30,
     installationId?: string,
-    sortOrder?: "asc" | "desc",
   ): Promise<RepositoryPage> {
     const { data } = await openHands.get<RepositoryPage>(
       "/api/v1/git/repositories/search",
@@ -71,7 +68,6 @@ class GitService {
           limit,
           page_id: pageId,
           installation_id: installationId,
-          sort_order: sortOrder ?? "desc", // "desc" = "pushed" (most recent first)
         },
       },
     );
@@ -108,7 +104,6 @@ class GitService {
           limit,
           page_id: pageId,
           installation_id: installationId,
-          sort_order: "desc",
         },
       },
     );
