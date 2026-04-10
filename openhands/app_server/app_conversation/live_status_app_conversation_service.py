@@ -928,6 +928,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             usage_id='agent',
         )
 
+    def _resolve_web_url(self) -> str | None:
+        """Resolve the current web URL, preferring a fresh read from environment.
+
+        On every call this method re-reads the OH_WEB_URL / WEB_HOST environment
+        variables so that IP address or hostname changes are picked up immediately
+        — for example after a network reconnect or container restart.  If the
+        environment variables are not set, falls back to the ``web_url`` that was
+        captured at service-creation time.
+        """
+        from openhands.app_server.config import get_current_web_url
+
+        current = get_current_web_url()
+        if current and current != self.web_url:
+            _logger.info(
+                f'web_url changed: {self.web_url!r} -> {current!r} '
+                '(picked up from environment)'
+            )
+        return current or self.web_url
+
+
     async def _add_system_mcp_servers(
         self, mcp_servers: dict[str, Any], conversation_id: UUID
     ) -> None:
@@ -941,11 +961,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             mcp_servers: Dictionary to add servers to
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
         """
-        if not self.web_url:
+        # Always resolve the latest web_url from the environment so that
+        # IP/hostname changes after restart are picked up (fixes #13861).
+        web_url = self._resolve_web_url()
+        if not web_url:
             return
 
-        # Add default OpenHands MCP server (includes Tavily proxy if configured)
-        mcp_url = f'{self.web_url}/mcp/mcp'
+        # Add default OpenHands MCP server (includes Tavily proxy if configured).
+        # Use the freshly-resolved web_url from above so IP/hostname changes
+        # after restart are picked up (fixes #13861).
+        mcp_url = f'{web_url}/mcp/mcp'
         mcp_servers['default'] = {
             'url': mcp_url,
             'headers': {'X-OpenHands-ServerConversation-ID': str(conversation_id)},
@@ -2022,8 +2047,11 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 )
             config = get_global_config()
 
-            # If no web url has been set and we are using docker, we can use host.docker.internal
-            web_url = config.web_url
+            # Re-read web_url from environment to pick up IP/hostname changes
+            # that may have occurred since the config was created (fixes #13861).
+            from openhands.app_server.config import get_current_web_url
+
+            web_url = get_current_web_url() or config.web_url
             if web_url is None:
                 if isinstance(sandbox_service, DockerSandboxService):
                     web_url = f'http://host.docker.internal:{sandbox_service.host_port}'

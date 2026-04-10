@@ -402,9 +402,15 @@ class DockerSandboxService(SandboxService):
         # This allows the agent-server container to accept requests from the
         # frontend when running OpenHands on a remote machine.
         # Each origin gets its own indexed env var (OH_ALLOW_CORS_ORIGINS_0, _1, etc.)
+        #
+        # Re-read web_url from environment to pick up IP/hostname changes
+        # that may have occurred since the service was created (fixes #13861).
+        from openhands.app_server.config import get_current_web_url
+
+        current_web_url = get_current_web_url() or self.web_url
         cors_origins: list[str] = []
-        if self.web_url:
-            cors_origins.append(self.web_url)
+        if current_web_url:
+            cors_origins.append(current_web_url)
         cors_origins.extend(self.permitted_cors_origins)
         # Deduplicate while preserving order
         seen: set[str] = set()
@@ -666,9 +672,13 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             get_sandbox_spec_service,
         )
 
-        # Get web_url and permitted_cors_origins from global config
+        # Get web_url and permitted_cors_origins from global config.
+        # Use get_current_web_url() to always pick up the latest value from
+        # the environment, falling back to the config value (fixes #13861).
+        from openhands.app_server.config import get_current_web_url
+
         config = get_global_config()
-        web_url = config.web_url
+        web_url = get_current_web_url() or config.web_url
 
         async with (
             get_httpx_client(state) as httpx_client,

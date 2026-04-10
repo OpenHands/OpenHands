@@ -100,6 +100,26 @@ def get_default_web_url() -> str | None:
     return f'https://{web_host}'
 
 
+def get_current_web_url() -> str | None:
+    """Get the current web URL by re-reading environment variables.
+
+    This function always reads the latest values from the environment,
+    ensuring that dynamic changes to OH_WEB_URL or WEB_HOST are picked up.
+    This is important when the server's IP address changes between sandbox
+    restarts — stale URLs would cause MCP server connection failures.
+
+    Priority:
+      1. OH_WEB_URL environment variable (set by pydantic from_env parser)
+      2. WEB_HOST environment variable (legacy fallback, assumed https)
+    """
+    # Check for the explicit OH_WEB_URL first (same env var the from_env parser uses)
+    oh_web_url = os.getenv('OH_WEB_URL')
+    if oh_web_url:
+        return oh_web_url.strip()
+    # Fall back to legacy WEB_HOST
+    return get_default_web_url()
+
+
 def get_default_permitted_cors_origins() -> list[str]:
     """Get permitted CORS origins, falling back to legacy PERMITTED_CORS_ORIGINS env var.
 

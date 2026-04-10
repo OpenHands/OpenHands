@@ -274,12 +274,20 @@ class RemoteSandboxService(SandboxService):
         """Initialize the environment variables for the sandbox."""
         environment = sandbox_spec.initial_env.copy()
 
+        # Re-read web_url from environment to pick up IP/hostname changes
+        # that may have occurred since the service was created (fixes #13861).
+        from openhands.app_server.config import get_current_web_url
+
+        current_web_url = get_current_web_url() or self.web_url
+
         # If a public facing url is defined, add a callback to the agent server environment.
-        if self.web_url:
-            environment[WEBHOOK_CALLBACK_VARIABLE] = f'{self.web_url}/api/v1/webhooks'
+        if current_web_url:
+            environment[WEBHOOK_CALLBACK_VARIABLE] = (
+                f'{current_web_url}/api/v1/webhooks'
+            )
             # We specify CORS settings only if there is a public facing url - otherwise
             # we are probably in local development and the only url in use is localhost
-            environment[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
+            environment[ALLOW_CORS_ORIGINS_VARIABLE] = current_web_url
 
         # Add worker port environment variables so the agent knows which ports to use
         # for web applications. These match the ports exposed via the WORKER_1 and
@@ -916,9 +924,13 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
         )
 
         # If no public facing web url is defined, poll for changes as callbacks will be unavailable.
-        # This is primarily used for local development rather than production
+        # This is primarily used for local development rather than production.
+        # Re-read web_url from environment to pick up IP/hostname changes
+        # that may have occurred since the config was created (fixes #13861).
+        from openhands.app_server.config import get_current_web_url
+
         config = get_global_config()
-        web_url = config.web_url
+        web_url = get_current_web_url() or config.web_url
         if web_url is None or 'localhost' in web_url:
             global polling_task
             if polling_task is None:
