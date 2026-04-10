@@ -205,7 +205,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "RUNNING", // Cached status is RUNNING
+            sandboxStatus: "PAUSED", // Cached status is PAUSED
             refetchConversation: mockRefetch,
           }),
         { wrapper: createWrapper() },

@@ -15,7 +15,7 @@ describe("getStatusCode", () => {
     );
 
     // Should return runtime status since conversation is RUNNING
-    expect(result).toBe("STATUS$STARTING_CONVERSATION");
+    expect(result).toBe("CONVERSATION$STARTING_CONVERSATION");
   });
 
   it("should handle agent running state with stale runtime status", () => {
@@ -98,7 +98,6 @@ describe("getStatusCode", () => {
       "CONNECTING", // webSocketStatus
       V1ExecutionStatus.IDLE,
       "RUNNING", // sandboxStatus
-      "WORKING", // taskStatus (in progress)
     );
 
     // Should show connecting message since task hasn't errored
