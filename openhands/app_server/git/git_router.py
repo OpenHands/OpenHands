@@ -262,7 +262,7 @@ async def search_branches(
             repository=repository,
             specified_provider=provider,
             page=page,
-            per_page=limit + 1
+            per_page=limit + 1,
         )
         branches = current_page.branches
 
