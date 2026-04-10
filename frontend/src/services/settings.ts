@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS: Settings = {
   language: "en",
   llm_api_key: null,
   llm_api_key_set: false,
+  llm_sign_in_with_chatgpt: false,
   search_api_key_set: false,
   confirmation_mode: false,
   security_analyzer: "llm",
