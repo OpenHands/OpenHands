@@ -161,9 +161,6 @@ function LlmSettingsScreen() {
 
   const shouldUseOpenHandsKey = isOpenHandsProvider() && isSaasMode;
 
-  // Determine if we should hide the agent dropdown when V1 conversation API is enabled
-  const isV1Enabled = settings?.v1_enabled;
-
   React.useEffect(() => {
     const determineWhetherToToggleAdvancedSettings = () => {
       if (resources && settings) {
@@ -406,14 +403,6 @@ function LlmSettingsScreen() {
     }));
   };
 
-  const handleAgentIsDirty = (agent: string) => {
-    const agentIsDirty = agent !== settings?.agent && agent !== "";
-    setDirtyInputs((prev) => ({
-      ...prev,
-      agent: agentIsDirty,
-    }));
-  };
-
   const handleConfirmationModeIsDirty = (isToggled: boolean) => {
     const confirmationModeIsDirty = isToggled !== settings?.confirmation_mode;
     setDirtyInputs((prev) => ({
@@ -481,18 +470,6 @@ function LlmSettingsScreen() {
       key: "none",
       label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_NONE),
     });
-
-    if (isV1Enabled) {
-      return orderedItems;
-    }
-
-    // Add Invariant analyzer third
-    if (analyzers.includes("invariant")) {
-      orderedItems.push({
-        key: "invariant",
-        label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_INVARIANT),
-      });
-    }
 
     // Add any other analyzers that might exist
     analyzers.forEach((analyzer) => {
@@ -678,25 +655,6 @@ function LlmSettingsScreen() {
                     linkText={t(I18nKey.SETTINGS$SEARCH_API_KEY_INSTRUCTIONS)}
                     href="https://tavily.com/"
                   />
-
-                  {!isV1Enabled && (
-                    <SettingsDropdownInput
-                      testId="agent-input"
-                      name="agent-input"
-                      label={t(I18nKey.SETTINGS$AGENT)}
-                      items={
-                        resources?.agents.map((agent) => ({
-                          key: agent,
-                          label: agent, // TODO: Add i18n support for agent names
-                        })) || []
-                      }
-                      defaultSelectedKey={settings.agent}
-                      isClearable={false}
-                      onInputChange={handleAgentIsDirty}
-                      isDisabled={isReadOnly}
-                      wrapperClassName="w-full max-w-[680px]"
-                    />
-                  )}
                 </>
               )}
 
