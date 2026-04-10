@@ -30,9 +30,9 @@ export function useBranchData(
     provider,
   );
 
-  // Combine all branches from paginated data
+  // Combine all branches from paginated data - use .items for V1 response
   const allBranches = useMemo(
-    () => branchData?.pages?.flatMap((page) => page.branches) || [],
+    () => branchData?.pages?.flatMap((page) => page.items) || [],
     [branchData],
   );
 

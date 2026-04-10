@@ -18,8 +18,8 @@ export function useUrlSearch(inputValue: string, provider: Provider) {
           try {
             const repositories = await GitService.searchGitRepositories(
               repoName,
-              3,
               provider,
+              3,
             );
 
             setUrlSearchResults(repositories.items);

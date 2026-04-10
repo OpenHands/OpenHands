@@ -46,11 +46,14 @@ export const useRepositoryBranchesPaginated = (
           next_page_id: null,
         };
       }
+      // Use type assertion to ensure correct type
+      const pageParamString = pageParam as string | null | undefined;
+      const resolvedPageId = pageParamString ?? undefined;
       return GitService.getRepositoryBranches(
         repository,
         selectedProvider,
         "", // query (empty = list all)
-        pageParam as string | null,
+        resolvedPageId,
         perPage,
       );
     },

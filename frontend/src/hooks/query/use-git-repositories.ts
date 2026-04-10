@@ -2,7 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useConfig } from "./use-config";
 import { useUserProviders } from "../use-user-providers";
 import { useAppInstallations } from "./use-app-installations";
-import { GitRepository, RepositoryPage } from "../../types/git";
+import { GitRepository } from "../../types/git";
 import { Provider } from "../../types/settings";
 import GitService from "#/api/git-service/git-service.api";
 import { shouldUseInstallationRepos } from "#/utils/utils";
@@ -74,9 +74,12 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
         };
       }
 
+      // Use type assertion to ensure correct type
+      const pageParamString = pageParam as string | null | undefined;
+      const resolvedPageId = pageParamString ?? undefined;
       const result = await GitService.retrieveUserGitRepositories(
         provider,
-        pageId ?? undefined,
+        resolvedPageId,
         pageSize,
       );
       return {

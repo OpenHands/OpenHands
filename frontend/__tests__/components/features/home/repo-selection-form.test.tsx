@@ -229,7 +229,7 @@ describe("RepositorySelectionForm", () => {
 
     // Create a spy on the API call
     const searchGitReposSpy = vi.spyOn(GitService, "searchGitRepositories");
-    searchGitReposSpy.mockResolvedValue(MOCK_SEARCH_REPOS);
+    searchGitReposSpy.mockResolvedValue({ items: MOCK_SEARCH_REPOS, next_page_id: null });
 
     mockUseGitRepositories.mockReturnValue({
       data: { pages: [] },

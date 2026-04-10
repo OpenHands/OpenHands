@@ -1,8 +1,6 @@
 import { openHands } from "../open-hands-axios";
 import {
   GitRepository,
-  PaginatedBranchesResponse,
-  Branch,
   RepositoryPage,
   BranchPage,
   InstallationPage,
@@ -17,8 +15,8 @@ class GitService {
   /**
    * Search for Git repositories
    * @param query Search query
-   * @param limit Number of results per page
    * @param provider Git provider to search in (required)
+   * @param limit Number of results per page
    * @param pageId Cursor for pagination
    * @param installationId Filter by installation ID
    * @param sortOrder Sort order (asc or desc)
@@ -26,8 +24,8 @@ class GitService {
    */
   static async searchGitRepositories(
     query: string,
-    limit = 100,
     provider: string,
+    limit = 100,
     pageId?: string,
     installationId?: string,
     sortOrder?: "asc" | "desc",
