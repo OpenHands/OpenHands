@@ -31,9 +31,8 @@ export const useConfig = (options?: UseConfigOptions) => {
  * Fetch web client config for use in clientLoaders/serverLoaders.
  * Uses TanStack Query's fetchQuery which properly handles caching.
  */
-export const fetchConfig = (): Promise<WebClientConfig> => {
-  return queryClient.fetchQuery({
+export const fetchConfig = (): Promise<WebClientConfig> =>
+  queryClient.fetchQuery({
     queryKey: WEB_CLIENT_CONFIG_KEY,
     queryFn: OptionService.getConfig,
   });
-};
