@@ -85,6 +85,8 @@ from openhands.app_server.utils.llm_metadata import (
     should_set_litellm_extra_body,
 )
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.llm.litellm_chatgpt_patch import apply_litellm_chatgpt_api_key_patch
+from openhands.utils.chatgpt_oauth_tokens import decode_chatgpt_access_token_for_llm
 from openhands.integrations.service_types import SuggestedTask
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
@@ -104,6 +106,8 @@ from openhands.tools.preset.planning import (
     get_planning_tools,
 )
 from openhands.utils._redact_compat import sanitize_config
+
+apply_litellm_chatgpt_api_key_patch()
 from openhands.utils.git import ensure_valid_git_branch_name
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
@@ -902,10 +906,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         ):
             base_url = user.llm_base_url or self.openhands_provider_base_url
 
+        api_key = decode_chatgpt_access_token_for_llm(user.llm_api_key, model)
         return LLM(
             model=model,
             base_url=base_url,
-            api_key=user.llm_api_key,
+            api_key=api_key,
             usage_id='agent',
         )
 
