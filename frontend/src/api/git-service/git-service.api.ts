@@ -9,7 +9,7 @@ import { GitChange, GitChangeDiff } from "../open-hands.types";
 import ConversationService from "../conversation-service/conversation-service.api";
 
 /**
- * Git Service API - Handles all Git-related API endpoints (V1)
+ * Git Service API - Handles all Git-related API endpoints
  */
 class GitService {
   /**
