@@ -248,7 +248,7 @@ async def search_branches(
             # get_branches - those should be merged into a single paginated method
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail='sort_order is not supported when listing user repositories. It will be supported after API refactoring.',
+                detail='paging is not supported when searching branches. It will be supported after API refactoring.',
             )
         # Get search results - we'll handle pagination ourselves
         branches: list[Branch] = await client.search_branches(
