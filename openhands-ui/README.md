@@ -38,21 +38,27 @@ function App() {
 
 ## Components
 
-| Component         | Description                               |
-| ----------------- | ----------------------------------------- |
-| `Button`          | Interactive button with multiple variants |
-| `Checkbox`        | Checkbox input with label support         |
-| `Chip`            | Display tags or labels                    |
-| `Divider`         | Visual separator                          |
-| `Icon`            | Icon wrapper component                    |
-| `Input`           | Text input field                          |
-| `InteractiveChip` | Clickable chip component                  |
-| `RadioGroup`      | Radio button group                        |
-| `RadioOption`     | Individual radio option                   |
-| `Scrollable`      | Scrollable container                      |
-| `Toggle`          | Toggle switch                             |
-| `Tooltip`         | Tooltip overlay                           |
-| `Typography`      | Text components (H1-H6, Text, Code)       |
+| Component         | Description                                              |
+| ----------------- | -------------------------------------------------------- |
+| `Accordion`       | Collapsible content sections with single or multi-expand |
+| `Button`          | Interactive button with multiple variants                |
+| `Checkbox`        | Checkbox input with label support                        |
+| `Chip`            | Display tags or labels                                   |
+| `Dialog`          | Modal overlay with focus trap and dismiss support        |
+| `Divider`         | Visual separator                                         |
+| `Icon`            | Icon wrapper component                                   |
+| `Input`           | Text input field                                         |
+| `InteractiveChip` | Clickable chip component                                 |
+| `RadioGroup`      | Radio button group                                       |
+| `RadioOption`     | Individual radio option                                  |
+| `Scrollable`      | Scrollable container                                     |
+| `Select`          | Dropdown select input with search and custom options     |
+| `Spinner`         | Loading indicator with determinate and indeterminate modes |
+| `Tabs`            | Tabbed navigation with overflow scrolling                |
+| `Toast`           | Temporary notification messages                          |
+| `Toggle`          | Toggle switch                                            |
+| `Tooltip`         | Tooltip overlay                                          |
+| `Typography`      | Text components (H1-H6, Text, Code)                     |
 
 ## Development
 
