@@ -1,4 +1,12 @@
-"""Shared Event router for OpenHands Server."""
+"""Shared Event router for OpenHands Server.
+
+All endpoints in this router are unauthenticated — shared conversations are
+public.  To avoid returning internal system state that the viewer does not
+need, ``ConversationStateUpdateEvent`` instances are filtered out before the
+response is sent.  The shared-conversation frontend only renders messages,
+actions, observations, errors, and hook-execution events; state snapshots
+are consumed exclusively by the authenticated WebSocket path.
+"""
 
 from datetime import datetime
 from typing import Annotated
@@ -13,7 +21,13 @@ from server.sharing.shared_event_service import (
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
+from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
 from openhands.utils.environment import StorageProvider, get_storage_provider
+
+
+def _is_viewable(event: Event) -> bool:
+    """Return True if *event* should be included in public shared responses."""
+    return not isinstance(event, ConversationStateUpdateEvent)
 
 
 def get_shared_event_service_injector() -> SharedEventServiceInjector:
@@ -88,7 +102,7 @@ async def search_shared_events(
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> EventPage:
     """Search / List events for a shared conversation."""
-    return await shared_event_service.search_shared_events(
+    page = await shared_event_service.search_shared_events(
         conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
@@ -96,6 +110,10 @@ async def search_shared_events(
         sort_order=sort_order,
         page_id=page_id,
         limit=limit,
+    )
+    return EventPage(
+        items=[e for e in page.items if _is_viewable(e)],
+        next_page_id=page.next_page_id,
     )
 
 
@@ -147,7 +165,7 @@ async def batch_get_shared_events(
     events = await shared_event_service.batch_get_shared_events(
         UUID(conversation_id), event_ids
     )
-    return events
+    return [e if e is not None and _is_viewable(e) else None for e in events]
 
 
 @router.get('/{conversation_id}/{event_id}')
@@ -157,6 +175,9 @@ async def get_shared_event(
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> Event | None:
     """Get a single event from a shared conversation by conversation_id and event_id."""
-    return await shared_event_service.get_shared_event(
+    event = await shared_event_service.get_shared_event(
         UUID(conversation_id), UUID(event_id)
     )
+    if event is not None and not _is_viewable(event):
+        return None
+    return event
