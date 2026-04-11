@@ -135,6 +135,7 @@ class GitService {
 
   /**
    * Search repository branches
+   * @deprecated Use getRepositoryBranches instead - this method is identical
    * @param repository Repository name
    * @param provider Git provider (required)
    * @param query Search query
@@ -149,19 +150,13 @@ class GitService {
     pageId?: string,
     limit = 30,
   ): Promise<BranchPage> {
-    const { data } = await openHands.get<BranchPage>(
-      "/api/v1/git/branches/search",
-      {
-        params: {
-          provider,
-          repository,
-          query,
-          page_id: pageId,
-          limit,
-        },
-      },
+    return this.getRepositoryBranches(
+      repository,
+      provider,
+      query,
+      pageId,
+      limit,
     );
-    return data;
   }
 
   /**
