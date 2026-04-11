@@ -8,7 +8,7 @@ actions, observations, errors, and hook-execution events.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -24,7 +24,6 @@ from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
 from openhands.sdk.event.llm_convertible import MessageEvent
 from openhands.sdk.llm import Message, TextContent
 
-
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
@@ -37,7 +36,9 @@ def _make_message_event() -> MessageEvent:
     )
 
 
-def _make_state_event(key: str = 'full_state', value: dict | str = 'idle') -> ConversationStateUpdateEvent:
+def _make_state_event(
+    key: str = 'full_state', value: dict | str = 'idle'
+) -> ConversationStateUpdateEvent:
     return ConversationStateUpdateEvent(key=key, value=value)
 
 
@@ -81,7 +82,10 @@ class TestSearchSharedEvents:
         )
 
         assert len(result.items) == 2
-        assert all(not isinstance(e, ConversationStateUpdateEvent) for e in result.items)
+        assert all(
+            not isinstance(e, ConversationStateUpdateEvent)
+            for e in result.items
+        )
 
     @pytest.mark.asyncio
     async def test_preserves_next_page_id(self):
