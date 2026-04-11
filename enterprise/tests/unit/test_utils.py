@@ -69,6 +69,82 @@ def test_markdown_to_jira_markup():
         ), f'Failed for {repr(markdown)}: got {repr(result)}, expected {repr(expected)}'
 
 
+def test_markdown_to_jira_markup_real_jira_messages():
+    """Test conversion of actual messages sent by Jira integrations.
+
+    These are real message patterns from jira_manager.py, jira_dc_manager.py,
+    utils.py, and v1_utils.py that previously displayed as raw Markdown in Jira.
+    See: https://github.com/All-Hands-AI/OpenHands/issues/13878
+    """
+    test_cases = [
+        # MissingSettingsError messages (jira_manager.py:308, jira_dc_manager.py:399)
+        (
+            'Please re-login into [OpenHands Cloud](https://app.all-hands.dev) before starting a job.',
+            'Please re-login into [OpenHands Cloud|https://app.all-hands.dev] before starting a job.',
+        ),
+        # LLMAuthenticationError messages (jira_manager.py:315, jira_dc_manager.py:403)
+        (
+            'Please set a valid LLM API key in [OpenHands Cloud](https://app.all-hands.dev) before starting a job.',
+            'Please set a valid LLM API key in [OpenHands Cloud|https://app.all-hands.dev] before starting a job.',
+        ),
+        # Session expired messages (utils.py:64-65)
+        (
+            'Your session has expired. Please login again at [OpenHands Cloud](https://app.all-hands.dev) and try again.',
+            'Your session has expired. Please login again at [OpenHands Cloud|https://app.all-hands.dev] and try again.',
+        ),
+        # Unknown error messages (utils.py:210)
+        (
+            'OpenHands encountered an unknown error. [See the conversation](https://app.all-hands.dev/c/abc123) for more information, or try again',
+            'OpenHands encountered an unknown error. [See the conversation|https://app.all-hands.dev/c/abc123] for more information, or try again',
+        ),
+        # Error with reason (utils.py:247)
+        (
+            'OpenHands encountered an error: **LLM budget has been exceeded**.\n\n[See the conversation](https://app.all-hands.dev/c/abc123) for more information.',
+            'OpenHands encountered an error: *LLM budget has been exceeded*.\n\n[See the conversation|https://app.all-hands.dev/c/abc123] for more information.',
+        ),
+        # Waiting for input (utils.py:258)
+        (
+            'OpenHands is waiting for your input. [Continue the conversation](https://app.all-hands.dev/c/abc123) to provide additional instructions.',
+            'OpenHands is waiting for your input. [Continue the conversation|https://app.all-hands.dev/c/abc123] to provide additional instructions.',
+        ),
+        # V1 error callback (v1_utils.py:73-75)
+        (
+            'OpenHands encountered an error: **Connection timeout**\n\n[See the conversation](https://app.all-hands.dev/c/abc123) for more information.',
+            'OpenHands encountered an error: *Connection timeout*\n\n[See the conversation|https://app.all-hands.dev/c/abc123] for more information.',
+        ),
+    ]
+
+    for markdown, expected in test_cases:
+        result = markdown_to_jira_markup(markdown)
+        assert (
+            result == expected
+        ), f'Failed for {repr(markdown)}: got {repr(result)}, expected {repr(expected)}'
+
+
+def test_markdown_to_jira_markup_edge_cases():
+    """Test edge cases for the markdown-to-Jira conversion."""
+    # Empty / None input
+    assert markdown_to_jira_markup('') == ''
+    assert markdown_to_jira_markup(None) == ''
+
+    # Plain text without any Markdown should pass through unchanged
+    assert markdown_to_jira_markup('Hello world') == 'Hello world'
+
+    # Already-correct Jira wiki markup links should not be double-converted
+    result = markdown_to_jira_markup(
+        "I'm on it! John can [track my progress here|https://app.all-hands.dev/c/123]."
+    )
+    assert '[track my progress here|https://app.all-hands.dev/c/123]' in result
+
+    # User not found message (utils.py:83-84)
+    result = markdown_to_jira_markup(
+        "It looks like you haven't created an OpenHands account yet. "
+        "Please sign up at [OpenHands Cloud](https://app.all-hands.dev) and try again."
+    )
+    assert '[OpenHands Cloud|https://app.all-hands.dev]' in result
+    assert '](https://' not in result
+
+
 def test_infer_repo_from_message():
     test_cases = [
         # Single GitHub URLs

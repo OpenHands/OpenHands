@@ -284,6 +284,143 @@ class TestSendMessage:
             assert result == {'id': 'comment_id'}
             mock_response.raise_for_status.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_send_message_converts_markdown_links_to_jira(self, jira_manager):
+        """Test that send_message converts Markdown links to Jira wiki markup.
+
+        Jira REST API v2 expects Jira Wiki Markup, not Markdown. Links like
+        [text](url) must be converted to [text|url] format.
+        See: https://github.com/All-Hands-AI/OpenHands/issues/13878
+        """
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'id': 'comment_id'}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            await jira_manager.send_message(
+                'Please re-login into [OpenHands Cloud](https://app.all-hands.dev) before starting a job.',
+                'PROJ-123',
+                'cloud-123',
+                'service@test.com',
+                'api_key',
+            )
+
+            # Verify the body was converted from Markdown to Jira wiki markup
+            call_kwargs = mock_post.call_args
+            posted_data = call_kwargs.kwargs.get('json') or call_kwargs[1].get('json')
+            assert posted_data['body'] == (
+                'Please re-login into [OpenHands Cloud|https://app.all-hands.dev]'
+                ' before starting a job.'
+            )
+
+    @pytest.mark.asyncio
+    async def test_send_message_converts_markdown_bold_to_jira(self, jira_manager):
+        """Test that send_message converts Markdown bold (**text**) to Jira bold (*text*)."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'id': 'comment_id'}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            await jira_manager.send_message(
+                'OpenHands encountered an error: **LLM budget exceeded**.',
+                'PROJ-123',
+                'cloud-123',
+                'service@test.com',
+                'api_key',
+            )
+
+            call_kwargs = mock_post.call_args
+            posted_data = call_kwargs.kwargs.get('json') or call_kwargs[1].get('json')
+            assert posted_data['body'] == (
+                'OpenHands encountered an error: *LLM budget exceeded*.'
+            )
+
+    @pytest.mark.asyncio
+    async def test_send_message_converts_error_with_link_to_jira(self, jira_manager):
+        """Test conversion of error messages containing both bold and links."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'id': 'comment_id'}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            await jira_manager.send_message(
+                'OpenHands encountered an error: **timeout**\n\n'
+                '[See the conversation](https://app.all-hands.dev/c/123) for more information.',
+                'PROJ-123',
+                'cloud-123',
+                'service@test.com',
+                'api_key',
+            )
+
+            call_kwargs = mock_post.call_args
+            posted_data = call_kwargs.kwargs.get('json') or call_kwargs[1].get('json')
+            assert '*timeout*' in posted_data['body']
+            assert '[See the conversation|https://app.all-hands.dev/c/123]' in posted_data['body']
+            # Should NOT contain Markdown syntax
+            assert '**' not in posted_data['body']
+            assert '](https://' not in posted_data['body']
+
+    @pytest.mark.asyncio
+    async def test_send_message_plain_text_unchanged(self, jira_manager):
+        """Test that plain text messages pass through without corruption."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'id': 'comment_id'}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            await jira_manager.send_message(
+                'Simple plain text message with no formatting.',
+                'PROJ-123',
+                'cloud-123',
+                'service@test.com',
+                'api_key',
+            )
+
+            call_kwargs = mock_post.call_args
+            posted_data = call_kwargs.kwargs.get('json') or call_kwargs[1].get('json')
+            assert posted_data['body'] == 'Simple plain text message with no formatting.'
+
+    @pytest.mark.asyncio
+    async def test_send_message_preserves_existing_jira_markup(self, jira_manager):
+        """Test that messages already in Jira wiki markup are not corrupted.
+
+        Some code paths (e.g., jira_view.py) already produce Jira-formatted
+        messages. The conversion should not break these.
+        """
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'id': 'comment_id'}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            # This is already in Jira wiki markup format (from jira_view.py)
+            await jira_manager.send_message(
+                "I'm on it! John can [track my progress here|https://app.all-hands.dev/c/123].",
+                'PROJ-123',
+                'cloud-123',
+                'service@test.com',
+                'api_key',
+            )
+
+            call_kwargs = mock_post.call_args
+            posted_data = call_kwargs.kwargs.get('json') or call_kwargs[1].get('json')
+            # The pipe-based link should survive conversion
+            assert '[track my progress here|https://app.all-hands.dev/c/123]' in posted_data['body']
+
 
 class TestSendErrorFromPayload:
     """Test error comment sending from payload."""
