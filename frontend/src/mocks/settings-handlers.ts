@@ -145,7 +145,7 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(config);
   }),
 
-  http.get("/api/settings", async () => {
+  http.get("/api/v1/settings", async () => {
     await delay();
     const { settings } = MOCK_USER_PREFERENCES;
 
@@ -154,7 +154,7 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(settings);
   }),
 
-  http.post("/api/settings", async ({ request }) => {
+  http.post("/api/v1/settings", async ({ request }) => {
     await delay();
     const body = await request.json();
 
