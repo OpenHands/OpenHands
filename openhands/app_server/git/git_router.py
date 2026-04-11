@@ -205,9 +205,11 @@ async def search_branches(
         Query(title='Repository name in format owner/repo'),
     ],
     query: Annotated[
-        str,
-        Query(title='Branch name search query'),
-    ],
+        str | None,
+        Query(
+            title='Branch name search query. If not provided, returns all branches.'
+        ),
+    ] = None,
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -218,9 +220,10 @@ async def search_branches(
     ] = 30,
     user_context: UserContext = user_context_dependency,
 ) -> BranchPage:
-    """Search branches in a repository.
+    """Get or search branches in a repository.
 
-    Returns a paginated list of branches matching the search query.
+    If query is provided, searches branches by name.
+    If query is not provided, returns a paginated list of all branches.
     """
     # Get provider tokens from user context
     provider_tokens = await user_context.get_provider_tokens()
@@ -244,34 +247,31 @@ async def search_branches(
         page = decoded_page_id
 
     if query:
-        if page != 1:
-            # TODO(#13883): Support pagination for branch search after refactoring.
-            # The search_branches method does not support paging in the same way as
-            # get_branches - those should be merged into a single paginated method
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail='Pagination not yet supported for branch search queries. Use empty query to list all branches with pagination.',
-            )
-        # Get search results - we'll handle pagination ourselves
+        # Search branches by name - we request limit+1 to detect if there's a next page
         branches: list[Branch] = await client.search_branches(
             selected_provider=provider,
             repository=repository,
             query=query,
             per_page=limit + 1,
         )
+
+        next_page_id = None
+        if len(branches) > limit:
+            branches = branches[:-1]
+            next_page_id = encode_page_id(page + 1)
     else:
-        current_page = await client.get_branches(
+        # List all branches with pagination via get_branches
+        paginated_response = await client.get_branches(
             repository=repository,
             specified_provider=provider,
             page=page,
-            per_page=limit + 1,
+            per_page=limit,
         )
-        branches = current_page.branches
+        branches = paginated_response.branches
 
-    next_page_id = None
-    if len(branches) > limit:
-        branches = branches[:-1]
-        next_page_id = encode_page_id(page + 1)
+        next_page_id = None
+        if paginated_response.has_next_page:
+            next_page_id = encode_page_id(page + 1)
 
     return BranchPage(items=branches, next_page_id=next_page_id)
 
