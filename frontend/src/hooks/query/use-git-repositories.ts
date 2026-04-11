@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, InfiniteData } from "@tanstack/react-query";
 import { useConfig } from "./use-config";
 import { useUserProviders } from "../use-user-providers";
 import { useAppInstallations } from "./use-app-installations";
@@ -12,6 +12,11 @@ interface UseGitRepositoriesOptions {
   pageSize?: number;
   enabled?: boolean;
 }
+
+type GitRepoPageParam =
+  | string
+  | { installationIndex: number; pageId: string | null }
+  | null;
 
 export function useGitRepositories(options: UseGitRepositoriesOptions) {
   const { provider, pageSize = 30, enabled = true } = options;
@@ -29,7 +34,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
     Error,
     RepositoryPage,
     [string, string[], Provider | null, boolean, number, ...unknown[]],
-    string | { installationIndex: number; pageId: string | null }
+    GitRepoPageParam
   >({
     queryKey: [
       "repositories",
@@ -73,8 +78,8 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
     },
     getNextPageParam: (lastPage) => lastPage.next_page_id,
     initialPageParam: useInstallationRepos
-      ? { installationIndex: 0, pageId: null }
-      : null,
+      ? { installationIndex: 0, pageId: null as string | null }
+      : (null as string | null),
     enabled:
       enabled &&
       (providers || []).length > 0 &&
@@ -93,7 +98,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
   };
 
   return {
-    data: repos.data,
+    data: repos.data as unknown as InfiniteData<RepositoryPage> | undefined,
     isLoading: repos.isLoading,
     isError: repos.isError,
     hasNextPage: repos.hasNextPage,
