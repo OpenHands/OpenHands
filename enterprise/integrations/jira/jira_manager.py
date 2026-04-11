@@ -305,14 +305,14 @@ class JiraManager(Manager[JiraViewInterface]):
                 '[Jira] Missing settings error',
                 extra={'issue_key': view.payload.issue_key, 'error': str(e)},
             )
-            msg_info = f'Please re-login into [OpenHands Cloud]({HOST_URL}) before starting a job.'
+            msg_info = f'Please re-login into [OpenHands Cloud|{HOST_URL}] before starting a job.'
 
         except LLMAuthenticationError as e:
             logger.warning(
                 '[Jira] LLM authentication error',
                 extra={'issue_key': view.payload.issue_key, 'error': str(e)},
             )
-            msg_info = f'Please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
+            msg_info = f'Please set a valid LLM API key in [OpenHands Cloud|{HOST_URL}] before starting a job.'
 
         except SessionExpiredError as e:
             logger.warning(

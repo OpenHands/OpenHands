@@ -396,11 +396,11 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         except MissingSettingsError as e:
             logger.warning(f'[Jira DC] Missing settings error: {str(e)}')
-            msg_info = f'Please re-login into [OpenHands Cloud]({HOST_URL}) before starting a job.'
+            msg_info = f'Please re-login into [OpenHands Cloud|{HOST_URL}] before starting a job.'
 
         except LLMAuthenticationError as e:
             logger.warning(f'[Jira DC] LLM authentication error: {str(e)}')
-            msg_info = f'Please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
+            msg_info = f'Please set a valid LLM API key in [OpenHands Cloud|{HOST_URL}] before starting a job.'
 
         except SessionExpiredError as e:
             logger.warning(f'[Jira DC] Session expired: {str(e)}')

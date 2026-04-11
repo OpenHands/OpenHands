@@ -62,7 +62,7 @@ def get_session_expired_message(username: str | None = None) -> str:
     """
     if username:
         return f'@{username} your session has expired. Please login again at [OpenHands Cloud]({HOST_URL}) and try again.'
-    return f'Your session has expired. Please login again at [OpenHands Cloud]({HOST_URL}) and try again.'
+    return f'Your session has expired. Please login again at [OpenHands Cloud|{HOST_URL}] and try again.'
 
 
 def get_user_not_found_message(username: str | None = None) -> str:
@@ -81,7 +81,7 @@ def get_user_not_found_message(username: str | None = None) -> str:
     """
     if username:
         return f"@{username} it looks like you haven't created an OpenHands account yet. Please sign up at [OpenHands Cloud]({HOST_URL}) and try again."
-    return f"It looks like you haven't created an OpenHands account yet. Please sign up at [OpenHands Cloud]({HOST_URL}) and try again."
+    return f"It looks like you haven't created an OpenHands account yet. Please sign up at [OpenHands Cloud|{HOST_URL}] and try again."
 
 
 # Toggle for solvability report feature
