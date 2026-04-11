@@ -44,12 +44,16 @@ async def search_models(
         bool | None,
         Query(title='Filter by verified status (true/false, omit for all)'),
     ] = None,
+    provider__eq: Annotated[
+        str | None,
+        Query(title='Filter by provider name (exact match)'),
+    ] = None,
     models: ModelsResponse = Depends(get_llm_models_dependency),
 ) -> LLMModelPage:
     """Search for LLM models with pagination and filtering.
 
     Returns a paginated list of models that can be filtered by name
-    (contains) and verified status.
+    (contains), verified status, and provider.
     """
     filtered_models = _get_all_models_with_verified(models)
 
@@ -60,10 +64,24 @@ async def search_models(
     if verified__eq is not None:
         filtered_models = [m for m in filtered_models if m.verified == verified__eq]
 
+    if provider__eq is not None:
+        filtered_models = [m for m in filtered_models if m.provider == provider__eq]
+
     # Apply pagination
     items, next_page_id = paginate_results(filtered_models, page_id, limit)
 
     return LLMModelPage(items=items, next_page_id=next_page_id)
+
+
+@router.get('/providers')
+async def get_providers(
+    models: ModelsResponse = Depends(get_llm_models_dependency),
+) -> list[str]:
+    """Get the list of verified providers.
+
+    Returns a list of provider names that are considered verified by OpenHands.
+    """
+    return models.verified_providers
 
 
 def _get_verified_models() -> set[str]:
