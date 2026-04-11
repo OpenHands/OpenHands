@@ -106,10 +106,6 @@ export const SETTINGS_HANDLERS = [
     }),
   ),
 
-  http.get("/api/options/agents", async () =>
-    HttpResponse.json(["CodeActAgent", "CoActAgent"]),
-  ),
-
   http.get("/api/options/security-analyzers", async () =>
     HttpResponse.json(["llm", "none"]),
   ),
