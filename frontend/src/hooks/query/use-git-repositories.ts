@@ -13,10 +13,9 @@ interface UseGitRepositoriesOptions {
   enabled?: boolean;
 }
 
-type GitRepoPageParam =
-  | string
-  | { installationIndex: number; pageId: string | null }
-  | null;
+type InstallationCursor = { installationIndex: number; pageId: string | null };
+type UserCursor = string | null;
+type Cursor = InstallationCursor | UserCursor;
 
 export function useGitRepositories(options: UseGitRepositoriesOptions) {
   const { provider, pageSize = 30, enabled = true } = options;
@@ -34,7 +33,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
     Error,
     RepositoryPage,
     [string, string[], Provider | null, boolean, number, ...unknown[]],
-    GitRepoPageParam
+    Cursor
   >({
     queryKey: [
       "repositories",
@@ -54,32 +53,45 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
           throw new Error("Missing installation list");
         }
 
-        const { installationIndex, pageId } = pageParam as {
-          installationIndex: number;
-          pageId: string | null;
-        };
+        const cursor = pageParam as InstallationCursor;
         const result = await GitService.retrieveInstallationRepositories(
           provider,
-          installationIndex || 0,
+          cursor.installationIndex,
           installations,
-          pageId ?? undefined,
+          cursor.pageId ?? undefined,
           pageSize,
         );
         return result;
       }
 
-      const pageId = pageParam as string | null;
+      const cursor = pageParam as UserCursor;
       const result = await GitService.retrieveUserGitRepositories(
         provider,
-        pageId ?? undefined,
+        cursor ?? undefined,
         pageSize,
       );
       return result;
     },
-    getNextPageParam: (lastPage) => lastPage.next_page_id,
+    getNextPageParam: (lastPage, allPages, lastPageParam) => {
+      if (useInstallationRepos && installations) {
+        // Installation-based pagination
+        const currentCursor = lastPageParam as InstallationCursor;
+        if (lastPage.next_page_id) {
+          return { installationIndex: currentCursor.installationIndex, pageId: lastPage.next_page_id };
+        }
+        // Advance to next installation
+        const nextInstallationIndex = currentCursor.installationIndex + 1;
+        if (nextInstallationIndex < installations.length) {
+          return { installationIndex: nextInstallationIndex, pageId: null };
+        }
+        return undefined;
+      }
+      // User repositories pagination
+      return lastPage.next_page_id;
+    },
     initialPageParam: useInstallationRepos
-      ? { installationIndex: 0, pageId: null as string | null }
-      : (null as string | null),
+      ? { installationIndex: 0, pageId: null }
+      : null,
     enabled:
       enabled &&
       (providers || []).length > 0 &&
@@ -98,7 +110,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
   };
 
   return {
-    data: repos.data as unknown as InfiniteData<RepositoryPage> | undefined,
+    data: repos.data as InfiniteData<RepositoryPage> | undefined,
     isLoading: repos.isLoading,
     isError: repos.isError,
     hasNextPage: repos.hasNextPage,
