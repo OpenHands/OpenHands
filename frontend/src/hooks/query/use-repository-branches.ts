@@ -10,10 +10,10 @@ export const useRepositoryBranches = (
   useQuery<Branch[]>({
     queryKey: ["repository", repository, "branches", selectedProvider],
     queryFn: async () => {
-      if (!repository) return [];
+      if (!repository || !selectedProvider) return [];
       const response = await GitService.getRepositoryBranches(
         repository,
-        selectedProvider!, // provider (required)
+        selectedProvider, // provider (required)
         "", // query (empty = list all)
         undefined, // pageId
         30, // limit
