@@ -1,6 +1,4 @@
 import { useCallback } from "react";
-import { useWsClient } from "#/context/ws-client-provider";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { V1MessageContent } from "#/api/conversation-service/v1-conversation-service.types";
@@ -16,22 +14,13 @@ interface SendResult {
  */
 export function useSendMessage() {
   const { conversationId } = useConversationId();
-  const { data: conversation } = useActiveConversation();
-  const { send: v0Send } = useWsClient();
 
   // Get V1 context (will be null if not in V1 provider)
   const v1Context = useConversationWebSocket();
 
-  // Check if this is a V1 conversation - match logic in useUnifiedWebSocketStatus
-  // Use both ID prefix and conversation_version to handle cases where conversation
-  // data is temporarily undefined during refetch
-  const isV1Conversation =
-    conversationId.startsWith("task-") ||
-    conversation?.conversation_version === "V1";
-
   const send = useCallback(
     async (event: Record<string, unknown>): Promise<SendResult> => {
-      if (isV1Conversation && v1Context) {
+      if (v1Context) {
         // V1: Convert V0 event format to V1 message format
         const { action, args } = event as {
           action: string;
@@ -67,16 +56,11 @@ export function useSendMessage() {
           });
           return result;
         }
-        // For non-message events, fall back to V0 send
-        // (e.g., agent state changes, other control events)
-        v0Send(event);
         return { queued: false };
       }
-      // V0: Use Socket.IO
-      v0Send(event);
       return { queued: false };
     },
-    [isV1Conversation, v1Context, v0Send, conversationId],
+    [v1Context, conversationId],
   );
 
   return { send };

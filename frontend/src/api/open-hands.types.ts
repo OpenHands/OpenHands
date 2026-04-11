@@ -131,12 +131,6 @@ export interface IOption<T> {
   value: T;
 }
 
-export interface CreateMicroagent {
-  repo: string;
-  git_provider?: Provider;
-  title?: string;
-}
-
 export interface MicroagentContentResponse {
   content: string;
   path: string;

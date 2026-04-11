@@ -10,6 +10,7 @@ import {
 } from "#/utils/conversation-local-storage";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import type { Conversation } from "#/api/open-hands.types";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 
 // Mock dependencies
 vi.mock("#/stores/conversation-store");
@@ -36,9 +37,9 @@ function asMockReturnValue<T>(value: Partial<T>): T {
   return value as T;
 }
 
-function makeConversation(overrides?: Partial<Conversation>): Conversation {
+function makeConversation(overrides?: Partial<V1AppConversation>): V1AppConversation {
   return {
-    conversation_id: "conv-123",
+    id: "conv-123",
     title: "Test Conversation",
     selected_repository: null,
     selected_branch: null,
@@ -47,12 +48,12 @@ function makeConversation(overrides?: Partial<Conversation>): Conversation {
     created_at: new Date().toISOString(),
     status: "RUNNING",
     runtime_status: null,
-    url: null,
+    conversation_url: null,
     session_api_key: null,
     conversation_version: "V1",
     sub_conversation_ids: [],
     ...overrides,
-  } as Conversation;
+  } as V1AppConversation;
 }
 
 describe("useHandlePlanClick", () => {
@@ -107,7 +108,7 @@ describe("useHandlePlanClick", () => {
 
       vi.mocked(useActiveConversation).mockReturnValue(
         asMockReturnValue<ReturnType<typeof useActiveConversation>>({
-          data: makeConversation({ conversation_id: conversationId }),
+          data: makeConversation({ id: conversationId }),
           isLoading: false,
           isPending: false,
           isError: false,
@@ -138,7 +139,7 @@ describe("useHandlePlanClick", () => {
 
       vi.mocked(useActiveConversation).mockReturnValue(
         asMockReturnValue<ReturnType<typeof useActiveConversation>>({
-          data: makeConversation({ conversation_id: conversationId }),
+          data: makeConversation({ id: conversationId }),
           isLoading: false,
           isPending: false,
           isError: false,
@@ -265,7 +266,7 @@ describe("useHandlePlanClick", () => {
 
       vi.mocked(useActiveConversation).mockReturnValue(
         asMockReturnValue<ReturnType<typeof useActiveConversation>>({
-          data: makeConversation({ conversation_id: conversationId }),
+          data: makeConversation({ id: conversationId }),
           isLoading: false,
           isPending: false,
           isError: false,
@@ -311,7 +312,7 @@ describe("useHandlePlanClick", () => {
 
       vi.mocked(useActiveConversation).mockReturnValue(
         asMockReturnValue<ReturnType<typeof useActiveConversation>>({
-          data: makeConversation({ conversation_id: conversationId }),
+          data: makeConversation({ id: conversationId }),
           isLoading: false,
           isPending: false,
           isError: false,

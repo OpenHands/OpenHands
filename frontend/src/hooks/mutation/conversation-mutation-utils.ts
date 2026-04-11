@@ -1,5 +1,4 @@
 import { QueryClient } from "@tanstack/react-query";
-import { Provider } from "#/types/settings";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { SandboxService } from "#/api/sandbox-service/sandbox-service.api";
@@ -91,14 +90,6 @@ export const resumeV1Conversation = async (conversationId: string) => {
     sessionApiKey,
   );
 };
-
-/**
- * Starts a V0 conversation using the legacy API
- */
-export const startV0Conversation = async (
-  conversationId: string,
-  providers?: Provider[],
-) => ConversationService.startConversation(conversationId, providers);
 
 /**
  * Optimistically updates the conversation status in the cache

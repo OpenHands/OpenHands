@@ -36,18 +36,12 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 }));
 
 const mockConversation = {
-  conversation_id: "conv-123",
+  id: "conv-123",
   sandbox_id: "sandbox-456",
   title: "Test Conversation",
   selected_repository: null,
   selected_branch: null,
   git_provider: null,
-  last_updated_at: new Date().toISOString(),
-  created_at: new Date().toISOString(),
-  status: "RUNNING" as const,
-  runtime_status: null,
-  url: null,
-  session_api_key: null,
   conversation_version: "V1" as const,
 };
 

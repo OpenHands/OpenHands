@@ -34,7 +34,7 @@ dependencies = [
   "dirhash",
   "docker",
   "fastapi",
-  "fastmcp>=3,<4",
+  "fastmcp>=3.2,<4",
   "google-api-python-client>=2.164",
   "google-auth-httplib2",
   "google-auth-oauthlib",
@@ -212,7 +212,7 @@ prompt-toolkit = "^3.0.50"
 poetry = "^2.3.3"
 anyio = "4.9.0"
 pythonnet = { version = "*", markers = "sys_platform == 'win32'" }
-fastmcp = ">=3,<4"
+fastmcp = ">=3.2,<4"
 python-frontmatter = "^1.1.0"
 shellingham = "^1.5.4"
 # TODO: Should these go into the runtime group?

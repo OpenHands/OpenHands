@@ -365,8 +365,7 @@ describe("ConversationNameContextMenu", () => {
       onDisplayCost: vi.fn(),
       onShowAgentTools: vi.fn(),
       onShowSkills: vi.fn(),
-      onExportConversation: vi.fn(),
-      onDownloadViaVSCode: vi.fn(),
+      onDownloadConversation: vi.fn(),
     };
 
     renderWithProviders(
@@ -380,9 +379,8 @@ describe("ConversationNameContextMenu", () => {
     expect(screen.getByTestId("show-agent-tools-button")).toBeInTheDocument();
     expect(screen.getByTestId("show-skills-button")).toBeInTheDocument();
     expect(
-      screen.getByTestId("export-conversation-button"),
+      screen.getByTestId("download-trajectory-button"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("download-vscode-button")).toBeInTheDocument();
   });
 
   it("should not render menu options when handlers are not provided", () => {
@@ -396,12 +394,6 @@ describe("ConversationNameContextMenu", () => {
       screen.queryByTestId("show-agent-tools-button"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("show-skills-button")).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("export-conversation-button"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("download-vscode-button"),
-    ).not.toBeInTheDocument();
   });
 
   it("should call rename handler when rename button is clicked", async () => {
@@ -497,59 +489,6 @@ describe("ConversationNameContextMenu", () => {
     expect(onShowSkills).toHaveBeenCalledTimes(1);
   });
 
-  it("should call export conversation handler when export conversation button is clicked", async () => {
-    const user = userEvent.setup();
-    const onExportConversation = vi.fn();
-
-    renderWithProviders(
-      <ConversationNameContextMenu
-        {...defaultProps}
-        onExportConversation={onExportConversation}
-      />,
-    );
-
-    const exportButton = screen.getByTestId("export-conversation-button");
-    await user.click(exportButton);
-
-    expect(onExportConversation).toHaveBeenCalledTimes(1);
-  });
-
-  it("should call download via VSCode handler when download via VSCode button is clicked", async () => {
-    const user = userEvent.setup();
-    const onDownloadViaVSCode = vi.fn();
-
-    renderWithProviders(
-      <ConversationNameContextMenu
-        {...defaultProps}
-        onDownloadViaVSCode={onDownloadViaVSCode}
-      />,
-    );
-
-    const downloadButton = screen.getByTestId("download-vscode-button");
-    await user.click(downloadButton);
-
-    expect(onDownloadViaVSCode).toHaveBeenCalledTimes(1);
-  });
-
-  it("should render separators between logical groups", () => {
-    const handlers = {
-      onRename: vi.fn(),
-      onShowAgentTools: vi.fn(),
-      onExportConversation: vi.fn(),
-      onDisplayCost: vi.fn(),
-      onStop: vi.fn(),
-    };
-
-    renderWithProviders(
-      <ConversationNameContextMenu {...defaultProps} {...handlers} />,
-    );
-
-    // Look for separator elements using test IDs
-    expect(screen.getByTestId("separator-tools")).toBeInTheDocument();
-    expect(screen.getByTestId("separator-export")).toBeInTheDocument();
-    expect(screen.getByTestId("separator-info-control")).toBeInTheDocument();
-  });
-
   it("should apply correct positioning class when position is top", () => {
     const handlers = {
       onRename: vi.fn(),
@@ -592,8 +531,7 @@ describe("ConversationNameContextMenu", () => {
       onDisplayCost: vi.fn(),
       onShowAgentTools: vi.fn(),
       onShowSkills: vi.fn(),
-      onExportConversation: vi.fn(),
-      onDownloadViaVSCode: vi.fn(),
+      onDownloadConversation: vi.fn(),
     };
 
     renderWithProviders(
@@ -616,11 +554,8 @@ describe("ConversationNameContextMenu", () => {
     expect(screen.getByTestId("show-skills-button")).toHaveTextContent(
       "Show Skills",
     );
-    expect(screen.getByTestId("export-conversation-button")).toHaveTextContent(
+    expect(screen.getByTestId("download-trajectory-button")).toHaveTextContent(
       "Export Conversation",
-    );
-    expect(screen.getByTestId("download-vscode-button")).toHaveTextContent(
-      "Download via VS Code",
     );
   });
 
