@@ -6,7 +6,6 @@ import { render } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useParamsMock, createUserMessageEvent } from "test-utils";
 import { ChatInterface } from "#/components/features/chat/chat-interface";
-import { useWsClient } from "#/context/ws-client-provider";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
@@ -94,13 +93,6 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       conversationId: "test-conversation-id",
     });
 
-    // Default: V0, no loading, no events
-    (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      send: vi.fn(),
-      isLoadingMessages: false,
-      parsedEvents: [],
-    });
-
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: { app_mode: "local" },
     });
@@ -131,7 +123,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
     beforeEach(() => {
       // Set up V1 conversation
       vi.mocked(useActiveConversation).mockReturnValue({
-        data: { conversation_version: "V1" },
+        data: {},
       } as ReturnType<typeof useActiveConversation>);
     });
 
@@ -201,50 +193,6 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
         screen.queryByTestId("chat-messages-skeleton"),
       ).not.toBeInTheDocument();
       expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("V0 conversations", () => {
-    it("shows messages when V0 events exist in store even if isLoadingMessages is true", () => {
-      // Simulate: loading flag is still true but events already exist in store (e.g., remount)
-      (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-        send: vi.fn(),
-        isLoadingMessages: true,
-        parsedEvents: [],
-      });
-
-      // Put V0 user events in the store
-      useEventStore.setState({
-        events: [createV0UserEvent()],
-        uiEvents: [],
-      });
-
-      renderWithQueryClient(<ChatInterface />, queryClient);
-
-      // AC1/AC4: Messages display immediately, no skeleton
-      expect(
-        screen.queryByTestId("chat-messages-skeleton"),
-      ).not.toBeInTheDocument();
-    });
-
-    it("shows skeleton when store is empty and isLoadingMessages is true", () => {
-      // Simulate: genuine first load, no events yet
-      (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-        send: vi.fn(),
-        isLoadingMessages: true,
-        parsedEvents: [],
-      });
-
-      // Store is empty
-      useEventStore.setState({
-        events: [],
-        uiEvents: [],
-      });
-
-      renderWithQueryClient(<ChatInterface />, queryClient);
-
-      // AC5: Genuine first-load shows skeleton
-      expect(screen.getByTestId("chat-messages-skeleton")).toBeInTheDocument();
     });
   });
 });

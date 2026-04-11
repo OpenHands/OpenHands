@@ -285,14 +285,10 @@ describe("Content", () => {
     });
 
     it("should render the advanced form if the switch is toggled", async () => {
-      // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
+      // V1 is always enabled, so no agent-input in the form
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
-      });
-      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        v1_enabled: false,
       });
 
       renderLlmSettingsScreen();
@@ -318,7 +314,6 @@ describe("Content", () => {
       within(advancedForm).getByTestId("base-url-input");
       within(advancedForm).getByTestId("llm-api-key-input");
       within(advancedForm).getByTestId("llm-api-key-help-anchor-advanced");
-      within(advancedForm).getByTestId("agent-input");
       within(advancedForm).getByTestId("enable-memory-condenser-switch");
 
       await userEvent.click(advancedSwitch);
@@ -329,14 +324,10 @@ describe("Content", () => {
     });
 
     it("should render the default advanced settings", async () => {
-      // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
+      // V1 is always enabled, so no agent-input in the form
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
-      });
-      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        v1_enabled: false,
       });
 
       renderLlmSettingsScreen();
@@ -350,14 +341,12 @@ describe("Content", () => {
       const model = screen.getByTestId("llm-custom-model-input");
       const baseUrl = screen.getByTestId("base-url-input");
       const apiKey = screen.getByTestId("llm-api-key-input");
-      const agent = screen.getByTestId("agent-input");
       const condensor = screen.getByTestId("enable-memory-condenser-switch");
 
       expect(model).toHaveValue("openhands/claude-opus-4-5-20251101");
       expect(baseUrl).toHaveValue("");
       expect(apiKey).toHaveValue("");
       expect(apiKey).toHaveProperty("placeholder", "");
-      expect(agent).toHaveValue("CodeActAgent");
       expect(condensor).toBeChecked();
     });
 
@@ -378,7 +367,6 @@ describe("Content", () => {
     });
 
     it("should render existing advanced settings correctly", async () => {
-      // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
@@ -390,11 +378,9 @@ describe("Content", () => {
         llm_model: "openai/gpt-4o",
         llm_base_url: "https://api.openai.com/v1/chat/completions",
         llm_api_key_set: true,
-        agent: "CoActAgent",
         confirmation_mode: true,
         enable_default_condenser: false,
         security_analyzer: "none",
-        v1_enabled: false,
       });
 
       renderLlmSettingsScreen();
@@ -403,7 +389,6 @@ describe("Content", () => {
       const model = screen.getByTestId("llm-custom-model-input");
       const baseUrl = screen.getByTestId("base-url-input");
       const apiKey = screen.getByTestId("llm-api-key-input");
-      const agent = screen.getByTestId("agent-input");
       const confirmation = screen.getByTestId(
         "enable-confirmation-mode-switch",
       );
@@ -417,89 +402,48 @@ describe("Content", () => {
         );
         expect(apiKey).toHaveValue("");
         expect(apiKey).toHaveProperty("placeholder", "<hidden>");
-        expect(agent).toHaveValue("CoActAgent");
         expect(confirmation).toBeChecked();
         expect(condensor).not.toBeChecked();
         expect(securityAnalyzer).toHaveValue("SETTINGS$SECURITY_ANALYZER_NONE");
       });
     });
 
-    it("should omit invariant and custom analyzers when V1 is enabled", async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      getSettingsSpy.mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        confirmation_mode: true,
-        security_analyzer: "llm",
-        v1_enabled: true,
-      });
-
-      const getSecurityAnalyzersSpy = vi.spyOn(
-        OptionService,
-        "getSecurityAnalyzers",
-      );
-      getSecurityAnalyzersSpy.mockResolvedValue([
-        "llm",
-        "none",
-        "invariant",
-        "custom",
-      ]);
-
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
-
-      const securityAnalyzer = await screen.findByTestId(
-        "security-analyzer-input",
-      );
-      await userEvent.click(securityAnalyzer);
-
-      // Only llm + none should be available when V1 is enabled
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
-      expect(
-        screen.queryByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
-      ).not.toBeInTheDocument();
-      expect(screen.queryByText("custom")).not.toBeInTheDocument();
+    it("should show custom security analyzers", async () => {
+    // Mock the config to enable security analyzer functionality
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
+    });
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      confirmation_mode: true,
+      security_analyzer: "llm",
     });
 
-    it("should include invariant analyzer option when V1 is disabled", async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      getSettingsSpy.mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        confirmation_mode: true,
-        security_analyzer: "llm",
-        v1_enabled: false,
-      });
+    const getSecurityAnalyzersSpy = vi.spyOn(
+      OptionService,
+      "getSecurityAnalyzers",
+    );
+    // Only custom analyzer (not invariant which is filtered out)
+    getSecurityAnalyzersSpy.mockResolvedValue(["llm", "none", "custom"]);
 
-      const getSecurityAnalyzersSpy = vi.spyOn(
-        OptionService,
-        "getSecurityAnalyzers",
-      );
-      getSecurityAnalyzersSpy.mockResolvedValue(["llm", "none", "invariant"]);
+    renderLlmSettingsScreen();
+    await screen.findByTestId("llm-settings-screen");
 
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
+    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+    await userEvent.click(advancedSwitch);
 
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
+    const securityAnalyzer = await screen.findByTestId(
+      "security-analyzer-input",
+    );
+    await userEvent.click(securityAnalyzer);
 
-      const securityAnalyzer = await screen.findByTestId(
-        "security-analyzer-input",
-      );
-      await userEvent.click(securityAnalyzer);
-
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
-      ).toBeInTheDocument();
-    });
+    // Custom analyzers should be available, but invariant is filtered out
+    screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
+    screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
+    expect(screen.getByText("custom")).toBeInTheDocument();
+  });
   });
 
   it.todo("should render an indicator if the llm api key is set");
@@ -747,14 +691,10 @@ describe("Form submission", () => {
   });
 
   it("should submit the advanced form with the correct values", async () => {
-    // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
+    // V1 is always enabled, so no agent-input in the form
     mockUseConfig.mockReturnValue({
       data: { app_mode: "oss" },
       isLoading: false,
-    });
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      v1_enabled: false,
     });
 
     const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
@@ -768,7 +708,6 @@ describe("Form submission", () => {
     const model = screen.getByTestId("llm-custom-model-input");
     const baseUrl = screen.getByTestId("base-url-input");
     const apiKey = screen.getByTestId("llm-api-key-input");
-    const agent = screen.getByTestId("agent-input");
     const confirmation = screen.getByTestId("enable-confirmation-mode-switch");
     const condensor = screen.getByTestId("enable-memory-condenser-switch");
 
@@ -792,12 +731,6 @@ describe("Form submission", () => {
     await userEvent.click(condensor);
     expect(condensor).not.toBeChecked();
 
-    // select agent
-    await userEvent.click(agent);
-    const agentOption = screen.getByText("CoActAgent");
-    await userEvent.click(agentOption);
-    expect(agent).toHaveValue("CoActAgent");
-
     // select security analyzer
     const securityAnalyzer = screen.getByTestId("security-analyzer-input");
     await userEvent.click(securityAnalyzer);
@@ -813,7 +746,6 @@ describe("Form submission", () => {
       expect.objectContaining({
         llm_model: "openai/gpt-4o",
         llm_base_url: "https://api.openai.com/v1/chat/completions",
-        agent: "CoActAgent",
         confirmation_mode: true,
         enable_default_condenser: false,
         security_analyzer: null,
@@ -865,7 +797,7 @@ describe("Form submission", () => {
   });
 
   it("should disable the button if there are no changes in the advanced form", async () => {
-    // Use OSS mode and V0 (v1_enabled: false) so agent-input is visible
+    // V1 is always enabled, so no agent-input in the form
     mockUseConfig.mockReturnValue({
       data: { app_mode: "oss" },
       isLoading: false,
@@ -878,7 +810,6 @@ describe("Form submission", () => {
       llm_base_url: "https://api.openai.com/v1/chat/completions",
       llm_api_key_set: true,
       confirmation_mode: true,
-      v1_enabled: false,
     });
 
     renderLlmSettingsScreen();
@@ -891,7 +822,6 @@ describe("Form submission", () => {
     const model = await screen.findByTestId("llm-custom-model-input");
     const baseUrl = await screen.findByTestId("base-url-input");
     const apiKey = await screen.findByTestId("llm-api-key-input");
-    const agent = await screen.findByTestId("agent-input");
     const condensor = await screen.findByTestId(
       "enable-memory-condenser-switch",
     );
@@ -938,21 +868,6 @@ describe("Form submission", () => {
     // reset api key
     await userEvent.clear(apiKey);
     expect(apiKey).toHaveValue("");
-    expect(submitButton).toBeDisabled();
-
-    // set agent
-    await userEvent.clear(agent);
-    await userEvent.type(agent, "test-agent");
-    expect(agent).toHaveValue("test-agent");
-    expect(submitButton).not.toBeDisabled();
-
-    // reset agent
-    await userEvent.clear(agent);
-    expect(agent).toHaveValue("");
-    expect(submitButton).toBeDisabled();
-
-    await userEvent.type(agent, "CodeActAgent");
-    expect(agent).toHaveValue("CodeActAgent");
     expect(submitButton).toBeDisabled();
 
     // toggle confirmation mode

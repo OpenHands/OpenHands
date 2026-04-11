@@ -45,9 +45,6 @@ export function ToolsContextMenu({
   const { data: conversation } = useActiveConversation();
   const { providers } = useUserProviders();
 
-  // This is a temporary measure and may be re-enabled in the future
-  const isV1Conversation = conversation?.conversation_version === "V1";
-
   const [activeSubmenu, setActiveSubmenu] = useState<"git" | "macros" | null>(
     null,
   );
@@ -131,7 +128,7 @@ export function ToolsContextMenu({
         </div>
       </div>
 
-      {(!isV1Conversation || shouldShowAgentTools) && <Divider />}
+      {shouldShowAgentTools && <Divider />}
 
       <ContextMenuListItem
         testId="show-skills-button"

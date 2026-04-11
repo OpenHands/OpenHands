@@ -1,17 +1,17 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import CodeBranchIcon from "#/icons/u-code-branch.svg?react";
-import { Conversation } from "#/api/open-hands.types";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 import { GitProviderIcon } from "#/components/shared/git-provider-icon";
 import { Provider } from "#/types/settings";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { I18nKey } from "#/i18n/declaration";
-import { ConversationStatusIndicator } from "./conversation-status-indicator";
+import { SandboxStatusIndicator } from "./sandbox-status-indicator";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
 
 interface RecentConversationProps {
-  conversation: Conversation;
+  conversation: V1AppConversation;
 }
 
 export function RecentConversation({ conversation }: RecentConversationProps) {
@@ -22,11 +22,11 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
 
   return (
     <Link
-      to={`/conversations/${conversation.conversation_id}`}
+      to={`/conversations/${conversation.id}`}
       className="flex flex-col gap-1 p-[14px] cursor-pointer w-full rounded-lg hover:bg-[#5C5D62] transition-all duration-300 text-left"
     >
       <div className="flex items-center gap-2 pl-1">
-        <ConversationStatusIndicator conversationStatus={conversation.status} />
+        <SandboxStatusIndicator sandboxStatus={conversation.sandbox_status} />
         <span className="text-xs text-white leading-6 font-normal">
           {conversation.title}
         </span>
@@ -76,10 +76,10 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
               <span className="truncate">{conversation.llm_model}</span>
             </span>
           )}
-          {(conversation.created_at || conversation.last_updated_at) && (
+          {(conversation.created_at || conversation.updated_at) && (
             <span>
               {formatTimeDelta(
-                conversation.created_at || conversation.last_updated_at,
+                conversation.created_at || conversation.updated_at,
               )}{" "}
               {t(I18nKey.CONVERSATION$AGO)}
             </span>

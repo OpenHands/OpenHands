@@ -29,10 +29,18 @@ async def get_llm_models_dependency(request: Request) -> ModelsResponse:
     return get_supported_llm_models(config)
 
 
-@app.get('/models')
+@app.get('/models', deprecated=True)
 async def get_litellm_models(
     models: ModelsResponse = Depends(get_llm_models_dependency),
 ) -> ModelsResponse:
+    """Get all supported LLM models.
+
+    .. deprecated::
+        This endpoint is deprecated. Use `/api/v1/config/models/search` instead.
+
+    Returns:
+        ModelsResponse: Response containing models, verified_models, verified_providers, and default_model.
+    """
     return models
 
 

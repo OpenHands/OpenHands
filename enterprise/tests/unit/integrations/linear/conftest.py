@@ -73,6 +73,7 @@ def sample_user_auth():
     """Create a mock UserAuth for testing."""
     user_auth = MagicMock(spec=UserAuth)
     user_auth.get_provider_tokens = AsyncMock(return_value={})
+    user_auth.get_secrets = AsyncMock(return_value=MagicMock(custom_secrets={}))
     user_auth.get_access_token = AsyncMock(return_value='test_token')
     user_auth.get_user_id = AsyncMock(return_value='test_user_id')
     return user_auth

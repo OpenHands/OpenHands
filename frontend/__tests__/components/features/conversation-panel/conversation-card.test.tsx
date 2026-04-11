@@ -15,7 +15,7 @@ import { formatTimeDelta } from "#/utils/format-time-delta";
 import { ConversationCard } from "#/components/features/conversation-panel/conversation-card/conversation-card";
 import { clickOnEditButton } from "./utils";
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
-import { ConversationStatus } from "#/types/conversation-status";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -474,23 +474,23 @@ describe("ConversationCard", () => {
     ).not.toBeInTheDocument();
   });
 
-  const statusTable: [ConversationStatus, boolean][] = [
+  const statusTable: [V1SandboxStatus, boolean][] = [
     ["RUNNING", true],
     ["STARTING", true],
-    ["STOPPED", false],
-    ["ARCHIVED", false],
     ["ERROR", false],
+    ["PAUSED", false],
+    ["MISSING", false],
   ];
 
   it.each(statusTable)(
-    "should toggle stop button visibility correctly for status",
-    (status, shouldShow) => {
+    "should toggle stop button visibility correctly for sandbox status",
+    (sandboxStatus, shouldShow) => {
       renderWithProviders(
         <ConversationCardActions
           contextMenuOpen={true}
           onContextMenuToggle={vi.fn()}
           onStop={vi.fn()}
-          conversationStatus={status}
+          sandboxStatus={sandboxStatus}
         />,
       );
 

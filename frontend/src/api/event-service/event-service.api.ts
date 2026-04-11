@@ -74,16 +74,5 @@ class EventService {
 
     return data.items;
   }
-
-  // V0 conversations — Legacy REST endpoint
-  static async searchEventsV0(conversationId: string, limit = 100) {
-    const { data } = await openHands.get<{
-      events: OpenHandsEvent[];
-    }>(`/api/conversations/${conversationId}/events`, {
-      params: { limit },
-    });
-
-    return data.events;
-  }
 }
 export default EventService;

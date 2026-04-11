@@ -34,7 +34,7 @@ dependencies = [
   "dirhash",
   "docker",
   "fastapi",
-  "fastmcp>=3,<4",
+  "fastmcp>=3.2,<4",
   "google-api-python-client>=2.164",
   "google-auth-httplib2",
   "google-auth-oauthlib",
@@ -68,7 +68,7 @@ dependencies = [
   "pg8000>=1.31.5",
   "pillow>=12.1.1",
   "playwright>=1.55",
-  "poetry>=2.1.2",
+  "poetry>=2.3.3",
   "prompt-toolkit>=3.0.50",
   "protobuf>=5.29.6,<6",
   "psutil",
@@ -209,10 +209,10 @@ sse-starlette = "^3.0.2"
 psutil = "*"
 python-json-logger = ">=3.2.1,<5.0.0"
 prompt-toolkit = "^3.0.50"
-poetry = "^2.1.2"
+poetry = "^2.3.3"
 anyio = "4.9.0"
 pythonnet = { version = "*", markers = "sys_platform == 'win32'" }
-fastmcp = ">=3,<4"
+fastmcp = ">=3.2,<4"
 python-frontmatter = "^1.1.0"
 shellingham = "^1.5.4"
 # TODO: Should these go into the runtime group?
