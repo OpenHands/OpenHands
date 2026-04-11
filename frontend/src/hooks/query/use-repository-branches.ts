@@ -11,7 +11,7 @@ export const useRepositoryBranchesPaginated = (
   const result = useInfiniteQuery<
     BranchPage,
     Error,
-    BranchPage,
+    InfiniteData<BranchPage>,
     [string, string | null, ...unknown[]],
     string | null
   >({
@@ -47,6 +47,5 @@ export const useRepositoryBranchesPaginated = (
 
   return {
     ...result,
-    data: result.data as unknown as InfiniteData<BranchPage> | undefined,
   };
 };

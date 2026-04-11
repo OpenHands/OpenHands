@@ -31,7 +31,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
   const repos = useInfiniteQuery<
     RepositoryPage,
     Error,
-    RepositoryPage,
+    InfiniteData<RepositoryPage>,
     [string, string[], Provider | null, boolean, number, ...unknown[]],
     Cursor
   >({
@@ -113,7 +113,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
   };
 
   return {
-    data: repos.data as InfiniteData<RepositoryPage> | undefined,
+    data: repos.data,
     isLoading: repos.isLoading,
     isError: repos.isError,
     hasNextPage: repos.hasNextPage,
