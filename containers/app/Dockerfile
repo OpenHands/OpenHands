@@ -20,9 +20,11 @@ ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
+# Pin Poetry version to match the version used to generate poetry.lock
+ARG POETRY_VERSION=2.3.3
 RUN apt-get update -y \
     && apt-get install -y curl make git build-essential jq gettext \
-    && python3 -m pip install poetry --break-system-packages
+    && python3 -m pip install "poetry==${POETRY_VERSION}" --break-system-packages
 
 COPY pyproject.toml poetry.lock ./
 RUN touch README.md
@@ -50,7 +52,7 @@ RUN mkdir -p $FILE_STORE_PATH
 RUN mkdir -p $WORKSPACE_BASE
 
 RUN apt-get update -y \
-    && apt-get install -y curl ssh sudo \
+    && apt-get install -y curl git ssh sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Default is 1000, but OSX is often 501

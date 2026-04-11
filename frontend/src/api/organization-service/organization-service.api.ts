@@ -1,4 +1,5 @@
 import {
+  GitOrgClaim,
   Organization,
   OrganizationMember,
   OrganizationMembersPage,
@@ -166,5 +167,38 @@ export const organizationService = {
     }>("/api/organizations/members/invite/accept", { token });
 
     return data;
+  },
+
+  getGitClaims: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<GitOrgClaim[]>(
+      `/api/organizations/${orgId}/git-claims`,
+    );
+    return data;
+  },
+
+  claimGitOrg: async ({
+    orgId,
+    provider,
+    gitOrganization,
+  }: {
+    orgId: string;
+    provider: string;
+    gitOrganization: string;
+  }) => {
+    const { data } = await openHands.post<GitOrgClaim>(
+      `/api/organizations/${orgId}/git-claims`,
+      { provider, git_organization: gitOrganization },
+    );
+    return data;
+  },
+
+  disconnectGitOrg: async ({
+    orgId,
+    claimId,
+  }: {
+    orgId: string;
+    claimId: string;
+  }) => {
+    await openHands.delete(`/api/organizations/${orgId}/git-claims/${claimId}`);
   },
 };

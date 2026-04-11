@@ -6,6 +6,7 @@ import { ul, ol } from "./list";
 import { paragraph } from "./paragraph";
 import { anchor } from "./anchor";
 import { h1, h2, h3, h4, h5, h6 } from "./headings";
+import { table, th, td } from "./table";
 
 interface MarkdownRendererProps {
   /**
@@ -55,6 +56,9 @@ export function MarkdownRenderer({
     code,
     ul,
     ol,
+    table,
+    th,
+    td,
     ...(includeStandard && {
       a: anchor,
       p: paragraph,

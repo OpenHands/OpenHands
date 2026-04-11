@@ -2,10 +2,11 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { GitOrgRow } from "#/components/features/org/git-org-row";
-import type { GitOrg } from "#/hooks/organizations/use-git-conversation-routing";
+import type { GitOrg } from "#/types/org";
 
 const createOrg = (overrides: Partial<GitOrg> = {}): GitOrg => ({
   id: "1",
+  claimId: null,
   provider: "GitHub",
   name: "TestOrg",
   status: "unclaimed",

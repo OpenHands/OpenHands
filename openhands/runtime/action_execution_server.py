@@ -40,9 +40,13 @@ from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from uvicorn import run
 
+from openhands.app_server.status.system_stats import (
+    get_system_stats,
+    update_last_execution_time,
+)
 from openhands.core.config.mcp_config import MCPStdioServerConfig
 from openhands.core.exceptions import BrowserUnavailableException
-from openhands.core.logger import get_uvicorn_json_log_config
+from openhands.core.logger import get_uvicorn_log_config
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import (
     Action,
@@ -78,10 +82,6 @@ from openhands.runtime.utils.bash import BashSession
 from openhands.runtime.utils.files import insert_lines, read_lines
 from openhands.runtime.utils.memory_monitor import MemoryMonitor
 from openhands.runtime.utils.runtime_init import init_user_and_working_directory
-from openhands.runtime.utils.system_stats import (
-    get_system_stats,
-    update_last_execution_time,
-)
 from openhands.utils.async_utils import call_sync_from_async, wait_all
 
 if sys.platform == 'win32':
@@ -1078,8 +1078,5 @@ if __name__ == '__main__':
             return JSONResponse(content=[])
 
     logger.debug(f'Starting action execution API on port {args.port}')
-    # When LOG_JSON=1, provide a JSON log config to Uvicorn so error/access logs are structured
-    log_config = None
-    if os.getenv('LOG_JSON', '0') in ('1', 'true', 'True'):
-        log_config = get_uvicorn_json_log_config()
+    log_config = get_uvicorn_log_config()
     run(app, host='0.0.0.0', port=args.port, log_config=log_config, use_colors=False)

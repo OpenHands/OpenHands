@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import SecretStr
 
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
@@ -32,7 +33,6 @@ from openhands.microagent.types import (
     MicroagentContentResponse,
     MicroagentResponse,
 )
-from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import server_config
 from openhands.server.user_auth import (
     get_access_token,
@@ -43,7 +43,12 @@ from openhands.server.user_auth import (
 app = APIRouter(prefix='/api/user', dependencies=get_dependencies())
 
 
-@app.get('/installations', response_model=list[str])
+@app.get(
+    '/installations',
+    response_model=list[str],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/installations/search` instead.',
+)
 async def get_user_installations(
     provider: ProviderType,
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
@@ -74,7 +79,12 @@ async def get_user_installations(
     raise AuthenticationError('Git provider token required. (such as GitHub).')
 
 
-@app.get('/repositories', response_model=list[Repository])
+@app.get(
+    '/repositories',
+    response_model=list[Repository],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/repositories/search` instead.',
+)
 async def get_user_repositories(
     sort: str = 'pushed',
     selected_provider: Annotated[ProviderType | None, Query()] = None,
@@ -113,12 +123,13 @@ async def get_user_repositories(
     raise AuthenticationError('Git provider token required. (such as GitHub).')
 
 
-@app.get('/info', response_model=User)
+@app.get('/info', response_model=User, deprecated=True)
 async def get_user(
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
 ) -> User | JSONResponse:
+    """Get the current user git info. Use GET /api/v1/users/git-info instead"""
     if provider_tokens:
         client = ProviderHandler(
             provider_tokens=provider_tokens, external_auth_token=access_token
@@ -140,7 +151,12 @@ async def get_user(
     raise AuthenticationError('Git provider token required. (such as GitHub).')
 
 
-@app.get('/search/repositories', response_model=list[Repository])
+@app.get(
+    '/search/repositories',
+    response_model=list[Repository],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/repositories/search` instead.',
+)
 async def search_repositories(
     query: str,
     per_page: int = 5,
@@ -175,7 +191,12 @@ async def search_repositories(
     raise AuthenticationError('Git provider token required.')
 
 
-@app.get('/search/branches', response_model=list[Branch])
+@app.get(
+    '/search/branches',
+    response_model=list[Branch],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/branches/search` instead.',
+)
 async def search_branches(
     repository: str,
     query: str,
@@ -218,7 +239,12 @@ async def search_branches(
     )
 
 
-@app.get('/suggested-tasks', response_model=list[SuggestedTask])
+@app.get(
+    '/suggested-tasks',
+    response_model=list[SuggestedTask],
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/suggested-tasks/search` instead.',
+)
 async def get_suggested_tasks(
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
@@ -247,7 +273,12 @@ async def get_suggested_tasks(
     raise AuthenticationError('No providers set.')
 
 
-@app.get('/repository/branches', response_model=PaginatedBranchesResponse)
+@app.get(
+    '/repository/branches',
+    response_model=PaginatedBranchesResponse,
+    deprecated=True,
+    description='Deprecated: Use `/api/v1/git/branches/search` instead.',
+)
 async def get_repository_branches(
     repository: str,
     page: int = 1,
@@ -293,21 +324,10 @@ async def get_repository_branches(
     raise AuthenticationError('Git provider token required. (such as GitHub).')
 
 
-def _extract_repo_name(repository_name: str) -> str:
-    """Extract the actual repository name from the full repository path.
-
-    Args:
-        repository_name: Repository name in format 'owner/repo' or 'domain/owner/repo'
-
-    Returns:
-        The actual repository name (last part after the last '/')
-    """
-    return repository_name.split('/')[-1]
-
-
 @app.get(
     '/repository/{repository_name:path}/microagents',
     response_model=list[MicroagentResponse],
+    deprecated=True,
 )
 async def get_repository_microagents(
     repository_name: str,
@@ -316,6 +336,10 @@ async def get_repository_microagents(
     user_id: str | None = Depends(get_user_id),
 ) -> list[MicroagentResponse] | JSONResponse:
     """Scan the microagents directory of a repository and return the list of microagents.
+
+    .. deprecated::
+        This endpoint is deprecated. The microagents UI has already been removed
+        and is not supported in V1.
 
     The microagents directory location depends on the git provider and actual repository name:
     - If git provider is not GitLab and actual repository name is ".openhands": scans "microagents" folder
@@ -371,6 +395,7 @@ async def get_repository_microagents(
 @app.get(
     '/repository/{repository_name:path}/microagents/content',
     response_model=MicroagentContentResponse,
+    deprecated=True,
 )
 async def get_repository_microagent_content(
     repository_name: str,
@@ -382,6 +407,10 @@ async def get_repository_microagent_content(
     user_id: str | None = Depends(get_user_id),
 ) -> MicroagentContentResponse | JSONResponse:
     """Fetch the content of a specific microagent file from a repository.
+
+    .. deprecated::
+        This endpoint is deprecated. The microagents UI has already been removed
+        and is not supported in V1.
 
     Args:
         repository_name: Repository name in the format 'owner/repo' or 'domain/owner/repo'

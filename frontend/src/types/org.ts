@@ -65,3 +65,25 @@ export type OrganizationsQueryData = {
   items: Organization[];
   currentOrgId: string | null;
 };
+
+export interface GitOrgClaim {
+  id: string;
+  org_id: string;
+  provider: string;
+  git_organization: string;
+  claimed_by: string;
+  claimed_at: string;
+}
+
+export interface UserGitOrganizationsResponse {
+  provider: string;
+  organizations: string[];
+}
+
+export interface GitOrg {
+  id: string;
+  claimId: string | null;
+  provider: string;
+  name: string;
+  status: "unclaimed" | "claimed" | "claiming" | "disconnecting";
+}

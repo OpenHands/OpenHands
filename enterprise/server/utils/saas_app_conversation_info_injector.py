@@ -363,6 +363,11 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                     if api_key_org_id is not None:
                         org_id = api_key_org_id
 
+            # Override with resolver org_id if set (from git org claim resolution)
+            resolver_org_id = getattr(self.user_context, 'resolver_org_id', None)
+            if resolver_org_id is not None:
+                org_id = resolver_org_id
+
             # Check if SAAS metadata already exists
             saas_query = select(StoredConversationMetadataSaas).where(
                 StoredConversationMetadataSaas.conversation_id == str(info.id)

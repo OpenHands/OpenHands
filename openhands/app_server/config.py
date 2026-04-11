@@ -220,9 +220,12 @@ def config_from_env() -> AppServerConfig:
             config.event = AwsEventServiceInjector(bucket_name=bucket_name)
         elif provider == StorageProvider.GCP:
             # Google Cloud storage configuration
-            config.event = GoogleCloudEventServiceInjector(
-                bucket_name=os.environ.get('FILE_STORE_PATH')
-            )
+            bucket_name = os.environ.get('FILE_STORE_PATH')
+            if not bucket_name:
+                raise ValueError(
+                    'FILE_STORE_PATH environment variable is required for Google Cloud storage'
+                )
+            config.event = GoogleCloudEventServiceInjector(bucket_name=bucket_name)
         else:
             config.event = FilesystemEventServiceInjector()
 

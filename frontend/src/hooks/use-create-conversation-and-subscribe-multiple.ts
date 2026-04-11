@@ -6,9 +6,9 @@ import { useCreateConversation } from "./mutation/use-create-conversation";
 import { useUserProviders } from "./use-user-providers";
 import { useConversationSubscriptions } from "#/context/conversation-subscriptions-provider";
 import { Provider } from "#/types/settings";
-import { CreateMicroagent, Conversation } from "#/api/open-hands.types";
+import { Conversation } from "#/api/open-hands.types";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { renderConversationStartingToast } from "#/components/features/chat/microagent/microagent-status-toast";
+import { renderConversationStartingToast } from "#/components/shared/conversation-toast";
 
 interface ConversationData {
   conversationId: string;
@@ -120,7 +120,6 @@ export const useCreateConversationAndSubscribeMultiple = () => {
       query,
       conversationInstructions,
       repository,
-      createMicroagent,
       onSuccessCallback,
       onEventCallback,
     }: {
@@ -131,7 +130,6 @@ export const useCreateConversationAndSubscribeMultiple = () => {
         branch?: string;
         gitProvider: Provider;
       };
-      createMicroagent?: CreateMicroagent;
       onSuccessCallback?: (conversationId: string) => void;
       onEventCallback?: (event: unknown, conversationId: string) => void;
     }) => {
@@ -140,7 +138,6 @@ export const useCreateConversationAndSubscribeMultiple = () => {
           query,
           conversationInstructions,
           repository,
-          createMicroagent,
         },
         {
           onSuccess: (data) => {
