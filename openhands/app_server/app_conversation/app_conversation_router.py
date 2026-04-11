@@ -65,12 +65,12 @@ from openhands.app_server.services.httpx_client_injector import (
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.server.dependencies import get_dependencies
 
 # Handle anext compatibility for Python < 3.10
 if sys.version_info >= (3, 10):
@@ -644,7 +644,7 @@ async def get_conversation_skills(
                 skill_type = 'knowledge'
 
             # Extract triggers
-            triggers = []
+            triggers: list[str] = []
             if isinstance(skill.trigger, (KeywordTrigger, TaskTrigger)):
                 if hasattr(skill.trigger, 'keywords'):
                     triggers = skill.trigger.keywords

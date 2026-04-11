@@ -17,15 +17,6 @@ class OptionService {
   }
 
   /**
-   * Retrieve the list of agents available
-   * @returns List of agents available
-   */
-  static async getAgents(): Promise<string[]> {
-    const { data } = await openHands.get<string[]>("/api/options/agents");
-    return data;
-  }
-
-  /**
    * Retrieve the list of security analyzers available
    * @returns List of security analyzers available
    */

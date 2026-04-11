@@ -8,7 +8,6 @@ const fetchAiConfigOptions = async () => {
     verifiedModels: modelsResponse.verified_models,
     verifiedProviders: modelsResponse.verified_providers,
     defaultModel: modelsResponse.default_model,
-    agents: await OptionService.getAgents(),
     securityAnalyzers: await OptionService.getSecurityAnalyzers(),
   };
 };
