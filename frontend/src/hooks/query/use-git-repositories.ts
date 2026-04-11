@@ -24,7 +24,13 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
     ? shouldUseInstallationRepos(provider, config?.app_mode)
     : false;
 
-  const repos = useInfiniteQuery<RepositoryPage>({
+  const repos = useInfiniteQuery<
+    RepositoryPage,
+    Error,
+    RepositoryPage,
+    [string, string[], Provider | null, boolean, number, ...unknown[]],
+    string | { installationIndex: number; pageId: string | null }
+  >({
     queryKey: [
       "repositories",
       providers || [],
@@ -39,15 +45,14 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
       }
 
       if (useInstallationRepos) {
-        const { installationIndex, pageId } = pageParam as {
-          installationIndex: number | null;
-          pageId: string | null;
-        };
-
         if (!installations) {
           throw new Error("Missing installation list");
         }
 
+        const { installationIndex, pageId } = pageParam as {
+          installationIndex: number;
+          pageId: string | null;
+        };
         const result = await GitService.retrieveInstallationRepositories(
           provider,
           installationIndex || 0,
@@ -58,20 +63,18 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
         return result;
       }
 
-      // Use type assertion to ensure correct type
-      const pageParamString = pageParam as string | null | undefined;
-      const resolvedPageId = pageParamString ?? undefined;
+      const pageId = pageParam as string | null;
       const result = await GitService.retrieveUserGitRepositories(
         provider,
-        resolvedPageId,
+        pageId ?? undefined,
         pageSize,
       );
       return result;
     },
     getNextPageParam: (lastPage) => lastPage.next_page_id,
     initialPageParam: useInstallationRepos
-      ? { installationIndex: 0, pageId: null as string | null }
-      : (null as string | null),
+      ? { installationIndex: 0, pageId: null }
+      : null,
     enabled:
       enabled &&
       (providers || []).length > 0 &&
