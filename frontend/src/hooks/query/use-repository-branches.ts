@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, InfiniteData } from "@tanstack/react-query";
 import GitService from "#/api/git-service/git-service.api";
 import { BranchPage } from "#/types/git";
 import { Provider } from "#/types/settings";
@@ -7,12 +7,12 @@ export const useRepositoryBranchesPaginated = (
   repository: string | null,
   perPage: number = 30,
   selectedProvider?: Provider,
-) =>
-  useInfiniteQuery<
+) => {
+  const result = useInfiniteQuery<
     BranchPage,
     Error,
     BranchPage,
-    [string, string | null, string, number, ...unknown[]],
+    [string, string | null, ...unknown[]],
     string | null
   >({
     queryKey: [
@@ -44,3 +44,9 @@ export const useRepositoryBranchesPaginated = (
       lastPage.next_page_id ? lastPage.next_page_id : undefined,
     initialPageParam: null,
   });
+
+  return {
+    ...result,
+    data: result.data as unknown as InfiniteData<BranchPage> | undefined,
+  };
+};

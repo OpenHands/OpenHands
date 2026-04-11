@@ -77,7 +77,10 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
         // Installation-based pagination
         const currentCursor = lastPageParam as InstallationCursor;
         if (lastPage.next_page_id) {
-          return { installationIndex: currentCursor.installationIndex, pageId: lastPage.next_page_id };
+          return {
+            installationIndex: currentCursor.installationIndex,
+            pageId: lastPage.next_page_id,
+          };
         }
         // Advance to next installation
         const nextInstallationIndex = currentCursor.installationIndex + 1;
