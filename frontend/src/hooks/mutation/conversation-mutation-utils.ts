@@ -169,7 +169,7 @@ export const removeConversationsFromCache = (
 
   queryClient.setQueriesData<{
     pages: Array<{
-      results: Array<{ conversation_id: string }>;
+      items: Array<{ id: string }>;
     }>;
   }>({ queryKey: ["user", "conversations"] }, (oldData) => {
     if (!oldData) return oldData;
@@ -181,9 +181,7 @@ export const removeConversationsFromCache = (
       ...oldData,
       pages: oldData.pages.map((page) => ({
         ...page,
-        results: page.results.filter(
-          (conv) => !idsToRemove.has(conv.conversation_id),
-        ),
+        items: page.items.filter((conv) => !idsToRemove.has(conv.id)),
       })),
     };
   });

@@ -6,6 +6,7 @@ import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 import { V1ExecutionStatus } from "#/types/v1/core";
@@ -878,24 +879,27 @@ describe("ConversationPanel", () => {
   it("should bulk delete selected conversations", async () => {
     const user = userEvent.setup();
 
-    const mockData: Conversation[] = [...mockConversations];
+    const mockData: V1AppConversation[] = [...mockConversations];
 
-    vi.spyOn(ConversationService, "getUserConversations").mockImplementation(
+    vi.spyOn(V1ConversationService, "searchConversations").mockImplementation(
       async () => ({
-        results: mockData,
+        items: mockData,
         next_page_id: null,
       }),
     );
 
-    const deleteUserConversationSpy = vi.spyOn(
+    const bulkDeleteSpy = vi.spyOn(
       ConversationService,
-      "deleteUserConversation",
+      "bulkDeleteConversations",
     );
-    deleteUserConversationSpy.mockImplementation(async (id: string) => {
-      const index = mockData.findIndex((conv) => conv.conversation_id === id);
-      if (index !== -1) {
-        mockData.splice(index, 1);
+    bulkDeleteSpy.mockImplementation(async (ids: string[]) => {
+      for (const id of ids) {
+        const index = mockData.findIndex((conv) => conv.id === id);
+        if (index !== -1) {
+          mockData.splice(index, 1);
+        }
       }
+      return { succeeded: ids, failed: [] };
     });
 
     renderConversationPanel();
@@ -915,8 +919,8 @@ describe("ConversationPanel", () => {
     const confirmButton = screen.getByRole("button", { name: /confirm/i });
     await user.click(confirmButton);
 
-    // Should have called delete for both
-    expect(deleteUserConversationSpy).toHaveBeenCalledTimes(2);
+    // Should have called bulk delete with both IDs
+    expect(bulkDeleteSpy).toHaveBeenCalledTimes(1);
 
     // Bulk bar should disappear after deletion
     expect(screen.queryByTestId("bulk-delete-button")).not.toBeInTheDocument();

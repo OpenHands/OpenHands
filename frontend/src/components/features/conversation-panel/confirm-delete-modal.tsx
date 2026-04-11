@@ -13,6 +13,7 @@ interface ConfirmDeleteModalProps {
   onCancel: () => void;
   conversationTitle?: string;
   bulkCount?: number;
+  bulkTitles?: string[];
 }
 
 export function ConfirmDeleteModal({
@@ -20,6 +21,7 @@ export function ConfirmDeleteModal({
   onCancel,
   conversationTitle,
   bulkCount,
+  bulkTitles,
 }: ConfirmDeleteModalProps) {
   const { t } = useTranslation();
 
@@ -46,6 +48,18 @@ export function ConfirmDeleteModal({
         <div className="flex flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.CONVERSATION$CONFIRM_DELETE)} />
           <BaseModalDescription>{confirmationMessage}</BaseModalDescription>
+          {bulkTitles && bulkTitles.length > 0 && (
+            <div
+              className="max-h-40 overflow-y-auto text-xs text-white"
+              data-testid="bulk-delete-titles"
+            >
+              {bulkTitles.map((title, i) => (
+                <div key={i} className="truncate">
+                  {i + 1}. <span className="text-white">{title}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div
           className="flex flex-col gap-2 w-full"

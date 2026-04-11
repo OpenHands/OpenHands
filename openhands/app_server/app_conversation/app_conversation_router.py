@@ -12,6 +12,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -651,6 +652,119 @@ async def delete_app_conversation(
         )
 
     return Success()
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request body for bulk conversation deletion."""
+
+    model_config = ConfigDict(extra='forbid')
+    conversation_ids: list[str] = Field(..., max_length=50)
+
+
+class BulkDeleteResponse(BaseModel):
+    """Response body for bulk conversation deletion."""
+
+    succeeded: list[str]
+    failed: list[str]
+
+
+async def _finalize_bulk_sandbox_cleanup(
+    sandbox_service: SandboxService,
+    app_conversation_info_service: AppConversationInfoService,
+    sandbox_ids: set[str],
+    db_session: AsyncSession,
+    httpx_client: httpx.AsyncClient,
+) -> None:
+    """Clean up sandboxes deferred during bulk delete, then close shared connections."""
+    try:
+        for sandbox_id in sandbox_ids:
+            try:
+                conversation_count = await app_conversation_info_service.count_conversations_by_sandbox_id(
+                    sandbox_id
+                )
+                if conversation_count == 0:
+                    await sandbox_service.delete_sandbox(sandbox_id)
+            except Exception:
+                logger.warning(f'Failed to clean up sandbox {sandbox_id}')
+        await db_session.commit()
+    finally:
+        await asyncio.gather(db_session.aclose(), httpx_client.aclose())
+
+
+@router.post('/bulk-delete')
+async def bulk_delete_conversations(
+    request: Request,
+    body: BulkDeleteRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    app_conversation_info_service: AppConversationInfoService = (
+        app_conversation_info_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    db_session: AsyncSession = db_session_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> BulkDeleteResponse:
+    """Delete multiple conversations by ID."""
+    succeeded: list[str] = []
+    failed: list[str] = []
+    deferred_sandbox_ids: set[str] = set()
+
+    for conversation_id in body.conversation_ids:
+        try:
+            conversation_uuid = UUID(conversation_id)
+        except ValueError:
+            failed.append(conversation_id)
+            continue
+
+        try:
+            app_conversation_info = (
+                await app_conversation_info_service.get_app_conversation_info(
+                    conversation_uuid
+                )
+            )
+            if not app_conversation_info:
+                failed.append(conversation_id)
+                continue
+
+            sandbox_id = app_conversation_info.sandbox_id
+            sandbox_is_shared = False
+            if sandbox_id:
+                conversation_count = await app_conversation_info_service.count_conversations_by_sandbox_id(
+                    sandbox_id
+                )
+                sandbox_is_shared = conversation_count > 1
+
+            deleted = await app_conversation_service.delete_app_conversation(
+                conversation_uuid,
+                skip_agent_server_delete=sandbox_is_shared,
+            )
+            if deleted:
+                succeeded.append(conversation_id)
+                if sandbox_id:
+                    deferred_sandbox_ids.add(sandbox_id)
+            else:
+                failed.append(conversation_id)
+
+            await db_session.commit()
+        except Exception:
+            logger.warning(f'Failed to delete conversation {conversation_id}')
+            failed.append(conversation_id)
+
+    if deferred_sandbox_ids:
+        set_db_session_keep_open(request.state, True)
+        set_httpx_client_keep_open(request.state, True)
+        asyncio.create_task(
+            _finalize_bulk_sandbox_cleanup(
+                sandbox_service,
+                app_conversation_info_service,
+                deferred_sandbox_ids,
+                db_session,
+                httpx_client,
+            )
+        )
+
+    return BulkDeleteResponse(succeeded=succeeded, failed=failed)
 
 
 @router.post('/stream-start')

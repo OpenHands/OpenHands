@@ -127,7 +127,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     if (selectedIds.size === conversations.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(conversations.map((c) => c.conversation_id)));
+      setSelectedIds(new Set(conversations.map((c) => c.id)));
     }
   };
 
@@ -201,7 +201,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
                 selectedIds.size === conversations.length
               }
               onChange={toggleSelectAll}
-              className="w-4 h-4 accent-white cursor-pointer"
+              className="w-4 h-4 cursor-pointer"
               data-testid="select-all-checkbox"
             />
             {t(I18nKey.CONVERSATION$SELECT_ALL)}
@@ -335,6 +335,9 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
           onConfirm={handleConfirmBulkDelete}
           onCancel={() => setConfirmBulkDeleteModalVisible(false)}
           bulkCount={selectedIds.size}
+          bulkTitles={conversations
+            .filter((c) => selectedIds.has(c.id))
+            .map((c) => c.title ?? "Untitled")}
         />
       )}
     </div>

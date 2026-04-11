@@ -139,7 +139,7 @@ export function ConversationCard({
             checked={isSelected}
             onChange={() => onSelectionToggle()}
             onClick={(e) => e.stopPropagation()}
-            className="mr-2 w-4 h-4 shrink-0 cursor-pointer accent-white"
+            className="mr-2 w-4 h-4 shrink-0 cursor-pointer"
             aria-label={`Select ${title}`}
             data-testid="conversation-select-checkbox"
           />
