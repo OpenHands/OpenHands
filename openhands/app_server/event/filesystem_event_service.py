@@ -23,8 +23,8 @@ class FilesystemEventService(EventServiceBase):
     def _load_event(self, path: Path) -> Event | None:
         try:
             content = path.read_text()
-            content = Event.model_validate_json(content)
-            return content
+            content = Event.model_validate_json(content)  # type: ignore[assignment]
+            return content  # type: ignore[return-value]
         except Exception:
             if path.exists():
                 _logger.exception('Error reading event', stack_info=True)

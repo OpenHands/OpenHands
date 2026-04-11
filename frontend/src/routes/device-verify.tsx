@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
-import { EnterpriseBanner } from "#/components/features/device-verify/enterprise-banner";
+import { LoginCTA } from "#/components/features/auth/login-cta";
 import { I18nKey } from "#/i18n/declaration";
 import { H1 } from "#/ui/typography";
 import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
@@ -151,11 +151,11 @@ export default function DeviceVerify() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div
-          className={`flex flex-col lg:flex-row items-center lg:items-start gap-6 w-full ${showEnterpriseBanner ? "max-w-4xl" : "max-w-md"}`}
+          className={`flex flex-col lg:flex-row items-center lg:items-stretch gap-6 w-full ${showEnterpriseBanner ? "max-w-4xl" : "max-w-md"}`}
         >
           {/* Device Authorization Card */}
           <div
-            className={`flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg border border-neutral-700 ${showEnterpriseBanner ? "lg:mx-0" : ""}`}
+            className={`flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-2xl shadow-lg border border-[#242424] ${showEnterpriseBanner ? "lg:mx-0 lg:self-stretch" : ""}`}
           >
             <H1 className="text-2xl mb-4 text-center">
               {t(I18nKey.DEVICE$AUTHORIZATION_REQUEST)}
@@ -197,8 +197,10 @@ export default function DeviceVerify() {
             </div>
           </div>
 
-          {/* Enterprise Banner */}
-          {showEnterpriseBanner && <EnterpriseBanner />}
+          {/* Login CTA */}
+          {showEnterpriseBanner && (
+            <LoginCTA source="device_verify" className="lg:self-stretch" />
+          )}
         </div>
       </div>
     );

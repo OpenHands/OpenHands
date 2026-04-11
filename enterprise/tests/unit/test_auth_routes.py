@@ -846,10 +846,108 @@ async def test_keycloak_callback_duplicate_email_detected(
         assert exc_info.value.detail == 'duplicate_email'
 
 
-# Note: test_keycloak_callback_duplicate_email_deletion_fails was removed as part of
-# the user authorization refactor. The Keycloak user deletion logic for duplicate emails
-# has been removed from keycloak_callback. If this behavior needs to be restored,
-# it should be implemented in the DefaultUserAuthorizer or handled separately.
+@pytest.mark.asyncio
+async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
+    mock_request, create_keycloak_user_info
+):
+    """Test that new Keycloak user is deleted when duplicate email is detected.
+
+    When a user attempts to sign up with a +modifier email (e.g., joe+1@example.com)
+    and an account with the base email already exists, the newly created Keycloak
+    user should be deleted to prevent orphaned accounts from blocking future sign-ins.
+    """
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
+    ):
+        # Arrange
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value=create_keycloak_user_info(
+                sub='new_user_id',
+                preferred_username='test_user',
+                email='joe+1@example.com',
+                identity_provider='github',
+            )
+        )
+        mock_token_manager.delete_keycloak_user = AsyncMock(return_value=True)
+
+        # User does NOT exist in UserStore (new signup attempt)
+        mock_user_store.get_user_by_id = AsyncMock(return_value=None)
+
+        # Create mock authorizer that returns duplicate_email error
+        mock_authorizer = create_mock_user_authorizer(
+            success=False, error_detail='duplicate_email'
+        )
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await keycloak_callback(
+                code='test_code',
+                state='test_state',
+                request=mock_request,
+                user_authorizer=mock_authorizer,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == 'duplicate_email'
+        # Keycloak user should be deleted since user doesn't exist in UserStore
+        mock_token_manager.delete_keycloak_user.assert_called_once_with('new_user_id')
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_duplicate_email_preserves_existing_user(
+    mock_request, create_keycloak_user_info
+):
+    """Test that existing users are not deleted when duplicate email is detected.
+
+    When an existing user signs in and duplicate email is detected (e.g., because
+    another account with the same base email was created while duplicate checking
+    was disabled), the existing user's Keycloak account should NOT be deleted.
+    """
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
+    ):
+        # Arrange
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value=create_keycloak_user_info(
+                sub='existing_user_id',
+                preferred_username='test_user',
+                email='joe@example.com',
+                identity_provider='github',
+            )
+        )
+        mock_token_manager.delete_keycloak_user = AsyncMock(return_value=True)
+
+        # User EXISTS in UserStore (legitimate existing user)
+        mock_existing_user = MagicMock()
+        mock_existing_user.id = 'existing_user_id'
+        mock_user_store.get_user_by_id = AsyncMock(return_value=mock_existing_user)
+
+        # Create mock authorizer that returns duplicate_email error
+        mock_authorizer = create_mock_user_authorizer(
+            success=False, error_detail='duplicate_email'
+        )
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await keycloak_callback(
+                code='test_code',
+                state='test_state',
+                request=mock_request,
+                user_authorizer=mock_authorizer,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == 'duplicate_email'
+        # Keycloak user should NOT be deleted since user exists in UserStore
+        mock_token_manager.delete_keycloak_user.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -30,37 +30,42 @@ env:
 
 jobs:
   define-matrix:
-    runs-on: blacksmith
+    runs-on: ubuntu-latest
     outputs:
       base_image: ${{ steps.define-base-images.outputs.base_image }}
+      platforms: ${{ steps.define-base-images.outputs.platforms }}
     steps:
       - name: Define base images
         shell: bash
         id: define-base-images
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik" }
+            platforms="linux/amd64"
+            json=$(jq -n -c --arg platforms "$platforms" '[
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik", platforms: $platforms }
               ]')
           else
-            json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik" },
-                { image: "ubuntu:24.04", tag: "ubuntu" }
+            platforms="linux/amd64,linux/arm64"
+            json=$(jq -n -c --arg platforms "$platforms" '[
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik", platforms: $platforms },
+                { image: "ubuntu:24.04", tag: "ubuntu", platforms: $platforms }
               ]')
           fi
           echo "base_image=$json" >> "$GITHUB_OUTPUT"
+          echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
 
   # Builds the OpenHands Docker images
   ghcr_build_app:
     name: Build App Image
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ext-v'))"
+    needs: define-matrix
     permissions:
       contents: read
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up QEMU
@@ -82,12 +87,12 @@ jobs:
       - name: Build and push app image
         if: "!github.event.pull_request.head.repo.fork"
         run: |
-          ./containers/build.sh -i openhands -o ${{ env.REPO_OWNER }} --push
+          ./containers/build.sh -i openhands -o ${{ env.REPO_OWNER }} --push -p ${{ needs.define-matrix.outputs.platforms }}
 
   # Builds the runtime Docker images
   ghcr_build_runtime:
     name: Build Runtime Image
-    runs-on: blacksmith-8vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ext-v'))"
     permissions:
       contents: read
@@ -98,7 +103,7 @@ jobs:
         base_image: ${{ fromJson(needs.define-matrix.outputs.base_image) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up QEMU
@@ -117,7 +122,7 @@ jobs:
       - name: Install poetry via pipx
         run: pipx install poetry
       - name: Set up Python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: poetry
@@ -136,7 +141,7 @@ jobs:
         shell: bash
         run: |
 
-          ./containers/build.sh -i runtime -o ${{ env.REPO_OWNER }} -t ${{ matrix.base_image.tag }} --dry
+          ./containers/build.sh -i runtime -o ${{ env.REPO_OWNER }} -t ${{ matrix.base_image.tag }} --dry -p ${{ matrix.base_image.platforms }}
 
           DOCKER_BUILD_JSON=$(jq -c . < docker-build-dry.json)
           echo "DOCKER_TAGS=$(echo "$DOCKER_BUILD_JSON" | jq -r '.tags | join(",")')" >> $GITHUB_ENV
@@ -144,7 +149,7 @@ jobs:
           echo "DOCKER_BUILD_ARGS=$(echo "$DOCKER_BUILD_JSON" | jq -r '.build_args | join(",")')" >> $GITHUB_ENV
       - name: Build and push runtime image ${{ matrix.base_image.image }}
         if: github.event.pull_request.head.repo.fork != true
-        uses: useblacksmith/build-push-action@v1
+        uses: docker/build-push-action@v6
         with:
           push: true
           tags: ${{ env.DOCKER_TAGS }}
@@ -158,7 +163,7 @@ jobs:
       # Forked repos can't push to GHCR, so we just build in order to populate the cache for rebuilding
       - name: Build runtime image ${{ matrix.base_image.image }} for fork
         if: github.event.pull_request.head.repo.fork
-        uses: useblacksmith/build-push-action@v1
+        uses: docker/build-push-action@v6
         with:
           tags: ghcr.io/${{ env.REPO_OWNER }}/runtime:${{ env.RELEVANT_SHA }}-${{ matrix.base_image.tag }}
           context: containers/runtime
@@ -171,7 +176,7 @@ jobs:
 
   ghcr_build_enterprise:
     name: Push Enterprise Image
-    runs-on: blacksmith-8vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: write
@@ -180,7 +185,7 @@ jobs:
     if: github.event.pull_request.head.repo.fork != true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
@@ -210,6 +215,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            type=match,pattern=cloud-\d+\.\d+\.\d+
           flavor: |
             latest=auto
             prefix=
@@ -223,7 +229,7 @@ jobs:
           # rather than a mutable branch tag like "main" which can serve stale cached layers.
           echo "OPENHANDS_DOCKER_TAG=${RELEVANT_SHA}" >> $GITHUB_ENV
       - name: Build and push Docker image
-        uses: useblacksmith/build-push-action@v1
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: enterprise/Dockerfile
@@ -242,7 +248,7 @@ jobs:
   # We can remove this once the config changes
   runtime_tests_check_success:
     name: All Runtime Tests Passed
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - name: All tests passed
         run: echo "All runtime tests have passed successfully!"
@@ -251,10 +257,10 @@ jobs:
     name: Update PR Description
     if: github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]'
     needs: [ghcr_build_runtime]
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get short SHA
         id: short_sha

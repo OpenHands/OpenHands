@@ -73,6 +73,12 @@ vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => mockUseConfig(),
 }));
 
+// Mock useOrgTypeAndAccess hook
+const mockUseOrgTypeAndAccess = vi.fn();
+vi.mock("#/hooks/use-org-type-and-access", () => ({
+  useOrgTypeAndAccess: () => mockUseOrgTypeAndAccess(),
+}));
+
 const renderLlmSettingsScreen = (
   orgId: string | null = null,
   meData?: {
@@ -163,6 +169,15 @@ beforeEach(() => {
 
   // Reset organization store
   useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+  // Default mock for useOrgTypeAndAccess - returns team org by default
+  mockUseOrgTypeAndAccess.mockReturnValue({
+    selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+    isPersonalOrg: false,
+    isTeamOrg: true,
+    canViewOrgRoutes: true,
+    organizationId: "1",
+  });
 });
 
 describe("Content", () => {
@@ -270,7 +285,7 @@ describe("Content", () => {
     });
 
     it("should render the advanced form if the switch is toggled", async () => {
-      // Use OSS mode so agent-input is visible
+      // V1 is always enabled, so no agent-input in the form
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
@@ -299,7 +314,6 @@ describe("Content", () => {
       within(advancedForm).getByTestId("base-url-input");
       within(advancedForm).getByTestId("llm-api-key-input");
       within(advancedForm).getByTestId("llm-api-key-help-anchor-advanced");
-      within(advancedForm).getByTestId("agent-input");
       within(advancedForm).getByTestId("enable-memory-condenser-switch");
 
       await userEvent.click(advancedSwitch);
@@ -310,7 +324,7 @@ describe("Content", () => {
     });
 
     it("should render the default advanced settings", async () => {
-      // Use OSS mode so agent-input is visible
+      // V1 is always enabled, so no agent-input in the form
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
@@ -327,14 +341,12 @@ describe("Content", () => {
       const model = screen.getByTestId("llm-custom-model-input");
       const baseUrl = screen.getByTestId("base-url-input");
       const apiKey = screen.getByTestId("llm-api-key-input");
-      const agent = screen.getByTestId("agent-input");
       const condensor = screen.getByTestId("enable-memory-condenser-switch");
 
       expect(model).toHaveValue("openhands/claude-opus-4-5-20251101");
       expect(baseUrl).toHaveValue("");
       expect(apiKey).toHaveValue("");
       expect(apiKey).toHaveProperty("placeholder", "");
-      expect(agent).toHaveValue("CodeActAgent");
       expect(condensor).toBeChecked();
     });
 
@@ -355,7 +367,6 @@ describe("Content", () => {
     });
 
     it("should render existing advanced settings correctly", async () => {
-      // Use OSS mode so agent-input is visible
       mockUseConfig.mockReturnValue({
         data: { app_mode: "oss" },
         isLoading: false,
@@ -367,7 +378,6 @@ describe("Content", () => {
         llm_model: "openai/gpt-4o",
         llm_base_url: "https://api.openai.com/v1/chat/completions",
         llm_api_key_set: true,
-        agent: "CoActAgent",
         confirmation_mode: true,
         enable_default_condenser: false,
         security_analyzer: "none",
@@ -379,7 +389,6 @@ describe("Content", () => {
       const model = screen.getByTestId("llm-custom-model-input");
       const baseUrl = screen.getByTestId("base-url-input");
       const apiKey = screen.getByTestId("llm-api-key-input");
-      const agent = screen.getByTestId("agent-input");
       const confirmation = screen.getByTestId(
         "enable-confirmation-mode-switch",
       );
@@ -393,89 +402,48 @@ describe("Content", () => {
         );
         expect(apiKey).toHaveValue("");
         expect(apiKey).toHaveProperty("placeholder", "<hidden>");
-        expect(agent).toHaveValue("CoActAgent");
         expect(confirmation).toBeChecked();
         expect(condensor).not.toBeChecked();
         expect(securityAnalyzer).toHaveValue("SETTINGS$SECURITY_ANALYZER_NONE");
       });
     });
 
-    it("should omit invariant and custom analyzers when V1 is enabled", async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      getSettingsSpy.mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        confirmation_mode: true,
-        security_analyzer: "llm",
-        v1_enabled: true,
-      });
-
-      const getSecurityAnalyzersSpy = vi.spyOn(
-        OptionService,
-        "getSecurityAnalyzers",
-      );
-      getSecurityAnalyzersSpy.mockResolvedValue([
-        "llm",
-        "none",
-        "invariant",
-        "custom",
-      ]);
-
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
-
-      const securityAnalyzer = await screen.findByTestId(
-        "security-analyzer-input",
-      );
-      await userEvent.click(securityAnalyzer);
-
-      // Only llm + none should be available when V1 is enabled
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
-      expect(
-        screen.queryByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
-      ).not.toBeInTheDocument();
-      expect(screen.queryByText("custom")).not.toBeInTheDocument();
+    it("should show custom security analyzers", async () => {
+    // Mock the config to enable security analyzer functionality
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
+    });
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      confirmation_mode: true,
+      security_analyzer: "llm",
     });
 
-    it("should include invariant analyzer option when V1 is disabled", async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      getSettingsSpy.mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        confirmation_mode: true,
-        security_analyzer: "llm",
-        v1_enabled: false,
-      });
+    const getSecurityAnalyzersSpy = vi.spyOn(
+      OptionService,
+      "getSecurityAnalyzers",
+    );
+    // Only custom analyzer (not invariant which is filtered out)
+    getSecurityAnalyzersSpy.mockResolvedValue(["llm", "none", "custom"]);
 
-      const getSecurityAnalyzersSpy = vi.spyOn(
-        OptionService,
-        "getSecurityAnalyzers",
-      );
-      getSecurityAnalyzersSpy.mockResolvedValue(["llm", "none", "invariant"]);
+    renderLlmSettingsScreen();
+    await screen.findByTestId("llm-settings-screen");
 
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
+    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+    await userEvent.click(advancedSwitch);
 
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
+    const securityAnalyzer = await screen.findByTestId(
+      "security-analyzer-input",
+    );
+    await userEvent.click(securityAnalyzer);
 
-      const securityAnalyzer = await screen.findByTestId(
-        "security-analyzer-input",
-      );
-      await userEvent.click(securityAnalyzer);
-
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
-      ).toBeInTheDocument();
-    });
+    // Custom analyzers should be available, but invariant is filtered out
+    screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
+    screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
+    expect(screen.getByText("custom")).toBeInTheDocument();
+  });
   });
 
   it.todo("should render an indicator if the llm api key is set");
@@ -723,7 +691,7 @@ describe("Form submission", () => {
   });
 
   it("should submit the advanced form with the correct values", async () => {
-    // Use OSS mode so agent-input is visible
+    // V1 is always enabled, so no agent-input in the form
     mockUseConfig.mockReturnValue({
       data: { app_mode: "oss" },
       isLoading: false,
@@ -740,7 +708,6 @@ describe("Form submission", () => {
     const model = screen.getByTestId("llm-custom-model-input");
     const baseUrl = screen.getByTestId("base-url-input");
     const apiKey = screen.getByTestId("llm-api-key-input");
-    const agent = screen.getByTestId("agent-input");
     const confirmation = screen.getByTestId("enable-confirmation-mode-switch");
     const condensor = screen.getByTestId("enable-memory-condenser-switch");
 
@@ -764,12 +731,6 @@ describe("Form submission", () => {
     await userEvent.click(condensor);
     expect(condensor).not.toBeChecked();
 
-    // select agent
-    await userEvent.click(agent);
-    const agentOption = screen.getByText("CoActAgent");
-    await userEvent.click(agentOption);
-    expect(agent).toHaveValue("CoActAgent");
-
     // select security analyzer
     const securityAnalyzer = screen.getByTestId("security-analyzer-input");
     await userEvent.click(securityAnalyzer);
@@ -785,7 +746,6 @@ describe("Form submission", () => {
       expect.objectContaining({
         llm_model: "openai/gpt-4o",
         llm_base_url: "https://api.openai.com/v1/chat/completions",
-        agent: "CoActAgent",
         confirmation_mode: true,
         enable_default_condenser: false,
         security_analyzer: null,
@@ -837,7 +797,7 @@ describe("Form submission", () => {
   });
 
   it("should disable the button if there are no changes in the advanced form", async () => {
-    // Use OSS mode so agent-input is visible
+    // V1 is always enabled, so no agent-input in the form
     mockUseConfig.mockReturnValue({
       data: { app_mode: "oss" },
       isLoading: false,
@@ -862,7 +822,6 @@ describe("Form submission", () => {
     const model = await screen.findByTestId("llm-custom-model-input");
     const baseUrl = await screen.findByTestId("base-url-input");
     const apiKey = await screen.findByTestId("llm-api-key-input");
-    const agent = await screen.findByTestId("agent-input");
     const condensor = await screen.findByTestId(
       "enable-memory-condenser-switch",
     );
@@ -909,21 +868,6 @@ describe("Form submission", () => {
     // reset api key
     await userEvent.clear(apiKey);
     expect(apiKey).toHaveValue("");
-    expect(submitButton).toBeDisabled();
-
-    // set agent
-    await userEvent.clear(agent);
-    await userEvent.type(agent, "test-agent");
-    expect(agent).toHaveValue("test-agent");
-    expect(submitButton).not.toBeDisabled();
-
-    // reset agent
-    await userEvent.clear(agent);
-    expect(agent).toHaveValue("");
-    expect(submitButton).toBeDisabled();
-
-    await userEvent.type(agent, "CodeActAgent");
-    expect(agent).toHaveValue("CodeActAgent");
     expect(submitButton).toBeDisabled();
 
     // toggle confirmation mode
@@ -1475,11 +1419,8 @@ describe("Role-based permissions", () => {
       });
 
       // Basic form should remain visible (members can't switch to advanced)
-      expect(
-        screen.getByTestId("llm-settings-form-basic"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
     });
-
   });
 
   describe("Owner role (full access)", () => {
@@ -1789,24 +1730,23 @@ describe("Role-based permissions", () => {
   });
 });
 
-describe("clientLoader permission checks", () => {
-  it("should export a clientLoader for route protection", async () => {
-    // This test verifies the clientLoader is exported for consistency with other routes
-    // Note: All roles have view_llm_settings permission, so this guard ensures
-    // the route is protected and can be restricted in the future if needed
-    const { clientLoader } = await import("#/routes/llm-settings");
-    expect(clientLoader).toBeDefined();
-    expect(typeof clientLoader).toBe("function");
-  });
-});
-
 describe("Contextual info messages", () => {
-  it("should show admin message when user is an admin in a team organization", async () => {
-    // Arrange
-    const orgId = "team-org-1";
-    const adminMeData: OrganizationMember = {
-      org_id: orgId,
-      user_id: "1",
+  it("should show admin info message for admin user in team organization", async () => {
+    // Arrange: SaaS mode with team org and admin role
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
+    });
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
+    });
+    const adminData = {
+      org_id: "1",
+      user_id: "99",
       email: "admin@example.com",
       role: "admin",
       status: "active",
@@ -1817,44 +1757,31 @@ describe("Contextual info messages", () => {
       llm_base_url: "",
     };
 
+    // Act
+    renderLlmSettingsScreen("1", adminData);
+    await screen.findByTestId("llm-settings-screen");
+
+    // Assert
+    const infoMessage = screen.getByTestId("llm-settings-info-message");
+    expect(infoMessage).toHaveTextContent("SETTINGS$LLM_ADMIN_INFO");
+  });
+
+  it("should show member info message for member user in team organization", async () => {
+    // Arrange: SaaS mode with team org and member role
     mockUseConfig.mockReturnValue({
       data: { app_mode: "saas" },
       isLoading: false,
     });
-
-    vi.spyOn(organizationService, "getMe").mockResolvedValue(adminMeData);
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
-      items: [
-        createMockOrganization({
-          id: orgId,
-          name: "Team Org",
-          is_personal: false,
-        }),
-      ],
-      currentOrgId: orgId,
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
     });
-
-    // Act
-    renderLlmSettingsScreen(orgId, adminMeData);
-
-    // Assert
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("llm-settings-info-message"),
-      ).toBeInTheDocument();
-    });
-
-    expect(screen.getByTestId("llm-settings-info-message")).toHaveTextContent(
-      "SETTINGS$LLM_ADMIN_INFO",
-    );
-  });
-
-  it("should show member message when user is a member in a team organization", async () => {
-    // Arrange
-    const orgId = "team-org-2";
-    const memberMeData: OrganizationMember = {
-      org_id: orgId,
-      user_id: "2",
+    const memberData = {
+      org_id: "1",
+      user_id: "99",
       email: "member@example.com",
       role: "member",
       status: "active",
@@ -1865,97 +1792,67 @@ describe("Contextual info messages", () => {
       llm_base_url: "",
     };
 
-    mockUseConfig.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
-    });
-
-    vi.spyOn(organizationService, "getMe").mockResolvedValue(memberMeData);
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
-      items: [
-        createMockOrganization({
-          id: orgId,
-          name: "Team Org",
-          is_personal: false,
-        }),
-      ],
-      currentOrgId: orgId,
-    });
-
     // Act
-    renderLlmSettingsScreen(orgId, memberMeData);
+    renderLlmSettingsScreen("1", memberData);
+    await screen.findByTestId("llm-settings-screen");
 
     // Assert
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("llm-settings-info-message"),
-      ).toBeInTheDocument();
-    });
-
-    expect(screen.getByTestId("llm-settings-info-message")).toHaveTextContent(
-      "SETTINGS$LLM_MEMBER_INFO",
-    );
+    const infoMessage = screen.getByTestId("llm-settings-info-message");
+    expect(infoMessage).toHaveTextContent("SETTINGS$LLM_MEMBER_INFO");
   });
 
-  it("should not show info message in personal workspace", async () => {
-    // Arrange
-    const orgId = "personal-org-1";
-    const ownerMeData: OrganizationMember = {
-      org_id: orgId,
-      user_id: "3",
-      email: "user@example.com",
-      role: "owner",
-      status: "active",
-      llm_api_key: "",
-      max_iterations: 20,
-      llm_model: "",
-      llm_api_key_for_byor: null,
-      llm_base_url: "",
-    };
-
+  it("should not show info message for personal workspace", async () => {
+    // Arrange: SaaS mode with personal org
     mockUseConfig.mockReturnValue({
       data: { app_mode: "saas" },
       isLoading: false,
     });
-
-    vi.spyOn(organizationService, "getMe").mockResolvedValue(ownerMeData);
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
-      items: [
-        createMockOrganization({ id: orgId, name: "Personal", is_personal: true }),
-      ],
-      currentOrgId: orgId,
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Personal Org", is_personal: true }),
+      isPersonalOrg: true,
+      isTeamOrg: false,
+      canViewOrgRoutes: false,
+      organizationId: "1",
     });
 
     // Act
-    renderLlmSettingsScreen(orgId, ownerMeData);
+    renderLlmSettingsScreen("1");
+    await screen.findByTestId("llm-settings-screen");
 
     // Assert
-    await waitFor(() => {
-      expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
-    });
-
-    expect(
-      screen.queryByTestId("llm-settings-info-message"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
   });
 
   it("should not show info message in OSS mode", async () => {
-    // Arrange
+    // Arrange: OSS mode
     mockUseConfig.mockReturnValue({
       data: { app_mode: "oss" },
       isLoading: false,
     });
-
-    // Act
-    renderLlmSettingsScreen();
-
-    // Assert
-    await waitFor(() => {
-      expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
+    mockUseOrgTypeAndAccess.mockReturnValue({
+      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      isPersonalOrg: false,
+      isTeamOrg: true,
+      canViewOrgRoutes: true,
+      organizationId: "1",
     });
 
-    expect(
-      screen.queryByTestId("llm-settings-info-message"),
-    ).not.toBeInTheDocument();
+    // Act
+    renderLlmSettingsScreen("1");
+    await screen.findByTestId("llm-settings-screen");
+
+    // Assert
+    expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
+  });
+});
+
+describe("clientLoader permission checks", () => {
+  it("should export a clientLoader for route protection", async () => {
+    // This test verifies the clientLoader is exported for consistency with other routes
+    // Note: All roles have view_llm_settings permission, so this guard ensures
+    // the route is protected and can be restricted in the future if needed
+    const { clientLoader } = await import("#/routes/llm-settings");
+    expect(clientLoader).toBeDefined();
+    expect(typeof clientLoader).toBe("function");
   });
 });

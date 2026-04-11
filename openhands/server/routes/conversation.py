@@ -12,10 +12,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from openhands.app_server.app_conversation.app_conversation_service import (
-    AppConversationService,
+from openhands.app_server.app_conversation.app_conversation_info_service import (
+    AppConversationInfoService,
 )
-from openhands.app_server.config import depends_app_conversation_service
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationInfo,
+)
+from openhands.app_server.config import depends_app_conversation_info_service
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action.message import MessageAction
 from openhands.events.event_filter import EventFilter
@@ -24,7 +28,6 @@ from openhands.events.serialization.event import event_to_dict
 from openhands.memory.memory import Memory
 from openhands.microagent.types import InputMetadata
 from openhands.runtime.base import Runtime
-from openhands.server.dependencies import get_dependencies
 from openhands.server.session.conversation import ServerConversation
 from openhands.server.shared import conversation_manager, file_store
 from openhands.server.user_auth import get_user_id
@@ -36,59 +39,27 @@ app = APIRouter(
 )
 
 # Dependency for app conversation service
-app_conversation_service_dependency = depends_app_conversation_service()
+app_conversation_info_service_dependency = depends_app_conversation_info_service()
 
 
-async def _is_v1_conversation(
-    conversation_id: str, app_conversation_service: AppConversationService
-) -> bool:
-    """Check if the given conversation_id corresponds to a V1 conversation.
-
-    Args:
-        conversation_id: The conversation ID to check
-        app_conversation_service: Service to query V1 conversations
-
-    Returns:
-        True if this is a V1 conversation, False otherwise
-    """
+async def _get_v1_conversation_info(
+    conversation_id: str, app_conversation_info_service: AppConversationInfoService
+) -> AppConversationInfo | None:
     try:
         conversation_uuid = uuid.UUID(conversation_id)
-        app_conversation = await app_conversation_service.get_app_conversation(
-            conversation_uuid
+        app_conversation_info = (
+            await app_conversation_info_service.get_app_conversation_info(
+                conversation_uuid
+            )
         )
-        return app_conversation is not None
+        return app_conversation_info
     except (ValueError, TypeError):
         # Not a valid UUID, so it's not a V1 conversation
-        return False
-    except Exception:
+        return None
+    except Exception as e:
         # Service error, assume it's not a V1 conversation
-        return False
-
-
-async def _get_v1_conversation_config(
-    conversation_id: str, app_conversation_service: AppConversationService
-) -> dict[str, str | None]:
-    """Get configuration for a V1 conversation.
-
-    Args:
-        conversation_id: The conversation ID
-        app_conversation_service: Service to query V1 conversations
-
-    Returns:
-        Dictionary with runtime_id (sandbox_id) and session_id (conversation_id)
-    """
-    conversation_uuid = uuid.UUID(conversation_id)
-    app_conversation = await app_conversation_service.get_app_conversation(
-        conversation_uuid
-    )
-
-    if app_conversation is None:
-        raise ValueError(f'V1 conversation {conversation_id} not found')
-
-    return {
-        'runtime_id': app_conversation.sandbox_id,
-        'session_id': conversation_id,
-    }
+        logger.debug(f'Failed to fetch V1 conversation {conversation_id}: {e}')
+        return None
 
 
 def _get_v0_conversation_config(
@@ -112,22 +83,33 @@ def _get_v0_conversation_config(
     }
 
 
-@app.get('/config')
+@app.get('/config', deprecated=True)
 async def get_remote_runtime_config(
     conversation_id: str,
-    app_conversation_service: AppConversationService = app_conversation_service_dependency,
+    app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
     user_id: str | None = Depends(get_user_id),
 ) -> JSONResponse:
     """Retrieve the runtime configuration.
+
+    .. deprecated::
+        This endpoint is deprecated. The config is now returned as part of
+        GET /api/v1/app-conversation/{conversation_id}. Use that endpoint instead.
 
     For V0 conversations: returns runtime_id and session_id from the runtime.
     For V1 conversations: returns sandbox_id as runtime_id and conversation_id as session_id.
     """
     # Check if this is a V1 conversation first
-    if await _is_v1_conversation(conversation_id, app_conversation_service):
+    v1_conversation_info = await _get_v1_conversation_info(
+        conversation_id, app_conversation_info_service
+    )
+    if v1_conversation_info:
         # This is a V1 conversation
-        config = await _get_v1_conversation_config(
-            conversation_id, app_conversation_service
+        return JSONResponse(
+            content={
+                'runtime_id': v1_conversation_info.sandbox_id,
+                'session_id': conversation_id,
+            },
+            status_code=200,
         )
     else:
         # V0 conversation - get the conversation and use the existing logic

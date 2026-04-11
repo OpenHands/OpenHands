@@ -91,6 +91,9 @@ class AppConversationInfo(BaseModel):
 
     public: bool | None = None
 
+    # Tags for conversation metadata (e.g., automation context, skills used)
+    tags: dict[str, str] = Field(default_factory=dict)
+
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

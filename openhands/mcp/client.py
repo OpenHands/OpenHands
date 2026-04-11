@@ -49,7 +49,6 @@ class MCPClient(BaseModel):
                 name=tool.name,
                 description=tool.description,
                 inputSchema=tool.inputSchema,
-                session=self.client,
             )
             self.tool_map[tool.name] = server_tool
             self.tools.append(server_tool)
@@ -85,17 +84,17 @@ class MCPClient(BaseModel):
 
             # Instantiate custom transports due to custom headers
             if isinstance(server, MCPSHTTPServerConfig):
-                transport = StreamableHttpTransport(
+                streamable_transport = StreamableHttpTransport(
                     url=server_url,
                     headers=headers if headers else None,
                 )
+                self.client = Client(streamable_transport, timeout=timeout)
             else:
-                transport = SSETransport(
+                sse_transport = SSETransport(
                     url=server_url,
                     headers=headers if headers else None,
                 )
-
-            self.client = Client(transport, timeout=timeout)
+                self.client = Client(sse_transport, timeout=timeout)
 
             await self._initialize_and_list_tools()
         except McpError as e:

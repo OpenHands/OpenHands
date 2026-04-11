@@ -11,6 +11,41 @@ from openhands.server.types import AppMode
 
 
 @pytest.mark.asyncio
+async def test_gitlab_get_user_groups_returns_group_paths():
+    """Test that get_user_groups returns group paths the user belongs to."""
+    service = GitLabService(token=SecretStr('test-token'))
+
+    mock_groups = [
+        {'path': 'my-team', 'name': 'My Team', 'id': 1},
+        {'path': 'open-source', 'name': 'Open Source Projects', 'id': 2},
+    ]
+
+    with patch.object(service, '_make_request') as mock_request:
+        mock_request.return_value = (mock_groups, {})
+
+        groups = await service.get_user_groups()
+
+        assert groups == ['my-team', 'open-source']
+        mock_request.assert_called_once_with(
+            f'{service.BASE_URL}/groups',
+            {'min_access_level': '10', 'per_page': '100'},
+        )
+
+
+@pytest.mark.asyncio
+async def test_gitlab_get_user_groups_returns_empty_on_error():
+    """Test that get_user_groups returns empty list when the API call fails."""
+    service = GitLabService(token=SecretStr('test-token'))
+
+    with patch.object(service, '_make_request') as mock_request:
+        mock_request.side_effect = Exception('API error')
+
+        groups = await service.get_user_groups()
+
+        assert groups == []
+
+
+@pytest.mark.asyncio
 async def test_gitlab_get_repositories_with_user_owner_type():
     """Test that get_repositories correctly sets owner_type field for user repositories."""
     service = GitLabService(token=SecretStr('test-token'))

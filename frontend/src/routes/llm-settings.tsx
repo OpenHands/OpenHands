@@ -28,10 +28,11 @@ import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-se
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
-import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
 import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
+
+const DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-5-20251101";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -75,34 +76,25 @@ function LlmSettingsScreen() {
   const { data: config } = useConfig();
   const { data: me } = useMe();
   const { hasPermission } = usePermission(me?.role ?? "member");
-  const { isPersonalOrg, isTeamOrg } = useOrgTypeAndAccess();
 
   // In OSS mode, user has full access (no permission restrictions)
   // In SaaS mode, check role-based permissions (members can only view, owners and admins can edit)
   const isOssMode = config?.app_mode === "oss";
   const isReadOnly = isOssMode ? false : !hasPermission("edit_llm_settings");
 
-  // Determine the contextual info message based on workspace type and role
+  // Get organization type for contextual info messages
+  const { isTeamOrg } = useOrgTypeAndAccess();
+  const isAdminOrOwner = me?.role === "admin" || me?.role === "owner";
+
   const getLlmSettingsInfoMessage = (): I18nKey | null => {
-    // No message in OSS mode (no organization context)
     if (isOssMode) return null;
-
-    // No message for personal workspaces
-    if (isPersonalOrg) return null;
-
-    // Team org - show appropriate message based on role
-    if (isTeamOrg) {
-      const role = me?.role ?? "member";
-      if (role === "admin" || role === "owner") {
-        return I18nKey.SETTINGS$LLM_ADMIN_INFO;
-      }
-      return I18nKey.SETTINGS$LLM_MEMBER_INFO;
-    }
-
-    return null;
+    if (!isTeamOrg) return null;
+    return isAdminOrOwner
+      ? I18nKey.SETTINGS$LLM_ADMIN_INFO
+      : I18nKey.SETTINGS$LLM_MEMBER_INFO;
   };
 
-  const llmInfoMessage = getLlmSettingsInfoMessage();
+  const infoMessageKey = getLlmSettingsInfoMessage();
 
   const [view, setView] = React.useState<"basic" | "advanced">("basic");
 
@@ -143,6 +135,9 @@ function LlmSettingsScreen() {
   const modelsAndProviders = organizeModelsAndProviders(
     resources?.models || [],
   );
+  const verifiedModels = resources?.verifiedModels || [];
+  const verifiedProviders = resources?.verifiedProviders || [];
+  const defaultModel = resources?.defaultModel || DEFAULT_OPENHANDS_MODEL;
 
   // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
   const currentModel = currentSelectedModel || settings?.llm_model;
@@ -165,9 +160,6 @@ function LlmSettingsScreen() {
   };
 
   const shouldUseOpenHandsKey = isOpenHandsProvider() && isSaasMode;
-
-  // Determine if we should hide the agent dropdown when V1 conversation API is enabled
-  const isV1Enabled = settings?.v1_enabled;
 
   React.useEffect(() => {
     const determineWhetherToToggleAdvancedSettings = () => {
@@ -411,14 +403,6 @@ function LlmSettingsScreen() {
     }));
   };
 
-  const handleAgentIsDirty = (agent: string) => {
-    const agentIsDirty = agent !== settings?.agent && agent !== "";
-    setDirtyInputs((prev) => ({
-      ...prev,
-      agent: agentIsDirty,
-    }));
-  };
-
   const handleConfirmationModeIsDirty = (isToggled: boolean) => {
     const confirmationModeIsDirty = isToggled !== settings?.confirmation_mode;
     setDirtyInputs((prev) => ({
@@ -487,18 +471,6 @@ function LlmSettingsScreen() {
       label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_NONE),
     });
 
-    if (isV1Enabled) {
-      return orderedItems;
-    }
-
-    // Add Invariant analyzer third
-    if (analyzers.includes("invariant")) {
-      orderedItems.push({
-        key: "invariant",
-        label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_INVARIANT),
-      });
-    }
-
     // Add any other analyzers that might exist
     analyzers.forEach((analyzer) => {
       if (!["llm", "invariant", "none"].includes(analyzer)) {
@@ -528,14 +500,15 @@ function LlmSettingsScreen() {
         className="flex flex-col h-full justify-between"
       >
         <div className="flex flex-col gap-6">
-          {llmInfoMessage && (
+          {infoMessageKey && (
             <p
               data-testid="llm-settings-info-message"
               className="text-sm text-tertiary-alt"
             >
-              {t(llmInfoMessage)}
+              {t(infoMessageKey)}
             </p>
           )}
+
           <SettingsSwitch
             testId="advanced-settings-switch"
             defaultIsToggled={view === "advanced"}
@@ -555,7 +528,9 @@ function LlmSettingsScreen() {
                 <>
                   <ModelSelector
                     models={modelsAndProviders}
-                    currentModel={settings.llm_model || DEFAULT_OPENHANDS_MODEL}
+                    verifiedModels={verifiedModels}
+                    verifiedProviders={verifiedProviders}
+                    currentModel={settings.llm_model || defaultModel}
                     onChange={handleModelIsDirty}
                     onDefaultValuesChanged={onDefaultValuesChanged}
                     wrapperClassName="!flex-col !gap-6"
@@ -606,8 +581,8 @@ function LlmSettingsScreen() {
                 testId="llm-custom-model-input"
                 name="llm-custom-model-input"
                 label={t(I18nKey.SETTINGS$CUSTOM_MODEL)}
-                defaultValue={settings.llm_model || DEFAULT_OPENHANDS_MODEL}
-                placeholder={DEFAULT_OPENHANDS_MODEL}
+                defaultValue={settings.llm_model || defaultModel}
+                placeholder={defaultModel}
                 type="text"
                 className="w-full max-w-[680px]"
                 onChange={handleCustomModelIsDirty}
@@ -680,25 +655,6 @@ function LlmSettingsScreen() {
                     linkText={t(I18nKey.SETTINGS$SEARCH_API_KEY_INSTRUCTIONS)}
                     href="https://tavily.com/"
                   />
-
-                  {!isV1Enabled && (
-                    <SettingsDropdownInput
-                      testId="agent-input"
-                      name="agent-input"
-                      label={t(I18nKey.SETTINGS$AGENT)}
-                      items={
-                        resources?.agents.map((agent) => ({
-                          key: agent,
-                          label: agent, // TODO: Add i18n support for agent names
-                        })) || []
-                      }
-                      defaultSelectedKey={settings.agent}
-                      isClearable={false}
-                      onInputChange={handleAgentIsDirty}
-                      isDisabled={isReadOnly}
-                      wrapperClassName="w-full max-w-[680px]"
-                    />
-                  )}
                 </>
               )}
 

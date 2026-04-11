@@ -1,5 +1,15 @@
 import { extractModelAndProvider } from "./extract-model-and-provider";
-import { organizeModelsAndProviders } from "./organize-models-and-providers";
+
+const isEquivalentOpenAIModel = (left: string, right: string) => {
+  const leftParts = extractModelAndProvider(left);
+  const rightParts = extractModelAndProvider(right);
+
+  return (
+    leftParts.model === rightParts.model &&
+    ((leftParts.provider === "openai" && !rightParts.provider) ||
+      (!leftParts.provider && rightParts.provider === "openai"))
+  );
+};
 
 /**
  * Check if a model is a custom model. A custom model is a model that is not part of the default models.
@@ -10,13 +20,11 @@ import { organizeModelsAndProviders } from "./organize-models-and-providers";
 export const isCustomModel = (models: string[], model: string): boolean => {
   if (!model) return false;
 
-  const organizedModels = organizeModelsAndProviders(models);
-  const { provider: extractedProvider, model: extractedModel } =
-    extractModelAndProvider(model);
-
-  const isKnownModel =
-    extractedProvider in organizedModels &&
-    organizedModels[extractedProvider].models.includes(extractedModel);
+  const isKnownModel = models.some(
+    (availableModel) =>
+      availableModel === model ||
+      isEquivalentOpenAIModel(availableModel, model),
+  );
 
   return !isKnownModel;
 };
