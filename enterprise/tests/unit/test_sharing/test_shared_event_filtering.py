@@ -83,8 +83,7 @@ class TestSearchSharedEvents:
 
         assert len(result.items) == 2
         assert all(
-            not isinstance(e, ConversationStateUpdateEvent)
-            for e in result.items
+            not isinstance(e, ConversationStateUpdateEvent) for e in result.items
         )
 
     @pytest.mark.asyncio
