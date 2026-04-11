@@ -187,7 +187,7 @@ describe("RepositorySelectionForm", () => {
       },
     ];
     mockUseGitRepositories.mockReturnValue({
-      data: { pages: [{ data: MOCK_REPOS }] },
+      data: { pages: [{ items: MOCK_REPOS }] },
       isLoading: false,
       isError: false,
       hasNextPage: false,
@@ -267,7 +267,7 @@ describe("RepositorySelectionForm", () => {
     ];
 
     mockUseGitRepositories.mockReturnValue({
-      data: { pages: [{ data: MOCK_SEARCH_REPOS }] },
+      data: { pages: [{ items: MOCK_SEARCH_REPOS }] },
       isLoading: false,
       isError: false,
       hasNextPage: false,
