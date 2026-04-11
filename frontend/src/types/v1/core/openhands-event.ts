@@ -13,6 +13,7 @@ import {
   ConversationErrorEvent,
   HookExecutionEvent,
   PauseEvent,
+  ServerErrorEvent,
 } from "./events/index";
 
 /**
@@ -36,4 +37,5 @@ export type OpenHandsEvent =
   | ConversationStateUpdateEvent
   | ConversationErrorEvent
   // Control events
-  | PauseEvent;
+  | PauseEvent
+  | ServerErrorEvent;

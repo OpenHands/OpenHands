@@ -80,6 +80,7 @@ export interface Conversation {
   sub_conversation_ids?: string[];
   public?: boolean;
   sandbox_id?: string | null;
+  llm_model?: string | null;
 }
 
 export interface ResultSet<T> {
@@ -128,12 +129,6 @@ export interface GetMicroagentPromptResponse {
 export interface IOption<T> {
   label: string;
   value: T;
-}
-
-export interface CreateMicroagent {
-  repo: string;
-  git_provider?: Provider;
-  title?: string;
 }
 
 export interface MicroagentContentResponse {

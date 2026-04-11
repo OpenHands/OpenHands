@@ -239,7 +239,7 @@ class BashSession:
         # Set history limit to a large number to avoid losing history
         # https://unix.stackexchange.com/questions/43414/unlimited-history-in-tmux
         self.session.set_option('history-limit', str(self.HISTORY_LIMIT), global_=True)
-        self.session.history_limit = self.HISTORY_LIMIT
+        self.session.history_limit = str(self.HISTORY_LIMIT)
         # We need to create a new pane because the initial pane's history limit is (default) 2000
         _initial_window = self.session.active_window
         self.window = self.session.new_window(
@@ -252,9 +252,10 @@ class BashSession:
         _initial_window.kill()
 
         # Configure bash to use simple PS1 and disable PS2
-        self.pane.send_keys(
-            f'export PROMPT_COMMAND=\'export PS1="{self.PS1}"\'; export PS2=""'
-        )
+        if self.pane:
+            self.pane.send_keys(
+                f'export PROMPT_COMMAND=\'export PS1="{self.PS1}"\'; export PS2=""'
+            )
         time.sleep(0.1)  # Wait for command to take effect
         self._clear_screen()
 
@@ -274,6 +275,8 @@ class BashSession:
 
     def _get_pane_content(self) -> str:
         """Capture the current pane content and update the buffer."""
+        if not self.pane:
+            return ''
         content = '\n'.join(
             map(
                 # avoid double newlines
@@ -302,9 +305,10 @@ class BashSession:
 
     def _clear_screen(self) -> None:
         """Clear the tmux pane screen and history."""
-        self.pane.send_keys('C-l', enter=False)
-        time.sleep(0.1)
-        self.pane.cmd('clear-history')
+        if self.pane:
+            self.pane.send_keys('C-l', enter=False)
+            time.sleep(0.1)
+            self.pane.cmd('clear-history')
 
     def _get_command_output(
         self,
@@ -596,7 +600,7 @@ class BashSession:
             )
 
         # Send actual command/inputs to the pane
-        if command != '':
+        if command != '' and self.pane:
             is_special_key = self._is_special_key(command)
             if is_input:
                 logger.debug(f'SENDING INPUT TO RUNNING PROCESS: {command!r}')

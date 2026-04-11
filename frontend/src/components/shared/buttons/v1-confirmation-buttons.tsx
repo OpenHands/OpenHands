@@ -49,8 +49,8 @@ export function V1ConfirmationButtons() {
 
       // Call the V1 API endpoint
       respondToConfirmation({
-        conversationId: conversation.conversation_id,
-        conversationUrl: conversation.url || "",
+        conversationId: conversation.id,
+        conversationUrl: conversation.conversation_url || "",
         sessionApiKey: conversation.session_api_key,
         accept,
       });

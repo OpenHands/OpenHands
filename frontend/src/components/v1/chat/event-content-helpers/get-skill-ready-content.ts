@@ -1,6 +1,14 @@
 import { TextContent } from "#/types/v1/core/base/common";
 
 /**
+ * Represents a single activated skill with its name and associated content.
+ */
+export interface SkillReadyItem {
+  name: string;
+  content: string;
+}
+
+/**
  * Extracts all text content from an array of TextContent items.
  */
 const extractAllText = (extendedContent: TextContent[]): string =>
@@ -79,23 +87,23 @@ const formatExtendedContentOnly = (extraInfoBlocks: string[]): string => {
 };
 
 /**
+ * Extracts EXTRA_INFO blocks from extended content.
+ */
+const getExtraInfoBlocks = (extendedContent: TextContent[]): string[] => {
+  if (!extendedContent || extendedContent.length === 0) return [];
+  return extractExtraInfoBlocks(extractAllText(extendedContent));
+};
+
+/**
  * Formats activated skills and extended content into markdown for display.
- * Similar to how v0 formats microagent knowledge in recall observations.
- *
  * Each skill is paired with its corresponding <EXTRA_INFO> block by index.
  */
 export const getSkillReadyContent = (
   activatedSkills: string[],
   extendedContent: TextContent[],
 ): string => {
-  // Extract all <EXTRA_INFO> blocks from extended_content
-  const extraInfoBlocks: string[] = [];
-  if (extendedContent && extendedContent.length > 0) {
-    const allText = extractAllText(extendedContent);
-    extraInfoBlocks.push(...extractExtraInfoBlocks(allText));
-  }
+  const extraInfoBlocks = getExtraInfoBlocks(extendedContent);
 
-  // Format output based on what we have
   if (activatedSkills && activatedSkills.length > 0) {
     return formatSkillKnowledge(activatedSkills, extraInfoBlocks);
   }
@@ -105,4 +113,34 @@ export const getSkillReadyContent = (
   }
 
   return "";
+};
+
+/**
+ * Returns structured skill items with their names and associated content.
+ * Each skill is paired with its corresponding <EXTRA_INFO> block by index.
+ */
+export const getSkillReadyItems = (
+  activatedSkills: string[],
+  extendedContent: TextContent[],
+): SkillReadyItem[] => {
+  const extraInfoBlocks = getExtraInfoBlocks(extendedContent);
+
+  if (activatedSkills && activatedSkills.length > 0) {
+    return activatedSkills.map((skill, index) => ({
+      name: skill,
+      content:
+        index < extraInfoBlocks.length ? extraInfoBlocks[index].trim() : "",
+    }));
+  }
+
+  if (extraInfoBlocks.length > 0) {
+    return extraInfoBlocks
+      .filter((block) => block.trim().length > 0)
+      .map((block, index) => ({
+        name: `Extended Content ${index + 1}`,
+        content: block.trim(),
+      }));
+  }
+
+  return [];
 };

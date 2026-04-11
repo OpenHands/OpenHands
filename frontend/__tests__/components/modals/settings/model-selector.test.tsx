@@ -3,7 +3,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 
-// Mock react-i18next
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
@@ -32,15 +31,20 @@ describe("ModelSelector", () => {
       separator: "/",
       models: ["chat-bison", "chat-bison-32k"],
     },
-    cohere: {
-      separator: ".",
-      models: ["command-r-v1:0"],
-    },
   };
+
+  const verifiedModels = ["gpt-4o", "gpt-4o-mini"];
+  const verifiedProviders = ["openai"];
 
   it("should display the provider selector", async () => {
     const user = userEvent.setup();
-    render(<ModelSelector models={models} />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+      />,
+    );
 
     const selector = screen.getByLabelText("LLM Provider");
     expect(selector).toBeInTheDocument();
@@ -50,12 +54,17 @@ describe("ModelSelector", () => {
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Azure")).toBeInTheDocument();
     expect(screen.getByText("VertexAI")).toBeInTheDocument();
-    expect(screen.getByText("cohere")).toBeInTheDocument();
   });
 
   it("should disable the model selector if the provider is not selected", async () => {
     const user = userEvent.setup();
-    render(<ModelSelector models={models} />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+      />,
+    );
 
     const modelSelector = screen.getByLabelText("LLM Model");
     expect(modelSelector).toBeDisabled();
@@ -71,7 +80,13 @@ describe("ModelSelector", () => {
 
   it("should display the model selector", async () => {
     const user = userEvent.setup();
-    render(<ModelSelector models={models} />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+      />,
+    );
 
     const providerSelector = screen.getByLabelText("LLM Provider");
     await user.click(providerSelector);
@@ -84,51 +99,43 @@ describe("ModelSelector", () => {
 
     expect(screen.getByText("ada")).toBeInTheDocument();
     expect(screen.getByText("gpt-35-turbo")).toBeInTheDocument();
-
-    await user.click(providerSelector);
-    const vertexProvider = screen.getByText("VertexAI");
-    await user.click(vertexProvider);
-
-    await user.click(modelSelector);
-
-    // Test fails when expecting these values to be present.
-    // My hypothesis is that it has something to do with NextUI's
-    // list virtualization
-
-    // expect(screen.getByText("chat-bison")).toBeInTheDocument();
-    // expect(screen.getByText("chat-bison-32k")).toBeInTheDocument();
   });
 
-  it("should call onModelChange when the model is changed", async () => {
+  it("should call onChange when the provider and model change", async () => {
     const user = userEvent.setup();
-    render(<ModelSelector models={models} />);
+    const onChange = vi.fn();
+
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+        onChange={onChange}
+      />,
+    );
 
     const providerSelector = screen.getByLabelText("LLM Provider");
-    const modelSelector = screen.getByLabelText("LLM Model");
-
     await user.click(providerSelector);
     await user.click(screen.getByText("Azure"));
 
+    const modelSelector = screen.getByLabelText("LLM Model");
     await user.click(modelSelector);
     await user.click(screen.getByText("ada"));
 
-    await user.click(modelSelector);
-    await user.click(screen.getByText("gpt-35-turbo"));
-
-    await user.click(providerSelector);
-    await user.click(screen.getByText("cohere"));
-
-    await user.click(modelSelector);
-
-    // Test fails when expecting this values to be present.
-    // My hypothesis is that it has something to do with NextUI's
-    // list virtualization
-
-    // await user.click(screen.getByText("command-r-v1:0"));
+    expect(onChange).toHaveBeenNthCalledWith(1, "azure", null);
+    expect(onChange).toHaveBeenNthCalledWith(2, "azure", "ada");
   });
 
+
   it("should have a default value if passed", async () => {
-    render(<ModelSelector models={models} currentModel="azure/ada" />);
+    render(
+      <ModelSelector
+        models={models}
+        verifiedModels={verifiedModels}
+        verifiedProviders={verifiedProviders}
+        currentModel="azure/ada"
+      />,
+    );
 
     expect(screen.getByLabelText("LLM Provider")).toHaveValue("Azure");
     expect(screen.getByLabelText("LLM Model")).toHaveValue("ada");

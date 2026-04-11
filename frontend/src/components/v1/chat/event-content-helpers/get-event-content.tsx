@@ -263,10 +263,22 @@ export const getEventContent = (
     } else {
       details = getObservationContent(event);
     }
+  } else if (
+    // Lenient fallback for action-like events that fail the strict isActionEvent() guard
+    // (e.g., missing tool_name or tool_call_id). Extract a title from the action kind
+    // so the UI shows something meaningful instead of "Unknown event".
+    event.source === "agent" &&
+    "action" in event &&
+    event.action !== null &&
+    typeof event.action === "object" &&
+    "kind" in event.action &&
+    typeof event.action.kind === "string"
+  ) {
+    title = String(event.action.kind).replace("Action", "").toUpperCase();
   }
 
   return {
     title: title || i18n.t("EVENT$UNKNOWN_EVENT"),
-    details: details || i18n.t("EVENT$UNKNOWN_EVENT"),
+    details,
   };
 };

@@ -101,6 +101,9 @@ class StoredConversationMetadata(Base):  # type: ignore
     parent_conversation_id = Column(String, nullable=True, index=True)
     public = Column(Boolean, nullable=True, index=True)
 
+    # Tags for conversation metadata (e.g., automation context, skills used)
+    tags = Column(create_json_type_decorator(dict[str, str]), nullable=True)
+
 
 @dataclass
 class SQLAppConversationInfoService(AppConversationInfoService):
@@ -364,6 +367,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 else None
             ),
             public=info.public,
+            tags=info.tags if info.tags else None,
         )
 
         await self.db_session.merge(stored)
@@ -551,6 +555,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             ),
             sub_conversation_ids=sub_conversation_ids or [],
             public=stored.public,
+            tags=stored.tags or {},
             created_at=created_at,
             updated_at=updated_at,
         )

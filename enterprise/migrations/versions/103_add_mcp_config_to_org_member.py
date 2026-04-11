@@ -6,6 +6,7 @@ Create Date: 2026-03-26
 
 """
 
+import json
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -33,7 +34,7 @@ def upgrade() -> None:
             sa.text(
                 'UPDATE org_member SET mcp_config = :config WHERE org_id = :org_id'
             ),
-            {'config': mcp_config, 'org_id': str(org_id)},
+            {'config': json.dumps(mcp_config), 'org_id': str(org_id)},
         )
 
 

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
+from openhands.app_server.secrets.secrets_router import check_provider_tokens
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import OwnerType, Repository
@@ -17,7 +18,6 @@ from openhands.resolver.interfaces.issue import Issue
 from openhands.resolver.interfaces.issue_definitions import ServiceContextIssue
 from openhands.resolver.send_pull_request import PR_SIGNATURE, send_pull_request
 from openhands.runtime.base import Runtime
-from openhands.server.routes.secrets import check_provider_tokens
 from openhands.server.settings import POSTProviderModel
 from openhands.server.types import AppMode
 
@@ -412,9 +412,10 @@ async def test_check_provider_tokens_with_only_bitbucket():
 
     # Call check_provider_tokens with the patched validate_provider_token
     with patch(
-        'openhands.server.routes.secrets.validate_provider_token', mock_validate
+        'openhands.app_server.secrets.secrets_router.validate_provider_token',
+        mock_validate,
     ):
-        result = await check_provider_tokens(post_model, None)
+        await check_provider_tokens(post_model, None)
 
         # Verify that validate_provider_token was called only once (for Bitbucket)
         assert mock_validate.call_count == 1
@@ -422,9 +423,6 @@ async def test_check_provider_tokens_with_only_bitbucket():
         # Verify that the token passed to validate_provider_token was the Bitbucket token
         args, kwargs = mock_validate.call_args
         assert args[0].get_secret_value() == 'username:app_password'
-
-        # Verify that no error message was returned
-        assert result == ''
 
 
 @pytest.mark.asyncio

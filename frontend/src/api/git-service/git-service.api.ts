@@ -2,12 +2,7 @@ import { openHands } from "../open-hands-axios";
 import { Provider } from "#/types/settings";
 import { GitRepository, PaginatedBranchesResponse, Branch } from "#/types/git";
 import { extractNextPageFromLink } from "#/utils/extract-next-page-from-link";
-import { RepositoryMicroagent } from "#/types/microagent-management";
-import {
-  MicroagentContentResponse,
-  GitChange,
-  GitChangeDiff,
-} from "../open-hands.types";
+import { GitChange, GitChangeDiff } from "../open-hands.types";
 import ConversationService from "../conversation-service/conversation-service.api";
 
 /**
@@ -171,43 +166,6 @@ class GitService {
           per_page: perPage,
           selected_provider: selectedProvider,
         },
-      },
-    );
-    return data;
-  }
-
-  /**
-   * Get the available microagents for a repository
-   * @param owner The repository owner
-   * @param repo The repository name
-   * @returns The available microagents for the repository
-   */
-  static async getRepositoryMicroagents(
-    owner: string,
-    repo: string,
-  ): Promise<RepositoryMicroagent[]> {
-    const { data } = await openHands.get<RepositoryMicroagent[]>(
-      `/api/user/repository/${owner}/${repo}/microagents`,
-    );
-    return data;
-  }
-
-  /**
-   * Get the content of a specific microagent from a repository
-   * @param owner The repository owner
-   * @param repo The repository name
-   * @param filePath The path to the microagent file within the repository
-   * @returns The microagent content and metadata
-   */
-  static async getRepositoryMicroagentContent(
-    owner: string,
-    repo: string,
-    filePath: string,
-  ): Promise<MicroagentContentResponse> {
-    const { data } = await openHands.get<MicroagentContentResponse>(
-      `/api/user/repository/${owner}/${repo}/microagents/content`,
-      {
-        params: { file_path: filePath },
       },
     );
     return data;

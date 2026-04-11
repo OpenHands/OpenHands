@@ -52,7 +52,7 @@ export function ContextMenuCTA() {
               "inline-flex items-center justify-center",
               "h-[40px] px-4 rounded-[4px]",
               "bg-[#050505] border border-[#242424]",
-              "text-white hover:bg-[#0a0a0a]",
+              "text-white hover:bg-white hover:text-black",
               "font-semibold text-sm",
             )}
           >
