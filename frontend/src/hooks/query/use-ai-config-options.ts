@@ -82,9 +82,7 @@ const fetchAiConfigOptions = async (): Promise<AIConfigOptions> => {
     .filter((model, index, self) => self.indexOf(model) === index); // Remove duplicates
 
   // Extract verified model names (without provider prefix)
-  const verifiedModels = allModels
-    .filter((m) => m.verified)
-    .map((m) => m.name);
+  const verifiedModels = allModels.filter((m) => m.verified).map((m) => m.name);
 
   // Get security analyzers from the deprecated endpoint (still needed)
   // We could also migrate this to V1 if there's a V1 security-analyzers endpoint

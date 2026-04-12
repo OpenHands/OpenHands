@@ -1,8 +1,5 @@
 import { openHands } from "../open-hands-axios";
-import type {
-  LLMModelPage,
-  SearchModelsParams,
-} from "./config-service.types";
+import type { LLMModelPage, SearchModelsParams } from "./config-service.types";
 
 /**
  * Service for handling V1 Config API endpoints
