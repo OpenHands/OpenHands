@@ -32,7 +32,7 @@ import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 
-const DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-5-20251101";
+const DEFAULT_OPENHANDS_MODEL = "openhands/minimax-m2.7";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -71,7 +71,7 @@ function LlmSettingsScreen() {
 
   const { mutate: saveSettings, isPending } = useSaveSettings();
 
-  const { data: resources } = useAIConfigOptions();
+  const { data: securityAnalyzers } = useAIConfigOptions();
   const { data: providers = [] } = useSearchProviders();
   const { data: settings, isLoading, isFetching } = useSettings();
   const { data: config } = useConfig();
@@ -133,7 +133,7 @@ function LlmSettingsScreen() {
     null,
   );
 
-  const defaultModel = resources?.defaultModel || DEFAULT_OPENHANDS_MODEL;
+  const defaultModel = DEFAULT_OPENHANDS_MODEL;
 
   // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
   const currentModel = currentSelectedModel || settings?.llm_model;
@@ -448,7 +448,7 @@ function LlmSettingsScreen() {
   const formIsDirty = Object.values(dirtyInputs).some((isDirty) => isDirty);
 
   const getSecurityAnalyzerOptions = () => {
-    const analyzers = resources?.securityAnalyzers || [];
+    const analyzers = securityAnalyzers || [];
     const orderedItems = [];
 
     // Add LLM analyzer first

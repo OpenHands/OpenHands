@@ -82,6 +82,7 @@ const MOCK_MODELS = [
   "openhands/claude-sonnet-4-5-20250929",
   "openhands/claude-haiku-4-5-20251001",
   "openhands/claude-opus-4-5-20251101",
+  "openhands/minimax-m2.7",
   "sambanova/Meta-Llama-3.1-8B-Instruct",
 ];
 
@@ -90,6 +91,7 @@ const MOCK_VERIFIED_MODELS = new Set([
   "anthropic/claude-sonnet-4-5-20250929",
   "openhands/claude-opus-4-5-20251101",
   "openhands/claude-sonnet-4-5-20250929",
+  "openhands/minimax-m2.7",
 ]);
 
 const MOCK_VERIFIED_PROVIDERS = [
@@ -115,7 +117,7 @@ export const SETTINGS_HANDLERS = [
         "claude-sonnet-4-5-20250929",
       ],
       verified_providers: MOCK_VERIFIED_PROVIDERS,
-      default_model: "openhands/claude-opus-4-5-20251101",
+      default_model: "openhands/minimax-m2.7",
     }),
   ),
 
