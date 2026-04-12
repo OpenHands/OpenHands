@@ -1,50 +1,41 @@
 import { openHands } from "../open-hands-axios";
-import type { LLMModelPage, SearchModelsParams } from "./config-service.types";
+import type {
+  LLMModelPage,
+  ProviderPage,
+  SearchModelsParams,
+  SearchProvidersParams,
+} from "./config-service.types";
 
-/**
- * Service for handling V1 Config API endpoints
- */
+function toSearchParams(
+  params: SearchModelsParams | SearchProvidersParams,
+): string {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) {
+      searchParams.append(key, String(value));
+    }
+  }
+  return searchParams.toString();
+}
+
 class ConfigService {
-  /**
-   * Search for LLM models with pagination and filtering.
-   *
-   * @param params - Search parameters including pagination, query, verified status, and provider filter
-   * @returns Paginated list of LLM models
-   */
   static async searchModels(
     params: SearchModelsParams = {},
   ): Promise<LLMModelPage> {
-    const searchParams = new URLSearchParams();
-
-    if (params.page_id) {
-      searchParams.append("page_id", params.page_id);
-    }
-    if (params.limit) {
-      searchParams.append("limit", params.limit.toString());
-    }
-    if (params.query) {
-      searchParams.append("query", params.query);
-    }
-    if (params.verified__eq !== undefined) {
-      searchParams.append("verified__eq", params.verified__eq.toString());
-    }
-    if (params.provider__eq) {
-      searchParams.append("provider__eq", params.provider__eq);
-    }
-
+    const qs = toSearchParams(params);
     const { data } = await openHands.get<LLMModelPage>(
-      `/api/v1/config/models/search?${searchParams.toString()}`,
+      `/api/v1/config/models/search?${qs}`,
     );
     return data;
   }
 
-  /**
-   * Get the list of verified providers.
-   *
-   * @returns List of verified provider names
-   */
-  static async getProviders(): Promise<string[]> {
-    const { data } = await openHands.get<string[]>("/api/v1/config/providers");
+  static async searchProviders(
+    params: SearchProvidersParams = {},
+  ): Promise<ProviderPage> {
+    const qs = toSearchParams(params);
+    const { data } = await openHands.get<ProviderPage>(
+      `/api/v1/config/providers/search?${qs}`,
+    );
     return data;
   }
 }

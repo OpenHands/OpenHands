@@ -4,12 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class LLMModel(BaseModel):
-    """LLM Model object for API responses.
-
-    Attributes:
-        name: The model name.
-        verified: Whether the model is verified by OpenHands.
-    """
+    """LLM Model object for API responses."""
 
     provider: str | None = Field(
         default=None, description='The name of the provider for this model'
@@ -21,12 +16,23 @@ class LLMModel(BaseModel):
 
 
 class LLMModelPage(BaseModel):
-    """Paginated response for LLM models.
-
-    Attributes:
-        items: List of LLM models in the current page.
-        next_page_id: ID for the next page, or None if there are no more pages.
-    """
+    """Paginated response for LLM models."""
 
     items: list[LLMModel]
+    next_page_id: str | None = None
+
+
+class Provider(BaseModel):
+    """LLM Provider object for API responses."""
+
+    name: str = Field(description='The provider name')
+    verified: bool = Field(
+        default=False, description='Whether the provider is verified by OpenHands'
+    )
+
+
+class ProviderPage(BaseModel):
+    """Paginated response for LLM providers."""
+
+    items: list[Provider]
     next_page_id: str | None = None
