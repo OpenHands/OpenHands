@@ -1,10 +1,12 @@
 """Configuration for the OpenHands App Server."""
 
+import logging
 import os
 from pathlib import Path
 from typing import AsyncContextManager
 
 import httpx
+import tomllib
 from fastapi import Depends, Request
 from pydantic import Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +63,129 @@ from openhands.app_server.web_client.web_client_config_injector import (
 from openhands.sdk.utils.models import OpenHandsModel
 from openhands.server.types import AppMode
 from openhands.utils.environment import StorageProvider, get_storage_provider
+
+_logger = logging.getLogger(__name__)
+
+
+def _env_var_is_set(name: str) -> bool:
+    value = os.getenv(name)
+    return value is not None and value != ''
+
+
+def _env_has_prefix(prefix: str) -> bool:
+    return any(key.startswith(prefix) and _env_var_is_set(key) for key in os.environ)
+
+
+def _resolve_app_server_toml_path() -> Path | None:
+    """Resolve app-server TOML config path.
+
+    Resolution order:
+    1. `OH_CONFIG_FILE` or `OPENHANDS_CONFIG_FILE` when set.
+    2. `docker.toml` in current working directory.
+    3. `config.toml` in current working directory.
+    4. `/app/docker.toml`.
+    5. `/app/config.toml`.
+    """
+    explicit_path = os.getenv('OH_CONFIG_FILE') or os.getenv('OPENHANDS_CONFIG_FILE')
+    if explicit_path:
+        resolved = Path(explicit_path).expanduser()
+        if resolved.is_file():
+            return resolved
+        _logger.warning('Configured app server TOML file was not found: %s', resolved)
+        return None
+
+    candidates = [
+        Path.cwd() / 'docker.toml',
+        Path.cwd() / 'config.toml',
+        Path('/app/docker.toml'),
+        Path('/app/config.toml'),
+    ]
+    seen: set[Path] = set()
+    for candidate in candidates:
+        candidate = candidate.expanduser()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _load_app_server_toml() -> dict | None:
+    path = _resolve_app_server_toml_path()
+    if path is None:
+        return None
+    try:
+        with path.open('rb') as file_handle:
+            config = tomllib.load(file_handle)
+        _logger.info('Loaded app-server TOML configuration from %s', path)
+        return config
+    except tomllib.TOMLDecodeError as e:
+        _logger.warning('Failed to parse app-server TOML file %s: %s', path, e)
+    except OSError as e:
+        _logger.warning('Failed to read app-server TOML file %s: %s', path, e)
+    return None
+
+
+def _parse_mounts(mounts_spec: str):
+    """Parse legacy volume mount string into docker sandbox mounts."""
+    from openhands.app_server.sandbox.docker_sandbox_service import VolumeMount
+
+    mounts = []
+    for mount_spec in mounts_spec.split(','):
+        mount_spec = mount_spec.strip()
+        if not mount_spec:
+            continue
+        parts = mount_spec.split(':')
+        if len(parts) < 2:
+            _logger.warning('Skipping invalid mount spec %r in TOML config', mount_spec)
+            continue
+
+        host_path = parts[0].strip()
+        container_path = parts[1].strip()
+        mode = parts[2].strip() if len(parts) > 2 and parts[2].strip() else 'rw'
+        mounts.append(
+            VolumeMount(
+                host_path=host_path,
+                container_path=container_path,
+                mode=mode,
+            )
+        )
+    return mounts
+
+
+def _extract_container_ports_from_publish_args(args: list[str]) -> list[int]:
+    """Extract container ports from docker publish args (e.g. `-p 8080:8080`)."""
+    ports: list[int] = []
+    i = 0
+    while i < len(args):
+        arg = args[i].strip()
+        publish_spec: str | None = None
+
+        if arg in ('-p', '--publish') and i + 1 < len(args):
+            publish_spec = args[i + 1].strip()
+            i += 1
+        elif arg.startswith('-p '):
+            publish_spec = arg[3:].strip()
+        elif arg.startswith('--publish '):
+            publish_spec = arg[len('--publish ') :].strip()
+        elif arg.startswith('--publish='):
+            publish_spec = arg[len('--publish=') :].strip()
+
+        if publish_spec:
+            # Support publish specs like:
+            # - 8080
+            # - 8080:8080
+            # - 127.0.0.1:8080:8080/tcp
+            container_part = publish_spec.split(':')[-1].split('/')[0].strip()
+            if container_part.isdigit():
+                port = int(container_part)
+                if port not in ports:
+                    ports.append(port)
+
+        i += 1
+
+    return ports
 
 
 def get_default_persistence_dir() -> Path:
@@ -161,6 +286,127 @@ class AppServerConfig(OpenHandsModel):
     web_client: WebClientConfigInjector = Field(
         default_factory=DefaultWebClientConfigInjector
     )
+
+
+def _apply_toml_overrides(config: AppServerConfig) -> None:
+    """Apply TOML configuration overrides to app server config.
+
+    TOML values are treated as defaults and are only applied when no environment
+    variable override is present.
+    """
+    toml_config = _load_app_server_toml()
+    if not toml_config or not isinstance(toml_config, dict):
+        return
+
+    app_server_section = toml_config.get('app_server')
+    if isinstance(app_server_section, dict):
+        if (
+            not _env_var_is_set('OH_WEB_URL')
+            and not _env_var_is_set('WEB_HOST')
+            and isinstance(app_server_section.get('web_url'), str)
+        ):
+            config.web_url = app_server_section['web_url']
+
+        if (
+            not _env_has_prefix('OH_PERMITTED_CORS_ORIGINS_')
+            and not _env_var_is_set('PERMITTED_CORS_ORIGINS')
+            and isinstance(app_server_section.get('permitted_cors_origins'), list)
+        ):
+            configured_origins = [
+                item
+                for item in app_server_section['permitted_cors_origins']
+                if isinstance(item, str)
+            ]
+            if configured_origins:
+                config.permitted_cors_origins = configured_origins
+
+    # Support both the V1 section ([app_server.sandbox]) and legacy section ([sandbox]).
+    sandbox_section = None
+    if isinstance(app_server_section, dict) and isinstance(
+        app_server_section.get('sandbox'), dict
+    ):
+        sandbox_section = app_server_section['sandbox']
+    elif isinstance(toml_config.get('sandbox'), dict):
+        sandbox_section = toml_config['sandbox']
+
+    if sandbox_section is None:
+        return
+
+    from openhands.app_server.sandbox.docker_sandbox_service import (
+        DockerSandboxServiceInjector,
+        ExposedPort,
+    )
+
+    if not isinstance(config.sandbox, DockerSandboxServiceInjector):
+        return
+
+    if (
+        not _env_var_is_set('AGENT_SERVER_USE_HOST_NETWORK')
+        and not _env_var_is_set('OH_SANDBOX_USE_HOST_NETWORK')
+        and isinstance(sandbox_section.get('use_host_network'), bool)
+    ):
+        config.sandbox.use_host_network = sandbox_section['use_host_network']
+
+    if (
+        not _env_var_is_set('SANDBOX_HOST_PORT')
+        and not _env_var_is_set('OH_SANDBOX_HOST_PORT')
+        and isinstance(sandbox_section.get('host_port'), int)
+    ):
+        config.sandbox.host_port = sandbox_section['host_port']
+
+    if (
+        not _env_var_is_set('SANDBOX_CONTAINER_URL_PATTERN')
+        and not _env_var_is_set('OH_SANDBOX_CONTAINER_URL_PATTERN')
+        and isinstance(sandbox_section.get('container_url_pattern'), str)
+    ):
+        config.sandbox.container_url_pattern = sandbox_section['container_url_pattern']
+
+    if (
+        not _env_var_is_set('SANDBOX_STARTUP_GRACE_SECONDS')
+        and not _env_var_is_set('OH_SANDBOX_STARTUP_GRACE_SECONDS')
+        and isinstance(sandbox_section.get('startup_grace_seconds'), int)
+    ):
+        config.sandbox.startup_grace_seconds = sandbox_section['startup_grace_seconds']
+
+    if not _env_var_is_set('SANDBOX_VOLUMES') and not _env_has_prefix(
+        'OH_SANDBOX_MOUNTS_'
+    ):
+        volumes = sandbox_section.get('volumes')
+        if isinstance(volumes, str):
+            parsed_mounts = _parse_mounts(volumes)
+            if parsed_mounts:
+                config.sandbox.mounts = parsed_mounts
+
+    # Compatibility path: support legacy runtime_extra_build_args publish flags
+    # by turning them into additional exposed container ports in V1 docker sandboxes.
+    if not _env_has_prefix('OH_SANDBOX_EXPOSED_PORTS_') and isinstance(
+        sandbox_section.get('runtime_extra_build_args'), list
+    ):
+        parsed_args = [
+            arg
+            for arg in sandbox_section['runtime_extra_build_args']
+            if isinstance(arg, str)
+        ]
+        custom_ports = _extract_container_ports_from_publish_args(parsed_args)
+        if custom_ports:
+            existing_ports = {
+                exposed_port.container_port
+                for exposed_port in config.sandbox.exposed_ports
+            }
+            extra_ports = [
+                ExposedPort(
+                    name=f'CUSTOM_{port}',
+                    description='Custom sandbox port from TOML runtime_extra_build_args',
+                    container_port=port,
+                )
+                for port in custom_ports
+                if port not in existing_ports
+            ]
+            if extra_ports:
+                config.sandbox.exposed_ports = [
+                    *config.sandbox.exposed_ports,
+                    *extra_ports,
+                ]
 
 
 def config_from_env() -> AppServerConfig:
@@ -266,27 +512,7 @@ def config_from_env() -> AppServerConfig:
             # This is set by the CLI's --mount-cwd flag
             sandbox_volumes = os.getenv('SANDBOX_VOLUMES')
             if sandbox_volumes:
-                from openhands.app_server.sandbox.docker_sandbox_service import (
-                    VolumeMount,
-                )
-
-                mounts = []
-                for mount_spec in sandbox_volumes.split(','):
-                    mount_spec = mount_spec.strip()
-                    if not mount_spec:
-                        continue
-                    parts = mount_spec.split(':')
-                    if len(parts) >= 2:
-                        host_path = parts[0]
-                        container_path = parts[1]
-                        mode = parts[2] if len(parts) > 2 else 'rw'
-                        mounts.append(
-                            VolumeMount(
-                                host_path=host_path,
-                                container_path=container_path,
-                                mode=mode,
-                            )
-                        )
+                mounts = _parse_mounts(sandbox_volumes)
                 if mounts:
                     docker_sandbox_kwargs['mounts'] = mounts
             config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
@@ -328,6 +554,8 @@ def config_from_env() -> AppServerConfig:
 
     if config.jwt is None:
         config.jwt = JwtServiceInjector(persistence_dir=config.persistence_dir)
+
+    _apply_toml_overrides(config)
 
     return config
 
