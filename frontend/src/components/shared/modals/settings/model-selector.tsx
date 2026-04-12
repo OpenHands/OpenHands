@@ -41,7 +41,11 @@ export function ModelSelector({
   const [selectedModel, setSelectedModel] = React.useState<string | null>(null);
 
   const { data: providers = [] } = useSearchProviders();
-  const { data: providerModels = [] } = useProviderModels(selectedProvider);
+  const {
+    data: providerModels = [],
+    isLoading: isLoadingModels,
+    error: modelsError,
+  } = useProviderModels(selectedProvider);
 
   const verifiedProviders = React.useMemo(
     () => providers.filter((p) => p.verified),
@@ -174,6 +178,7 @@ export function ModelSelector({
           data-testid="llm-model-input"
           isRequired
           isVirtualized={false}
+          isLoading={isLoadingModels}
           name="llm-model-input"
           aria-label={t(I18nKey.LLM$MODEL)}
           placeholder={t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER)}
@@ -212,6 +217,11 @@ export function ModelSelector({
             </AutocompleteSection>
           ) : null}
         </Autocomplete>
+        {modelsError && (
+          <p data-testid="models-error" className="text-danger text-xs">
+            {t(I18nKey.CONFIGURATION$ERROR_FETCH_MODELS)}
+          </p>
+        )}
       </fieldset>
     </div>
   );
