@@ -41,7 +41,7 @@ jobs:
         working-directory: ./frontend
         run: npx playwright test --project=chromium
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
