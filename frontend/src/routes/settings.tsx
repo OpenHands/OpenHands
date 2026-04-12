@@ -19,7 +19,10 @@ import {
 } from "#/utils/settings-utils";
 import { useMe } from "#/hooks/query/use-me";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
-import { useConfig } from "#/hooks/query/use-config";
+import {
+  useConfig,
+  WEB_CLIENT_CONFIG_QUERY_KEY,
+} from "#/hooks/query/use-config";
 import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 
 const SAAS_ONLY_PATHS = [
@@ -36,10 +39,16 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const { pathname } = url;
 
   // Step 1: Get config first (needed for all checks, no user data required)
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
+  // Check cache first - reuses data from useConfig hook if available
+  let config = queryClient.getQueryData<WebClientConfig>(
+    WEB_CLIENT_CONFIG_QUERY_KEY,
+  );
   if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
+    // Fetch with deduplication - shares in-flight requests automatically
+    config = await queryClient.fetchQuery<WebClientConfig>({
+      queryKey: WEB_CLIENT_CONFIG_QUERY_KEY,
+      queryFn: OptionService.getConfig,
+    });
   }
 
   const isSaas = config?.app_mode === "saas";

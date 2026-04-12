@@ -17,12 +17,19 @@ import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import { getFirstAvailablePath } from "#/utils/settings-utils";
+import { WEB_CLIENT_CONFIG_QUERY_KEY } from "#/hooks/query/use-config";
 
 export const clientLoader = async () => {
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
+  // Check cache first - reuses data from useConfig hook if available
+  let config = queryClient.getQueryData<WebClientConfig>(
+    WEB_CLIENT_CONFIG_QUERY_KEY,
+  );
   if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
+    // Fetch with deduplication - shares in-flight requests automatically
+    config = await queryClient.fetchQuery<WebClientConfig>({
+      queryKey: WEB_CLIENT_CONFIG_QUERY_KEY,
+      queryFn: OptionService.getConfig,
+    });
   }
 
   const isSaas = config?.app_mode === "saas";

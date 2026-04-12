@@ -1,21 +1,30 @@
 import { redirect } from "react-router";
-import OptionService from "#/api/option-service/option-service.api";
-import { WebClientConfig } from "#/api/option-service/option.types";
 import { queryClient } from "#/query-client-config";
 import { getFirstAvailablePath } from "#/utils/settings-utils";
 import { getActiveOrganizationUser } from "./permission-checks";
 import { PermissionKey, rolePermissions } from "./permissions";
+import OptionService from "#/api/option-service/option-service.api";
+import { WebClientConfig } from "#/api/option-service/option.types";
+import { WEB_CLIENT_CONFIG_QUERY_KEY } from "#/hooks/query/use-config";
 
 /**
- * Helper to get config, using cache or fetching if needed.
+ * Helper to get config from React Query cache, with fetchQuery fallback for deduplication.
+ * - Uses cached data if available (e.g., from useConfig hook)
+ * - Uses fetchQuery for automatic request deduplication when fetching
  */
 async function getConfig(): Promise<WebClientConfig | undefined> {
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
-  if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
+  // Check cache first - this reuses data from useConfig hook
+  const cached = queryClient.getQueryData<WebClientConfig>(
+    WEB_CLIENT_CONFIG_QUERY_KEY,
+  );
+  if (cached) {
+    return cached;
   }
-  return config;
+  // Fetch with deduplication - shares in-flight requests automatically
+  return queryClient.fetchQuery<WebClientConfig>({
+    queryKey: WEB_CLIENT_CONFIG_QUERY_KEY,
+    queryFn: OptionService.getConfig,
+  });
 }
 
 /**

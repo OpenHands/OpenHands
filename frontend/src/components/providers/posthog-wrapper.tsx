@@ -1,7 +1,6 @@
 import React from "react";
 import { PostHogProvider } from "posthog-js/react";
-import OptionService from "#/api/option-service/option-service.api";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useConfig } from "#/hooks/query/use-config";
 
 const POSTHOG_BOOTSTRAP_KEY = "posthog_bootstrap";
 
@@ -38,32 +37,16 @@ function getBootstrapIds() {
 }
 
 export function PostHogWrapper({ children }: { children: React.ReactNode }) {
-  const [posthogClientKey, setPosthogClientKey] = React.useState<string | null>(
-    null,
-  );
-  const [isLoading, setIsLoading] = React.useState(true);
+  const { data: config, isLoading: isConfigLoading } = useConfig();
   const bootstrapIds = React.useMemo(() => getBootstrapIds(), []);
 
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const config = await OptionService.getConfig();
-        setPosthogClientKey(config.posthog_client_key);
-      } catch {
-        displayErrorToast("Error fetching PostHog client key");
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, []);
-
-  if (isLoading || !posthogClientKey) {
+  if (isConfigLoading || !config?.posthog_client_key) {
     return children;
   }
 
   return (
     <PostHogProvider
-      apiKey={posthogClientKey}
+      apiKey={config.posthog_client_key}
       options={{
         api_host: "https://us.i.posthog.com",
         person_profiles: "identified_only",

@@ -10,19 +10,31 @@ vi.mock("#/utils/org/permission-checks", () => ({
   getActiveOrganizationUser: vi.fn(),
 }));
 
-vi.mock("#/api/option-service/option-service.api", () => ({
-  default: {
-    getConfig: vi.fn().mockResolvedValue({
-      app_mode: "saas",
-      feature_flags: {
-        hide_users_page: false,
-        hide_billing_page: false,
-        hide_integrations_page: false,
-        hide_llm_settings: false,
-      },
-    }),
-  },
-}));
+// Define mockConfig inside the factory to avoid hoisting issues
+vi.mock("#/query-client-config", () => {
+  const mockConfig = {
+    app_mode: "saas",
+    feature_flags: {
+      hide_users_page: false,
+      hide_billing_page: false,
+      hide_integrations_page: false,
+      hide_llm_settings: false,
+    },
+  };
+
+  return {
+    queryClient: {
+      getQueryData: vi.fn(() => mockConfig),
+      setQueryData: vi.fn(),
+      fetchQuery: vi.fn().mockResolvedValue(mockConfig),
+    },
+  };
+});
+
+// Import after mocks are set up
+import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { getActiveOrganizationUser } from "#/utils/org/permission-checks";
+import { queryClient } from "#/query-client-config";
 
 const mockConfig = {
   app_mode: "saas",
@@ -34,17 +46,6 @@ const mockConfig = {
   },
 };
 
-vi.mock("#/query-client-config", () => ({
-  queryClient: {
-    getQueryData: vi.fn(() => mockConfig),
-    setQueryData: vi.fn(),
-  },
-}));
-
-// Import after mocks are set up
-import { createPermissionGuard } from "#/utils/org/permission-guard";
-import { getActiveOrganizationUser } from "#/utils/org/permission-checks";
-
 // Helper to create a mock request
 const createMockRequest = (pathname: string = "/settings/billing") => ({
   request: new Request(`http://localhost${pathname}`),
@@ -53,6 +54,8 @@ const createMockRequest = (pathname: string = "/settings/billing") => ({
 describe("createPermissionGuard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset mocks to return config from cache
+    vi.mocked(queryClient.getQueryData).mockReturnValue(mockConfig);
   });
 
   afterEach(() => {

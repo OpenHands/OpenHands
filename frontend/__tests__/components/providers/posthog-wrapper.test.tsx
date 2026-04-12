@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { PostHogWrapper } from "#/components/providers/posthog-wrapper";
-import OptionService from "#/api/option-service/option-service.api";
 
 // Mock PostHogProvider to capture the options passed to it
 const mockPostHogProvider = vi.fn();
@@ -12,6 +11,14 @@ vi.mock("posthog-js/react", () => ({
   },
 }));
 
+// Mock the useConfig hook
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: vi.fn(() => ({
+    data: { posthog_client_key: "test-posthog-key" },
+    isLoading: false,
+  })),
+}));
+
 describe("PostHogWrapper", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -19,11 +26,6 @@ describe("PostHogWrapper", () => {
     window.location.hash = "";
     // Clear sessionStorage
     sessionStorage.clear();
-    // Mock the config fetch
-    // @ts-expect-error - partial mock
-    vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      posthog_client_key: "test-posthog-key",
-    });
   });
 
   it("should initialize PostHog with bootstrap IDs from URL hash (without ph_ prefix)", async () => {
