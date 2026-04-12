@@ -116,8 +116,12 @@ def check_dependencies(code_repo_path: str, check_browser: bool) -> None:
         except Exception:
             raise ValueError('tmux is not properly installed or available on the path.')
         pane = session.active_pane
-        pane.send_keys('echo "test"')
-        pane_output = '\n'.join(pane.cmd('capture-pane', '-p').stdout)
+
+        if pane:
+            pane.send_keys('echo "test"')
+            pane_output = '\n'.join(pane.cmd('capture-pane', '-p').stdout)
+        else:
+            pane_output = ''
         session.kill()
         if 'test' not in pane_output:
             raise ValueError('libtmux is not properly installed. ' + ERROR_MESSAGE)

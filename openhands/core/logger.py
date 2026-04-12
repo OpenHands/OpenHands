@@ -537,6 +537,42 @@ class OpenHandsLoggerAdapter(logging.LoggerAdapter):
         return msg, kwargs
 
 
+class RedactURLParamsFilter(logging.Filter):
+    """Logging filter that redacts sensitive query parameters from URLs.
+
+    Intercepts log records and applies ``redact_url_params`` to any string
+    argument that contains a query string, preventing secrets such as
+    ``session_api_key`` from appearing in uvicorn access logs.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        from openhands.utils._redact_compat import redact_url_params
+
+        if record.args and isinstance(record.args, (tuple, list)):
+            record.args = tuple(
+                redact_url_params(arg) if isinstance(arg, str) and '?' in arg else arg
+                for arg in record.args
+            )
+        return True
+
+
+def get_uvicorn_log_config() -> dict:
+    """Returns a uvicorn log config dict with URL-param redaction.
+
+    When ``LOG_JSON`` is enabled the config uses JSON formatters; otherwise it
+    uses uvicorn's default plain-text formatters.  In both cases a
+    :class:`RedactURLParamsFilter` is attached to the access-log handler so
+    that sensitive query parameters (e.g. ``session_api_key``) are never
+    written to logs.
+
+    Returns:
+        A dict suitable for passing to ``uvicorn.run(..., log_config=...)``.
+    """
+    if LOG_JSON:
+        return _uvicorn_json_log_config()
+    return _uvicorn_default_log_config()
+
+
 def get_uvicorn_json_log_config() -> dict:
     """Returns a uvicorn log config dict for JSON structured logging.
 
@@ -547,9 +583,18 @@ def get_uvicorn_json_log_config() -> dict:
     Returns:
         A dict suitable for passing to uvicorn.run(..., log_config=...).
     """
+    return _uvicorn_json_log_config()
+
+
+def _uvicorn_json_log_config() -> dict:
     return {
         'version': 1,
         'disable_existing_loggers': False,
+        'filters': {
+            'redact_url_params': {
+                '()': 'openhands.core.logger.RedactURLParamsFilter',
+            },
+        },
         'formatters': {
             # Uvicorn mutates 'default' and 'access' to set use_colors;
             # keep them present using Uvicorn formatters
@@ -584,6 +629,7 @@ def get_uvicorn_json_log_config() -> dict:
                 'class': 'logging.StreamHandler',
                 'level': 'INFO',
                 'formatter': 'json_access',
+                'filters': ['redact_url_params'],
                 'stream': 'ext://sys.stdout',
             },
         },
@@ -622,4 +668,56 @@ def get_uvicorn_json_log_config() -> dict:
             },
         },
         'root': {'level': 'INFO', 'handlers': ['default']},
+    }
+
+
+def _uvicorn_default_log_config() -> dict:
+    """Replicates uvicorn's default LOGGING_CONFIG with URL-param redaction."""
+    return {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'filters': {
+            'redact_url_params': {
+                '()': 'openhands.core.logger.RedactURLParamsFilter',
+            },
+        },
+        'formatters': {
+            'default': {
+                '()': 'uvicorn.logging.DefaultFormatter',
+                'fmt': '%(levelprefix)s %(message)s',
+                'use_colors': None,
+            },
+            'access': {
+                '()': 'uvicorn.logging.AccessFormatter',
+                'fmt': '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
+            },
+        },
+        'handlers': {
+            'default': {
+                'formatter': 'default',
+                'class': 'logging.StreamHandler',
+                'stream': 'ext://sys.stderr',
+            },
+            'access': {
+                'formatter': 'access',
+                'class': 'logging.StreamHandler',
+                'filters': ['redact_url_params'],
+                'stream': 'ext://sys.stdout',
+            },
+        },
+        'loggers': {
+            'uvicorn': {
+                'handlers': ['default'],
+                'level': 'INFO',
+                'propagate': False,
+            },
+            'uvicorn.error': {
+                'level': 'INFO',
+            },
+            'uvicorn.access': {
+                'handlers': ['access'],
+                'level': 'INFO',
+                'propagate': False,
+            },
+        },
     }
