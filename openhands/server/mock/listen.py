@@ -58,7 +58,7 @@ def read_llm_models() -> dict:
             'moonshot',
             'minimax',
         ],
-        'default_model': 'openhands/minimax-m2.7',
+        'default_model': 'openhands/claude-opus-4-5-20251101',
     }
 
 
