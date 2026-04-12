@@ -215,7 +215,7 @@ describe("Content", () => {
 
       await waitFor(() => {
         expect(provider).toHaveValue("OpenHands");
-        expect(model).toHaveValue("claude-opus-4-5-20251101");
+        expect(model).toHaveValue("minimax-m2.7");
 
         expect(apiKey).toHaveValue("");
         expect(apiKey).toHaveProperty("placeholder", "");
@@ -343,7 +343,7 @@ describe("Content", () => {
       const apiKey = screen.getByTestId("llm-api-key-input");
       const condensor = screen.getByTestId("enable-memory-condenser-switch");
 
-      expect(model).toHaveValue("openhands/claude-opus-4-5-20251101");
+      expect(model).toHaveValue("openhands/minimax-m2.7");
       expect(baseUrl).toHaveValue("");
       expect(apiKey).toHaveValue("");
       expect(apiKey).toHaveProperty("placeholder", "");
