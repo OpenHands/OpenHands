@@ -32,7 +32,7 @@ import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 
-const DEFAULT_OPENHANDS_MODEL = "openhands/minimax-m2.7";
+const DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-5-20251101";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
