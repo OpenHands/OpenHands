@@ -1,6 +1,12 @@
 from types import MappingProxyType
 
 from github import Auth, Github, GithubIntegration
+
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+from github.GithubException import RateLimitExceededException, GithubException
+
+def _is_retryable_github_error(exception):
+    return isinstance(exception, RateLimitExceededException) or (isinstance(exception, GithubException) and getattr(exception, 'status', 0) >= 500)
 from integrations.github.data_collector import GitHubDataCollector
 from integrations.github.github_solvability import summarize_issue_solvability
 from integrations.github.github_view import (
@@ -73,6 +79,11 @@ class GithubManager(Manager[GithubViewType]):
         token_data = self.github_integration.get_access_token(installation_id)
         return token_data.token
 
+    @retry(
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type(_is_retryable_github_error)
+    )
     def _add_reaction(
         self, github_view: ResolverViewInterface, reaction: str, installation_token: str
     ):
@@ -99,6 +110,11 @@ class GithubManager(Manager[GithubViewType]):
                 issue = repo.get_issue(github_view.issue_number)
                 issue.create_reaction(reaction)
 
+    @retry(
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type(_is_retryable_github_error)
+    )
     def _user_has_write_access_to_repo(
         self, installation_id: str, full_repo_name: str, username: str
     ) -> bool:
