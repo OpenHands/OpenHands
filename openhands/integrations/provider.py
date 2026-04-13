@@ -4,7 +4,7 @@ import os
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any, Coroutine, Literal, cast, overload
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 from pydantic import (
@@ -362,26 +362,36 @@ class ProviderHandler:
     ) -> list[Repository]:
         if selected_provider:
             service = self.get_service(selected_provider)
+            exact_match = await self._get_exact_repository_match(
+                selected_provider, query, service
+            )
             public = self._is_repository_url(query, selected_provider)
             user_repos = await service.search_repositories(
                 query, per_page, sort, order, public, app_mode
             )
+            if exact_match:
+                user_repos = [exact_match, *user_repos]
             return self._deduplicate_repositories(user_repos)
 
         all_repos: list[Repository] = []
         for provider in self.provider_tokens:
             try:
                 service = self.get_service(provider)
+                exact_match = await self._get_exact_repository_match(
+                    provider, query, service
+                )
                 public = self._is_repository_url(query, provider)
                 service_repos = await service.search_repositories(
                     query, per_page, sort, order, public, app_mode
                 )
+                if exact_match:
+                    service_repos = [exact_match, *service_repos]
                 all_repos.extend(service_repos)
             except Exception as e:
                 logger.warning(f'Error searching repos from {provider}: {e}')
                 continue
 
-        return all_repos
+        return self._deduplicate_repositories(all_repos)
 
     def _is_repository_url(self, query: str, provider: ProviderType) -> bool:
         """Check if the query is a repository URL."""
@@ -395,14 +405,76 @@ class ProviderHandler:
         )
 
     def _deduplicate_repositories(self, repos: list[Repository]) -> list[Repository]:
-        """Remove duplicate repositories based on full_name."""
-        seen = set()
-        unique_repos = []
+        """Remove duplicate repositories from the same provider."""
+        seen: set[tuple[ProviderType, str]] = set()
+        unique_repos: list[Repository] = []
         for repo in repos:
-            if repo.full_name not in seen:
-                seen.add(repo.id)
+            repository_key = (repo.git_provider, repo.full_name)
+            if repository_key not in seen:
+                seen.add(repository_key)
                 unique_repos.append(repo)
         return unique_repos
+
+    async def _get_exact_repository_match(
+        self,
+        provider: ProviderType,
+        query: str,
+        service: GitService,
+    ) -> Repository | None:
+        """Try an exact repository lookup for owner/repo-style identifiers."""
+        normalized_query = self._normalize_repository_query(query, provider)
+        if normalized_query is None:
+            return None
+
+        try:
+            return await service.get_repository_details_from_repo_name(normalized_query)
+        except Exception as e:
+            logger.debug(
+                'Exact repository lookup failed for %s on %s: %s',
+                normalized_query,
+                provider.value,
+                e,
+            )
+            return None
+
+    def _normalize_repository_query(
+        self, query: str, provider: ProviderType
+    ) -> str | None:
+        """Normalize exact repository identifiers from URLs or owner/repo strings."""
+        normalized_query = query.strip()
+        if not normalized_query:
+            return None
+
+        if normalized_query.startswith(('http://', 'https://')):
+            parsed_url = urlparse(normalized_query)
+            path_segments = [segment for segment in parsed_url.path.split('/') if segment]
+            if provider in (
+                ProviderType.GITHUB,
+                ProviderType.FORGEJO,
+                ProviderType.BITBUCKET,
+            ):
+                if len(path_segments) < 2:
+                    return None
+                normalized_query = '/'.join(path_segments[:2])
+            elif provider == ProviderType.AZURE_DEVOPS:
+                if len(path_segments) < 3:
+                    return None
+                normalized_query = '/'.join(path_segments[:3])
+            else:
+                return None
+        elif any(char in normalized_query for char in (' ', '?', '#')):
+            return None
+
+        normalized_query = normalized_query.strip('/').removesuffix('.git')
+        if not normalized_query:
+            return None
+
+        path_segments = [segment for segment in normalized_query.split('/') if segment]
+        minimum_segments = 3 if provider == ProviderType.AZURE_DEVOPS else 2
+        if len(path_segments) < minimum_segments:
+            return None
+
+        return '/'.join(path_segments)
 
     async def set_event_stream_secrets(
         self,

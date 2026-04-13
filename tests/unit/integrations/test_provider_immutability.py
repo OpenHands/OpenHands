@@ -10,6 +10,8 @@ from openhands.integrations.provider import (
     ProviderToken,
     ProviderType,
 )
+from openhands.integrations.service_types import Repository
+from openhands.server.types import AppMode
 from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
 
@@ -396,3 +398,94 @@ async def test_get_gitlab_groups_delegates_to_service():
 
         assert result == ['group-a', 'group-b']
         mock_get_service.assert_called_once_with(ProviderType.GITLAB)
+
+
+@pytest.mark.asyncio
+async def test_search_repositories_prioritizes_exact_repository_match():
+    """Test that exact owner/repo matches are returned first and de-duplicated."""
+    tokens = MappingProxyType(
+        {ProviderType.GITHUB: ProviderToken(token=SecretStr('gh-token'))}
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    exact_repo = Repository(
+        id='1',
+        full_name='OpenHands/OpenHands',
+        git_provider=ProviderType.GITHUB,
+        is_public=True,
+    )
+    duplicate_search_repo = Repository(
+        id='999',
+        full_name='OpenHands/OpenHands',
+        git_provider=ProviderType.GITHUB,
+        is_public=True,
+    )
+    related_repo = Repository(
+        id='2',
+        full_name='OpenHands/OpenHands-CLI',
+        git_provider=ProviderType.GITHUB,
+        is_public=True,
+    )
+
+    with patch.object(handler, 'get_service') as mock_get_service:
+        mock_service = mock_get_service.return_value
+        mock_service.get_repository_details_from_repo_name = AsyncMock(
+            return_value=exact_repo
+        )
+        mock_service.search_repositories = AsyncMock(
+            return_value=[duplicate_search_repo, related_repo]
+        )
+
+        repositories = await handler.search_repositories(
+            selected_provider=ProviderType.GITHUB,
+            query='OpenHands/OpenHands',
+            per_page=10,
+            sort='stars',
+            order='desc',
+            app_mode=AppMode.SAAS,
+        )
+
+        mock_service.get_repository_details_from_repo_name.assert_called_once_with(
+            'OpenHands/OpenHands'
+        )
+        assert [repo.full_name for repo in repositories] == [
+            'OpenHands/OpenHands',
+            'OpenHands/OpenHands-CLI',
+        ]
+
+
+@pytest.mark.asyncio
+async def test_search_repositories_normalizes_repository_urls_for_exact_lookup():
+    """Test that repository URLs are normalized before exact lookup."""
+    tokens = MappingProxyType(
+        {ProviderType.GITHUB: ProviderToken(token=SecretStr('gh-token'))}
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    exact_repo = Repository(
+        id='1',
+        full_name='OpenHands/OpenHands',
+        git_provider=ProviderType.GITHUB,
+        is_public=True,
+    )
+
+    with patch.object(handler, 'get_service') as mock_get_service:
+        mock_service = mock_get_service.return_value
+        mock_service.get_repository_details_from_repo_name = AsyncMock(
+            return_value=exact_repo
+        )
+        mock_service.search_repositories = AsyncMock(return_value=[])
+
+        repositories = await handler.search_repositories(
+            selected_provider=ProviderType.GITHUB,
+            query='https://github.com/OpenHands/OpenHands.git/tree/main',
+            per_page=10,
+            sort='stars',
+            order='desc',
+            app_mode=AppMode.SAAS,
+        )
+
+        mock_service.get_repository_details_from_repo_name.assert_called_once_with(
+            'OpenHands/OpenHands'
+        )
+        assert [repo.full_name for repo in repositories] == ['OpenHands/OpenHands']
