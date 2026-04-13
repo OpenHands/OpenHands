@@ -269,7 +269,7 @@ jobs:
           fi
 
       - name: Upload output.jsonl as artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always() # Upload even if the previous steps fail
         with:
           name: resolver-output

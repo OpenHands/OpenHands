@@ -169,7 +169,7 @@ jobs:
           context: containers/runtime
       - name: Upload runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
@@ -204,7 +204,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/openhands/enterprise-server
           tags: |
