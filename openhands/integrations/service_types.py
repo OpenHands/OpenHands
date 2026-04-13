@@ -531,6 +531,11 @@ class GitService(Protocol):
     ) -> list[Branch]:
         """Search for branches within a repository"""
 
+    async def search_paginated_branches(
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
+    ) -> PaginatedBranchesResponse:
+        """Search for branches within a repository with pagination"""
+
     async def get_microagents(self, repository: str) -> list[MicroagentResponse]:
         """Get microagents from a repository"""
         ...

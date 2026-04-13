@@ -193,28 +193,29 @@ async def search_repositories(
 
 @app.get(
     '/search/branches',
-    response_model=list[Branch],
+    response_model=PaginatedBranchesResponse,
     deprecated=True,
     description='Deprecated: Use `/api/v1/git/branches/search` instead.',
 )
 async def search_branches(
     repository: str,
     query: str,
+    page: int = 1,
     per_page: int = 30,
     selected_provider: Annotated[ProviderType | None, Query()] = None,
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
-) -> list[Branch] | JSONResponse:
+) -> PaginatedBranchesResponse | JSONResponse:
     if provider_tokens:
         client = ProviderHandler(
-            provider_tokens=provider_tokens,
-            external_auth_token=access_token,
-            external_auth_id=user_id,
+            provider_tokens=***
+            external_auth_token=***
+            external_auth_id=***
         )
         try:
-            branches: list[Branch] = await client.search_branches(
-                selected_provider, repository, query, per_page
+            branches: PaginatedBranchesResponse = await client.search_paginated_branches(
+                selected_provider, repository, query, page, per_page
             )
             return branches
 

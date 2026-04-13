@@ -290,16 +290,17 @@ async def saas_get_repository_branches(
     )
 
 
-@saas_user_router.get('/search/branches', response_model=list[Branch])
+@saas_user_router.get('/search/branches', response_model=PaginatedBranchesResponse)
 async def saas_search_branches(
     repository: str,
     query: str,
+    page: int = 1,
     per_page: int = 30,
     selected_provider: ProviderType | None = None,
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
-) -> list[Branch] | JSONResponse:
+) -> PaginatedBranchesResponse | JSONResponse:
     if not provider_tokens:
         retval = await _check_idp(
             access_token=access_token,
@@ -311,6 +312,7 @@ async def saas_search_branches(
     return await search_branches(
         repository=repository,
         query=query,
+        page=page,
         per_page=per_page,
         selected_provider=selected_provider,
         provider_tokens=provider_tokens,

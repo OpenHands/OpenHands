@@ -138,6 +138,13 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
         self, repository: str, query: str, per_page: int = 30
     ) -> list[Branch]:
         """Search for branches within a repository."""
+        result = await self.search_paginated_branches(repository, query, page=1, per_page=per_page)
+        return result.branches
+
+    async def search_paginated_branches(
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
+    ) -> PaginatedBranchesResponse:
+        """Search for branches within a repository with pagination."""
         # Parse repository string: organization/project/repo
         parts = repository.split('/')
         if len(parts) < 3:
@@ -186,10 +193,26 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
                     )
                     filtered_branches.append(branch)
 
-                    if len(filtered_branches) >= per_page:
-                        break
+            # Apply pagination to filtered results
+            total_count = len(filtered_branches)
+            start_idx = (page - 1) * per_page
+            end_idx = start_idx + per_page
+            paginated_branches = filtered_branches[start_idx:end_idx]
+            has_next_page = end_idx < total_count
 
-            return filtered_branches
+            return PaginatedBranchesResponse(
+                branches=paginated_branches,
+                has_next_page=has_next_page,
+                current_page=page,
+                per_page=per_page,
+                total_count=total_count,
+            )
         except Exception:
-            # Return empty list on error instead of None
-            return []
+            # Return empty response instead of raising
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=page,
+                per_page=per_page,
+                total_count=None,
+            )

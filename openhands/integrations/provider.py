@@ -332,24 +332,54 @@ class ProviderHandler:
         per_page: int = 30,
     ) -> list[Branch]:
         """Search for branches within a repository using the appropriate provider service."""
+        result = await self.search_paginated_branches(
+            selected_provider, repository, query, page=1, per_page=per_page
+        )
+        return result.branches
+
+    async def search_paginated_branches(
+        self,
+        selected_provider: ProviderType | None,
+        repository: str,
+        query: str,
+        page: int = 1,
+        per_page: int = 30,
+    ) -> PaginatedBranchesResponse:
+        """Search for branches within a repository with pagination support."""
         if selected_provider:
             service = self.get_service(selected_provider)
             try:
-                return await service.search_branches(repository, query, per_page)
+                return await service.search_paginated_branches(
+                    repository, query, page, per_page
+                )
             except Exception as e:
                 logger.warning(
                     f'Error searching branches from selected provider {selected_provider}: {e}'
                 )
-                return []
+                return PaginatedBranchesResponse(
+                    branches=[],
+                    has_next_page=False,
+                    current_page=page,
+                    per_page=per_page,
+                    total_count=None,
+                )
 
         # If provider not specified, determine provider by verifying repository access
         try:
             repo_details = await self.verify_repo_provider(repository)
             service = self.get_service(repo_details.git_provider)
-            return await service.search_branches(repository, query, per_page)
+            return await service.search_paginated_branches(
+                repository, query, page, per_page
+            )
         except Exception as e:
             logger.warning(f'Error searching branches for {repository}: {e}')
-            return []
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=page,
+                per_page=per_page,
+                total_count=None,
+            )
 
     async def search_repositories(
         self,

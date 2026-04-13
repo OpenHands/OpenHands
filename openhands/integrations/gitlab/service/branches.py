@@ -88,11 +88,18 @@ class GitLabBranchesMixin(GitLabMixinBase):
         self, repository: str, query: str, per_page: int = 30
     ) -> list[Branch]:
         """Search branches using GitLab API which supports `search` param."""
+        result = await self.search_paginated_branches(repository, query, page=1, per_page=per_page)
+        return result.branches
+
+    async def search_paginated_branches(
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
+    ) -> PaginatedBranchesResponse:
+        """Search branches using GitLab API with pagination support."""
         encoded_name = repository.replace('/', '%2F')
         url = f'{self.BASE_URL}/projects/{encoded_name}/repository/branches'
 
-        params = {'per_page': str(per_page), 'search': query}
-        response, _ = await self._make_request(url, params)
+        params = {'per_page': str(per_page), 'page': str(page), 'search': query}
+        response, headers = await self._make_request(url, params)
 
         branches: list[Branch] = []
         for branch_data in response:
@@ -104,4 +111,22 @@ class GitLabBranchesMixin(GitLabMixinBase):
                     last_push_date=branch_data.get('commit', {}).get('committed_date'),
                 )
             )
-        return branches
+
+        has_next_page = False
+        total_count = None
+        if headers.get('Link', ''):
+            has_next_page = True
+
+        if 'X-Total' in headers:
+            try:
+                total_count = int(headers['X-Total'])
+            except (ValueError, TypeError):
+                pass
+
+        return PaginatedBranchesResponse(
+            branches=branches,
+            has_next_page=has_next_page,
+            current_page=page,
+            per_page=per_page,
+            total_count=total_count,
+        )
