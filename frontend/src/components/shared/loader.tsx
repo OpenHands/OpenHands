@@ -1,3 +1,4 @@
+import { Spinner, SpinnerSize } from "#/components/shared/spinner";
 import { cn } from "#/utils/utils";
 
 interface LoaderProps {
@@ -5,21 +6,18 @@ interface LoaderProps {
   className?: string;
 }
 
+const sizeMap: Record<"small" | "medium" | "large", SpinnerSize> = {
+  small: "xs",
+  medium: "sm",
+  large: "md",
+};
+
 export function Loader({ size = "medium", className }: LoaderProps) {
-  const sizeClasses = {
-    small: "w-3 h-3",
-    medium: "w-4 h-4",
-    large: "w-5 h-5",
-  };
-
-  const dotSize = sizeClasses[size];
-
   return (
-    <div
-      data-testid="loader"
+    <Spinner
+      size={sizeMap[size]}
+      testId="loader"
       className={cn("flex items-center justify-center", className)}
-    >
-      <div className={cn("loader rounded-full", dotSize)} />
-    </div>
+    />
   );
 }

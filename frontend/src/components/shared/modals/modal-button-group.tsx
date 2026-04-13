@@ -45,12 +45,7 @@ export function ModalButtonGroup({
         isDisabled={isLoading}
       >
         {isLoading ? (
-          <LoadingSpinner
-            size="small"
-            className="w-5 h-5"
-            innerClassName="hidden"
-            outerClassName="w-5 h-5"
-          />
+          <LoadingSpinner size="small" className="w-5 h-5" />
         ) : (
           primaryText
         )}

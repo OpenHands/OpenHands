@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Spinner } from "@heroui/react";
+import { Spinner } from "#/components/shared/spinner";
 import { cn } from "#/utils/utils";
 
 export interface RepositoryLoadingStateProps {
