@@ -68,8 +68,8 @@ class RemoteRuntimeBuilder(RuntimeBuilder):
                 files=files,
                 timeout=30,
             )
-        except httpx.HTTPError as e:
-            if e.response.status_code == 429:
+        except httpx.HTTPStatusError as e:
+            if e.response and e.response.status_code == 429:
                 logger.warning('Build was rate limited. Retrying in 30 seconds.')
                 time.sleep(30)
                 return self.build(path, tags, platform)

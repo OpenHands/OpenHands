@@ -1,8 +1,8 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, InfiniteData } from "@tanstack/react-query";
 import { useConfig } from "./use-config";
 import { useUserProviders } from "../use-user-providers";
 import { useAppInstallations } from "./use-app-installations";
-import { GitRepository } from "../../types/git";
+import { RepositoryPage } from "../../types/git";
 import { Provider } from "../../types/settings";
 import GitService from "#/api/git-service/git-service.api";
 import { shouldUseInstallationRepos } from "#/utils/utils";
@@ -13,29 +13,27 @@ interface UseGitRepositoriesOptions {
   enabled?: boolean;
 }
 
-interface UserRepositoriesResponse {
-  data: GitRepository[];
-  nextPage: number | null;
-}
-
-interface InstallationRepositoriesResponse {
-  data: GitRepository[];
-  nextPage: number | null;
-  installationIndex: number | null;
-}
+type InstallationCursor = { installationIndex: number; pageId: string | null };
+type UserCursor = string | null;
+type Cursor = InstallationCursor | UserCursor;
 
 export function useGitRepositories(options: UseGitRepositoriesOptions) {
   const { provider, pageSize = 30, enabled = true } = options;
   const { providers } = useUserProviders();
   const { data: config } = useConfig();
-  const { data: installations } = useAppInstallations(provider);
+  const { data: page } = useAppInstallations(provider);
+  const installations = page?.items;
 
   const useInstallationRepos = provider
     ? shouldUseInstallationRepos(provider, config?.app_mode)
     : false;
 
   const repos = useInfiniteQuery<
-    UserRepositoriesResponse | InstallationRepositoriesResponse
+    RepositoryPage,
+    Error,
+    InfiniteData<RepositoryPage>,
+    [string, string[], Provider | null, boolean, number, ...unknown[]],
+    Cursor
   >({
     queryKey: [
       "repositories",
@@ -51,56 +49,52 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
       }
 
       if (useInstallationRepos) {
-        const { repoPage, installationIndex } = pageParam as {
-          installationIndex: number | null;
-          repoPage: number | null;
-        };
-
         if (!installations) {
           throw new Error("Missing installation list");
         }
 
-        return GitService.retrieveInstallationRepositories(
+        const cursor = pageParam as InstallationCursor;
+        const result = await GitService.retrieveInstallationRepositories(
           provider,
-          installationIndex || 0,
+          cursor.installationIndex,
           installations,
-          repoPage || 1,
+          cursor.pageId ?? undefined,
           pageSize,
         );
+        return result;
       }
 
-      return GitService.retrieveUserGitRepositories(
+      const cursor = pageParam as UserCursor;
+      const result = await GitService.retrieveUserGitRepositories(
         provider,
-        pageParam as number,
+        cursor ?? undefined,
         pageSize,
       );
+      return result;
     },
-    getNextPageParam: (lastPage) => {
-      if (useInstallationRepos) {
-        const installationPage = lastPage as InstallationRepositoriesResponse;
-        if (installationPage.nextPage) {
+    getNextPageParam: (lastPage, allPages, lastPageParam) => {
+      if (useInstallationRepos && installations) {
+        // Installation-based pagination
+        const currentCursor = lastPageParam as InstallationCursor;
+        if (lastPage.next_page_id) {
           return {
-            installationIndex: installationPage.installationIndex,
-            repoPage: installationPage.nextPage,
+            installationIndex: currentCursor.installationIndex,
+            pageId: lastPage.next_page_id,
           };
         }
-
-        if (installationPage.installationIndex !== null) {
-          return {
-            installationIndex: installationPage.installationIndex,
-            repoPage: 1,
-          };
+        // Advance to next installation
+        const nextInstallationIndex = currentCursor.installationIndex + 1;
+        if (nextInstallationIndex < installations.length) {
+          return { installationIndex: nextInstallationIndex, pageId: null };
         }
-
-        return null;
+        return undefined;
       }
-
-      const userPage = lastPage as UserRepositoriesResponse;
-      return userPage.nextPage;
+      // User repositories pagination
+      return lastPage.next_page_id;
     },
     initialPageParam: useInstallationRepos
-      ? { installationIndex: 0, repoPage: 1 }
-      : 1,
+      ? { installationIndex: 0, pageId: null }
+      : null,
     enabled:
       enabled &&
       (providers || []).length > 0 &&

@@ -257,7 +257,7 @@ class TestSlackV1CallbackProcessor:
         # Verify Slack posting
         mock_slack_client.chat_postMessage.assert_called_once_with(
             channel='C1234567890',
-            text='Test summary from agent',
+            markdown_text='Test summary from agent',
             thread_ts='1234567890.123456',
             unfurl_links=False,
             unfurl_media=False,
@@ -509,7 +509,7 @@ class TestSlackV1CallbackProcessor:
         # Verify user-friendly message was posted to Slack
         mock_slack_client.chat_postMessage.assert_called_once()
         call_kwargs = mock_slack_client.chat_postMessage.call_args[1]
-        posted_message = call_kwargs.get('text', '')
+        posted_message = call_kwargs.get('markdown_text', '')
         assert 'OpenHands encountered an error' in posted_message
         assert 'LLM budget has been exceeded' in posted_message
         assert 'please re-fill' in posted_message

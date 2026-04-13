@@ -239,12 +239,14 @@ class SlackManager(Manager[SlackViewInterface]):
     def _generate_repo_selection_form(
         self, message_ts: str, thread_ts: str | None
     ) -> list[dict[str, Any]]:
-        """Generate a repo selection form using external_select for dynamic loading.
+        """Generate a repo selection form with immediate "No Repository" button and search dropdown.
 
-        This uses Slack's external_select element which allows:
-        - Type-ahead search for repositories
-        - Dynamic loading of options from an external endpoint
-        - Support for users with many repositories (no 100 option limit)
+        This form provides two options side-by-side:
+        1. A "No Repository" button - immediately clickable without any loading
+        2. An external_select dropdown - for searching repositories dynamically
+
+        This design ensures "No Repository" is always immediately available while
+        still providing full dynamic search capability for repositories.
 
         Args:
             message_ts: The message timestamp for tracking
@@ -266,12 +268,22 @@ class SlackManager(Manager[SlackViewInterface]):
                 'type': 'section',
                 'text': {
                     'type': 'mrkdwn',
-                    'text': 'Type to search your repositories:',
+                    'text': 'Select a repository or continue without one:',
                 },
             },
             {
                 'type': 'actions',
                 'elements': [
+                    {
+                        'type': 'button',
+                        'action_id': f'no_repository:{message_ts}:{thread_ts}',
+                        'text': {
+                            'type': 'plain_text',
+                            'text': 'No Repository',
+                            'emoji': True,
+                        },
+                        'value': '-',
+                    },
                     {
                         'type': 'external_select',
                         'action_id': f'repository_select:{message_ts}:{thread_ts}',
@@ -279,8 +291,8 @@ class SlackManager(Manager[SlackViewInterface]):
                             'type': 'plain_text',
                             'text': 'Search repositories...',
                         },
-                        'min_query_length': 0,  # Load initial options immediately
-                    }
+                        'min_query_length': 0,
+                    },
                 ],
             },
         ]
@@ -288,8 +300,11 @@ class SlackManager(Manager[SlackViewInterface]):
     def _build_repo_options(self, repos: list[Repository]) -> list[dict[str, Any]]:
         """Build Slack options list from repositories.
 
-        Always includes a "No Repository" option at the top, followed by up to 99
-        repositories (Slack has a 100 option limit for external_select).
+        Returns up to 100 repositories formatted as Slack options
+        (Slack has a 100 option limit for external_select).
+
+        Note: "No Repository" is handled by a separate button in the form,
+        so it's not included in the dropdown options.
 
         Args:
             repos: List of Repository objects
@@ -297,13 +312,7 @@ class SlackManager(Manager[SlackViewInterface]):
         Returns:
             List of Slack option objects
         """
-        options: list[dict[str, Any]] = [
-            {
-                'text': {'type': 'plain_text', 'text': 'No Repository'},
-                'value': '-',
-            }
-        ]
-        options.extend(
+        return [
             {
                 'text': {
                     'type': 'plain_text',
@@ -311,9 +320,8 @@ class SlackManager(Manager[SlackViewInterface]):
                 },
                 'value': repo.full_name,
             }
-            for repo in repos[:99]  # Leave room for "No Repository" option
-        )
-        return options
+            for repo in repos[:100]
+        ]
 
     async def search_repos_for_slack(
         self, user_auth: UserAuth, query: str, per_page: int = 20
@@ -363,33 +371,69 @@ class SlackManager(Manager[SlackViewInterface]):
                 SlackError(SlackErrorCode.UNEXPECTED_ERROR),
             )
 
-    async def receive_form_interaction(self, slack_payload: dict):
-        """Process a Slack form interaction (repository selection).
+    def _parse_form_action(self, action: dict) -> tuple[str, str | None, str] | None:
+        """Parse action payload and extract message_ts, thread_ts, and selected value.
 
-        This handles the block_actions payload when a user selects a repository
-        from the dropdown form. It retrieves the original user message from Redis
-        and delegates to receive_message for processing.
+        This handles the different payload structures for button clicks vs dropdown
+        selections in the repository selection form.
+
+        Args:
+            action: The action object from the Slack payload
+
+        Returns:
+            Tuple of (message_ts, thread_ts, selected_value) if action is recognized,
+            None if the action_id is unknown.
+        """
+        action_id = action['action_id']
+
+        if action_id.startswith('no_repository:'):
+            # Button click - value is in 'value' field
+            attribs = action_id.split('no_repository:')[-1]
+            selected_value = action.get('value', '-')
+        elif action_id.startswith('repository_select:'):
+            # Dropdown selection - value is in 'selected_option'
+            attribs = action_id.split('repository_select:')[-1]
+            selected_value = action['selected_option']['value']
+        else:
+            return None
+
+        message_ts, thread_ts = attribs.split(':')
+        thread_ts = None if thread_ts == 'None' else thread_ts
+
+        return message_ts, thread_ts, selected_value
+
+    async def receive_form_interaction(self, slack_payload: dict):
+        """Process a Slack form interaction (repository selection or button click).
+
+        This handles the block_actions payload when a user interacts with the
+        repository selection form. It can handle:
+        - "No Repository" button click: proceeds with conversation without a repo
+        - Repository selection from dropdown: proceeds with the selected repo
 
         Args:
             slack_payload: The raw Slack interaction payload
         """
         # Extract fields from the Slack interaction payload
-        selected_repository = slack_payload['actions'][0]['selected_option']['value']
-        if selected_repository == '-':
-            selected_repository = None
-
+        action = slack_payload['actions'][0]
         slack_user_id = slack_payload['user']['id']
         channel_id = slack_payload['container']['channel_id']
         team_id = slack_payload['team']['id']
 
-        # Get original message_ts and thread_ts from action_id
-        attribs = slack_payload['actions'][0]['action_id'].split('repository_select:')[
-            -1
-        ]
-        message_ts, thread_ts = attribs.split(':')
-        thread_ts = None if thread_ts == 'None' else thread_ts
+        # Parse the action to extract message_ts, thread_ts, and selected value
+        parsed = self._parse_form_action(action)
+        if parsed is None:
+            logger.warning(
+                'slack_unknown_action_id',
+                extra={
+                    'action_id': action['action_id'],
+                    'slack_user_id': slack_user_id,
+                },
+            )
+            return
 
-        # Build partial payload for error handling during Redis retrieval
+        message_ts, thread_ts, selected_value = parsed
+
+        # Build partial payload for error handling
         payload = {
             'team_id': team_id,
             'channel_id': channel_id,
@@ -397,6 +441,9 @@ class SlackManager(Manager[SlackViewInterface]):
             'message_ts': message_ts,
             'thread_ts': thread_ts,
         }
+
+        # Convert "-" (No Repository) to None
+        selected_repository = None if selected_value == '-' else selected_value
 
         # Retrieve the original user message from Redis
         try:

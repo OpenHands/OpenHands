@@ -2,8 +2,8 @@ import { RefObject, useState, useCallback, useRef } from "react";
 
 export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
   // Track whether the user is currently near the bottom of the scroll area.
-  // Used by consumers (e.g., likert-scale) to decide whether to scroll when
-  // new UI elements appear. NOT used for automatic content-following.
+  // Used by consumers to decide whether to scroll when new UI elements appear.
+  // NOT used for automatic content-following.
   const [autoscroll, setAutoscroll] = useState(true);
 
   // Track whether the user is currently at the bottom of the scroll area

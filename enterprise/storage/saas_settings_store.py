@@ -182,7 +182,13 @@ class SaasSettingsStore(SettingsStore):
                 return None
 
             # Check if we need to generate an LLM key.
-            if not item.llm_base_url or item.llm_base_url == LITE_LLM_API_URL:
+            # Only generate/verify proxy keys when the base URL is explicitly the
+            # LiteLLM proxy, or when it's unset and the model is an OpenHands model
+            # (which always needs a proxy key). For non-OpenHands models with no
+            # base URL (e.g. basic view BYOR), preserve the user's own API key.
+            if item.llm_base_url == LITE_LLM_API_URL or (
+                not item.llm_base_url and is_openhands_model(item.llm_model)
+            ):
                 await self._ensure_api_key(
                     item, str(org_id), openhands_type=is_openhands_model(item.llm_model)
                 )

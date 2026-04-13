@@ -3,7 +3,7 @@ from uuid import UUID
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
-from openhands.integrations.service_types import ProviderType
+from openhands.integrations.service_types import ProviderType, UserGitInfo
 from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth
 
@@ -85,3 +85,6 @@ class ResolverUserContext(UserContext):
 
     async def get_mcp_api_key(self) -> str | None:
         return await self.saas_user_auth.get_mcp_api_key()
+
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        return await self.saas_user_auth.get_user_git_info()

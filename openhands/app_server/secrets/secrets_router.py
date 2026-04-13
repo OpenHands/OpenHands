@@ -88,7 +88,7 @@ async def check_provider_tokens(
 
 @router.post(
     '/git-providers',
-    tags=['Git Providers'],
+    tags=['Git'],
 )
 async def store_provider_tokens(
     provider_info: POSTProviderModel,
@@ -136,7 +136,7 @@ async def store_provider_tokens(
 
 @router.delete(
     '/git-providers',
-    tags=['Git Providers'],
+    tags=['Git'],
 )
 async def unset_provider_tokens(
     secrets_store: SecretsStore = Depends(get_secrets_store),

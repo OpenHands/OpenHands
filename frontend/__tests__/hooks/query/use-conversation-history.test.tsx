@@ -83,33 +83,6 @@ describe("useConversationHistory", () => {
     });
 
     expect(EventService.searchEventsV1).toHaveBeenCalledWith("conv-123");
-    expect(EventService.searchEventsV0).not.toHaveBeenCalled();
-  });
-
-  it("calls V0 REST endpoint for V0 conversations", async () => {
-    const v0SearchEventsSpy = vi.spyOn(EventService, "searchEventsV0");
-
-    vi.mocked(useUserConversation).mockReturnValue({
-      data: makeConversation("V0"),
-      isLoading: false,
-      isPending: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    } as any);
-
-    v0SearchEventsSpy.mockResolvedValue([makeEvent()]);
-
-    const { result } = renderHook(() => useConversationHistory("conv-456"), {
-      wrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.data).toBeDefined();
-    });
-
-    expect(EventService.searchEventsV0).toHaveBeenCalledWith("conv-456");
-    expect(EventService.searchEventsV1).not.toHaveBeenCalled();
   });
 });
 
@@ -193,51 +166,10 @@ describe("useConversationHistory cache key stability", () => {
 
     // Must NOT refetch — version hasn't changed, only mutable fields did
     expect(v1Spy).toHaveBeenCalledTimes(1);
-  });
 
-  // Edge case: version change MUST trigger a refetch with the correct endpoint
-  it("refetches when conversation_version changes from V0 to V1", async () => {
-    const v0Spy = vi.spyOn(EventService, "searchEventsV0");
-    const v1Spy = vi.spyOn(EventService, "searchEventsV1");
-    v0Spy.mockResolvedValue([makeEvent()]);
-    v1Spy.mockResolvedValue([makeEvent()]);
-
-    // Start with V0
-    vi.mocked(useUserConversation).mockReturnValue({
-      data: makeConversation("V0"),
-      isLoading: false,
-      isPending: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    } as any);
-
-    const { result, rerender } = renderHook(
-      () => useConversationHistory("conv-version-change"),
-      { wrapper: localWrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.data).toBeDefined();
-    });
-
-    expect(v0Spy).toHaveBeenCalledTimes(1);
-
-    // Switch to V1 — new version means new cache key, must refetch
-    vi.mocked(useUserConversation).mockReturnValue({
-      data: makeConversation("V1"),
-      isLoading: false,
-      isPending: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    } as any);
-
-    rerender();
-
-    await waitFor(() => {
-      expect(v1Spy).toHaveBeenCalledTimes(1);
-    });
+    // Note: The behavior of always using V1 API regardless of conversation_version
+    // means the "version change triggers refetch" test is no longer applicable.
+    // The hook now consistently uses searchEventsV1 for all conversations.
   });
 
   it("treats cached history as never stale (staleTime is Infinity)", async () => {
