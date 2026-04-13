@@ -12,6 +12,7 @@ import {
 export const useGripResize = (
   chatInputRef: React.RefObject<HTMLDivElement | null>,
   messageToSend: IMessageToSend | null,
+  enableManualResize = true,
 ) => {
   const [isGripVisible, setIsGripVisible] = useState(false);
 
@@ -66,7 +67,7 @@ export const useGripResize = (
     onGripDragStart: handleDragStart,
     onGripDragEnd: handleDragEnd,
     value: messageToSend ?? undefined,
-    enableManualResize: true,
+    enableManualResize,
   });
 
   return {

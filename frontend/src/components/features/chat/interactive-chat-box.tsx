@@ -154,7 +154,8 @@ export function InteractiveChatBox({
     isTaskPolling(subConversationTaskStatus);
 
   return (
-    <div data-testid="interactive-chat-box">
+    <div className="flex flex-col gap-3 md:gap-4" data-testid="interactive-chat-box">
+      <GitControlBar onSuggestionsClick={handleSuggestionsClick} />
       <CustomChatInput
         disabled={isDisabled}
         isNewConversationPending={disabled}
@@ -162,9 +163,6 @@ export function InteractiveChatBox({
         onFilesPaste={handleUpload}
         sandboxStatus={conversation?.sandbox_status || null}
       />
-      <div className="mt-4">
-        <GitControlBar onSuggestionsClick={handleSuggestionsClick} />
-      </div>
     </div>
   );
 }

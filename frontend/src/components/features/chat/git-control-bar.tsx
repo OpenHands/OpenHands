@@ -112,8 +112,8 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
   };
 
   return (
-    <div className="flex flex-row items-center">
-      <div className="flex flex-row gap-2.5 items-center overflow-x-auto flex-wrap md:flex-nowrap relative scrollbar-hide">
+    <div className="w-full">
+      <div className="flex w-full items-center gap-2.5 overflow-x-auto overflow-y-hidden whitespace-nowrap scrollbar-hide">
         <GitControlBarRepoButton
           selectedRepository={selectedRepository}
           gitProvider={gitProvider}

@@ -42,10 +42,10 @@ export function GitControlBarBranchButton({
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-[100px] w-fit flex-shrink-0 max-w-[200px] truncate relative",
+        "group inline-flex min-w-[108px] max-w-[min(55vw,12rem)] flex-shrink-0 flex-row items-center justify-between gap-2 rounded-[100px] py-1 pl-2.5 pr-2.5",
         hasBranch
-          ? "border border-[#525252] bg-transparent hover:border-[#454545] cursor-pointer"
-          : "border border-[rgba(71,74,84,0.50)] bg-transparent cursor-not-allowed min-w-[108px]",
+          ? "cursor-pointer border border-[#525252] bg-transparent hover:border-[#454545]"
+          : "cursor-not-allowed border border-[rgba(71,74,84,0.50)] bg-transparent",
       )}
     >
       <div className="w-3 h-3 flex items-center justify-center flex-shrink-0">

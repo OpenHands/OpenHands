@@ -33,6 +33,7 @@ import { useConversationWebSocket } from "#/contexts/conversation-websocket-cont
 import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
 import { I18nKey } from "#/i18n/declaration";
 
 function getEntryPoint(
@@ -46,6 +47,7 @@ function getEntryPoint(
 
 export function ChatInterface() {
   const posthog = usePostHog();
+  const isMobile = useBreakpoint();
   const { setMessageToSend } = useConversationStore();
   const { errorMessage, removeErrorMessage } = useErrorMessageStore();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
@@ -259,7 +261,7 @@ export function ChatInterface() {
 
   return (
     <ScrollProvider value={scrollProviderValue}>
-      <div className="h-full flex flex-col justify-between pr-0 md:pr-4 relative">
+      <div className="relative flex h-full flex-col pr-0 md:pr-4">
         {!hasSubstantiveAgentActions &&
           !optimisticUserMessage &&
           !userEventsExist &&
@@ -273,7 +275,15 @@ export function ChatInterface() {
         <div
           ref={scrollRef}
           onScroll={(e) => onChatBodyScroll(e.currentTarget)}
-          className="custom-scrollbar-always flex flex-col grow overflow-y-auto overflow-x-hidden px-4 pt-4 gap-2"
+          className="custom-scrollbar-always flex min-h-0 grow flex-col gap-2 overflow-y-auto overflow-x-hidden px-4 pt-4"
+          style={
+            isMobile
+              ? {
+                  paddingBottom:
+                    "calc(env(safe-area-inset-bottom, 0px) + 15rem)",
+                }
+              : undefined
+          }
         >
           {isChatLoading && isReturningToConversation && (
             <ChatMessagesSkeleton />
@@ -290,8 +300,19 @@ export function ChatInterface() {
           )}
         </div>
 
-        <div className="flex flex-col gap-[6px]">
-          <div className="flex justify-between relative">
+        <div
+          className="z-10 flex flex-col gap-[6px] bg-base md:bg-transparent"
+          style={
+            isMobile
+              ? {
+                  position: "sticky",
+                  bottom: 0,
+                  paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)",
+                }
+              : undefined
+          }
+        >
+          <div className="relative flex justify-between px-4 md:px-0">
             <div className="flex items-end gap-1">
               <ConfirmationModeEnabled />
               {isStartingStatus && (
@@ -302,7 +323,7 @@ export function ChatInterface() {
               )}
             </div>
 
-            <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0">
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 transform">
               {curAgentState === AgentState.RUNNING && <TypingIndicator />}
             </div>
 
@@ -310,16 +331,20 @@ export function ChatInterface() {
           </div>
 
           {errorMessage && (
-            <ErrorMessageBanner
-              message={errorMessage}
-              onDismiss={removeErrorMessage}
-            />
+            <div className="px-4 md:px-0">
+              <ErrorMessageBanner
+                message={errorMessage}
+                onDismiss={removeErrorMessage}
+              />
+            </div>
           )}
 
-          <InteractiveChatBox
-            onSubmit={handleSendMessage}
-            disabled={isNewConversationPending}
-          />
+          <div className="px-4 md:px-0">
+            <InteractiveChatBox
+              onSubmit={handleSendMessage}
+              disabled={isNewConversationPending}
+            />
+          </div>
         </div>
       </div>
     </ScrollProvider>

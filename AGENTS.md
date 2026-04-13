@@ -129,6 +129,8 @@ Frontend:
 - Environment Variables:
   - Set in `frontend/.env` or as environment variables
   - Available variables: VITE_BACKEND_HOST, VITE_USE_TLS, VITE_INSECURE_SKIP_VERIFY, VITE_FRONTEND_PORT
+- Mobile-only chat layout work can reuse `useBreakpoint()` from `frontend/src/hooks/use-breakpoint.ts`; pass an explicit mobile flag into composer subcomponents instead of adding separate mobile-only components.
+
 - Internationalization:
   - Generate i18n declaration file: `npm run make-i18n`
 - Data Fetching & Cache Management:

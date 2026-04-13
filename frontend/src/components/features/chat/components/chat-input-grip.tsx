@@ -7,6 +7,7 @@ interface ChatInputGripProps {
   handleTopEdgeClick: (e: React.MouseEvent) => void;
   handleGripMouseDown: (e: React.MouseEvent) => void;
   handleGripTouchStart: (e: React.TouchEvent) => void;
+  isEnabled?: boolean;
 }
 
 export function ChatInputGrip({
@@ -15,7 +16,12 @@ export function ChatInputGrip({
   handleTopEdgeClick,
   handleGripMouseDown,
   handleGripTouchStart,
+  isEnabled = true,
 }: ChatInputGripProps) {
+  if (!isEnabled) {
+    return null;
+  }
+
   return (
     <div
       className="absolute -top-[12px] left-0 w-full h-6 lg:h-3 z-20 group"

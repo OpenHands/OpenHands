@@ -12,6 +12,7 @@ interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
   isDragOver: boolean;
   disabled: boolean;
+  isMobile?: boolean;
   isNewConversationPending?: boolean;
   showButton: boolean;
   buttonClassName: string;
@@ -36,6 +37,7 @@ export function ChatInputContainer({
   chatContainerRef,
   isDragOver,
   disabled,
+  isMobile = false,
   isNewConversationPending = false,
   showButton,
   buttonClassName,
@@ -102,7 +104,7 @@ export function ChatInputContainer({
         />
       </div>
 
-      <ChatInputActions disabled={disabled} />
+      <ChatInputActions disabled={disabled} isMobile={isMobile} />
     </div>
   );
 }

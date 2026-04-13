@@ -10,6 +10,7 @@ import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
 import { useConversationStore } from "#/stores/conversation-store";
 import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
 
 export interface CustomChatInputProps {
   disabled?: boolean;
@@ -36,6 +37,7 @@ export function CustomChatInput({
   className = "",
   buttonClassName = "",
 }: CustomChatInputProps) {
+  const isMobile = useBreakpoint();
   const {
     submittedMessage,
     clearAllFiles,
@@ -88,6 +90,7 @@ export function CustomChatInput({
   } = useGripResize(
     chatInputRef as React.RefObject<HTMLDivElement | null>,
     messageToSend,
+    !isMobile,
   );
 
   const { handleSubmit } = useChatSubmission(
@@ -143,12 +146,14 @@ export function CustomChatInput({
           handleTopEdgeClick={handleTopEdgeClick}
           handleGripMouseDown={handleGripMouseDown}
           handleGripTouchStart={handleGripTouchStart}
+          isEnabled={!isMobile}
         />
 
         <ChatInputContainer
           chatContainerRef={chatContainerRef}
           isDragOver={isDragOver}
           disabled={isDisabled}
+          isMobile={isMobile}
           isNewConversationPending={isNewConversationPending}
           showButton={showButton}
           buttonClassName={buttonClassName}
