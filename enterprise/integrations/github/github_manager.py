@@ -2,11 +2,23 @@ from types import MappingProxyType
 
 from github import Auth, Github, GithubIntegration
 
-from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+from tenacity import (
+    retry,
+    wait_exponential,
+    stop_after_attempt,
+    retry_if_exception_type,
+    retry_if_exception,
+)
 from github.GithubException import RateLimitExceededException, GithubException
 
+
 def _is_retryable_github_error(exception):
-    return isinstance(exception, RateLimitExceededException) or (isinstance(exception, GithubException) and getattr(exception, 'status', 0) >= 500)
+    return isinstance(exception, RateLimitExceededException) or (
+        isinstance(exception, GithubException)
+        and getattr(exception, "status", 0) >= 500
+    )
+
+
 from integrations.github.data_collector import GitHubDataCollector
 from integrations.github.github_solvability import summarize_issue_solvability
 from integrations.github.github_view import (
@@ -62,18 +74,18 @@ class GithubManager(Manager[GithubViewType]):
         )
 
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'github')
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + "github")
         )
 
     def _confirm_incoming_source_type(self, message: Message):
         if message.source != SourceType.GITHUB:
-            raise ValueError(f'Unexpected message source {message.source}')
+            raise ValueError(f"Unexpected message source {message.source}")
 
     def _get_full_repo_name(self, repo_obj: dict) -> str:
-        owner = repo_obj['owner']['login']
-        repo_name = repo_obj['name']
+        owner = repo_obj["owner"]["login"]
+        repo_name = repo_obj["name"]
 
-        return f'{owner}/{repo_name}'
+        return f"{owner}/{repo_name}"
 
     def _get_installation_access_token(self, installation_id: int) -> str:
         token_data = self.github_integration.get_access_token(installation_id)
@@ -82,7 +94,7 @@ class GithubManager(Manager[GithubViewType]):
     @retry(
         wait=wait_exponential(multiplier=1, min=4, max=60),
         stop=stop_after_attempt(3),
-        retry=retry_if_exception_type(_is_retryable_github_error)
+        retry=retry_if_exception(_is_retryable_github_error),
     )
     def _add_reaction(
         self, github_view: ResolverViewInterface, reaction: str, installation_token: str
@@ -113,7 +125,7 @@ class GithubManager(Manager[GithubViewType]):
     @retry(
         wait=wait_exponential(multiplier=1, min=4, max=60),
         stop=stop_after_attempt(3),
-        retry=retry_if_exception_type(_is_retryable_github_error)
+        retry=retry_if_exception(_is_retryable_github_error),
     )
     def _user_has_write_access_to_repo(
         self, installation_id: str, full_repo_name: str, username: str
@@ -128,7 +140,7 @@ class GithubManager(Manager[GithubViewType]):
             # Check if the user is a collaborator
             try:
                 collaborator = repository.get_collaborator_permission(username)
-                if collaborator in ['admin', 'write']:
+                if collaborator in ["admin", "write"]:
                     return True
             except Exception:
                 pass
@@ -156,15 +168,15 @@ class GithubManager(Manager[GithubViewType]):
         Returns:
             The issue/PR number, or None if not found
         """
-        payload = message.message.get('payload', {})
+        payload = message.message.get("payload", {})
 
         # Labeled issues, issue comments, and PR comments all have 'issue' in payload
-        if 'issue' in payload:
-            return payload['issue']['number']
+        if "issue" in payload:
+            return payload["issue"]["number"]
 
         # Inline PR comments have 'pull_request' directly in payload
-        if 'pull_request' in payload:
-            return payload['pull_request']['number']
+        if "pull_request" in payload:
+            return payload["pull_request"]["number"]
 
         return None
 
@@ -181,9 +193,9 @@ class GithubManager(Manager[GithubViewType]):
             message: The incoming GitHub webhook message
             username: The GitHub username to mention in the response
         """
-        payload = message.message.get('payload', {})
-        installation_id = message.message['installation']
-        repo_obj = payload['repository']
+        payload = message.message.get("payload", {})
+        installation_id = message.message["installation"]
+        repo_obj = payload["repository"]
         full_repo_name = self._get_full_repo_name(repo_obj)
 
         # Get installation token to post the comment
@@ -194,8 +206,8 @@ class GithubManager(Manager[GithubViewType]):
 
         if not issue_number:
             logger.warning(
-                f'[GitHub] Could not determine issue/PR number to send user not found message for {username}. '
-                f'Payload keys: {list(payload.keys())}'
+                f"[GitHub] Could not determine issue/PR number to send user not found message for {username}. "
+                f"Payload keys: {list(payload.keys())}"
             )
             return
 
@@ -207,27 +219,27 @@ class GithubManager(Manager[GithubViewType]):
                 issue.create_comment(get_user_not_found_message(username))
         except Exception as e:
             logger.error(
-                f'[GitHub] Failed to send user not found message to {username} '
-                f'on {full_repo_name}#{issue_number}: {e}'
+                f"[GitHub] Failed to send user not found message to {username} "
+                f"on {full_repo_name}#{issue_number}: {e}"
             )
 
     async def is_job_requested(self, message: Message) -> bool:
         self._confirm_incoming_source_type(message)
 
-        installation_id = message.message['installation']
-        payload = message.message.get('payload', {})
-        repo_obj = payload.get('repository')
+        installation_id = message.message["installation"]
+        payload = message.message.get("payload", {})
+        repo_obj = payload.get("repository")
         if not repo_obj:
             return False
-        username = payload.get('sender', {}).get('login')
+        username = payload.get("sender", {}).get("login")
         repo_name = self._get_full_repo_name(repo_obj)
 
         # Suggestions contain `@openhands` macro; avoid kicking off jobs for system recommendations
         if GithubFactory.is_pr_comment(
             message
         ) and GithubFailingAction.unqiue_suggestions_header in payload.get(
-            'comment', {}
-        ).get('body', ''):
+            "comment", {}
+        ).get("body", ""):
             return False
 
         # Check event types before making expensive API calls (e.g., _user_has_write_access_to_repo)
@@ -239,7 +251,7 @@ class GithubManager(Manager[GithubViewType]):
         ):
             return False
 
-        logger.info(f'[GitHub] Checking permissions for {username} in {repo_name}')
+        logger.info(f"[GitHub] Checking permissions for {username} in {repo_name}")
         user_has_write_access = self._user_has_write_access_to_repo(
             installation_id, repo_name, username
         )
@@ -258,13 +270,13 @@ class GithubManager(Manager[GithubViewType]):
             await self.data_collector.process_payload(message)
         except Exception:
             logger.warning(
-                '[Github]: Error processing payload for gh interaction', exc_info=True
+                "[Github]: Error processing payload for gh interaction", exc_info=True
             )
 
         if await self.is_job_requested(message):
-            payload = message.message.get('payload', {})
-            user_id = payload['sender']['id']
-            username = payload['sender']['login']
+            payload = message.message.get("payload", {})
+            user_id = payload["sender"]["id"]
+            username = payload["sender"]["login"]
             keycloak_user_id = await self.token_manager.get_user_id_from_idp_user_id(
                 user_id, ProviderType.GITHUB
             )
@@ -272,8 +284,8 @@ class GithubManager(Manager[GithubViewType]):
             # Check if the user has an OpenHands account
             if not keycloak_user_id:
                 logger.warning(
-                    f'[GitHub] User {username} (id={user_id}) not found in Keycloak. '
-                    f'User must create an OpenHands account first.'
+                    f"[GitHub] User {username} (id={user_id}) not found in Keycloak. "
+                    f"User must create an OpenHands account first."
                 )
                 self._send_user_not_found_message(message, username)
                 return
@@ -282,7 +294,7 @@ class GithubManager(Manager[GithubViewType]):
                 message, keycloak_user_id
             )
             logger.info(
-                f'[GitHub] Creating job for {github_view.user_info.username} in {github_view.full_repo_name}#{github_view.issue_number}'
+                f"[GitHub] Creating job for {github_view.user_info.username} in {github_view.full_repo_name}#{github_view.issue_number}"
             )
             # Get the installation token
             installation_token = self._get_installation_access_token(
@@ -293,7 +305,7 @@ class GithubManager(Manager[GithubViewType]):
                 github_view.installation_id, installation_token
             )
             # Add eyes reaction to acknowledge we've read the request
-            self._add_reaction(github_view, 'eyes', installation_token)
+            self._add_reaction(github_view, "eyes", installation_token)
             await self.start_job(github_view)
 
     async def send_message(self, message: str, github_view: GithubViewType):
@@ -307,7 +319,7 @@ class GithubManager(Manager[GithubViewType]):
             github_view.installation_id
         )
         if not installation_token:
-            logger.warning('Missing installation token')
+            logger.warning("Missing installation token")
             return
 
         if isinstance(github_view, GithubInlinePRComment):
@@ -329,7 +341,7 @@ class GithubManager(Manager[GithubViewType]):
         else:
             # Catch any new types added to GithubViewType that aren't handled above
             logger.warning(  # type: ignore[unreachable]
-                f'Unsupported github_view type: {type(github_view).__name__}'
+                f"Unsupported github_view type: {type(github_view).__name__}"
             )
             return
 
@@ -346,12 +358,12 @@ class GithubManager(Manager[GithubViewType]):
         )
 
         try:
-            msg_info: str = ''
+            msg_info: str = ""
 
             try:
                 user_info = github_view.user_info
                 logger.info(
-                    f'[GitHub] Starting job for user {user_info.username} (id={user_info.user_id})'
+                    f"[GitHub] Starting job for user {user_info.username} (id={user_info.user_id})"
                 )
 
                 # Create conversation
@@ -361,12 +373,12 @@ class GithubManager(Manager[GithubViewType]):
 
                 if not user_token:
                     logger.warning(
-                        f'[GitHub] No token found for user {user_info.username} (id={user_info.user_id})'
+                        f"[GitHub] No token found for user {user_info.username} (id={user_info.user_id})"
                     )
-                    raise MissingSettingsError('Missing settings')
+                    raise MissingSettingsError("Missing settings")
 
                 logger.info(
-                    f'[GitHub] Creating new conversation for user {user_info.username}'
+                    f"[GitHub] Creating new conversation for user {user_info.username}"
                 )
 
                 secret_store = Secrets(
@@ -389,7 +401,7 @@ class GithubManager(Manager[GithubViewType]):
                 solvability_summary = None
                 if not ENABLE_SOLVABILITY_ANALYSIS:
                     logger.info(
-                        '[Github]: Solvability report feature is disabled, skipping'
+                        "[Github]: Solvability report feature is disabled, skipping"
                     )
                 else:
                     try:
@@ -398,7 +410,7 @@ class GithubManager(Manager[GithubViewType]):
                         )
                     except Exception as e:
                         logger.warning(
-                            f'[Github]: Error summarizing issue solvability: {str(e)}'
+                            f"[Github]: Error summarizing issue solvability: {str(e)}"
                         )
 
                 saas_user_auth = await get_saas_user_auth(
@@ -415,7 +427,7 @@ class GithubManager(Manager[GithubViewType]):
                 conversation_id = github_view.conversation_id
 
                 logger.info(
-                    f'[GitHub] Created conversation {conversation_id} for user {user_info.username}'
+                    f"[GitHub] Created conversation {conversation_id} for user {user_info.username}"
                 )
 
                 if not github_view.v1_enabled:
@@ -429,7 +441,7 @@ class GithubManager(Manager[GithubViewType]):
                     register_callback_processor(conversation_id, processor)
 
                     logger.info(
-                        f'[Github] Registered callback processor for conversation {conversation_id}'
+                        f"[Github] Registered callback processor for conversation {conversation_id}"
                     )
 
                 # Send message with conversation link
@@ -437,27 +449,27 @@ class GithubManager(Manager[GithubViewType]):
                 base_msg = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
                 # Combine messages: include solvability report with "I'm on it!" if successful
                 if solvability_summary:
-                    msg_info = f'{base_msg}\n\n{solvability_summary}'
+                    msg_info = f"{base_msg}\n\n{solvability_summary}"
                 else:
                     msg_info = base_msg
 
             except MissingSettingsError as e:
                 logger.warning(
-                    f'[GitHub] Missing settings error for user {user_info.username}: {str(e)}'
+                    f"[GitHub] Missing settings error for user {user_info.username}: {str(e)}"
                 )
 
-                msg_info = f'@{user_info.username} please re-login into [OpenHands Cloud]({HOST_URL}) before starting a job.'
+                msg_info = f"@{user_info.username} please re-login into [OpenHands Cloud]({HOST_URL}) before starting a job."
 
             except LLMAuthenticationError as e:
                 logger.warning(
-                    f'[GitHub] LLM authentication error for user {user_info.username}: {str(e)}'
+                    f"[GitHub] LLM authentication error for user {user_info.username}: {str(e)}"
                 )
 
-                msg_info = f'@{user_info.username} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
+                msg_info = f"@{user_info.username} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job."
 
             except (AuthenticationError, ExpiredError, SessionExpiredError) as e:
                 logger.warning(
-                    f'[GitHub] Session expired for user {user_info.username}: {str(e)}'
+                    f"[GitHub] Session expired for user {user_info.username}: {str(e)}"
                 )
 
                 msg_info = get_session_expired_message(user_info.username)
@@ -465,12 +477,12 @@ class GithubManager(Manager[GithubViewType]):
             await self.send_message(msg_info, github_view)
 
         except Exception:
-            logger.exception('[Github]: Error starting job')
+            logger.exception("[Github]: Error starting job")
             await self.send_message(
-                'Uh oh! There was an unexpected error starting the job :(', github_view
+                "Uh oh! There was an unexpected error starting the job :(", github_view
             )
 
         try:
             await self.data_collector.save_data(github_view)
         except Exception:
-            logger.warning('[Github]: Error saving interaction data', exc_info=True)
+            logger.warning("[Github]: Error saving interaction data", exc_info=True)
