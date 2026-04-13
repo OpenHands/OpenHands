@@ -8,7 +8,6 @@ import {
   buildVSCodeRemoteSSHUrl,
 } from "#/utils/vscode-url-helper";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
-import { useBatchAppConversations } from "./use-batch-app-conversations";
 import { useBatchSandboxes } from "./use-batch-sandboxes";
 
 interface SSHConnectionResult {
@@ -30,14 +29,12 @@ export const useSSHConnection = () => {
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  // V1AppConversation has sandbox_id field, V0 conversations don't use V1 API
+  // If we have a conversation from useActiveConversation, it's V1
+  const isV1Conversation = !!conversation?.sandbox_id;
 
-  // Fetch V1 app conversation to get sandbox_id
-  const appConversationsQuery = useBatchAppConversations(
-    isV1Conversation && conversationId ? [conversationId] : [],
-  );
-  const appConversation = appConversationsQuery.data?.[0];
-  const sandboxId = appConversation?.sandbox_id;
+  // The conversation from useActiveConversation already has sandbox_id
+  const sandboxId = conversation?.sandbox_id;
 
   // Fetch sandbox data for V1 conversations
   const sandboxesQuery = useBatchSandboxes(sandboxId ? [sandboxId] : []);
@@ -118,10 +115,7 @@ export const useSSHConnection = () => {
   });
 
   // Calculate overall loading state including dependent queries for V1
-  const isLoading =
-    appConversationsQuery.isLoading ||
-    sandboxesQuery.isLoading ||
-    mainQuery.isLoading;
+  const isLoading = sandboxesQuery.isLoading || mainQuery.isLoading;
 
   return {
     data: mainQuery.data,
