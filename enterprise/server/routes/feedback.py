@@ -7,8 +7,8 @@ from storage.database import a_session_maker
 from storage.feedback import ConversationFeedback
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.events.event_store import EventStore
-from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import file_store
 from openhands.server.user_auth import get_user_id
 

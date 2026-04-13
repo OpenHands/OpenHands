@@ -23,6 +23,9 @@ from openhands.app_server.utils.docker_utils import (
 )
 from openhands.sdk import Event, MessageEvent
 
+# TODO(OpenHands/evaluation#418): import from openhands.sdk.utils.redact
+from openhands.utils._redact_compat import redact_text_secrets
+
 _logger = logging.getLogger(__name__)
 
 # Delay between attempts to poll title
@@ -49,11 +52,16 @@ async def _poll_for_title(
     for _ in range(_NUM_POLL_ATTEMPTS):
         await asyncio.sleep(_POLL_DELAY_S)
         try:
+            headers = (
+                {
+                    'X-Session-API-Key': session_api_key,
+                }
+                if session_api_key
+                else {}
+            )
             response = await httpx_client.get(
                 url,
-                headers={
-                    'X-Session-API-Key': session_api_key,
-                },
+                headers=headers,
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
@@ -88,7 +96,11 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             get_httpx_client,
         )
 
-        _logger.info(f'Callback {callback.id} Invoked for event {event}')
+        _logger.info(
+            'Callback %s Invoked for event %s',
+            callback.id,
+            redact_text_secrets(str(event)),
+        )
 
         state = InjectorState()
         setattr(state, USER_CONTEXT_ATTR, ADMIN)

@@ -103,16 +103,22 @@ export const startV0Conversation = async (
 /**
  * Optimistically updates the conversation status in the cache
  */
-export const updateConversationStatusInCache = (
+export const updateConversationSandboxStatusInCache = (
   queryClient: QueryClient,
   conversationId: string,
-  status: string,
+  sandbox_status: string,
 ): void => {
   // Update the individual conversation cache
   queryClient.setQueryData<{ status: string }>(
     ["user", "conversation", conversationId],
     (oldData) => {
       if (!oldData) return oldData;
+      let status = sandbox_status;
+      if (status === "PAUSED") {
+        status = "STOPPED";
+      } else if (status === "MISSING") {
+        status = "ARCHIVED";
+      }
       return { ...oldData, status };
     },
   );
@@ -120,7 +126,7 @@ export const updateConversationStatusInCache = (
   // Update the conversations list cache
   queryClient.setQueriesData<{
     pages: Array<{
-      results: Array<{ conversation_id: string; status: string }>;
+      items: Array<{ id: string; sandbox_status: string }>;
     }>;
   }>({ queryKey: ["user", "conversations"] }, (oldData) => {
     if (!oldData) return oldData;
@@ -129,8 +135,8 @@ export const updateConversationStatusInCache = (
       ...oldData,
       pages: oldData.pages.map((page) => ({
         ...page,
-        results: page.results.map((conv) =>
-          conv.conversation_id === conversationId ? { ...conv, status } : conv,
+        items: page.items.map((conv) =>
+          conv.id === conversationId ? { ...conv, sandbox_status } : conv,
         ),
       })),
     };

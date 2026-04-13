@@ -9,7 +9,7 @@ This module tests the Docker sandbox service implementation, focusing on:
 - Edge cases with malformed container data
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -1649,3 +1649,60 @@ class TestDockerSandboxServiceHostNetwork:
 
         # Verify no warning was logged about port collision
         mock_logger.warning.assert_not_called()
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.utc_now')
+    async def test_container_to_checked_sandbox_info_uses_container_started_at(
+        self, mock_utc_now, service
+    ):
+        """Test that health check uses container's StartedAt for grace period calculation instead of sandbox created_at.
+
+        This tests the fix for the bug where resuming a stopped container incorrectly
+        marked the sandbox as ERROR instead of STARTING because it was using
+        sandbox_info.created_at (when the sandbox record was created) instead of
+        the actual container start time.
+        """
+        # Setup - create a fresh container with State that includes StartedAt
+        container = MagicMock()
+        container.name = 'oh-test-abc123'
+        container.status = 'running'
+        container.image.tags = ['spec456']
+        now = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_utc_now.return_value = now
+
+        # Container started 4 seconds ago (within 15s grace period)
+        container_started_within_grace_period = datetime(
+            2024, 1, 15, 11, 59, 56, tzinfo=timezone.utc
+        )
+        # Sandbox was created 5 days ago (way outside grace period)
+        sandbox_created_long_ago = datetime(2024, 1, 10, 10, 0, 0, tzinfo=timezone.utc)
+
+        container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'State': {'StartedAt': container_started_within_grace_period.isoformat()},
+            'Config': {
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=session_key_123',
+                    'OTHER_VAR=other_value',
+                ],
+                'WorkingDir': '/workspace',
+            },
+            'NetworkSettings': {
+                'Ports': {
+                    '8000/tcp': [{'HostPort': '12345'}],
+                    '8001/tcp': [{'HostPort': '12346'}],
+                }
+            },
+        }
+
+        # Create a sandbox_info with old created_at (simulates old sandbox record)
+        sandbox_info = await service._container_to_sandbox_info(container)
+        sandbox_info.created_at = sandbox_created_long_ago
+
+        # Health check fails but container was started recently (within 15s grace period)
+        service.httpx_client.get.side_effect = httpx.HTTPError('Health check failed')
+
+        result = await service._container_to_checked_sandbox_info(container)
+
+        # Verify - should be STARTING because container started within grace period
+        assert result is not None
+        assert result.status == SandboxStatus.STARTING

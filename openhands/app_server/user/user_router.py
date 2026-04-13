@@ -1,11 +1,10 @@
 """User router for OpenHands App Server. For the moment, this simply implements the /me endpoint."""
 
-import logging
-
 from fastapi import APIRouter, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from openhands.app_server.config import depends_user_context
+<<<<<<< fix/add_secrets_logging
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.sandbox.session_auth import validate_session_key
 from openhands.app_server.user.user_context import UserContext
@@ -14,6 +13,13 @@ from openhands.server.dependencies import get_dependencies
 
 _logger = logging.getLogger(__name__)
 _audit = logging.getLogger('openhands.security.secrets_access')
+=======
+from openhands.app_server.sandbox.session_auth import validate_session_key_ownership
+from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.user.user_models import UserInfo
+from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.integrations.service_types import UserGitInfo
+>>>>>>> main
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
@@ -39,6 +45,7 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
     if expose_secrets:
+<<<<<<< fix/add_secrets_logging
         sandbox_info = await _validate_session_key_ownership(
             user_context, x_session_api_key
         )
@@ -53,12 +60,16 @@ async def get_current_user(
                 'outcome': 'allowed',
             },
         )
+=======
+        await validate_session_key_ownership(user_context, x_session_api_key)
+>>>>>>> main
         return JSONResponse(  # type: ignore[return-value]
             content=user.model_dump(mode='json', context={'expose_secrets': True})
         )
     return user
 
 
+<<<<<<< fix/add_secrets_logging
 async def _validate_session_key_ownership(
     user_context: UserContext,
     session_api_key: str | None,
@@ -127,3 +138,14 @@ async def _validate_session_key_ownership(
         )
 
     return sandbox_info
+=======
+@router.get('/git-info')
+async def get_current_user_git_info(
+    user_context: UserContext = user_dependency,
+) -> UserGitInfo:
+    """Get the current authenticated user's metadata from the git provider."""
+    user = await user_context.get_user_git_info()
+    if user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
+    return user
+>>>>>>> main

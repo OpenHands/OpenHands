@@ -58,6 +58,8 @@ repos:
             types-Markdown,
             pydantic,
             lxml,
+            "openhands-sdk==1.14",
+            "openhands-tools==1.14",
           ]
         # To see gaps add `--html-report mypy-report/`
         entry: mypy --config-file dev_config/python/mypy.ini openhands/

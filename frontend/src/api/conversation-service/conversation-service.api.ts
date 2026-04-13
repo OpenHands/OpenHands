@@ -1,30 +1,27 @@
 import { AxiosHeaders } from "axios";
 import {
-  Feedback,
-  FeedbackResponse,
   GetVSCodeUrlResponse,
   Conversation,
   ResultSet,
   GetTrajectoryResponse,
   GetMicroagentsResponse,
   GetMicroagentPromptResponse,
-  CreateMicroagent,
   FileUploadSuccessResponse,
   GetFilesResponse,
 } from "../open-hands.types";
 import { openHands } from "../open-hands-axios";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
-import { BatchFeedbackData } from "#/hooks/query/use-batch-feedback";
+import { V1AppConversation } from "./v1-conversation-service.types";
 
 class ConversationService {
-  private static currentConversation: Conversation | null = null;
+  private static currentConversation: V1AppConversation | null = null;
 
   /**
    * Get a current conversation
    * @return the current conversation
    */
-  static getCurrentConversation(): Conversation | null {
+  static getCurrentConversation(): V1AppConversation | null {
     return this.currentConversation;
   }
 
@@ -33,7 +30,7 @@ class ConversationService {
    * @param url Custom URL to use for conversation endpoints
    */
   static setCurrentConversation(
-    currentConversation: Conversation | null,
+    currentConversation: V1AppConversation | null,
   ): void {
     this.currentConversation = currentConversation;
   }
@@ -42,9 +39,9 @@ class ConversationService {
    * Get the url for the conversation. If
    */
   static getConversationUrl(conversationId: string): string {
-    if (this.currentConversation?.conversation_id === conversationId) {
-      if (this.currentConversation.url) {
-        return this.currentConversation.url;
+    if (this.currentConversation?.id === conversationId) {
+      if (this.currentConversation.conversation_url) {
+        return this.currentConversation.conversation_url;
       }
     }
     return `/api/conversations/${conversationId}`;
@@ -57,105 +54,6 @@ class ConversationService {
       headers.set("X-Session-API-Key", sessionApiKey);
     }
     return headers;
-  }
-
-  /**
-   * Send feedback to the server
-   * @param data Feedback data
-   * @returns The stored feedback data
-   */
-  static async submitFeedback(
-    conversationId: string,
-    feedback: Feedback,
-  ): Promise<FeedbackResponse> {
-    const url = `/api/conversations/${conversationId}/submit-feedback`;
-    const { data } = await openHands.post<FeedbackResponse>(url, feedback);
-    return data;
-  }
-
-  /**
-   * Submit conversation feedback with rating
-   * @param conversationId The conversation ID
-   * @param rating The rating (1-5)
-   * @param eventId Optional event ID this feedback corresponds to
-   * @param reason Optional reason for the rating
-   * @returns Response from the feedback endpoint
-   */
-  static async submitConversationFeedback(
-    conversationId: string,
-    rating: number,
-    eventId?: number,
-    reason?: string,
-  ): Promise<{ status: string; message: string }> {
-    const url = `/feedback/conversation`;
-    const payload = {
-      conversation_id: conversationId,
-      event_id: eventId,
-      rating,
-      reason,
-      metadata: { source: "likert-scale" },
-    };
-    const { data } = await openHands.post<{ status: string; message: string }>(
-      url,
-      payload,
-    );
-    return data;
-  }
-
-  /**
-   * Check if feedback exists for a specific conversation and event
-   * @param conversationId The conversation ID
-   * @param eventId The event ID to check
-   * @returns Feedback data including existence, rating, and reason
-   */
-  static async checkFeedbackExists(
-    conversationId: string,
-    eventId: number,
-  ): Promise<{ exists: boolean; rating?: number; reason?: string }> {
-    try {
-      const url = `/feedback/conversation/${conversationId}/${eventId}`;
-      const { data } = await openHands.get<{
-        exists: boolean;
-        rating?: number;
-        reason?: string;
-      }>(url);
-      return data;
-    } catch {
-      // Error checking if feedback exists
-      return { exists: false };
-    }
-  }
-
-  /**
-   * Get feedback for multiple events in a conversation
-   * @param conversationId The conversation ID
-   * @returns Map of event IDs to feedback data including existence, rating, reason and metadata
-   */
-  static async getBatchFeedback(conversationId: string): Promise<
-    Record<
-      string,
-      {
-        exists: boolean;
-        rating?: number;
-        reason?: string;
-        metadata?: Record<string, BatchFeedbackData>;
-      }
-    >
-  > {
-    const url = `/feedback/conversation/${conversationId}/batch`;
-    const { data } = await openHands.get<
-      Record<
-        string,
-        {
-          exists: boolean;
-          rating?: number;
-          reason?: string;
-          metadata?: Record<string, BatchFeedbackData>;
-        }
-      >
-    >(url);
-
-    return data;
   }
 
   /**
@@ -194,23 +92,6 @@ class ConversationService {
     return data;
   }
 
-  static async getUserConversations(
-    limit: number = 20,
-    pageId?: string,
-  ): Promise<ResultSet<Conversation>> {
-    const params = new URLSearchParams();
-    params.append("limit", limit.toString());
-
-    if (pageId) {
-      params.append("page_id", pageId);
-    }
-
-    const { data } = await openHands.get<ResultSet<Conversation>>(
-      `/api/conversations?${params.toString()}`,
-    );
-    return data;
-  }
-
   static async searchConversations(
     selectedRepository?: string,
     conversationTrigger?: string,
@@ -244,7 +125,6 @@ class ConversationService {
     suggested_task?: SuggestedTask,
     selected_branch?: string,
     conversationInstructions?: string,
-    createMicroagent?: CreateMicroagent,
   ): Promise<Conversation> {
     const body = {
       repository: selectedRepository,
@@ -253,7 +133,6 @@ class ConversationService {
       initial_user_msg: initialUserMsg,
       suggested_task,
       conversation_instructions: conversationInstructions,
-      create_microagent: createMicroagent,
     };
 
     const { data } = await openHands.post<Conversation>(

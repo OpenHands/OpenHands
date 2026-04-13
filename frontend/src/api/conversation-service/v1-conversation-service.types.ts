@@ -2,6 +2,7 @@ import { ConversationTrigger } from "../open-hands.types";
 import { V1SandboxStatus } from "../sandbox-service/sandbox-service.types";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
+import { V1ExecutionStatus } from "#/types/v1/core";
 
 // Plugin specification for starting conversations with plugins
 export interface PluginSpec {
@@ -99,14 +100,6 @@ export interface V1AppConversationStartTaskPage {
   next_page_id: string | null;
 }
 
-export type V1ConversationExecutionStatus =
-  | "RUNNING"
-  | "AWAITING_USER_INPUT"
-  | "AWAITING_USER_CONFIRMATION"
-  | "FINISHED"
-  | "PAUSED"
-  | "STOPPED";
-
 export interface V1AppConversation {
   id: string;
   created_by_user_id: string | null;
@@ -122,10 +115,11 @@ export interface V1AppConversation {
   created_at: string;
   updated_at: string;
   sandbox_status: V1SandboxStatus;
-  execution_status: V1ConversationExecutionStatus | null;
+  execution_status: V1ExecutionStatus | null;
   conversation_url: string | null;
   session_api_key: string | null;
   public?: boolean;
+  sub_conversation_ids: string[];
 }
 
 export interface V1AppConversationPage {
@@ -198,6 +192,6 @@ export interface V1RuntimeConversationInfo {
   metrics: V1MetricsSnapshot | null;
   created_at: string;
   updated_at: string;
-  status: V1ConversationExecutionStatus;
+  status: V1ExecutionStatus;
   stats: V1RuntimeConversationStats;
 }
