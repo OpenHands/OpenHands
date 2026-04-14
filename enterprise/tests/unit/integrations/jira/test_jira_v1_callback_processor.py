@@ -320,7 +320,9 @@ class TestAskQuestion:
         mock_httpx_client.post.assert_called_once()
         call_args = mock_httpx_client.post.call_args
 
-        expected_url = f'{agent_server_url}/api/conversations/{conversation_id}/ask_agent'
+        expected_url = (
+            f'{agent_server_url}/api/conversations/{conversation_id}/ask_agent'
+        )
         assert call_args[0][0] == expected_url
         assert call_args[1]['headers'] == {'X-Session-API-Key': session_api_key}
         assert call_args[1]['json'] == {'question': message_content}
@@ -354,7 +356,9 @@ class TestAskQuestion:
     async def test_handles_timeout(self, callback_processor):
         """Test that timeout errors are handled and wrapped."""
         mock_httpx_client = AsyncMock()
-        mock_httpx_client.post = AsyncMock(side_effect=httpx.TimeoutException('Timeout'))
+        mock_httpx_client.post = AsyncMock(
+            side_effect=httpx.TimeoutException('Timeout')
+        )
 
         with pytest.raises(Exception, match='Failed to send message to agent server'):
             await callback_processor._ask_question(

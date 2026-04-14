@@ -596,4 +596,6 @@ class TestJiraV1Conversation:
             mock_get_org.return_value = None
 
             with pytest.raises(RuntimeError, match='Failed to start V1 conversation'):
-                await new_conversation_view.create_or_update_conversation(mock_jinja_env)
+                await new_conversation_view.create_or_update_conversation(
+                    mock_jinja_env
+                )
