@@ -18,9 +18,6 @@ from integrations.jira.jira_view import (
     JiraNewConversationView,
 )
 
-from openhands.integrations.service_types import ProviderType
-from openhands.server.user_auth.user_auth import UserAuth
-
 
 class TestJiraNewConversationView:
     """Tests for JiraNewConversationView"""
