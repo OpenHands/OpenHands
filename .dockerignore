@@ -1,5 +1,34 @@
+# Version control (large; never used by containers/app/Dockerfile COPY)
+.git
+**/.git
+
 # NodeJS
 frontend/node_modules
+**/node_modules
+
+# Areas not copied by containers/app/Dockerfile (reduces context size)
+/enterprise/
+/openhands-ui/
+/.agents/
+
+# IDE / local tooling
+.cursor/
+**/.cursor/
+.vscode/
+**/.vscode/
+.idea/
+**/.idea/
+
+# Caches & coverage (not needed in image)
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+.pytest_cache
+.ruff_cache
+htmlcov/
+coverage/
+*.egg-info/
+**/*.egg-info/
 
 # Configuration (except pyproject.toml)
 *.ini
