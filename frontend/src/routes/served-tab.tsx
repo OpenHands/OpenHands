@@ -27,10 +27,10 @@ function ServedApp() {
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "route-change" && event.data.path) {
-        // Extract only the pathname, ignoring query params
-        // (activeHost already carries the default query params)
+        // Persist the iframe's current pathname so a refresh restores it,
+        // but do NOT call setPath — setting path would re-render the iframe
+        // with a new src and force-reload it, undoing the client-side nav.
         const pathname = event.data.path.split("?")[0];
-        setPath(pathname);
         sessionStorage.setItem(storageKey, pathname);
       }
     };
@@ -116,7 +116,13 @@ function ServedApp() {
         </button>
         <button
           type="button"
-          onClick={() => setRefreshKey((prev) => prev + 1)}
+          onClick={() => {
+            // Refresh at the iframe's most recent pathname (persisted on
+            // route-change messages), not the stale initial `path` state.
+            const latest = sessionStorage.getItem(storageKey);
+            if (latest) setPath(latest);
+            setRefreshKey((prev) => prev + 1);
+          }}
           className="text-sm"
           aria-label={t(I18nKey.BUTTON$REFRESH)}
         >
