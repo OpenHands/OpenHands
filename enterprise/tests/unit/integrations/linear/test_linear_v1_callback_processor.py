@@ -243,7 +243,9 @@ class TestPostSummaryToLinear:
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {
-            'data': {'commentCreate': {'success': True, 'comment': {'id': 'comment-123'}}}
+            'data': {
+                'commentCreate': {'success': True, 'comment': {'id': 'comment-123'}}
+            }
         }
 
         mock_client_instance = AsyncMock()
@@ -268,7 +270,9 @@ class TestPostSummaryToLinear:
         assert 'commentCreate' in json_body['query']
         assert 'variables' in json_body
         assert json_body['variables']['input']['issueId'] == 'issue-123'
-        assert 'OpenHands resolved this issue' in json_body['variables']['input']['body']
+        assert (
+            'OpenHands resolved this issue' in json_body['variables']['input']['body']
+        )
         assert 'Test summary content' in json_body['variables']['input']['body']
 
     @pytest.mark.asyncio
@@ -295,9 +299,7 @@ class TestPostSummaryToLinear:
         """Test that GraphQL errors are handled and raised."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            'errors': [{'message': 'Issue not found'}]
-        }
+        mock_response.json.return_value = {'errors': [{'message': 'Issue not found'}]}
 
         mock_client_instance = AsyncMock()
         mock_client_instance.post = AsyncMock(return_value=mock_response)
