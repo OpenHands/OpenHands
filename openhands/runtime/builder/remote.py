@@ -38,6 +38,7 @@ class RemoteRuntimeBuilder(RuntimeBuilder):
         tags: list[str],
         platform: str | None = None,
         extra_build_args: list[str] | None = None,
+        use_local_cache: bool = False,
         timeout: int = 600,
     ) -> str:
         """Builds a Docker image using the Runtime API's /build endpoint."""
@@ -73,7 +74,14 @@ class RemoteRuntimeBuilder(RuntimeBuilder):
             if e.response.status_code == 429:
                 logger.warning('Build was rate limited. Retrying in 30 seconds.')
                 time.sleep(30)
-                return self.build(path, tags, platform)
+                return self.build(
+                    path,
+                    tags,
+                    platform,
+                    extra_build_args,
+                    use_local_cache,
+                    timeout,
+                )
             else:
                 raise e
 

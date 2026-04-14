@@ -344,6 +344,8 @@ def test_build_runtime_image_from_scratch():
             ],
             platform=None,
             extra_build_args=None,
+            use_local_cache=False,
+            timeout=600,
         )
         assert (
             image_name
@@ -439,6 +441,8 @@ def test_build_runtime_image_exact_hash_not_exist_and_lock_exist():
             ],
             platform=None,
             extra_build_args=None,
+            use_local_cache=False,
+            timeout=600,
         )
         mock_prep_build_folder.assert_called_once_with(
             ANY,
@@ -499,6 +503,8 @@ def test_build_runtime_image_exact_hash_not_exist_and_lock_not_exist_and_version
             ],
             platform=None,
             extra_build_args=None,
+            use_local_cache=False,
+            timeout=600,
         )
         mock_prep_build_folder.assert_called_once_with(
             ANY,

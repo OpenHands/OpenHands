@@ -16,6 +16,7 @@ class RuntimeBuilder(abc.ABC):
         tags: list[str],
         platform: str | None = None,
         extra_build_args: list[str] | None = None,
+        use_local_cache: bool = False,
         timeout: int = 600,
     ) -> str:
         """Build the runtime image.
@@ -25,6 +26,7 @@ class RuntimeBuilder(abc.ABC):
             tags (list[str]): The tags to apply to the runtime image (e.g., ["repo:my-repo", "sha:my-sha"]).
             platform (str, optional): The target platform for the build. Defaults to None.
             extra_build_args (list[str], optional): Additional build arguments to pass to the builder. Defaults to None.
+            use_local_cache (bool, optional): For local Docker builds, whether to use local cache. Ignored by remote builders. Defaults to False.
 
         Returns:
             str: The name:tag of the runtime image after build (e.g., "repo:sha").
