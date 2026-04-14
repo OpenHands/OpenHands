@@ -243,6 +243,13 @@ ralph/
 /debug
 cache
 
+# OpenHands local workspace: JWT, encryption keys, SQLite, settings, and
+# exported conversation JSON. Never commit — treat like ~/.openhands on your machine.
+.openhands/
+
+# Local debug console output (may contain sensitive paths or tokens).
+.debug_console_plus/
+
 # configuration
 config.toml
 config.toml_
