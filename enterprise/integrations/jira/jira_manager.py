@@ -38,7 +38,6 @@ from integrations.utils import (
 from jinja2 import Environment, FileSystemLoader
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
-from server.utils.conversation_callback_utils import register_callback_processor
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
@@ -288,16 +287,6 @@ class JiraManager(Manager[JiraViewInterface]):
 
             # Register callback processor for updates
             logger.info(f'[Jira] TRACE View Type {view.__class__.__name__}')
-            if isinstance(view, JiraNewConversationView):
-                processor = JiraCallbackProcessor(
-                    issue_key=view.payload.issue_key,
-                    workspace_name=view.jira_workspace.name,
-                )
-                register_callback_processor(conversation_id, processor)
-                logger.info(
-                    '[Jira] Callback processor registered',
-                    extra={'conversation_id': conversation_id},
-                )
 
             # Send success response
             logger.info('[Jira] TRACE Getting response message')
