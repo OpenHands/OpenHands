@@ -25,7 +25,7 @@ from openhands.utils.http_session import httpx_verify_option
 
 _logger = logging.getLogger(__name__)
 
-JIRA_CLOUD_API_URL = "https://api.atlassian.com/ex/jira"
+JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 
 
 class JiraV1CallbackProcessor(EventCallbackProcessor):
@@ -48,16 +48,16 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         if not isinstance(event, ConversationStateUpdateEvent):
             return None
 
-        if event.key != "execution_status":
+        if event.key != 'execution_status':
             return None
 
-        _logger.info("[Jira] Callback agent state was %s", event)
+        _logger.info('[Jira] Callback agent state was %s', event)
 
         # Only request summary when execution has finished successfully
-        if event.value != "finished":
+        if event.value != 'finished':
             return None
 
-        _logger.info("[Jira] Should request summary: %s", self.should_request_summary)
+        _logger.info('[Jira] Should request summary: %s', self.should_request_summary)
 
         if not self.should_request_summary:
             return None
@@ -65,11 +65,11 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         self.should_request_summary = False
 
         try:
-            _logger.info(f"[Jira] Requesting summary {conversation_id}")
+            _logger.info(f'[Jira] Requesting summary {conversation_id}')
             summary = await self._request_summary(conversation_id)
             _logger.info(
-                f"[Jira] Posting summary {conversation_id}",
-                extra={"summary": summary},
+                f'[Jira] Posting summary {conversation_id}',
+                extra={'summary': summary},
             )
             await self._post_summary_to_jira(summary)
 
@@ -81,7 +81,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.exception(f"[Jira] Failed to post summary: {e}", stack_info=True)
+            _logger.exception(f'[Jira] Failed to post summary: {e}', stack_info=True)
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
@@ -127,9 +127,9 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert sandbox.session_api_key is not None, (
-                f"No session API key for sandbox: {sandbox.id}"
-            )
+            assert (
+                sandbox.session_api_key is not None
+            ), f'No session API key for sandbox: {sandbox.id}'
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
@@ -161,7 +161,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
             f"{agent_server_url.rstrip('/')}"
             f"/api/conversations/{conversation_id}/ask_agent"
         )
-        headers = {"X-Session-API-Key": session_api_key}
+        headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
 
         try:
@@ -177,34 +177,34 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
             return agent_response.response
 
         except httpx.HTTPStatusError as e:
-            error_detail = f"HTTP {e.response.status_code} error"
+            error_detail = f'HTTP {e.response.status_code} error'
             try:
                 error_body = e.response.text
                 if error_body:
-                    error_detail += f": {error_body}"
+                    error_detail += f': {error_body}'
             except Exception:
                 pass
 
             _logger.exception(
-                "[Jira] HTTP error sending message to %s: %s. "
-                "Request payload: %s. Response headers: %s",
+                '[Jira] HTTP error sending message to %s: %s. '
+                'Request payload: %s. Response headers: %s',
                 url,
                 error_detail,
                 payload,
                 dict(e.response.headers),
                 stack_info=True,
             )
-            raise Exception(f"Failed to send message to agent server: {error_detail}")
+            raise Exception(f'Failed to send message to agent server: {error_detail}')
 
         except httpx.TimeoutException:
-            error_detail = f"Request timeout after 30 seconds to {url}"
+            error_detail = f'Request timeout after 30 seconds to {url}'
             _logger.exception(
-                "[Jira] Timeout error: %s. Request payload: %s",
+                '[Jira] Timeout error: %s. Request payload: %s',
                 error_detail,
                 payload,
                 stack_info=True,
             )
-            raise Exception(f"Failed to send message to agent server: {error_detail}")
+            raise Exception(f'Failed to send message to agent server: {error_detail}')
 
     async def _post_summary_to_jira(self, summary: str):
         """Post the summary back to the Jira issue."""
@@ -216,18 +216,18 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 self.jira_cloud_id,
             ]
         ):
-            _logger.warning("[Jira] Missing required data for posting summary")
+            _logger.warning('[Jira] Missing required data for posting summary')
             return
 
         # Add a comment to the Jira issue with the summary
         comment_url = (
-            f"{JIRA_CLOUD_API_URL}/{self.jira_cloud_id}"
-            f"/rest/api/2/issue/{self.issue_key}/comment"
+            f'{JIRA_CLOUD_API_URL}/{self.jira_cloud_id}'
+            f'/rest/api/2/issue/{self.issue_key}/comment'
         )
 
         # Use plain string body for v2 API (not ADF which is for v3 API)
-        message = f"OpenHands resolved this issue:\n\n{summary}"
-        comment_body = {"body": message}
+        message = f'OpenHands resolved this issue:\n\n{summary}'
+        comment_body = {'body': message}
 
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(
@@ -236,4 +236,4 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 json=comment_body,
             )
             response.raise_for_status()
-            _logger.info(f"[Jira] Posted summary to {self.issue_key}")
+            _logger.info(f'[Jira] Posted summary to {self.issue_key}')
