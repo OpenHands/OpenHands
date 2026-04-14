@@ -26,11 +26,11 @@ from integrations.utils import (
     infer_repo_from_message,
 )
 from jinja2 import Environment
+from storage.jira_conversation import JiraConversation
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
 
-from enterprise.storage.jira_conversation import JiraConversation
 from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
