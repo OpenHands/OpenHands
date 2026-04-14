@@ -185,24 +185,24 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
             except Exception:
                 pass
 
-            _logger.error(
+            _logger.exception(
                 '[Jira] HTTP error sending message to %s: %s. '
                 'Request payload: %s. Response headers: %s',
                 url,
                 error_detail,
                 payload,
                 dict(e.response.headers),
-                exc_info=True,
+                stack_info=True,
             )
             raise Exception(f'Failed to send message to agent server: {error_detail}')
 
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
-            _logger.error(
+            _logger.exception(
                 '[Jira] Timeout error: %s. Request payload: %s',
                 error_detail,
                 payload,
-                exc_info=True,
+                stack_info=True,
             )
             raise Exception(f'Failed to send message to agent server: {error_detail}')
 
