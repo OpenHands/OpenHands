@@ -123,6 +123,10 @@ jobs:
             [[ -z "$tag" ]] && continue
             sources=""
             for arch in $ARCHS; do
+              if ! docker buildx imagetools inspect "${tag}-${arch}" > /dev/null 2>&1; then
+                echo "::error::Missing image ${tag}-${arch}"
+                exit 1
+              fi
               sources+=" ${tag}-${arch}"
             done
             echo "Creating manifest for $tag from:$sources"
@@ -251,6 +255,10 @@ jobs:
               [[ -z "$tag" ]] && continue
               sources=""
               for arch in $ARCHS; do
+                if ! docker buildx imagetools inspect "${tag}-${arch}" > /dev/null 2>&1; then
+                  echo "::error::Missing image ${tag}-${arch}"
+                  exit 1
+                fi
                 sources+=" ${tag}-${arch}"
               done
               echo "Creating manifest for $tag from:$sources"
@@ -384,6 +392,10 @@ jobs:
             [[ -z "$tag" ]] && continue
             sources=""
             for arch in $ARCHS; do
+              if ! docker buildx imagetools inspect "${tag}-${arch}" > /dev/null 2>&1; then
+                echo "::error::Missing image ${tag}-${arch}"
+                exit 1
+              fi
               sources+=" ${tag}-${arch}"
             done
             echo "Creating manifest for $tag from:$sources"
