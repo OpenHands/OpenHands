@@ -264,6 +264,9 @@ containers/runtime/code
 .debug_console_plus/
 frontend/node_modules._old_*/
 
+# Local OpenHands app data (sqlite, secrets); never commit
+.openhands/
+
 # test results
 test-results
 .sessions
