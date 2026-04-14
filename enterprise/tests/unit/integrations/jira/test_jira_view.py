@@ -533,8 +533,8 @@ class TestJiraV1Conversation:
         mock_service = AsyncMock()
 
         async def mock_start_generator(*args, **kwargs):
-            yield MagicMock(status=AppConversationStartTaskStatus.RUNNING)
-            yield MagicMock(status=AppConversationStartTaskStatus.COMPLETED)
+            yield MagicMock(status=AppConversationStartTaskStatus.WORKING)
+            yield MagicMock(status=AppConversationStartTaskStatus.READY)
 
         mock_service.start_app_conversation = mock_start_generator
         mock_get_service.return_value.__aenter__.return_value = mock_service
