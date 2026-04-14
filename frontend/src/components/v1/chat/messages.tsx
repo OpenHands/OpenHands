@@ -51,9 +51,17 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     );
   },
   (prevProps, nextProps) => {
-    // Prevent re-renders if messages are the same length
+    // Re-render when the length OR any item identity changes. Items can be
+    // swapped without changing length (e.g. an action being replaced by its
+    // observation in handleEventForUI), and we need to reflect that.
     if (prevProps.messages.length !== nextProps.messages.length) {
       return false;
+    }
+
+    for (let i = 0; i < prevProps.messages.length; i += 1) {
+      if (prevProps.messages[i] !== nextProps.messages[i]) {
+        return false;
+      }
     }
 
     return true;

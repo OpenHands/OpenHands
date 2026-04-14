@@ -1,6 +1,8 @@
-import { OpenHandsEvent } from "#/types/v1/core";
+import React from "react";
+import { ActionEvent, OpenHandsEvent } from "#/types/v1/core";
 import { GenericEventMessage } from "../../../features/chat/generic-event-message";
 import { getEventContent } from "../event-content-helpers/get-event-content";
+import { getActionContent } from "../event-content-helpers/get-action-content";
 import { getObservationResult } from "../event-content-helpers/get-observation-result";
 import { isObservationEvent } from "#/types/v1/type-guards";
 import {
@@ -14,13 +16,41 @@ import { MarkdownRenderer } from "#/components/features/markdown/markdown-render
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
   isLastMessage: boolean;
+  /**
+   * Optional action event that produced this observation. When provided,
+   * the action's input/arguments are prepended to the observation details
+   * so users can see both the call inputs and the result in one block.
+   */
+  actionEvent?: ActionEvent;
 }
 
 export function GenericEventMessageWrapper({
   event,
   isLastMessage,
+  actionEvent,
 }: GenericEventMessageWrapperProps) {
   const { title, details } = getEventContent(event);
+
+  // If this wrapper is rendering an observation and we have the corresponding
+  // action, splice the action's input content (e.g. MCP tool arguments) into
+  // the observation details so users see it inside the same collapsible block.
+  // The action content is inserted *after* the observation header (e.g.
+  // "**Tool:** name") but *before* the Result/Error/Output section so the
+  // tool description still appears first.
+  let mergedDetails: string | React.ReactNode = details;
+  if (actionEvent && typeof details === "string") {
+    const actionContent = getActionContent(actionEvent);
+    if (actionContent) {
+      const resultMatch = details.match(/\n*\*\*(?:Result|Error|Output):\*\*/);
+      if (resultMatch?.index !== undefined) {
+        const head = details.slice(0, resultMatch.index).trimEnd();
+        const tail = details.slice(resultMatch.index).trimStart();
+        mergedDetails = `${head}\n\n${actionContent}\n\n${tail}`;
+      } else {
+        mergedDetails = `${details}\n\n${actionContent}`;
+      }
+    }
+  }
 
   // SkillReadyEvent is not an observation event, so skip the observation checks
   if (!isSkillReadyEvent(event)) {
@@ -51,7 +81,7 @@ export function GenericEventMessageWrapper({
     <div>
       <GenericEventMessage
         title={title}
-        details={details}
+        details={mergedDetails}
         success={success}
         initiallyExpanded={false}
       />

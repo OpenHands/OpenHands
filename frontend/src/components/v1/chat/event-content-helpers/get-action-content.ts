@@ -75,12 +75,10 @@ const getExecuteBashActionContent = (
 };
 
 // Tool Actions
-const getMCPToolActionContent = (action: MCPToolAction): string => {
-  // For V1, the tool name is in the event's tool_name property, not in the action
-  let details = `**MCP Tool Call**\n\n`;
-  details += `**Arguments:**\n\`\`\`json\n${JSON.stringify(action.data, null, 2)}\n\`\`\``;
-  return details;
-};
+const getMCPToolActionContent = (action: MCPToolAction): string =>
+  // The block title (e.g. "Calling Build.One tool" or "Build.One tool called")
+  // already labels this section, so we only emit the arguments here.
+  `**Arguments:**\n\`\`\`json\n${JSON.stringify(action.data, null, 2)}\n\`\`\``;
 
 // Simple Actions
 const getThinkActionContent = (action: ThinkAction): string => action.thought;

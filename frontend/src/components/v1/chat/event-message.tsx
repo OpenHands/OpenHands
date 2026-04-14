@@ -234,6 +234,11 @@ export function EventMessage({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          actionEvent={
+            correspondingAction && isActionEvent(correspondingAction)
+              ? correspondingAction
+              : undefined
+          }
         />
       </>
     );
