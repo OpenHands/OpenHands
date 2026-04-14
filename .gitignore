@@ -266,8 +266,42 @@ containers/runtime/Dockerfile
 containers/runtime/project.tar.gz
 containers/runtime/code
 **/node_modules/
+**/node_modules._old*/
 
 # test results
 test-results
 .sessions
 .eval_sessions
+
+# Root-level scratch / Windows experiment files (optional; keep repo clean)
+/*.zip
+/backend-err.txt
+/backend-out.txt
+/rebuild_log.txt
+/build_check.txt
+/env_check_result.txt
+/frontend-build.log
+/docker_update_monitor.log
+/docker_update_monitor.ps1
+/docker-api-fix.py
+/docker-daemon-setup.ps1
+/simple-docker-upgrade.ps1
+/upgrade-docker-desktop.ps1
+/complete-fix.ps1
+/fix_windows_compat.py
+/fcntl_compat.py
+/container-runtime-setup.sh
+/wsl-docker-setup.sh
+/condenser_config_source.txt
+/query
+/tmp_*.py
+/test_fixes.py
+/test_condenser.py
+/.tmp_*.py
+/WINDOWS_COMPATIBILITY_FIXES.md
+
+# Docker Desktop legacy install path (local only)
+/docker-legacy/
+
+# Root uvicorn log dumps
+/uvicorn_backend*.log
