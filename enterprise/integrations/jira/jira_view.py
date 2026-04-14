@@ -9,6 +9,7 @@ Views are responsible for:
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
+from enterprise.storage.jira_conversation import JiraConversation
 import httpx
 from integrations.jira.jira_payload import JiraWebhookPayload
 from integrations.jira.jira_types import (
@@ -183,7 +184,14 @@ class JiraNewConversationView(JiraViewInterface):
         if not self.selected_repo:
             raise StartingConvoException('No repository selected for this conversation')
 
-        # Use V1 app conversation service
+        jira_conversation = JiraConversation(
+            conversation_id=self.conversation_id,
+            issue_id=self.payload.issue_id,
+            issue_key=self.payload.issue_key,
+            jira_user_id=self.jira_user.id,
+        )
+        await integration_store.create_conversation(jira_conversation)
+
         conversation_metadata = await self._create_v1_metadata()
         await self._create_v1_conversation(jinja_env, conversation_metadata)
         return self.conversation_id
