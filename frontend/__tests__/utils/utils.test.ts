@@ -1,9 +1,4 @@
 import { describe, it, expect, vi, test } from "vitest";
-import {
-  formatTimestamp,
-  getExtension,
-  removeApiKey,
-} from "../../src/utils/utils";
 import { getStatusText } from "#/utils/utils";
 import { AgentState } from "#/types/agent-state";
 import { I18nKey } from "#/i18n/declaration";
@@ -21,25 +16,6 @@ const t = (key: string) => {
   };
   return translations[key] || key;
 };
-
-test("removeApiKey", () => {
-  const data = [{ args: { LLM_API_KEY: "key", LANGUAGE: "en" } }];
-  expect(removeApiKey(data)).toEqual([{ args: { LANGUAGE: "en" } }]);
-});
-
-test("getExtension", () => {
-  expect(getExtension("main.go")).toBe("go");
-  expect(getExtension("get-extension.test.ts")).toBe("ts");
-  expect(getExtension("directory")).toBe("");
-});
-
-test("formatTimestamp", () => {
-  const morningDate = new Date("2021-10-10T10:10:10.000").toISOString();
-  expect(formatTimestamp(morningDate)).toBe("10/10/2021, 10:10:10");
-
-  const eveningDate = new Date("2021-10-10T22:10:10.000").toISOString();
-  expect(formatTimestamp(eveningDate)).toBe("10/10/2021, 22:10:10");
-});
 
 describe("getStatusText", () => {
   it("returns STOPPING when pausing", () => {

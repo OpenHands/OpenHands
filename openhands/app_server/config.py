@@ -105,8 +105,11 @@ def get_default_permitted_cors_origins() -> list[str]:
 
 
 def get_openhands_provider_base_url() -> str | None:
-    """Return the base URL for the OpenHands provider, if configured."""
-    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or None
+    """Return the base URL for the OpenHands provider, if configured.
+
+    Falls back to LLM_BASE_URL for backward compatibility.
+    """
+    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or os.getenv('LLM_BASE_URL') or None
 
 
 def _get_default_lifespan():

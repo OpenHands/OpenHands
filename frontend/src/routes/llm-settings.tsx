@@ -4,8 +4,8 @@ import { AxiosError } from "axios";
 import { useSearchParams } from "react-router";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
-import { organizeModelsAndProviders } from "#/utils/organize-models-and-providers";
 import { useAIConfigOptions } from "#/hooks/query/use-ai-config-options";
+import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useSettings } from "#/hooks/query/use-settings";
 import { hasAdvancedSettingsSet } from "#/utils/has-advanced-settings-set";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
@@ -23,10 +23,10 @@ import {
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { useConfig } from "#/hooks/query/use-config";
-import { isCustomModel } from "#/utils/is-custom-model";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { getProviderId } from "#/utils/map-provider";
 import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
@@ -71,7 +71,8 @@ function LlmSettingsScreen() {
 
   const { mutate: saveSettings, isPending } = useSaveSettings();
 
-  const { data: resources } = useAIConfigOptions();
+  const { data: securityAnalyzers } = useAIConfigOptions();
+  const { data: providers = [] } = useSearchProviders();
   const { data: settings, isLoading, isFetching } = useSettings();
   const { data: config } = useConfig();
   const { data: me } = useMe();
@@ -132,12 +133,7 @@ function LlmSettingsScreen() {
     null,
   );
 
-  const modelsAndProviders = organizeModelsAndProviders(
-    resources?.models || [],
-  );
-  const verifiedModels = resources?.verifiedModels || [];
-  const verifiedProviders = resources?.verifiedProviders || [];
-  const defaultModel = resources?.defaultModel || DEFAULT_OPENHANDS_MODEL;
+  const defaultModel = DEFAULT_OPENHANDS_MODEL;
 
   // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
   const currentModel = currentSelectedModel || settings?.llm_model;
@@ -161,28 +157,23 @@ function LlmSettingsScreen() {
 
   const shouldUseOpenHandsKey = isOpenHandsProvider() && isSaasMode;
 
-  // Determine if we should hide the agent dropdown when V1 conversation API is enabled
-  const isV1Enabled = settings?.v1_enabled;
-
+  // Determine basic vs advanced view based on saved settings.
+  // If the user's provider is not in the known providers list, or if they
+  // have advanced settings configured, show the advanced view.
   React.useEffect(() => {
-    const determineWhetherToToggleAdvancedSettings = () => {
-      if (resources && settings) {
-        return (
-          isCustomModel(resources.models, settings.llm_model) ||
-          hasAdvancedSettingsSet({
-            ...settings,
-          })
-        );
-      }
+    if (settings) {
+      const { provider } = extractModelAndProvider(settings.llm_model);
+      const knownProvider =
+        !provider || providers.some((p) => p.name === provider);
+      const isAdvanced =
+        !knownProvider ||
+        hasAdvancedSettingsSet({
+          ...settings,
+        });
 
-      return false;
-    };
-
-    const userSettingsIsAdvanced = determineWhetherToToggleAdvancedSettings();
-
-    if (userSettingsIsAdvanced) setView("advanced");
-    else setView("basic");
-  }, [settings, resources]);
+      setView(isAdvanced ? "advanced" : "basic");
+    }
+  }, [settings, providers]);
 
   // Initialize currentSelectedModel with the current settings
   React.useEffect(() => {
@@ -406,14 +397,6 @@ function LlmSettingsScreen() {
     }));
   };
 
-  const handleAgentIsDirty = (agent: string) => {
-    const agentIsDirty = agent !== settings?.agent && agent !== "";
-    setDirtyInputs((prev) => ({
-      ...prev,
-      agent: agentIsDirty,
-    }));
-  };
-
   const handleConfirmationModeIsDirty = (isToggled: boolean) => {
     const confirmationModeIsDirty = isToggled !== settings?.confirmation_mode;
     setDirtyInputs((prev) => ({
@@ -465,7 +448,7 @@ function LlmSettingsScreen() {
   const formIsDirty = Object.values(dirtyInputs).some((isDirty) => isDirty);
 
   const getSecurityAnalyzerOptions = () => {
-    const analyzers = resources?.securityAnalyzers || [];
+    const analyzers = securityAnalyzers || [];
     const orderedItems = [];
 
     // Add LLM analyzer first
@@ -481,18 +464,6 @@ function LlmSettingsScreen() {
       key: "none",
       label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_NONE),
     });
-
-    if (isV1Enabled) {
-      return orderedItems;
-    }
-
-    // Add Invariant analyzer third
-    if (analyzers.includes("invariant")) {
-      orderedItems.push({
-        key: "invariant",
-        label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_INVARIANT),
-      });
-    }
 
     // Add any other analyzers that might exist
     analyzers.forEach((analyzer) => {
@@ -550,9 +521,6 @@ function LlmSettingsScreen() {
               {!isLoading && !isFetching && (
                 <>
                   <ModelSelector
-                    models={modelsAndProviders}
-                    verifiedModels={verifiedModels}
-                    verifiedProviders={verifiedProviders}
                     currentModel={settings.llm_model || defaultModel}
                     onChange={handleModelIsDirty}
                     onDefaultValuesChanged={onDefaultValuesChanged}
@@ -678,25 +646,6 @@ function LlmSettingsScreen() {
                     linkText={t(I18nKey.SETTINGS$SEARCH_API_KEY_INSTRUCTIONS)}
                     href="https://tavily.com/"
                   />
-
-                  {!isV1Enabled && (
-                    <SettingsDropdownInput
-                      testId="agent-input"
-                      name="agent-input"
-                      label={t(I18nKey.SETTINGS$AGENT)}
-                      items={
-                        resources?.agents.map((agent) => ({
-                          key: agent,
-                          label: agent, // TODO: Add i18n support for agent names
-                        })) || []
-                      }
-                      defaultSelectedKey={settings.agent}
-                      isClearable={false}
-                      onInputChange={handleAgentIsDirty}
-                      isDisabled={isReadOnly}
-                      wrapperClassName="w-full max-w-[680px]"
-                    />
-                  )}
                 </>
               )}
 
