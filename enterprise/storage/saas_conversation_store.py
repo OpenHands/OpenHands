@@ -90,6 +90,9 @@ class SaasConversationStore(ConversationStore):
         kwargs.pop('per_turn_token', None)
         kwargs.pop('parent_conversation_id', None)
         kwargs.pop('public')
+        kwargs.pop('critic_score', None)
+        kwargs.pop('critic_message', None)
+        kwargs.pop('critic_evaluated_at', None)
 
         return ConversationMetadata(**kwargs)
 

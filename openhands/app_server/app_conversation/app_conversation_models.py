@@ -11,6 +11,7 @@ from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.critic.base import CriticResult
 from openhands.integrations.service_types import ProviderType, SuggestedTask
 from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
@@ -85,6 +86,15 @@ class AppConversationInfo(BaseModel):
     llm_model: str | None = None
 
     metrics: MetricsSnapshot | None = None
+
+    critic_result: CriticResult | None = Field(
+        default=None,
+        description=(
+            'Most recent critic evaluation of this conversation, if one has been '
+            'computed. Populated by the finish critic callback processor once the '
+            'conversation reaches a terminal execution status.'
+        ),
+    )
 
     parent_conversation_id: OpenHandsUUID | None = None
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
