@@ -341,7 +341,7 @@ class JiraManager(Manager[JiraViewInterface]):
             msg_info = 'Sorry, there was an unexpected error starting the job. Please try again.'
 
         # Send response comment
-        logger.info(f'[Jira] TRACE Sending comment to Jira')
+        logger.info('[Jira] TRACE Sending comment to Jira')
         await self._send_comment(view, msg_info)
 
     async def send_message(
