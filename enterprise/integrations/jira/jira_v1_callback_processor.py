@@ -57,9 +57,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         if event.value != 'finished':
             return None
 
-        _logger.info(
-            '[Jira] Should request summary: %s', self.should_request_summary
-        )
+        _logger.info('[Jira] Should request summary: %s', self.should_request_summary)
 
         if not self.should_request_summary:
             return None

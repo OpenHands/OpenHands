@@ -9,7 +9,6 @@ Views are responsible for:
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
-from enterprise.storage.jira_conversation import JiraConversation
 import httpx
 from integrations.jira.jira_payload import JiraWebhookPayload
 from integrations.jira.jira_types import (
@@ -31,6 +30,7 @@ from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
 
+from enterprise.storage.jira_conversation import JiraConversation
 from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
