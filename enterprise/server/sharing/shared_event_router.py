@@ -101,19 +101,36 @@ async def search_shared_events(
     ] = 100,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> EventPage:
-    """Search / List events for a shared conversation."""
-    page = await shared_event_service.search_shared_events(
-        conversation_id=UUID(conversation_id),
-        kind__eq=kind__eq,
-        timestamp__gte=timestamp__gte,
-        timestamp__lt=timestamp__lt,
-        sort_order=sort_order,
-        page_id=page_id,
-        limit=limit,
-    )
+    """Search / List events for a shared conversation.
+
+    Because non-viewable events (e.g. ``ConversationStateUpdateEvent``) are
+    filtered out after fetching, a single backend page may yield fewer items
+    than *limit*.  This method transparently fetches additional backend pages
+    until the requested *limit* is reached or there are no more results.
+    """
+    conv_id = UUID(conversation_id)
+    viewable: list[Event] = []
+    cursor = page_id
+
+    while len(viewable) < limit:
+        remaining = limit - len(viewable)
+        page = await shared_event_service.search_shared_events(
+            conversation_id=conv_id,
+            kind__eq=kind__eq,
+            timestamp__gte=timestamp__gte,
+            timestamp__lt=timestamp__lt,
+            sort_order=sort_order,
+            page_id=cursor,
+            limit=remaining,
+        )
+        viewable.extend(e for e in page.items if _is_viewable(e))
+        cursor = page.next_page_id
+        if cursor is None:
+            break
+
     return EventPage(
-        items=[e for e in page.items if _is_viewable(e)],
-        next_page_id=page.next_page_id,
+        items=viewable[:limit],
+        next_page_id=cursor,
     )
 
 
