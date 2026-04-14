@@ -76,12 +76,17 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
                 event_callback_id=callback.id,
+                event_id=event.id,
+                conversation_id=conversation_id,
+                detail=summary,
             )
         except Exception as e:
             _logger.error(f'[Jira] Failed to post summary: {e}')
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
+                event_id=event.id,
+                conversation_id=conversation_id,
                 detail=str(e),
             )
 
