@@ -65,6 +65,7 @@ class DockerRuntimeBuilder(RuntimeBuilder):
         platform: str | None = None,
         extra_build_args: list[str] | None = None,
         use_local_cache: bool = False,
+        timeout: int = 600,
     ) -> str:
         """Builds a Docker image using BuildKit and handles the build logs appropriately.
 
@@ -194,10 +195,18 @@ class DockerRuntimeBuilder(RuntimeBuilder):
                 for line in iter(process.stdout.readline, ''):
                     line = line.strip()
                     if line:
-                        output_lines.append(line)  # Store all output lines
+                        output_lines.append(line)
                         self._output_logs(line)
 
-            return_code = process.wait()
+            try:
+                return_code = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                try:
+                    return_code = process.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    return_code = process.wait()
 
             if return_code != 0:
                 # Use the collected output for error reporting

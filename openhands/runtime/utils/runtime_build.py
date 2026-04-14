@@ -186,6 +186,8 @@ def build_runtime_image_in_folder(
     platform: str | None = None,
     extra_build_args: list[str] | None = None,
     enable_browser: bool = True,
+    build_from: BuildFromImageType = BuildFromImageType.SCRATCH,
+    timeout: int = 600,
 ) -> str:
     runtime_image_repo, _ = get_runtime_image_repo_and_tag(base_image)
     lock_tag = (
@@ -221,6 +223,7 @@ def build_runtime_image_in_folder(
                 versioned_tag,
                 platform,
                 extra_build_args=extra_build_args,
+                timeout=timeout,
             )
         return hash_image_name
 
@@ -263,6 +266,7 @@ def build_runtime_image_in_folder(
             ),
             platform=platform,
             extra_build_args=extra_build_args,
+            timeout=timeout,
         )
 
     return hash_image_name
@@ -378,6 +382,7 @@ def _build_sandbox_image(
     versioned_tag: str | None,
     platform: str | None = None,
     extra_build_args: list[str] | None = None,
+    timeout: int = 600,
 ) -> str:
     """Build and tag the sandbox image. The image will be tagged with all tags that do not yet exist."""
     names = [
@@ -393,6 +398,7 @@ def _build_sandbox_image(
         tags=names,
         platform=platform,
         extra_build_args=extra_build_args,
+        timeout=timeout,
     )
     if not image_name:
         raise AgentRuntimeBuildError(f'Build failed for image {names}')

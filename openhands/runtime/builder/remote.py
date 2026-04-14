@@ -38,6 +38,7 @@ class RemoteRuntimeBuilder(RuntimeBuilder):
         tags: list[str],
         platform: str | None = None,
         extra_build_args: list[str] | None = None,
+        timeout: int = 600,
     ) -> str:
         """Builds a Docker image using the Runtime API's /build endpoint."""
         # Create a tar archive of the build context

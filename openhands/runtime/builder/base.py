@@ -16,6 +16,7 @@ class RuntimeBuilder(abc.ABC):
         tags: list[str],
         platform: str | None = None,
         extra_build_args: list[str] | None = None,
+        timeout: int = 600,
     ) -> str:
         """Build the runtime image.
 
