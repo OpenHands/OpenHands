@@ -287,6 +287,7 @@ class JiraManager(Manager[JiraViewInterface]):
             )
 
             # Register callback processor for updates
+            logger.info(f'[Jira] TRACE View Type {view.__class__.__name__}')
             if isinstance(view, JiraNewConversationView):
                 processor = JiraCallbackProcessor(
                     issue_key=view.payload.issue_key,
@@ -299,7 +300,9 @@ class JiraManager(Manager[JiraViewInterface]):
                 )
 
             # Send success response
+            logger.info('[Jira] TRACE Getting response message')
             msg_info = view.get_response_msg()
+            logger.info(f'[Jira] TRACE Response message was {msg_info}')
 
         except MissingSettingsError as e:
             logger.warning(
@@ -338,6 +341,7 @@ class JiraManager(Manager[JiraViewInterface]):
             msg_info = 'Sorry, there was an unexpected error starting the job. Please try again.'
 
         # Send response comment
+        logger.info(f'[Jira] TRACE Sending comment to Jira')
         await self._send_comment(view, msg_info)
 
     async def send_message(
@@ -366,12 +370,14 @@ class JiraManager(Manager[JiraViewInterface]):
             response = await client.post(
                 url, auth=(svc_acc_email, svc_acc_api_key), json=data
             )
+            logger.info(f'[Jira] TRACE Sent message to Jira: {response.status_code}')
             response.raise_for_status()
             return response.json()
 
     async def _send_comment(self, view: JiraViewInterface, msg: str):
         """Send a comment using credentials from the view."""
         try:
+            logger.info('[Jira] TRACE Sending comment to Jira')
             api_key = self.token_manager.decrypt_text(
                 view.jira_workspace.svc_acc_api_key
             )
