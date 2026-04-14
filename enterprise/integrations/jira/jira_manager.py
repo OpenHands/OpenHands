@@ -24,7 +24,7 @@ from integrations.jira.jira_types import (
     RepositoryNotFoundError,
     StartingConvoException,
 )
-from integrations.jira.jira_view import JiraFactory, JiraNewConversationView
+from integrations.jira.jira_view import JiraFactory
 from integrations.manager import Manager
 from integrations.models import Message
 from integrations.utils import (
@@ -259,11 +259,6 @@ class JiraManager(Manager[JiraViewInterface]):
 
     async def start_job(self, view: JiraViewInterface) -> None:
         """Start a Jira job/conversation."""
-        # Import here to prevent circular import
-        from server.conversation_callback_processor.jira_callback_processor import (
-            JiraCallbackProcessor,
-        )
-
         try:
             logger.info(
                 '[Jira] Starting job',
