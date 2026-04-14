@@ -8,7 +8,6 @@ from integrations.linear.linear_types import LinearViewInterface
 from integrations.linear.linear_view import (
     LinearExistingConversationView,
     LinearFactory,
-    LinearNewConversationView,
 )
 from integrations.manager import Manager
 from integrations.models import JobContext, Message
@@ -21,7 +20,6 @@ from integrations.utils import (
 from jinja2 import Environment, FileSystemLoader
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
-from server.utils.conversation_callback_utils import register_callback_processor
 from storage.linear_integration_store import LinearIntegrationStore
 from storage.linear_user import LinearUser
 from storage.linear_workspace import LinearWorkspace
@@ -285,12 +283,18 @@ class LinearManager(Manager[LinearViewInterface]):
             return
 
         try:
+            # Decrypt the API key for the V1 callback processor
+            decrypted_api_key = self.token_manager.decrypt_text(
+                workspace.svc_acc_api_key
+            )
+
             # Create Linear view
             linear_view = await LinearFactory.create_linear_view_from_payload(
                 job_context,
                 saas_user_auth,
                 linear_user,
                 workspace,
+                decrypted_api_key=decrypted_api_key,
             )
         except Exception as e:
             logger.error(
@@ -344,12 +348,11 @@ class LinearManager(Manager[LinearViewInterface]):
             return False
 
     async def start_job(self, linear_view: LinearViewInterface) -> None:
-        """Start a Linear job/conversation."""
-        # Import here to prevent circular import
-        from server.conversation_callback_processor.linear_callback_processor import (
-            LinearCallbackProcessor,
-        )
+        """Start a Linear job/conversation.
 
+        For new conversations, the V1 callback processor is registered automatically
+        by passing it to AppConversationStartRequest.processors in the view.
+        """
         try:
             user_info: LinearUser = linear_view.linear_user
             logger.info(
@@ -357,7 +360,7 @@ class LinearManager(Manager[LinearViewInterface]):
                 f'issue {linear_view.job_context.issue_key}',
             )
 
-            # Create conversation
+            # Create conversation (V1 callback processor is registered in the view)
             conversation_id = await linear_view.create_or_update_conversation(
                 self.jinja_env
             )
@@ -365,21 +368,6 @@ class LinearManager(Manager[LinearViewInterface]):
             logger.info(
                 f'[Linear] Created/Updated conversation {conversation_id} for issue {linear_view.job_context.issue_key}'
             )
-
-            if isinstance(linear_view, LinearNewConversationView):
-                # Register callback processor for updates
-                processor = LinearCallbackProcessor(
-                    issue_id=linear_view.job_context.issue_id,
-                    issue_key=linear_view.job_context.issue_key,
-                    workspace_name=linear_view.linear_workspace.name,
-                )
-
-                # Register the callback processor
-                register_callback_processor(conversation_id, processor)
-
-                logger.info(
-                    f'[Linear] Created callback processor for conversation {conversation_id}'
-                )
 
             # Send initial response
             msg_info = linear_view.get_response_msg()

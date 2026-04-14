@@ -152,7 +152,7 @@ def mock_jinja_env():
 def linear_conversation():
     """Sample Linear conversation for testing"""
     return LinearConversation(
-        conversation_id='conv-123',
+        conversation_id='12345678123456781234567812345678',  # Valid UUID hex string
         issue_id='test_issue_id',
         issue_key='TEST-123',
         linear_user_id='linear-user-123',
@@ -170,7 +170,7 @@ def new_conversation_view(
         linear_user=sample_linear_user,
         linear_workspace=sample_linear_workspace,
         selected_repo='test/repo1',
-        conversation_id='conv-123',
+        conversation_id='12345678123456781234567812345678',  # Valid UUID hex string
     )
 
 
@@ -185,7 +185,7 @@ def existing_conversation_view(
         linear_user=sample_linear_user,
         linear_workspace=sample_linear_workspace,
         selected_repo='test/repo1',
-        conversation_id='conv-123',
+        conversation_id='12345678123456781234567812345678',  # Valid UUID hex string
     )
 
 

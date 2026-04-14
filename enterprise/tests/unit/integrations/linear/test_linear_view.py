@@ -12,7 +12,9 @@ from integrations.linear.linear_view import (
     LinearNewConversationView,
 )
 
-from openhands.core.schema.agent import AgentState
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationStartTaskStatus,
+)
 
 
 class TestLinearNewConversationView:
@@ -29,32 +31,41 @@ class TestLinearNewConversationView:
         assert 'Test Issue' in user_msg
         assert 'Fix this bug @openhands' in user_msg
 
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
     @patch('integrations.linear.linear_view.integration_store')
+    @patch('integrations.linear.linear_view.get_app_conversation_service')
     async def test_create_or_update_conversation_success(
         self,
+        mock_get_app_conversation_service,
         mock_integration_store,
-        mock_start_convo,
-        mock_get_resolver_instance,
         new_conversation_view,
         mock_jinja_env,
     ):
-        """Test successful conversation creation"""
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
+        """Test successful conversation creation using V1 system"""
         mock_integration_store.create_conversation = AsyncMock()
+
+        # Mock the app conversation service
+        mock_service = AsyncMock()
+
+        # Create a mock task that indicates success (WORKING is a valid status)
+        mock_task = MagicMock()
+        mock_task.status = AppConversationStartTaskStatus.WORKING
+
+        async def mock_start_app_conversation(*args, **kwargs):
+            yield mock_task
+
+        mock_service.start_app_conversation = mock_start_app_conversation
+
+        # Set up the async context manager
+        mock_context = AsyncMock()
+        mock_context.__aenter__.return_value = mock_service
+        mock_context.__aexit__.return_value = None
+        mock_get_app_conversation_service.return_value = mock_context
 
         result = await new_conversation_view.create_or_update_conversation(
             mock_jinja_env
         )
 
         assert result is not None
-        mock_start_convo.assert_called_once()
         mock_integration_store.create_conversation.assert_called_once()
 
     async def test_create_or_update_conversation_no_repo(
@@ -66,27 +77,38 @@ class TestLinearNewConversationView:
         with pytest.raises(StartingConvoException, match='No repository selected'):
             await new_conversation_view.create_or_update_conversation(mock_jinja_env)
 
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
+    @patch('integrations.linear.linear_view.integration_store')
+    @patch('integrations.linear.linear_view.get_app_conversation_service')
     async def test_create_or_update_conversation_failure(
         self,
-        mock_start_convo,
-        mock_get_resolver_instance,
+        mock_get_app_conversation_service,
+        mock_integration_store,
         new_conversation_view,
         mock_jinja_env,
     ):
         """Test conversation creation failure"""
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
-        mock_start_convo.side_effect = Exception('Creation failed')
+        mock_integration_store.create_conversation = AsyncMock()
 
-        with pytest.raises(
-            StartingConvoException, match='Failed to create conversation'
-        ):
+        # Mock the app conversation service to return an error
+        mock_service = AsyncMock()
+
+        # Create a mock task that indicates error
+        mock_task = MagicMock()
+        mock_task.status = AppConversationStartTaskStatus.ERROR
+        mock_task.detail = 'Creation failed'
+
+        async def mock_start_app_conversation(*args, **kwargs):
+            yield mock_task
+
+        mock_service.start_app_conversation = mock_start_app_conversation
+
+        # Set up the async context manager
+        mock_context = AsyncMock()
+        mock_context.__aenter__.return_value = mock_service
+        mock_context.__aexit__.return_value = None
+        mock_get_app_conversation_service.return_value = mock_context
+
+        with pytest.raises(RuntimeError, match='Failed to start V1 conversation'):
             await new_conversation_view.create_or_update_conversation(mock_jinja_env)
 
     def test_get_response_msg(self, new_conversation_view):
@@ -96,7 +118,17 @@ class TestLinearNewConversationView:
         assert "I'm on it!" in response
         assert 'Test User' in response
         assert 'track my progress here' in response
-        assert 'conv-123' in response
+        assert '12345678123456781234567812345678' in response
+
+    def test_create_linear_v1_callback_processor(self, new_conversation_view):
+        """Test that V1 callback processor is created correctly"""
+        new_conversation_view._decrypted_api_key = 'test_api_key'
+        processor = new_conversation_view._create_linear_v1_callback_processor()
+
+        assert processor.decrypted_api_key == 'test_api_key'
+        assert processor.issue_id == 'test_issue_id'
+        assert processor.issue_key == 'TEST-123'
+        assert processor.workspace_name == 'test-workspace'
 
 
 class TestLinearExistingConversationView:
@@ -113,53 +145,42 @@ class TestLinearExistingConversationView:
         assert 'Test Issue' in user_msg
         assert 'Fix this bug @openhands' in user_msg
 
-    @patch('integrations.linear.linear_view.ConversationStoreImpl.get_instance')
-    @patch('integrations.linear.linear_view.setup_init_conversation_settings')
-    @patch('integrations.linear.linear_view.conversation_manager')
-    @patch('integrations.linear.linear_view.get_final_agent_observation')
+    @patch.object(LinearExistingConversationView, '_get_running_sandbox')
+    @patch.object(LinearExistingConversationView, '_send_followup_message')
     async def test_create_or_update_conversation_success(
         self,
-        mock_get_observation,
-        mock_conversation_manager,
-        mock_setup_init,
-        mock_store_impl,
+        mock_send_followup,
+        mock_get_running_sandbox,
         existing_conversation_view,
         mock_jinja_env,
-        mock_conversation_store,
-        mock_conversation_init_data,
-        mock_agent_loop_info,
     ):
-        """Test successful existing conversation update"""
-        # Setup mocks
-        mock_store_impl.return_value = mock_conversation_store
-        mock_setup_init.return_value = mock_conversation_init_data
-        mock_conversation_manager.maybe_start_agent_loop = AsyncMock(
-            return_value=mock_agent_loop_info
-        )
-        mock_conversation_manager.send_event_to_conversation = AsyncMock()
+        """Test successful existing conversation update using V1 system"""
+        # Mock the sandbox
+        mock_sandbox = MagicMock()
+        mock_sandbox.status = 'running'
+        mock_sandbox.session_api_key = 'test_session_key'
+        mock_get_running_sandbox.return_value = mock_sandbox
 
-        # Mock agent observation with RUNNING state
-        mock_observation = MagicMock()
-        mock_observation.agent_state = AgentState.RUNNING
-        mock_get_observation.return_value = [mock_observation]
+        mock_send_followup.return_value = None
 
         result = await existing_conversation_view.create_or_update_conversation(
             mock_jinja_env
         )
 
-        assert result == 'conv-123'
-        mock_conversation_manager.send_event_to_conversation.assert_called_once()
+        assert result == '12345678123456781234567812345678'
+        mock_send_followup.assert_called_once()
 
-    @patch('integrations.linear.linear_view.ConversationStoreImpl.get_instance')
-    async def test_create_or_update_conversation_no_metadata(
-        self, mock_store_impl, existing_conversation_view, mock_jinja_env
+    @patch.object(LinearExistingConversationView, '_get_running_sandbox')
+    async def test_create_or_update_conversation_no_conversation(
+        self,
+        mock_get_running_sandbox,
+        existing_conversation_view,
+        mock_jinja_env,
     ):
-        """Test conversation update with no metadata"""
-        mock_store = AsyncMock()
-        mock_store.get_metadata.side_effect = FileNotFoundError(
-            'No such file or directory'
+        """Test conversation update when conversation no longer exists"""
+        mock_get_running_sandbox.side_effect = StartingConvoException(
+            'Conversation no longer exists.'
         )
-        mock_store_impl.return_value = mock_store
 
         with pytest.raises(
             StartingConvoException, match='Conversation no longer exists'
@@ -168,50 +189,37 @@ class TestLinearExistingConversationView:
                 mock_jinja_env
             )
 
-    @patch('integrations.linear.linear_view.ConversationStoreImpl.get_instance')
-    @patch('integrations.linear.linear_view.setup_init_conversation_settings')
-    @patch('integrations.linear.linear_view.conversation_manager')
-    @patch('integrations.linear.linear_view.get_final_agent_observation')
-    async def test_create_or_update_conversation_loading_state(
+    @patch.object(LinearExistingConversationView, '_get_running_sandbox')
+    async def test_create_or_update_conversation_sandbox_not_running(
         self,
-        mock_get_observation,
-        mock_conversation_manager,
-        mock_setup_init,
-        mock_store_impl,
+        mock_get_running_sandbox,
         existing_conversation_view,
         mock_jinja_env,
-        mock_conversation_store,
-        mock_conversation_init_data,
-        mock_agent_loop_info,
     ):
-        """Test conversation update with loading state"""
-        mock_store_impl.return_value = mock_conversation_store
-        mock_setup_init.return_value = mock_conversation_init_data
-        mock_conversation_manager.maybe_start_agent_loop = AsyncMock(
-            return_value=mock_agent_loop_info
+        """Test conversation update when sandbox is not running"""
+        mock_get_running_sandbox.side_effect = StartingConvoException(
+            'Conversation sandbox is not available.'
         )
 
-        # Mock agent observation with LOADING state
-        mock_observation = MagicMock()
-        mock_observation.agent_state = AgentState.LOADING
-        mock_get_observation.return_value = [mock_observation]
-
         with pytest.raises(
-            StartingConvoException, match='Conversation is still starting'
+            StartingConvoException, match='Conversation sandbox is not available'
         ):
             await existing_conversation_view.create_or_update_conversation(
                 mock_jinja_env
             )
 
-    @patch('integrations.linear.linear_view.ConversationStoreImpl.get_instance')
+    @patch.object(LinearExistingConversationView, '_get_running_sandbox')
     async def test_create_or_update_conversation_failure(
-        self, mock_store_impl, existing_conversation_view, mock_jinja_env
+        self,
+        mock_get_running_sandbox,
+        existing_conversation_view,
+        mock_jinja_env,
     ):
         """Test conversation update failure"""
-        mock_store_impl.side_effect = Exception('Store error')
+        mock_get_running_sandbox.side_effect = Exception('Service error')
 
         with pytest.raises(
-            StartingConvoException, match='Failed to create conversation'
+            StartingConvoException, match='Failed to update conversation'
         ):
             await existing_conversation_view.create_or_update_conversation(
                 mock_jinja_env
@@ -224,7 +232,7 @@ class TestLinearExistingConversationView:
         assert "I'm on it!" in response
         assert 'Test User' in response
         assert 'continue tracking my progress here' in response
-        assert 'conv-123' in response
+        assert '12345678123456781234567812345678' in response
 
 
 class TestLinearFactory:
@@ -253,7 +261,7 @@ class TestLinearFactory:
         )
 
         assert isinstance(view, LinearExistingConversationView)
-        assert view.conversation_id == 'conv-123'
+        assert view.conversation_id == '12345678123456781234567812345678'
 
     @patch('integrations.linear.linear_view.integration_store')
     async def test_create_linear_view_from_payload_new_conversation(
@@ -276,6 +284,29 @@ class TestLinearFactory:
 
         assert isinstance(view, LinearNewConversationView)
         assert view.conversation_id == ''
+
+    @patch('integrations.linear.linear_view.integration_store')
+    async def test_create_linear_view_from_payload_with_api_key(
+        self,
+        mock_store,
+        sample_job_context,
+        sample_user_auth,
+        sample_linear_user,
+        sample_linear_workspace,
+    ):
+        """Test factory creates view with decrypted API key"""
+        mock_store.get_user_conversations_by_issue_id = AsyncMock(return_value=None)
+
+        view = await LinearFactory.create_linear_view_from_payload(
+            sample_job_context,
+            sample_user_auth,
+            sample_linear_user,
+            sample_linear_workspace,
+            decrypted_api_key='test_api_key',
+        )
+
+        assert isinstance(view, LinearNewConversationView)
+        assert view._decrypted_api_key == 'test_api_key'
 
     async def test_create_linear_view_from_payload_no_user(
         self, sample_job_context, sample_user_auth, sample_linear_workspace
@@ -317,139 +348,44 @@ class TestLinearFactory:
 class TestLinearViewEdgeCases:
     """Tests for edge cases and error scenarios"""
 
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
-    @patch('integrations.linear.linear_view.integration_store')
-    async def test_conversation_creation_with_no_user_secrets(
-        self,
-        mock_integration_store,
-        mock_start_convo,
-        mock_get_resolver_instance,
-        new_conversation_view,
-        mock_jinja_env,
-    ):
-        """Test conversation creation when user has no secrets"""
-        new_conversation_view.saas_user_auth.get_secrets = AsyncMock(return_value=None)
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
-        mock_integration_store.create_conversation = AsyncMock()
-
-        result = await new_conversation_view.create_or_update_conversation(
-            mock_jinja_env
-        )
-
-        assert result is not None
-        # Verify start_conversation was called with custom_secrets=None
-        call_kwargs = mock_start_convo.call_args[1]
-        assert call_kwargs['custom_secrets'] is None
-
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
-    @patch('integrations.linear.linear_view.integration_store')
-    async def test_conversation_creation_store_failure(
-        self,
-        mock_integration_store,
-        mock_start_convo,
-        mock_get_resolver_instance,
-        new_conversation_view,
-        mock_jinja_env,
-    ):
-        """Test conversation creation when store creation fails"""
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
-        mock_integration_store.create_conversation = AsyncMock(
-            side_effect=Exception('Store error')
-        )
-
-        with pytest.raises(
-            StartingConvoException, match='Failed to create conversation'
-        ):
-            await new_conversation_view.create_or_update_conversation(mock_jinja_env)
-
-    @patch('integrations.linear.linear_view.ConversationStoreImpl.get_instance')
-    @patch('integrations.linear.linear_view.setup_init_conversation_settings')
-    @patch('integrations.linear.linear_view.conversation_manager')
-    @patch('integrations.linear.linear_view.get_final_agent_observation')
-    async def test_existing_conversation_empty_observations(
-        self,
-        mock_get_observation,
-        mock_conversation_manager,
-        mock_setup_init,
-        mock_store_impl,
-        existing_conversation_view,
-        mock_jinja_env,
-        mock_conversation_store,
-        mock_conversation_init_data,
-        mock_agent_loop_info,
-    ):
-        """Test existing conversation with empty observations"""
-        mock_store_impl.return_value = mock_conversation_store
-        mock_setup_init.return_value = mock_conversation_init_data
-        mock_conversation_manager.maybe_start_agent_loop = AsyncMock(
-            return_value=mock_agent_loop_info
-        )
-        mock_get_observation.return_value = []  # Empty observations
-
-        with pytest.raises(
-            StartingConvoException, match='Conversation is still starting'
-        ):
-            await existing_conversation_view.create_or_update_conversation(
-                mock_jinja_env
-            )
-
     def test_new_conversation_view_attributes(self, new_conversation_view):
         """Test new conversation view attribute access"""
         assert new_conversation_view.job_context.issue_key == 'TEST-123'
         assert new_conversation_view.selected_repo == 'test/repo1'
-        assert new_conversation_view.conversation_id == 'conv-123'
+        assert (
+            new_conversation_view.conversation_id == '12345678123456781234567812345678'
+        )
 
     def test_existing_conversation_view_attributes(self, existing_conversation_view):
         """Test existing conversation view attribute access"""
         assert existing_conversation_view.job_context.issue_key == 'TEST-123'
         assert existing_conversation_view.selected_repo == 'test/repo1'
-        assert existing_conversation_view.conversation_id == 'conv-123'
+        assert (
+            existing_conversation_view.conversation_id
+            == '12345678123456781234567812345678'
+        )
 
-    @patch('integrations.linear.linear_view.ConversationStoreImpl.get_instance')
-    @patch('integrations.linear.linear_view.setup_init_conversation_settings')
-    @patch('integrations.linear.linear_view.conversation_manager')
-    @patch('integrations.linear.linear_view.get_final_agent_observation')
+    @patch.object(LinearExistingConversationView, '_get_running_sandbox')
+    @patch.object(LinearExistingConversationView, '_send_followup_message')
     async def test_existing_conversation_message_send_failure(
         self,
-        mock_get_observation,
-        mock_conversation_manager,
-        mock_setup_init,
-        mock_store_impl,
+        mock_send_followup,
+        mock_get_running_sandbox,
         existing_conversation_view,
         mock_jinja_env,
-        mock_conversation_store,
-        mock_conversation_init_data,
-        mock_agent_loop_info,
     ):
         """Test existing conversation when message sending fails"""
-        mock_store_impl.return_value = mock_conversation_store
-        mock_setup_init.return_value = mock_conversation_init_data
-        mock_conversation_manager.maybe_start_agent_loop.return_value = (
-            mock_agent_loop_info
-        )
-        mock_conversation_manager.send_event_to_conversation = AsyncMock(
-            side_effect=Exception('Send error')
-        )
+        # Mock the sandbox
+        mock_sandbox = MagicMock()
+        mock_sandbox.status = 'running'
+        mock_sandbox.session_api_key = 'test_session_key'
+        mock_get_running_sandbox.return_value = mock_sandbox
 
-        # Mock agent observation with RUNNING state
-        mock_observation = MagicMock()
-        mock_observation.agent_state = AgentState.RUNNING
-        mock_get_observation.return_value = [mock_observation]
+        # Mock the followup message to fail
+        mock_send_followup.side_effect = Exception('Send error')
 
         with pytest.raises(
-            StartingConvoException, match='Failed to create conversation'
+            StartingConvoException, match='Failed to update conversation'
         ):
             await existing_conversation_view.create_or_update_conversation(
                 mock_jinja_env
