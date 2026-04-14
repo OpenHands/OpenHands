@@ -5,6 +5,16 @@ This repository contains the code for OpenHands, an automated AI software engine
 To set up the entire repo, including frontend and backend, run `make build`.
 You don't need to do this unless the user asks you to, or if you're trying to run the entire application.
 
+## Local Docker: development agent vs packaged build
+
+Use the right compose file depending on whether you are **developing** this repo or **running** the packaged app image.
+
+- **Development agent (iterate on source):** Use [`containers/dev/compose.yml`](containers/dev/compose.yml). It builds `openhands:dev`, mounts the repo at `/app`, wires the sandbox to `host.docker.internal`, and uses `pull_policy: never` so you are not constantly rebuilding. From the repository root: `docker compose -f containers/dev/compose.yml up` (override `OPENHANDS_WORKSPACE` if the checkout lives outside the default `../../` layout).
+
+- **Packaged build (production-like UI in Docker):** Use the root [`docker-compose.yml`](docker-compose.yml). It builds `openhands:latest` via [`containers/app/Dockerfile`](containers/app/Dockerfile), publishes **3000:3000**, and passes `AGENT_SERVER_IMAGE_*` to match the canonical tag in [`openhands/app_server/sandbox/sandbox_spec_service.py`](openhands/app_server/sandbox/sandbox_spec_service.py) (default `1.16.1-python`). Run `docker compose build` when dependencies or Dockerfile change; otherwise `docker compose up -d` reuses the local image.
+
+- **Windows:** Set `WORKSPACE_BASE` to an absolute path (for example `C:\path\to\openhands\workspace`) so bind mounts resolve.
+
 ## Running OpenHands with OpenHands:
 To run the full application to debug issues:
 ```bash
