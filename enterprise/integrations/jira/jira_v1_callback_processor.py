@@ -81,7 +81,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.error(f'[Jira] Failed to post summary: {e}')
+            _logger.exception(f'[Jira] Failed to post summary: {e}', stack_info=True)
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
