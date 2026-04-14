@@ -52,8 +52,10 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import (
     Base,
+    UtcDateTime,
     create_json_type_decorator,
 )
+from openhands.critic.base import CriticResult
 from openhands.integrations.provider import ProviderType
 from openhands.sdk.conversation.conversation_stats import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
@@ -103,6 +105,12 @@ class StoredConversationMetadata(Base):  # type: ignore
 
     # Tags for conversation metadata (e.g., automation context, skills used)
     tags = Column(create_json_type_decorator(dict[str, str]), nullable=True)
+
+    # Critic evaluation results (populated by the critic callback processor
+    # once the conversation reaches a terminal execution status).
+    critic_score = Column(Float, nullable=True)
+    critic_message = Column(String, nullable=True)
+    critic_evaluated_at = Column(UtcDateTime, nullable=True)
 
 
 @dataclass
@@ -368,6 +376,11 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             ),
             public=info.public,
             tags=info.tags if info.tags else None,
+            critic_score=info.critic_result.score if info.critic_result else None,
+            critic_message=(info.critic_result.message if info.critic_result else None),
+            critic_evaluated_at=(
+                info.critic_result.evaluated_at if info.critic_result else None
+            ),
         )
 
         await self.db_session.merge(stored)
@@ -534,6 +547,21 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         created_at = self._fix_timezone(stored.created_at)
         updated_at = self._fix_timezone(stored.last_updated_at)
 
+        critic_score = getattr(stored, 'critic_score', None)
+        critic_message = getattr(stored, 'critic_message', None)
+        critic_evaluated_at = getattr(stored, 'critic_evaluated_at', None)
+        critic_result: CriticResult | None = None
+        if isinstance(critic_score, (int, float)) and isinstance(critic_message, str):
+            critic_result = CriticResult(
+                score=float(critic_score),
+                message=critic_message,
+                evaluated_at=(
+                    self._fix_timezone(critic_evaluated_at)
+                    if isinstance(critic_evaluated_at, datetime)
+                    else utc_now()
+                ),
+            )
+
         return AppConversationInfo(
             id=UUID(stored.conversation_id),
             created_by_user_id=None,  # User ID is now stored in ConversationMetadataSaas
@@ -548,6 +576,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             pr_number=stored.pr_number,
             llm_model=stored.llm_model,
             metrics=metrics,
+            critic_result=critic_result,
             parent_conversation_id=(
                 UUID(stored.parent_conversation_id)
                 if stored.parent_conversation_id

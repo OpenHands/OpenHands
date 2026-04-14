@@ -59,6 +59,9 @@ from openhands.app_server.event_callback.event_callback_models import EventCallb
 from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
 )
+from openhands.app_server.event_callback.finish_critic_callback_processor import (
+    FinishCriticCallbackProcessor,
+)
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
 )
@@ -369,6 +372,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
             if not has_set_title_processor:
                 processors.append(SetTitleCallbackProcessor())
+
+            # Always ensure a FinishCriticCallbackProcessor is included so
+            # that new conversations are scored automatically once they
+            # reach a terminal execution status.
+            has_finish_critic_processor = any(
+                isinstance(processor, FinishCriticCallbackProcessor)
+                for processor in processors
+            )
+            if not has_finish_critic_processor:
+                processors.append(FinishCriticCallbackProcessor())
 
             # Save processors
             for processor in processors:

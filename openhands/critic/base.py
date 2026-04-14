@@ -1,8 +1,10 @@
 import abc
+from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from openhands.events import Event
+from openhands.agent_server.utils import utc_now
 
 
 class CriticResult(BaseModel):
@@ -10,6 +12,7 @@ class CriticResult(BaseModel):
 
     score: float
     message: str
+    evaluated_at: datetime = Field(default_factory=utc_now)
 
     @property
     def success(self) -> bool:
@@ -18,10 +21,13 @@ class CriticResult(BaseModel):
 
 
 class BaseCritic(abc.ABC):
-    """A critic is a function that takes in a list of events, optional git patch, and returns a score about the quality of those events."""
+    """A critic produces a `CriticResult` from a sequence of conversation events.
+
+    The events list is intentionally untyped so critic implementations can be
+    shared between the legacy V0 event stream (``openhands.events.Event``) and
+    the V1 SDK event stream (``openhands.sdk.Event``).
+    """
 
     @abc.abstractmethod
-    def evaluate(
-        self, events: list[Event], git_patch: str | None = None
-    ) -> CriticResult:
+    def evaluate(self, events: list[Any], git_patch: str | None = None) -> CriticResult:
         pass
