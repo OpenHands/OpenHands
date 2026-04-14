@@ -4,7 +4,7 @@ import { AxiosError } from "axios";
 import { useSearchParams } from "react-router";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
-import { useAIConfigOptions } from "#/hooks/query/use-ai-config-options";
+import { useSecurityAnalyzers } from "#/hooks/query/use-security-analyzers";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useSettings } from "#/hooks/query/use-settings";
 import { hasAdvancedSettingsSet } from "#/utils/has-advanced-settings-set";
@@ -71,7 +71,7 @@ function LlmSettingsScreen() {
 
   const { mutate: saveSettings, isPending } = useSaveSettings();
 
-  const { data: securityAnalyzers } = useAIConfigOptions();
+  const { data: securityAnalyzers } = useSecurityAnalyzers();
   const { data: providers = [] } = useSearchProviders();
   const { data: settings, isLoading, isFetching } = useSettings();
   const { data: config } = useConfig();
