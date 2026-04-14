@@ -35,12 +35,10 @@ def callback_processor():
 @pytest.fixture
 def mock_event_callback():
     """Create a mock EventCallback."""
-    return EventCallback(
-        id=UUID('12345678-1234-5678-1234-567812345678'),
-        name='test_callback',
-        conversation_id=UUID('87654321-4321-8765-4321-876543218765'),
-        processor=MagicMock(),
-    )
+    callback = MagicMock(spec=EventCallback)
+    callback.id = UUID('12345678-1234-5678-1234-567812345678')
+    callback.conversation_id = UUID('87654321-4321-8765-4321-876543218765')
+    return callback
 
 
 @pytest.fixture
