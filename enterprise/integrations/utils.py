@@ -597,3 +597,18 @@ def markdown_to_jira_markup(markdown_text: str) -> str:
         # Log the error but don't raise it - return original text as fallback
         print(f'Error converting markdown to Jira markup: {str(e)}')
         return markdown_text or ''
+
+
+def format_jira_comment_body(message: str) -> dict:
+    """Format a message as a Jira API v2 comment body.
+
+    This helper ensures consistent comment formatting across all Jira integrations.
+    Converts markdown to Jira Wiki Markup and wraps in the expected API structure.
+
+    Args:
+        message: The message content to send (may contain markdown)
+
+    Returns:
+        dict: The comment body in Jira API v2 format {'body': ...}
+    """
+    return {'body': markdown_to_jira_markup(message)}

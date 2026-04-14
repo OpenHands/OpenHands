@@ -197,9 +197,11 @@ class JiraNewConversationView(JiraViewInterface):
         return self.conversation_id
 
     async def _create_v1_metadata(self) -> ConversationMetadata:
-        """Create dummy conversation metadata for V1 conversations.
+        """Create conversation metadata for V1 conversations.
 
-        V1 conversations are stored in a separate table, so we don't save to store.
+        The JiraConversation mapping is saved to the integration store (above), but
+        V1 conversation metadata is managed by the app conversation system, not
+        the legacy conversation store.
         """
         logger.info('[Jira]: Creating V1 metadata')
 

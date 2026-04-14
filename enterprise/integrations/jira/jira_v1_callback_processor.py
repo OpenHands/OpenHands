@@ -2,7 +2,7 @@ import logging
 from uuid import UUID
 
 import httpx
-from integrations.utils import get_summary_instruction
+from integrations.utils import format_jira_comment_body, get_summary_instruction
 from pydantic import Field
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
@@ -225,9 +225,8 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
             f'/rest/api/2/issue/{self.issue_key}/comment'
         )
 
-        # Use plain string body for v2 API (not ADF which is for v3 API)
         message = f'OpenHands resolved this issue:\n\n{summary}'
-        comment_body = {'body': message}
+        comment_body = format_jira_comment_body(message)
 
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(
