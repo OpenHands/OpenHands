@@ -55,3 +55,19 @@ test("organizeModelsAndProviders — models already prefixed by backend", () => 
     },
   });
 });
+
+test("returns empty object for non-array input without throwing", () => {
+  expect(organizeModelsAndProviders(undefined)).toEqual({});
+  expect(organizeModelsAndProviders({ models: [] })).toEqual({});
+});
+
+test("skips non-string entries in the array", () => {
+  const object = organizeModelsAndProviders([
+    "openai/gpt-4o",
+    null,
+    42,
+    "anthropic/claude-test",
+  ] as unknown);
+  expect(object.openai?.models).toEqual(["gpt-4o"]);
+  expect(object.anthropic?.models).toEqual(["claude-test"]);
+});

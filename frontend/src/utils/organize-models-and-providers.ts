@@ -2,7 +2,7 @@ import { extractModelAndProvider } from "./extract-model-and-provider";
 
 /**
  * Given a list of models, organize them by provider.
- * @param models The list of models
+ * @param models The list of model id strings (non-arrays and non-string entries are ignored)
  * @returns An object containing the provider and models
  *
  * @example
@@ -20,22 +20,30 @@ import { extractModelAndProvider } from "./extract-model-and-provider";
  * //   },
  * // }
  */
-export const organizeModelsAndProviders = (models: string[]) => {
+export const organizeModelsAndProviders = (
+  models: unknown,
+): Record<string, { separator: string; models: string[] }> => {
   const object: Record<string, { separator: string; models: string[] }> = {};
 
-  models.forEach((model) => {
-    const {
-      separator,
-      provider,
-      model: modelId,
-    } = extractModelAndProvider(model);
+  if (!Array.isArray(models)) {
+    return object;
+  }
 
-    const key = provider || "other";
-    if (!object[key]) {
-      object[key] = { separator, models: [] };
+  for (const model of models) {
+    if (typeof model === "string") {
+      const {
+        separator,
+        provider,
+        model: modelId,
+      } = extractModelAndProvider(model);
+
+      const key = provider || "other";
+      if (!object[key]) {
+        object[key] = { separator, models: [] };
+      }
+      object[key].models.push(modelId);
     }
-    object[key].models.push(modelId);
-  });
+  }
 
   return object;
 };

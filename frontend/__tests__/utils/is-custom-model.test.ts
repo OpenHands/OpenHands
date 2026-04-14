@@ -22,4 +22,9 @@ describe("isCustomModel", () => {
   it("treats bare and prefixed OpenAI models as the same model", () => {
     expect(isCustomModel(prefixedModels, "gpt-4o")).toBe(false);
   });
+
+  it("treats non-array models as empty list", () => {
+    expect(isCustomModel(undefined, "anthropic/claude-3.5")).toBe(true);
+    expect(isCustomModel({ not: "array" }, "anthropic/claude-3.5")).toBe(true);
+  });
 });

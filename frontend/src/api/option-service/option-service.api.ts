@@ -1,4 +1,5 @@
 import { openHands } from "../open-hands-axios";
+import { normalizeStringArray } from "#/utils/normalize-string-array";
 import { ModelsResponse, WebClientConfig } from "./option.types";
 
 /**
@@ -13,7 +14,22 @@ class OptionService {
    */
   static async getModels(): Promise<ModelsResponse> {
     const { data } = await openHands.get<ModelsResponse>("/api/options/models");
-    return data;
+    if (!data || typeof data !== "object") {
+      return {
+        models: [],
+        verified_models: [],
+        verified_providers: [],
+        default_model: "",
+      };
+    }
+    return {
+      ...data,
+      models: normalizeStringArray(data.models),
+      verified_models: normalizeStringArray(data.verified_models),
+      verified_providers: normalizeStringArray(data.verified_providers),
+      default_model:
+        typeof data.default_model === "string" ? data.default_model : "",
+    };
   }
 
   /**
@@ -21,10 +37,10 @@ class OptionService {
    * @returns List of security analyzers available
    */
   static async getSecurityAnalyzers(): Promise<string[]> {
-    const { data } = await openHands.get<string[]>(
+    const { data } = await openHands.get<unknown>(
       "/api/options/security-analyzers",
     );
-    return data;
+    return normalizeStringArray(data);
   }
 
   /**

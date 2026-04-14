@@ -1,4 +1,5 @@
 import { extractModelAndProvider } from "./extract-model-and-provider";
+import { normalizeStringArray } from "./normalize-string-array";
 
 const isEquivalentOpenAIModel = (left: string, right: string) => {
   const leftParts = extractModelAndProvider(left);
@@ -13,14 +14,16 @@ const isEquivalentOpenAIModel = (left: string, right: string) => {
 
 /**
  * Check if a model is a custom model. A custom model is a model that is not part of the default models.
- * @param models Full list of models
+ * @param models Full list of models (non-arrays are treated as empty)
  * @param model Model to check
  * @returns Whether the model is a custom model
  */
-export const isCustomModel = (models: string[], model: string): boolean => {
+export const isCustomModel = (models: unknown, model: string): boolean => {
   if (!model) return false;
 
-  const isKnownModel = models.some(
+  const list = normalizeStringArray(models);
+
+  const isKnownModel = list.some(
     (availableModel) =>
       availableModel === model ||
       isEquivalentOpenAIModel(availableModel, model),
