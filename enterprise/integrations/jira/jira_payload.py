@@ -138,10 +138,8 @@ class JiraPayloadParser:
         # Extract labels that were added
         labels = set()
         for item in items:
-            if item.get('field') == 'labels':
-                labels_str = item.get('toString')
-                if isinstance(labels_str, str):
-                    labels.update(labels_str.split(' '))
+            if item.get('field') == 'labels' and item.get('toString'):
+                labels.update(item['toString'].split())
 
         if self.oh_label not in labels:
             return JiraPayloadSkipped(
