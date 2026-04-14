@@ -3,6 +3,7 @@ export const LOCAL_STORAGE_KEYS = {
   LOGIN_METHOD: "openhands_login_method",
   ENTERPRISE_FORM_SAAS: "openhands_enterprise_form_saas",
   ENTERPRISE_FORM_SELF_HOSTED: "openhands_enterprise_form_self_hosted",
+  SELECTED_ORG: "openhands_selected_org",
 };
 
 // Login methods
@@ -37,6 +38,10 @@ export const getLoginMethod = (): LoginMethod | null => {
  */
 export const clearLoginData = (): void => {
   localStorage.removeItem(LOCAL_STORAGE_KEYS.LOGIN_METHOD);
+};
+
+export const setSelectedOrg = (orgId: string): void => {
+  localStorage.setItem(LOCAL_STORAGE_KEYS.SELECTED_ORG, orgId);
 };
 
 // CTA locations that can be dismissed

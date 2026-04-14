@@ -87,21 +87,6 @@ class TestSearchSharedEvents:
         )
 
     @pytest.mark.asyncio
-    async def test_preserves_next_page_id(self):
-        mock_service = AsyncMock()
-        mock_service.search_shared_events.return_value = EventPage(
-            items=[_make_state_event()], next_page_id='abc'
-        )
-
-        result = await search_shared_events(
-            conversation_id=uuid4().hex,
-            shared_event_service=mock_service,
-        )
-
-        assert result.next_page_id == 'abc'
-        assert result.items == []
-
-    @pytest.mark.asyncio
     async def test_empty_page_unchanged(self):
         mock_service = AsyncMock()
         mock_service.search_shared_events.return_value = EventPage(
@@ -115,6 +100,115 @@ class TestSearchSharedEvents:
 
         assert result.items == []
         assert result.next_page_id is None
+
+    @pytest.mark.asyncio
+    async def test_fetches_additional_pages_when_filtering_reduces_count(self):
+        """Fetch next page when first page has only state events."""
+        msg = _make_message_event()
+        state = _make_state_event()
+        mock_service = AsyncMock()
+        mock_service.search_shared_events.side_effect = [
+            # Page 1: only state events — all filtered out
+            EventPage(items=[state, state, state], next_page_id='page2'),
+            # Page 2: all viewable
+            EventPage(items=[msg, msg, msg], next_page_id=None),
+        ]
+
+        result = await search_shared_events(
+            conversation_id=uuid4().hex,
+            limit=3,
+            shared_event_service=mock_service,
+        )
+
+        assert len(result.items) == 3
+        assert result.next_page_id is None
+        assert mock_service.search_shared_events.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_multiple_pages_until_limit_reached(self):
+        """Keep fetching mixed pages until limit viewable events accumulated."""
+        msg = _make_message_event()
+        state = _make_state_event()
+        mock_service = AsyncMock()
+        mock_service.search_shared_events.side_effect = [
+            EventPage(items=[msg, state], next_page_id='p2'),
+            EventPage(items=[state, msg], next_page_id='p3'),
+            EventPage(items=[msg], next_page_id='p4'),
+        ]
+
+        result = await search_shared_events(
+            conversation_id=uuid4().hex,
+            limit=3,
+            shared_event_service=mock_service,
+        )
+
+        assert len(result.items) == 3
+        assert result.next_page_id == 'p4'
+        assert mock_service.search_shared_events.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_stops_when_no_more_pages(self):
+        """Return partial results when no more backend pages are available."""
+        msg = _make_message_event()
+        state = _make_state_event()
+        mock_service = AsyncMock()
+        mock_service.search_shared_events.side_effect = [
+            EventPage(items=[msg, state], next_page_id='p2'),
+            EventPage(items=[state], next_page_id=None),
+        ]
+
+        result = await search_shared_events(
+            conversation_id=uuid4().hex,
+            limit=5,
+            shared_event_service=mock_service,
+        )
+
+        assert len(result.items) == 1
+        assert result.next_page_id is None
+
+    @pytest.mark.asyncio
+    async def test_passes_remaining_as_limit_to_backend(self):
+        """Pass remaining needed count as limit to each backend call."""
+        msg = _make_message_event()
+        state = _make_state_event()
+        conv_id = uuid4().hex
+        mock_service = AsyncMock()
+        mock_service.search_shared_events.side_effect = [
+            # First call: limit=3, returns 1 viewable
+            EventPage(items=[msg, state, state], next_page_id='p2'),
+            # Second call: limit should be 2 (remaining)
+            EventPage(items=[msg, msg], next_page_id=None),
+        ]
+
+        await search_shared_events(
+            conversation_id=conv_id,
+            limit=3,
+            shared_event_service=mock_service,
+        )
+
+        calls = mock_service.search_shared_events.call_args_list
+        assert calls[0].kwargs['limit'] == 3
+        assert calls[1].kwargs['limit'] == 2
+
+    @pytest.mark.asyncio
+    async def test_preserves_next_page_id_when_all_filtered(self):
+        """Continue fetching when all events on a page are filtered out."""
+        msg = _make_message_event()
+        state = _make_state_event()
+        mock_service = AsyncMock()
+        mock_service.search_shared_events.side_effect = [
+            EventPage(items=[state], next_page_id='p2'),
+            EventPage(items=[msg], next_page_id='p3'),
+        ]
+
+        result = await search_shared_events(
+            conversation_id=uuid4().hex,
+            limit=1,
+            shared_event_service=mock_service,
+        )
+
+        assert len(result.items) == 1
+        assert result.next_page_id == 'p3'
 
 
 # ---------------------------------------------------------------------------
