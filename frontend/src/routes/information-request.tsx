@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, redirect } from "react-router";
+import { Link } from "react-router";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 import {
@@ -17,14 +17,6 @@ import {
   saveEnterpriseFormData,
 } from "#/utils/local-storage";
 import { cn } from "#/utils/utils";
-import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
-
-export const clientLoader = async () => {
-  if (!ENABLE_PROJ_USER_JOURNEY()) {
-    return redirect("/login");
-  }
-  return null;
-};
 
 const DEFAULT_FORM_DATA: EnterpriseFormData = {
   name: "",
