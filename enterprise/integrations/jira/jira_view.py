@@ -201,7 +201,7 @@ class JiraNewConversationView(JiraViewInterface):
 
         V1 conversations are stored in a separate table, so we don't save to store.
         """
-        logger.info('[Jira V1]: Creating V1 metadata')
+        logger.info('[Jira]: Creating V1 metadata')
 
         # Generate a dummy conversation for V1 (not saved to store)
         self.conversation_id = uuid4().hex
@@ -218,7 +218,7 @@ class JiraNewConversationView(JiraViewInterface):
         conversation_metadata: ConversationMetadata,
     ):
         """Create conversation using the new V1 app conversation system."""
-        logger.info('[Jira V1]: Creating V1 conversation')
+        logger.info('[Jira]: Creating V1 conversation')
 
         initial_user_text = await self._get_v1_initial_user_message(jinja_env)
 
@@ -304,7 +304,7 @@ class JiraNewConversationView(JiraViewInterface):
             return resolved_org_id
         except Exception as e:
             logger.warning(
-                f'[Jira V1] Failed to resolve org for {self.selected_repo}: {e}'
+                f'[Jira] Failed to resolve org for {self.selected_repo}: {e}'
             )
             return None
 

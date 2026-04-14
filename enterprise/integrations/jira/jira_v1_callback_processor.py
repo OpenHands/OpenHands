@@ -51,14 +51,14 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         if event.key != 'execution_status':
             return None
 
-        _logger.info('[Jira V1] Callback agent state was %s', event)
+        _logger.info('[Jira] Callback agent state was %s', event)
 
         # Only request summary when execution has finished successfully
         if event.value != 'finished':
             return None
 
         _logger.info(
-            '[Jira V1] Should request summary: %s', self.should_request_summary
+            '[Jira] Should request summary: %s', self.should_request_summary
         )
 
         if not self.should_request_summary:
@@ -67,10 +67,10 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         self.should_request_summary = False
 
         try:
-            _logger.info(f'[Jira V1] Requesting summary {conversation_id}')
+            _logger.info(f'[Jira] Requesting summary {conversation_id}')
             summary = await self._request_summary(conversation_id)
             _logger.info(
-                f'[Jira V1] Posting summary {conversation_id}',
+                f'[Jira] Posting summary {conversation_id}',
                 extra={'summary': summary},
             )
             await self._post_summary_to_jira(summary)
@@ -80,7 +80,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 event_callback_id=callback.id,
             )
         except Exception as e:
-            _logger.error(f'[Jira V1] Failed to post summary: {e}')
+            _logger.error(f'[Jira] Failed to post summary: {e}')
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
@@ -183,7 +183,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 pass
 
             _logger.error(
-                '[Jira V1] HTTP error sending message to %s: %s. '
+                '[Jira] HTTP error sending message to %s: %s. '
                 'Request payload: %s. Response headers: %s',
                 url,
                 error_detail,
@@ -196,7 +196,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
             _logger.error(
-                '[Jira V1] Timeout error: %s. Request payload: %s',
+                '[Jira] Timeout error: %s. Request payload: %s',
                 error_detail,
                 payload,
                 exc_info=True,
@@ -213,7 +213,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 self.jira_cloud_id,
             ]
         ):
-            _logger.warning('[Jira V1] Missing required data for posting summary')
+            _logger.warning('[Jira] Missing required data for posting summary')
             return
 
         # Add a comment to the Jira issue with the summary
@@ -247,4 +247,4 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 json=comment_body,
             )
             response.raise_for_status()
-            _logger.info(f'[Jira V1] Posted summary to {self.issue_key}')
+            _logger.info(f'[Jira] Posted summary to {self.issue_key}')
