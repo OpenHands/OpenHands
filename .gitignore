@@ -260,6 +260,10 @@ containers/runtime/project.tar.gz
 containers/runtime/code
 **/node_modules/
 
+# Local tooling / ad-hoc backups (Windows dev)
+.debug_console_plus/
+frontend/node_modules._old_*/
+
 # test results
 test-results
 .sessions
