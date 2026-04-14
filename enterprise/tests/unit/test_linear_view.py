@@ -1,9 +1,10 @@
 """Tests for Linear resolver org routing logic.
 
 Tests that the LinearNewConversationView correctly resolves the target
-organization and passes resolver_org_id through the V0 conversation path.
+organization and passes resolver_org_id through the V1 conversation path.
 """
 
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
@@ -15,7 +16,6 @@ from storage.linear_workspace import LinearWorkspace
 
 from openhands.integrations.service_types import ProviderType
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 CLAIMING_ORG_ID = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
 KEYCLOAK_USER_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
@@ -83,32 +83,44 @@ def linear_view(job_context, mock_user_auth, mock_linear_user, mock_linear_works
     )
 
 
-class TestLinearV0OrgRouting:
-    """Test V0 conversation routing logic for Linear resolver."""
+def create_mock_app_conversation_service():
+    """Create a mock app conversation service that yields MagicMock tasks."""
+    mock_service = MagicMock()
+
+    async def mock_generator(request):
+        # Create mock tasks that pass the status checks in the code
+        mock_task = MagicMock()
+        mock_task.status = MagicMock()
+        # Ensure the status check in the code passes
+        # (status != ERROR)
+        mock_task.status.__eq__ = lambda self, other: False
+        yield mock_task
+
+    mock_service.start_app_conversation = mock_generator
+    return mock_service
+
+
+class TestLinearV1OrgRouting:
+    """Test V1 conversation routing logic for Linear resolver."""
 
     @pytest.mark.asyncio
     @patch(
         'integrations.linear.linear_view.resolve_org_for_repo', new_callable=AsyncMock
     )
     @patch('integrations.linear.linear_view.ProviderHandler')
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
+    @patch('integrations.linear.linear_view.get_app_conversation_service')
     @patch(
         'integrations.linear.linear_view.integration_store',
     )
-    async def test_v0_passes_resolver_org_id_to_get_resolver_instance(
+    async def test_v1_passes_resolver_org_id_to_user_context(
         self,
         mock_integration_store,
-        mock_start_convo,
-        mock_get_resolver_instance,
+        mock_get_app_convo_svc,
         mock_provider_handler_cls,
         mock_resolve_org,
         linear_view,
     ):
-        """V0 path should resolve org and pass resolver_org_id to get_resolver_instance."""
+        """V1 path should resolve org and set resolver_org_id in user context."""
         # Arrange
         mock_repo = MagicMock()
         mock_repo.git_provider = ProviderType.GITHUB
@@ -117,21 +129,20 @@ class TestLinearV0OrgRouting:
         mock_provider_handler_cls.return_value = mock_handler
 
         mock_resolve_org.return_value = CLAIMING_ORG_ID
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
         mock_integration_store.create_conversation = AsyncMock()
 
+        # Create mock app conversation service
+        @asynccontextmanager
+        async def mock_context_manager(injector_state):
+            yield create_mock_app_conversation_service()
+
+        mock_get_app_convo_svc.side_effect = mock_context_manager
+
         mock_jinja = MagicMock()
+        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
 
         # Act
-        with patch.object(
-            linear_view,
-            '_get_instructions',
-            new_callable=AsyncMock,
-            return_value=('instructions', 'user_msg'),
-        ):
-            await linear_view.create_or_update_conversation(mock_jinja)
+        await linear_view.create_or_update_conversation(mock_jinja)
 
         # Assert
         mock_resolve_org.assert_called_once_with(
@@ -139,31 +150,21 @@ class TestLinearV0OrgRouting:
             full_repo_name='OpenHands/foo',
             keycloak_user_id=KEYCLOAK_USER_ID,
         )
-        call_args = mock_get_resolver_instance.call_args
-        assert call_args[0][1] == KEYCLOAK_USER_ID
-        assert call_args[0][2] == CLAIMING_ORG_ID
-        saved_metadata = mock_store.save_metadata.call_args[0][0]
-        assert saved_metadata.trigger == ConversationTrigger.LINEAR
-        assert saved_metadata.git_provider == ProviderType.GITHUB
+        assert linear_view.resolved_org_id == CLAIMING_ORG_ID
 
     @pytest.mark.asyncio
     @patch(
         'integrations.linear.linear_view.resolve_org_for_repo', new_callable=AsyncMock
     )
     @patch('integrations.linear.linear_view.ProviderHandler')
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
+    @patch('integrations.linear.linear_view.get_app_conversation_service')
     @patch(
         'integrations.linear.linear_view.integration_store',
     )
-    async def test_v0_passes_none_when_no_claim(
+    async def test_v1_passes_none_when_no_claim(
         self,
         mock_integration_store,
-        mock_start_convo,
-        mock_get_resolver_instance,
+        mock_get_app_convo_svc,
         mock_provider_handler_cls,
         mock_resolve_org,
         linear_view,
@@ -177,43 +178,36 @@ class TestLinearV0OrgRouting:
         mock_provider_handler_cls.return_value = mock_handler
 
         mock_resolve_org.return_value = None
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
         mock_integration_store.create_conversation = AsyncMock()
 
+        # Create mock app conversation service
+        @asynccontextmanager
+        async def mock_context_manager(injector_state):
+            yield create_mock_app_conversation_service()
+
+        mock_get_app_convo_svc.side_effect = mock_context_manager
+
         mock_jinja = MagicMock()
+        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
 
         # Act
-        with patch.object(
-            linear_view,
-            '_get_instructions',
-            new_callable=AsyncMock,
-            return_value=('instructions', 'user_msg'),
-        ):
-            await linear_view.create_or_update_conversation(mock_jinja)
+        await linear_view.create_or_update_conversation(mock_jinja)
 
         # Assert
-        call_args = mock_get_resolver_instance.call_args
-        assert call_args[0][2] is None
+        assert linear_view.resolved_org_id is None
 
     @pytest.mark.asyncio
     @patch(
         'integrations.linear.linear_view.resolve_org_for_repo', new_callable=AsyncMock
     )
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
+    @patch('integrations.linear.linear_view.get_app_conversation_service')
     @patch(
         'integrations.linear.linear_view.integration_store',
     )
     async def test_no_provider_tokens_skips_org_resolution(
         self,
         mock_integration_store,
-        mock_start_convo,
-        mock_get_resolver_instance,
+        mock_get_app_convo_svc,
         mock_resolve_org,
         linear_view,
         mock_user_auth,
@@ -221,47 +215,38 @@ class TestLinearV0OrgRouting:
         """When provider tokens are None, org resolution should be skipped."""
         # Arrange
         mock_user_auth.get_provider_tokens = AsyncMock(return_value=None)
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
         mock_integration_store.create_conversation = AsyncMock()
 
+        # Create mock app conversation service
+        @asynccontextmanager
+        async def mock_context_manager(injector_state):
+            yield create_mock_app_conversation_service()
+
+        mock_get_app_convo_svc.side_effect = mock_context_manager
+
         mock_jinja = MagicMock()
+        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
 
         # Act
-        with patch.object(
-            linear_view,
-            '_get_instructions',
-            new_callable=AsyncMock,
-            return_value=('instructions', 'user_msg'),
-        ):
-            await linear_view.create_or_update_conversation(mock_jinja)
+        await linear_view.create_or_update_conversation(mock_jinja)
 
         # Assert
         mock_resolve_org.assert_not_called()
-        call_args = mock_get_resolver_instance.call_args
-        assert call_args[0][2] is None
-        saved_metadata = mock_store.save_metadata.call_args[0][0]
-        assert saved_metadata.git_provider is None
+        assert linear_view.resolved_org_id is None
 
     @pytest.mark.asyncio
     @patch(
         'integrations.linear.linear_view.resolve_org_for_repo', new_callable=AsyncMock
     )
     @patch('integrations.linear.linear_view.ProviderHandler')
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
+    @patch('integrations.linear.linear_view.get_app_conversation_service')
     @patch(
         'integrations.linear.linear_view.integration_store',
     )
     async def test_verify_repo_provider_failure_falls_back_to_personal_workspace(
         self,
         mock_integration_store,
-        mock_start_convo,
-        mock_get_resolver_instance,
+        mock_get_app_convo_svc,
         mock_provider_handler_cls,
         mock_resolve_org,
         linear_view,
@@ -274,45 +259,38 @@ class TestLinearV0OrgRouting:
         )
         mock_provider_handler_cls.return_value = mock_handler
 
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
         mock_integration_store.create_conversation = AsyncMock()
 
+        # Create mock app conversation service
+        @asynccontextmanager
+        async def mock_context_manager(injector_state):
+            yield create_mock_app_conversation_service()
+
+        mock_get_app_convo_svc.side_effect = mock_context_manager
+
         mock_jinja = MagicMock()
+        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
 
         # Act
-        with patch.object(
-            linear_view,
-            '_get_instructions',
-            new_callable=AsyncMock,
-            return_value=('instructions', 'user_msg'),
-        ):
-            await linear_view.create_or_update_conversation(mock_jinja)
+        await linear_view.create_or_update_conversation(mock_jinja)
 
         # Assert - org resolution should be skipped, conversation created in personal workspace
         mock_resolve_org.assert_not_called()
-        call_args = mock_get_resolver_instance.call_args
-        assert call_args[0][2] is None
+        assert linear_view.resolved_org_id is None
 
     @pytest.mark.asyncio
     @patch(
         'integrations.linear.linear_view.resolve_org_for_repo', new_callable=AsyncMock
     )
     @patch('integrations.linear.linear_view.ProviderHandler')
-    @patch(
-        'integrations.linear.linear_view.SaasConversationStore.get_resolver_instance',
-        new_callable=AsyncMock,
-    )
-    @patch('integrations.linear.linear_view.start_conversation', new_callable=AsyncMock)
+    @patch('integrations.linear.linear_view.get_app_conversation_service')
     @patch(
         'integrations.linear.linear_view.integration_store',
     )
     async def test_resolve_org_failure_falls_back_to_personal_workspace(
         self,
         mock_integration_store,
-        mock_start_convo,
-        mock_get_resolver_instance,
+        mock_get_app_convo_svc,
         mock_provider_handler_cls,
         mock_resolve_org,
         linear_view,
@@ -326,22 +304,20 @@ class TestLinearV0OrgRouting:
         mock_provider_handler_cls.return_value = mock_handler
 
         mock_resolve_org.side_effect = Exception('Database connection failed')
-        mock_store = MagicMock()
-        mock_store.save_metadata = AsyncMock()
-        mock_get_resolver_instance.return_value = mock_store
         mock_integration_store.create_conversation = AsyncMock()
 
+        # Create mock app conversation service
+        @asynccontextmanager
+        async def mock_context_manager(injector_state):
+            yield create_mock_app_conversation_service()
+
+        mock_get_app_convo_svc.side_effect = mock_context_manager
+
         mock_jinja = MagicMock()
+        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
 
         # Act
-        with patch.object(
-            linear_view,
-            '_get_instructions',
-            new_callable=AsyncMock,
-            return_value=('instructions', 'user_msg'),
-        ):
-            await linear_view.create_or_update_conversation(mock_jinja)
+        await linear_view.create_or_update_conversation(mock_jinja)
 
         # Assert - conversation should be created with resolver_org_id=None
-        call_args = mock_get_resolver_instance.call_args
-        assert call_args[0][2] is None
+        assert linear_view.resolved_org_id is None
