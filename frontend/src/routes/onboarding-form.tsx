@@ -208,7 +208,7 @@ function OnboardingForm() {
   const translatedInputFields = getTranslatedInputFields(currentStep, t);
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <div
         data-testid="onboarding-form"
         className="w-[500px] max-w-[calc(100vw-2rem)] mx-auto p-4 sm:p-6 flex flex-col justify-center overflow-hidden"
