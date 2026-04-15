@@ -693,7 +693,7 @@ describe("HomepageCTA visibility", () => {
     expect(ctaLink).toBeInTheDocument();
   });
 
-  it("should show HomepageCTA in OSS mode when not dismissed", async () => {
+  it("should not show HomepageCTA in OSS mode", async () => {
     useIsAuthedMock.mockReturnValue({
       data: true,
       isLoading: false,
@@ -733,8 +733,7 @@ describe("HomepageCTA visibility", () => {
 
     await screen.findByTestId("home-screen");
 
-    const ctaLink = await screen.findByTestId("homepage-cta-learn-more");
-    expect(ctaLink).toBeInTheDocument();
+    expect(screen.queryByTestId("homepage-cta-learn-more")).not.toBeInTheDocument();
   });
 
   it("should not show HomepageCTA in SaaS Self-hosted mode", async () => {

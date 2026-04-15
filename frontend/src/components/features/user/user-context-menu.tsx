@@ -41,7 +41,7 @@ export function UserContextMenu({
   const settingsNavItems = useSettingsNavItems();
   const shouldHideSelector = useShouldHideOrgSelector();
   const isMobile = useBreakpoint(768);
-  const { isOss, isSaas, isEnterpriseCloud } = useAppMode();
+  const { isSaas, isEnterpriseCloud } = useAppMode();
 
   // Keep all nav items including headers and dividers for proper section grouping
   const navItems = settingsNavItems;
@@ -58,8 +58,8 @@ export function UserContextMenu({
   // Show invite button for admin/owner in team orgs
   const showInviteButton = !isMember && !isPersonalOrg;
 
-  // CTA only renders in SaaS desktop with feature flag enabled
-  const isCTAEnabled = (isEnterpriseCloud || isOss) && !isMobile;
+  // CTA only renders in SaaS Cloud desktop mode
+  const isCTAEnabled = isEnterpriseCloud && !isMobile;
 
   const handleLogout = () => {
     logout();

@@ -13,7 +13,7 @@ import { useAppMode } from "#/hooks/use-app-mode";
 <PrefetchPageLinks page="/conversations/:conversationId" />;
 
 function HomeScreen() {
-  const { isOss, isEnterpriseCloud } = useAppMode();
+  const { isEnterpriseCloud } = useAppMode();
   const [selectedRepo, setSelectedRepo] = React.useState<GitRepository | null>(
     null,
   );
@@ -21,8 +21,6 @@ function HomeScreen() {
   const [shouldShowCTA, setShouldShowCTA] = React.useState(
     () => !isCTADismissed("homepage"),
   );
-
-  const isCTAEnabled = isEnterpriseCloud || isOss;
 
   return (
     <div
@@ -51,7 +49,7 @@ function HomeScreen() {
         </div>
       </div>
 
-      {isCTAEnabled && shouldShowCTA && (
+      {isEnterpriseCloud && shouldShowCTA && (
         <div className="fixed bottom-4 right-8 z-50 md:bottom-6 md:right-12">
           <HomepageCTA setShouldShowCTA={setShouldShowCTA} />
         </div>

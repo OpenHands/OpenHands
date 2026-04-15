@@ -324,7 +324,7 @@ describe("LoginContent", () => {
     expect(screen.getByTestId("login-cta")).toBeInTheDocument();
   });
 
-  it("should display the enterprise LoginCTA component when in OSS mode", () => {
+  it("should not display the enterprise LoginCTA component when in OSS mode", () => {
     mockUseAppMode.mockReturnValue({
       isOss: true,
       isSaas: false,
@@ -346,7 +346,7 @@ describe("LoginContent", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId("login-cta")).toBeInTheDocument();
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
   });
 
   it("should not display the enterprise LoginCTA component when in SaaS Self-hosted mode", () => {

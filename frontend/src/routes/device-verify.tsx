@@ -16,9 +16,7 @@ export default function DeviceVerify() {
     messageKey: I18nKey;
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const { isOss, isEnterpriseCloud } = useAppMode();
-
-  const isCTAEnabled = isEnterpriseCloud || isOss;
+  const { isEnterpriseCloud } = useAppMode();
 
   // Get user_code from URL parameters
   const userCode = searchParams.get("user_code");
@@ -153,11 +151,11 @@ export default function DeviceVerify() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div
-          className={`flex flex-col lg:flex-row items-center lg:items-stretch gap-6 w-full ${isCTAEnabled ? "max-w-4xl" : "max-w-md"}`}
+          className={`flex flex-col lg:flex-row items-center lg:items-stretch gap-6 w-full ${isEnterpriseCloud ? "max-w-4xl" : "max-w-md"}`}
         >
           {/* Device Authorization Card */}
           <div
-            className={`flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-2xl shadow-lg border border-[#242424] ${isCTAEnabled ? "lg:mx-0 lg:self-stretch" : ""}`}
+            className={`flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-2xl shadow-lg border border-[#242424] ${isEnterpriseCloud ? "lg:mx-0 lg:self-stretch" : ""}`}
           >
             <H1 className="text-2xl mb-4 text-center">
               {t(I18nKey.DEVICE$AUTHORIZATION_REQUEST)}
@@ -200,7 +198,7 @@ export default function DeviceVerify() {
           </div>
 
           {/* Login CTA */}
-          {isCTAEnabled && (
+          {isEnterpriseCloud && (
             <LoginCTA source="device_verify" className="lg:self-stretch" />
           )}
         </div>

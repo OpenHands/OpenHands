@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useConfig } from "#/hooks/query/use-config";
 
 /**
@@ -16,25 +17,27 @@ import { useConfig } from "#/hooks/query/use-config";
 export function useAppMode() {
   const { data: config } = useConfig();
 
-  const appMode = config?.app_mode;
-  const deploymentMode = config?.feature_flags?.deployment_mode;
+  return useMemo(() => {
+    const appMode = config?.app_mode;
+    const deploymentMode = config?.feature_flags?.deployment_mode;
 
-  return {
-    // App Mode checks
-    isOss: appMode === "oss",
-    isSaas: appMode === "saas",
+    return {
+      // App Mode checks
+      isOss: appMode === "oss",
+      isSaas: appMode === "saas",
 
-    // Deployment Mode checks
-    isCloud: deploymentMode === "cloud",
-    isSelfHosted: deploymentMode === "self_hosted",
+      // Deployment Mode checks
+      isCloud: deploymentMode === "cloud",
+      isSelfHosted: deploymentMode === "self_hosted",
 
-    /** Enterprise checks */
-    isEnterpriseSelfHosted:
-      appMode === "saas" && deploymentMode === "self_hosted",
-    isEnterpriseCloud: appMode === "saas" && deploymentMode === "cloud",
+      /** Enterprise checks */
+      isEnterpriseSelfHosted:
+        appMode === "saas" && deploymentMode === "self_hosted",
+      isEnterpriseCloud: appMode === "saas" && deploymentMode === "cloud",
 
-    // Raw values (for cases where the actual value is needed)
-    appMode,
-    deploymentMode,
-  };
+      // Raw values (for cases where the actual value is needed)
+      appMode,
+      deploymentMode,
+    };
+  }, [config?.app_mode, config?.feature_flags?.deployment_mode]);
 }

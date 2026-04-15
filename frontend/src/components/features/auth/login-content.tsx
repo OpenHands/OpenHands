@@ -45,8 +45,7 @@ export function LoginContent({
   const { t } = useTranslation();
   const { trackLoginButtonClick } = useTracking();
   const { data: config } = useConfig();
-  const { isOss, isEnterpriseCloud } = useAppMode();
-  const isCTAEnabled = isEnterpriseCloud || isOss;
+  const { isEnterpriseCloud } = useAppMode();
 
   // reCAPTCHA - only need token generation, verification happens at backend callback
   const { isReady: recaptchaReady, executeRecaptcha } = useRecaptcha({
@@ -308,7 +307,7 @@ export function LoginContent({
         <TermsAndPrivacyNotice className="max-w-[320px] text-[#A3A3A3]" />
       </div>
 
-      {isCTAEnabled && <LoginCTA />}
+      {isEnterpriseCloud && <LoginCTA />}
     </div>
   );
 }

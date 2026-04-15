@@ -281,7 +281,7 @@ describe("DeviceVerify", () => {
       });
     });
 
-    it("should include the LoginCTA component when in OSS mode", async () => {
+    it("should not include the LoginCTA component when in OSS mode", async () => {
       mockUseAppMode.mockReturnValue({
         isOss: true,
         isSaas: false,
@@ -305,7 +305,7 @@ describe("DeviceVerify", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId("login-cta")).toBeInTheDocument();
+        expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
       });
     });
 

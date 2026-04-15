@@ -770,7 +770,7 @@ describe("UserContextMenu", () => {
       expect(screen.getByText("CTA$LEARN_MORE")).toBeInTheDocument();
     });
 
-    it("should render the CTA component in OSS mode on desktop", async () => {
+    it("should not render the CTA component in OSS mode", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
         createMockWebClientConfig({ app_mode: "oss" }),
       );
@@ -778,10 +778,9 @@ describe("UserContextMenu", () => {
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       await waitFor(() => {
-        expect(screen.getByTestId("context-menu-cta")).toBeInTheDocument();
+        expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
       });
-      expect(screen.getByText("CTA$ENTERPRISE_TITLE")).toBeInTheDocument();
-      expect(screen.getByText("CTA$LEARN_MORE")).toBeInTheDocument();
+      expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
     });
 
     it("should not render the CTA component on mobile even in SaaS Cloud mode", async () => {
