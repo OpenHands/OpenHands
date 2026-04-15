@@ -689,7 +689,7 @@ async def accept_tos(request: Request):
 
     # Determine final redirect - but don't override if it's the offline token flow
     # (the offline callback will handle post-auth redirect after storing the token)
-    is_offline_flow = '/offline' in redirect_url
+    is_offline_flow = 'offline' in redirect_url
     if not is_offline_flow:
         redirect_url = await _get_post_auth_redirect(user_id, redirect_url, web_url)
 
