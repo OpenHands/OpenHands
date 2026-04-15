@@ -416,7 +416,7 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(config);
   }),
 
-  http.get("/api/settings/conversation-schema", async () => {
+  http.get("/api/v1/settings/conversation-schema", async () => {
     await delay();
     return HttpResponse.json(MOCK_CONVERSATION_SETTINGS_SCHEMA);
   }),
@@ -430,7 +430,7 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(settings);
   }),
 
-  http.get("/api/settings/agent-schema", async () => {
+  http.get("/api/v1/settings/agent-schema", async () => {
     await delay();
     return HttpResponse.json(MOCK_AGENT_SETTINGS_SCHEMA);
   }),
