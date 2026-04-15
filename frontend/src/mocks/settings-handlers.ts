@@ -77,6 +77,7 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
         {
           key: "llm.model",
           label: "Model",
+          description: "Select the model to use for this conversation.",
           section: "llm",
           section_label: "LLM",
           value_type: "string",
@@ -90,6 +91,9 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
         {
           key: "llm.api_key",
           label: "API Key",
+          description:
+            "Provide the API key used to authenticate requests for the selected model.",
+
           section: "llm",
           section_label: "LLM",
           value_type: "string",
@@ -102,6 +106,9 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
         },
         {
           key: "llm.base_url",
+          description:
+            "Override the model provider's default API base URL when needed.",
+
           label: "Base URL",
           section: "llm",
           section_label: "LLM",
@@ -120,6 +127,9 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
       label: "Critic",
       fields: [
         {
+          description:
+            "Enable an additional critic pass to review the agent's work.",
+
           key: "critic.enabled",
           label: "Enable critic",
           section: "critic",
@@ -133,6 +143,8 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
           required: true,
         },
         {
+          description: "Choose when the critic should review and intervene.",
+
           key: "critic.mode",
           label: "Mode",
           section: "critic",
@@ -166,6 +178,9 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
           key: "max_iterations",
           label: "Max iterations",
           section: "general",
+          description:
+            "Maximum number of agent steps allowed before the conversation stops.",
+
           section_label: "General",
           value_type: "integer",
           default: 500,
@@ -184,6 +199,9 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
         {
           key: "confirmation_mode",
           label: "Confirmation mode",
+          description:
+            "Pause for confirmation before the agent performs high-risk actions.",
+
           section: "verification",
           section_label: "Verification",
           value_type: "boolean",
@@ -197,6 +215,9 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
         {
           key: "security_analyzer",
           label: "Security analyzer",
+          description:
+            "Choose how OpenHands should analyze actions before asking for confirmation.",
+
           section: "verification",
           section_label: "Verification",
           value_type: "string",

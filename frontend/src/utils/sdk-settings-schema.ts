@@ -6,6 +6,7 @@ import {
   SettingsSectionSchema,
   SettingsValue,
 } from "#/types/settings";
+import { getSettingsFieldConstraints } from "#/utils/sdk-settings-field-metadata";
 
 export type SettingsFormValues = Record<string, string | boolean>;
 export type SettingsDirtyState = Record<string, boolean>;
@@ -330,6 +331,14 @@ function coerceFieldValue(
     }
     if (field.value_type === "integer" && !Number.isInteger(parsedValue)) {
       throw new Error(`Expected an integer value, received: ${stringValue}`);
+    }
+
+    const constraints = getSettingsFieldConstraints(field.key);
+    if (constraints?.min != null && parsedValue < constraints.min) {
+      throw new Error(`${field.label} must be at least ${constraints.min}`);
+    }
+    if (constraints?.max != null && parsedValue > constraints.max) {
+      throw new Error(`${field.label} must be at most ${constraints.max}`);
     }
 
     return parsedValue;

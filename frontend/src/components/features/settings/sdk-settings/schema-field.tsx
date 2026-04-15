@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -6,6 +7,11 @@ import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { SettingsFieldSchema } from "#/types/settings";
 import { HelpLink } from "#/ui/help-link";
 import { Typography } from "#/ui/typography";
+import {
+  getSettingsFieldConstraints,
+  getSettingsFieldDescription,
+  getSettingsFieldLabel,
+} from "#/utils/sdk-settings-field-metadata";
 import { cn } from "#/utils/utils";
 
 // ---------------------------------------------------------------------------
@@ -18,25 +24,27 @@ export const FIELD_HELP_LINKS: Record<
   "llm.api_key": {
     text: "Don't know your API key?",
     linkText: "Click here for instructions.",
-    href: "https://docs.all-hands.dev/usage/local-setup#getting-an-api-key",
+    href: "https://docs.openhands.dev/usage/local-setup#getting-an-api-key",
   },
 };
 
 function FieldHelp({ field }: { field: SettingsFieldSchema }) {
+  const { t } = useTranslation();
   const helpLink = FIELD_HELP_LINKS[field.key];
+  const description = getSettingsFieldDescription(field.key, field.description);
 
   return (
     <>
-      {field.description ? (
+      {description ? (
         <Typography.Paragraph className="text-tertiary-alt text-xs leading-5">
-          {field.description}
+          {t(description)}
         </Typography.Paragraph>
       ) : null}
       {helpLink ? (
         <HelpLink
           testId={`help-link-${field.key}`}
-          text={helpLink.text}
-          linkText={helpLink.linkText}
+          text={t(helpLink.text)}
+          linkText={t(helpLink.linkText)}
           href={helpLink.href}
           size="settings"
           linkColor="white"
@@ -88,6 +96,10 @@ export function SchemaField({
   isDisabled: boolean;
   onChange: (value: string | boolean) => void;
 }) {
+  const { t } = useTranslation();
+  const label = t(getSettingsFieldLabel(field.key, field.label));
+  const constraints = getSettingsFieldConstraints(field.key);
+
   if (isBooleanField(field)) {
     return (
       <div className="flex flex-col gap-1.5">
@@ -97,7 +109,7 @@ export function SchemaField({
           isDisabled={isDisabled}
           onToggle={onChange}
         >
-          {field.label}
+          {label}
         </SettingsSwitch>
         <FieldHelp field={field} />
       </div>
@@ -110,10 +122,10 @@ export function SchemaField({
         <SettingsDropdownInput
           testId={`sdk-settings-${field.key}`}
           name={field.key}
-          label={field.label}
+          label={label}
           items={field.choices.map((choice) => ({
             key: String(choice.value),
-            label: choice.label,
+            label: t(choice.label),
           }))}
           selectedKey={value === "" ? undefined : String(value)}
           isClearable={!field.required}
@@ -133,7 +145,7 @@ export function SchemaField({
     return (
       <label className="flex flex-col gap-2.5 w-full">
         <div className="flex items-center gap-2">
-          <span className="text-sm">{field.label}</span>
+          <span className="text-sm">{label}</span>
           {!field.required ? <OptionalTag /> : null}
         </div>
         <textarea
@@ -159,7 +171,7 @@ export function SchemaField({
       <SettingsInput
         testId={`sdk-settings-${field.key}`}
         name={field.key}
-        label={field.label}
+        label={label}
         type={getInputType(field)}
         value={String(value ?? "")}
         required={field.required}
@@ -167,6 +179,9 @@ export function SchemaField({
         isDisabled={isDisabled}
         onChange={onChange}
         className="w-full"
+        min={constraints?.min}
+        max={constraints?.max}
+        step={constraints?.step}
       />
       <FieldHelp field={field} />
     </div>

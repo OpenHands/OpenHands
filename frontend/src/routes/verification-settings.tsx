@@ -12,7 +12,6 @@ import { I18nKey } from "#/i18n/declaration";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { SettingsScope } from "#/types/settings";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
-import { SettingsView } from "#/utils/sdk-settings-schema";
 
 const VERIFICATION_SCHEMA_EXCLUDE_KEYS = new Set([
   "confirmation_mode",
@@ -24,7 +23,6 @@ function VerificationSettingsHeader({
   confirmationMode,
   securityAnalyzer,
   isConversationSettingsDisabled,
-  view,
   onConfirmationModeChange,
   onSecurityAnalyzerChange,
   renderTopContent,
@@ -33,7 +31,6 @@ function VerificationSettingsHeader({
   confirmationMode: boolean;
   securityAnalyzer: string | null;
   isConversationSettingsDisabled: boolean;
-  view: SettingsView;
   onConfirmationModeChange: (value: boolean) => void;
   onSecurityAnalyzerChange: (value: string | null) => void;
   renderTopContent?: () => React.ReactNode;
@@ -54,16 +51,15 @@ function VerificationSettingsHeader({
     [t],
   );
 
-  const showConversationSettings = view !== "basic";
-  const showSecurityAnalyzer = showConversationSettings && confirmationMode;
+  const showSecurityAnalyzer = confirmationMode;
 
   return (
     <div className="flex flex-col gap-6">
       {renderTopContent?.()}
       {scope === "org" ? <OrgWideSettingsBadge /> : null}
 
-      {showConversationSettings ? (
-        <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-1.5">
           <SettingsSwitch
             testId="confirmation-mode-toggle"
             isToggled={confirmationMode}
@@ -72,8 +68,13 @@ function VerificationSettingsHeader({
           >
             {t(I18nKey.SETTINGS_FORM$ENABLE_CONFIRMATION_MODE_LABEL)}
           </SettingsSwitch>
+          <p className="text-tertiary-alt text-xs leading-5">
+            {t(I18nKey.SETTINGS$CONFIRMATION_MODE_TOOLTIP)}
+          </p>
+        </div>
 
-          {showSecurityAnalyzer ? (
+        {showSecurityAnalyzer ? (
+          <div className="flex flex-col gap-1.5">
             <SettingsDropdownInput
               testId="security-analyzer-input"
               name="security_analyzer"
@@ -86,9 +87,12 @@ function VerificationSettingsHeader({
                 onSecurityAnalyzerChange(key ? String(key) : null)
               }
             />
-          ) : null}
-        </div>
-      ) : null}
+            <p className="text-tertiary-alt text-xs leading-5">
+              {t(I18nKey.SETTINGS$SECURITY_ANALYZER_DESCRIPTION)}
+            </p>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -126,13 +130,12 @@ export function VerificationSettingsScreen({
   }, [settings?.confirmation_mode, settings?.security_analyzer]);
 
   const buildHeader = React.useCallback(
-    ({ isDisabled, view }: SdkSectionHeaderProps) => (
+    ({ isDisabled }: SdkSectionHeaderProps) => (
       <VerificationSettingsHeader
         scope={scope}
         confirmationMode={confirmationMode}
         securityAnalyzer={securityAnalyzer}
         isConversationSettingsDisabled={isDisabled}
-        view={view}
         onConfirmationModeChange={(value) => {
           setConfirmationMode(value);
           setConfirmationModeDirty(true);
@@ -148,14 +151,8 @@ export function VerificationSettingsScreen({
   );
 
   const buildPayload = React.useCallback(
-    (basePayload: Record<string, unknown>, context: { view: SettingsView }) => {
+    (basePayload: Record<string, unknown>) => {
       const payload = { ...basePayload };
-
-      if (context.view === "basic") {
-        payload.confirmation_mode = DEFAULT_SETTINGS.confirmation_mode;
-        payload.security_analyzer = DEFAULT_SETTINGS.security_analyzer;
-        return { conversation_settings: payload };
-      }
 
       if (confirmationModeDirty) {
         payload.confirmation_mode = confirmationMode;

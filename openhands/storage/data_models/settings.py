@@ -158,12 +158,21 @@ class Settings(BaseModel):
                     coerced[key] = (
                         _coerce_value(value) if not isinstance(value, dict) else value
                     )
+
+                replace_mcp_config = 'mcp_config' in agent_update
+                mcp_config = (
+                    coerced.pop('mcp_config', None) if replace_mcp_config else None
+                )
+
                 merged = deep_merge(
                     self.agent_settings.model_dump(
                         mode='json', context={'expose_secrets': True}
                     ),
                     coerced,
                 )
+                if replace_mcp_config:
+                    merged['mcp_config'] = mcp_config
+
                 # Use object.__setattr__ to avoid validate_assignment
                 # side-effects on other fields.
                 object.__setattr__(

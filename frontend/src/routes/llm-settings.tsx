@@ -124,7 +124,7 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
       <p className="text-xs">
         {t(I18nKey.SETTINGS$LLM_BILLING_INFO)}{" "}
         <a
-          href="https://docs.all-hands.dev/usage/llms/openhands-llms"
+          href="https://docs.openhands.dev/usage/llms/openhands-llms"
           rel="noreferrer noopener"
           target="_blank"
           className="underline underline-offset-2"
@@ -284,11 +284,26 @@ export function LlmSettingsScreen({
               testId={helpTestId}
               text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
               linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-              href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
+              href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
             />
           </>
         );
       };
+
+      const agentItems = getSchemaFieldChoices(schema, "agent").map(
+        (choice) => ({
+          key: String(choice.value),
+          label: choice.label,
+        }),
+      );
+
+      if (
+        hasAgentField &&
+        agentValue &&
+        !agentItems.some((item) => item.key === agentValue)
+      ) {
+        agentItems.unshift({ key: agentValue, label: agentValue });
+      }
 
       return (
         <div className="flex flex-col gap-6">
@@ -401,12 +416,7 @@ export function LlmSettingsScreen({
                       testId="agent-input"
                       name="agent-input"
                       label={t(I18nKey.SETTINGS$AGENT)}
-                      items={getSchemaFieldChoices(schema, "agent").map(
-                        (choice) => ({
-                          key: String(choice.value),
-                          label: choice.label,
-                        }),
-                      )}
+                      items={agentItems}
                       selectedKey={agentValue}
                       isClearable={false}
                       onSelectionChange={(key) => {

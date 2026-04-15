@@ -90,7 +90,7 @@ export function parseMcpConfig(value: unknown): MCPConfig {
  * Convert the frontend MCPConfig format back to the SDK { mcpServers: { ... } }
  * shape expected by agent_settings.mcp_config on the backend.
  */
-export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig {
+export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
   const mcpServers: Record<string, SdkMcpServerConfig> = {};
   let counter = 0;
 
@@ -133,5 +133,5 @@ export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig {
     mcpServers[nextName(entry.name || "stdio")] = server;
   }
 
-  return { mcpServers };
+  return Object.keys(mcpServers).length > 0 ? { mcpServers } : null;
 }

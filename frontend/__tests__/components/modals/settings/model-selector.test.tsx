@@ -3,7 +3,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
-import type { LLMProvider, LLMModel } from "#/api/config-service/config-service.types";
+import type {
+  LLMProvider,
+  LLMModel,
+} from "#/api/config-service/config-service.types";
 
 const mockProviders: LLMProvider[] = [
   { name: "openai", verified: true },
@@ -132,5 +135,11 @@ describe("ModelSelector", () => {
       expect(screen.getByLabelText("LLM Provider")).toHaveValue("Azure");
       expect(screen.getByLabelText("LLM Model")).toHaveValue("ada");
     });
+  });
+
+  it("should stretch the provider and model selectors across the full row", () => {
+    const { container } = renderWithQuery(<ModelSelector />);
+
+    expect(container.firstChild).toHaveClass("w-full");
   });
 });

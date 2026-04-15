@@ -225,6 +225,63 @@ def test_settings_update_mcp_config():
     assert mcp.mcpServers['custom'].url == 'https://example.com/mcp'
 
 
+
+def test_settings_update_replaces_existing_mcp_servers():
+    settings = Settings(
+        agent_settings=AgentSettings(
+            llm=LLM(model='sdk-model'),
+            mcp_config=MCPConfig(
+                mcpServers={
+                    'stale': {
+                        'transport': 'sse',
+                        'url': 'https://example.com/stale',
+                    }
+                }
+            ),
+        )
+    )
+
+    settings.update(
+        {
+            'agent_settings': {
+                'mcp_config': {
+                    'mcpServers': {
+                        'fresh': {
+                            'transport': 'http',
+                            'url': 'https://example.com/fresh',
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    mcp = settings.agent_settings.mcp_config
+    assert mcp is not None
+    assert set(mcp.mcpServers) == {'fresh'}
+    assert mcp.mcpServers['fresh'].url == 'https://example.com/fresh'
+
+
+def test_settings_update_can_clear_mcp_config():
+    settings = Settings(
+        agent_settings=AgentSettings(
+            llm=LLM(model='sdk-model'),
+            mcp_config=MCPConfig(
+                mcpServers={
+                    'custom': {
+                        'transport': 'http',
+                        'url': 'https://example.com/mcp',
+                    }
+                }
+            ),
+        )
+    )
+
+    settings.update({'agent_settings': {'mcp_config': None}})
+
+    assert settings.agent_settings.mcp_config is None
+
+
 def test_settings_update_batch():
     settings = Settings()
     settings.update(

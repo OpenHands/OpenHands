@@ -292,9 +292,85 @@ describe("LlmSettingsScreen", () => {
     );
   });
 
+  it("keeps the current agent visible in advanced view when the schema omits agent choices", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+      ],
+    });
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings_schema: schema,
+        agent_settings: {
+          agent: "BrowsingAgent",
+          llm: {
+            model: "openai/gpt-4o",
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-input")).toHaveValue("BrowsingAgent");
+    });
+  });
+
+  it("uses the docs.openhands.dev domain for the API key help link", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        agent_settings: {
+          llm: {
+            model: "openai/gpt-4o",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    const helpLink = within(
+      screen.getByTestId("llm-settings-form-basic"),
+    ).getByTestId("llm-api-key-help-anchor");
+
+    expect(helpLink.querySelector("a")).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev/usage/local-setup#getting-an-api-key",
+    );
+  });
 
   it("defaults to basic view on first visit when org settings use a bare OpenAI model with the default base URL", async () => {
-    const schema = structuredClone(MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!);
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
     const llmSection = schema.sections.find((section) => section.key === "llm");
 
     if (!llmSection) {
@@ -335,7 +411,10 @@ describe("LlmSettingsScreen", () => {
       ],
     });
 
-    vi.spyOn(organizationService, "getOrganizationAgentSettings").mockResolvedValue(
+    vi.spyOn(
+      organizationService,
+      "getOrganizationAgentSettings",
+    ).mockResolvedValue(
       buildSettings({
         llm_model: "gpt-4",
         llm_base_url: "https://api.openai.com",
@@ -353,12 +432,18 @@ describe("LlmSettingsScreen", () => {
     renderLlmSettingsScreen({ appMode: "saas", scope: "org" });
 
     await screen.findByTestId("llm-settings-form-basic");
-    expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("llm-settings-form-advanced")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-llm.timeout"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
   });
 
   it("defaults to basic view on first personal SaaS visit even when effective settings include inherited org-only LLM fields", async () => {
-    const schema = structuredClone(MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!);
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
     const llmSection = schema.sections.find((section) => section.key === "llm");
 
     if (!llmSection) {
@@ -398,10 +483,13 @@ describe("LlmSettingsScreen", () => {
     renderLlmSettingsScreen({ appMode: "saas" });
 
     await screen.findByTestId("llm-settings-form-basic");
-    expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("llm-settings-form-advanced")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-llm.timeout"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
   });
-
 
   it("hides the API key input for OpenHands provider in SaaS mode", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
@@ -619,7 +707,11 @@ describe("LlmSettingsScreen", () => {
         expect.objectContaining({
           agent_settings: expect.objectContaining({
             agent: "CodeActAgent",
-            llm: expect.objectContaining({ api_key: "test-api-key", base_url: "https://schema.default/v1", timeout: 30 }),
+            llm: expect.objectContaining({
+              api_key: "test-api-key",
+              base_url: "https://schema.default/v1",
+              timeout: 30,
+            }),
           }),
         }),
       );
@@ -825,7 +917,10 @@ describe("LlmSettingsScreen", () => {
       expect(saveOrganizationSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           agent_settings: expect.objectContaining({
-            llm: expect.objectContaining({ api_key: "test-api-key", base_url: null }),
+            llm: expect.objectContaining({
+              api_key: "test-api-key",
+              base_url: null,
+            }),
           }),
         }),
       );
@@ -896,7 +991,10 @@ describe("LlmSettingsScreen", () => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           agent_settings: expect.objectContaining({
-            llm: expect.objectContaining({ api_key: "test-api-key", base_url: null }),
+            llm: expect.objectContaining({
+              api_key: "test-api-key",
+              base_url: null,
+            }),
           }),
         }),
       );
@@ -963,7 +1061,10 @@ describe("LlmSettingsScreen", () => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           agent_settings: expect.objectContaining({
-            llm: expect.objectContaining({ model: "openai/gpt-4o", api_key: "test-api-key" }),
+            llm: expect.objectContaining({
+              model: "openai/gpt-4o",
+              api_key: "test-api-key",
+            }),
           }),
         }),
       );
@@ -1006,7 +1107,9 @@ describe("LlmSettingsScreen", () => {
   });
 
   it("does not reveal all-only fields after save when the search API key remains set on refetch", async () => {
-    const schema = structuredClone(MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!);
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
     const llmSection = schema.sections.find((section) => section.key === "llm");
 
     if (!llmSection) {
@@ -1061,29 +1164,35 @@ describe("LlmSettingsScreen", () => {
     const getSettingsSpy = vi
       .spyOn(SettingsService, "getSettings")
       .mockImplementation(async () => structuredClone(persistedSettings));
-    vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
-      const nextSearchApiKey =
-        typeof payload.search_api_key === "string" ? payload.search_api_key : "";
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(
+      async (payload) => {
+        const nextSearchApiKey =
+          typeof payload.search_api_key === "string"
+            ? payload.search_api_key
+            : "";
 
-      persistedSettings = buildSettings({
-        agent_settings_schema: schema,
-        search_api_key: nextSearchApiKey,
-        search_api_key_set: nextSearchApiKey.trim().length > 0,
-        agent_settings: {
-          llm: {
-            model: "openhands/claude-opus-4-5-20251101",
+        persistedSettings = buildSettings({
+          agent_settings_schema: schema,
+          search_api_key: nextSearchApiKey,
+          search_api_key_set: nextSearchApiKey.trim().length > 0,
+          agent_settings: {
+            llm: {
+              model: "openhands/claude-opus-4-5-20251101",
+            },
           },
-        },
-      });
+        });
 
-      return true;
-    });
+        return true;
+      },
+    );
 
     renderLlmSettingsScreen({ appMode: "oss" });
 
     await screen.findByTestId("llm-settings-form-basic");
     await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
-    expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-llm.timeout"),
+    ).not.toBeInTheDocument();
 
     const searchApiKeyInput = await screen.findByTestId("search-api-key-input");
     await userEvent.type(searchApiKeyInput, "tavily-key");
@@ -1094,12 +1203,16 @@ describe("LlmSettingsScreen", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("sdk-settings-llm.timeout"),
+      ).not.toBeInTheDocument();
     });
   });
 
   it("does not reveal all-only fields after save when refetch returns a litellm_proxy model with the managed proxy base URL", async () => {
-    const schema = structuredClone(MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!);
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
     const llmSection = schema.sections.find((section) => section.key === "llm");
 
     if (!llmSection) {
@@ -1149,7 +1262,9 @@ describe("LlmSettingsScreen", () => {
     renderLlmSettingsScreen({ appMode: "oss" });
 
     await screen.findByTestId("llm-settings-form-basic");
-    expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-llm.timeout"),
+    ).not.toBeInTheDocument();
 
     await userEvent.type(
       await screen.findByTestId("llm-api-key-input"),
@@ -1162,7 +1277,9 @@ describe("LlmSettingsScreen", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("sdk-settings-llm.timeout"),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -1198,7 +1315,9 @@ describe("LlmSettingsScreen", () => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           agent_settings: expect.objectContaining({
-            llm: expect.objectContaining({ base_url: "https://custom.example/v1/extra" }),
+            llm: expect.objectContaining({
+              base_url: "https://custom.example/v1/extra",
+            }),
           }),
         }),
       );
