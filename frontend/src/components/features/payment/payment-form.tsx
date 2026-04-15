@@ -11,7 +11,7 @@ import { amountIsValid } from "#/utils/amount-is-valid";
 import { I18nKey } from "#/i18n/declaration";
 import { PoweredByStripeTag } from "./powered-by-stripe-tag";
 
-export function PaymentForm() {
+export function PaymentForm({ isDisabled }: { isDisabled?: boolean }) {
   const { t } = useTranslation();
   const { data: balance, isLoading } = useBalance();
   const { mutate: addBalance, isPending } = useCreateStripeCheckoutSession();
@@ -69,13 +69,14 @@ export function PaymentForm() {
           min={10}
           max={25000}
           step={1}
+          isDisabled={isDisabled}
         />
 
         <div className="flex items-center w-[680px] gap-2">
           <BrandButton
             variant="primary"
             type="submit"
-            isDisabled={isPending || buttonIsDisabled}
+            isDisabled={isPending || buttonIsDisabled || isDisabled}
           >
             {t(I18nKey.PAYMENT$ADD_CREDIT)}
           </BrandButton>

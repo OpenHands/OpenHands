@@ -44,6 +44,9 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     React.useState<string | null>(null);
   const [selectedConversationVersion, setSelectedConversationVersion] =
     React.useState<"V0" | "V1" | undefined>(undefined);
+  const [selectedSandboxId, setSelectedSandboxId] = React.useState<
+    string | null
+  >(null);
   const [openContextMenuId, setOpenContextMenuId] = React.useState<
     string | null
   >(null);
@@ -60,8 +63,8 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
 
-  // Flatten all pages into a single array of conversations
-  const conversations = data?.pages.flatMap((page) => page.results) ?? [];
+  // Flatten all pages into a single array of conversations (V1 uses 'items' instead of 'results')
+  const conversations = data?.pages.flatMap((page) => page.items) ?? [];
 
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: pauseConversationSandbox } =
@@ -85,10 +88,12 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const handleStopConversation = (
     conversationId: string,
     version?: "V0" | "V1",
+    sandboxId?: string | null,
   ) => {
     setConfirmStopModalVisible(true);
     setSelectedConversationId(conversationId);
     setSelectedConversationVersion(version);
+    setSelectedSandboxId(sandboxId ?? null);
   };
 
   const handleConversationTitleChange = async (
@@ -171,40 +176,41 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         </NavLink>
       ))}
       {/* Then render completed conversations */}
-      {conversations?.map((project) => (
+      {conversations?.map((conversation) => (
         <NavLink
-          key={project.conversation_id}
-          to={`/conversations/${project.conversation_id}`}
+          key={conversation.id}
+          to={`/conversations/${conversation.id}`}
           onClick={onClose}
         >
           <ConversationCard
             onDelete={() =>
-              handleDeleteProject(project.conversation_id, project.title)
+              handleDeleteProject(conversation.id, conversation.title ?? "")
             }
             onStop={() =>
               handleStopConversation(
-                project.conversation_id,
-                project.conversation_version,
+                conversation.id,
+                "V1",
+                conversation.sandbox_id,
               )
             }
             onChangeTitle={(title) =>
-              handleConversationTitleChange(project.conversation_id, title)
+              handleConversationTitleChange(conversation.id, title)
             }
-            title={project.title}
+            title={conversation.title ?? ""}
             selectedRepository={{
-              selected_repository: project.selected_repository,
-              selected_branch: project.selected_branch,
-              git_provider: project.git_provider as Provider,
+              selected_repository: conversation.selected_repository,
+              selected_branch: conversation.selected_branch,
+              git_provider: conversation.git_provider as Provider,
             }}
-            lastUpdatedAt={project.last_updated_at}
-            createdAt={project.created_at}
-            conversationStatus={project.status}
-            conversationId={project.conversation_id}
-            conversationVersion={project.conversation_version}
-            contextMenuOpen={openContextMenuId === project.conversation_id}
+            lastUpdatedAt={conversation.updated_at}
+            createdAt={conversation.created_at}
+            sandboxStatus={conversation.sandbox_status}
+            conversationId={conversation.id}
+            contextMenuOpen={openContextMenuId === conversation.id}
             onContextMenuToggle={(isOpen) =>
-              setOpenContextMenuId(isOpen ? project.conversation_id : null)
+              setOpenContextMenuId(isOpen ? conversation.id : null)
             }
+            llmModel={conversation.llm_model}
           />
         </NavLink>
       ))}
@@ -238,6 +244,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
             setConfirmStopModalVisible(false);
           }}
           onCancel={() => setConfirmStopModalVisible(false)}
+          sandboxId={selectedSandboxId}
         />
       )}
 

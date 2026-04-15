@@ -19,6 +19,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
+from openhands.app_server.event_callback.webhook_router import on_conversation_update
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
@@ -95,6 +96,9 @@ def mock_conversation_info() -> ConversationInfo:
     conversation_info.stats = MagicMock()
     conversation_info.stats.get_combined_metrics.return_value = None
 
+    # Mock tags (required by on_conversation_update)
+    conversation_info.tags = {}
+
     return conversation_info
 
 
@@ -118,9 +122,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Saved conversation retains the parent_conversation_id
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -137,12 +138,11 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Mock valid_conversation to return existing conversation
+        # Act - call on_conversation_update directly with mocked valid_conversation
         with patch(
             'openhands.app_server.event_callback.webhook_router.valid_conversation',
             return_value=existing_conv,
         ):
-            # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
                 sandbox_info=sandbox_info,
@@ -175,9 +175,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Saved conversation has parent_conversation_id as None
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         conversation_id = mock_conversation_info.id
@@ -191,12 +188,11 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=None,
         )
 
-        # Mock valid_conversation to return existing conversation
+        # Act - call on_conversation_update directly with mocked valid_conversation
         with patch(
             'openhands.app_server.event_callback.webhook_router.valid_conversation',
             return_value=existing_conv,
         ):
-            # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
                 sandbox_info=sandbox_info,
@@ -228,9 +224,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - New conversation has parent_conversation_id as None
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         conversation_id = mock_conversation_info.id
@@ -242,12 +235,11 @@ class TestOnConversationUpdateParentConversationId:
             created_by_user_id=sandbox_info.created_by_user_id,
         )
 
-        # Mock valid_conversation to return stub (as it would for new conversation)
+        # Act - call on_conversation_update directly with mocked valid_conversation
         with patch(
             'openhands.app_server.event_callback.webhook_router.valid_conversation',
             return_value=stub_conv,
         ):
-            # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
                 sandbox_info=sandbox_info,
@@ -280,9 +272,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - All metadata including parent_conversation_id is preserved
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -302,12 +291,11 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Mock valid_conversation to return existing conversation
+        # Act - call on_conversation_update directly with mocked valid_conversation
         with patch(
             'openhands.app_server.event_callback.webhook_router.valid_conversation',
             return_value=existing_conv,
         ):
-            # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
                 sandbox_info=sandbox_info,
@@ -349,9 +337,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Parent_conversation_id remains unchanged after all updates
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -366,9 +351,8 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Mock valid_conversation to return conversation with parent
-        # In real scenario, this would be retrieved from DB after first save
-        async def mock_valid_conv(*args, **kwargs):
+        # Act - Update multiple times, simulating what valid_conversation would return
+        for _ in range(3):
             # After first save, get from DB with parent preserved
             saved = await app_conversation_info_service.get_app_conversation_info(
                 conversation_id
@@ -376,21 +360,20 @@ class TestOnConversationUpdateParentConversationId:
             if saved:
                 # Override created_by_user_id for auth check
                 saved.created_by_user_id = 'user_123'
-                return saved
-            return initial_conv
+                existing = saved
+            else:
+                existing = initial_conv
 
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            side_effect=mock_valid_conv,
-        ):
-            # Act - Update multiple times
-            for _ in range(3):
+            with patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=existing,
+            ):
                 result = await on_conversation_update(
                     conversation_info=mock_conversation_info,
                     sandbox_info=sandbox_info,
                     app_conversation_info_service=app_conversation_info_service,
                 )
-                assert isinstance(result, Success)
+            assert isinstance(result, Success)
 
         # Assert
         saved_conv = await app_conversation_info_service.get_app_conversation_info(
@@ -417,9 +400,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Function returns early, no updates are made
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -441,12 +421,11 @@ class TestOnConversationUpdateParentConversationId:
         # Set conversation to DELETING status
         mock_conversation_info.execution_status = ConversationExecutionStatus.DELETING
 
-        # Mock valid_conversation (though it won't be called for DELETING status)
+        # Act - call on_conversation_update directly with mocked valid_conversation
         with patch(
             'openhands.app_server.event_callback.webhook_router.valid_conversation',
             return_value=existing_conv,
         ):
-            # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
                 sandbox_info=sandbox_info,
@@ -481,9 +460,6 @@ class TestOnConversationUpdateParentConversationId:
         Assert:
             - Parent_conversation_id is preserved and title is generated
         """
-        from openhands.app_server.event_callback.webhook_router import (
-            on_conversation_update,
-        )
 
         # Arrange
         parent_id = uuid4()
@@ -498,12 +474,11 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Mock valid_conversation to return existing conversation
+        # Act - call on_conversation_update directly with mocked valid_conversation
         with patch(
             'openhands.app_server.event_callback.webhook_router.valid_conversation',
             return_value=existing_conv,
         ):
-            # Act
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
                 sandbox_info=sandbox_info,

@@ -1,16 +1,20 @@
 import { useTranslation } from "react-i18next";
-import { NavLink } from "react-router";
 import { cn } from "#/utils/utils";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-import { SettingsNavItem } from "#/constants/settings-nav";
+import { OrgSelector } from "../org/org-selector";
+import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
+import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
+import { SettingsNavHeader } from "./settings-nav-header";
+import { SettingsNavDivider } from "./settings-nav-divider";
+import { SettingsNavLink } from "./settings-nav-link";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
   onCloseMobileMenu: () => void;
-  navigationItems: SettingsNavItem[];
+  navigationItems: SettingsNavRenderedItem[];
 }
 
 export function SettingsNavigation({
@@ -19,6 +23,7 @@ export function SettingsNavigation({
   navigationItems,
 }: SettingsNavigationProps) {
   const { t } = useTranslation();
+  const shouldHideSelector = useShouldHideOrgSelector();
 
   return (
     <>
@@ -34,8 +39,8 @@ export function SettingsNavigation({
         data-testid="settings-navbar"
         className={cn(
           "flex flex-col gap-6 transition-transform duration-300 ease-in-out",
-          // Mobile: full screen overlay
-          "fixed inset-0 z-50 w-full bg-base-secondary p-4 transform md:transform-none",
+          // Mobile: full screen overlay with dark background matching desktop
+          "fixed inset-0 z-50 w-full bg-[#050505] p-4 transform md:transform-none",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
           // Desktop: static sidebar
           "md:relative md:translate-x-0 md:w-64 md:p-0 md:bg-transparent",
@@ -50,35 +55,38 @@ export function SettingsNavigation({
           <button
             type="button"
             onClick={onCloseMobileMenu}
-            className="md:hidden p-0.5 hover:bg-[#454545] rounded-md transition-colors cursor-pointer"
+            className="md:hidden p-0.5 hover:bg-tertiary rounded-md transition-colors cursor-pointer"
             aria-label="Close navigation menu"
           >
             <CloseIcon width={32} height={32} />
           </button>
         </div>
 
+        {!shouldHideSelector && <OrgSelector />}
+
         <div className="flex flex-col gap-2">
-          {navigationItems.map(({ to, icon, text }) => (
-            <NavLink
-              end
-              key={to}
-              to={to}
-              onClick={onCloseMobileMenu}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 p-1 sm:px-[14px] sm:py-2 rounded-md transition-colors",
-                  isActive ? "bg-[#454545]" : "hover:bg-[#454545]",
-                )
-              }
-            >
-              {icon}
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
-                  {t(text as I18nKey)}
-                </Typography.Text>
-              </div>
-            </NavLink>
-          ))}
+          {navigationItems.map((renderedItem, index) => {
+            if (renderedItem.type === "header") {
+              return (
+                <SettingsNavHeader
+                  key={`header-${renderedItem.text}`}
+                  text={renderedItem.text}
+                />
+              );
+            }
+
+            if (renderedItem.type === "divider") {
+              return <SettingsNavDivider key={`divider-${index}`} />;
+            }
+
+            return (
+              <SettingsNavLink
+                key={renderedItem.item.to}
+                item={renderedItem.item}
+                onClick={onCloseMobileMenu}
+              />
+            );
+          })}
         </div>
       </nav>
     </>

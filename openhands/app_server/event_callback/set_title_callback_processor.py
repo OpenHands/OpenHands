@@ -1,5 +1,8 @@
+import asyncio
 import logging
 from uuid import UUID
+
+import httpx
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
@@ -20,7 +23,60 @@ from openhands.app_server.utils.docker_utils import (
 )
 from openhands.sdk import Event, MessageEvent
 
+# TODO(OpenHands/evaluation#418): import from openhands.sdk.utils.redact
+from openhands.utils._redact_compat import redact_text_secrets
+
 _logger = logging.getLogger(__name__)
+
+# Delay between attempts to poll title
+_POLL_DELAY_S = 3
+# Number of attempts to poll title
+_NUM_POLL_ATTEMPTS = 4
+
+
+async def _poll_for_title(
+    httpx_client: httpx.AsyncClient,
+    url: str,
+    session_api_key: str | None,
+) -> str | None:
+    """Poll the agent server for the conversation title.
+
+    Args:
+        httpx_client: The HTTP client to use for requests.
+        url: The conversation URL to poll.
+        session_api_key: The session API key for authentication.
+
+    Returns:
+        The title if available, None otherwise.
+    """
+    for _ in range(_NUM_POLL_ATTEMPTS):
+        await asyncio.sleep(_POLL_DELAY_S)
+        try:
+            headers = (
+                {
+                    'X-Session-API-Key': session_api_key,
+                }
+                if session_api_key
+                else {}
+            )
+            response = await httpx_client.get(
+                url,
+                headers=headers,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            # Transient agent-server failures are acceptable; retry later.
+            _logger.warning(
+                'Title poll failed for conversation %s: %s',
+                url,
+                exc,
+            )
+        else:
+            title = response.json().get('title')
+            if title:
+                return title
+
+    return None
 
 
 class SetTitleCallbackProcessor(EventCallbackProcessor):
@@ -41,7 +97,11 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             get_httpx_client,
         )
 
-        _logger.info(f'Callback {callback.id} Invoked for event {event}')
+        _logger.info(
+            'Callback %s Invoked for event %s',
+            callback.id,
+            redact_text_secrets(str(event)),
+        )
 
         state = InjectorState()
         setattr(state, USER_CONTEXT_ATTR, ADMIN)
@@ -51,7 +111,6 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             get_app_conversation_info_service(state) as app_conversation_info_service,
             get_httpx_client(state) as httpx_client,
         ):
-            # Generate a title for the conversation
             app_conversation = await app_conversation_service.get_app_conversation(
                 conversation_id
             )
@@ -61,15 +120,20 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             app_conversation_url = replace_localhost_hostname_for_docker(
                 app_conversation_url
             )
-            response = await httpx_client.post(
-                f'{app_conversation_url}/generate_title',
-                headers={
-                    'X-Session-API-Key': app_conversation.session_api_key,
-                },
-                content='{}',
+
+            title = await _poll_for_title(
+                httpx_client,
+                app_conversation_url,
+                app_conversation.session_api_key,
             )
-            response.raise_for_status()
-            title = response.json()['title']
+
+            if not title:
+                # Keep the callback active so later message events can retry.
+                _logger.info(
+                    f'Conversation {conversation_id} title not available yet; '
+                    'will retry on a future message event.'
+                )
+                return None
 
             # Save the conversation info
             info = AppConversationInfo(

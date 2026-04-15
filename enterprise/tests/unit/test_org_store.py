@@ -145,6 +145,86 @@ async def test_create_org(async_session_maker, mock_litellm_api):
 
 
 @pytest.mark.asyncio
+async def test_create_org_v1_enabled_defaults_to_true_when_default_is_true(
+    async_session_maker, mock_litellm_api
+):
+    """
+    GIVEN: DEFAULT_V1_ENABLED is True and org.v1_enabled is not specified (None)
+    WHEN: create_org is called
+    THEN: org.v1_enabled should be set to True
+    """
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.DEFAULT_V1_ENABLED', True),
+    ):
+        org = await OrgStore.create_org(kwargs={'name': 'test-org-v1-default-true'})
+
+        assert org is not None
+        assert org.v1_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_create_org_v1_enabled_defaults_to_false_when_default_is_false(
+    async_session_maker, mock_litellm_api
+):
+    """
+    GIVEN: DEFAULT_V1_ENABLED is False and org.v1_enabled is not specified (None)
+    WHEN: create_org is called
+    THEN: org.v1_enabled should be set to False
+    """
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.DEFAULT_V1_ENABLED', False),
+    ):
+        org = await OrgStore.create_org(kwargs={'name': 'test-org-v1-default-false'})
+
+        assert org is not None
+        assert org.v1_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_create_org_v1_enabled_explicit_false_overrides_default_true(
+    async_session_maker, mock_litellm_api
+):
+    """
+    GIVEN: DEFAULT_V1_ENABLED is True but org.v1_enabled is explicitly set to False
+    WHEN: create_org is called
+    THEN: org.v1_enabled should stay False (explicit value wins over default)
+    """
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.DEFAULT_V1_ENABLED', True),
+    ):
+        org = await OrgStore.create_org(
+            kwargs={'name': 'test-org-v1-explicit-false', 'v1_enabled': False}
+        )
+
+        assert org is not None
+        assert org.v1_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_create_org_v1_enabled_explicit_true_overrides_default_false(
+    async_session_maker, mock_litellm_api
+):
+    """
+    GIVEN: DEFAULT_V1_ENABLED is False but org.v1_enabled is explicitly set to True
+    WHEN: create_org is called
+    THEN: org.v1_enabled should stay True (explicit value wins over default)
+    """
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.DEFAULT_V1_ENABLED', False),
+    ):
+        org = await OrgStore.create_org(
+            kwargs={'name': 'test-org-v1-explicit-true', 'v1_enabled': True}
+        )
+
+        assert org is not None
+        assert org.v1_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_get_org_by_name(async_session_maker, mock_litellm_api):
     # Test getting org by name
     async with async_session_maker() as session:

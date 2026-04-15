@@ -60,7 +60,7 @@ class SandboxConfig(BaseModel):
     rm_all_containers: bool = Field(default=False)
     api_key: str | None = Field(default=None)
     base_container_image: str | None = Field(
-        default='nikolaik/python-nodejs:python3.12-nodejs22'
+        default='nikolaik/python-nodejs:python3.12-nodejs22-slim'
     )
     runtime_container_image: str | None = Field(default=None)
     user_id: int = Field(default=os.getuid() if hasattr(os, 'getuid') else 1000)
@@ -126,5 +126,7 @@ class SandboxConfig(BaseModel):
     @model_validator(mode='after')
     def set_default_base_image(self) -> 'SandboxConfig':
         if self.base_container_image is None:
-            self.base_container_image = 'nikolaik/python-nodejs:python3.12-nodejs22'
+            self.base_container_image = (
+                'nikolaik/python-nodejs:python3.12-nodejs22-slim'
+            )
         return self

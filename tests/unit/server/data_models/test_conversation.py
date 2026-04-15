@@ -1038,6 +1038,9 @@ async def test_delete_v1_conversation_success():
                     return_value=mock_app_conversation_info
                 )
                 mock_service.delete_app_conversation = AsyncMock(return_value=True)
+                mock_info_service.count_conversations_by_sandbox_id = AsyncMock(
+                    return_value=1
+                )
 
                 # Call delete_conversation with V1 conversation ID
                 result = await delete_conversation(
@@ -1059,7 +1062,8 @@ async def test_delete_v1_conversation_success():
 
                 # Verify that delete_app_conversation was called with the conversation ID
                 mock_service.delete_app_conversation.assert_called_once_with(
-                    conversation_uuid
+                    conversation_uuid,
+                    skip_agent_server_delete=False,
                 )
 
 
@@ -1357,6 +1361,9 @@ async def test_delete_v1_conversation_with_agent_server():
                     return_value=mock_app_conversation_info
                 )
                 mock_service.delete_app_conversation = AsyncMock(return_value=True)
+                mock_info_service.count_conversations_by_sandbox_id = AsyncMock(
+                    return_value=1
+                )
 
                 # Call delete_conversation with V1 conversation ID
                 result = await delete_conversation(
@@ -1378,7 +1385,8 @@ async def test_delete_v1_conversation_with_agent_server():
 
                 # Verify that delete_app_conversation was called with the conversation ID
                 mock_service.delete_app_conversation.assert_called_once_with(
-                    conversation_uuid
+                    conversation_uuid,
+                    skip_agent_server_delete=False,
                 )
 
 
@@ -2187,8 +2195,10 @@ async def test_delete_v1_conversation_with_sub_conversations():
         sandbox_service=mock_sandbox_service,
         sandbox_spec_service=MagicMock(),
         jwt_service=MagicMock(),
+        pending_message_service=MagicMock(),
         sandbox_startup_timeout=120,
         sandbox_startup_poll_frequency=2,
+        max_num_conversations_per_sandbox=20,
         httpx_client=mock_httpx_client,
         web_url=None,
         openhands_provider_base_url=None,
@@ -2310,8 +2320,10 @@ async def test_delete_v1_conversation_with_no_sub_conversations():
         sandbox_service=mock_sandbox_service,
         sandbox_spec_service=MagicMock(),
         jwt_service=MagicMock(),
+        pending_message_service=MagicMock(),
         sandbox_startup_timeout=120,
         sandbox_startup_poll_frequency=2,
+        max_num_conversations_per_sandbox=20,
         httpx_client=mock_httpx_client,
         web_url=None,
         openhands_provider_base_url=None,
@@ -2463,8 +2475,10 @@ async def test_delete_v1_conversation_sub_conversation_deletion_error():
         sandbox_service=mock_sandbox_service,
         sandbox_spec_service=MagicMock(),
         jwt_service=MagicMock(),
+        pending_message_service=MagicMock(),
         sandbox_startup_timeout=120,
         sandbox_startup_poll_frequency=2,
+        max_num_conversations_per_sandbox=20,
         httpx_client=mock_httpx_client,
         web_url=None,
         openhands_provider_base_url=None,

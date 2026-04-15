@@ -22,7 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.remote_sandbox_service import (
     ALLOW_CORS_ORIGINS_VARIABLE,
-    POD_STATUS_MAPPING,
     STATUS_MAPPING,
     WEBHOOK_CALLBACK_VARIABLE,
     RemoteSandboxService,
@@ -98,7 +97,6 @@ def remote_sandbox_service(
 def create_runtime_data(
     session_id: str = 'test-sandbox-123',
     status: str = 'running',
-    pod_status: str = 'ready',
     url: str = 'https://sandbox.example.com',
     session_api_key: str = 'test-session-key',
     runtime_id: str = 'runtime-456',
@@ -107,7 +105,6 @@ def create_runtime_data(
     return {
         'session_id': session_id,
         'status': status,
-        'pod_status': pod_status,
         'url': url,
         'session_api_key': session_api_key,
         'runtime_id': runtime_id,
@@ -188,24 +185,11 @@ class TestStatusMapping:
     """Test cases for status mapping functionality."""
 
     @pytest.mark.asyncio
-    async def test_get_sandbox_status_from_runtime_with_pod_status(
+    async def test_get_sandbox_status_from_runtime_with_status(
         self, remote_sandbox_service
     ):
-        """Test status mapping using pod_status."""
-        runtime_data = create_runtime_data(pod_status='ready')
-
-        status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
-
-        assert status == SandboxStatus.RUNNING
-
-    @pytest.mark.asyncio
-    async def test_get_sandbox_status_from_runtime_fallback_to_status(
-        self, remote_sandbox_service
-    ):
-        """Test status mapping fallback to status field."""
-        runtime_data = create_runtime_data(
-            pod_status='unknown_pod_status', status='running'
-        )
+        """Test status mapping using status field."""
+        runtime_data = create_runtime_data(status='running')
 
         status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
 
@@ -225,32 +209,22 @@ class TestStatusMapping:
         self, remote_sandbox_service
     ):
         """Test status mapping with unknown status values."""
-        runtime_data = create_runtime_data(
-            pod_status='unknown_pod', status='unknown_status'
-        )
+        runtime_data = create_runtime_data(status='unknown_status')
 
         status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
 
         assert status == SandboxStatus.MISSING
 
     @pytest.mark.asyncio
-    async def test_pod_status_mapping_coverage(self, remote_sandbox_service):
-        """Test all pod status mappings are handled correctly."""
-        test_cases = [
-            ('ready', SandboxStatus.RUNNING),
-            ('pending', SandboxStatus.STARTING),
-            ('running', SandboxStatus.STARTING),
-            ('failed', SandboxStatus.ERROR),
-            ('unknown', SandboxStatus.ERROR),
-            ('crashloopbackoff', SandboxStatus.ERROR),
-        ]
+    async def test_get_sandbox_status_from_runtime_empty_status(
+        self, remote_sandbox_service
+    ):
+        """Test status mapping with empty status field."""
+        runtime_data = create_runtime_data(status='')
 
-        for pod_status, expected_status in test_cases:
-            runtime_data = create_runtime_data(pod_status=pod_status)
-            status = remote_sandbox_service._get_sandbox_status_from_runtime(
-                runtime_data
-            )
-            assert status == expected_status, f'Failed for pod_status: {pod_status}'
+        status = remote_sandbox_service._get_sandbox_status_from_runtime(runtime_data)
+
+        assert status == SandboxStatus.MISSING
 
     @pytest.mark.asyncio
     async def test_status_mapping_coverage(self, remote_sandbox_service):
@@ -264,8 +238,24 @@ class TestStatusMapping:
         ]
 
         for status, expected_status in test_cases:
-            # Use empty pod_status to force fallback to status field
-            runtime_data = create_runtime_data(pod_status='', status=status)
+            runtime_data = create_runtime_data(status=status)
+            result = remote_sandbox_service._get_sandbox_status_from_runtime(
+                runtime_data
+            )
+            assert result == expected_status, f'Failed for status: {status}'
+
+    @pytest.mark.asyncio
+    async def test_status_mapping_case_insensitive(self, remote_sandbox_service):
+        """Test that status mapping is case-insensitive."""
+        test_cases = [
+            ('RUNNING', SandboxStatus.RUNNING),
+            ('Running', SandboxStatus.RUNNING),
+            ('PAUSED', SandboxStatus.PAUSED),
+            ('Starting', SandboxStatus.STARTING),
+        ]
+
+        for status, expected_status in test_cases:
+            runtime_data = create_runtime_data(status=status)
             result = remote_sandbox_service._get_sandbox_status_from_runtime(
                 runtime_data
             )
@@ -336,7 +326,7 @@ class TestSandboxInfoConversion:
         """Test conversion to SandboxInfo with running runtime."""
         # Setup
         stored_sandbox = create_stored_sandbox()
-        runtime_data = create_runtime_data(status='running', pod_status='ready')
+        runtime_data = create_runtime_data(status='running')
 
         # Execute
         sandbox_info = remote_sandbox_service._to_sandbox_info(
@@ -363,7 +353,7 @@ class TestSandboxInfoConversion:
         """Test conversion to SandboxInfo with starting runtime."""
         # Setup
         stored_sandbox = create_stored_sandbox()
-        runtime_data = create_runtime_data(status='running', pod_status='pending')
+        runtime_data = create_runtime_data(status='starting')
 
         # Execute
         sandbox_info = remote_sandbox_service._to_sandbox_info(
@@ -400,7 +390,7 @@ class TestSandboxLifecycle:
         """Test successful sandbox start."""
         # Setup
         mock_response = MagicMock()
-        mock_response.json.return_value = create_runtime_data()
+        mock_response.json.return_value = create_runtime_data(status='running')
         remote_sandbox_service.httpx_client.request.return_value = mock_response
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
 
@@ -414,9 +404,7 @@ class TestSandboxLifecycle:
 
         # Verify
         assert sandbox_info.id == 'test-sandbox-123'
-        assert (
-            sandbox_info.status == SandboxStatus.STARTING
-        )  # pod_status is 'pending' by default
+        assert sandbox_info.status == SandboxStatus.RUNNING
         remote_sandbox_service.pause_old_sandboxes.assert_called_once_with(
             9
         )  # max_num_sandboxes - 1
@@ -1266,19 +1254,6 @@ class TestUtilityFunctions:
 
 class TestConstants:
     """Test cases for constants and mappings."""
-
-    def test_pod_status_mapping_completeness(self):
-        """Test that POD_STATUS_MAPPING covers expected statuses."""
-        expected_statuses = [
-            'ready',
-            'pending',
-            'running',
-            'failed',
-            'unknown',
-            'crashloopbackoff',
-        ]
-        for status in expected_statuses:
-            assert status in POD_STATUS_MAPPING, f'Missing pod status: {status}'
 
     def test_status_mapping_completeness(self):
         """Test that STATUS_MAPPING covers expected statuses."""

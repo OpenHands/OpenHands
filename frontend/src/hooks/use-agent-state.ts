@@ -1,7 +1,5 @@
 import { useMemo } from "react";
-import { useAgentStore } from "#/stores/agent-store";
 import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { AgentState } from "#/types/agent-state";
 import { V1ExecutionStatus } from "#/types/v1/core/base/common";
 
@@ -39,20 +37,14 @@ function mapV1StatusToV0State(status: V1ExecutionStatus | null): AgentState {
  * - For V1 conversations: Returns mapped state from useV1ConversationStateStore
  */
 export function useAgentState() {
-  const { data: conversation } = useActiveConversation();
-  const v0State = useAgentStore((state) => state.curAgentState);
   const v1Status = useV1ConversationStateStore(
     (state) => state.execution_status,
   );
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
-
-  const curAgentState = useMemo(() => {
-    if (isV1Conversation) {
-      return mapV1StatusToV0State(v1Status);
-    }
-    return v0State;
-  }, [isV1Conversation, v1Status, v0State]);
+  const curAgentState = useMemo(
+    () => mapV1StatusToV0State(v1Status),
+    [v1Status],
+  );
 
   return { curAgentState };
 }

@@ -280,6 +280,8 @@ class TestSaasSQLAppConversationInfoService:
         stored_metadata.reasoning_tokens = 0
         stored_metadata.context_window = 0
         stored_metadata.per_turn_token = 0
+        stored_metadata.public = None
+        stored_metadata.tags = {}
 
         saas_metadata = MagicMock(spec=StoredConversationMetadataSaas)
         saas_metadata.user_id = UUID('a1111111-1111-1111-1111-111111111111')
@@ -663,3 +665,741 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         admin_page = await admin_service.search_app_conversation_info()
         assert len(admin_page.items) == 5
+
+
+class TestSaasSQLAppConversationInfoServiceWebhookFallback:
+    """Test suite for webhook callback fallback using info.created_by_user_id."""
+
+    @pytest.mark.asyncio
+    async def test_save_with_admin_context_uses_created_by_user_id_fallback(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that save_app_conversation_info uses info.created_by_user_id when user_context returns None.
+
+        This is the key fix for SDK-created conversations: when the webhook endpoint
+        uses ADMIN context (user_id=None), the service should fall back to using
+        the created_by_user_id from the AppConversationInfo object.
+        """
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Create service with ADMIN context (user_id=None)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        # Create conversation info with created_by_user_id set (as would come from sandbox_info)
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),  # This should be used as fallback
+            sandbox_id='sandbox_webhook_test',
+            title='Webhook Created Conversation',
+        )
+
+        # Act: Save using ADMIN context
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Assert: SAAS metadata should be created with user_id from info.created_by_user_id
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None, 'SAAS metadata should be created'
+        assert (
+            saas_metadata.user_id == USER1_ID
+        ), 'user_id should match info.created_by_user_id'
+        assert saas_metadata.org_id == ORG1_ID, 'org_id should match user current org'
+
+    @pytest.mark.asyncio
+    async def test_save_with_admin_context_no_user_id_skips_saas_metadata(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that save_app_conversation_info skips SAAS metadata when both user_context and info have no user_id."""
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Create service with ADMIN context (user_id=None)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        # Create conversation info without created_by_user_id
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=None,  # No user_id available
+            sandbox_id='sandbox_no_user',
+            title='No User Conversation',
+        )
+
+        # Act: Save using ADMIN context with no user_id fallback
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Assert: SAAS metadata should NOT be created
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert (
+            saas_metadata is None
+        ), 'SAAS metadata should not be created without user_id'
+
+    @pytest.mark.asyncio
+    async def test_webhook_created_conversation_visible_to_user(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test end-to-end: conversation saved via webhook is visible to the owning user."""
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Arrange: Save conversation using ADMIN context (simulating webhook)
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_webhook_e2e',
+            title='E2E Webhook Conversation',
+        )
+        await admin_service.save_app_conversation_info(conv_info)
+
+        # Act: Query as the owning user
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        user1_page = await user1_service.search_app_conversation_info()
+
+        # Assert: User should see the webhook-created conversation
+        assert len(user1_page.items) == 1
+        assert user1_page.items[0].id == conv_id
+        assert user1_page.items[0].title == 'E2E Webhook Conversation'
+
+
+class TestSandboxIdFilterSaas:
+    """Test suite for sandbox_id__eq filter parameter in SAAS service."""
+
+    @pytest.mark.asyncio
+    async def test_search_by_sandbox_id(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test searching conversations by exact sandbox_id match with SAAS user filtering."""
+        # Create service for user1
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create conversations with different sandbox IDs for user1
+        conv1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_alpha',
+            title='Conversation Alpha',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_beta',
+            title='Conversation Beta',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+        conv3 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_alpha',
+            title='Conversation Gamma',
+            created_at=datetime(2024, 1, 1, 14, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 14, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save all conversations
+        await user1_service.save_app_conversation_info(conv1)
+        await user1_service.save_app_conversation_info(conv2)
+        await user1_service.save_app_conversation_info(conv3)
+
+        # Search for sandbox_alpha - should return 2 conversations
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_alpha'
+        )
+        assert len(page.items) == 2
+        sandbox_ids = {item.sandbox_id for item in page.items}
+        assert sandbox_ids == {'sandbox_alpha'}
+        conversation_ids = {item.id for item in page.items}
+        assert conv1.id in conversation_ids
+        assert conv3.id in conversation_ids
+
+        # Search for sandbox_beta - should return 1 conversation
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_beta'
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv2.id
+
+        # Search for non-existent sandbox - should return 0 conversations
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq='sandbox_nonexistent'
+        )
+        assert len(page.items) == 0
+
+    @pytest.mark.asyncio
+    async def test_count_by_sandbox_id(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test counting conversations by exact sandbox_id match with SAAS user filtering."""
+        # Create service for user1
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create conversations with different sandbox IDs
+        conv1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_x',
+            title='Conversation X1',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_y',
+            title='Conversation Y1',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+        conv3 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_x',
+            title='Conversation X2',
+            created_at=datetime(2024, 1, 1, 14, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 14, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save all conversations
+        await user1_service.save_app_conversation_info(conv1)
+        await user1_service.save_app_conversation_info(conv2)
+        await user1_service.save_app_conversation_info(conv3)
+
+        # Count for sandbox_x - should be 2
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_x'
+        )
+        assert count == 2
+
+        # Count for sandbox_y - should be 1
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_y'
+        )
+        assert count == 1
+
+        # Count for non-existent sandbox - should be 0
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq='sandbox_nonexistent'
+        )
+        assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_sandbox_id_filter_respects_user_isolation(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that sandbox_id filter respects user isolation in SAAS environment."""
+        # Create services for both users
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        user2_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER2_ID)),
+        )
+
+        # Create conversation with same sandbox_id for both users
+        shared_sandbox_id = 'sandbox_shared'
+
+        conv_user1 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id=shared_sandbox_id,
+            title='User1 Conversation',
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        )
+        conv_user2 = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER2_ID),
+            sandbox_id=shared_sandbox_id,
+            title='User2 Conversation',
+            created_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 13, 30, 0, tzinfo=timezone.utc),
+        )
+
+        # Save conversations
+        await user1_service.save_app_conversation_info(conv_user1)
+        await user2_service.save_app_conversation_info(conv_user2)
+
+        # User1 should only see their own conversation with this sandbox_id
+        page = await user1_service.search_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv_user1.id
+        assert page.items[0].title == 'User1 Conversation'
+
+        # User2 should only see their own conversation with this sandbox_id
+        page = await user2_service.search_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert len(page.items) == 1
+        assert page.items[0].id == conv_user2.id
+        assert page.items[0].title == 'User2 Conversation'
+
+        # Count should also respect user isolation
+        count = await user1_service.count_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert count == 1
+
+        count = await user2_service.count_app_conversation_info(
+            sandbox_id__eq=shared_sandbox_id
+        )
+        assert count == 1
+
+
+class TestApiKeyOrgIdHandling:
+    """Test suite for API key organization ID handling in save_app_conversation_info.
+
+    These tests verify that when a conversation is created using API key authentication,
+    the conversation is associated with the API key's bound organization, not the user's
+    currently selected organization.
+    """
+
+    @pytest.mark.asyncio
+    async def test_api_key_org_id_used_when_available(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that API key's org_id is used when saving conversation via API key auth.
+
+        This tests the main bug fix: when a user creates an API key in Personal Workspace,
+        then switches to OpenHands org in browser, and uses the API key to create a
+        conversation, the conversation should be saved in Personal Workspace (API key's org),
+        not OpenHands (user's current org).
+        """
+        from dataclasses import dataclass
+
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        # Create a mock UserAuth with API key org_id
+        @dataclass
+        class MockUserAuth:
+            user_id: str
+            api_key_org_id: UUID | None = None
+
+            async def get_user_id(self) -> str:
+                return self.user_id
+
+            def get_api_key_org_id(self) -> UUID | None:
+                return self.api_key_org_id
+
+        # Create a mock UserContext that wraps the MockUserAuth
+        @dataclass
+        class MockAuthUserContext:
+            user_auth: MockUserAuth
+
+            async def get_user_id(self) -> str | None:
+                return await self.user_auth.get_user_id()
+
+        # Simulate: User1's current org is ORG2, but API key is bound to ORG1
+        # First, update user1's current_org_id to ORG2
+        result = await async_session_with_users.execute(
+            select(User).where(User.id == USER1_ID)
+        )
+        user_to_update = result.scalars().first()
+        user_to_update.current_org_id = ORG2_ID  # User is viewing ORG2
+        await async_session_with_users.commit()
+        async_session_with_users.expire_all()
+
+        # Create service with mock auth context where API key is bound to ORG1
+        mock_user_auth = MockUserAuth(
+            user_id=str(USER1_ID),
+            api_key_org_id=ORG1_ID,  # API key created in ORG1
+        )
+        mock_context = MockAuthUserContext(user_auth=mock_user_auth)
+
+        service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=mock_context,
+        )
+
+        # Create and save a conversation
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_api_key_test',
+            title='API Key Created Conversation',
+        )
+        await service.save_app_conversation_info(conv_info)
+
+        # Verify: SAAS metadata should have ORG1 (API key's org), not ORG2 (user's current org)
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None, 'SAAS metadata should be created'
+        assert saas_metadata.user_id == USER1_ID
+        assert (
+            saas_metadata.org_id == ORG1_ID
+        ), 'Conversation should be in API key org (ORG1), not user current org (ORG2)'
+
+    @pytest.mark.asyncio
+    async def test_legacy_api_key_without_org_uses_user_current_org(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that legacy API keys (without org_id) fall back to user's current org.
+
+        Legacy API keys created before the org_id feature was added will have
+        api_key_org_id = None. In this case, we should fall back to the user's
+        current_org_id.
+        """
+        from dataclasses import dataclass
+
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        # Create a mock UserAuth with API key but NO org_id (legacy key)
+        @dataclass
+        class MockUserAuth:
+            user_id: str
+            api_key_org_id: UUID | None = None
+
+            async def get_user_id(self) -> str:
+                return self.user_id
+
+            def get_api_key_org_id(self) -> UUID | None:
+                return self.api_key_org_id
+
+        @dataclass
+        class MockAuthUserContext:
+            user_auth: MockUserAuth
+
+            async def get_user_id(self) -> str | None:
+                return await self.user_auth.get_user_id()
+
+        # Create service with mock auth context where API key has NO org_id
+        mock_user_auth = MockUserAuth(
+            user_id=str(USER1_ID),
+            api_key_org_id=None,  # Legacy key without org binding
+        )
+        mock_context = MockAuthUserContext(user_auth=mock_user_auth)
+
+        service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=mock_context,
+        )
+
+        # Create and save a conversation
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_legacy_key_test',
+            title='Legacy API Key Conversation',
+        )
+        await service.save_app_conversation_info(conv_info)
+
+        # Verify: SAAS metadata should use user's current org (ORG1) as fallback
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None, 'SAAS metadata should be created'
+        assert saas_metadata.user_id == USER1_ID
+        assert (
+            saas_metadata.org_id == ORG1_ID
+        ), 'Legacy key should fall back to user current org (ORG1)'
+
+    @pytest.mark.asyncio
+    async def test_cookie_auth_without_api_key_uses_user_current_org(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that cookie auth (no API key) uses user's current org.
+
+        When authenticated via browser cookie (no API key), there's no
+        get_api_key_org_id method, so we use user's current_org_id.
+        This is already tested by other tests using SpecifyUserContext,
+        but we explicitly test the case where user_context doesn't have user_auth.
+        """
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        # Use SpecifyUserContext which doesn't have user_auth attribute
+        service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create and save a conversation
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_cookie_auth_test',
+            title='Cookie Auth Conversation',
+        )
+        await service.save_app_conversation_info(conv_info)
+
+        # Verify: SAAS metadata should use user's current org (ORG1)
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None, 'SAAS metadata should be created'
+        assert saas_metadata.user_id == USER1_ID
+        assert (
+            saas_metadata.org_id == ORG1_ID
+        ), 'Cookie auth should use user current org (ORG1)'
+
+    @pytest.mark.asyncio
+    async def test_api_key_org_isolation_cross_org_visibility(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test end-to-end: conversation created via API key is visible in correct org.
+
+        Simulates the full bug scenario:
+        1. Create conversation via API key (bound to ORG1)
+        2. User switches to ORG2
+        3. User should NOT see the conversation in ORG2
+        4. User switches back to ORG1
+        5. User should see the conversation in ORG1
+        """
+        from dataclasses import dataclass
+
+        @dataclass
+        class MockUserAuth:
+            user_id: str
+            api_key_org_id: UUID | None = None
+
+            async def get_user_id(self) -> str:
+                return self.user_id
+
+            def get_api_key_org_id(self) -> UUID | None:
+                return self.api_key_org_id
+
+        @dataclass
+        class MockAuthUserContext:
+            user_auth: MockUserAuth
+
+            async def get_user_id(self) -> str | None:
+                return await self.user_auth.get_user_id()
+
+        # Step 1: Create conversation via API key bound to ORG1
+        mock_user_auth = MockUserAuth(
+            user_id=str(USER1_ID),
+            api_key_org_id=ORG1_ID,
+        )
+        mock_context = MockAuthUserContext(user_auth=mock_user_auth)
+
+        api_key_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=mock_context,
+        )
+
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_e2e_api_key',
+            title='E2E API Key Conversation',
+        )
+        await api_key_service.save_app_conversation_info(conv_info)
+
+        # Step 2: Switch user to ORG2 in browser session
+        result = await async_session_with_users.execute(
+            select(User).where(User.id == USER1_ID)
+        )
+        user_to_update = result.scalars().first()
+        user_to_update.current_org_id = ORG2_ID
+        await async_session_with_users.commit()
+        async_session_with_users.expire_all()
+
+        # Step 3: User in ORG2 should NOT see the conversation
+        user_service_org2 = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        page_org2 = await user_service_org2.search_app_conversation_info()
+        assert (
+            len(page_org2.items) == 0
+        ), 'User in ORG2 should not see conversation created via API key in ORG1'
+
+        # Also verify get_app_conversation_info returns None
+        conv_from_org2 = await user_service_org2.get_app_conversation_info(conv_id)
+        assert (
+            conv_from_org2 is None
+        ), 'User in ORG2 should not access conversation from ORG1'
+
+        # Step 4: Switch user back to ORG1
+        result = await async_session_with_users.execute(
+            select(User).where(User.id == USER1_ID)
+        )
+        user_to_update = result.scalars().first()
+        user_to_update.current_org_id = ORG1_ID
+        await async_session_with_users.commit()
+        async_session_with_users.expire_all()
+
+        # Step 5: User in ORG1 should see the conversation
+        user_service_org1 = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        page_org1 = await user_service_org1.search_app_conversation_info()
+        assert (
+            len(page_org1.items) == 1
+        ), 'User in ORG1 should see conversation created via API key in ORG1'
+        assert page_org1.items[0].id == conv_id
+        assert page_org1.items[0].title == 'E2E API Key Conversation'
+
+        # Also verify get_app_conversation_info works
+        conv_from_org1 = await user_service_org1.get_app_conversation_info(conv_id)
+        assert conv_from_org1 is not None
+        assert conv_from_org1.id == conv_id
+
+
+class TestResolverOrgIdRouting:
+    """Test that resolver_org_id on user_context overrides the default org_id."""
+
+    @pytest.mark.asyncio
+    async def test_save_uses_resolver_org_id_when_set_on_context(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """When user_context has resolver_org_id, conversation is saved in that org."""
+        from unittest.mock import AsyncMock
+
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from enterprise.integrations.resolver_context import ResolverUserContext
+
+        # Arrange: user1 is in ORG1, but resolver routes to ORG2
+        # Use spec to prevent MagicMock from auto-creating undefined attributes
+        mock_context = MagicMock(spec=ResolverUserContext)
+        mock_context.get_user_id = AsyncMock(return_value=str(USER1_ID))
+        mock_context.resolver_org_id = ORG2_ID
+
+        service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=mock_context,
+        )
+
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_resolver',
+            title='Resolver Routed Conversation',
+        )
+
+        # Act
+        await service.save_app_conversation_info(conv_info)
+
+        # Assert: conversation is stored in ORG2, not user's default ORG1
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None
+        assert saas_metadata.org_id == ORG2_ID
+        assert saas_metadata.user_id == USER1_ID
+
+    @pytest.mark.asyncio
+    async def test_save_uses_default_org_when_resolver_org_id_is_none(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """When resolver_org_id is None, conversation uses user's default org."""
+        from unittest.mock import AsyncMock
+
+        from storage.stored_conversation_metadata_saas import (
+            StoredConversationMetadataSaas,
+        )
+
+        from enterprise.integrations.resolver_context import ResolverUserContext
+
+        # Arrange: user1 in ORG1 with no resolver override
+        # Use spec to prevent MagicMock from auto-creating undefined attributes
+        mock_context = MagicMock(spec=ResolverUserContext)
+        mock_context.get_user_id = AsyncMock(return_value=str(USER1_ID))
+        mock_context.resolver_org_id = None
+
+        service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=mock_context,
+        )
+
+        conv_id = uuid4()
+        conv_info = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_default',
+            title='Default Org Conversation',
+        )
+
+        # Act
+        await service.save_app_conversation_info(conv_info)
+
+        # Assert: conversation stored in user's default ORG1
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == str(conv_id)
+        )
+        result = await async_session_with_users.execute(saas_query)
+        saas_metadata = result.scalar_one_or_none()
+
+        assert saas_metadata is not None
+        assert saas_metadata.org_id == ORG1_ID

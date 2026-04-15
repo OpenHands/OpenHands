@@ -38,7 +38,7 @@ export function useRepositoryData(
 
   // Combine all repositories from paginated data
   const allRepositories = useMemo(
-    () => repoData?.pages?.flatMap((page) => page.data) || [],
+    () => repoData?.pages?.flatMap((page) => page.items) || [],
     [repoData],
   );
 

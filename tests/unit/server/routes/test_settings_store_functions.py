@@ -6,16 +6,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.errors import AuthError
+from openhands.app_server.secrets.secrets_router import (
+    check_provider_tokens,
+)
+from openhands.app_server.settings.settings_router import store_llm_settings
 from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
 from openhands.server.routes.secrets import (
     app as secrets_router,
 )
-from openhands.server.routes.secrets import (
-    check_provider_tokens,
-)
-from openhands.server.routes.settings import store_llm_settings
 from openhands.server.settings import POSTProviderModel
 from openhands.storage import get_file_store
 from openhands.storage.data_models.secrets import Secrets
@@ -39,10 +40,10 @@ def test_client():
 
     with (
         patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
-        patch('openhands.server.dependencies._SESSION_API_KEY', None),
+        patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.routes.secrets.check_provider_tokens',
-            AsyncMock(return_value=''),
+            'openhands.app_server.secrets.secrets_router.check_provider_tokens',
+            AsyncMock(return_value=None),
         ),
     ):
         client = TestClient(test_app)
@@ -77,14 +78,10 @@ async def test_check_provider_tokens_valid():
 
     # Mock the validate_provider_token function to return GITHUB for valid tokens
     with patch(
-        'openhands.server.routes.secrets.validate_provider_token'
+        'openhands.app_server.secrets.secrets_router.validate_provider_token'
     ) as mock_validate:
         mock_validate.return_value = ProviderType.GITHUB
-
-        result = await check_provider_tokens(providers, existing_provider_tokens)
-
-        # Should return empty string for valid token
-        assert result == ''
+        await check_provider_tokens(providers, existing_provider_tokens)
         mock_validate.assert_called_once()
 
 
@@ -99,14 +96,14 @@ async def test_check_provider_tokens_invalid():
 
     # Mock the validate_provider_token function to return None for invalid tokens
     with patch(
-        'openhands.server.routes.secrets.validate_provider_token'
+        'openhands.app_server.secrets.secrets_router.validate_provider_token'
     ) as mock_validate:
         mock_validate.return_value = None
 
-        result = await check_provider_tokens(providers, existing_provider_tokens)
+        # Should raise error for invalid token
+        with pytest.raises(AuthError):
+            await check_provider_tokens(providers, existing_provider_tokens)
 
-        # Should return error message for invalid token
-        assert 'Invalid token' in result
         mock_validate.assert_called_once()
 
 
@@ -120,10 +117,7 @@ async def test_check_provider_tokens_wrong_type():
     # Empty existing provider tokens
     existing_provider_tokens = {}
 
-    result = await check_provider_tokens(providers, existing_provider_tokens)
-
-    # Should return empty string for no providers
-    assert result == ''
+    await check_provider_tokens(providers, existing_provider_tokens)
 
 
 @pytest.mark.asyncio
@@ -134,10 +128,7 @@ async def test_check_provider_tokens_no_tokens():
     # Empty existing provider tokens
     existing_provider_tokens = {}
 
-    result = await check_provider_tokens(providers, existing_provider_tokens)
-
-    # Should return empty string when no tokens provided
-    assert result == ''
+    await check_provider_tokens(providers, existing_provider_tokens)
 
 
 # Tests for store_llm_settings
@@ -211,9 +202,32 @@ async def test_store_llm_settings_partial_update():
     assert result.llm_model == 'gpt-4'
     # For SecretStr objects, we need to compare the secret value
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # llm_base_url was explicitly cleared (""), so auto-detection runs
-    # OpenAI models: litellm.get_api_base() returns https://api.openai.com
-    assert result.llm_base_url == 'https://api.openai.com'
+    # llm_base_url="" is an explicit clear — must not be repopulated via auto-detection
+    assert result.llm_base_url is None
+
+
+@pytest.mark.asyncio
+async def test_store_llm_settings_advanced_view_clear_removes_base_url():
+    """Regression test for #13420: clearing Base URL in Advanced view must persist.
+
+    Before the fix, llm_base_url="" was treated identically to llm_base_url=None,
+    causing the backend to re-run auto-detection and overwrite the user's intent.
+    """
+    settings = Settings(
+        llm_model='gpt-4',
+        llm_base_url='',  # User deleted the field in Advanced view
+    )
+
+    existing_settings = Settings(
+        llm_model='gpt-4',
+        llm_api_key=SecretStr('my-api-key'),
+        llm_base_url='https://my-custom-proxy.example.com',
+    )
+
+    result = await store_llm_settings(settings, existing_settings)
+
+    # The old custom URL must not come back
+    assert result.llm_base_url is None
 
 
 @pytest.mark.asyncio
@@ -316,7 +330,7 @@ async def test_store_llm_settings_litellm_error_logged():
     )
 
     # The function should not raise even if litellm fails
-    with patch('openhands.server.routes.settings.logger') as mock_logger:
+    with patch('openhands.app_server.settings.settings_router.logger') as mock_logger:
         result = await store_llm_settings(settings, existing_settings)
 
         # llm_base_url should remain None since litellm couldn't find the model

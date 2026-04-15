@@ -1,6 +1,12 @@
 """Tests for openhands.utils.llm module."""
 
-from openhands.utils.llm import get_provider_api_base, is_openhands_model
+from openhands.utils import llm as llm_utils
+from openhands.utils.llm import (
+    _assign_provider,
+    _derive_verified_models,
+    get_provider_api_base,
+    is_openhands_model,
+)
 
 
 class TestIsOpenhandsModel:
@@ -32,6 +38,55 @@ class TestIsOpenhandsModel:
         assert is_openhands_model('openhands') is False  # Missing slash
         assert is_openhands_model('openhandsx/model') is False  # Extra char
         assert is_openhands_model('OPENHANDS/model') is False  # Wrong case
+
+
+class TestAssignProvider:
+    """Tests for the _assign_provider helper."""
+
+    def test_known_bare_models_get_prefixed(self, monkeypatch):
+        """Test that known bare models get the expected provider prefix."""
+        monkeypatch.setattr(llm_utils, '_BARE_OPENAI_MODELS', {'gpt-5.2'})
+        monkeypatch.setattr(
+            llm_utils, '_BARE_ANTHROPIC_MODELS', {'claude-sonnet-4-5-20250929'}
+        )
+        monkeypatch.setattr(llm_utils, '_BARE_MISTRAL_MODELS', {'mistral-large-latest'})
+
+        assert _assign_provider('gpt-5.2') == 'openai/gpt-5.2'
+        assert (
+            _assign_provider('claude-sonnet-4-5-20250929')
+            == 'anthropic/claude-sonnet-4-5-20250929'
+        )
+        assert (
+            _assign_provider('mistral-large-latest') == 'mistral/mistral-large-latest'
+        )
+
+    def test_prefixed_and_unknown_models_remain_unchanged(self, monkeypatch):
+        """Test that only known bare models are rewritten."""
+        monkeypatch.setattr(llm_utils, '_BARE_OPENAI_MODELS', {'gpt-5.2'})
+        monkeypatch.setattr(llm_utils, '_BARE_ANTHROPIC_MODELS', set())
+        monkeypatch.setattr(llm_utils, '_BARE_MISTRAL_MODELS', set())
+
+        assert _assign_provider('openai/gpt-5.2') == 'openai/gpt-5.2'
+        assert _assign_provider('cohere.command-r-v1:0') == 'cohere.command-r-v1:0'
+        assert _assign_provider('custom-model') == 'custom-model'
+
+
+class TestDeriveVerifiedModels:
+    """Tests for the _derive_verified_models helper."""
+
+    def test_extracts_openhands_model_names(self):
+        """Test that only openhands-prefixed models are returned bare."""
+        models = [
+            'openhands/claude-opus-4-5-20251101',
+            'openhands/gpt-5',
+            'openai/gpt-5',
+            'gpt-4o',
+        ]
+
+        assert _derive_verified_models(models) == [
+            'claude-opus-4-5-20251101',
+            'gpt-5',
+        ]
 
 
 class TestGetProviderApiBase:

@@ -6,7 +6,6 @@ from pathlib import Path
 from uuid import UUID
 
 from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.agent_server.sockets import page_iterator
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -16,6 +15,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
+from openhands.sdk.utils.paging import page_iterator
 
 
 @dataclass
@@ -68,7 +68,7 @@ class EventServiceBase(EventService, ABC):
         conversation_path = await self.get_conversation_path(conversation_id)
         path = conversation_path / f'{event_id.hex}.json'
         loop = asyncio.get_running_loop()
-        event: Event = await loop.run_in_executor(None, self._load_event, path)
+        event: Event = await loop.run_in_executor(None, self._load_event, path)  # type: ignore[arg-type]
         return event
 
     async def search_events(
@@ -85,8 +85,10 @@ class EventServiceBase(EventService, ABC):
         loop = asyncio.get_running_loop()
         prefix = await self.get_conversation_path(conversation_id)
         paths = await loop.run_in_executor(None, self._search_paths, prefix)
+
+        # Type error: run_in_executor expects a return value, but self._load_event is typed return Event | None.
         events = await asyncio.gather(
-            *[loop.run_in_executor(None, self._load_event, path) for path in paths]
+            *[loop.run_in_executor(None, self._load_event, path) for path in paths]  # type: ignore[arg-type]
         )
         items = []
         for event in events:
@@ -94,9 +96,10 @@ class EventServiceBase(EventService, ABC):
                 continue
             if kind__eq and event.kind != kind__eq:
                 continue
-            if timestamp__gte and event.timestamp < timestamp__gte:
+            # TODO: Are these comparison operators valid?
+            if timestamp__gte and event.timestamp < timestamp__gte:  # type: ignore[operator]
                 continue
-            if timestamp__lt and event.timestamp >= timestamp__lt:
+            if timestamp__lt and event.timestamp >= timestamp__lt:  # type: ignore[operator]
                 continue
             items.append(event)
 
@@ -106,14 +109,15 @@ class EventServiceBase(EventService, ABC):
                 reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC),
             )
 
+        # Apply pagination to items (not paths)
         start_offset = 0
         next_page_id = None
         if page_id:
             start_offset = int(page_id)
-            paths = paths[start_offset:]
-        if len(paths) > limit:
-            paths = paths[:limit]
+            items = items[start_offset:]
+        if len(items) > limit:
             next_page_id = str(start_offset + limit)
+            items = items[:limit]
 
         return EventPage(items=items, next_page_id=next_page_id)
 
@@ -138,21 +142,22 @@ class EventServiceBase(EventService, ABC):
             timestamp__gte=timestamp__gte,
             timestamp__lt=timestamp__lt,
         )
-        result = sum(1 for event in events)
+        result = 0
+        async for event in events:
+            result += 1
         return result
 
     async def _count_events_no_filter(self, conversation_path: Path) -> int:
-        paths = page_iterator(self._search_paths, conversation_path)
-        result = 0
-        async for _ in paths:
-            result += 1
-        return result
+        """Count all event files in the conversation directory without filtering."""
+        loop = asyncio.get_running_loop()
+        paths = await loop.run_in_executor(None, self._search_paths, conversation_path)
+        return len(paths)
 
     async def save_event(self, conversation_id: UUID, event: Event):
         if isinstance(event.id, str):
             id_hex = event.id.replace('-', '')
         else:
-            id_hex = event.id.hex
+            id_hex = event.id.hex  # type: ignore[unreachable]
         path = (await self.get_conversation_path(conversation_id)) / f'{id_hex}.json'
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._store_event, path, event)

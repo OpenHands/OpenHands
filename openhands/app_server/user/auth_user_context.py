@@ -14,6 +14,7 @@ from openhands.integrations.provider import (
     ProviderHandler,
     ProviderType,
 )
+from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
@@ -48,8 +49,27 @@ class AuthUserContext(UserContext):
             self._user_info = user_info
         return user_info
 
-    async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
-        return await self.user_auth.get_provider_tokens()
+    async def get_provider_tokens(
+        self, as_env_vars: bool = False
+    ) -> PROVIDER_TOKEN_TYPE | dict[str, str] | None:
+        """Return provider tokens.
+
+        Args:
+            as_env_vars: When True, return a ``dict[str, str]`` mapping env
+                var names (e.g. ``github_token``) to plain-text token values,
+                resolving the latest value at call time.  When False (default),
+                return the raw ``dict[ProviderType, ProviderToken]``.
+        """
+        provider_tokens = await self.user_auth.get_provider_tokens()
+        if not as_env_vars:
+            return provider_tokens
+        results: dict[str, str] = {}
+        if provider_tokens:
+            for provider_type, provider_token in provider_tokens.items():
+                if provider_token.token:
+                    env_key = ProviderHandler.get_provider_env_key(provider_type)
+                    results[env_key] = provider_token.token.get_secret_value()
+        return results
 
     async def get_provider_handler(self):
         provider_handler = self._provider_handler
@@ -79,9 +99,9 @@ class AuthUserContext(UserContext):
         return token
 
     async def get_secrets(self) -> dict[str, SecretSource]:
-        results = {}
+        results: dict[str, SecretSource] = {}
 
-        # Include custom secrets...
+        # Include custom secrets
         secrets = await self.user_auth.get_secrets()
         if secrets:
             for name, custom_secret in secrets.custom_secrets.items():
@@ -97,6 +117,9 @@ class AuthUserContext(UserContext):
     async def get_mcp_api_key(self) -> str | None:
         mcp_api_key = await self.user_auth.get_mcp_api_key()
         return mcp_api_key
+
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        return await self.user_auth.get_user_git_info()
 
 
 USER_ID_ATTR = 'user_id'

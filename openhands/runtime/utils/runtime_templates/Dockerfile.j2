@@ -45,7 +45,21 @@ RUN apt-get update && \
         libasound2-plugins libatomic1 && \
     (apt-get install -y --no-install-recommends libgl1 || apt-get install -y --no-install-recommends libgl1-mesa-glx) && \
         # Install Docker dependencies
-    apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release
+    apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release && \
+    # Security upgrade: patch GLib CVE-2025-14087 (buffer underflow in GVariant parser)
+    (apt-get install -y --no-install-recommends --only-upgrade \
+        libglib2.0-0t64 libglib2.0-bin libglib2.0-dev libglib2.0-dev-bin || true) && \
+    # Security upgrade: patch OpenSSL CVEs (CVE-2025-15467, CVE-2025-69419, CVE-2025-69421, et al.)
+    (apt-get install -y --no-install-recommends --only-upgrade \
+        openssl openssl-provider-legacy libssl3t64 || true) && \
+    # Security upgrade: patch ImageMagick CVEs (CVE-2026-25897, CVE-2026-25968, CVE-2026-26284, et al.)
+    (apt-get install -y --no-install-recommends --only-upgrade \
+        imagemagick imagemagick-7-common imagemagick-7.q16 \
+        libmagickcore-7-arch-config libmagickcore-7-headers \
+        libmagickcore-7.q16-10 libmagickcore-7.q16-10-extra \
+        libmagickcore-7.q16-dev libmagickcore-dev \
+        libmagickwand-7-headers libmagickwand-7.q16-10 \
+        libmagickwand-7.q16-dev libmagickwand-dev || true)
 {% endif %}
 
 {% if (('ubuntu' in base_image) or ('mswebench' in base_image)) %}
@@ -204,13 +218,11 @@ RUN \
         libxdamage1 libxrandr2 libgbm1 libxss1 && \
     # Install libasound2 - try new package name first (Ubuntu 24.04+), fallback to old name
     (apt-get install -y --no-install-recommends libasound2t64 || apt-get install -y --no-install-recommends libasound2) && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* && \
     # Install Playwright browsers in shared location accessible to all users
     export PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers && \
     mkdir -p /opt/playwright-browsers && \
+    umask 022 && \
     /openhands/micromamba/bin/micromamba run -n openhands poetry run playwright install --with-deps chromium && \
-    # Set proper permissions for shared access
-    chmod -R 755 /opt/playwright-browsers && \
     # Create cache directories and symlinks for both users
     mkdir -p /home/openhands/.cache && \
     mkdir -p /root/.cache && \
@@ -222,11 +234,9 @@ RUN \
     {% endif %}
     # Set environment variables (requires root)
     /openhands/micromamba/bin/micromamba run -n openhands poetry run python -c "import sys; print('OH_INTERPRETER_PATH=' + sys.executable)" >> /etc/environment && \
-    # Set permissions for shared read-only access
-    # Note: chown -R operations removed - files are now created with correct ownership
-    # by running micromamba/poetry as openhands user (see install_dependencies_user)
-    chmod -R 755 /openhands/poetry && \
-    chmod -R 755 /openhands/micromamba && \
+    # Permissions: poetry and micromamba are already world-readable thanks to
+    # umask 022 set during install_dependencies_user and micromamba install.
+    # No cross-layer chmod -R needed, which avoids expensive overlay2 copy-ups.
     mkdir -p /openhands/workspace && chmod -R g+rws,o+rw /openhands/workspace && \
     chown -R openhands:openhands /openhands/workspace && \
     # Ensure PATH includes system binaries early in startup
@@ -251,6 +261,9 @@ WORKDIR /openhands/code
 
 USER openhands
 RUN \
+    # Set umask so all files are created world-readable (dirs 755, files 644).
+    # This avoids expensive cross-layer chmod -R 755 in install_dependencies_root.
+    umask 022 && \
     /openhands/micromamba/bin/micromamba config set changeps1 False && \
     /openhands/micromamba/bin/micromamba run -n openhands poetry config virtualenvs.path /openhands/poetry && \
     /openhands/micromamba/bin/micromamba run -n openhands poetry env use python3.12 && \
@@ -292,7 +305,8 @@ RUN mkdir -p /openhands/micromamba/bin && \
 # Create the openhands virtual environment and install poetry and python
 # Run as openhands user to avoid expensive chown -R operations later
 USER openhands
-RUN /openhands/micromamba/bin/micromamba create -n openhands -y && \
+RUN umask 022 && \
+    /openhands/micromamba/bin/micromamba create -n openhands -y && \
     /openhands/micromamba/bin/micromamba install -n openhands -c conda-forge poetry python=3.12 -y
 USER root
 
@@ -331,9 +345,12 @@ RUN \
     mkdir -p /home/openhands && \
     mkdir -p /openhands && \
     mkdir -p $(dirname ${OPENVSCODE_SERVER_ROOT}) && \
-    # Ensure ownership is correct for all OpenHands paths
-    chown -R openhands:openhands /home/openhands || true && \
-    chown -R openhands:openhands /openhands || true
+    # Fix ownership only on files not already owned by openhands.
+    # A blanket chown -R would trigger an overlay2 copy-up of every inode
+    # from prior layers even when ownership is already correct.
+    find /home/openhands /openhands \
+        ! \( -user openhands -group openhands \) \
+        -exec chown openhands:openhands {} + 2>/dev/null || true
 
 {{ setup_vscode_server() }}
 
@@ -348,6 +365,14 @@ COPY --chown=openhands:openhands ./code/openhands /openhands/code/openhands
 RUN chmod a+rwx /openhands/code/openhands/__init__.py && \
     chown -R openhands:openhands /openhands/code
 
+
+# ================================================================
+# Install VSCode extensions for build_from_scratch
+# (must be after setup_vscode_server and source file copy)
+# ================================================================
+{% if build_from_scratch %}
+{{ install_vscode_extensions() }}
+{% endif %}
 
 # ================================================================
 # END: Build from versioned image

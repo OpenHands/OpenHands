@@ -53,14 +53,6 @@ from openhands.sdk.utils.paging import page_iterator
 
 _logger = logging.getLogger(__name__)
 polling_task: asyncio.Task | None = None
-POD_STATUS_MAPPING = {
-    'ready': SandboxStatus.RUNNING,
-    'pending': SandboxStatus.STARTING,
-    'running': SandboxStatus.STARTING,
-    'failed': SandboxStatus.ERROR,
-    'unknown': SandboxStatus.ERROR,
-    'crashloopbackoff': SandboxStatus.ERROR,
-}
 STATUS_MAPPING = {
     'running': SandboxStatus.RUNNING,
     'paused': SandboxStatus.PAUSED,
@@ -188,28 +180,22 @@ class RemoteSandboxService(SandboxService):
     def _get_sandbox_status_from_runtime(
         self, runtime: dict[str, Any] | None
     ) -> SandboxStatus:
-        """Derive a SandboxStatus from the runtime info. The legacy logic for getting
-        the status of a runtime is inconsistent. It is divided between a "status" which
-        cannot be trusted (It sometimes returns  "running" for cases when the pod is
-        still starting) and a "pod_status" which is not returned for list
-        operations."""
+        """Derive a SandboxStatus from the runtime info.
+
+        The status field is now the source of truth for sandbox status. It accounts
+        for both pod readiness and ingress availability, making it more reliable than
+        pod_status which only reflected pod state.
+        """
         if not runtime:
             return SandboxStatus.MISSING
 
-        status = None
-        pod_status = (runtime.get('pod_status') or '').lower()
-        if pod_status:
-            status = POD_STATUS_MAPPING.get(pod_status, None)
+        runtime_status = runtime.get('status')
+        if runtime_status:
+            status = STATUS_MAPPING.get(runtime_status.lower(), None)
+            if status is not None:
+                return status
 
-        # If we failed to get the status from the pod status, fall back to status
-        if status is None:
-            runtime_status = runtime.get('status')
-            if runtime_status:
-                status = STATUS_MAPPING.get(runtime_status.lower(), None)
-
-        if status is None:
-            return SandboxStatus.MISSING
-        return status
+        return SandboxStatus.MISSING
 
     async def _secure_select(self):
         query = select(StoredRemoteSandbox)
@@ -513,9 +499,6 @@ class RemoteSandboxService(SandboxService):
                 stored_sandbox.session_api_key_hash = _hash_session_api_key(
                     session_api_key
                 )
-
-            # Hack - result doesn't contain this
-            runtime_data['pod_status'] = 'pending'
 
             # Log runtime assignment for observability
             runtime_id = runtime_data.get('runtime_id', 'unknown')

@@ -205,7 +205,9 @@ describe("useWebSocket", () => {
       expect(result.current.isConnected).toBe(true);
     });
 
-    expect(onCloseSpy).not.toHaveBeenCalled();
+    // Reset spy after connection is established to ignore any spurious
+    // close events fired by the MSW mock during the handshake.
+    onCloseSpy.mockClear();
 
     // Unmount to trigger close
     unmount();

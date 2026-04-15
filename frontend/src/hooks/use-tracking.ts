@@ -110,14 +110,44 @@ export const useTracking = () => {
     orgSize,
     useCase,
   }: {
-    role: string;
-    orgSize: string;
-    useCase: string;
+    role?: string;
+    orgSize?: string;
+    useCase?: string[];
   }) => {
     posthog.capture("onboarding_completed", {
       role,
       org_size: orgSize,
       use_case: useCase,
+      ...commonProperties,
+    });
+  };
+
+  const trackSaasSelfhostedInquiry = ({ location }: { location: string }) => {
+    posthog.capture("saas_selfhosted_inquiry", {
+      location,
+      ...commonProperties,
+    });
+  };
+
+  const trackEnterpriseLeadFormSubmitted = ({
+    requestType,
+    name,
+    company,
+    email,
+    message,
+  }: {
+    requestType: "saas" | "self-hosted";
+    name: string;
+    company: string;
+    email: string;
+    message: string;
+  }) => {
+    posthog.capture("enterprise_lead_form_submitted", {
+      request_type: requestType,
+      name,
+      company,
+      email,
+      message,
       ...commonProperties,
     });
   };
@@ -134,5 +164,7 @@ export const useTracking = () => {
     trackCreditLimitReached,
     trackAddTeamMembersButtonClick,
     trackOnboardingCompleted,
+    trackSaasSelfhostedInquiry,
+    trackEnterpriseLeadFormSubmitted,
   };
 };

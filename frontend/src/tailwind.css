@@ -343,6 +343,14 @@
     0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
+.modal-box-shadow {
+  box-shadow: 0 183px 51px 0 rgba(0, 0, 0, 0.00), 0 117px 47px 0 rgba(0, 0, 0, 0.01), 0 66px 40px 0 rgba(0, 0, 0, 0.03), 0 29px 29px 0 rgba(0, 0, 0, 0.04), 0 7px 16px 0 rgba(0, 0, 0, 0.05);
+}
+
+.table-box-shadow {
+  box-shadow: 0 26px 7px 0 rgba(0, 0, 0, 0.00), 0 17px 7px 0 rgba(0, 0, 0, 0.01), 0 9px 6px 0 rgba(0, 0, 0, 0.03), 0 4px 4px 0 rgba(0, 0, 0, 0.04), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
 .git-external-link-icon {
   background: linear-gradient(90deg, rgba(69, 69, 69, 0) 0.35%, #454545 41.39%);
 }
@@ -367,4 +375,10 @@
   background-clip: text !important;
   animation: shine 2s linear infinite;
   background: radial-gradient(circle at center, rgb(24 24 27 / 85%), transparent) -200% 50% / 200% 100% no-repeat, #f4f4f5;
+}
+
+/* CTA card gradient and shadow */
+.cta-card-gradient {
+  background: radial-gradient(85.36% 123.38% at 50% 0%, rgba(255, 255, 255, 0.14) 0%, rgba(0, 0, 0, 0) 100%), #000000;
+  box-shadow: 0px 4px 6px -4px rgba(0, 0, 0, 0.1), 0px 10px 15px -3px rgba(0, 0, 0, 0.1);
 }

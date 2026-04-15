@@ -59,3 +59,20 @@ class SandboxInfo(BaseModel):
 class SandboxPage(BaseModel):
     items: list[SandboxInfo]
     next_page_id: str | None = None
+
+
+class SecretNameItem(BaseModel):
+    """A secret's name and optional description (value NOT included)."""
+
+    name: str = Field(description='The secret name/key')
+    description: str | None = Field(
+        default=None, description='Optional description of the secret'
+    )
+
+
+class SecretNamesResponse(BaseModel):
+    """Response listing available secret names (no raw values)."""
+
+    secrets: list[SecretNameItem] = Field(
+        default_factory=list, description='Available secrets'
+    )

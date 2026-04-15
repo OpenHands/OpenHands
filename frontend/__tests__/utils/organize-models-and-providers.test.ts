@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import { organizeModelsAndProviders } from "../../src/utils/organize-models-and-providers";
 
-test("organizeModelsAndProviders", () => {
+test("organizeModelsAndProviders — models already prefixed by backend", () => {
+  // The backend now assigns provider prefixes to bare LiteLLM names.
+  // The frontend only needs to parse slash-prefixed provider/model strings.
   const models = [
     "azure/ada",
     "azure/gpt-35-turbo",
@@ -12,14 +14,10 @@ test("organizeModelsAndProviders", () => {
     "sagemaker/meta-textgeneration-llama-2-13b",
     "cohere.command-r-v1:0",
     "cloudflare/@cf/mistral/mistral-7b-instruct-v0.1",
-    "gpt-4o",
-    "together-ai-21.1b-41b",
-    "gpt-4o-mini",
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
     "anthropic/claude-3-5-sonnet-20241022",
-    "claude-3-haiku-20240307",
-    "claude-2",
-    "claude-2.1",
-    "anthropic.unsafe-claude-2.1",
+    "together-ai-21.1b-41b",
   ];
 
   const object = organizeModelsAndProviders(models);
@@ -39,7 +37,6 @@ test("organizeModelsAndProviders", () => {
       models: ["chat-bison", "chat-bison-32k"],
     },
     sagemaker: { separator: "/", models: ["meta-textgeneration-llama-2-13b"] },
-    cohere: { separator: ".", models: ["command-r-v1:0"] },
     cloudflare: {
       separator: "/",
       models: ["@cf/mistral/mistral-7b-instruct-v0.1"],
@@ -50,18 +47,11 @@ test("organizeModelsAndProviders", () => {
     },
     anthropic: {
       separator: "/",
-      models: [
-        "claude-3-5-sonnet-20241022",
-      ],
+      models: ["claude-3-5-sonnet-20241022"],
     },
     other: {
       separator: "",
-      models: [
-        "together-ai-21.1b-41b",
-        "claude-3-haiku-20240307",
-        "claude-2",
-        "claude-2.1",
-      ],
+      models: ["cohere.command-r-v1:0", "together-ai-21.1b-41b"],
     },
   });
 });

@@ -1,16 +1,22 @@
-/* eslint-disable i18next/no-literal-string */
 import React, { useState } from "react";
 import { useSearchParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
+import { LoginCTA } from "#/components/features/auth/login-cta";
+import { I18nKey } from "#/i18n/declaration";
+import { H1 } from "#/ui/typography";
+import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 
 export default function DeviceVerify() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const { data: isAuthed, isLoading: isAuthLoading } = useIsAuthed();
   const [verificationResult, setVerificationResult] = useState<{
     success: boolean;
-    message: string;
+    messageKey: I18nKey;
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const showEnterpriseBanner = ENABLE_PROJ_USER_JOURNEY();
 
   // Get user_code from URL parameters
   const userCode = searchParams.get("user_code");
@@ -33,21 +39,18 @@ export default function DeviceVerify() {
         // Show success message
         setVerificationResult({
           success: true,
-          message:
-            "Device authorized successfully! You can now return to your CLI and close this window.",
+          messageKey: I18nKey.DEVICE$SUCCESS_MESSAGE,
         });
       } else {
-        const errorText = await response.text();
         setVerificationResult({
           success: false,
-          message: errorText || "Failed to authorize device. Please try again.",
+          messageKey: I18nKey.DEVICE$ERROR_FAILED,
         });
       }
     } catch (error) {
       setVerificationResult({
         success: false,
-        message:
-          "An error occurred while authorizing the device. Please try again.",
+        messageKey: I18nKey.DEVICE$ERROR_OCCURRED,
       });
     } finally {
       setIsProcessing(false);
@@ -105,10 +108,12 @@ export default function DeviceVerify() {
               )}
             </div>
             <h2 className="text-xl font-semibold mb-2">
-              {verificationResult.success ? "Success!" : "Error"}
+              {verificationResult.success
+                ? t(I18nKey.DEVICE$SUCCESS_TITLE)
+                : t(I18nKey.DEVICE$ERROR_TITLE)}
             </h2>
             <p className="text-muted-foreground mb-4">
-              {verificationResult.message}
+              {t(verificationResult.messageKey)}
             </p>
             {!verificationResult.success && (
               <button
@@ -116,7 +121,7 @@ export default function DeviceVerify() {
                 onClick={() => window.location.reload()}
                 className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
               >
-                Try Again
+                {t(I18nKey.DEVICE$TRY_AGAIN)}
               </button>
             )}
           </div>
@@ -133,7 +138,7 @@ export default function DeviceVerify() {
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
             <p className="text-muted-foreground">
-              Processing device verification...
+              {t(I18nKey.DEVICE$PROCESSING)}
             </p>
           </div>
         </div>
@@ -144,63 +149,58 @@ export default function DeviceVerify() {
   // Show device authorization confirmation if user is authenticated and code is provided
   if (isAuthed && userCode) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
-          <h1 className="text-2xl font-bold mb-4 text-center">
-            Device Authorization Request
-          </h1>
-          <div className="mb-6 p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground mb-2">Device Code:</p>
-            <p className="text-lg font-mono font-semibold text-center tracking-wider">
-              {userCode}
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div
+          className={`flex flex-col lg:flex-row items-center lg:items-stretch gap-6 w-full ${showEnterpriseBanner ? "max-w-4xl" : "max-w-md"}`}
+        >
+          {/* Device Authorization Card */}
+          <div
+            className={`flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-2xl shadow-lg border border-[#242424] ${showEnterpriseBanner ? "lg:mx-0 lg:self-stretch" : ""}`}
+          >
+            <H1 className="text-2xl mb-4 text-center">
+              {t(I18nKey.DEVICE$AUTHORIZATION_REQUEST)}
+            </H1>
+            <div className="mb-6 p-4 bg-neutral-900 rounded-lg border border-neutral-700">
+              <p className="text-xs text-neutral-500 mb-2 text-center uppercase tracking-wider">
+                {t(I18nKey.DEVICE$CODE_LABEL)}
+              </p>
+              <p className="text-xl font-mono font-semibold text-center tracking-[0.3em]">
+                {userCode}
+              </p>
+            </div>
+            <div className="mb-6 p-4 bg-amber-950/50 border-l-2 border-amber-500 rounded-r-lg">
+              <p className="text-sm font-medium text-amber-500 mb-1">
+                {t(I18nKey.DEVICE$SECURITY_NOTICE)}
+              </p>
+              <p className="text-sm text-gray-400">
+                {t(I18nKey.DEVICE$SECURITY_WARNING)}
+              </p>
+            </div>
+            <p className="text-muted-foreground mb-6 text-center">
+              {t(I18nKey.DEVICE$CONFIRM_PROMPT)}
             </p>
-          </div>
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-start">
-              <svg
-                className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => window.close()}
+                className="flex-1 px-4 py-2 border border-neutral-600 rounded-md hover:bg-muted text-gray-300"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z"
-                />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-yellow-800 mb-1">
-                  Security Notice
-                </p>
-                <p className="text-sm text-yellow-700">
-                  Only authorize this device if you initiated this request from
-                  your CLI or application.
-                </p>
-              </div>
+                {t(I18nKey.DEVICE$CANCEL)}
+              </button>
+              <button
+                type="button"
+                onClick={() => processDeviceVerification(userCode)}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                {t(I18nKey.DEVICE$AUTHORIZE)}
+              </button>
             </div>
           </div>
-          <p className="text-muted-foreground mb-6 text-center">
-            Do you want to authorize this device to access your OpenHands
-            account?
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => window.close()}
-              className="flex-1 px-4 py-2 border border-input rounded-md hover:bg-muted"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => processDeviceVerification(userCode)}
-              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-            >
-              Authorize Device
-            </button>
-          </div>
+
+          {/* Login CTA */}
+          {showEnterpriseBanner && (
+            <LoginCTA source="device_verify" className="lg:self-stretch" />
+          )}
         </div>
       </div>
     );
@@ -211,11 +211,11 @@ export default function DeviceVerify() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
-          <h1 className="text-2xl font-bold mb-4 text-center">
-            Device Authorization
-          </h1>
+          <H1 className="text-2xl mb-4 text-center">
+            {t(I18nKey.DEVICE$AUTHORIZATION_TITLE)}
+          </H1>
           <p className="text-muted-foreground mb-6 text-center">
-            Enter the code displayed on your device:
+            {t(I18nKey.DEVICE$ENTER_CODE_PROMPT)}
           </p>
           <form onSubmit={handleManualSubmit}>
             <div className="mb-4">
@@ -223,7 +223,7 @@ export default function DeviceVerify() {
                 htmlFor="user_code"
                 className="block text-sm font-medium mb-2"
               >
-                Device Code:
+                {t(I18nKey.DEVICE$CODE_INPUT_LABEL)}
               </label>
               <input
                 type="text"
@@ -231,14 +231,14 @@ export default function DeviceVerify() {
                 name="user_code"
                 required
                 className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter your device code"
+                placeholder={t(I18nKey.DEVICE$CODE_PLACEHOLDER)}
               />
             </div>
             <button
               type="submit"
               className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
             >
-              Continue
+              {t(I18nKey.DEVICE$CONTINUE)}
             </button>
           </form>
         </div>
@@ -253,7 +253,7 @@ export default function DeviceVerify() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
           <p className="text-muted-foreground">
-            Processing device verification...
+            {t(I18nKey.DEVICE$PROCESSING)}
           </p>
         </div>
       </div>
@@ -264,9 +264,9 @@ export default function DeviceVerify() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg text-center">
-        <h1 className="text-2xl font-bold mb-4">Authentication Required</h1>
+        <H1 className="text-2xl mb-4">{t(I18nKey.DEVICE$AUTH_REQUIRED)}</H1>
         <p className="text-muted-foreground">
-          Please sign in to authorize your device.
+          {t(I18nKey.DEVICE$SIGN_IN_PROMPT)}
         </p>
       </div>
     </div>

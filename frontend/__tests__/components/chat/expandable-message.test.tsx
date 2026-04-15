@@ -113,7 +113,7 @@ describe("ExpandableMessage", () => {
 
   it("should render the out of credits message when the user is out of credits", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    // @ts-expect-error - We only care about the app_mode and feature_flags fields
+    // @ts-expect-error - partial mock for testing
     getConfigSpy.mockResolvedValue({
       app_mode: "saas",
       feature_flags: {

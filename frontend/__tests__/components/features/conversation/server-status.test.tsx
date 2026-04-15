@@ -69,7 +69,7 @@ describe("ServerStatus", () => {
   it("should render server status with RUNNING conversation status", () => {
     mockAgentStore(AgentState.RUNNING);
 
-    renderWithProviders(<ServerStatus conversationStatus="RUNNING" />);
+    renderWithProviders(<ServerStatus sandboxStatus="RUNNING" />);
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("ServerStatus", () => {
   it("should render server status with STOPPED conversation status", () => {
     mockAgentStore(AgentState.RUNNING);
 
-    renderWithProviders(<ServerStatus conversationStatus="STOPPED" />);
+    renderWithProviders(<ServerStatus sandboxStatus="MISSING" />);
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Server Stopped")).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe("ServerStatus", () => {
   it("should render STARTING status when agent state is LOADING", () => {
     mockAgentStore(AgentState.LOADING);
 
-    renderWithProviders(<ServerStatus conversationStatus="STARTING" />);
+    renderWithProviders(<ServerStatus sandboxStatus="STARTING" />);
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Starting")).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe("ServerStatus", () => {
   it("should render STARTING status when agent state is INIT", () => {
     mockAgentStore(AgentState.INIT);
 
-    renderWithProviders(<ServerStatus conversationStatus="STARTING" />);
+    renderWithProviders(<ServerStatus sandboxStatus="STARTING" />);
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Starting")).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe("ServerStatus", () => {
   it("should render ERROR status when agent state is ERROR", () => {
     mockAgentStore(AgentState.ERROR);
 
-    renderWithProviders(<ServerStatus conversationStatus="RUNNING" />);
+    renderWithProviders(<ServerStatus sandboxStatus="RUNNING" />);
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Error")).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe("ServerStatus", () => {
     mockAgentStore(AgentState.RUNNING);
 
     renderWithProviders(
-      <ServerStatus conversationStatus="RUNNING" isPausing={true} />,
+      <ServerStatus sandboxStatus="RUNNING" isPausing={true} />,
     );
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
@@ -125,7 +125,7 @@ describe("ServerStatus", () => {
   it("should handle null conversation status", () => {
     mockAgentStore(AgentState.RUNNING);
 
-    renderWithProviders(<ServerStatus conversationStatus={null} />);
+    renderWithProviders(<ServerStatus sandboxStatus={null} />);
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe("ServerStatus", () => {
     mockAgentStore(AgentState.RUNNING);
 
     renderWithProviders(
-      <ServerStatus conversationStatus="RUNNING" className="custom-class" />,
+      <ServerStatus sandboxStatus="RUNNING" className="custom-class" />,
     );
 
     const container = screen.getByTestId("server-status");
@@ -153,7 +153,7 @@ describe("ServerStatusContextMenu", () => {
 
   const defaultProps = {
     onClose: vi.fn(),
-    conversationStatus: "RUNNING" as ConversationStatus,
+    sandboxStatus: "RUNNING" as ConversationStatus,
   };
 
   afterEach(() => {
@@ -166,7 +166,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="RUNNING"
+        sandboxStatus="RUNNING"
         onStopServer={vi.fn()}
       />,
     );
@@ -182,7 +182,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="STOPPED"
+        sandboxStatus="MISSING"
         onStartServer={vi.fn()}
       />,
     );
@@ -198,7 +198,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="RUNNING"
+        sandboxStatus="RUNNING"
       />,
     );
 
@@ -212,7 +212,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="STOPPED"
+        sandboxStatus="MISSING"
       />,
     );
 
@@ -228,7 +228,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="RUNNING"
+        sandboxStatus="RUNNING"
         onStopServer={onStopServer}
       />,
     );
@@ -247,7 +247,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="STOPPED"
+        sandboxStatus="MISSING"
         onStartServer={onStartServer}
       />,
     );
@@ -264,7 +264,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="RUNNING"
+        sandboxStatus="RUNNING"
         onStopServer={vi.fn()}
       />,
     );
@@ -280,7 +280,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="STOPPED"
+        sandboxStatus="MISSING"
         onStartServer={vi.fn()}
       />,
     );
@@ -298,7 +298,7 @@ describe("ServerStatusContextMenu", () => {
       <ServerStatusContextMenu
         {...defaultProps}
         onClose={onClose}
-        conversationStatus="RUNNING"
+        sandboxStatus="RUNNING"
         onStopServer={vi.fn()}
       />,
     );
@@ -314,7 +314,7 @@ describe("ServerStatusContextMenu", () => {
     renderWithProviders(
       <ServerStatusContextMenu
         {...defaultProps}
-        conversationStatus="STARTING"
+        sandboxStatus="STARTING"
       />,
     );
 

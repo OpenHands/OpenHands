@@ -1,25 +1,34 @@
 from dataclasses import dataclass
+from uuid import uuid4
 
 from integrations.linear.linear_types import LinearViewInterface, StartingConvoException
 from integrations.models import JobContext
+from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.utils import CONVERSATION_URL, get_final_agent_observation
 from jinja2 import Environment
+from server.config import get_config
 from storage.linear_conversation import LinearConversation
 from storage.linear_integration_store import LinearIntegrationStore
 from storage.linear_user import LinearUser
 from storage.linear_workspace import LinearWorkspace
+from storage.saas_conversation_store import SaasConversationStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
 from openhands.events.action import MessageAction
 from openhands.events.serialization.event import event_to_dict
+from openhands.integrations.provider import ProviderHandler
 from openhands.server.services.conversation_service import (
-    create_new_conversation,
     setup_init_conversation_settings,
+    start_conversation,
 )
 from openhands.server.shared import ConversationStoreImpl, config, conversation_manager
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+from openhands.storage.data_models.conversation_metadata import (
+    ConversationMetadata,
+    ConversationTrigger,
+)
+from openhands.utils.conversation_summary import get_default_conversation_title
 
 integration_store = LinearIntegrationStore.get_instance()
 
@@ -61,20 +70,70 @@ class LinearNewConversationView(LinearViewInterface):
         instructions, user_msg = await self._get_instructions(jinja_env)
 
         try:
-            agent_loop_info = await create_new_conversation(
-                user_id=self.linear_user.keycloak_user_id,
-                git_provider_tokens=provider_tokens,
-                selected_repository=self.selected_repo,
-                selected_branch=None,
-                initial_user_msg=user_msg,
-                conversation_instructions=instructions,
-                image_urls=None,
-                replay_json=None,
-                conversation_trigger=ConversationTrigger.LINEAR,
-                custom_secrets=user_secrets.custom_secrets if user_secrets else None,
+            user_id = self.linear_user.keycloak_user_id
+
+            # Resolve git provider from repository
+            resolved_git_provider = None
+            if provider_tokens:
+                try:
+                    provider_handler = ProviderHandler(provider_tokens)
+                    repository = await provider_handler.verify_repo_provider(
+                        self.selected_repo
+                    )
+                    resolved_git_provider = repository.git_provider
+                except Exception as e:
+                    logger.warning(
+                        f'[Linear] Failed to resolve git provider for {self.selected_repo}: {e}'
+                    )
+
+            # Resolve target org based on claimed git organizations
+            resolved_org_id = None
+            if resolved_git_provider and self.selected_repo:
+                try:
+                    resolved_org_id = await resolve_org_for_repo(
+                        provider=resolved_git_provider.value,
+                        full_repo_name=self.selected_repo,
+                        keycloak_user_id=user_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f'[Linear] Failed to resolve org for {self.selected_repo}: {e}'
+                    )
+
+            # Create the conversation store with resolver org routing
+            # (bypasses initialize_conversation to avoid threading enterprise-only
+            # resolver_org_id through the generic OSS interface)
+            store = await SaasConversationStore.get_resolver_instance(
+                get_config(),
+                user_id,
+                resolved_org_id,
             )
 
-            self.conversation_id = agent_loop_info.conversation_id
+            conversation_id = uuid4().hex
+            conversation_metadata = ConversationMetadata(
+                trigger=ConversationTrigger.LINEAR,
+                conversation_id=conversation_id,
+                title=get_default_conversation_title(conversation_id),
+                user_id=user_id,
+                selected_repository=self.selected_repo,
+                selected_branch=None,
+                git_provider=resolved_git_provider,
+            )
+            await store.save_metadata(conversation_metadata)
+
+            await start_conversation(
+                user_id=user_id,
+                git_provider_tokens=provider_tokens,
+                custom_secrets=user_secrets.custom_secrets if user_secrets else None,
+                initial_user_msg=user_msg,
+                image_urls=None,
+                replay_json=None,
+                conversation_id=conversation_id,
+                conversation_metadata=conversation_metadata,
+                conversation_instructions=instructions,
+            )
+
+            self.conversation_id = conversation_id
 
             logger.info(f'[Linear] Created conversation {self.conversation_id}')
 

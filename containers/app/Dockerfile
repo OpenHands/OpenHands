@@ -1,5 +1,5 @@
 ARG OPENHANDS_BUILD_VERSION=dev
-FROM node:25.2-trixie-slim AS frontend-builder
+FROM node:25.8-trixie-slim AS frontend-builder
 
 WORKDIR /app
 
@@ -20,9 +20,11 @@ ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
+# Pin Poetry version to match the version used to generate poetry.lock
+ARG POETRY_VERSION=2.3.3
 RUN apt-get update -y \
     && apt-get install -y curl make git build-essential jq gettext \
-    && python3 -m pip install poetry --break-system-packages
+    && python3 -m pip install "poetry==${POETRY_VERSION}" --break-system-packages
 
 COPY pyproject.toml poetry.lock ./
 RUN touch README.md
@@ -50,7 +52,7 @@ RUN mkdir -p $FILE_STORE_PATH
 RUN mkdir -p $WORKSPACE_BASE
 
 RUN apt-get update -y \
-    && apt-get install -y curl ssh sudo \
+    && apt-get install -y curl git ssh sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Default is 1000, but OSX is often 501
@@ -72,6 +74,17 @@ ENV VIRTUAL_ENV=/app/.venv \
     PYTHONPATH='/app'
 
 COPY --chown=openhands:openhands --chmod=770 --from=backend-builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
+
+# Pin pip to a known-good version (reproducible builds) and fix CVE-2025-8869
+# Pin both venv pip and system pip (Trivy scans both)
+# - `python -m pip` uses the venv because `PATH` is prefixed with `${VIRTUAL_ENV}/bin`
+# - `/usr/local/bin/python3 -m pip` uses the system interpreter regardless of `PATH`
+ARG PIP_VERSION=26.0.1
+RUN python -m pip install --no-cache-dir "pip==${PIP_VERSION}"
+
+USER root
+RUN /usr/local/bin/python3 -m pip install --no-cache-dir "pip==${PIP_VERSION}" --break-system-packages
+USER openhands
 
 COPY --chown=openhands:openhands --chmod=770 ./skills ./skills
 COPY --chown=openhands:openhands --chmod=770 ./openhands ./openhands

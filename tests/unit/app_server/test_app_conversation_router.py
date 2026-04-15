@@ -12,21 +12,28 @@ from fastapi import HTTPException, status
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
+    AppConversationPage,
 )
 from openhands.app_server.app_conversation.app_conversation_router import (
     batch_get_app_conversations,
+    count_app_conversations,
+    search_app_conversations,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
 
-def _make_mock_app_conversation(conversation_id=None, user_id='test-user'):
+def _make_mock_app_conversation(
+    conversation_id=None, user_id='test-user', sandbox_id=None
+):
     """Create a mock AppConversation for testing."""
     if conversation_id is None:
         conversation_id = uuid4()
+    if sandbox_id is None:
+        sandbox_id = str(uuid4())
     return AppConversation(
         id=conversation_id,
         created_by_user_id=user_id,
-        sandbox_id=str(uuid4()),
+        sandbox_id=sandbox_id,
         sandbox_status=SandboxStatus.RUNNING,
     )
 
@@ -34,11 +41,17 @@ def _make_mock_app_conversation(conversation_id=None, user_id='test-user'):
 def _make_mock_service(
     get_conversation_return=None,
     batch_get_return=None,
+    search_return=None,
+    count_return=0,
 ):
     """Create a mock AppConversationService for testing."""
     service = MagicMock()
     service.get_app_conversation = AsyncMock(return_value=get_conversation_return)
     service.batch_get_app_conversations = AsyncMock(return_value=batch_get_return or [])
+    service.search_app_conversations = AsyncMock(
+        return_value=search_return or AppConversationPage(items=[])
+    )
+    service.count_app_conversations = AsyncMock(return_value=count_return)
     return service
 
 
@@ -207,3 +220,157 @@ class TestBatchGetAppConversations:
         assert result[0] is not None
         assert result[0].id == uuid1
         assert result[1] is None
+
+
+@pytest.mark.asyncio
+class TestSearchAppConversations:
+    """Test suite for search_app_conversations endpoint."""
+
+    async def test_search_with_sandbox_id_filter(self):
+        """Test that sandbox_id__eq filter is passed to the service.
+
+        Arrange: Create mock service and specific sandbox_id
+        Act: Call search_app_conversations with sandbox_id__eq
+        Assert: Service is called with the sandbox_id__eq parameter
+        """
+        # Arrange
+        sandbox_id = 'test-sandbox-123'
+        mock_conversation = _make_mock_app_conversation(sandbox_id=sandbox_id)
+        mock_service = _make_mock_service(
+            search_return=AppConversationPage(items=[mock_conversation])
+        )
+
+        # Act
+        result = await search_app_conversations(
+            sandbox_id__eq=sandbox_id,
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.search_app_conversations.assert_called_once()
+        call_kwargs = mock_service.search_app_conversations.call_args[1]
+        assert call_kwargs.get('sandbox_id__eq') == sandbox_id
+        assert len(result.items) == 1
+        assert result.items[0].sandbox_id == sandbox_id
+
+    async def test_search_without_sandbox_id_filter(self):
+        """Test that sandbox_id__eq defaults to None when not provided.
+
+        Arrange: Create mock service
+        Act: Call search_app_conversations without sandbox_id__eq
+        Assert: Service is called with sandbox_id__eq=None
+        """
+        # Arrange
+        mock_service = _make_mock_service()
+
+        # Act
+        await search_app_conversations(
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.search_app_conversations.assert_called_once()
+        call_kwargs = mock_service.search_app_conversations.call_args[1]
+        assert call_kwargs.get('sandbox_id__eq') is None
+
+    async def test_search_with_sandbox_id_and_other_filters(self):
+        """Test that sandbox_id__eq works correctly with other filters.
+
+        Arrange: Create mock service
+        Act: Call search_app_conversations with sandbox_id__eq and other filters
+        Assert: Service is called with all parameters correctly
+        """
+        # Arrange
+        sandbox_id = 'test-sandbox-456'
+        mock_service = _make_mock_service()
+
+        # Act
+        await search_app_conversations(
+            title__contains='test',
+            sandbox_id__eq=sandbox_id,
+            limit=50,
+            include_sub_conversations=True,
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.search_app_conversations.assert_called_once()
+        call_kwargs = mock_service.search_app_conversations.call_args[1]
+        assert call_kwargs.get('sandbox_id__eq') == sandbox_id
+        assert call_kwargs.get('title__contains') == 'test'
+        assert call_kwargs.get('limit') == 50
+        assert call_kwargs.get('include_sub_conversations') is True
+
+
+@pytest.mark.asyncio
+class TestCountAppConversations:
+    """Test suite for count_app_conversations endpoint."""
+
+    async def test_count_with_sandbox_id_filter(self):
+        """Test that sandbox_id__eq filter is passed to the service.
+
+        Arrange: Create mock service with count return value
+        Act: Call count_app_conversations with sandbox_id__eq
+        Assert: Service is called with the sandbox_id__eq parameter
+        """
+        # Arrange
+        sandbox_id = 'test-sandbox-789'
+        mock_service = _make_mock_service(count_return=5)
+
+        # Act
+        result = await count_app_conversations(
+            sandbox_id__eq=sandbox_id,
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.count_app_conversations.assert_called_once()
+        call_kwargs = mock_service.count_app_conversations.call_args[1]
+        assert call_kwargs.get('sandbox_id__eq') == sandbox_id
+        assert result == 5
+
+    async def test_count_without_sandbox_id_filter(self):
+        """Test that sandbox_id__eq defaults to None when not provided.
+
+        Arrange: Create mock service
+        Act: Call count_app_conversations without sandbox_id__eq
+        Assert: Service is called with sandbox_id__eq=None
+        """
+        # Arrange
+        mock_service = _make_mock_service(count_return=10)
+
+        # Act
+        result = await count_app_conversations(
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.count_app_conversations.assert_called_once()
+        call_kwargs = mock_service.count_app_conversations.call_args[1]
+        assert call_kwargs.get('sandbox_id__eq') is None
+        assert result == 10
+
+    async def test_count_with_sandbox_id_and_other_filters(self):
+        """Test that sandbox_id__eq works correctly with other filters.
+
+        Arrange: Create mock service
+        Act: Call count_app_conversations with sandbox_id__eq and other filters
+        Assert: Service is called with all parameters correctly
+        """
+        # Arrange
+        sandbox_id = 'test-sandbox-abc'
+        mock_service = _make_mock_service(count_return=3)
+
+        # Act
+        result = await count_app_conversations(
+            title__contains='test',
+            sandbox_id__eq=sandbox_id,
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.count_app_conversations.assert_called_once()
+        call_kwargs = mock_service.count_app_conversations.call_args[1]
+        assert call_kwargs.get('sandbox_id__eq') == sandbox_id
+        assert call_kwargs.get('title__contains') == 'test'
+        assert result == 3

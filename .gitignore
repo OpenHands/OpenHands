@@ -234,6 +234,8 @@ yarn-error.log*
 
 logs
 
+ralph/
+
 # agent
 .envrc
 /workspace

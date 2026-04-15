@@ -7,19 +7,15 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { mapProvider } from "#/utils/map-provider";
-import {
-  VERIFIED_MODELS,
-  VERIFIED_PROVIDERS,
-  VERIFIED_OPENHANDS_MODELS,
-} from "#/utils/verified-models";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { cn } from "#/utils/utils";
 import { HelpLink } from "#/ui/help-link";
 import { PRODUCT_URL } from "#/utils/constants";
+import { useSearchProviders } from "#/hooks/query/use-search-providers";
+import { useProviderModels } from "#/hooks/query/use-provider-models";
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
-  models: Record<string, { separator: string; models: string[] }>;
   currentModel?: string;
   onChange?: (provider: string | null, model: string | null) => void;
   onDefaultValuesChanged?: (
@@ -32,7 +28,6 @@ interface ModelSelectorProps {
 
 export function ModelSelector({
   isDisabled,
-  models,
   currentModel,
   onChange,
   onDefaultValuesChanged,
@@ -45,38 +40,51 @@ export function ModelSelector({
   );
   const [selectedModel, setSelectedModel] = React.useState<string | null>(null);
 
-  // Get the appropriate verified models array based on the selected provider
-  const getVerifiedModels = () => {
-    if (selectedProvider === "openhands") {
-      return VERIFIED_OPENHANDS_MODELS;
-    }
-    return VERIFIED_MODELS;
-  };
+  const { data: providers = [] } = useSearchProviders();
+  const {
+    data: providerModels = [],
+    isLoading: isLoadingModels,
+    error: modelsError,
+  } = useProviderModels(selectedProvider);
+
+  const verifiedProviders = React.useMemo(
+    () => providers.filter((p) => p.verified),
+    [providers],
+  );
+  const unverifiedProviders = React.useMemo(
+    () => providers.filter((p) => !p.verified),
+    [providers],
+  );
+
+  const verifiedModels = React.useMemo(
+    () => providerModels.filter((m) => m.verified),
+    [providerModels],
+  );
+  const unverifiedModels = React.useMemo(
+    () => providerModels.filter((m) => !m.verified),
+    [providerModels],
+  );
 
   React.useEffect(() => {
     if (currentModel) {
-      // runs when resetting to defaults
       const { provider, model } = extractModelAndProvider(currentModel);
 
       setLitellmId(currentModel);
-      setSelectedProvider(provider);
+      setSelectedProvider(provider || null);
       setSelectedModel(model);
-      onDefaultValuesChanged?.(provider, model);
+      onDefaultValuesChanged?.(provider || null, model);
     }
   }, [currentModel]);
 
   const handleChangeProvider = (provider: string) => {
     setSelectedProvider(provider);
     setSelectedModel(null);
-
-    const separator = models[provider]?.separator || "";
-    setLitellmId(provider + separator);
+    setLitellmId(`${provider}/`);
     onChange?.(provider, null);
   };
 
   const handleChangeModel = (model: string) => {
-    const separator = models[selectedProvider || ""]?.separator || "";
-    let fullModel = selectedProvider + separator + model;
+    let fullModel = `${selectedProvider}/${model}`;
     if (selectedProvider === "openai") {
       // LiteLLM lists OpenAI models without the openai/ prefix
       fullModel = model;
@@ -130,28 +138,22 @@ export function ModelSelector({
           }}
         >
           <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
-            {VERIFIED_PROVIDERS.filter((provider) => models[provider]).map(
-              (provider) => (
-                <AutocompleteItem
-                  data-testid={`provider-item-${provider}`}
-                  key={provider}
-                >
-                  {mapProvider(provider)}
-                </AutocompleteItem>
-              ),
-            )}
+            {verifiedProviders.map((provider) => (
+              <AutocompleteItem
+                data-testid={`provider-item-${provider.name}`}
+                key={provider.name}
+              >
+                {mapProvider(provider.name)}
+              </AutocompleteItem>
+            ))}
           </AutocompleteSection>
-          {Object.keys(models).some(
-            (provider) => !VERIFIED_PROVIDERS.includes(provider),
-          ) ? (
+          {unverifiedProviders.length > 0 ? (
             <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$OTHERS)}>
-              {Object.keys(models)
-                .filter((provider) => !VERIFIED_PROVIDERS.includes(provider))
-                .map((provider) => (
-                  <AutocompleteItem key={provider}>
-                    {mapProvider(provider)}
-                  </AutocompleteItem>
-                ))}
+              {unverifiedProviders.map((provider) => (
+                <AutocompleteItem key={provider.name}>
+                  {mapProvider(provider.name)}
+                </AutocompleteItem>
+              ))}
             </AutocompleteSection>
           ) : null}
         </Autocomplete>
@@ -176,6 +178,7 @@ export function ModelSelector({
           data-testid="llm-model-input"
           isRequired
           isVirtualized={false}
+          isLoading={isLoadingModels}
           name="llm-model-input"
           aria-label={t(I18nKey.LLM$MODEL)}
           placeholder={t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER)}
@@ -197,31 +200,28 @@ export function ModelSelector({
           }}
         >
           <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
-            {getVerifiedModels()
-              .filter((model) =>
-                models[selectedProvider || ""]?.models?.includes(model),
-              )
-              .map((model) => (
-                <AutocompleteItem key={model}>{model}</AutocompleteItem>
-              ))}
+            {verifiedModels.map((model) => (
+              <AutocompleteItem key={model.name}>{model.name}</AutocompleteItem>
+            ))}
           </AutocompleteSection>
-          {models[selectedProvider || ""]?.models?.some(
-            (model) => !getVerifiedModels().includes(model),
-          ) ? (
+          {unverifiedModels.length > 0 ? (
             <AutocompleteSection title={t(I18nKey.MODEL_SELECTOR$OTHERS)}>
-              {models[selectedProvider || ""]?.models
-                .filter((model) => !getVerifiedModels().includes(model))
-                .map((model) => (
-                  <AutocompleteItem
-                    data-testid={`model-item-${model}`}
-                    key={model}
-                  >
-                    {model}
-                  </AutocompleteItem>
-                ))}
+              {unverifiedModels.map((model) => (
+                <AutocompleteItem
+                  data-testid={`model-item-${model.name}`}
+                  key={model.name}
+                >
+                  {model.name}
+                </AutocompleteItem>
+              ))}
             </AutocompleteSection>
           ) : null}
         </Autocomplete>
+        {modelsError && (
+          <p data-testid="models-error" className="text-danger text-xs">
+            {t(I18nKey.CONFIGURATION$ERROR_FETCH_MODELS)}
+          </p>
+        )}
       </fieldset>
     </div>
   );

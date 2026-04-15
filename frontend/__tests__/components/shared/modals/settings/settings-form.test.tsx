@@ -14,11 +14,7 @@ describe("SettingsForm", () => {
   const RouteStub = createRoutesStub([
     {
       Component: () => (
-        <SettingsForm
-          settings={DEFAULT_SETTINGS}
-          models={[DEFAULT_SETTINGS.llm_model]}
-          onClose={onCloseMock}
-        />
+        <SettingsForm settings={DEFAULT_SETTINGS} onClose={onCloseMock} />
       ),
       path: "/",
     },

@@ -243,10 +243,12 @@ class BitbucketDCIssueHandler(IssueHandlerInterface):
 
     def branch_exists(self, branch_name: str) -> bool:
         url = f'{self._get_repo_api_base()}/branches'
-        params = {'filterText': branch_name, 'limit': 1}
         try:
             response = httpx.get(
-                url, headers=self.headers, params=params, verify=httpx_verify_option()
+                url,
+                headers=self.headers,
+                params={'filterText': branch_name, 'limit': '1'},
+                verify=httpx_verify_option(),
             )
             response.raise_for_status()
             data = response.json()

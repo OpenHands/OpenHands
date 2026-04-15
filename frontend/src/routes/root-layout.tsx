@@ -17,19 +17,22 @@ import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
-import { SetupPaymentModal } from "#/components/features/payment/setup-payment-modal";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
 import { useAutoLogin } from "#/hooks/use-auto-login";
 import { useAuthCallback } from "#/hooks/use-auth-callback";
 import { useReoTracking } from "#/hooks/use-reo-tracking";
 import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
+import { useAutoSelectOrganization } from "#/hooks/use-auto-select-organization";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { AlertBanner } from "#/components/features/alerts/alert-banner";
 import { cn } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
+import { useInvitation } from "#/hooks/use-invitation";
+import { InvitationAcceptModal } from "#/components/features/invitations/invitation-accept-modal";
+import { useSwitchOrganization } from "#/hooks/mutation/use-switch-organization";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -84,6 +87,11 @@ export default function MainApp() {
 
   const [consentFormIsOpen, setConsentFormIsOpen] = React.useState(false);
 
+  // Invitation acceptance modal state
+  const { invitationToken, clearInvitation } = useInvitation();
+  const { mutate: switchOrganization } = useSwitchOrganization();
+  const [showInvitationModal, setShowInvitationModal] = React.useState(false);
+
   // Auto-login if login method is stored in local storage
   useAutoLogin();
 
@@ -95,6 +103,9 @@ export default function MainApp() {
 
   // Sync PostHog opt-in/out state with backend setting on mount
   useSyncPostHogConsent();
+
+  // Auto-select the first organization when none is selected
+  useAutoSelectOrganization();
 
   React.useEffect(() => {
     // Don't change language when on intermediate pages (TOS, profile questions)
@@ -130,6 +141,28 @@ export default function MainApp() {
       displaySuccessToast(t(I18nKey.BILLING$YOURE_IN));
     }
   }, [settings?.is_new_user, config.data?.app_mode]);
+
+  // Show invitation modal when authenticated and has invitation token
+  React.useEffect(() => {
+    if (isAuthed && invitationToken && !isOnIntermediatePage) {
+      setShowInvitationModal(true);
+    }
+  }, [isAuthed, invitationToken, isOnIntermediatePage]);
+
+  const handleInvitationClose = React.useCallback(() => {
+    setShowInvitationModal(false);
+    clearInvitation();
+  }, [clearInvitation]);
+
+  const handleInvitationSuccess = React.useCallback(
+    (payload: { orgId: string; orgName: string; isPersonal: boolean }) => {
+      setShowInvitationModal(false);
+      clearInvitation();
+      // Switch to the newly joined organization
+      switchOrganization(payload);
+    },
+    [clearInvitation, switchOrganization],
+  );
 
   // Function to check if login method exists in local storage
   const checkLoginMethodExists = React.useCallback(() => {
@@ -259,10 +292,13 @@ export default function MainApp() {
           }}
         />
       )}
-
-      {config.data?.feature_flags.enable_billing &&
-        config.data?.app_mode === "saas" &&
-        settings?.is_new_user && <SetupPaymentModal />}
+      {showInvitationModal && invitationToken && (
+        <InvitationAcceptModal
+          token={invitationToken}
+          onClose={handleInvitationClose}
+          onSuccess={handleInvitationSuccess}
+        />
+      )}
     </div>
   );
 }

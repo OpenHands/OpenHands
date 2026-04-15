@@ -47,6 +47,7 @@ class Org(Base):  # type: ignore
     conversation_expiration = Column(Integer, nullable=True)
     condenser_max_size = Column(Integer, nullable=True)
     byor_export_enabled = Column(Boolean, nullable=False, default=False)
+    sandbox_grouping_strategy = Column(String, nullable=True)
 
     # Relationships
     org_members = relationship('OrgMember', back_populates='org')
@@ -63,6 +64,7 @@ class Org(Base):  # type: ignore
     slack_conversations = relationship('SlackConversation', back_populates='org')
     slack_users = relationship('SlackUser', back_populates='org')
     stripe_customers = relationship('StripeCustomer', back_populates='org')
+    git_claims = relationship('OrgGitClaim', back_populates='org')
 
     def __init__(self, **kwargs):
         # Handle known SQLAlchemy columns directly

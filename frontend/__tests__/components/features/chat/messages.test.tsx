@@ -10,9 +10,12 @@ import {
 import { OpenHandsObservation } from "#/types/core/observations";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { Conversation } from "#/api/open-hands.types";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useParams: () => ({ conversationId: "123" }),
+  useRevalidator: () => ({ revalidate: vi.fn() }),
 }));
 
 let queryClient: QueryClient;
@@ -47,6 +50,7 @@ const renderMessages = ({
 describe("Messages", () => {
   beforeEach(() => {
     queryClient = new QueryClient();
+    useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
   });
 
   const assistantMessage: AssistantMessageAction = {

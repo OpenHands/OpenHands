@@ -59,12 +59,15 @@ class SaasSecretsStore(SecretsStore):
 
         async with a_session_maker() as session:
             # Incoming secrets are always the most updated ones
-            # Delete all existing records and override with incoming ones
-            await session.execute(
-                delete(StoredCustomSecrets).filter(
-                    StoredCustomSecrets.keycloak_user_id == self.user_id
-                )
+            # Delete existing records for this user AND organization only
+            delete_query = delete(StoredCustomSecrets).filter(
+                StoredCustomSecrets.keycloak_user_id == self.user_id
             )
+            if org_id is not None:
+                delete_query = delete_query.filter(StoredCustomSecrets.org_id == org_id)
+            else:
+                delete_query = delete_query.filter(StoredCustomSecrets.org_id.is_(None))
+            await session.execute(delete_query)
 
             # Prepare the new secrets data
             kwargs = item.model_dump(context={'expose_secrets': True})

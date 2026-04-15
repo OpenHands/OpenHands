@@ -101,6 +101,9 @@ class StoredConversationMetadata(Base):  # type: ignore
     parent_conversation_id = Column(String, nullable=True, index=True)
     public = Column(Boolean, nullable=True, index=True)
 
+    # Tags for conversation metadata (e.g., automation context, skills used)
+    tags = Column(create_json_type_decorator(dict[str, str]), nullable=True)
+
 
 @dataclass
 class SQLAppConversationInfoService(AppConversationInfoService):
@@ -119,6 +122,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -141,6 +145,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         # Add sort order
@@ -195,6 +200,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ) -> int:
         """Count sandboxed conversations matching the given filters."""
         query = select(func.count(StoredConversationMetadata.conversation_id)).where(
@@ -208,6 +214,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         result = await self.db_session.execute(query)
@@ -222,6 +229,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ) -> Select:
         # Apply the same filters as search_app_conversations
         conditions = []
@@ -246,6 +254,9 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 StoredConversationMetadata.last_updated_at < updated_at__lt
             )
 
+        if sandbox_id__eq is not None:
+            conditions.append(StoredConversationMetadata.sandbox_id == sandbox_id__eq)
+
         if conditions:
             query = query.where(*conditions)
         return query
@@ -269,6 +280,14 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         result_set = await self.db_session.execute(query)
         rows = result_set.scalars().all()
         return [UUID(row.conversation_id) for row in rows]
+
+    async def count_conversations_by_sandbox_id(self, sandbox_id: str) -> int:
+        query = await self._secure_select()
+        query = query.where(StoredConversationMetadata.sandbox_id == sandbox_id)
+        count_query = select(func.count()).select_from(query.subquery())
+        result = await self.db_session.execute(count_query)
+        count = result.scalar()
+        return count or 0
 
     async def get_app_conversation_info(
         self, conversation_id: UUID
@@ -348,6 +367,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 else None
             ),
             public=info.public,
+            tags=info.tags if info.tags else None,
         )
 
         await self.db_session.merge(stored)
@@ -535,6 +555,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             ),
             sub_conversation_ids=sub_conversation_ids or [],
             public=stored.public,
+            tags=stored.tags or {},
             created_at=created_at,
             updated_at=updated_at,
         )

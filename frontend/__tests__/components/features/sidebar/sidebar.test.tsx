@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   renderWithProviders,
   createAxiosNotFoundErrorObject,
@@ -10,6 +10,7 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { WebClientConfig } from "#/api/option-service/option.types";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 // Helper to create mock config with sensible defaults
 const createMockConfig = (
@@ -75,6 +76,10 @@ const renderSidebar = (path: "conversation" | "settings" = "conversation") => {
 describe("Sidebar", () => {
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
   const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+
+  beforeEach(() => {
+    useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
+  });
 
   afterEach(() => {
     vi.clearAllMocks();

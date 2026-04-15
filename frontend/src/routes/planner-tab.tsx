@@ -11,11 +11,22 @@ import { cn } from "#/utils/utils";
 
 function PlannerTab() {
   const { t } = useTranslation();
-  const { scrollRef: scrollContainerRef, onChatBodyScroll } = useScrollToBottom(
-    React.useRef<HTMLDivElement>(null),
-  );
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const {
+    scrollRef: scrollContainerRef,
+    onChatBodyScroll,
+    autoScroll,
+    scrollDomToBottom,
+  } = useScrollToBottom(scrollRef);
 
   const { planContent, conversationMode } = useConversationStore();
+
+  // Auto-scroll to bottom when plan content changes
+  React.useEffect(() => {
+    if (autoScroll) {
+      scrollDomToBottom();
+    }
+  }, [planContent, autoScroll, scrollDomToBottom]);
   const isPlanMode = conversationMode === "plan";
   const { handlePlanClick } = useHandlePlanClick();
 

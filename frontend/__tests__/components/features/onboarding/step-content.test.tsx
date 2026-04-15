@@ -12,7 +12,7 @@ describe("StepContent", () => {
 
   const defaultProps = {
     options: mockOptions,
-    selectedOptionId: null,
+    selectedOptionIds: [],
     onSelectOption: vi.fn(),
   };
 
@@ -44,7 +44,7 @@ describe("StepContent", () => {
   });
 
   it("should mark the selected option as selected", () => {
-    render(<StepContent {...defaultProps} selectedOptionId="option1" />);
+    render(<StepContent {...defaultProps} selectedOptionIds={["option1"]} />);
 
     const selectedOption = screen.getByTestId("step-option-option1");
     const unselectedOption = screen.getByTestId("step-option-option2");

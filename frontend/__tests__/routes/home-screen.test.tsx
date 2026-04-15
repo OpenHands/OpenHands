@@ -228,20 +228,17 @@ describe("HomeScreen", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     renderHomeScreen();
@@ -272,20 +269,17 @@ describe("HomeScreen", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     renderHomeScreen();
@@ -332,14 +326,11 @@ describe("HomeScreen", () => {
 
       // Mock the repository branches API call
       vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-        branches: [
+        items: [
           { name: "main", commit_sha: "123", protected: false },
           { name: "develop", commit_sha: "456", protected: false },
         ],
-        has_next_page: false,
-        current_page: 1,
-        per_page: 30,
-        total_count: 2,
+        next_page_id: null,
       });
 
       // Select a repository to enable the repo launch button
@@ -371,8 +362,8 @@ describe("HomeScreen", () => {
         "retrieveUserGitRepositories",
       );
       retrieveUserGitRepositoriesSpy.mockResolvedValue({
-        data: MOCK_RESPOSITORIES,
-        nextPage: null,
+        items: MOCK_RESPOSITORIES,
+        next_page_id: null,
       });
     });
 
@@ -541,7 +532,7 @@ describe("Settings 404", () => {
   });
 });
 
-describe("Setup Payment modal", () => {
+describe("New user welcome toast", () => {
   const getConfigSpy = vi.spyOn(OptionService, "getConfig");
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
@@ -593,7 +584,7 @@ describe("Setup Payment modal", () => {
     vi.unstubAllGlobals();
   });
 
-  it("should only render if SaaS mode and is new user", async () => {
+  it("should not show the setup payment modal (removed) in SaaS mode for new users", async () => {
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
       is_new_user: true,
@@ -603,9 +594,149 @@ describe("Setup Payment modal", () => {
 
     await screen.findByTestId("root-layout");
 
-    const setupPaymentModal = await screen.findByTestId(
-      "proceed-to-stripe-button",
-    );
-    expect(setupPaymentModal).toBeInTheDocument();
+    // SetupPaymentModal was removed; verify it no longer renders
+    expect(
+      screen.queryByTestId("proceed-to-stripe-button"),
+    ).not.toBeInTheDocument();
   });
+});
+
+describe("HomepageCTA visibility", () => {
+  const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+  const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+    getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
+
+    // Mock localStorage to enable the PROJ_USER_JOURNEY feature flag (CTA dismissal also uses localStorage)
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn((key: string) => {
+        if (key === "FEATURE_PROJ_USER_JOURNEY") {
+          return "true";
+        }
+        return null;
+      }),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("should show HomepageCTA in SaaS mode when not dismissed and feature flag enabled", async () => {
+    useIsAuthedMock.mockReturnValue({
+      data: true,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+    });
+    useConfigMock.mockReturnValue({
+      data: { app_mode: "saas", feature_flags: DEFAULT_FEATURE_FLAGS },
+      isLoading: false,
+    });
+
+    getConfigSpy.mockResolvedValue({
+      app_mode: "saas",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github"],
+      auth_url: "https://auth.example.com",
+      feature_flags: DEFAULT_FEATURE_FLAGS,
+      maintenance_start_time: null,
+      recaptcha_site_key: null,
+      faulty_models: [],
+      error_message: null,
+      updated_at: "2024-01-14T10:00:00Z",
+      github_app_slug: null,
+    });
+
+    renderHomeScreen();
+
+    await screen.findByTestId("home-screen");
+
+    const ctaLink = await screen.findByTestId("homepage-cta-learn-more");
+    expect(ctaLink).toBeInTheDocument();
+  });
+
+  it("should not show HomepageCTA in OSS mode even with feature flag enabled", async () => {
+    useIsAuthedMock.mockReturnValue({
+      data: true,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+    });
+    useConfigMock.mockReturnValue({
+      data: { app_mode: "oss", feature_flags: DEFAULT_FEATURE_FLAGS },
+      isLoading: false,
+    });
+
+    getConfigSpy.mockResolvedValue({
+      app_mode: "oss",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github"],
+      auth_url: "https://auth.example.com",
+      feature_flags: DEFAULT_FEATURE_FLAGS,
+      maintenance_start_time: null,
+      recaptcha_site_key: null,
+      faulty_models: [],
+      error_message: null,
+      updated_at: "2024-01-14T10:00:00Z",
+      github_app_slug: null,
+    });
+
+    renderHomeScreen();
+
+    await screen.findByTestId("home-screen");
+
+    expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
+  });
+
+  it("should not show HomepageCTA when feature flag is disabled", async () => {
+    // Override localStorage to disable the feature flag
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null), // No feature flags set
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
+
+    useIsAuthedMock.mockReturnValue({
+      data: true,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+    });
+    useConfigMock.mockReturnValue({
+      data: { app_mode: "saas", feature_flags: DEFAULT_FEATURE_FLAGS },
+      isLoading: false,
+    });
+
+    getConfigSpy.mockResolvedValue({
+      app_mode: "saas",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github"],
+      auth_url: "https://auth.example.com",
+      feature_flags: DEFAULT_FEATURE_FLAGS,
+      maintenance_start_time: null,
+      recaptcha_site_key: null,
+      faulty_models: [],
+      error_message: null,
+      updated_at: "2024-01-14T10:00:00Z",
+      github_app_slug: null,
+    });
+
+    renderHomeScreen();
+
+    await screen.findByTestId("home-screen");
+
+    expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
+  });
+
 });
