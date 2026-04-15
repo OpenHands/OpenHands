@@ -18,14 +18,14 @@ class SettingsService {
    */
   static async getSettingsSchema(): Promise<SettingsSchema> {
     const { data } = await openHands.get<SettingsSchema>(
-      "/api/settings/agent-schema",
+      "/api/v1/settings/agent-schema",
     );
     return data;
   }
 
   static async getConversationSettingsSchema(): Promise<SettingsSchema> {
     const { data } = await openHands.get<SettingsSchema>(
-      "/api/settings/conversation-schema",
+      "/api/v1/settings/conversation-schema",
     );
     return data;
   }

@@ -15,6 +15,7 @@ from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
 )
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.server.routes.secrets import invalidate_legacy_secrets_store
 from openhands.server.settings import (
     GETSettingsModel,
@@ -234,3 +235,13 @@ async def store_settings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': 'Something went wrong storing settings'},
         )
+
+
+@router.get('/agent-schema', deprecated=True)
+async def load_settings_schema() -> dict[str, Any]:
+    return AgentSettings.export_schema().model_dump(mode='json')
+
+
+@router.get('/conversation-schema', deprecated=True)
+async def load_conversation_settings_schema() -> dict[str, Any]:
+    return ConversationSettings.export_schema().model_dump(mode='json')

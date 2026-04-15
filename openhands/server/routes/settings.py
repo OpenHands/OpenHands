@@ -16,7 +16,6 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
 )
-from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.server.routes.secrets import invalidate_legacy_secrets_store
 from openhands.server.settings import (
     GETSettingsModel,
@@ -33,16 +32,6 @@ from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
 
 app = APIRouter(prefix='/api', dependencies=get_dependencies())
-
-
-@app.get('/settings/agent-schema', deprecated=True)
-async def load_settings_schema() -> dict[str, Any]:
-    return AgentSettings.export_schema().model_dump(mode='json')
-
-
-@app.get('/settings/conversation-schema', deprecated=True)
-async def load_conversation_settings_schema() -> dict[str, Any]:
-    return ConversationSettings.export_schema().model_dump(mode='json')
 
 
 @app.get(
