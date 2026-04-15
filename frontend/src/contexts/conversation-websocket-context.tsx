@@ -335,6 +335,10 @@ export function ConversationWebSocketProvider({
     receivedEventCountRefMain.current = 0;
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
+    // Clear stale execution status from a previous conversation/session.
+    // Without this, resuming a closed conversation shows the agent stuck in
+    // the last status (e.g. FINISHED) until a new WebSocket state event arrives.
+    useV1ConversationStateStore.getState().reset();
   }, [conversationId]);
 
   const { data: preloadedEvents } = useConversationHistory(conversationId);

@@ -11,6 +11,7 @@ import { AgentLoading } from "./agent-loading";
 import { useConversationStore } from "#/stores/conversation-store";
 import CircleErrorIcon from "#/icons/circle-error.svg?react";
 import { useAgentState } from "#/hooks/use-agent-state";
+import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
 import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
@@ -46,9 +47,16 @@ export function AgentStatus({
       conversation?.id || null,
     );
 
+  // Prefer the live execution status from WebSocket state events over the
+  // REST-polled value on `conversation` — the REST field lags by up to 30s
+  // and makes resumed conversations appear stuck in their last-known status
+  // (e.g. "Agent has finished the task") until the next poll.
+  const liveExecutionStatus = useV1ConversationStateStore(
+    (state) => state.execution_status,
+  );
   const statusCode = getStatusCode(
     webSocketStatus,
-    conversation?.execution_status || null,
+    liveExecutionStatus ?? conversation?.execution_status ?? null,
     conversation?.sandbox_status || null,
     taskStatus,
     subConversationTaskStatus,

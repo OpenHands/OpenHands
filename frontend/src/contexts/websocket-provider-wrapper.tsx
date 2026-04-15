@@ -3,6 +3,7 @@ import { ConversationWebSocketProvider } from "#/contexts/conversation-websocket
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSubConversations } from "#/hooks/query/use-sub-conversations";
 import { useSandboxRecovery } from "#/hooks/use-sandbox-recovery";
+import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
 import { isTaskConversationId } from "#/utils/conversation-local-storage";
 
 interface WebSocketProviderWrapperProps {
@@ -46,6 +47,21 @@ export function WebSocketProviderWrapper({
     sandboxStatus: conversation?.sandbox_status,
     refetchConversation: isConversationReady ? refetchConversation : undefined,
   });
+
+  // Prime the execution status from the backend-reported value on the
+  // AppConversation. The V1 store is otherwise only populated via WebSocket
+  // ConversationStateUpdateEvents, which are not persisted in event history.
+  // Without this, after resuming a closed conversation the UI has no source of
+  // truth for agent status until a live state-update event arrives — and the
+  // first resume may never emit one if the agent is idle, leaving the UI stuck.
+  const backendExecutionStatus = conversation?.execution_status ?? null;
+  React.useEffect(() => {
+    if (backendExecutionStatus) {
+      useV1ConversationStateStore
+        .getState()
+        .setExecutionStatus(backendExecutionStatus);
+    }
+  }, [backendExecutionStatus]);
 
   return (
     <ConversationWebSocketProvider

@@ -171,7 +171,12 @@ export function getStatusCode(
 
   if (executionStatus && executionStatus !== V1ExecutionStatus.STUCK) {
     switch (executionStatus) {
+      // FINISHED means the agent completed its last task and is ready for
+      // the next user message. From the user's perspective that's the same
+      // as IDLE — showing "Agent has finished the task" on an empty input
+      // (e.g. after resuming a conversation) is confusing.
       case V1ExecutionStatus.IDLE:
+      case V1ExecutionStatus.FINISHED:
         return I18nKey.AGENT_STATUS$WAITING_FOR_TASK;
       case V1ExecutionStatus.RUNNING:
         return I18nKey.AGENT_STATUS$RUNNING_TASK;
@@ -179,8 +184,6 @@ export function getStatusCode(
         return I18nKey.AGENT_STATUS$WAITING_FOR_USER_CONFIRMATION;
       case V1ExecutionStatus.PAUSED:
         return I18nKey.CHAT_INTERFACE$AGENT_PAUSED_MESSAGE;
-      case V1ExecutionStatus.FINISHED:
-        return I18nKey.CHAT_INTERFACE$AGENT_FINISHED_MESSAGE;
       default:
         throw new Error(`Unknown executionStatus: ${executionStatus}`);
     }
