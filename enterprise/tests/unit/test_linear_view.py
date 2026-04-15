@@ -139,7 +139,9 @@ class TestLinearV1OrgRouting:
         mock_get_app_convo_svc.side_effect = mock_context_manager
 
         mock_jinja = MagicMock()
-        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
+        mock_jinja.get_template = MagicMock(
+            return_value=MagicMock(render=MagicMock(return_value='test'))
+        )
 
         # Act
         await linear_view.create_or_update_conversation(mock_jinja)
@@ -188,7 +190,9 @@ class TestLinearV1OrgRouting:
         mock_get_app_convo_svc.side_effect = mock_context_manager
 
         mock_jinja = MagicMock()
-        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
+        mock_jinja.get_template = MagicMock(
+            return_value=MagicMock(render=MagicMock(return_value='test'))
+        )
 
         # Act
         await linear_view.create_or_update_conversation(mock_jinja)
@@ -225,7 +229,9 @@ class TestLinearV1OrgRouting:
         mock_get_app_convo_svc.side_effect = mock_context_manager
 
         mock_jinja = MagicMock()
-        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
+        mock_jinja.get_template = MagicMock(
+            return_value=MagicMock(render=MagicMock(return_value='test'))
+        )
 
         # Act
         await linear_view.create_or_update_conversation(mock_jinja)
@@ -269,7 +275,9 @@ class TestLinearV1OrgRouting:
         mock_get_app_convo_svc.side_effect = mock_context_manager
 
         mock_jinja = MagicMock()
-        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
+        mock_jinja.get_template = MagicMock(
+            return_value=MagicMock(render=MagicMock(return_value='test'))
+        )
 
         # Act
         await linear_view.create_or_update_conversation(mock_jinja)
@@ -314,7 +322,9 @@ class TestLinearV1OrgRouting:
         mock_get_app_convo_svc.side_effect = mock_context_manager
 
         mock_jinja = MagicMock()
-        mock_jinja.get_template = MagicMock(return_value=MagicMock(render=MagicMock(return_value='test')))
+        mock_jinja.get_template = MagicMock(
+            return_value=MagicMock(render=MagicMock(return_value='test'))
+        )
 
         # Act
         await linear_view.create_or_update_conversation(mock_jinja)
