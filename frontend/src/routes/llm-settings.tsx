@@ -90,17 +90,19 @@ const normalizeBaseUrl = (baseUrl: string) => {
 };
 
 const isProviderDefaultBaseUrl = (model: string, baseUrl: string) => {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const { provider } = extractModelAndProvider(model);
-  if (!provider) {
-    return false;
+
+  if (provider) {
+    const knownDefaults = KNOWN_PROVIDER_DEFAULT_BASE_URLS[provider];
+    if (knownDefaults) {
+      return knownDefaults.has(normalizedBaseUrl);
+    }
   }
 
-  const knownDefaults = KNOWN_PROVIDER_DEFAULT_BASE_URLS[provider];
-  if (!knownDefaults) {
-    return false;
-  }
-
-  return knownDefaults.has(normalizeBaseUrl(baseUrl));
+  return Object.values(KNOWN_PROVIDER_DEFAULT_BASE_URLS).some((knownDefaults) =>
+    knownDefaults?.has(normalizedBaseUrl),
+  );
 };
 
 interface OpenHandsApiKeyHelpProps {

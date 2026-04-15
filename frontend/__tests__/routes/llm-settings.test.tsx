@@ -292,6 +292,71 @@ describe("LlmSettingsScreen", () => {
     );
   });
 
+
+  it("defaults to basic view on first visit when org settings use a bare OpenAI model with the default base URL", async () => {
+    const schema = structuredClone(MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!);
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+
+    if (!llmSection) {
+      throw new Error("Expected llm section in test schema");
+    }
+
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+      ],
+    });
+
+    vi.spyOn(organizationService, "getOrganizationAgentSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "gpt-4",
+        llm_base_url: "https://api.openai.com",
+        agent_settings_schema: schema,
+        agent_settings: {
+          agent: "CodeActAgent",
+          llm: {
+            model: "gpt-4",
+            base_url: "https://api.openai.com",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "saas", scope: "org" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("llm-settings-form-advanced")).not.toBeInTheDocument();
+  });
+
   it("hides the API key input for OpenHands provider in SaaS mode", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
 
