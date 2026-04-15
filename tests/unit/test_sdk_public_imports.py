@@ -2,7 +2,6 @@ from importlib import import_module
 
 import pytest
 
-
 PUBLIC_IMPORT_CASES = [
     (
         'openhands.sdk',
