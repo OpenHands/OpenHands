@@ -38,6 +38,7 @@ vi.mock("#/query-client-config", () => ({
   queryClient: {
     getQueryData: vi.fn(() => mockConfig),
     setQueryData: vi.fn(),
+    fetchQuery: vi.fn(() => Promise.resolve(mockConfig)),
   },
 }));
 
