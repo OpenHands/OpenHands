@@ -77,7 +77,7 @@ def _walk_redact_urls(obj: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# sanitize_config
+# sanitize_config / sanitize_for_logging
 # ---------------------------------------------------------------------------
 
 
@@ -87,6 +87,23 @@ def sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
     config = sanitize_dict(config)
     config = _walk_redact_urls(config)
     return config
+
+
+def sanitize_for_logging(data: Any) -> Any:
+    """Deep-copy and sanitize data (dict, list, or primitive) for safe logging.
+
+    This handles both dicts and lists, recursively redacting secret keys
+    and URL query params. Use this for logging arbitrary config data.
+    """
+    data = copy.deepcopy(data)
+    if isinstance(data, dict):
+        data = sanitize_dict(data)
+    elif isinstance(data, list):
+        data = [
+            sanitize_dict(item) if isinstance(item, dict) else item for item in data
+        ]
+    data = _walk_redact_urls(data)
+    return data
 
 
 # ---------------------------------------------------------------------------
