@@ -37,6 +37,18 @@ import { ViewToggle } from "./view-toggle";
 
 const EMPTY_EXCLUDE_KEYS = new Set<string>();
 
+const VIEW_ORDER: Record<SettingsView, number> = {
+  basic: 0,
+  advanced: 1,
+  all: 2,
+};
+
+const getLessDetailedView = (
+  currentView: SettingsView,
+  nextView: SettingsView,
+): SettingsView =>
+  VIEW_ORDER[nextView] < VIEW_ORDER[currentView] ? nextView : currentView;
+
 export interface SdkSectionHeaderProps {
   values: SettingsFormValues;
   isDisabled: boolean;
@@ -115,6 +127,7 @@ export function SdkSectionPage({
   const [view, setView] = React.useState<SettingsView>("basic");
   const [values, setValues] = React.useState<SettingsFormValues>({});
   const [dirty, setDirty] = React.useState<SettingsDirtyState>({});
+  const hasHydratedViewRef = React.useRef(false);
 
   const sectionKeysSignature = React.useMemo(
     () => JSON.stringify(sectionKeys),
@@ -155,10 +168,25 @@ export function SdkSectionPage({
   }, [settings, filteredSchema, getInitialView, settingsSource]);
 
   React.useEffect(() => {
+    hasHydratedViewRef.current = false;
+    setView("basic");
+    setValues({});
+    setDirty({});
+  }, [scope, settingsSource, sectionKeysSignature]);
+
+  React.useEffect(() => {
     if (!initialValues || !initialView) return;
+
     setValues(initialValues);
     setDirty({});
-    setView(initialView);
+    setView((currentView) => {
+      if (!hasHydratedViewRef.current) {
+        hasHydratedViewRef.current = true;
+        return initialView;
+      }
+
+      return getLessDetailedView(currentView, initialView);
+    });
   }, [initialValues, initialView]);
 
   const visibleSections = React.useMemo(() => {

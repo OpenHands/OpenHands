@@ -156,6 +156,7 @@ export function LlmSettingsScreen({
   );
   const [searchApiKey, setSearchApiKey] = React.useState("");
   const [searchApiKeyDirty, setSearchApiKeyDirty] = React.useState(false);
+  const hasHydratedInitialPersonalSaasViewRef = React.useRef(false);
 
   const defaultModel = String(
     (DEFAULT_SETTINGS.agent_settings?.llm as Record<string, unknown>)?.model ??
@@ -176,6 +177,12 @@ export function LlmSettingsScreen({
     setSearchApiKey(settings?.search_api_key ?? "");
     setSearchApiKeyDirty(false);
   }, [settings?.search_api_key]);
+
+  React.useEffect(() => {
+    if (settings && isSaasMode && scope !== "org") {
+      hasHydratedInitialPersonalSaasViewRef.current = true;
+    }
+  }, [isSaasMode, scope, settings]);
 
   React.useEffect(() => {
     const checkout = searchParams.get("checkout");
@@ -201,6 +208,14 @@ export function LlmSettingsScreen({
       currentSettings: Settings,
       filteredSchema: SettingsSchema,
     ): SettingsView => {
+      if (
+        isSaasMode &&
+        scope !== "org" &&
+        !hasHydratedInitialPersonalSaasViewRef.current
+      ) {
+        return "basic";
+      }
+
       const schemaView = inferInitialView(currentSettings, filteredSchema);
       if (schemaView !== "basic") {
         return schemaView;
@@ -214,7 +229,7 @@ export function LlmSettingsScreen({
 
       return hasCustomBaseUrl ? "all" : "basic";
     },
-    [],
+    [isSaasMode, scope],
   );
 
   const buildHeader = React.useCallback(
