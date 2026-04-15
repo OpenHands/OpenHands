@@ -7989,6 +7989,23 @@
     "uk": "Приватний",
     "ca": "Privat"
   },
+  "SIDEBAR$AUTOMATIONS": {
+    "en": "Automations",
+    "zh-CN": "自动化",
+    "zh-TW": "自動化",
+    "de": "Automatisierungen",
+    "ko-KR": "자동화",
+    "no": "Automatiseringer",
+    "it": "Automazioni",
+    "pt": "Automatizações",
+    "es": "Automatizaciones",
+    "ar": "الأتمتة",
+    "fr": "Automatisations",
+    "tr": "Otomasyonlar",
+    "ja": "自動化",
+    "uk": "Автоматизації",
+    "ca": "Automatitzacions"
+  },
   "SIDEBAR$CONVERSATIONS": {
     "en": "Conversations",
     "ja": "会話",

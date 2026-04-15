@@ -23,12 +23,6 @@ vi.mock("#/hooks/use-breakpoint", () => ({
   useBreakpoint: vi.fn(() => false), // Default to desktop (not mobile)
 }));
 
-// Mock feature flags
-const mockEnableProjUserJourney = vi.fn(() => true);
-vi.mock("#/utils/feature-flags", () => ({
-  ENABLE_PROJ_USER_JOURNEY: () => mockEnableProjUserJourney(),
-}));
-
 // Mock useTracking hook for CTA
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -144,9 +138,8 @@ describe("UserContextMenu", () => {
     // Ensure clean state at the start of each test
     vi.restoreAllMocks();
     useSelectedOrganizationStore.setState({ organizationId: null });
-    // Reset feature flag and breakpoint mocks to defaults
-    mockEnableProjUserJourney.mockReturnValue(true);
-    vi.mocked(breakpoint.useBreakpoint).mockReturnValue(false); // Desktop by default
+    // Reset breakpoint mock to desktop by default
+    vi.mocked(breakpoint.useBreakpoint).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -750,15 +743,26 @@ describe("UserContextMenu", () => {
   });
 
   describe("Context Menu CTA", () => {
-    it("should render the CTA component in SaaS mode on desktop with feature flag enabled", async () => {
-      // Set SaaS mode
+    it("should render the CTA component in SaaS Cloud mode on desktop", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
-        createMockWebClientConfig({ app_mode: "saas" }),
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            deployment_mode: "cloud",
+            enable_billing: false,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+          },
+        }),
       );
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for config to load
       await waitFor(() => {
         expect(screen.getByTestId("context-menu-cta")).toBeInTheDocument();
       });
@@ -766,59 +770,73 @@ describe("UserContextMenu", () => {
       expect(screen.getByText("CTA$LEARN_MORE")).toBeInTheDocument();
     });
 
-    it("should not render the CTA component in OSS mode even with feature flag enabled", async () => {
-      // Set OSS mode
+    it("should not render the CTA component in OSS mode", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
         createMockWebClientConfig({ app_mode: "oss" }),
       );
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for config to load
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
       });
-
       expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
-      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
     });
 
-    it("should not render the CTA component on mobile even in SaaS mode with feature flag enabled", async () => {
-      // Set SaaS mode
+    it("should not render the CTA component on mobile even in SaaS Cloud mode", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
-        createMockWebClientConfig({ app_mode: "saas" }),
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            deployment_mode: "cloud",
+            enable_billing: false,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+          },
+        }),
       );
       // Set mobile mode
       vi.mocked(breakpoint.useBreakpoint).mockReturnValue(true);
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for config to load
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
       });
 
       expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
-      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
     });
 
-    it("should not render the CTA component when feature flag is disabled in SaaS mode", async () => {
-      // Set SaaS mode
+    it("should not render the CTA component in SaaS Self-hosted mode", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
-        createMockWebClientConfig({ app_mode: "saas" }),
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            deployment_mode: "self_hosted",
+            enable_billing: false,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+          },
+        }),
       );
-      // Disable the feature flag
-      mockEnableProjUserJourney.mockReturnValue(false);
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for config to load
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
       });
 
       expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
-      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
     });
   });
 });
