@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { TFunction } from "i18next";
 import {
   toSchemaTranslationKey,
@@ -8,6 +8,19 @@ import {
   resolveSchemaChoiceLabel,
   getSettingsFieldConstraints,
 } from "./sdk-settings-field-metadata";
+
+// Mock console.warn to suppress warnings during tests and allow verification
+const originalWarn = console.warn;
+let warnSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  warnSpy.mockRestore();
+  console.warn = originalWarn;
+});
 
 describe("toSchemaTranslationKey", () => {
   it("generates correct key for simple field", () => {
@@ -236,5 +249,73 @@ describe("getSettingsFieldConstraints", () => {
   it("returns undefined for unknown fields", () => {
     const constraints = getSettingsFieldConstraints("unknown.field");
     expect(constraints).toBeUndefined();
+  });
+});
+
+describe("warning logging", () => {
+  it("logs warning when falling back to schema value for label", () => {
+    const mockT = vi.fn(
+      (_key: string, options?: { defaultValue: string }) =>
+        options?.defaultValue ?? "",
+    ) as unknown as TFunction;
+
+    resolveSchemaFieldLabel(mockT, "unknown.field", "Fallback Label");
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[i18n] Missing translation for key "SCHEMA$UNKNOWN$FIELD$LABEL", falling back to: "Fallback Label"',
+    );
+  });
+
+  it("logs warning when falling back to schema value for description", () => {
+    const mockT = vi.fn(
+      (_key: string, options?: { defaultValue: string }) =>
+        options?.defaultValue ?? "",
+    ) as unknown as TFunction;
+
+    resolveSchemaFieldDescription(
+      mockT,
+      "unknown.field",
+      "Fallback Description",
+    );
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[i18n] Missing translation for key "SCHEMA$UNKNOWN$FIELD$DESCRIPTION", falling back to: "Fallback Description"',
+    );
+  });
+
+  it("logs warning when falling back to schema value for choice label", () => {
+    const mockT = vi.fn(
+      (_key: string, options?: { defaultValue: string }) =>
+        options?.defaultValue ?? "",
+    ) as unknown as TFunction;
+
+    resolveSchemaChoiceLabel(mockT, "some.field", "option1", "Option 1");
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[i18n] Missing translation for key "SCHEMA$SOME$FIELD$CHOICE$OPTION1", falling back to: "Option 1"',
+    );
+  });
+
+  it("does not log warning when translation is found", () => {
+    const mockT = vi.fn((key: string) => {
+      if (key === "SCHEMA$LLM$API_KEY$LABEL") return "Translated API Key";
+      return "";
+    }) as unknown as TFunction;
+
+    resolveSchemaFieldLabel(mockT, "llm.api_key", "API Key");
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not log warning when description is null/undefined", () => {
+    const mockT = vi.fn(
+      (_key: string, options?: { defaultValue: string }) =>
+        options?.defaultValue ?? "",
+    ) as unknown as TFunction;
+
+    resolveSchemaFieldDescription(mockT, "some.field", null);
+    resolveSchemaFieldDescription(mockT, "some.field", undefined);
+
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });

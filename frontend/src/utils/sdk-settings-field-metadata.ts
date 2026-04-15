@@ -59,79 +59,88 @@ export function getSettingsFieldConstraints(fieldKey: string) {
 }
 
 /**
- * Resolves a field label using the i18n fallback chain:
+ * Common resolver for schema field text (labels and descriptions).
+ * Uses the i18n fallback chain:
  * 1. If schema provides an explicit translation key (contains $), use it directly
- * 2. Try the conventional key (SCHEMA$<PATH>$LABEL)
+ * 2. Try the conventional key (SCHEMA$<PATH>$<ATTRIBUTE>)
  * 3. Fall back to the schema-provided value (untranslated)
+ *
+ * Logs a warning if no translation is found and falling back to schema value.
  */
-export function resolveSchemaFieldLabel(
+function resolveSchemaFieldText(
   t: TFunction,
   fieldKey: string,
-  schemaValue: string,
-): string {
-  // If schema already provides a translation key, use it
-  if (looksLikeTranslationKey(schemaValue)) {
-    return t(schemaValue);
-  }
-
-  // Try conventional key, fall back to schema value
-  const conventionalKey = toSchemaTranslationKey(fieldKey, "LABEL");
-  return t(conventionalKey, { defaultValue: schemaValue });
-}
-
-/**
- * Resolves a field description using the i18n fallback chain:
- * 1. If schema provides an explicit translation key (contains $), use it directly
- * 2. Try the conventional key (SCHEMA$<PATH>$DESCRIPTION)
- * 3. Fall back to the schema-provided value (untranslated), or null if not provided
- */
-export function resolveSchemaFieldDescription(
-  t: TFunction,
-  fieldKey: string,
-  schemaValue?: string | null,
+  attribute: "LABEL" | "DESCRIPTION" | "SECTION_LABEL",
+  schemaValue: string | null | undefined,
 ): string | null {
   // If schema already provides a translation key, use it
   if (looksLikeTranslationKey(schemaValue)) {
-    // TypeScript needs assurance that schemaValue is a string here
     return t(schemaValue as string);
   }
 
   // Try conventional key
-  const conventionalKey = toSchemaTranslationKey(fieldKey, "DESCRIPTION");
+  const conventionalKey = toSchemaTranslationKey(fieldKey, attribute);
   const translated = t(conventionalKey, { defaultValue: "" });
 
-  // If we got a translation, use it; otherwise fall back to schema value
+  // If we got a translation, use it
   if (translated) {
     return translated;
+  }
+
+  // Log warning when falling back to untranslated schema value
+  if (schemaValue) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[i18n] Missing translation for key "${conventionalKey}", falling back to: "${schemaValue}"`,
+    );
   }
 
   return schemaValue ?? null;
 }
 
 /**
- * Resolves a section label using the i18n fallback chain:
- * 1. If schema provides an explicit translation key (contains $), use it directly
- * 2. Try the conventional key (SCHEMA$<SECTION>$SECTION_LABEL)
- * 3. Fall back to the schema-provided value (untranslated)
+ * Resolves a field label using the i18n fallback chain.
+ * @see resolveSchemaFieldText for the fallback chain details.
+ */
+export function resolveSchemaFieldLabel(
+  t: TFunction,
+  fieldKey: string,
+  schemaValue: string,
+): string {
+  return resolveSchemaFieldText(t, fieldKey, "LABEL", schemaValue) ?? "";
+}
+
+/**
+ * Resolves a field description using the i18n fallback chain.
+ * @see resolveSchemaFieldText for the fallback chain details.
+ */
+export function resolveSchemaFieldDescription(
+  t: TFunction,
+  fieldKey: string,
+  schemaValue?: string | null,
+): string | null {
+  return resolveSchemaFieldText(t, fieldKey, "DESCRIPTION", schemaValue);
+}
+
+/**
+ * Resolves a section label using the i18n fallback chain.
+ * @see resolveSchemaFieldText for the fallback chain details.
  */
 export function resolveSchemaFieldSectionLabel(
   t: TFunction,
   sectionKey: string,
   schemaValue: string,
 ): string {
-  // If schema already provides a translation key, use it
-  if (looksLikeTranslationKey(schemaValue)) {
-    return t(schemaValue);
-  }
-
-  // Try conventional key, fall back to schema value
-  const conventionalKey = toSchemaTranslationKey(sectionKey, "SECTION_LABEL");
-  return t(conventionalKey, { defaultValue: schemaValue });
+  return (
+    resolveSchemaFieldText(t, sectionKey, "SECTION_LABEL", schemaValue) ?? ""
+  );
 }
 
 /**
  * Resolves a choice label for select fields using the i18n fallback chain.
  * Convention: SCHEMA$<FIELD_PATH>$CHOICE$<CHOICE_VALUE>
+ *
+ * Logs a warning if no translation is found and falling back to schema label.
  */
 export function resolveSchemaChoiceLabel(
   t: TFunction,
@@ -146,5 +155,17 @@ export function resolveSchemaChoiceLabel(
   const normalizedFieldKey = fieldKey.replace(/\./g, "$").toUpperCase();
   const normalizedChoiceValue = String(choiceValue).toUpperCase();
   const conventionalKey = `SCHEMA$${normalizedFieldKey}$CHOICE$${normalizedChoiceValue}`;
-  return t(conventionalKey, { defaultValue: schemaLabel });
+  const translated = t(conventionalKey, { defaultValue: "" });
+
+  if (translated) {
+    return translated;
+  }
+
+  // Log warning when falling back to untranslated schema label
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[i18n] Missing translation for key "${conventionalKey}", falling back to: "${schemaLabel}"`,
+  );
+
+  return schemaLabel;
 }
