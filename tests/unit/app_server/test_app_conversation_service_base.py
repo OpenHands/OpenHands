@@ -8,9 +8,11 @@ import subprocess
 from pathlib import Path
 from types import MethodType
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from uuid import uuid4
 
 import pytest
 
+from openhands.app_server.app_conversation.app_conversation_models import AgentType
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
 )
