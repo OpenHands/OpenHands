@@ -772,7 +772,47 @@ class TestSearchBranches:
         assert call_kwargs.get('selected_provider') == ProviderType.GITHUB
         assert call_kwargs.get('repository') == 'user/repo'
         assert call_kwargs.get('query') == 'feature'
-        assert call_kwargs.get('per_page') == 11  # limit + 1
+        assert call_kwargs.get('per_page') == 11  # page(1) * limit(10) + 1
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_returns_second_page_of_search_results(self, mock_handler_cls):
+        """Test that branch search supports pagination beyond the first page."""
+        # Arrange: provider returns 21 branches (enough to fill page 2)
+        all_branches = [
+            Branch(name=f'branch-{i}', commit_sha=f'sha{i}', protected=False)
+            for i in range(21)
+        ]
+        mock_handler = MagicMock()
+        mock_handler.search_branches = AsyncMock(return_value=all_branches)
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act: request page 2 with limit=10
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='branch',
+            page_id=encode_page_id(2),
+            limit=10,
+            user_context=mock_context,
+        )
+
+        # Assert: second page contains items 10-19, no next page
+        assert len(result.items) == 10
+        assert result.items[0].name == 'branch-10'
+        assert result.items[9].name == 'branch-19'
+        assert result.next_page_id is None
+
+        # The provider should have been asked for page*limit+1 = 2*10+1 = 21 items
+        call_kwargs = mock_handler.search_branches.call_args.kwargs
+        assert call_kwargs.get('per_page') == 21
 
     def test_returns_401_when_no_provider_tokens(self, test_client):
         """Test that 401 is returned when no provider tokens."""
