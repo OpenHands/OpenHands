@@ -56,8 +56,8 @@ const mockUseAppMode = vi.fn(() => ({
   isSelfHosted: false,
   isEnterpriseSelfHosted: false,
   isEnterpriseCloud: true,
-  appMode: "saas" as const,
-  deploymentMode: "cloud" as const,
+  appMode: "saas" as string | undefined,
+  deploymentMode: "cloud" as string | undefined,
 }));
 vi.mock("#/hooks/use-app-mode", () => ({
   useAppMode: () => mockUseAppMode(),
@@ -74,8 +74,8 @@ describe("LoginContent", () => {
       isSelfHosted: false,
       isEnterpriseSelfHosted: false,
       isEnterpriseCloud: true,
-      appMode: "saas" as const,
-      deploymentMode: "cloud" as const,
+      appMode: "saas",
+      deploymentMode: "cloud",
     });
   });
 
@@ -307,8 +307,8 @@ describe("LoginContent", () => {
       isSelfHosted: false,
       isEnterpriseSelfHosted: false,
       isEnterpriseCloud: true,
-      appMode: "saas" as const,
-      deploymentMode: "cloud" as const,
+      appMode: "saas",
+      deploymentMode: "cloud",
     });
 
     render(
@@ -332,7 +332,7 @@ describe("LoginContent", () => {
       isSelfHosted: false,
       isEnterpriseSelfHosted: false,
       isEnterpriseCloud: false,
-      appMode: "oss" as const,
+      appMode: "oss",
       deploymentMode: undefined,
     });
 
@@ -357,8 +357,8 @@ describe("LoginContent", () => {
       isSelfHosted: true,
       isEnterpriseSelfHosted: true,
       isEnterpriseCloud: false,
-      appMode: "saas" as const,
-      deploymentMode: "self_hosted" as const,
+      appMode: "saas",
+      deploymentMode: "self_hosted",
     });
 
     render(

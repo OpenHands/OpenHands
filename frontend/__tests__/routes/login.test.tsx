@@ -82,8 +82,8 @@ vi.mock("#/hooks/use-app-mode", () => ({
     isSelfHosted: false,
     isEnterpriseSelfHosted: false,
     isEnterpriseCloud: true,
-    appMode: "saas" as const,
-    deploymentMode: "cloud" as const,
+    appMode: "saas",
+    deploymentMode: "cloud",
   }),
 }));
 
