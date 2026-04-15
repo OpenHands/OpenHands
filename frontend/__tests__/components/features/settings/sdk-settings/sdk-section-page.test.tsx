@@ -251,6 +251,189 @@ describe("SdkSectionPage", () => {
     });
   });
 
+  it("resets from advanced to the inferred basic view after saving when advanced settings match defaults", async () => {
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "llm",
+          label: "LLM",
+          fields: [
+            {
+              key: "llm.endpoint",
+              label: "Endpoint",
+              section: "llm",
+              section_label: "LLM",
+              value_type: "string",
+              default: "https://api.example.com",
+              choices: [],
+              depends_on: [],
+              prominence: "critical",
+              secret: false,
+              required: true,
+            },
+            {
+              key: "llm.api_version",
+              label: "API Version",
+              section: "llm",
+              section_label: "LLM",
+              value_type: "string",
+              default: null,
+              choices: [],
+              depends_on: [],
+              prominence: "major",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    let persistedSettings = buildSettings({
+      agent_settings_schema: schema,
+      agent_settings: {
+        llm: {
+          endpoint: "https://api.example.com",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
+      const agentSettings = (payload.agent_settings ?? {}) as Record<string, unknown>;
+      const llmSettings = (agentSettings.llm ?? {}) as Record<string, unknown>;
+
+      persistedSettings = buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          llm: {
+            endpoint:
+              typeof llmSettings.endpoint === "string"
+                ? llmSettings.endpoint
+                : "https://api.example.com",
+          },
+        },
+      });
+
+      return true;
+    });
+
+    renderSdkSectionPage({ sectionKeys: ["llm"] });
+
+    await screen.findByTestId("sdk-section-advanced-toggle");
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+    await screen.findByTestId("sdk-settings-llm.api_version");
+
+    const endpointInput = await screen.findByTestId("sdk-settings-llm.endpoint");
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://api.changed.example.com");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("sdk-settings-llm.api_version"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("resets from all to the inferred basic view after saving when detailed settings match defaults", async () => {
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "llm",
+          label: "LLM",
+          fields: [
+            {
+              key: "llm.endpoint",
+              label: "Endpoint",
+              section: "llm",
+              section_label: "LLM",
+              value_type: "string",
+              default: "https://api.example.com",
+              choices: [],
+              depends_on: [],
+              prominence: "critical",
+              secret: false,
+              required: true,
+            },
+            {
+              key: "llm.timeout",
+              label: "Timeout",
+              section: "llm",
+              section_label: "LLM",
+              value_type: "integer",
+              default: 30,
+              choices: [],
+              depends_on: [],
+              prominence: "minor",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    let persistedSettings = buildSettings({
+      agent_settings_schema: schema,
+      agent_settings: {
+        llm: {
+          endpoint: "https://api.example.com",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
+      const agentSettings = (payload.agent_settings ?? {}) as Record<string, unknown>;
+      const llmSettings = (agentSettings.llm ?? {}) as Record<string, unknown>;
+
+      persistedSettings = buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          llm: {
+            endpoint:
+              typeof llmSettings.endpoint === "string"
+                ? llmSettings.endpoint
+                : "https://api.example.com",
+          },
+        },
+      });
+
+      return true;
+    });
+
+    renderSdkSectionPage({ sectionKeys: ["llm"] });
+
+    await screen.findByTestId("sdk-section-all-toggle");
+    await userEvent.click(screen.getByTestId("sdk-section-all-toggle"));
+    await screen.findByTestId("sdk-settings-llm.timeout");
+
+    const endpointInput = await screen.findByTestId("sdk-settings-llm.endpoint");
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://api.changed.example.com");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+    });
+  });
+
+
 
   it("shows the all toggle instead of an empty advanced tier for minor-only schemas", async () => {
     const schema: NonNullable<Settings["agent_settings_schema"]> = {

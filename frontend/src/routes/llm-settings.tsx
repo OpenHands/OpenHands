@@ -73,6 +73,10 @@ const KNOWN_PROVIDER_DEFAULT_BASE_URLS: Partial<Record<string, Set<string>>> = {
     "https://llm-proxy.app.all-hands.dev",
     "https://llm-proxy.app.all-hands.dev/v1",
   ]),
+  litellm_proxy: new Set([
+    "https://llm-proxy.app.all-hands.dev",
+    "https://llm-proxy.app.all-hands.dev/v1",
+  ]),
 };
 
 const normalizeBaseUrl = (baseUrl: string) => {
@@ -205,12 +209,10 @@ export function LlmSettingsScreen({
       const hasCustomBaseUrl =
         trimmedBaseUrl.length > 0 &&
         !isProviderDefaultBaseUrl(currentModel, trimmedBaseUrl);
-      const hasVisibleSearchApiKey =
-        !isSaasMode && currentSettings.search_api_key_set === true;
 
-      return hasCustomBaseUrl || hasVisibleSearchApiKey ? "all" : "basic";
+      return hasCustomBaseUrl ? "all" : "basic";
     },
-    [isSaasMode],
+    [],
   );
 
   const buildHeader = React.useCallback(

@@ -515,7 +515,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("keeps the basic view after save by clearing hidden search API key state", async () => {
+  it("clears hidden search API key state when saving basic view", async () => {
     let persistedSettings = buildSettingsWithAdvancedToggle({
       llm_model: "openai/gpt-4o",
       search_api_key: "tavily-key",
@@ -560,8 +560,7 @@ describe("LlmSettingsScreen", () => {
 
     renderLlmSettingsScreen({ appMode: "oss" });
 
-    await screen.findByTestId("llm-settings-form-advanced");
-    await userEvent.click(screen.getByTestId("sdk-section-basic-toggle"));
+    await screen.findByTestId("llm-settings-form-basic");
 
     const apiKeyInput = await screen.findByTestId("llm-api-key-input");
     await userEvent.type(apiKeyInput, "test-api-key");
@@ -892,6 +891,167 @@ describe("LlmSettingsScreen", () => {
       expect(
         screen.queryByTestId("llm-settings-form-basic"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not reveal all-only fields after save when the search API key remains set on refetch", async () => {
+    const schema = structuredClone(MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!);
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+
+    if (!llmSection) {
+      throw new Error("Expected llm section in test schema");
+    }
+
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+      ],
+    });
+
+    let persistedSettings = buildSettings({
+      agent_settings_schema: schema,
+      search_api_key: "",
+      search_api_key_set: false,
+      agent_settings: {
+        llm: {
+          model: "openhands/claude-opus-4-5-20251101",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
+      const nextSearchApiKey =
+        typeof payload.search_api_key === "string" ? payload.search_api_key : "";
+
+      persistedSettings = buildSettings({
+        agent_settings_schema: schema,
+        search_api_key: nextSearchApiKey,
+        search_api_key_set: nextSearchApiKey.trim().length > 0,
+        agent_settings: {
+          llm: {
+            model: "openhands/claude-opus-4-5-20251101",
+          },
+        },
+      });
+
+      return true;
+    });
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+    expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+
+    const searchApiKeyInput = await screen.findByTestId("search-api-key-input");
+    await userEvent.type(searchApiKeyInput, "tavily-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not reveal all-only fields after save when refetch returns a litellm_proxy model with the managed proxy base URL", async () => {
+    const schema = structuredClone(MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!);
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+
+    if (!llmSection) {
+      throw new Error("Expected llm section in test schema");
+    }
+
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+
+    let persistedSettings = buildSettings({
+      agent_settings_schema: schema,
+      agent_settings: {
+        llm: {
+          model: "openhands/claude-opus-4-5-20251101",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(async () => {
+      persistedSettings = buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          llm: {
+            model: "litellm_proxy/claude-opus-4-5-20251101",
+            base_url: "https://llm-proxy.app.all-hands.dev",
+          },
+        },
+      });
+
+      return true;
+    });
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+
+    await userEvent.type(
+      await screen.findByTestId("llm-api-key-input"),
+      "test-api-key",
+    );
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
     });
   });
 
