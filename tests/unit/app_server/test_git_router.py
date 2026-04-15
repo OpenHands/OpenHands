@@ -778,10 +778,10 @@ class TestSearchBranches:
     @patch('openhands.app_server.git.git_router.ProviderHandler')
     async def test_returns_second_page_of_search_results(self, mock_handler_cls):
         """Test that branch search supports pagination beyond the first page."""
-        # Arrange: provider returns 21 branches (enough to fill page 2)
+        # Arrange: provider returns 20 branches (exactly fills pages 1 and 2)
         all_branches = [
             Branch(name=f'branch-{i}', commit_sha=f'sha{i}', protected=False)
-            for i in range(21)
+            for i in range(20)
         ]
         mock_handler = MagicMock()
         mock_handler.search_branches = AsyncMock(return_value=all_branches)
