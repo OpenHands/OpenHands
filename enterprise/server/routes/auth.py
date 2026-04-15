@@ -581,12 +581,7 @@ async def authenticate(request: Request):
 
 async def _should_redirect_to_onboarding(user_id: str, user: User) -> bool:
     """Check if user should be redirected to onboarding after TOS acceptance.
-
-    Backend always redirects applicable users to /onboarding. The frontend
-    checks the ENABLE_ONBOARDING feature flag (localStorage) and redirects
-    to / if the flag is disabled. This avoids needing helm chart changes.
-
-
+    Backend always redirects applicable users to /onboarding.
     Returns True if:
     - User has onboarding_completed explicitly set to False (new users)
     - Either:
