@@ -206,7 +206,7 @@ def new_conversation_view(
     sample_webhook_payload, sample_user_auth, sample_jira_user, sample_jira_workspace
 ):
     """JiraNewConversationView instance for testing"""
-    return JiraNewConversationView(
+    view = JiraNewConversationView(
         payload=sample_webhook_payload,
         saas_user_auth=sample_user_auth,
         jira_user=sample_jira_user,
@@ -215,6 +215,8 @@ def new_conversation_view(
         conversation_id='conv-123',
         _decrypted_api_key='decrypted_key',
     )
+    view.v1_enabled = False
+    return view
 
 
 @pytest.fixture

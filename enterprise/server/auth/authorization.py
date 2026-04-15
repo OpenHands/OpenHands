@@ -87,6 +87,9 @@ class Permission(str, Enum):
     # Git organization claims
     MANAGE_ORG_CLAIMS = 'manage_org_claims'
 
+    # Manage Automations
+    MANAGE_AUTOMATIONS = 'manage_automations'
+
 
 class RoleName(str, Enum):
     """Role names used in the system."""
@@ -123,6 +126,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.DELETE_ORGANIZATION,
             # Git organization claims
             Permission.MANAGE_ORG_CLAIMS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
     RoleName.ADMIN: frozenset(
@@ -146,6 +151,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.EDIT_ORG_SETTINGS,
             # Git organization claims
             Permission.MANAGE_ORG_CLAIMS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
     RoleName.MEMBER: frozenset(
@@ -159,6 +166,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             # Settings (View only)
             Permission.VIEW_ORG_SETTINGS,
             Permission.VIEW_LLM_SETTINGS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
 }
