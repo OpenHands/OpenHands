@@ -458,9 +458,7 @@ def test_post_merge_llm_fixups_handles_openhands_model_after_sdk_transform():
 
     # Simulate: user sends openhands/claude-opus-4-5, sdk transforms it
     settings = Settings()
-    settings.update(
-        {'agent_settings': {'llm': {'model': 'openhands/claude-opus-4-5'}}}
-    )
+    settings.update({'agent_settings': {'llm': {'model': 'openhands/claude-opus-4-5'}}})
 
     # After SDK transform:
     assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5'
@@ -497,9 +495,7 @@ def test_get_agent_settings_display_clears_proxy_base_url():
     """get_agent_settings_display should clear the LiteLLM proxy base_url
     for openhands models so the frontend sees null (enabling basic mode)."""
     s = Settings(
-        agent_settings=AgentSettings(
-            llm=LLM(model='openhands/claude-opus-4-5')
-        )
+        agent_settings=AgentSettings(llm=LLM(model='openhands/claude-opus-4-5'))
     )
 
     # SDK sets the proxy URL internally

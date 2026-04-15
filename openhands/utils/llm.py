@@ -107,8 +107,7 @@ def is_openhands_model(model: str | None) -> bool:
         False otherwise.
     """
     return bool(
-        model
-        and (model.startswith('openhands/') or model.startswith('litellm_proxy/'))
+        model and (model.startswith('openhands/') or model.startswith('litellm_proxy/'))
     )
 
 

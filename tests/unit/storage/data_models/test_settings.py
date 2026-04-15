@@ -225,7 +225,6 @@ def test_settings_update_mcp_config():
     assert mcp.mcpServers['custom'].url == 'https://example.com/mcp'
 
 
-
 def test_settings_update_replaces_existing_mcp_servers():
     settings = Settings(
         agent_settings=AgentSettings(
