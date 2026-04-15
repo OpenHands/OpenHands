@@ -5,7 +5,6 @@
 #   - V1 application server (in this repo): openhands/app_server/
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
-import json
 import os
 import tempfile
 import threading
@@ -401,7 +400,7 @@ class ActionExecutionClient(Runtime):
 
         self.log(
             'debug',
-            f'adding {len(new_servers)} new stdio servers to MCP config: {redact_text_secrets(json.dumps([s.model_dump() for s in new_servers]))}',
+            f'adding {len(new_servers)} new stdio servers to MCP config: {redact_text_secrets(str(new_servers))}',
         )
 
         # Only send update request if there are new servers
@@ -446,7 +445,7 @@ class ActionExecutionClient(Runtime):
                 )
             self.log(
                 'info',
-                f'Updated MCP config: {redact_text_secrets(json.dumps([s.model_dump() for s in updated_mcp_config.sse_servers]))}',
+                f'Updated MCP config: {redact_text_secrets(str(updated_mcp_config.sse_servers))}',
             )
         else:
             self.log('debug', 'No new stdio servers to update')
@@ -480,7 +479,7 @@ class ActionExecutionClient(Runtime):
         updated_mcp_config = self.get_mcp_config()
         self.log(
             'debug',
-            f'Creating MCP clients with servers: {redact_text_secrets(json.dumps([s.model_dump() for s in updated_mcp_config.sse_servers]))}',
+            f'Creating MCP clients with servers: {redact_text_secrets(str(updated_mcp_config.sse_servers))}',
         )
 
         # Create clients for this specific operation

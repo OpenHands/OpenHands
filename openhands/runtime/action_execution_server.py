@@ -14,7 +14,6 @@ NOTE: this will be executed inside the docker sandbox.
 import argparse
 import asyncio
 import base64
-import json
 import mimetypes
 import os
 import shutil
@@ -872,7 +871,7 @@ if __name__ == '__main__':
                 status_code=400, detail='Request must be a list of MCP tools to sync'
             )
         logger.info(
-            f'Updating MCP server with tools: {redact_text_secrets(json.dumps(mcp_tools_to_sync, indent=2))}'
+            f'Updating MCP server with tools: {redact_text_secrets(str(mcp_tools_to_sync))}'
         )
         mcp_tools_to_sync = [MCPStdioServerConfig(**tool) for tool in mcp_tools_to_sync]
         try:

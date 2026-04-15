@@ -3,8 +3,6 @@
 These tests verify that MCP config secrets are properly redacted before logging.
 """
 
-import json
-
 from openhands.utils._redact_compat import (
     redact_api_key_literals,
     redact_text_secrets,
@@ -99,8 +97,8 @@ class TestMCPConfigLoggingIntegration:
             }
         ]
 
-        # This is what the code does before logging
-        log_output = redact_text_secrets(json.dumps(mcp_tools_to_sync, indent=2))
+        # This is what the code does before logging - just str()
+        log_output = redact_text_secrets(str(mcp_tools_to_sync))
 
         assert 'tvly-realSecretKey123' not in log_output
         assert REDACTED in log_output
@@ -115,7 +113,7 @@ class TestMCPConfigLoggingIntegration:
             }
         ]
 
-        log_output = redact_text_secrets(json.dumps(sse_servers))
+        log_output = redact_text_secrets(str(sse_servers))
 
         assert 'sk-oh-realSessionKey456' not in log_output
         assert REDACTED in log_output
