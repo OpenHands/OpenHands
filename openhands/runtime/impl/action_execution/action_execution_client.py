@@ -5,6 +5,7 @@
 #   - V1 application server (in this repo): openhands/app_server/
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
+import json
 import os
 import tempfile
 import threading
@@ -55,7 +56,7 @@ from openhands.llm.llm_registry import LLMRegistry
 from openhands.runtime.base import Runtime
 from openhands.runtime.plugins import PluginRequirement
 from openhands.runtime.utils.request import send_request
-from openhands.utils._redact_compat import sanitize_for_logging
+from openhands.utils._redact_compat import redact_text_secrets
 from openhands.utils.http_session import HttpSession
 from openhands.utils.tenacity_stop import stop_if_should_exit
 
@@ -400,7 +401,7 @@ class ActionExecutionClient(Runtime):
 
         self.log(
             'debug',
-            f'adding {len(new_servers)} new stdio servers to MCP config: {sanitize_for_logging([s.model_dump() for s in new_servers])}',
+            f'adding {len(new_servers)} new stdio servers to MCP config: {redact_text_secrets(json.dumps([s.model_dump() for s in new_servers]))}',
         )
 
         # Only send update request if there are new servers
@@ -445,7 +446,7 @@ class ActionExecutionClient(Runtime):
                 )
             self.log(
                 'info',
-                f'Updated MCP config: {sanitize_for_logging([s.model_dump() for s in updated_mcp_config.sse_servers])}',
+                f'Updated MCP config: {redact_text_secrets(json.dumps([s.model_dump() for s in updated_mcp_config.sse_servers]))}',
             )
         else:
             self.log('debug', 'No new stdio servers to update')
@@ -479,7 +480,7 @@ class ActionExecutionClient(Runtime):
         updated_mcp_config = self.get_mcp_config()
         self.log(
             'debug',
-            f'Creating MCP clients with servers: {sanitize_for_logging([s.model_dump() for s in updated_mcp_config.sse_servers])}',
+            f'Creating MCP clients with servers: {redact_text_secrets(json.dumps([s.model_dump() for s in updated_mcp_config.sse_servers]))}',
         )
 
         # Create clients for this specific operation

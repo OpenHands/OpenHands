@@ -77,7 +77,7 @@ def _walk_redact_urls(obj: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# sanitize_config / sanitize_for_logging
+# sanitize_config
 # ---------------------------------------------------------------------------
 
 
@@ -87,23 +87,6 @@ def sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
     config = sanitize_dict(config)
     config = _walk_redact_urls(config)
     return config
-
-
-def sanitize_for_logging(data: Any) -> Any:
-    """Deep-copy and sanitize data (dict, list, or primitive) for safe logging.
-
-    This handles both dicts and lists, recursively redacting secret keys
-    and URL query params. Use this for logging arbitrary config data.
-    """
-    data = copy.deepcopy(data)
-    if isinstance(data, dict):
-        data = sanitize_dict(data)
-    elif isinstance(data, list):
-        data = [
-            sanitize_dict(item) if isinstance(item, dict) else item for item in data
-        ]
-    data = _walk_redact_urls(data)
-    return data
 
 
 # ---------------------------------------------------------------------------
@@ -140,9 +123,11 @@ def redact_api_key_literals(text: str) -> str:
 
 def redact_text_secrets(text: str) -> str:
     """Redact secrets from a string representation of a config object."""
-    # api_key='...' patterns
+    # api_key='...' patterns (Python repr style)
     text = re.sub(r"api_key='[^']*'", "api_key='<redacted>'", text)
     text = re.sub(r'api_key="[^"]*"', 'api_key="<redacted>"', text)
+    # "api_key": "..." patterns (JSON style)
+    text = re.sub(r'"api_key":\s*"[^"]*"', '"api_key": "<redacted>"', text)
 
     # Dict entries with sensitive key names
     text = re.sub(

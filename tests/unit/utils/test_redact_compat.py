@@ -9,169 +9,10 @@ from openhands.utils._redact_compat import (
     redact_api_key_literals,
     redact_text_secrets,
     redact_url_params,
-    sanitize_config,
-    sanitize_for_logging,
 )
 
-# The SDK uses '<redacted>' as the placeholder
+# The redaction placeholder
 REDACTED = '<redacted>'
-
-
-class TestSanitizeForLogging:
-    """Tests for sanitize_for_logging which handles both dicts and lists."""
-
-    def test_sanitize_list_of_mcp_stdio_configs(self):
-        """Test that MCP stdio server configs with env secrets are redacted."""
-        mcp_tools = [
-            {
-                'name': 'tavily',
-                'command': 'npx',
-                'args': ['-y', '@tavily/mcp-server'],
-                'env': {'TAVILY_API_KEY': 'tvly-abc123secretkey'},
-            },
-            {
-                'name': 'other-tool',
-                'command': 'other-cmd',
-                'env': {'OTHER_KEY': 'other-value', 'API_TOKEN': 'secret-token-123'},
-            },
-        ]
-
-        sanitized = sanitize_for_logging(mcp_tools)
-
-        # TAVILY_API_KEY should be redacted
-        assert sanitized[0]['env']['TAVILY_API_KEY'] == REDACTED
-        # API_TOKEN should be redacted (contains TOKEN)
-        assert sanitized[1]['env']['API_TOKEN'] == REDACTED
-        # Non-sensitive values should remain
-        assert sanitized[0]['name'] == 'tavily'
-        assert sanitized[0]['command'] == 'npx'
-
-    def test_sanitize_list_of_mcp_sse_configs(self):
-        """Test that MCP SSE server configs with api_key are redacted."""
-        sse_servers = [
-            {
-                'url': 'http://localhost:8000/mcp/sse',
-                'api_key': 'sk-oh-abc123sessionkey',
-            },
-            {
-                'url': 'http://other-server/sse',
-                'api_key': 'another-api-key-value',
-            },
-        ]
-
-        sanitized = sanitize_for_logging(sse_servers)
-
-        # api_key should be redacted
-        assert sanitized[0]['api_key'] == REDACTED
-        assert sanitized[1]['api_key'] == REDACTED
-        # URLs should remain
-        assert sanitized[0]['url'] == 'http://localhost:8000/mcp/sse'
-
-    def test_sanitize_dict_with_secrets(self):
-        """Test that dicts with secret keys are redacted."""
-        config = {
-            'name': 'test',
-            'password': 'secret123',
-            'api_key': 'my-api-key',
-            'OPENAI_API_KEY': 'sk-proj-abc123',
-        }
-
-        sanitized = sanitize_for_logging(config)
-
-        assert sanitized['password'] == REDACTED
-        assert sanitized['api_key'] == REDACTED
-        assert sanitized['OPENAI_API_KEY'] == REDACTED
-        assert sanitized['name'] == 'test'
-
-    def test_sanitize_does_not_mutate_original(self):
-        """Test that sanitization creates a deep copy."""
-        original = [{'name': 'test', 'env': {'API_KEY': 'secret'}}]
-
-        sanitize_for_logging(original)
-
-        # Original should not be modified
-        assert original[0]['env']['API_KEY'] == 'secret'
-
-    def test_sanitize_empty_list(self):
-        """Test sanitizing an empty list."""
-        assert sanitize_for_logging([]) == []
-
-    def test_sanitize_nested_secrets(self):
-        """Test that nested secrets in env dicts are redacted.
-
-        Note: The SDK's sanitize_dict redacts ALL values inside 'env' dicts
-        since environment variables typically contain sensitive data.
-        """
-        config = [
-            {
-                'name': 'nested',
-                'env': {
-                    'NESTED_SECRET_KEY': 'should-be-hidden',
-                    'NORMAL_VAR': 'also-hidden-in-env',
-                },
-            }
-        ]
-
-        sanitized = sanitize_for_logging(config)
-
-        # ALL env values are redacted (SDK's security-first approach)
-        assert sanitized[0]['env']['NESTED_SECRET_KEY'] == REDACTED
-        assert sanitized[0]['env']['NORMAL_VAR'] == REDACTED
-        # Non-env fields remain visible
-        assert sanitized[0]['name'] == 'nested'
-
-    def test_sanitize_url_with_api_key_param(self):
-        """Test that URLs with sensitive query params are redacted."""
-        config = [
-            {
-                'url': 'https://api.example.com?apiKey=secret123&other=visible',
-                'name': 'test',
-            }
-        ]
-
-        sanitized = sanitize_for_logging(config)
-
-        assert 'secret123' not in sanitized[0]['url']
-        assert 'other=visible' in sanitized[0]['url']
-
-    def test_sanitize_x_session_api_key_header(self):
-        """Test that X-Session-API-Key headers are redacted.
-
-        Note: The SDK's sanitize_dict redacts ALL values inside 'headers' dicts
-        since headers often contain sensitive auth data.
-        """
-        config = {
-            'headers': {
-                'X-Session-API-Key': 'sk-oh-secret123',
-                'Content-Type': 'application/json',
-            }
-        }
-
-        sanitized = sanitize_for_logging(config)
-
-        # ALL header values are redacted (SDK's security-first approach)
-        assert sanitized['headers']['X-Session-API-Key'] == REDACTED
-        assert sanitized['headers']['Content-Type'] == REDACTED
-
-
-class TestSanitizeConfig:
-    """Tests for sanitize_config (dict-only version)."""
-
-    def test_sanitize_mcp_config_dict(self):
-        """Test sanitizing a full MCP config dict."""
-        config = {
-            'sse_servers': [
-                {'url': 'http://localhost/sse', 'api_key': 'secret-key'},
-            ],
-            'stdio_servers': [
-                {'name': 'tavily', 'env': {'TAVILY_API_KEY': 'tvly-secret'}},
-            ],
-        }
-
-        sanitized = sanitize_config(config)
-
-        assert sanitized['sse_servers'][0]['api_key'] == REDACTED
-        assert sanitized['stdio_servers'][0]['env']['TAVILY_API_KEY'] == REDACTED
 
 
 class TestRedactTextSecrets:
@@ -259,8 +100,7 @@ class TestMCPConfigLoggingIntegration:
         ]
 
         # This is what the code does before logging
-        sanitized = sanitize_for_logging(mcp_tools_to_sync)
-        log_output = json.dumps(sanitized, indent=2)
+        log_output = redact_text_secrets(json.dumps(mcp_tools_to_sync, indent=2))
 
         assert 'tvly-realSecretKey123' not in log_output
         assert REDACTED in log_output
@@ -275,8 +115,7 @@ class TestMCPConfigLoggingIntegration:
             }
         ]
 
-        sanitized = sanitize_for_logging(sse_servers)
-        log_output = str(sanitized)
+        log_output = redact_text_secrets(json.dumps(sse_servers))
 
         assert 'sk-oh-realSessionKey456' not in log_output
         assert REDACTED in log_output
