@@ -336,12 +336,24 @@ class Settings(BaseModel):
         """Return agent_settings dict with display-friendly model names.
 
         ``litellm_proxy/`` prefixes are normalised to ``openhands/``.
+        The LiteLLM proxy ``base_url`` is cleared for managed models so
+        that the frontend can display "basic" mode.
         Secrets are masked by Pydantic's default serialiser.
         """
+        from openhands.utils.llm import is_openhands_model
+
         data = self.agent_settings.model_dump(mode='json')
         llm = data.get('llm')
         if isinstance(llm, dict):
             model = llm.get('model')
             if isinstance(model, str) and model.startswith('litellm_proxy/'):
                 llm['model'] = f'openhands/{model.removeprefix("litellm_proxy/")}'
+            # Clear the proxy base_url for managed models so the frontend
+            # sees null and can display the simple "basic" settings view.
+            if is_openhands_model(model):
+                base_url = llm.get('base_url')
+                if isinstance(base_url, str) and base_url.rstrip('/').endswith(
+                    'llm-proxy.app.all-hands.dev'
+                ):
+                    llm['base_url'] = None
         return data

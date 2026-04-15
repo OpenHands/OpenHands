@@ -129,15 +129,25 @@ async def load_settings(
             provider_tokens_set=provider_tokens_set,
         )
 
-        # If the base url matches the default for the provider, we don't send it
-        # So that the frontend can display basic mode
-        if is_openhands_model(llm.model):
-            if llm.base_url == LITE_LLM_API_URL:
-                settings_with_token_data.agent_settings.llm.base_url = None
-        elif llm.model and llm.base_url == get_provider_api_base(llm.model):
-            settings_with_token_data.agent_settings.llm.base_url = None
+        # Convert litellm_proxy/ back to openhands/ for the frontend
+        resp_llm = settings_with_token_data.agent_settings.llm
+        if resp_llm.model and resp_llm.model.startswith('litellm_proxy/'):
+            resp_llm.model = (
+                f'openhands/{resp_llm.model.removeprefix("litellm_proxy/")}'
+            )
 
-        settings_with_token_data.agent_settings.llm.api_key = None
+        # If the base url matches the default for the provider, we don't send it
+        # So that the frontend can display basic mode.
+        # Normalize trailing slashes for comparison since the SDK may add one.
+        normalized_base = (llm.base_url or '').rstrip('/')
+        normalized_proxy = LITE_LLM_API_URL.rstrip('/')
+        if is_openhands_model(llm.model):
+            if normalized_base == normalized_proxy:
+                resp_llm.base_url = None
+        elif llm.model and llm.base_url == get_provider_api_base(llm.model):
+            resp_llm.base_url = None
+
+        resp_llm.api_key = None
         settings_with_token_data.search_api_key = None
         settings_with_token_data.sandbox_api_key = None
         return settings_with_token_data

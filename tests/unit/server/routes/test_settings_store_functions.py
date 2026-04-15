@@ -441,6 +441,103 @@ def test_litellm_proxy_model_settings_migrate_back_to_openhands_prefix():
     assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
 
 
+# ──────────────────────────────────────────────────────────────────
+# Regression tests for openhands/ → litellm_proxy/ round-trip bug
+# ──────────────────────────────────────────────────────────────────
+# The SDK's AgentSettings.model_validate automatically transforms
+# "openhands/X" → "litellm_proxy/X" with a proxy base_url.  The
+# settings router must convert it back for the frontend and handle
+# the internal model name in is_openhands_model-style checks.
+
+
+def test_post_merge_llm_fixups_handles_openhands_model_after_sdk_transform():
+    """After SDK transforms openhands/X → litellm_proxy/X with a base_url,
+    _post_merge_llm_fixups should recognise it as a managed model and not
+    clobber the base_url with a provider lookup."""
+    from openhands.app_server.settings.settings_router import _post_merge_llm_fixups
+
+    # Simulate: user sends openhands/claude-opus-4-5, sdk transforms it
+    settings = Settings()
+    settings.update(
+        {'agent_settings': {'llm': {'model': 'openhands/claude-opus-4-5'}}}
+    )
+
+    # After SDK transform:
+    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5'
+    assert settings.agent_settings.llm.base_url is not None  # SDK set it
+
+    # _post_merge_llm_fixups should NOT break the base_url
+    _post_merge_llm_fixups(settings)
+    assert settings.agent_settings.llm.base_url is not None
+
+
+def test_post_merge_llm_fixups_sets_proxy_url_for_openhands_model_with_null_base_url():
+    """When an openhands model ends up with a null base_url (edge case from
+    older storage), _post_merge_llm_fixups should set the proxy URL."""
+    from openhands.app_server.settings.settings_router import (
+        LITE_LLM_API_URL,
+        _post_merge_llm_fixups,
+    )
+
+    settings = Settings(
+        agent_settings=AgentSettings(
+            llm=LLM(model='litellm_proxy/claude-opus-4-5', base_url=None)
+        ),
+    )
+    # Force base_url to None (bypass SDK validator for this edge case)
+    settings.agent_settings.llm.base_url = None
+
+    _post_merge_llm_fixups(settings)
+
+    # Should recognise litellm_proxy/ as a managed model and set the URL
+    assert settings.agent_settings.llm.base_url == LITE_LLM_API_URL
+
+
+def test_get_agent_settings_display_clears_proxy_base_url():
+    """get_agent_settings_display should clear the LiteLLM proxy base_url
+    for openhands models so the frontend sees null (enabling basic mode)."""
+    s = Settings(
+        agent_settings=AgentSettings(
+            llm=LLM(model='openhands/claude-opus-4-5')
+        )
+    )
+
+    # SDK sets the proxy URL internally
+    assert s.agent_settings.llm.base_url is not None
+
+    display = s.get_agent_settings_display()
+    # Model name should be converted back
+    assert display['llm']['model'] == 'openhands/claude-opus-4-5'
+    # Proxy base_url should be cleared for display
+    assert display['llm']['base_url'] is None
+
+
+def test_save_then_display_roundtrip_openhands_model():
+    """Full round-trip: save openhands model via update(), then display it.
+    The frontend should see openhands/X with null base_url (basic mode)."""
+    # Simulate save
+    settings = Settings()
+    settings.update(
+        {
+            'agent_settings': {
+                'llm': {
+                    'model': 'openhands/claude-opus-4-5',
+                    'api_key': '',
+                    'base_url': None,
+                }
+            }
+        }
+    )
+
+    # Verify internal representation
+    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5'
+
+    # Simulate load response
+    display = settings.get_agent_settings_display()
+    assert display['llm']['model'] == 'openhands/claude-opus-4-5'
+    assert display['llm']['base_url'] is None
+
+
 # Tests for store_provider_tokens
 @pytest.mark.asyncio
 async def test_store_provider_tokens_new_tokens(test_client, file_secrets_store):
