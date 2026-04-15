@@ -436,12 +436,13 @@ def infer_repo_from_message(user_msg: str) -> list[str]:
         r'(?=\s|$|}}|[\]\)\'",.:`])'  # right boundary
     )
 
-    matches: list[str] = []
+    # Use dict to preserve ordering
+    matches: dict[str, bool] = {}
 
     # Git URLs first (highest priority)
     for owner, repo in re.findall(git_url_pattern, normalized_msg):
         repo = re.sub(r'\.git$', '', repo)
-        matches.append(f'{owner}/{repo}')
+        matches[f'{owner}/{repo}'] = True
 
     # Direct mentions
     for owner, repo in re.findall(direct_pattern, normalized_msg):
@@ -457,9 +458,10 @@ def infer_repo_from_message(user_msg: str) -> list[str]:
             continue
 
         if full_match not in matches:
-            matches.append(full_match)
+            matches[full_match] = True
 
-    return matches
+    result = list(matches)
+    return result
 
 
 def filter_potential_repos_by_user_msg(
@@ -595,3 +597,18 @@ def markdown_to_jira_markup(markdown_text: str) -> str:
         # Log the error but don't raise it - return original text as fallback
         print(f'Error converting markdown to Jira markup: {str(e)}')
         return markdown_text or ''
+
+
+def format_jira_comment_body(message: str) -> dict:
+    """Format a message as a Jira API v2 comment body.
+
+    This helper ensures consistent comment formatting across all Jira integrations.
+    Converts markdown to Jira Wiki Markup and wraps in the expected API structure.
+
+    Args:
+        message: The message content to send (may contain markdown)
+
+    Returns:
+        dict: The comment body in Jira API v2 format {'body': ...}
+    """
+    return {'body': markdown_to_jira_markup(message)}

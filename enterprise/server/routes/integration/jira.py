@@ -149,7 +149,12 @@ async def verify_jira_signature(body: bytes, signature: str, payload: dict):
 
     workspace_name = jira_manager.get_workspace_name_from_payload(payload)
     if workspace_name is None:
-        logger.warning('[Jira] No workspace name found in webhook payload')
+        logger.warning(
+            '[Jira] No workspace name found in webhook payload',
+            extra={
+                'payload': payload,
+            },
+        )
         raise HTTPException(
             status_code=403, detail='Workspace name not found in payload'
         )

@@ -24,21 +24,20 @@ from integrations.jira.jira_types import (
     RepositoryNotFoundError,
     StartingConvoException,
 )
-from integrations.jira.jira_view import JiraFactory, JiraNewConversationView
+from integrations.jira.jira_view import JiraFactory
 from integrations.manager import Manager
 from integrations.models import Message
 from integrations.utils import (
     HOST,
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
+    format_jira_comment_body,
     get_oh_labels,
     get_session_expired_message,
-    markdown_to_jira_markup,
 )
 from jinja2 import Environment, FileSystemLoader
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
-from server.utils.conversation_callback_utils import register_callback_processor
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
@@ -260,11 +259,6 @@ class JiraManager(Manager[JiraViewInterface]):
 
     async def start_job(self, view: JiraViewInterface) -> None:
         """Start a Jira job/conversation."""
-        # Import here to prevent circular import
-        from server.conversation_callback_processor.jira_callback_processor import (
-            JiraCallbackProcessor,
-        )
-
         try:
             logger.info(
                 '[Jira] Starting job',
@@ -286,19 +280,7 @@ class JiraManager(Manager[JiraViewInterface]):
                 },
             )
 
-            # Register callback processor for updates
-            if isinstance(view, JiraNewConversationView):
-                processor = JiraCallbackProcessor(
-                    issue_key=view.payload.issue_key,
-                    workspace_name=view.jira_workspace.name,
-                )
-                register_callback_processor(conversation_id, processor)
-                logger.info(
-                    '[Jira] Callback processor registered',
-                    extra={'conversation_id': conversation_id},
-                )
-
-            # Send success response
+            # Create success message
             msg_info = view.get_response_msg()
 
         except MissingSettingsError as e:
@@ -360,8 +342,7 @@ class JiraManager(Manager[JiraViewInterface]):
         url = (
             f'{JIRA_CLOUD_API_URL}/{jira_cloud_id}/rest/api/2/issue/{issue_key}/comment'
         )
-        # Convert standard Markdown to Jira Wiki Markup for proper rendering
-        data = {'body': markdown_to_jira_markup(message)}
+        data = format_jira_comment_body(message)
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(
                 url, auth=(svc_acc_email, svc_acc_api_key), json=data

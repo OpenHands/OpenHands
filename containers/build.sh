@@ -8,18 +8,18 @@ push=0
 load=0
 tag_suffix=""
 dry_run=0
-platform_override=""
+arch_suffix=""
 
 # Function to display usage information
 usage() {
-    echo "Usage: $0 -i <image_name> [-o <org_name>] [--push] [--load] [-t <tag_suffix>] [-p <platform>] [--dry]"
+    echo "Usage: $0 -i <image_name> [-o <org_name>] [--push] [--load] [-t <tag_suffix>] [--dry] [--arch <arch>]"
     echo "  -i: Image name (required)"
     echo "  -o: Organization name"
     echo "  --push: Push the image"
     echo "  --load: Load the image"
     echo "  -t: Tag suffix"
-    echo "  -p: Platform(s) to build for (e.g. linux/amd64 or linux/amd64,linux/arm64)"
     echo "  --dry: Don't build, only create build-args.json"
+    echo "  --arch: Architecture suffix (e.g. amd64 or arm64). Appends -<arch> to tags and forces single-platform build"
     exit 1
 }
 
@@ -31,8 +31,8 @@ while [[ $# -gt 0 ]]; do
         --push) push=1; shift ;;
         --load) load=1; shift ;;
         -t) tag_suffix="$2"; shift 2 ;;
-        -p) platform_override="$2"; shift 2 ;;
         --dry) dry_run=1; shift ;;
+        --arch) arch_suffix="$2"; shift 2 ;;
         *) usage ;;
     esac
 done
@@ -78,7 +78,7 @@ if [[ -n $tag_suffix ]]; then
   done
 fi
 
-echo "Tags: ${tags[@]}"
+echo "Tags (before arch suffix): ${tags[@]}"
 
 if [[ "$image_name" == "openhands" ]]; then
   dir="./containers/app"
@@ -113,10 +113,21 @@ if [[ -n "$DOCKER_IMAGE_TAG" ]]; then
   tags+=("$DOCKER_IMAGE_TAG")
 fi
 
+# Apply architecture suffix for split-arch builds (after all tags are collected)
+if [[ -n "$arch_suffix" ]]; then
+  cache_tag+="-${arch_suffix}"
+  for i in "${!tags[@]}"; do
+    tags[$i]="${tags[$i]}-${arch_suffix}"
+  done
+  # Force single-platform build for this architecture
+  arch_platform="linux/${arch_suffix}"
+fi
+
 DOCKER_REPOSITORY="$DOCKER_REGISTRY/$DOCKER_ORG/$DOCKER_IMAGE"
 DOCKER_REPOSITORY=${DOCKER_REPOSITORY,,} # lowercase
 echo "Repo: $DOCKER_REPOSITORY"
 echo "Base dir: $DOCKER_BASE_DIR"
+echo "Tags: ${tags[@]}"
 
 args=""
 full_tags=()
@@ -124,7 +135,6 @@ for tag in "${tags[@]}"; do
   args+=" -t $DOCKER_REPOSITORY:$tag"
   full_tags+=("$DOCKER_REPOSITORY:$tag")
 done
-
 
 if [[ $push -eq 1 ]]; then
   args+=" --push"
@@ -138,8 +148,8 @@ fi
 echo "Args: $args"
 
 # Determine the platform(s) to build for
-if [[ -n "$platform_override" ]]; then
-  platform="$platform_override"
+if [[ -n "$arch_platform" ]]; then
+  platform="$arch_platform"
 elif [[ $load -eq 1 ]]; then
   # When loading, build only for the current platform
   platform=$(docker version -f '{{.Server.Os}}/{{.Server.Arch}}')
@@ -149,13 +159,24 @@ else
 fi
 if [[ $dry_run -eq 1 ]]; then
   echo "Dry Run is enabled. Writing build config to docker-build-dry.json"
+  # Compute base tags (arch suffix stripped) for use by merge jobs
+  base_tags=()
+  for ftag in "${full_tags[@]}"; do
+    if [[ -n "$arch_suffix" ]]; then
+      base_tags+=("${ftag%-${arch_suffix}}")
+    else
+      base_tags+=("$ftag")
+    fi
+  done
   jq -n \
     --argjson tags "$(printf '%s\n' "${full_tags[@]}" | jq -R . | jq -s .)" \
+    --argjson base_tags "$(printf '%s\n' "${base_tags[@]}" | jq -R . | jq -s .)" \
     --arg platform "$platform" \
     --arg openhands_build_version "$OPENHANDS_BUILD_VERSION" \
     --arg dockerfile "$dir/Dockerfile" \
     '{
       tags: $tags,
+      base_tags: $base_tags,
       platform: $platform,
       build_args: [
         "OPENHANDS_BUILD_VERSION=" + $openhands_build_version
@@ -174,7 +195,7 @@ docker buildx build \
   $args \
   --build-arg OPENHANDS_BUILD_VERSION="$OPENHANDS_BUILD_VERSION" \
   --cache-from=type=registry,ref=$DOCKER_REPOSITORY:$cache_tag \
-  --cache-from=type=registry,ref=$DOCKER_REPOSITORY:$cache_tag_base-main \
+  --cache-from=type=registry,ref=$DOCKER_REPOSITORY:${cache_tag_base}-main${arch_suffix:+-${arch_suffix}} \
   --platform $platform \
   --provenance=false \
   -f "$dir/Dockerfile" \
