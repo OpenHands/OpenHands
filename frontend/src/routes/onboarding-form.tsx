@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, redirect } from "react-router";
+import { useNavigate, redirect, useLoaderData } from "react-router";
 import StepHeader from "#/components/features/onboarding/step-header";
 import { StepContent } from "#/components/features/onboarding/step-content";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -10,26 +10,43 @@ import { useSubmitOnboarding } from "#/hooks/mutation/use-submit-onboarding";
 import { useTracking } from "#/hooks/use-tracking";
 import { ENABLE_ONBOARDING } from "#/utils/feature-flags";
 import { cn } from "#/utils/utils";
-import { useConfig } from "#/hooks/query/use-config";
+import { useMe } from "#/hooks/query/use-me";
 import {
   ONBOARDING_FORM,
   OnboardingQuestion,
   OnboardingAppMode,
 } from "#/constants/onboarding";
+import {
+  DeploymentMode,
+  WebClientConfig,
+} from "#/api/option-service/option.types";
+import { queryClient } from "#/query-client-config";
+import OptionService from "#/api/option-service/option-service.api";
 
 export const clientLoader = async () => {
-  if (!ENABLE_ONBOARDING()) {
+  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
+  if (!config) {
+    config = await OptionService.getConfig();
+    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
+  }
+
+  // Only allow access to onboarding for SaaS mode (cloud or self-hosted)
+  // OSS users should never reach /onboarding
+  if (config?.app_mode !== "saas" || !ENABLE_ONBOARDING()) {
     return redirect("/");
   }
 
-  return null;
+  return { config };
 };
 
 type OnboardingAnswers = Record<string, string | string[]>;
 
-function getOnboardingAppMode(): OnboardingAppMode {
-  // TODO: query for app mode (saas or self hosted super user)
-  return "saas";
+function getOnboardingAppMode(
+  deploymentMode: DeploymentMode | undefined,
+): OnboardingAppMode {
+  if (deploymentMode === "self_hosted") return "self-hosted";
+  if (deploymentMode === "cloud") return "cloud";
+  return "oss";
 }
 
 function getAnswerAsArray(answers: OnboardingAnswers, key: string): string[] {
@@ -63,11 +80,15 @@ function getTranslatedInputFields(
 function OnboardingForm() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const config = useConfig({ enabled: true });
+  const loaderData = useLoaderData<typeof clientLoader>();
+  const config = loaderData?.config;
+  const { data: me } = useMe();
   const { mutate: submitOnboarding } = useSubmitOnboarding();
   const { trackOnboardingCompleted } = useTracking();
 
-  const onboardingAppMode: OnboardingAppMode = getOnboardingAppMode();
+  const onboardingAppMode: OnboardingAppMode = getOnboardingAppMode(
+    config?.feature_flags?.deployment_mode,
+  );
 
   const steps = React.useMemo(
     () =>
@@ -148,8 +169,16 @@ function OnboardingForm() {
     if (isLastStep) {
       submitOnboarding({ selections: answers });
 
-      // Only track onboarding for SaaS users
-      if (config.data?.app_mode === "saas") {
+      // Track onboarding completion based on deployment mode:
+      // - Cloud mode: track ALL users
+      // - Self-hosted mode: track only org owners (SuperAdmin)
+      const deploymentMode = config?.feature_flags?.deployment_mode;
+      const isOwner = me?.role === "owner";
+      const shouldTrack =
+        deploymentMode === "cloud" ||
+        (deploymentMode === "self_hosted" && isOwner);
+
+      if (shouldTrack) {
         trackOnboardingCompleted({
           role: typeof answers.role === "string" ? answers.role : undefined,
           orgSize:
@@ -180,59 +209,61 @@ function OnboardingForm() {
   const translatedInputFields = getTranslatedInputFields(currentStep, t);
 
   return (
-    <div
-      data-testid="onboarding-form"
-      className="w-[500px] max-w-[calc(100vw-2rem)] mx-auto p-4 sm:p-6 flex flex-col justify-center overflow-hidden"
-    >
-      <div className="flex flex-col items-center mb-4">
-        <OpenHandsLogoWhite width={55} height={55} />
-      </div>
-      <StepHeader
-        title={t(currentStep.questionKey)}
-        subtitle={
-          currentStep.subtitleKey ? t(currentStep.subtitleKey) : undefined
-        }
-        currentStep={currentStepIndex + 1}
-        totalSteps={steps.length}
-      />
-      <StepContent
-        options={translatedOptions}
-        inputFields={translatedInputFields}
-        selectedOptionIds={currentSelections}
-        inputValues={inputValues}
-        onSelectOption={handleSelectOption}
-        onInputChange={handleInputChange}
-      />
+    <div className="min-h-screen flex items-center justify-center">
       <div
-        data-testid="step-actions"
-        className="flex justify-end items-center gap-3"
+        data-testid="onboarding-form"
+        className="w-[500px] max-w-[calc(100vw-2rem)] mx-auto p-4 sm:p-6 flex flex-col justify-center overflow-hidden"
       >
-        {!isFirstStep && (
+        <div className="flex flex-col items-center mb-4">
+          <OpenHandsLogoWhite width={55} height={55} />
+        </div>
+        <StepHeader
+          title={t(currentStep.questionKey)}
+          subtitle={
+            currentStep.subtitleKey ? t(currentStep.subtitleKey) : undefined
+          }
+          currentStep={currentStepIndex + 1}
+          totalSteps={steps.length}
+        />
+        <StepContent
+          options={translatedOptions}
+          inputFields={translatedInputFields}
+          selectedOptionIds={currentSelections}
+          inputValues={inputValues}
+          onSelectOption={handleSelectOption}
+          onInputChange={handleInputChange}
+        />
+        <div
+          data-testid="step-actions"
+          className="flex justify-end items-center gap-3"
+        >
+          {!isFirstStep && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              onClick={handleBack}
+              className="flex-1 px-4 sm:px-6 py-2.5 bg-[050505] text-white border hover:bg-white border-[#242424] hover:text-black"
+            >
+              {t(I18nKey.ONBOARDING$BACK_BUTTON)}
+            </BrandButton>
+          )}
           <BrandButton
             type="button"
-            variant="secondary"
-            onClick={handleBack}
-            className="flex-1 px-4 sm:px-6 py-2.5 bg-[050505] text-white border hover:bg-white border-[#242424] hover:text-black"
+            variant="primary"
+            onClick={handleNext}
+            isDisabled={!isStepComplete}
+            className={cn(
+              "px-4 sm:px-6 py-2.5 bg-white text-black hover:bg-white/90",
+              isFirstStep ? "w-1/2" : "flex-1",
+            )}
           >
-            {t(I18nKey.ONBOARDING$BACK_BUTTON)}
+            {t(
+              isLastStep
+                ? I18nKey.ONBOARDING$FINISH_BUTTON
+                : I18nKey.ONBOARDING$NEXT_BUTTON,
+            )}
           </BrandButton>
-        )}
-        <BrandButton
-          type="button"
-          variant="primary"
-          onClick={handleNext}
-          isDisabled={!isStepComplete}
-          className={cn(
-            "px-4 sm:px-6 py-2.5 bg-white text-black hover:bg-white/90",
-            isFirstStep ? "w-1/2" : "flex-1",
-          )}
-        >
-          {t(
-            isLastStep
-              ? I18nKey.ONBOARDING$FINISH_BUTTON
-              : I18nKey.ONBOARDING$NEXT_BUTTON,
-          )}
-        </BrandButton>
+        </div>
       </div>
     </div>
   );

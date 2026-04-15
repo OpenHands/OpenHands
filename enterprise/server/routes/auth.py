@@ -27,7 +27,10 @@ from server.auth.user.user_authorizer import (
     depends_user_authorizer,
 )
 from server.config import sign_token
-from server.constants import IS_FEATURE_ENV, IS_LOCAL_ENV
+from server.constants import (
+    DEPLOYMENT_MODE,
+    IS_FEATURE_ENV,
+)
 from server.routes.event_webhook import _get_session_api_key, _get_user_id
 from server.services.org_invitation_service import (
     EmailMismatchError,
@@ -462,8 +465,20 @@ async def keycloak_callback(
             tos_redirect_url = f'{tos_redirect_url}&invitation_success=true'
         response = RedirectResponse(tos_redirect_url, status_code=302)
     else:
+        # User has accepted TOS - check if they need onboarding
+        # Only redirect to onboarding if user has a valid offline token,
+        # otherwise they need to complete the Keycloak offline token flow first
+        if valid_offline_token and await _should_redirect_to_onboarding(user_id, user):
+            redirect_url = f'{web_url}/onboarding'
+            logger.info(
+                'Redirecting returning user to onboarding',
+                extra={'user_id': user_id, 'deployment_mode': DEPLOYMENT_MODE},
+            )
         if invitation_token:
-            redirect_url = f'{redirect_url}&invitation_success=true'
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&invitation_success=true'
+            else:
+                redirect_url = f'{redirect_url}?invitation_success=true'
         response = RedirectResponse(redirect_url, status_code=302)
 
     set_response_cookie(
@@ -471,7 +486,7 @@ async def keycloak_callback(
         response=response,
         keycloak_access_token=keycloak_access_token,
         keycloak_refresh_token=keycloak_refresh_token,
-        secure=True if redirect_url.startswith('https') else False,
+        secure=True if web_url.startswith('https') else False,
         accepted_tos=has_accepted_tos,
     )
 
@@ -512,8 +527,23 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
         user_id=user_info.sub, offline_token=keycloak_refresh_token
     )
 
+    user = await UserStore.get_user_by_id(user_info.sub)
+    has_accepted_tos = user is not None and user.accepted_tos is not None
+
     redirect_url, _, _ = _extract_oauth_state(state)
-    return RedirectResponse(redirect_url if redirect_url else web_url, status_code=302)
+    default_url = redirect_url if redirect_url else web_url
+    final_url = await _get_post_auth_redirect(user_info.sub, default_url, web_url, user)
+
+    response = RedirectResponse(final_url, status_code=302)
+    set_response_cookie(
+        request=request,
+        response=response,
+        keycloak_access_token=keycloak_access_token,
+        keycloak_refresh_token=keycloak_refresh_token,
+        secure=True if web_url.startswith('https') else False,
+        accepted_tos=has_accepted_tos,
+    )
+    return response
 
 
 @oauth_router.get('/github/callback')
@@ -547,6 +577,74 @@ async def authenticate(request: Request):
             )
 
         return response
+
+
+async def _should_redirect_to_onboarding(user_id: str, user: User) -> bool:
+    """Check if user should be redirected to onboarding after TOS acceptance.
+
+    Backend always redirects applicable users to /onboarding. The frontend
+    checks the ENABLE_ONBOARDING feature flag (localStorage) and redirects
+    to / if the flag is disabled. This avoids needing helm chart changes.
+
+
+    Returns True if:
+    - User has onboarding_completed explicitly set to False (new users)
+    - Either:
+      - Deployment mode is 'cloud' (all users)
+      - Deployment mode is 'self_hosted' AND user is the super admin
+        (first owner in their current org to accept TOS)
+
+    Returns False if:
+    - User has onboarding_completed=True (already completed)
+    - User has onboarding_completed=None (existing users before this feature)
+    """
+    # Already completed onboarding
+    if user.onboarding_completed is True:
+        return False
+
+    # Existing user before this feature (NULL in database)
+    if user.onboarding_completed is None:
+        return False
+
+    # Cloud SaaS: all users go to onboarding
+    if DEPLOYMENT_MODE == 'cloud':
+        return True
+
+    # Self-hosted SaaS: only the super admin (first owner to accept TOS in the org)
+    if DEPLOYMENT_MODE == 'self_hosted':
+        first_owner = await UserStore.get_first_owner_in_org(user.current_org_id)
+        if first_owner and str(first_owner.id) == user_id:
+            return True
+
+    return False
+
+
+async def _get_post_auth_redirect(
+    user_id: str, default_url: str, web_url: str, user: User | None = None
+) -> str:
+    """Determine where to redirect user after authentication completes.
+
+    Called after offline token is stored to determine final redirect destination.
+    Checks for pending user flows (e.g., onboarding) before falling back to default.
+
+    Args:
+        user_id: The user's ID.
+        default_url: The default URL to redirect to if no special flow is needed.
+        web_url: The base web URL for constructing absolute paths.
+        user: Optional user object to avoid refetching.
+
+    Returns:
+        The URL to redirect the user to.
+    """
+    if not user:
+        user = await UserStore.get_user_by_id(user_id)
+    if user and await _should_redirect_to_onboarding(user_id, user):
+        logger.info(
+            'Redirecting user to onboarding',
+            extra={'user_id': user_id, 'deployment_mode': DEPLOYMENT_MODE},
+        )
+        return f'{web_url}/onboarding'
+    return default_url
 
 
 @api_router.post('/accept_tos')
@@ -589,6 +687,12 @@ async def accept_tos(request: Request):
 
         logger.info(f'User {user_id} accepted TOS')
 
+    # Determine final redirect - but don't override if it's the offline token flow
+    # (the offline callback will handle post-auth redirect after storing the token)
+    is_offline_flow = 'offline' in redirect_url
+    if not is_offline_flow:
+        redirect_url = await _get_post_auth_redirect(user_id, redirect_url, web_url)
+
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={'redirect_url': redirect_url}
     )
@@ -598,10 +702,40 @@ async def accept_tos(request: Request):
         response=response,
         keycloak_access_token=access_token.get_secret_value(),
         keycloak_refresh_token=refresh_token.get_secret_value(),
-        secure=not IS_LOCAL_ENV,
+        secure=True if web_url.startswith('https') else False,
         accepted_tos=True,
     )
     return response
+
+
+@api_router.post('/complete_onboarding')
+async def complete_onboarding(request: Request):
+    """Mark onboarding as completed for the current user."""
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
+    user_id = await user_auth.get_user_id()
+
+    if not user_id:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'User is not authenticated'},
+        )
+
+    user = await UserStore.mark_onboarding_completed(user_id)
+    if not user:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'User not found'},
+        )
+
+    logger.info(
+        'User completed onboarding',
+        extra={'user_id': user_id},
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={'message': 'Onboarding completed'},
+    )
 
 
 @api_router.post('/logout')

@@ -24,6 +24,7 @@ from storage.encrypt_utils import (
 )
 from storage.org import Org
 from storage.org_member import OrgMember
+from storage.role import Role
 from storage.role_store import RoleStore
 from storage.user import User
 from storage.user_settings import UserSettings
@@ -750,6 +751,65 @@ class UserStore:
             await session.commit()
             await session.refresh(user)
             return user
+
+    @staticmethod
+    async def mark_onboarding_completed(user_id: str) -> Optional[User]:
+        """Mark the user's onboarding as completed.
+
+        Args:
+            user_id: The user's ID (Keycloak user ID)
+
+        Returns:
+            User: The updated user object, or None if user not found
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User).filter(User.id == uuid.UUID(user_id)).with_for_update()
+            )
+            user = result.scalars().first()
+            if not user:
+                logger.warning(
+                    'mark_onboarding_completed:user_not_found',
+                    extra={'user_id': user_id},
+                )
+                return None
+
+            user.onboarding_completed = True
+            await session.commit()
+            await session.refresh(user)
+            logger.info(
+                'mark_onboarding_completed:success',
+                extra={'user_id': user_id},
+            )
+            return user
+
+    @staticmethod
+    async def get_first_owner_in_org(org_id: UUID) -> Optional[User]:
+        """Get the first owner in an organization who accepted the Terms of Service.
+
+        This user is considered the super admin for that org in self-hosted deployments.
+        The super admin is identified as the owner with the earliest accepted_tos timestamp.
+
+        Args:
+            org_id: The organization UUID
+
+        Returns:
+            User: The first owner to accept TOS in this org, or None if not found.
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .join(OrgMember, OrgMember.user_id == User.id)
+                .join(Role, Role.id == OrgMember.role_id)
+                .filter(
+                    OrgMember.org_id == org_id,
+                    Role.name == 'owner',
+                    User.accepted_tos.isnot(None),
+                )
+                .order_by(User.accepted_tos.asc())
+                .limit(1)
+            )
+            return result.scalars().first()
 
     @staticmethod
     async def backfill_contact_name(user_id: str, user_info: dict) -> None:

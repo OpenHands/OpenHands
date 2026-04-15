@@ -10726,6 +10726,23 @@
     "uk": "Приватний",
     "ca": "Privat"
   },
+  "SIDEBAR$AUTOMATIONS": {
+    "en": "Automations",
+    "zh-CN": "自动化",
+    "zh-TW": "自動化",
+    "de": "Automatisierungen",
+    "ko-KR": "자동화",
+    "no": "Automatiseringer",
+    "it": "Automazioni",
+    "pt": "Automatizações",
+    "es": "Automatizaciones",
+    "ar": "الأتمتة",
+    "fr": "Automatisations",
+    "tr": "Otomasyonlar",
+    "ja": "自動化",
+    "uk": "Автоматизації",
+    "ca": "Automatitzacions"
+  },
   "SIDEBAR$CONVERSATIONS": {
     "en": "Conversations",
     "ja": "会話",
@@ -21997,7 +22014,7 @@
     "uk": "Якого розміру організація, в якій ви працюєте?",
     "ca": "De quina mida és la vostra organització?"
   },
-  "ONBOARDING$ORG_SIZE_SUBTITLE": {
+  "ONBOARDING$SELECT_ONE_SUBTITLE": {
     "en": "Select one",
     "ja": "1つ選択",
     "zh-CN": "选择一个",
@@ -22116,7 +22133,7 @@
     "uk": "Для яких випадків використання ви хочете використовувати OpenHands?",
     "ca": "Per a quins casos d'ús voleu fer servir OpenHands?"
   },
-  "ONBOARDING$USE_CASE_SUBTITLE": {
+  "ONBOARDING$SELECT_MULTIPLE_SUBTITLE": {
     "en": "Check all that apply",
     "ja": "該当するものをすべて選択",
     "zh-CN": "选择所有适用的",
