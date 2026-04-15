@@ -21,7 +21,6 @@ function HomeScreen() {
   const [shouldShowCTA, setShouldShowCTA] = React.useState(
     () => !isCTADismissed("homepage"),
   );
-  console.log("HOME", isEnterpriseCloud, isOss);
 
   const isCTAEnabled = isEnterpriseCloud || isOss;
 

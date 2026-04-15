@@ -31,7 +31,7 @@ export function useAppMode() {
     /** Enterprise checks */
     isEnterpriseSelfHosted:
       appMode === "saas" && deploymentMode === "self_hosted",
-    isEnterpriseCloud: appMode === "saas" && deploymentMode === "self_hosted", // deploymentMode === "cloud",
+    isEnterpriseCloud: appMode === "saas" && deploymentMode === "cloud",
 
     // Raw values (for cases where the actual value is needed)
     appMode,
