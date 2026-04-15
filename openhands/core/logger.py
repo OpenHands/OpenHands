@@ -560,9 +560,7 @@ class RedactURLParamsFilter(logging.Filter):
                 )
             elif isinstance(record.args, dict):
                 record.args = {
-                    k: redact_url_params(v)
-                    if isinstance(v, str) and '?' in v
-                    else v
+                    k: redact_url_params(v) if isinstance(v, str) and '?' in v else v
                     for k, v in record.args.items()
                 }
 

@@ -276,7 +276,9 @@ def test_redact_url_params_filter_dict_args():
     assert result is True
     assert record.args['method'] == 'GET'
     assert 'test' not in record.args['path']
-    assert '<redacted>' in record.args['path'] or '%3Credacted%3E' in record.args['path']
+    assert (
+        '<redacted>' in record.args['path'] or '%3Credacted%3E' in record.args['path']
+    )
 
 
 def test_redact_url_params_filter_msg_embedded_url():
