@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
-import OnboardingForm from "#/routes/onboarding-form";
+import OnboardingForm, { clientLoader } from "#/routes/onboarding-form";
 
 const mockMutate = vi.fn();
 const mockNavigate = vi.fn();
@@ -37,6 +37,23 @@ vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackOnboardingCompleted: mockTrackOnboardingCompleted,
   }),
+}));
+
+// Mocks for clientLoader tests
+const mockQueryClientGetData = vi.fn();
+const mockQueryClientSetData = vi.fn();
+vi.mock("#/query-client-config", () => ({
+  queryClient: {
+    getQueryData: (...args: unknown[]) => mockQueryClientGetData(...args),
+    setQueryData: (...args: unknown[]) => mockQueryClientSetData(...args),
+  },
+}));
+
+const mockGetConfig = vi.fn();
+vi.mock("#/api/option-service/option-service.api", () => ({
+  default: {
+    getConfig: () => mockGetConfig(),
+  },
 }));
 
 const renderOnboardingForm = async () => {
@@ -535,5 +552,111 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
 
     // But onboarding submission should still work
     expect(mockMutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("onboarding-form clientLoader", () => {
+  beforeEach(() => {
+    mockQueryClientGetData.mockReset();
+    mockQueryClientSetData.mockReset();
+    mockGetConfig.mockReset();
+  });
+
+  describe("redirect behavior", () => {
+    it("should redirect to / when app_mode is oss", async () => {
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader();
+
+      expect(result).toBeDefined();
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
+    it("should redirect to / when app_mode is undefined", async () => {
+      const undefinedConfig = {
+        app_mode: undefined,
+        feature_flags: { deployment_mode: "cloud" },
+      };
+      mockQueryClientGetData.mockReturnValue(undefinedConfig);
+
+      const result = await clientLoader();
+
+      expect(result).toBeDefined();
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
+    it("should redirect to / when config is null", async () => {
+      mockQueryClientGetData.mockReturnValue(null);
+      mockGetConfig.mockResolvedValue(null);
+
+      const result = await clientLoader();
+
+      expect(result).toBeDefined();
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
+    it("should allow access and return config when app_mode is saas with cloud deployment", async () => {
+      const saasCloudConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud" },
+      };
+      mockQueryClientGetData.mockReturnValue(saasCloudConfig);
+
+      const result = await clientLoader();
+
+      expect(result).toEqual({ config: saasCloudConfig });
+    });
+
+    it("should allow access and return config when app_mode is saas with self_hosted deployment", async () => {
+      const saasSelfHostedConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "self_hosted" },
+      };
+      mockQueryClientGetData.mockReturnValue(saasSelfHostedConfig);
+
+      const result = await clientLoader();
+
+      expect(result).toEqual({ config: saasSelfHostedConfig });
+    });
+  });
+
+  describe("config fetching", () => {
+    it("should use cached config from queryClient when available", async () => {
+      const cachedConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud" },
+      };
+      mockQueryClientGetData.mockReturnValue(cachedConfig);
+
+      await clientLoader();
+
+      expect(mockQueryClientGetData).toHaveBeenCalledWith(["web-client-config"]);
+      expect(mockGetConfig).not.toHaveBeenCalled();
+    });
+
+    it("should fetch config from OptionService when not cached", async () => {
+      const fetchedConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud" },
+      };
+      mockQueryClientGetData.mockReturnValue(null);
+      mockGetConfig.mockResolvedValue(fetchedConfig);
+
+      const result = await clientLoader();
+
+      expect(mockGetConfig).toHaveBeenCalled();
+      expect(mockQueryClientSetData).toHaveBeenCalledWith(
+        ["web-client-config"],
+        fetchedConfig,
+      );
+      expect(result).toEqual({ config: fetchedConfig });
+    });
   });
 });
