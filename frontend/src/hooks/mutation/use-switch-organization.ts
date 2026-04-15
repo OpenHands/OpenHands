@@ -5,6 +5,7 @@ import { organizationService } from "#/api/organization-service/organization-ser
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { I18nKey } from "#/i18n/declaration";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import { setSelectedOrg } from "#/utils/local-storage";
 
 export const useSwitchOrganization = () => {
   const { t } = useTranslation();
@@ -33,6 +34,8 @@ export const useSwitchOrganization = () => {
       // Update local state - this triggers automatic refetch for all org-scoped queries
       // since their query keys include organizationId (e.g., ["settings", orgId], ["secrets", orgId])
       setOrganizationId(orgId);
+      // Broadcast org change to other apps (e.g. Automations) via localStorage
+      setSelectedOrg(orgId);
       // Invalidate conversations to fetch data for the new org context
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
       // Remove all individual conversation queries to clear any stale/null data
