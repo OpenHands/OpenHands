@@ -1,21 +1,22 @@
 import { redirect } from "react-router";
+import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
 import { WebClientConfig } from "#/api/option-service/option.types";
-import { queryClient } from "#/query-client-config";
+import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
 import { getFirstAvailablePath } from "#/utils/settings-utils";
 import { getActiveOrganizationUser } from "./permission-checks";
 import { PermissionKey, rolePermissions } from "./permissions";
 
 /**
- * Helper to get config, using cache or fetching if needed.
+ * Helper to get config, using fetchQuery for automatic caching and deduplication.
+ * Uses the shared query key from QUERY_KEYS to ensure consistency across the app.
  */
 async function getConfig(): Promise<WebClientConfig | undefined> {
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
-  if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
-  }
-  return config;
+  return queryClient.fetchQuery({
+    queryKey: QUERY_KEYS.WEB_CLIENT_CONFIG,
+    queryFn: OptionService.getConfig,
+    ...CONFIG_CACHE_OPTIONS,
+  });
 }
 
 /**
