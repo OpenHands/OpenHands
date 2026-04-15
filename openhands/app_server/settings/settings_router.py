@@ -239,11 +239,11 @@ async def store_settings(
 
 @router.get('/agent-schema')
 async def load_settings_schema() -> dict[str, Any]:
-    """ Load the schema for settings """
+    """Load the schema for settings"""
     return AgentSettings.export_schema().model_dump(mode='json')
 
 
 @router.get('/conversation-schema')
 async def load_conversation_settings_schema() -> dict[str, Any]:
-    """ Load the schema for conversations """
+    """Load the schema for conversations"""
     return ConversationSettings.export_schema().model_dump(mode='json')
