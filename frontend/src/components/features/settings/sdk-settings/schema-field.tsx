@@ -9,21 +9,23 @@ import { HelpLink } from "#/ui/help-link";
 import { Typography } from "#/ui/typography";
 import {
   getSettingsFieldConstraints,
-  getSettingsFieldDescription,
-  getSettingsFieldLabel,
+  resolveSchemaChoiceLabel,
+  resolveSchemaFieldDescription,
+  resolveSchemaFieldLabel,
 } from "#/utils/sdk-settings-field-metadata";
 import { cn } from "#/utils/utils";
 
 // ---------------------------------------------------------------------------
 // Help links – UI-only mapping from field keys to user-facing guidance.
+// Keys use conventional i18n pattern: SCHEMA$<PATH>$HELP_TEXT / HELP_LINK_TEXT
 // ---------------------------------------------------------------------------
 export const FIELD_HELP_LINKS: Record<
   string,
-  { text: string; linkText: string; href: string }
+  { textKey: string; linkTextKey: string; href: string }
 > = {
   "llm.api_key": {
-    text: "Don't know your API key?",
-    linkText: "Click here for instructions.",
+    textKey: "SCHEMA$LLM$API_KEY$HELP_TEXT",
+    linkTextKey: "SCHEMA$LLM$API_KEY$HELP_LINK_TEXT",
     href: "https://docs.openhands.dev/usage/local-setup#getting-an-api-key",
   },
 };
@@ -31,20 +33,24 @@ export const FIELD_HELP_LINKS: Record<
 function FieldHelp({ field }: { field: SettingsFieldSchema }) {
   const { t } = useTranslation();
   const helpLink = FIELD_HELP_LINKS[field.key];
-  const description = getSettingsFieldDescription(field.key, field.description);
+  const description = resolveSchemaFieldDescription(
+    t,
+    field.key,
+    field.description,
+  );
 
   return (
     <>
       {description ? (
         <Typography.Paragraph className="text-tertiary-alt text-xs leading-5">
-          {t(description)}
+          {description}
         </Typography.Paragraph>
       ) : null}
       {helpLink ? (
         <HelpLink
           testId={`help-link-${field.key}`}
-          text={t(helpLink.text)}
-          linkText={t(helpLink.linkText)}
+          text={t(helpLink.textKey)}
+          linkText={t(helpLink.linkTextKey)}
           href={helpLink.href}
           size="settings"
           linkColor="white"
@@ -97,7 +103,7 @@ export function SchemaField({
   onChange: (value: string | boolean) => void;
 }) {
   const { t } = useTranslation();
-  const label = t(getSettingsFieldLabel(field.key, field.label));
+  const label = resolveSchemaFieldLabel(t, field.key, field.label);
   const constraints = getSettingsFieldConstraints(field.key);
 
   if (isBooleanField(field)) {
@@ -125,7 +131,12 @@ export function SchemaField({
           label={label}
           items={field.choices.map((choice) => ({
             key: String(choice.value),
-            label: t(choice.label),
+            label: resolveSchemaChoiceLabel(
+              t,
+              field.key,
+              choice.value,
+              choice.label,
+            ),
           }))}
           selectedKey={value === "" ? undefined : String(value)}
           isClearable={!field.required}
