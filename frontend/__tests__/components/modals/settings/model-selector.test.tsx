@@ -1,12 +1,45 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
+import type { LLMProvider, LLMModel } from "#/api/config-service/config-service.types";
+
+const mockProviders: LLMProvider[] = [
+  { name: "openai", verified: true },
+  { name: "azure", verified: false },
+  { name: "vertex_ai", verified: false },
+];
+
+const mockModelsByProvider: Record<string, LLMModel[]> = {
+  openai: [
+    { provider: "openai", name: "gpt-4o", verified: true },
+    { provider: "openai", name: "gpt-4o-mini", verified: true },
+  ],
+  azure: [
+    { provider: "azure", name: "ada", verified: false },
+    { provider: "azure", name: "gpt-35-turbo", verified: false },
+  ],
+  vertex_ai: [
+    { provider: "vertex_ai", name: "chat-bison", verified: false },
+    { provider: "vertex_ai", name: "chat-bison-32k", verified: false },
+  ],
+};
+
+vi.mock("#/hooks/query/use-search-providers", () => ({
+  useSearchProviders: () => ({ data: mockProviders }),
+}));
+
+vi.mock("#/hooks/query/use-provider-models", () => ({
+  useProviderModels: (provider: string | null) => ({
+    data: provider ? (mockModelsByProvider[provider] ?? []) : [],
+  }),
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
-      const translations: { [key: string]: string } = {
+      const translations: Record<string, string> = {
         LLM$PROVIDER: "LLM Provider",
         LLM$MODEL: "LLM Model",
         LLM$SELECT_PROVIDER_PLACEHOLDER: "Select a provider",
@@ -17,34 +50,19 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+function renderWithQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+}
+
 describe("ModelSelector", () => {
-  const models = {
-    openai: {
-      separator: "/",
-      models: ["gpt-4o", "gpt-4o-mini"],
-    },
-    azure: {
-      separator: "/",
-      models: ["ada", "gpt-35-turbo"],
-    },
-    vertex_ai: {
-      separator: "/",
-      models: ["chat-bison", "chat-bison-32k"],
-    },
-  };
-
-  const verifiedModels = ["gpt-4o", "gpt-4o-mini"];
-  const verifiedProviders = ["openai"];
-
   it("should display the provider selector", async () => {
     const user = userEvent.setup();
-    render(
-      <ModelSelector
-        models={models}
-        verifiedModels={verifiedModels}
-        verifiedProviders={verifiedProviders}
-      />,
-    );
+    renderWithQuery(<ModelSelector />);
 
     const selector = screen.getByLabelText("LLM Provider");
     expect(selector).toBeInTheDocument();
@@ -58,13 +76,7 @@ describe("ModelSelector", () => {
 
   it("should disable the model selector if the provider is not selected", async () => {
     const user = userEvent.setup();
-    render(
-      <ModelSelector
-        models={models}
-        verifiedModels={verifiedModels}
-        verifiedProviders={verifiedProviders}
-      />,
-    );
+    renderWithQuery(<ModelSelector />);
 
     const modelSelector = screen.getByLabelText("LLM Model");
     expect(modelSelector).toBeDisabled();
@@ -80,13 +92,7 @@ describe("ModelSelector", () => {
 
   it("should display the model selector", async () => {
     const user = userEvent.setup();
-    render(
-      <ModelSelector
-        models={models}
-        verifiedModels={verifiedModels}
-        verifiedProviders={verifiedProviders}
-      />,
-    );
+    renderWithQuery(<ModelSelector />);
 
     const providerSelector = screen.getByLabelText("LLM Provider");
     await user.click(providerSelector);
@@ -105,14 +111,7 @@ describe("ModelSelector", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(
-      <ModelSelector
-        models={models}
-        verifiedModels={verifiedModels}
-        verifiedProviders={verifiedProviders}
-        onChange={onChange}
-      />,
-    );
+    renderWithQuery(<ModelSelector onChange={onChange} />);
 
     const providerSelector = screen.getByLabelText("LLM Provider");
     await user.click(providerSelector);
@@ -126,18 +125,12 @@ describe("ModelSelector", () => {
     expect(onChange).toHaveBeenNthCalledWith(2, "azure", "ada");
   });
 
-
   it("should have a default value if passed", async () => {
-    render(
-      <ModelSelector
-        models={models}
-        verifiedModels={verifiedModels}
-        verifiedProviders={verifiedProviders}
-        currentModel="azure/ada"
-      />,
-    );
+    renderWithQuery(<ModelSelector currentModel="azure/ada" />);
 
-    expect(screen.getByLabelText("LLM Provider")).toHaveValue("Azure");
-    expect(screen.getByLabelText("LLM Model")).toHaveValue("ada");
+    await waitFor(() => {
+      expect(screen.getByLabelText("LLM Provider")).toHaveValue("Azure");
+      expect(screen.getByLabelText("LLM Model")).toHaveValue("ada");
+    });
   });
 });

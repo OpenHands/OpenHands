@@ -68,47 +68,120 @@ export const resetTestHandlersMockSettings = () => {
   MOCK_USER_PREFERENCES.settings = MOCK_DEFAULT_USER_SETTINGS;
 };
 
+// Mock model data used by both V0 and V1 endpoints
+const MOCK_MODELS = [
+  "anthropic/claude-3.5",
+  "anthropic/claude-sonnet-4-20250514",
+  "anthropic/claude-sonnet-4-5-20250929",
+  "anthropic/claude-haiku-4-5-20251001",
+  "anthropic/claude-opus-4-5-20251101",
+  "openai/gpt-3.5-turbo",
+  "openai/gpt-4o",
+  "openai/gpt-4o-mini",
+  "openhands/claude-sonnet-4-20250514",
+  "openhands/claude-sonnet-4-5-20250929",
+  "openhands/claude-haiku-4-5-20251001",
+  "openhands/claude-opus-4-5-20251101",
+  "openhands/minimax-m2.7",
+  "sambanova/Meta-Llama-3.1-8B-Instruct",
+];
+
+const MOCK_VERIFIED_MODELS = new Set([
+  "anthropic/claude-opus-4-5-20251101",
+  "anthropic/claude-sonnet-4-5-20250929",
+  "openhands/claude-opus-4-5-20251101",
+  "openhands/claude-sonnet-4-5-20250929",
+  "openhands/minimax-m2.7",
+]);
+
+const MOCK_VERIFIED_PROVIDERS = [
+  "openhands",
+  "anthropic",
+  "openai",
+  "mistral",
+  "gemini",
+  "deepseek",
+  "moonshot",
+  "minimax",
+];
+
 // --- Handlers for options/config/settings ---
 
 export const SETTINGS_HANDLERS = [
+  // V0 (legacy) models endpoint – still used for default_model
   http.get("/api/options/models", async () =>
     HttpResponse.json({
-      models: [
-        "anthropic/claude-3.5",
-        "anthropic/claude-sonnet-4-20250514",
-        "anthropic/claude-sonnet-4-5-20250929",
-        "anthropic/claude-haiku-4-5-20251001",
-        "anthropic/claude-opus-4-5-20251101",
-        "openai/gpt-3.5-turbo",
-        "openai/gpt-4o",
-        "openai/gpt-4o-mini",
-        "openhands/claude-sonnet-4-20250514",
-        "openhands/claude-sonnet-4-5-20250929",
-        "openhands/claude-haiku-4-5-20251001",
-        "openhands/claude-opus-4-5-20251101",
-        "sambanova/Meta-Llama-3.1-8B-Instruct",
-      ],
+      models: MOCK_MODELS,
       verified_models: [
         "claude-opus-4-5-20251101",
         "claude-sonnet-4-5-20250929",
       ],
-      verified_providers: [
-        "openhands",
-        "anthropic",
-        "openai",
-        "mistral",
-        "gemini",
-        "deepseek",
-        "moonshot",
-        "minimax",
-      ],
+      verified_providers: MOCK_VERIFIED_PROVIDERS,
       default_model: "openhands/claude-opus-4-5-20251101",
     }),
   ),
 
-  http.get("/api/options/agents", async () =>
-    HttpResponse.json(["CodeActAgent", "CoActAgent"]),
-  ),
+  // V1 providers search
+  http.get("/api/v1/config/providers/search", async ({ request }) => {
+    const url = new URL(request.url);
+    const query = url.searchParams.get("query")?.toLowerCase();
+    const verifiedEq = url.searchParams.get("verified__eq");
+
+    // Build unique provider list from models
+    const seen = new Set<string>();
+    let providers: { name: string; verified: boolean }[] = [];
+    for (const model of MOCK_MODELS) {
+      const [providerName] = model.split("/");
+      if (providerName && !seen.has(providerName)) {
+        seen.add(providerName);
+        providers.push({
+          name: providerName,
+          verified: MOCK_VERIFIED_PROVIDERS.includes(providerName),
+        });
+      }
+    }
+
+    if (query) {
+      providers = providers.filter((p) => p.name.toLowerCase().includes(query));
+    }
+    if (verifiedEq !== null && verifiedEq !== undefined) {
+      const wantVerified = verifiedEq === "true";
+      providers = providers.filter((p) => p.verified === wantVerified);
+    }
+
+    return HttpResponse.json({ items: providers, next_page_id: null });
+  }),
+
+  // V1 models search
+  http.get("/api/v1/config/models/search", async ({ request }) => {
+    const url = new URL(request.url);
+    const query = url.searchParams.get("query")?.toLowerCase();
+    const verifiedEq = url.searchParams.get("verified__eq");
+    const providerEq = url.searchParams.get("provider__eq");
+
+    let models = MOCK_MODELS.map((m) => {
+      const [provider, ...rest] = m.split("/");
+      const name = rest.join("/");
+      return {
+        provider: provider || null,
+        name,
+        verified: MOCK_VERIFIED_MODELS.has(m),
+      };
+    });
+
+    if (providerEq) {
+      models = models.filter((m) => m.provider === providerEq);
+    }
+    if (query) {
+      models = models.filter((m) => m.name.toLowerCase().includes(query));
+    }
+    if (verifiedEq !== null && verifiedEq !== undefined) {
+      const wantVerified = verifiedEq === "true";
+      models = models.filter((m) => m.verified === wantVerified);
+    }
+
+    return HttpResponse.json({ items: models, next_page_id: null });
+  }),
 
   http.get("/api/options/security-analyzers", async () =>
     HttpResponse.json(["llm", "none"]),
@@ -145,7 +218,7 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(config);
   }),
 
-  http.get("/api/settings", async () => {
+  http.get("/api/v1/settings", async () => {
     await delay();
     const { settings } = MOCK_USER_PREFERENCES;
 
@@ -154,7 +227,7 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(settings);
   }),
 
-  http.post("/api/settings", async ({ request }) => {
+  http.post("/api/v1/settings", async ({ request }) => {
     await delay();
     const body = await request.json();
 

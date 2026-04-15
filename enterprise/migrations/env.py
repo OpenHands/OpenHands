@@ -6,6 +6,12 @@ from logging.config import fileConfig
 # These plugin setup messages would otherwise appear before logging is configured
 logging.getLogger('alembic.runtime.plugins').setLevel(logging.WARNING)
 
+# Prevent SQLAlchemy engine from logging SQL results at DEBUG level, which can
+# leak sensitive column data (e.g. API keys, tokens) into log aggregators.
+# This is set before any engine is created so it takes effect immediately.
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
+
 from alembic import context  # noqa: E402
 from google.cloud.sql.connector import Connector  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
@@ -69,6 +75,12 @@ config = context.config
 # This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Re-apply SQLAlchemy engine log suppression after fileConfig, which may override
+# our earlier settings from alembic.ini. This ensures DEBUG-level SQL result logging
+# is always suppressed, preventing sensitive data from leaking into log aggregators.
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
 
 
 def run_migrations_offline() -> None:
