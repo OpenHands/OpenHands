@@ -12,7 +12,7 @@ from openhands.app_server.event_callback.event_callback_models import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.integrations.service_types import ProviderType, SuggestedTask
-from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger

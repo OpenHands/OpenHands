@@ -291,6 +291,435 @@ async def test_clone_or_init_git_repo_custom_timeout(service):
         )
 
 
+@patch(
+    'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+)
+def test_create_condenser_default_agent_with_none_max_size(mock_condenser_class):
+    """Test _create_condenser for DEFAULT agent with condenser_max_size = None uses default."""
+    # Arrange
+    mock_user_context = Mock(spec=UserContext)
+    with patch.object(
+        AppConversationServiceBase,
+        '__abstractmethods__',
+        set(),
+    ):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+        mock_llm = MagicMock()
+        mock_llm_copy = MagicMock()
+        mock_llm_copy.usage_id = 'condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_condenser_instance = MagicMock()
+        mock_condenser_class.return_value = mock_condenser_instance
+
+        # Act
+        service._create_condenser(mock_llm, AgentType.DEFAULT, None)
+
+        # Assert
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        # When condenser_max_size is None, max_size should not be passed (uses SDK default of 240)
+        assert 'max_size' not in call_kwargs
+        # keep_first is never passed (uses SDK default of 2)
+        assert 'keep_first' not in call_kwargs
+        assert call_kwargs['llm'].usage_id == 'condenser'
+        mock_llm.model_copy.assert_called_once()
+
+
+@patch(
+    'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+)
+def test_create_condenser_default_agent_with_custom_max_size(mock_condenser_class):
+    """Test _create_condenser for DEFAULT agent with custom condenser_max_size."""
+    # Arrange
+    mock_user_context = Mock(spec=UserContext)
+    with patch.object(
+        AppConversationServiceBase,
+        '__abstractmethods__',
+        set(),
+    ):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+        mock_llm = MagicMock()
+        mock_llm_copy = MagicMock()
+        mock_llm_copy.usage_id = 'condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_condenser_instance = MagicMock()
+        mock_condenser_class.return_value = mock_condenser_instance
+
+        # Act
+        service._create_condenser(mock_llm, AgentType.DEFAULT, 150)
+
+        # Assert
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        assert call_kwargs['max_size'] == 150  # Custom value should be used
+        # keep_first is never passed (uses SDK default of 2)
+        assert 'keep_first' not in call_kwargs
+        assert call_kwargs['llm'].usage_id == 'condenser'
+        mock_llm.model_copy.assert_called_once()
+
+
+@patch(
+    'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+)
+def test_create_condenser_plan_agent_with_none_max_size(mock_condenser_class):
+    """Test _create_condenser for PLAN agent with condenser_max_size = None uses default."""
+    # Arrange
+    mock_user_context = Mock(spec=UserContext)
+    with patch.object(
+        AppConversationServiceBase,
+        '__abstractmethods__',
+        set(),
+    ):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+        mock_llm = MagicMock()
+        mock_llm_copy = MagicMock()
+        mock_llm_copy.usage_id = 'planning_condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_condenser_instance = MagicMock()
+        mock_condenser_class.return_value = mock_condenser_instance
+
+        # Act
+        service._create_condenser(mock_llm, AgentType.PLAN, None)
+
+        # Assert
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        # When condenser_max_size is None, max_size should not be passed (uses SDK default of 240)
+        assert 'max_size' not in call_kwargs
+        # keep_first is never passed (uses SDK default of 2)
+        assert 'keep_first' not in call_kwargs
+        assert call_kwargs['llm'].usage_id == 'planning_condenser'
+        mock_llm.model_copy.assert_called_once()
+
+
+@patch(
+    'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+)
+def test_create_condenser_plan_agent_with_custom_max_size(mock_condenser_class):
+    """Test _create_condenser for PLAN agent with custom condenser_max_size."""
+    # Arrange
+    mock_user_context = Mock(spec=UserContext)
+    with patch.object(
+        AppConversationServiceBase,
+        '__abstractmethods__',
+        set(),
+    ):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+        mock_llm = MagicMock()
+        mock_llm_copy = MagicMock()
+        mock_llm_copy.usage_id = 'planning_condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_condenser_instance = MagicMock()
+        mock_condenser_class.return_value = mock_condenser_instance
+
+        # Act
+        service._create_condenser(mock_llm, AgentType.PLAN, 200)
+
+        # Assert
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        assert call_kwargs['max_size'] == 200  # Custom value should be used
+        # keep_first is never passed (uses SDK default of 2)
+        assert 'keep_first' not in call_kwargs
+        assert call_kwargs['llm'].usage_id == 'planning_condenser'
+        mock_llm.model_copy.assert_called_once()
+
+
+# =============================================================================
+# Tests for security analyzer helpers
+# =============================================================================
+
+
+@pytest.mark.parametrize('value', [None, '', 'none', 'NoNe'])
+def test_create_security_analyzer_returns_none_for_empty_values(value):
+    """_create_security_analyzer_from_string returns None for empty/none values."""
+    # Arrange
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(), bind_methods=('_create_security_analyzer_from_string',)
+    )
+
+    # Act
+    result = service._create_security_analyzer_from_string(value)
+
+    # Assert
+    assert result is None
+
+
+def test_create_security_analyzer_returns_llm_analyzer():
+    """_create_security_analyzer_from_string returns LLMSecurityAnalyzer for llm string."""
+    # Arrange
+    security_analyzer_str = 'llm'
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(), bind_methods=('_create_security_analyzer_from_string',)
+    )
+
+    # Act
+    result = service._create_security_analyzer_from_string(security_analyzer_str)
+
+    # Assert
+    from openhands.sdk.security import LLMSecurityAnalyzer
+
+    assert isinstance(result, LLMSecurityAnalyzer)
+
+
+def test_create_security_analyzer_logs_warning_for_unknown_value():
+    """_create_security_analyzer_from_string logs warning and returns None for unknown."""
+    # Arrange
+    unknown_value = 'custom'
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(), bind_methods=('_create_security_analyzer_from_string',)
+    )
+
+    # Act
+    with patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base._logger'
+    ) as mock_logger:
+        result = service._create_security_analyzer_from_string(unknown_value)
+
+    # Assert
+    assert result is None
+    mock_logger.warning.assert_called_once()
+
+
+def test_select_confirmation_policy_when_disabled_returns_never_confirm():
+    """_select_confirmation_policy returns NeverConfirm when confirmation_mode is False."""
+    # Arrange
+    confirmation_mode = False
+    security_analyzer = 'llm'
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(), bind_methods=('_select_confirmation_policy',)
+    )
+
+    # Act
+    policy = service._select_confirmation_policy(confirmation_mode, security_analyzer)
+
+    # Assert
+    from openhands.sdk.security import NeverConfirm
+
+    assert isinstance(policy, NeverConfirm)
+
+
+def test_select_confirmation_policy_llm_returns_confirm_risky():
+    """_select_confirmation_policy uses ConfirmRisky when analyzer is llm."""
+    # Arrange
+    confirmation_mode = True
+    security_analyzer = 'llm'
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(), bind_methods=('_select_confirmation_policy',)
+    )
+
+    # Act
+    policy = service._select_confirmation_policy(confirmation_mode, security_analyzer)
+
+    # Assert
+    from openhands.sdk.security import ConfirmRisky
+
+    assert isinstance(policy, ConfirmRisky)
+
+
+@pytest.mark.parametrize('security_analyzer', [None, '', 'none', 'custom'])
+def test_select_confirmation_policy_non_llm_returns_always_confirm(
+    security_analyzer,
+):
+    """_select_confirmation_policy falls back to AlwaysConfirm for non-llm values."""
+    # Arrange
+    confirmation_mode = True
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(), bind_methods=('_select_confirmation_policy',)
+    )
+
+    # Act
+    policy = service._select_confirmation_policy(confirmation_mode, security_analyzer)
+
+    # Assert
+    from openhands.sdk.security import AlwaysConfirm
+
+    assert isinstance(policy, AlwaysConfirm)
+
+
+@pytest.mark.asyncio
+async def test_set_security_analyzer_skips_when_no_session_key():
+    """_set_security_analyzer_from_settings exits early without session_api_key."""
+    # Arrange
+    agent_server_url = 'https://agent.example.com'
+    conversation_id = uuid4()
+    httpx_client = AsyncMock()
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(),
+        bind_methods=(
+            '_create_security_analyzer_from_string',
+            '_set_security_analyzer_from_settings',
+        ),
+    )
+
+    with patch.object(service, '_create_security_analyzer_from_string') as mock_create:
+        # Act
+        await service._set_security_analyzer_from_settings(
+            agent_server_url=agent_server_url,
+            session_api_key=None,
+            conversation_id=conversation_id,
+            security_analyzer_str='llm',
+            httpx_client=httpx_client,
+        )
+
+    # Assert
+    mock_create.assert_not_called()
+    httpx_client.post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_set_security_analyzer_skips_when_analyzer_none():
+    """_set_security_analyzer_from_settings skips API call when analyzer resolves to None."""
+    # Arrange
+    agent_server_url = 'https://agent.example.com'
+    session_api_key = 'session-key'
+    conversation_id = uuid4()
+    httpx_client = AsyncMock()
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(),
+        bind_methods=(
+            '_create_security_analyzer_from_string',
+            '_set_security_analyzer_from_settings',
+        ),
+    )
+
+    with patch.object(
+        service, '_create_security_analyzer_from_string', return_value=None
+    ) as mock_create:
+        # Act
+        await service._set_security_analyzer_from_settings(
+            agent_server_url=agent_server_url,
+            session_api_key=session_api_key,
+            conversation_id=conversation_id,
+            security_analyzer_str='none',
+            httpx_client=httpx_client,
+        )
+
+    # Assert
+    mock_create.assert_called_once_with('none')
+    httpx_client.post.assert_not_called()
+
+
+class DummyAnalyzer:
+    """Simple analyzer stub for testing model_dump contract."""
+
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    def model_dump(self) -> dict:
+        return self._payload
+
+
+@pytest.mark.asyncio
+async def test_set_security_analyzer_successfully_calls_agent_server():
+    """_set_security_analyzer_from_settings posts analyzer payload when available."""
+    # Arrange
+    agent_server_url = 'https://agent.example.com'
+    session_api_key = 'session-key'
+    conversation_id = uuid4()
+    analyzer_payload = {'type': 'llm'}
+    httpx_client = AsyncMock()
+    http_response = MagicMock()
+    http_response.raise_for_status = MagicMock()
+    httpx_client.post.return_value = http_response
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(),
+        bind_methods=(
+            '_create_security_analyzer_from_string',
+            '_set_security_analyzer_from_settings',
+        ),
+    )
+
+    analyzer = DummyAnalyzer(analyzer_payload)
+
+    with (
+        patch.object(
+            service,
+            '_create_security_analyzer_from_string',
+            return_value=analyzer,
+        ) as mock_create,
+        patch(
+            'openhands.app_server.app_conversation.app_conversation_service_base._logger'
+        ) as mock_logger,
+    ):
+        # Act
+        await service._set_security_analyzer_from_settings(
+            agent_server_url=agent_server_url,
+            session_api_key=session_api_key,
+            conversation_id=conversation_id,
+            security_analyzer_str='llm',
+            httpx_client=httpx_client,
+        )
+
+    # Assert
+    mock_create.assert_called_once_with('llm')
+    httpx_client.post.assert_awaited_once_with(
+        f'{agent_server_url}/api/conversations/{conversation_id}/security_analyzer',
+        json={'security_analyzer': analyzer_payload},
+        headers={'X-Session-API-Key': session_api_key},
+        timeout=30.0,
+    )
+    http_response.raise_for_status.assert_called_once()
+    mock_logger.info.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_set_security_analyzer_logs_warning_on_failure():
+    """_set_security_analyzer_from_settings warns but does not raise on errors."""
+    # Arrange
+    agent_server_url = 'https://agent.example.com'
+    session_api_key = 'session-key'
+    conversation_id = uuid4()
+    analyzer_payload = {'type': 'llm'}
+    httpx_client = AsyncMock()
+    httpx_client.post.side_effect = RuntimeError('network down')
+    service, _ = _create_service_with_mock_user_context(
+        MockUserInfo(),
+        bind_methods=(
+            '_create_security_analyzer_from_string',
+            '_set_security_analyzer_from_settings',
+        ),
+    )
+
+    analyzer = DummyAnalyzer(analyzer_payload)
+
+    with (
+        patch.object(
+            service,
+            '_create_security_analyzer_from_string',
+            return_value=analyzer,
+        ) as mock_create,
+        patch(
+            'openhands.app_server.app_conversation.app_conversation_service_base._logger'
+        ) as mock_logger,
+    ):
+        # Act
+        await service._set_security_analyzer_from_settings(
+            agent_server_url=agent_server_url,
+            session_api_key=session_api_key,
+            conversation_id=conversation_id,
+            security_analyzer_str='llm',
+            httpx_client=httpx_client,
+        )
+
+    # Assert
+    mock_create.assert_called_once_with('llm')
+    httpx_client.post.assert_awaited_once()
+    mock_logger.warning.assert_called()
+
+
 # =============================================================================
 # Tests for _configure_git_user_settings
 # =============================================================================

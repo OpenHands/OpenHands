@@ -28,7 +28,7 @@ from openhands.core.config.mcp_config import MCPConfig, StdioMCPServer
 from openhands.microagent.microagent import KnowledgeMicroagent, RepoMicroagent
 from openhands.microagent.types import MicroagentMetadata, MicroagentType
 from openhands.runtime.runtime_status import RuntimeStatus
-from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 from openhands.server.data_models.conversation_info import ConversationStatus
 from openhands.server.data_models.conversation_info_result_set import (

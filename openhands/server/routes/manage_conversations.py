@@ -72,7 +72,7 @@ from openhands.integrations.service_types import (
 )
 from openhands.runtime import get_runtime_cls
 from openhands.runtime.runtime_status import RuntimeStatus
-from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 from openhands.server.data_models.conversation_info import ConversationInfo
 from openhands.server.data_models.conversation_info_result_set import (
