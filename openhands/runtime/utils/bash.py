@@ -193,18 +193,35 @@ class BashSession:
     HISTORY_LIMIT = 10_000
     PS1 = CmdOutputMetadata.to_ps1_prompt()
 
+    # Patterns that indicate a command may kill processes on a specific port.
+    # These are checked against the lowercased command string.
+    _PORT_KILL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+        # fuser -k <port>/tcp or fuser --kill <port>
+        (re.compile(r'fuser\s+.*-k'), 'fuser -k'),
+        # kill with lsof port lookup: kill $(lsof -t -i:<port>)
+        (re.compile(r'kill\s.*lsof\s.*-i\s*:'), 'kill via lsof'),
+        # lsof piped to kill: lsof -i:<port> | ... kill
+        (re.compile(r'lsof\s.*-i\s*:.*\|\s*.*kill'), 'lsof piped to kill'),
+        # lsof piped to xargs kill
+        (re.compile(r'lsof\s.*-i\s*:.*\|\s*xargs\s+kill'), 'lsof piped to xargs kill'),
+        # ss or netstat piped to kill
+        (re.compile(r'(ss|netstat)\s.*\|\s*.*kill'), 'ss/netstat piped to kill'),
+    ]
+
     def __init__(
         self,
         work_dir: str,
         username: str | None = None,
         no_change_timeout_seconds: int = 30,
         max_memory_mb: int | None = None,
+        server_port: int | None = None,
     ):
         self.NO_CHANGE_TIMEOUT_SECONDS = no_change_timeout_seconds
         self.work_dir = work_dir
         self.username = username
         self._initialized = False
         self.max_memory_mb = max_memory_mb
+        self.server_port = server_port
 
     def initialize(self) -> None:
         self.server = libtmux.Server()
@@ -250,6 +267,13 @@ class BashSession:
         self.pane = self.window.active_pane
         logger.debug(f'pane: {self.pane}; history_limit: {self.session.history_limit}')
         _initial_window.kill()
+
+        # Export the sandbox server port so agents are aware of it
+        if self.server_port is not None and self.pane:
+            self.pane.send_keys(
+                f'export OPENHANDS_SANDBOX_PORT={self.server_port}'
+            )
+            time.sleep(0.05)
 
         # Configure bash to use simple PS1 and disable PS2
         if self.pane:
@@ -302,6 +326,32 @@ class BashSession:
         # Special keys are of the form C-<key>
         _command = command.strip()
         return _command.startswith('C-') and len(_command) == 3
+
+    def _is_command_dangerous_for_server(self, command: str) -> str | None:
+        """Check if the command would kill processes on the sandbox server port.
+
+        Returns an error message if dangerous, None otherwise.
+        """
+        if self.server_port is None:
+            return None
+
+        cmd_lower = command.lower()
+        port_str = str(self.server_port)
+
+        # Check if the command references the server port AND matches a kill pattern
+        if port_str not in cmd_lower:
+            return None
+
+        for pattern, description in self._PORT_KILL_PATTERNS:
+            if pattern.search(cmd_lower):
+                return (
+                    f'ERROR: Cannot execute this command because it would kill '
+                    f'the OpenHands sandbox server process on port {self.server_port}. '
+                    f'The sandbox runtime uses port {self.server_port} — killing it will crash your session. '
+                    f'Please use a different port for your application '
+                    f'(e.g., 3000, 5000, 8080, or any other available port).'
+                )
+        return None
 
     def _clear_screen(self) -> None:
         """Clear the tmux pane screen and history."""
@@ -541,6 +591,11 @@ class BashSession:
                     f'Provided commands:\n{"\n".join(f"({i + 1}) {cmd}" for i, cmd in enumerate(splited_commands))}'
                 )
             )
+
+        # Check if the command would kill the sandbox server process
+        dangerous_msg = self._is_command_dangerous_for_server(command)
+        if dangerous_msg:
+            return ErrorObservation(content=dangerous_msg)
 
         # Get initial state before sending command
         initial_pane_output = self._get_pane_content()

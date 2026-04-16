@@ -183,11 +183,13 @@ class ActionExecutor:
         user_id: int,
         enable_browser: bool,
         browsergym_eval_env: str | None,
+        server_port: int | None = None,
     ) -> None:
         self.plugins_to_load = plugins_to_load
         self._initial_cwd = work_dir
         self.username = username
         self.user_id = user_id
+        self.server_port = server_port
         _updated_user_id = init_user_and_working_directory(
             username=username, user_id=self.user_id, initial_cwd=work_dir
         )
@@ -291,6 +293,7 @@ class ActionExecutor:
                     os.environ.get('NO_CHANGE_TIMEOUT_SECONDS', 10)
                 ),
                 max_memory_mb=self.max_memory_gb * 1024 if self.max_memory_gb else None,
+                server_port=self.server_port,
             )
             bash_session.initialize()
             return bash_session
@@ -712,6 +715,7 @@ if __name__ == '__main__':
             user_id=args.user_id,
             enable_browser=args.enable_browser,
             browsergym_eval_env=args.browsergym_eval_env,
+            server_port=args.port,
         )
         await client.ainit()
         logger.info('ActionExecutor initialized.')
