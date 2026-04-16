@@ -36,6 +36,9 @@ def _inject_sdk_compat_fields(
     level of the ``/api/v1/users/me`` response. These values live inside
     the nested ``agent_settings`` structure, so we mirror them at the top
     level for backward compatibility.
+
+    The canonical representation is ``agent_settings``; these flat fields
+    exist solely for SDK backward compatibility.
     """
     agent_settings = content.get('agent_settings') or {}
     llm = agent_settings.get('llm') or {}
