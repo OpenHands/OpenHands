@@ -207,6 +207,34 @@ class V1ConversationService {
   }
 
   /**
+   * Ask the agent a side question without queueing a full turn.
+   * @param conversationId The conversation ID
+   * @param conversationUrl The conversation URL
+   * @param question The side question to ask
+   * @param sessionApiKey Session API key for authentication
+   * @returns The agent's response
+   */
+  static async askAgent(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    question: string,
+    sessionApiKey?: string | null,
+  ): Promise<{ response: string }> {
+    const url = this.buildRuntimeUrl(
+      conversationUrl,
+      `/api/conversations/${conversationId}/ask_agent`,
+    );
+    const headers = buildSessionHeaders(sessionApiKey);
+
+    const { data } = await axios.post<{ response: string }>(
+      url,
+      { question },
+      { headers },
+    );
+    return data;
+  }
+
+  /**
    * Resume a V1 conversation
    * Uses the custom runtime URL from the conversation
    *

@@ -11,11 +11,7 @@ from mcp import McpError
 from mcp.types import CallToolResult
 from pydantic import BaseModel, ConfigDict, Field
 
-from openhands.core.config.mcp_config import (
-    MCPSHTTPServerConfig,
-    MCPSSEServerConfig,
-    MCPStdioServerConfig,
-)
+from openhands.core.config.mcp_config import RemoteMCPServer, StdioMCPServer
 from openhands.core.logger import openhands_logger as logger
 from openhands.mcp.error_collector import mcp_error_collector
 from openhands.mcp.tool import MCPClientTool
@@ -57,44 +53,49 @@ class MCPClient(BaseModel):
 
     async def connect_http(
         self,
-        server: MCPSSEServerConfig | MCPSHTTPServerConfig,
+        server: RemoteMCPServer,
         conversation_id: str | None = None,
         timeout: float = 30.0,
     ):
-        """Connect to MCP server using SHTTP or SSE transport."""
+        """Connect to MCP server using streamable HTTP or SSE transport."""
         server_url = server.url
-        api_key = server.api_key
+        api_key = (
+            str(server.auth) if server.auth else None
+        )  # SDK uses `auth` for bearer token
 
         if not server_url:
             raise ValueError('Server URL is required.')
 
+        transport_type = server.transport or 'http'
+
         try:
-            headers = (
-                {
-                    'Authorization': f'Bearer {api_key}',
-                    's': api_key,  # We need this for action execution server's MCP Router
-                    'X-Session-API-Key': api_key,  # We need this for Remote Runtime
-                }
-                if api_key
-                else {}
+            headers: dict[str, str] = (
+                {k: str(v) for k, v in server.headers.items()} if server.headers else {}
             )
+            if api_key:
+                headers.update(
+                    {
+                        'Authorization': f'Bearer {api_key}',
+                        's': api_key,
+                        'X-Session-API-Key': api_key,
+                    }
+                )
 
             if conversation_id:
                 headers['X-OpenHands-ServerConversation-ID'] = conversation_id
 
-            # Instantiate custom transports due to custom headers
-            if isinstance(server, MCPSHTTPServerConfig):
-                streamable_transport = StreamableHttpTransport(
+            transport: SSETransport | StreamableHttpTransport
+            if transport_type == 'sse':
+                transport = SSETransport(
                     url=server_url,
-                    headers=headers if headers else None,
+                    headers=headers or None,
                 )
-                self.client = Client(streamable_transport, timeout=timeout)
             else:
-                sse_transport = SSETransport(
+                transport = StreamableHttpTransport(
                     url=server_url,
-                    headers=headers if headers else None,
+                    headers=headers or None,
                 )
-                self.client = Client(sse_transport, timeout=timeout)
+            self.client = Client(transport, timeout=timeout)
 
             await self._initialize_and_list_tools()
         except McpError as e:
@@ -102,29 +103,31 @@ class MCPClient(BaseModel):
             logger.error(error_msg)
             mcp_error_collector.add_error(
                 server_name=server_url,
-                server_type='shttp'
-                if isinstance(server, MCPSHTTPServerConfig)
-                else 'sse',
+                server_type=transport_type,
                 error_message=error_msg,
                 exception_details=str(e),
             )
-            raise  # Re-raise the error
+            raise
 
         except Exception as e:
             error_msg = f'Error connecting to {server_url}: {e}'
             logger.error(error_msg)
             mcp_error_collector.add_error(
                 server_name=server_url,
-                server_type='shttp'
-                if isinstance(server, MCPSHTTPServerConfig)
-                else 'sse',
+                server_type=transport_type,
                 error_message=error_msg,
                 exception_details=str(e),
             )
             raise
 
-    async def connect_stdio(self, server: MCPStdioServerConfig, timeout: float = 30.0):
+    async def connect_stdio(
+        self,
+        server: StdioMCPServer,
+        name: str | None = None,
+        timeout: float = 30.0,
+    ):
         """Connect to MCP server using stdio transport."""
+        server_name = name or f'{server.command} {" ".join(server.args or [])}'
         try:
             transport = StdioTransport(
                 command=server.command, args=server.args or [], env=server.env
@@ -132,9 +135,6 @@ class MCPClient(BaseModel):
             self.client = Client(transport, timeout=timeout)
             await self._initialize_and_list_tools()
         except Exception as e:
-            server_name = getattr(
-                server, 'name', f'{server.command} {" ".join(server.args or [])}'
-            )
             error_msg = f'Failed to connect to stdio server {server_name}: {e}'
             logger.error(error_msg)
             mcp_error_collector.add_error(

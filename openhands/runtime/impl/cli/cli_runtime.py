@@ -30,7 +30,7 @@ from openhands_aci.utils.diff import get_diff
 from pydantic import SecretStr
 
 from openhands.core.config import OpenHandsConfig
-from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
+from openhands.core.config.mcp_config import MCPConfig, StdioMCPServer
 from openhands.core.logger import openhands_logger as logger
 from openhands.events import EventStream
 from openhands.events.action import (
@@ -713,28 +713,18 @@ class CLIRuntime(Runtime):
             # Get the MCP config for this runtime
             mcp_config = self.get_mcp_config()
 
-            if (
-                not mcp_config.sse_servers
-                and not mcp_config.shttp_servers
-                and not mcp_config.stdio_servers
-            ):
+            if not mcp_config.mcpServers:
                 self.log('warning', 'No MCP servers configured')
                 return ErrorObservation('No MCP servers configured')
 
             self.log(
                 'debug',
-                f'Creating MCP clients for action {action.name} with servers: '
-                f'SSE={len(mcp_config.sse_servers)}, SHTTP={len(mcp_config.shttp_servers)}, '
-                f'stdio={len(mcp_config.stdio_servers)}',
+                f'Creating MCP clients for action {action.name} with '
+                f'{len(mcp_config.mcpServers)} servers',
             )
 
             # Create clients for this specific operation
-            mcp_clients = await create_mcp_clients(
-                mcp_config.sse_servers,
-                mcp_config.shttp_servers,
-                self.sid,
-                mcp_config.stdio_servers,
-            )
+            mcp_clients = await create_mcp_clients(mcp_config, self.sid)
 
             if not mcp_clients:
                 self.log('warning', 'No MCP clients could be created')
@@ -931,39 +921,27 @@ class CLIRuntime(Runtime):
         )
 
     def get_mcp_config(
-        self, extra_stdio_servers: list[MCPStdioServerConfig] | None = None
+        self, extra_stdio_servers: dict[str, StdioMCPServer] | None = None
     ) -> MCPConfig:
-        """Get MCP configuration for CLI runtime.
-
-        Args:
-            extra_stdio_servers: Additional stdio servers to include in the config
-
-        Returns:
-            MCPConfig: The MCP configuration with stdio servers and any configured SSE/SHTTP servers
-        """
-        # Check if we're on Windows - MCP is disabled on Windows
+        """Get MCP configuration for CLI runtime."""
         if sys.platform == 'win32':
             self.log('debug', 'MCP is disabled on Windows, returning empty config')
-            return MCPConfig(sse_servers=[], stdio_servers=[], shttp_servers=[])
+            return MCPConfig(mcpServers={})
 
-        # Note: we update the self.config.mcp directly for CLI runtime, which is different from other runtimes.
         mcp_config = self.config.mcp
 
-        # Add any extra stdio servers
         if extra_stdio_servers:
-            current_stdio_servers = list(mcp_config.stdio_servers)
-            for extra_server in extra_stdio_servers:
-                # Check if this stdio server is already in the config
-                if extra_server not in current_stdio_servers:
-                    current_stdio_servers.append(extra_server)
-                    self.log('info', f'Added extra stdio server: {extra_server.name}')
-            mcp_config.stdio_servers = current_stdio_servers
+            merged = dict(mcp_config.mcpServers)
+            for name, server in extra_stdio_servers.items():
+                if name not in merged:
+                    merged[name] = server
+                    self.log('info', f'Added extra stdio server: {name}')
+            mcp_config = MCPConfig(mcpServers=merged)
+            self.config.mcp = mcp_config
 
         self.log(
             'debug',
-            f'CLI MCP config: {len(mcp_config.sse_servers)} SSE servers, '
-            f'{len(mcp_config.stdio_servers)} stdio servers, '
-            f'{len(mcp_config.shttp_servers)} SHTTP servers',
+            f'CLI MCP config: {len(mcp_config.mcpServers)} servers',
         )
 
         return mcp_config

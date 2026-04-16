@@ -52,7 +52,16 @@ def test_get_kwargs_from_settings():
     settings = Settings(
         language='es',
         enable_sound_notifications=True,
-        llm_api_key=SecretStr('test-key'),
+    )
+    settings.update(
+        {
+            'agent_settings': {
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'api_key': 'test-key',
+                },
+            },
+        }
     )
 
     kwargs = UserStore.get_kwargs_from_settings(settings)
@@ -81,11 +90,18 @@ async def test_create_default_settings_with_litellm(mock_litellm_api):
     user_id = str(uuid.uuid4())
 
     # Mock LiteLlmManager.create_entries to return a Settings object
-    mock_settings = Settings(
-        language='en',
-        llm_api_key=SecretStr('test_api_key'),
-        llm_base_url='http://test.url',
-        agent='CodeActAgent',
+    mock_settings = Settings(language='en')
+    mock_settings.update(
+        {
+            'agent_settings': {
+                'agent': 'CodeActAgent',
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'api_key': 'test_api_key',
+                    'base_url': 'http://test.url',
+                },
+            },
+        }
     )
 
     with patch(
@@ -97,8 +113,8 @@ async def test_create_default_settings_with_litellm(mock_litellm_api):
 
     # With mock, should return settings with API key from LiteLLM
     assert settings is not None
-    assert settings.llm_api_key.get_secret_value() == 'test_api_key'
-    assert settings.llm_base_url == 'http://test.url'
+    assert settings.agent_settings.llm.api_key.get_secret_value() == 'test_api_key'
+    assert settings.agent_settings.llm.base_url == 'http://test.url'
 
 
 @pytest.mark.asyncio
@@ -688,8 +704,12 @@ def test_has_custom_settings_custom_base_url():
 
     user_settings = UserSettings(
         keycloak_user_id='test',
-        llm_base_url='https://custom.api.example.com',
-        llm_model='some-model',
+        agent_settings={
+            'llm': {
+                'base_url': 'https://custom.api.example.com',
+                'model': 'some-model',
+            },
+        },
     )
 
     result = UserStore._has_custom_settings(user_settings, old_user_version=1)
@@ -701,11 +721,7 @@ def test_has_custom_settings_no_model():
     """Test that no model set means using defaults."""
     from storage.user_settings import UserSettings
 
-    user_settings = UserSettings(
-        keycloak_user_id='test',
-        llm_base_url=None,
-        llm_model=None,
-    )
+    user_settings = UserSettings(keycloak_user_id='test', agent_settings={})
 
     result = UserStore._has_custom_settings(user_settings, old_user_version=1)
 
@@ -718,13 +734,41 @@ def test_has_custom_settings_empty_model():
 
     user_settings = UserSettings(
         keycloak_user_id='test',
-        llm_base_url=None,
-        llm_model='   ',  # whitespace only
+        agent_settings={'llm': {'model': '   '}},
     )
 
     result = UserStore._has_custom_settings(user_settings, old_user_version=1)
 
     assert result is False
+
+
+def test_user_settings_byor_secret_property_encrypts_round_trip():
+    from storage.user_settings import UserSettings
+
+    user_settings = UserSettings(keycloak_user_id='test')
+
+    user_settings.llm_api_key_for_byor_secret = SecretStr('sk-byor-secret')
+
+    assert user_settings.llm_api_key_for_byor != 'sk-byor-secret'
+    assert user_settings.llm_api_key_for_byor_secret is not None
+    assert (
+        user_settings.llm_api_key_for_byor_secret.get_secret_value() == 'sk-byor-secret'
+    )
+
+
+def test_user_settings_byor_secret_property_accepts_plaintext_legacy_rows():
+    from storage.user_settings import UserSettings
+
+    user_settings = UserSettings(
+        keycloak_user_id='test',
+        llm_api_key_for_byor='sk-legacy-plaintext',
+    )
+
+    assert user_settings.llm_api_key_for_byor_secret is not None
+    assert (
+        user_settings.llm_api_key_for_byor_secret.get_secret_value()
+        == 'sk-legacy-plaintext'
+    )
 
 
 # --- Tests for _create_user_settings_from_entities ---
@@ -737,10 +781,15 @@ def test_create_user_settings_from_entities():
     # Create mock entities
     org_member = MagicMock()
     org_member.llm_api_key = SecretStr('test-api-key')
-    org_member.llm_api_key_for_byor = None
-    org_member.llm_model = 'claude-3-5-sonnet'
-    org_member.llm_base_url = 'https://api.example.com'
-    org_member.max_iterations = 50
+    org_member.agent_settings_diff = {
+        'llm': {
+            'model': 'claude-3-5-sonnet',
+            'base_url': 'https://api.example.com',
+        },
+    }
+    org_member.conversation_settings_diff = {
+        'max_iterations': 50,
+    }
 
     user = MagicMock()
     user.accepted_tos = None
@@ -753,26 +802,23 @@ def test_create_user_settings_from_entities():
     user.git_user_email = 'test@git.com'
 
     org = MagicMock()
-    org.agent = 'CodeActAgent'
-    org.security_analyzer = 'mock-analyzer'
-    org.confirmation_mode = False
     org.remote_runtime_resource_factor = 1.0
-    org.enable_default_condenser = True
     org.billing_margin = 0.0
     org.enable_proactive_conversation_starters = True
     org.sandbox_base_container_image = None
     org.sandbox_runtime_container_image = None
     org.org_version = 1
-    org.mcp_config = None
+    org.agent_settings = {
+        'agent': 'CodeActAgent',
+    }
+    org.conversation_settings = {
+        'security_analyzer': 'llm',
+    }
     org.search_api_key = None
     org.sandbox_api_key = None
     org.max_budget_per_task = None
     org.enable_solvability_analysis = False
     org.v1_enabled = True
-    org.condenser_max_size = None
-    org.default_llm_model = 'default-model'
-    org.default_llm_base_url = 'https://default.api.com'
-    org.default_max_iterations = 100
 
     result = UserStore._create_user_settings_from_entities(
         user_id, org_member, user, org
@@ -780,7 +826,11 @@ def test_create_user_settings_from_entities():
 
     assert result.keycloak_user_id == user_id
     assert result.llm_api_key == 'test-api-key'
-    assert result.llm_model == 'claude-3-5-sonnet'
+    assert result.agent_settings['llm']['model'] == 'claude-3-5-sonnet'
+    assert result.agent_settings['llm']['base_url'] == 'https://api.example.com'
+    assert result.agent_settings['agent'] == 'CodeActAgent'
+    assert result.conversation_settings['security_analyzer'] == 'llm'
+    assert result.conversation_settings['max_iterations'] == 50
     assert result.language == 'en'
     assert result.email == 'test@example.com'
 
@@ -792,10 +842,8 @@ def test_create_user_settings_from_entities_with_org_fallback():
     # Create mock entities with None in OrgMember
     org_member = MagicMock()
     org_member.llm_api_key = None
-    org_member.llm_api_key_for_byor = None
-    org_member.llm_model = None  # Should fall back to org.default_llm_model
-    org_member.llm_base_url = None  # Should fall back to org.default_llm_base_url
-    org_member.max_iterations = None  # Should fall back to org.default_max_iterations
+    org_member.agent_settings_diff = {}
+    org_member.conversation_settings_diff = {}
 
     user = MagicMock()
     user.accepted_tos = None
@@ -808,36 +856,44 @@ def test_create_user_settings_from_entities_with_org_fallback():
     user.git_user_email = None
 
     org = MagicMock()
-    org.agent = 'CodeActAgent'
-    org.security_analyzer = None
-    org.confirmation_mode = True
     org.remote_runtime_resource_factor = 2.0
-    org.enable_default_condenser = False
     org.billing_margin = 0.1
     org.enable_proactive_conversation_starters = False
     org.sandbox_base_container_image = 'custom-image'
     org.sandbox_runtime_container_image = None
     org.org_version = 2
-    org.mcp_config = {'key': 'value'}
+    org.agent_settings = {
+        'agent': 'CodeActAgent',
+        'llm': {
+            'model': 'default-model',
+            'base_url': 'https://default.api.com',
+        },
+        'condenser': {
+            'enabled': False,
+            'max_size': 1000,
+        },
+    }
+    org.conversation_settings = {
+        'confirmation_mode': True,
+        'max_iterations': 100,
+    }
     org.search_api_key = SecretStr('search-key')
     org.sandbox_api_key = None
     org.max_budget_per_task = 10.0
     org.enable_solvability_analysis = True
     org.v1_enabled = False
-    org.condenser_max_size = 1000
-    # Org defaults
-    org.default_llm_model = 'default-model'
-    org.default_llm_base_url = 'https://default.api.com'
-    org.default_max_iterations = 100
 
     result = UserStore._create_user_settings_from_entities(
         user_id, org_member, user, org
     )
 
     # Should have fallen back to org defaults
-    assert result.llm_model == 'default-model'
-    assert result.llm_base_url == 'https://default.api.com'
-    assert result.max_iterations == 100
+    assert result.agent_settings['llm']['model'] == 'default-model'
+    assert result.agent_settings['llm']['base_url'] == 'https://default.api.com'
+    assert result.agent_settings['agent'] == 'CodeActAgent'
+    assert result.agent_settings['condenser']['max_size'] == 1000
+    assert result.conversation_settings['confirmation_mode'] is True
+    assert result.conversation_settings['max_iterations'] == 100
     assert result.language == 'es'
     assert result.search_api_key == 'search-key'
 

@@ -20,7 +20,11 @@ from openhands.core.config.condenser_config import (
     ConversationWindowCondenserConfig,
     LLMSummarizingCondenserConfig,
 )
-from openhands.core.config.mcp_config import OpenHandsMCPConfigImpl
+from openhands.core.config.mcp_config import (
+    MCPConfig,
+    OpenHandsMCPConfigImpl,
+    merge_mcp_configs,
+)
 from openhands.core.exceptions import MicroagentValidationError
 from openhands.core.logger import OpenHandsLoggerAdapter
 from openhands.core.schema import AgentState
@@ -37,13 +41,13 @@ from openhands.events.serialization import event_from_dict, event_to_dict
 from openhands.events.stream import EventStreamSubscriber
 from openhands.llm.llm_registry import LLMRegistry
 from openhands.runtime.runtime_status import RuntimeStatus
-from openhands.sdk.utils.redact import sanitize_dict
 from openhands.server.constants import ROOM_KEY
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.server.session.agent_session import AgentSession
 from openhands.server.session.conversation_init_data import ConversationInitData
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
+from openhands.utils._redact_compat import sanitize_dict
 
 
 class WebSession:
@@ -141,16 +145,13 @@ class WebSession:
             AgentStateChangedObservation('', AgentState.LOADING),
             EventSource.ENVIRONMENT,
         )
-        agent_cls = settings.agent or self.config.default_agent
-        self.config.security.confirmation_mode = (
-            self.config.security.confirmation_mode
-            if settings.confirmation_mode is None
-            else settings.confirmation_mode
+        agent_settings = settings.agent_settings
+        agent_cls = agent_settings.agent or self.config.default_agent
+        self.config.security.confirmation_mode = bool(
+            settings.conversation_settings.confirmation_mode
         )
         self.config.security.security_analyzer = (
-            self.config.security.security_analyzer
-            if settings.security_analyzer is None
-            else settings.security_analyzer
+            settings.conversation_settings.security_analyzer
         )
         self.config.sandbox.base_container_image = (
             settings.sandbox_base_container_image
@@ -170,7 +171,9 @@ class WebSession:
         git_user_email = getattr(settings, 'git_user_email', None)
         if git_user_email is not None:
             self.config.git_user_email = git_user_email
-        max_iterations = settings.max_iterations or self.config.max_iterations
+        max_iterations = (
+            settings.conversation_settings.max_iterations or self.config.max_iterations
+        )
 
         # Prioritize settings over config for max_budget_per_task
         max_budget_per_task = (
@@ -188,28 +191,23 @@ class WebSession:
             f'MCP configuration before setup - self.config.mcp_config: {sanitize_dict(self.config.mcp.model_dump())}'
         )
 
-        # Check if settings has custom mcp_config
-        mcp_config = getattr(settings, 'mcp_config', None)
-        if mcp_config is not None:
-            # Use the provided MCP SHTTP servers instead of default setup
-            self.config.mcp = self.config.mcp.merge(mcp_config)
+        # Merge user's custom MCP servers from settings
+        sdk_mcp = settings.agent_settings.mcp_config
+        if sdk_mcp and sdk_mcp.mcpServers:
+            self.config.mcp = merge_mcp_configs(self.config.mcp, sdk_mcp)
             self.logger.debug(
-                f'Merged custom MCP Config: {sanitize_dict(mcp_config.model_dump())}'
+                f'Merged custom MCP Config: {sanitize_dict(sdk_mcp.model_dump())}'
             )
 
-        # Add OpenHands' MCP server by default
-        (
-            openhands_mcp_server,
-            openhands_mcp_stdio_servers,
-        ) = await OpenHandsMCPConfigImpl.create_default_mcp_server_config(
+        # Add OpenHands' default MCP servers
+        default_servers = await OpenHandsMCPConfigImpl.create_default_mcp_server_config(
             self.config.mcp_host, self.config, self.user_id
         )
-
-        if openhands_mcp_server:
-            self.config.mcp.shttp_servers.append(openhands_mcp_server)
-            self.logger.debug('Added default MCP HTTP server to config')
-
-            self.config.mcp.stdio_servers.extend(openhands_mcp_stdio_servers)
+        if default_servers:
+            self.config.mcp = MCPConfig(
+                mcpServers={**self.config.mcp.mcpServers, **default_servers}
+            )
+            self.logger.debug('Added default MCP servers to config')
 
         self.logger.debug(
             f'MCP configuration after setup - self.config.mcp: {sanitize_dict(self.config.mcp.model_dump())}'
@@ -221,7 +219,7 @@ class WebSession:
         agent_config.runtime = self.config.runtime
         agent_name = agent_cls if agent_cls is not None else 'agent'
         llm_config = self.config.get_llm_config_from_agent(agent_name)
-        if settings.enable_default_condenser:
+        if agent_settings.condenser.enabled:
             # Default condenser chains three condensers together:
             # 1. a conversation window condenser that handles explicit
             # condensation requests,
@@ -231,7 +229,6 @@ class WebSession:
             # The order matters: with the browser output first, the summarizer
             # will only see the most recent browser output, which should keep
             # the summarization cost down.
-            max_events_for_condenser = settings.condenser_max_size or 240
             default_condenser_config = CondenserPipelineConfig(
                 condensers=[
                     ConversationWindowCondenserConfig(),
@@ -239,7 +236,7 @@ class WebSession:
                     LLMSummarizingCondenserConfig(
                         llm_config=llm_config,
                         keep_first=4,
-                        max_size=max_events_for_condenser,
+                        max_size=agent_settings.condenser.max_size,
                     ),
                 ]
             )
@@ -249,7 +246,7 @@ class WebSession:
                 f' browser_output_masking(attention_window=2), '
                 f' llm(model="{llm_config.model}", '
                 f' base_url="{llm_config.base_url}", '
-                f' keep_first=4, max_size={max_events_for_condenser})'
+                f' keep_first=4, max_size={agent_settings.condenser.max_size})'
             )
             agent_config.condenser = default_condenser_config
         agent = Agent.get_cls(agent_cls)(agent_config, self.llm_registry)

@@ -139,7 +139,12 @@ async def test_create_org_with_owner_success(
         ),
         patch(
             'storage.org_service.OrgStore.get_kwargs_from_settings',
-            return_value={},
+            return_value={
+                'agent_settings': {
+                    'llm': {'model': 'anthropic/claude-sonnet-4-5-20250929'},
+                },
+                'conversation_settings': {},
+            },
         ),
         patch(
             'storage.org_service.OrgMemberStore.get_kwargs_from_settings',
@@ -160,7 +165,10 @@ async def test_create_org_with_owner_success(
         assert result.contact_name == contact_name
         assert result.contact_email == contact_email
         assert result.org_version > 0  # Should be set to ORG_SETTINGS_VERSION
-        assert result.default_llm_model is not None  # Should be set
+        assert (
+            result.agent_settings['llm']['model']
+            == 'anthropic/claude-sonnet-4-5-20250929'
+        )
 
         # Verify organization was persisted
         with session_maker() as session:
@@ -1192,8 +1200,12 @@ async def test_update_org_with_permissions_success_llm_fields_admin(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        default_llm_model='claude-opus-4-5-20251101',
-        default_llm_base_url='https://api.anthropic.com',
+        agent_settings_diff={
+            'llm': {
+                'model': 'claude-opus-4-5-20251101',
+                'base_url': 'https://api.anthropic.com',
+            },
+        }
     )
 
     with (
@@ -1210,8 +1222,8 @@ async def test_update_org_with_permissions_success_llm_fields_admin(
 
         # Assert
         assert result is not None
-        assert result.default_llm_model == 'claude-opus-4-5-20251101'
-        assert result.default_llm_base_url == 'https://api.anthropic.com'
+        assert result.agent_settings['llm']['model'] == 'claude-opus-4-5-20251101'
+        assert result.agent_settings['llm']['base_url'] == 'https://api.anthropic.com'
 
 
 @pytest.mark.asyncio
@@ -1254,8 +1266,12 @@ async def test_update_org_with_permissions_success_llm_fields_owner(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        default_llm_model='claude-opus-4-5-20251101',
-        security_analyzer='enabled',
+        agent_settings_diff={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+        },
+        conversation_settings_diff={
+            'security_analyzer': 'llm',
+        },
     )
 
     with (
@@ -1272,8 +1288,8 @@ async def test_update_org_with_permissions_success_llm_fields_owner(
 
         # Assert
         assert result is not None
-        assert result.default_llm_model == 'claude-opus-4-5-20251101'
-        assert result.security_analyzer == 'enabled'
+        assert result.agent_settings['llm']['model'] == 'claude-opus-4-5-20251101'
+        assert result.conversation_settings['security_analyzer'] == 'llm'
 
 
 @pytest.mark.asyncio
@@ -1317,7 +1333,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(
 
     update_data = OrgUpdate(
         contact_name='Jane Doe',
-        default_llm_model='claude-opus-4-5-20251101',
+        agent_settings_diff={'llm': {'model': 'claude-opus-4-5-20251101'}},
         conversation_expiration=30,
     )
 
@@ -1336,7 +1352,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(
         # Assert
         assert result is not None
         assert result.contact_name == 'Jane Doe'
-        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.agent_settings['llm']['model'] == 'claude-opus-4-5-20251101'
         assert result.conversation_expiration == 30
 
 
@@ -1520,7 +1536,9 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
 
     from server.routes.org_models import OrgUpdate
 
-    update_data = OrgUpdate(default_llm_model='claude-opus-4-5-20251101')
+    update_data = OrgUpdate(
+        agent_settings_diff={'llm': {'model': 'claude-opus-4-5-20251101'}}
+    )
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
@@ -1763,9 +1781,13 @@ async def test_update_org_with_permissions_only_llm_fields(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        default_llm_model='claude-opus-4-5-20251101',
-        security_analyzer='enabled',
-        agent='agent-mode',
+        agent_settings_diff={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'agent': 'agent-mode',
+        },
+        conversation_settings_diff={
+            'security_analyzer': 'llm',
+        },
     )
 
     with (
@@ -1782,9 +1804,9 @@ async def test_update_org_with_permissions_only_llm_fields(
 
         # Assert
         assert result is not None
-        assert result.default_llm_model == 'claude-opus-4-5-20251101'
-        assert result.security_analyzer == 'enabled'
-        assert result.agent == 'agent-mode'
+        assert result.agent_settings['llm']['model'] == 'claude-opus-4-5-20251101'
+        assert result.conversation_settings['security_analyzer'] == 'llm'
+        assert result.agent_settings['agent'] == 'agent-mode'
 
 
 @pytest.mark.asyncio

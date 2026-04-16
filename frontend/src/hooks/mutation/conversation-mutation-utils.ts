@@ -65,6 +65,23 @@ export const pauseV1Conversation = async (conversationId: string) => {
 };
 
 /**
+ * Ask the agent a side question on a V1 conversation
+ */
+export const askV1Agent = async (
+  conversationId: string,
+  question: string,
+): Promise<{ response: string }> => {
+  const { conversationUrl, sessionApiKey } =
+    await fetchV1ConversationData(conversationId);
+  return V1ConversationService.askAgent(
+    conversationId,
+    conversationUrl,
+    question,
+    sessionApiKey,
+  );
+};
+
+/**
  * Stops a V0 conversation using the legacy API
  */
 export const stopV0Conversation = async (conversationId: string) =>

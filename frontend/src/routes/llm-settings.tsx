@@ -1,38 +1,109 @@
 import React from "react";
-import { useTranslation } from "react-i18next";
-import { AxiosError } from "axios";
 import { useSearchParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
-import { useAIConfigOptions } from "#/hooks/query/use-ai-config-options";
-import { useSearchProviders } from "#/hooks/query/use-search-providers";
+import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
-import { hasAdvancedSettingsSet } from "#/utils/has-advanced-settings-set";
-import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
-import { SettingsSwitch } from "#/components/features/settings/settings-switch";
-import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
-import QuestionCircleIcon from "#/icons/question-circle.svg?react";
-import { I18nKey } from "#/i18n/declaration";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { HelpLink } from "#/ui/help-link";
-import { BrandButton } from "#/components/features/settings/brand-button";
+import { useConfig } from "#/hooks/query/use-config";
+import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
+import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
+import {
+  SdkSectionHeaderProps,
+  SdkSectionPage,
+} from "#/components/features/settings/sdk-settings/sdk-section-page";
+import { I18nKey } from "#/i18n/declaration";
 import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
-import { useConfig } from "#/hooks/query/use-config";
-import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
-import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
-import { DEFAULT_SETTINGS } from "#/services/settings";
+import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
+import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
-import { getProviderId } from "#/utils/map-provider";
-import { useMe } from "#/hooks/query/use-me";
-import { usePermission } from "#/hooks/organizations/use-permissions";
-import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
+import {
+  inferInitialView,
+  type SettingsView,
+} from "#/utils/sdk-settings-schema";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 
-const DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-5-20251101";
+const LLM_EXCLUDED_KEYS = new Set([
+  "llm.model",
+  "llm.api_key",
+  "llm.base_url",
+  "agent",
+  "tools",
+  "mcp_config",
+]);
+
+const buildModelId = (provider: string | null, model: string | null) => {
+  if (!provider || !model) return null;
+  return `${provider}/${model}`;
+};
+
+const hasSchemaField = (
+  schema: SettingsSchema | null | undefined,
+  fieldKey: string,
+) =>
+  schema?.sections.some((section) =>
+    section.fields.some((field) => field.key === fieldKey),
+  ) ?? false;
+
+const getSchemaFieldDefaultValue = (
+  schema: SettingsSchema | null | undefined,
+  fieldKey: string,
+) =>
+  schema?.sections
+    .flatMap((section) => section.fields)
+    .find((field) => field.key === fieldKey)?.default ?? null;
+
+const getSchemaFieldChoices = (
+  schema: SettingsSchema | null | undefined,
+  fieldKey: string,
+) =>
+  schema?.sections
+    .flatMap((section) => section.fields)
+    .find((field) => field.key === fieldKey)?.choices ?? [];
+
+const KNOWN_PROVIDER_DEFAULT_BASE_URLS: Partial<Record<string, Set<string>>> = {
+  openai: new Set(["https://api.openai.com", "https://api.openai.com/v1"]),
+  openhands: new Set([
+    "https://llm-proxy.app.all-hands.dev",
+    "https://llm-proxy.app.all-hands.dev/v1",
+  ]),
+  litellm_proxy: new Set([
+    "https://llm-proxy.app.all-hands.dev",
+    "https://llm-proxy.app.all-hands.dev/v1",
+  ]),
+};
+
+const normalizeBaseUrl = (baseUrl: string) => {
+  try {
+    const parsedUrl = new URL(baseUrl);
+    const normalizedPath = parsedUrl.pathname.replace(/\/+$/, "") || "";
+    return `${parsedUrl.origin}${normalizedPath}`;
+  } catch {
+    return baseUrl.trim().replace(/\/+$/, "");
+  }
+};
+
+const isProviderDefaultBaseUrl = (model: string, baseUrl: string) => {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const { provider } = extractModelAndProvider(model);
+
+  if (provider) {
+    const knownDefaults = KNOWN_PROVIDER_DEFAULT_BASE_URLS[provider];
+    if (knownDefaults) {
+      return knownDefaults.has(normalizedBaseUrl);
+    }
+  }
+
+  return Object.values(KNOWN_PROVIDER_DEFAULT_BASE_URLS).some((knownDefaults) =>
+    knownDefaults?.has(normalizedBaseUrl),
+  );
+};
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -53,7 +124,7 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
       <p className="text-xs">
         {t(I18nKey.SETTINGS$LLM_BILLING_INFO)}{" "}
         <a
-          href="https://docs.all-hands.dev/usage/llms/openhands-llms"
+          href="https://docs.openhands.dev/usage/llms/openhands-llms"
           rel="noreferrer noopener"
           target="_blank"
           className="underline underline-offset-2"
@@ -65,138 +136,54 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
   );
 }
 
-function LlmSettingsScreen() {
+export function LlmSettingsScreen({
+  scope = "personal",
+}: {
+  scope?: SettingsScope;
+}) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { mutate: saveSettings, isPending } = useSaveSettings();
-
-  const { data: securityAnalyzers } = useAIConfigOptions();
-  const { data: providers = [] } = useSearchProviders();
-  const { data: settings, isLoading, isFetching } = useSettings();
-  const { data: config } = useConfig();
-  const { data: me } = useMe();
-  const { hasPermission } = usePermission(me?.role ?? "member");
-
-  // In OSS mode, user has full access (no permission restrictions)
-  // In SaaS mode, check role-based permissions (members can only view, owners and admins can edit)
-  const isOssMode = config?.app_mode === "oss";
-  const isReadOnly = isOssMode ? false : !hasPermission("edit_llm_settings");
-
-  // Get organization type for contextual info messages
-  const { isTeamOrg } = useOrgTypeAndAccess();
-  const isAdminOrOwner = me?.role === "admin" || me?.role === "owner";
-
-  const getLlmSettingsInfoMessage = (): I18nKey | null => {
-    if (isOssMode) return null;
-    if (!isTeamOrg) return null;
-    return isAdminOrOwner
-      ? I18nKey.SETTINGS$LLM_ADMIN_INFO
-      : I18nKey.SETTINGS$LLM_MEMBER_INFO;
-  };
-
-  const infoMessageKey = getLlmSettingsInfoMessage();
-
-  const [view, setView] = React.useState<"basic" | "advanced">("basic");
-
-  const [dirtyInputs, setDirtyInputs] = React.useState({
-    model: false,
-    apiKey: false,
-    searchApiKey: false,
-    baseUrl: false,
-    agent: false,
-    confirmationMode: false,
-    enableDefaultCondenser: false,
-    securityAnalyzer: false,
-    condenserMaxSize: false,
-  });
-
-  // Track the currently selected model to show help text
-  const [currentSelectedModel, setCurrentSelectedModel] = React.useState<
-    string | null
-  >(null);
-
-  // Track confirmation mode state to control security analyzer visibility
-  const [confirmationModeEnabled, setConfirmationModeEnabled] = React.useState(
-    settings?.confirmation_mode ?? DEFAULT_SETTINGS.confirmation_mode,
+  const { data: settings } = useSettings(scope);
+  const { data: schema } = useAgentSettingsSchema(
+    settings?.agent_settings_schema,
   );
-
-  // Track selected security analyzer for form submission
-  const [selectedSecurityAnalyzer, setSelectedSecurityAnalyzer] =
-    React.useState(
-      settings?.security_analyzer === null
-        ? "none"
-        : (settings?.security_analyzer ?? DEFAULT_SETTINGS.security_analyzer),
-    );
+  const { data: config } = useConfig();
+  const { isTeamOrg } = useOrgTypeAndAccess();
 
   const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
     null,
   );
+  const [searchApiKey, setSearchApiKey] = React.useState("");
+  const [searchApiKeyDirty, setSearchApiKeyDirty] = React.useState(false);
+  const hasHydratedInitialPersonalSaasViewRef = React.useRef(false);
 
-  const defaultModel = DEFAULT_OPENHANDS_MODEL;
-
-  // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
-  const currentModel = currentSelectedModel || settings?.llm_model;
+  const defaultModel = String(
+    (DEFAULT_SETTINGS.agent_settings?.llm as Record<string, unknown>)?.model ??
+      "",
+  );
 
   const isSaasMode = config?.app_mode === "saas";
+  const hasAgentField = hasSchemaField(schema, "agent");
 
-  const isOpenHandsProvider = () => {
-    if (view === "basic") {
-      return selectedProvider === "openhands";
-    }
-
-    if (view === "advanced") {
-      if (dirtyInputs.model) {
-        return currentModel?.startsWith("openhands/");
-      }
-      return settings?.llm_model?.startsWith("openhands/");
-    }
-
-    return false;
-  };
-
-  const shouldUseOpenHandsKey = isOpenHandsProvider() && isSaasMode;
-
-  // Determine basic vs advanced view based on saved settings.
-  // If the user's provider is not in the known providers list, or if they
-  // have advanced settings configured, show the advanced view.
-  React.useEffect(() => {
-    if (settings) {
-      const { provider } = extractModelAndProvider(settings.llm_model);
-      const knownProvider =
-        !provider || providers.some((p) => p.name === provider);
-      const isAdvanced =
-        !knownProvider ||
-        hasAdvancedSettingsSet({
-          ...settings,
-        });
-
-      setView(isAdvanced ? "advanced" : "basic");
-    }
-  }, [settings, providers]);
-
-  // Initialize currentSelectedModel with the current settings
   React.useEffect(() => {
     if (settings?.llm_model) {
-      setCurrentSelectedModel(settings.llm_model);
+      const { provider } = extractModelAndProvider(settings.llm_model);
+      setSelectedProvider(provider || null);
     }
   }, [settings?.llm_model]);
 
-  // Update confirmation mode state when settings change
   React.useEffect(() => {
-    if (settings?.confirmation_mode !== undefined) {
-      setConfirmationModeEnabled(settings.confirmation_mode);
-    }
-  }, [settings?.confirmation_mode]);
+    setSearchApiKey(settings?.search_api_key ?? "");
+    setSearchApiKeyDirty(false);
+  }, [settings?.search_api_key]);
 
-  // Update selected security analyzer state when settings change
   React.useEffect(() => {
-    if (settings?.security_analyzer !== undefined) {
-      setSelectedSecurityAnalyzer(settings.security_analyzer || "none");
+    if (settings && isSaasMode && scope !== "org") {
+      hasHydratedInitialPersonalSaasViewRef.current = true;
     }
-  }, [settings?.security_analyzer]);
+  }, [isSaasMode, scope, settings]);
 
-  // Handle URL parameters for SaaS subscription redirects
   React.useEffect(() => {
     const checkout = searchParams.get("checkout");
 
@@ -209,435 +196,212 @@ function LlmSettingsScreen() {
     }
   }, [searchParams, setSearchParams, t]);
 
-  const handleSuccessfulMutation = () => {
-    displaySuccessToast(t(I18nKey.SETTINGS$SAVED_WARNING));
-    setDirtyInputs({
-      model: false,
-      apiKey: false,
-      searchApiKey: false,
-      baseUrl: false,
-      agent: false,
-      confirmationMode: false,
-      enableDefaultCondenser: false,
-      securityAnalyzer: false,
-      condenserMaxSize: false,
-    });
-  };
+  const infoMessageKey = React.useMemo((): I18nKey | null => {
+    if (!isSaasMode || !isTeamOrg) return null;
+    return scope === "org"
+      ? I18nKey.SETTINGS$ORG_DEFAULTS_INFO
+      : I18nKey.SETTINGS$PERSONAL_AGENT_INFO;
+  }, [isSaasMode, isTeamOrg, scope]);
 
-  const handleErrorMutation = (error: AxiosError) => {
-    const errorMessage = retrieveAxiosErrorMessage(error);
-    displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-  };
-
-  const basicFormAction = (formData: FormData) => {
-    const providerDisplay = formData.get("llm-provider-input")?.toString();
-    const provider = providerDisplay
-      ? getProviderId(providerDisplay)
-      : undefined;
-    const model = formData.get("llm-model-input")?.toString();
-    const apiKey = formData.get("llm-api-key-input")?.toString();
-    const searchApiKey = formData.get("search-api-key-input")?.toString();
-    const confirmationMode =
-      formData.get("enable-confirmation-mode-switch")?.toString() === "on";
-    const securityAnalyzer = formData
-      .get("security-analyzer-input")
-      ?.toString();
-
-    const fullLlmModel = provider && model && `${provider}/${model}`;
-
-    // Use OpenHands-managed key for OpenHands provider in SaaS mode
-    const finalApiKey = shouldUseOpenHandsKey ? null : apiKey;
-
-    saveSettings(
-      {
-        llm_model: fullLlmModel,
-        llm_api_key: finalApiKey || null,
-        search_api_key: searchApiKey || "",
-        confirmation_mode: confirmationMode,
-        security_analyzer:
-          securityAnalyzer === "none"
-            ? null
-            : securityAnalyzer || DEFAULT_SETTINGS.security_analyzer,
-
-        // reset advanced settings
-        llm_base_url: DEFAULT_SETTINGS.llm_base_url,
-        agent: DEFAULT_SETTINGS.agent,
-        enable_default_condenser: DEFAULT_SETTINGS.enable_default_condenser,
-      },
-      {
-        onSuccess: handleSuccessfulMutation,
-        onError: handleErrorMutation,
-      },
-    );
-  };
-
-  const advancedFormAction = (formData: FormData) => {
-    const model = formData.get("llm-custom-model-input")?.toString();
-    const baseUrl = formData.get("base-url-input")?.toString();
-    const apiKey = formData.get("llm-api-key-input")?.toString();
-    const searchApiKey = formData.get("search-api-key-input")?.toString();
-    const agent = formData.get("agent-input")?.toString();
-    const confirmationMode =
-      formData.get("enable-confirmation-mode-switch")?.toString() === "on";
-    const enableDefaultCondenser =
-      formData.get("enable-memory-condenser-switch")?.toString() === "on";
-    const condenserMaxSizeStr = formData
-      .get("condenser-max-size-input")
-      ?.toString();
-    const condenserMaxSizeRaw = condenserMaxSizeStr
-      ? Number.parseInt(condenserMaxSizeStr, 10)
-      : undefined;
-    const condenserMaxSize =
-      condenserMaxSizeRaw !== undefined
-        ? Math.max(20, condenserMaxSizeRaw)
-        : undefined;
-
-    const securityAnalyzer = formData
-      .get("security-analyzer-input")
-      ?.toString();
-
-    // Use OpenHands-managed key for OpenHands provider in SaaS mode
-    const finalApiKey = shouldUseOpenHandsKey ? null : apiKey;
-
-    saveSettings(
-      {
-        llm_model: model,
-        llm_base_url: baseUrl,
-        llm_api_key: finalApiKey || null,
-        search_api_key: searchApiKey || "",
-        agent,
-        confirmation_mode: confirmationMode,
-        enable_default_condenser: enableDefaultCondenser,
-        condenser_max_size:
-          condenserMaxSize ?? DEFAULT_SETTINGS.condenser_max_size,
-        security_analyzer:
-          securityAnalyzer === "none"
-            ? null
-            : securityAnalyzer || DEFAULT_SETTINGS.security_analyzer,
-      },
-      {
-        onSuccess: handleSuccessfulMutation,
-        onError: handleErrorMutation,
-      },
-    );
-  };
-
-  const handleToggleAdvancedSettings = (isToggled: boolean) => {
-    setView(isToggled ? "advanced" : "basic");
-    setDirtyInputs({
-      model: false,
-      apiKey: false,
-      searchApiKey: false,
-      baseUrl: false,
-      agent: false,
-      confirmationMode: false,
-      enableDefaultCondenser: false,
-      securityAnalyzer: false,
-      condenserMaxSize: false,
-    });
-  };
-
-  const handleModelIsDirty = (
-    provider: string | null,
-    model: string | null,
-  ) => {
-    // openai providers are special case; see ModelSelector
-    // component for details
-    const modelIsDirty = model !== settings?.llm_model.replace("openai/", "");
-    setDirtyInputs((prev) => ({
-      ...prev,
-      model: modelIsDirty,
-    }));
-
-    // Track the currently selected model for help text display
-    setCurrentSelectedModel(model);
-    setSelectedProvider(provider);
-  };
-
-  const onDefaultValuesChanged = (
-    provider: string | null,
-    model: string | null,
-  ) => {
-    setSelectedProvider(provider);
-    setCurrentSelectedModel(model);
-  };
-
-  const handleApiKeyIsDirty = (apiKey: string) => {
-    const apiKeyIsDirty = apiKey !== "";
-    setDirtyInputs((prev) => ({
-      ...prev,
-      apiKey: apiKeyIsDirty,
-    }));
-  };
-
-  const handleSearchApiKeyIsDirty = (searchApiKey: string) => {
-    const searchApiKeyIsDirty = searchApiKey !== settings?.search_api_key;
-    setDirtyInputs((prev) => ({
-      ...prev,
-      searchApiKey: searchApiKeyIsDirty,
-    }));
-  };
-
-  const handleCustomModelIsDirty = (model: string) => {
-    const modelIsDirty = model !== settings?.llm_model && model !== "";
-    setDirtyInputs((prev) => ({
-      ...prev,
-      model: modelIsDirty,
-    }));
-
-    // Track the currently selected model for help text display
-    setCurrentSelectedModel(model);
-  };
-
-  const handleBaseUrlIsDirty = (baseUrl: string) => {
-    const baseUrlIsDirty = baseUrl !== settings?.llm_base_url;
-    setDirtyInputs((prev) => ({
-      ...prev,
-      baseUrl: baseUrlIsDirty,
-    }));
-  };
-
-  const handleConfirmationModeIsDirty = (isToggled: boolean) => {
-    const confirmationModeIsDirty = isToggled !== settings?.confirmation_mode;
-    setDirtyInputs((prev) => ({
-      ...prev,
-      confirmationMode: confirmationModeIsDirty,
-    }));
-    setConfirmationModeEnabled(isToggled);
-
-    // When confirmation mode is enabled, set default security analyzer to "llm" if not already set
-    if (isToggled && !selectedSecurityAnalyzer) {
-      setSelectedSecurityAnalyzer(DEFAULT_SETTINGS.security_analyzer);
-      setDirtyInputs((prev) => ({
-        ...prev,
-        securityAnalyzer: true,
-      }));
-    }
-  };
-
-  const handleEnableDefaultCondenserIsDirty = (isToggled: boolean) => {
-    const enableDefaultCondenserIsDirty =
-      isToggled !== settings?.enable_default_condenser;
-    setDirtyInputs((prev) => ({
-      ...prev,
-      enableDefaultCondenser: enableDefaultCondenserIsDirty,
-    }));
-  };
-
-  const handleCondenserMaxSizeIsDirty = (value: string) => {
-    const parsed = value ? Number.parseInt(value, 10) : undefined;
-    const bounded = parsed !== undefined ? Math.max(20, parsed) : undefined;
-    const condenserMaxSizeIsDirty =
-      (bounded ?? DEFAULT_SETTINGS.condenser_max_size) !==
-      (settings?.condenser_max_size ?? DEFAULT_SETTINGS.condenser_max_size);
-    setDirtyInputs((prev) => ({
-      ...prev,
-      condenserMaxSize: condenserMaxSizeIsDirty,
-    }));
-  };
-
-  const handleSecurityAnalyzerIsDirty = (securityAnalyzer: string) => {
-    const securityAnalyzerIsDirty =
-      securityAnalyzer !== settings?.security_analyzer;
-    setDirtyInputs((prev) => ({
-      ...prev,
-      securityAnalyzer: securityAnalyzerIsDirty,
-    }));
-  };
-
-  const formIsDirty = Object.values(dirtyInputs).some((isDirty) => isDirty);
-
-  const getSecurityAnalyzerOptions = () => {
-    const analyzers = securityAnalyzers || [];
-    const orderedItems = [];
-
-    // Add LLM analyzer first
-    if (analyzers.includes("llm")) {
-      orderedItems.push({
-        key: "llm",
-        label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT),
-      });
-    }
-
-    // Add None option second
-    orderedItems.push({
-      key: "none",
-      label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_NONE),
-    });
-
-    // Add any other analyzers that might exist
-    analyzers.forEach((analyzer) => {
-      if (!["llm", "invariant", "none"].includes(analyzer)) {
-        // For unknown analyzers, use the analyzer name as fallback
-        // In the future, add specific i18n keys for new analyzers
-        orderedItems.push({
-          key: analyzer,
-          label: analyzer, // TODO: Add i18n support for new analyzers
-        });
+  const getInitialView = React.useCallback(
+    (
+      currentSettings: Settings,
+      filteredSchema: SettingsSchema,
+    ): SettingsView => {
+      if (
+        isSaasMode &&
+        scope !== "org" &&
+        !hasHydratedInitialPersonalSaasViewRef.current
+      ) {
+        return "basic";
       }
-    });
 
-    return orderedItems;
-  };
+      const schemaView = inferInitialView(currentSettings, filteredSchema);
+      if (schemaView !== "basic") {
+        return schemaView;
+      }
 
-  if (!settings || isFetching) return <LlmSettingsInputsSkeleton />;
+      const currentModel = currentSettings.llm_model ?? "";
+      const trimmedBaseUrl = currentSettings.llm_base_url?.trim() ?? "";
+      const hasCustomBaseUrl =
+        trimmedBaseUrl.length > 0 &&
+        !isProviderDefaultBaseUrl(currentModel, trimmedBaseUrl);
 
-  const formAction = (formData: FormData) => {
-    if (view === "basic") basicFormAction(formData);
-    else advancedFormAction(formData);
-  };
+      return hasCustomBaseUrl ? "all" : "basic";
+    },
+    [isSaasMode, scope],
+  );
 
-  return (
-    <div data-testid="llm-settings-screen" className="h-full relative">
-      <form
-        action={formAction}
-        className="flex flex-col h-full justify-between"
-      >
+  const buildHeader = React.useCallback(
+    ({ values, isDisabled, view, onChange }: SdkSectionHeaderProps) => {
+      const modelValue =
+        typeof values["llm.model"] === "string" ? values["llm.model"] : "";
+      const baseUrlValue =
+        typeof values["llm.base_url"] === "string"
+          ? values["llm.base_url"]
+          : "";
+      const agentValue =
+        typeof values.agent === "string" ? values.agent : undefined;
+      const derivedProvider = modelValue
+        ? extractModelAndProvider(modelValue).provider || null
+        : null;
+      const activeProvider =
+        view === "basic"
+          ? (selectedProvider ?? derivedProvider)
+          : derivedProvider;
+      const shouldUseOpenHandsKey =
+        isSaasMode && activeProvider === "openhands";
+      const showOpenHandsApiKeyHelp = modelValue.startsWith("openhands/");
+
+      const renderApiKeyInput = (testId: string, helpTestId: string) => {
+        if (shouldUseOpenHandsKey) {
+          return null;
+        }
+
+        return (
+          <>
+            <SettingsInput
+              testId={testId}
+              label={t(I18nKey.SETTINGS_FORM$API_KEY)}
+              type="password"
+              className="w-full"
+              value={
+                typeof values["llm.api_key"] === "string"
+                  ? values["llm.api_key"]
+                  : ""
+              }
+              placeholder={settings?.llm_api_key_set ? "<hidden>" : ""}
+              onChange={(value) => onChange("llm.api_key", value)}
+              isDisabled={isDisabled}
+              startContent={
+                settings?.llm_api_key_set ? (
+                  <KeyStatusIcon isSet={settings.llm_api_key_set} />
+                ) : undefined
+              }
+            />
+
+            <HelpLink
+              testId={helpTestId}
+              text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
+              linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
+              href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+            />
+          </>
+        );
+      };
+
+      const agentItems = getSchemaFieldChoices(schema, "agent").map(
+        (choice) => ({
+          key: String(choice.value),
+          label: choice.label,
+        }),
+      );
+
+      if (
+        hasAgentField &&
+        agentValue &&
+        !agentItems.some((item) => item.key === agentValue)
+      ) {
+        agentItems.unshift({ key: agentValue, label: agentValue });
+      }
+
+      return (
         <div className="flex flex-col gap-6">
-          {infoMessageKey && (
+          {scope === "org" ? <OrgWideSettingsBadge /> : null}
+
+          {infoMessageKey ? (
             <p
               data-testid="llm-settings-info-message"
               className="text-sm text-tertiary-alt"
             >
               {t(infoMessageKey)}
             </p>
-          )}
+          ) : null}
 
-          <SettingsSwitch
-            testId="advanced-settings-switch"
-            defaultIsToggled={view === "advanced"}
-            onToggle={handleToggleAdvancedSettings}
-            isToggled={view === "advanced"}
-            isDisabled={isReadOnly}
-          >
-            {t(I18nKey.SETTINGS$ADVANCED)}
-          </SettingsSwitch>
-
-          {view === "basic" && (
+          {view === "basic" ? (
             <div
-              data-testid="llm-settings-form-basic"
               className="flex flex-col gap-6"
+              data-testid="llm-settings-form-basic"
             >
-              {!isLoading && !isFetching && (
-                <>
-                  <ModelSelector
-                    currentModel={settings.llm_model || defaultModel}
-                    onChange={handleModelIsDirty}
-                    onDefaultValuesChanged={onDefaultValuesChanged}
-                    wrapperClassName="!flex-col !gap-6"
-                    isDisabled={isReadOnly}
-                  />
-                  {(settings.llm_model?.startsWith("openhands/") ||
-                    currentSelectedModel?.startsWith("openhands/")) && (
-                    <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
-                  )}
-                </>
-              )}
+              <ModelSelector
+                currentModel={modelValue || undefined}
+                onChange={(provider, model) => {
+                  setSelectedProvider(provider);
+                  const nextModel = buildModelId(provider, model);
+                  if (nextModel) {
+                    onChange("llm.model", nextModel);
+                  }
+                }}
+                wrapperClassName="!flex-col !gap-6"
+                isDisabled={isDisabled}
+              />
 
-              {!shouldUseOpenHandsKey && (
-                <>
-                  <SettingsInput
-                    testId="llm-api-key-input"
-                    name="llm-api-key-input"
-                    label={t(I18nKey.SETTINGS_FORM$API_KEY)}
-                    type="password"
-                    className="w-full max-w-[680px]"
-                    placeholder={settings.llm_api_key_set ? "<hidden>" : ""}
-                    onChange={handleApiKeyIsDirty}
-                    isDisabled={isReadOnly}
-                    startContent={
-                      settings.llm_api_key_set && (
-                        <KeyStatusIcon isSet={settings.llm_api_key_set} />
-                      )
-                    }
-                  />
+              {showOpenHandsApiKeyHelp ? (
+                <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
+              ) : null}
 
-                  <HelpLink
-                    testId="llm-api-key-help-anchor"
-                    text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
-                    linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-                    href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
-                  />
-                </>
+              {renderApiKeyInput(
+                "llm-api-key-input",
+                "llm-api-key-help-anchor",
               )}
             </div>
-          )}
-
-          {view === "advanced" && (
+          ) : (
             <div
-              data-testid="llm-settings-form-advanced"
               className="flex flex-col gap-6"
+              data-testid="llm-settings-form-advanced"
             >
               <SettingsInput
                 testId="llm-custom-model-input"
-                name="llm-custom-model-input"
                 label={t(I18nKey.SETTINGS$CUSTOM_MODEL)}
-                defaultValue={settings.llm_model || defaultModel}
-                placeholder={defaultModel}
                 type="text"
-                className="w-full max-w-[680px]"
-                onChange={handleCustomModelIsDirty}
-                isDisabled={isReadOnly}
+                className="w-full"
+                value={modelValue}
+                placeholder={defaultModel}
+                onChange={(value) => onChange("llm.model", value)}
+                isDisabled={isDisabled}
               />
-              {(settings.llm_model?.startsWith("openhands/") ||
-                currentSelectedModel?.startsWith("openhands/")) && (
+
+              {showOpenHandsApiKeyHelp ? (
                 <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
-              )}
+              ) : null}
 
               <SettingsInput
                 testId="base-url-input"
-                name="base-url-input"
                 label={t(I18nKey.SETTINGS$BASE_URL)}
-                defaultValue={settings.llm_base_url}
-                placeholder="https://api.openai.com"
                 type="text"
-                className="w-full max-w-[680px]"
-                onChange={handleBaseUrlIsDirty}
-                isDisabled={isReadOnly}
+                className="w-full"
+                value={baseUrlValue}
+                placeholder="https://api.openai.com"
+                onChange={(value) => onChange("llm.base_url", value)}
+                isDisabled={isDisabled}
               />
 
-              {!shouldUseOpenHandsKey && (
-                <>
-                  <SettingsInput
-                    testId="llm-api-key-input"
-                    name="llm-api-key-input"
-                    label={t(I18nKey.SETTINGS_FORM$API_KEY)}
-                    type="password"
-                    className="w-full max-w-[680px]"
-                    placeholder={settings.llm_api_key_set ? "<hidden>" : ""}
-                    onChange={handleApiKeyIsDirty}
-                    isDisabled={isReadOnly}
-                    startContent={
-                      settings.llm_api_key_set && (
-                        <KeyStatusIcon isSet={settings.llm_api_key_set} />
-                      )
-                    }
-                  />
-                  <HelpLink
-                    testId="llm-api-key-help-anchor-advanced"
-                    text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
-                    linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-                    href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
-                  />
-                </>
+              {renderApiKeyInput(
+                "llm-api-key-input",
+                "llm-api-key-help-anchor-advanced",
               )}
 
-              {config?.app_mode !== "saas" && (
+              {!isSaasMode ? (
                 <>
                   <SettingsInput
                     testId="search-api-key-input"
-                    name="search-api-key-input"
                     label={t(I18nKey.SETTINGS$SEARCH_API_KEY)}
                     type="password"
-                    className="w-full max-w-[680px]"
-                    defaultValue={settings.search_api_key || ""}
-                    onChange={handleSearchApiKeyIsDirty}
+                    className="w-full"
+                    value={searchApiKey}
                     placeholder={t(I18nKey.API$TVLY_KEY_EXAMPLE)}
+                    onChange={(value) => {
+                      setSearchApiKey(value);
+                      setSearchApiKeyDirty(
+                        value !== (settings?.search_api_key ?? ""),
+                      );
+                    }}
                     startContent={
-                      settings.search_api_key_set && (
+                      settings?.search_api_key_set ? (
                         <KeyStatusIcon isSet={settings.search_api_key_set} />
-                      )
+                      ) : undefined
                     }
+                    isDisabled={isDisabled}
                   />
 
                   <HelpLink
@@ -646,125 +410,122 @@ function LlmSettingsScreen() {
                     linkText={t(I18nKey.SETTINGS$SEARCH_API_KEY_INSTRUCTIONS)}
                     href="https://tavily.com/"
                   />
-                </>
-              )}
 
-              <div className="w-full max-w-[680px]">
-                <SettingsInput
-                  testId="condenser-max-size-input"
-                  name="condenser-max-size-input"
-                  type="number"
-                  min={20}
-                  step={1}
-                  label={t(I18nKey.SETTINGS$CONDENSER_MAX_SIZE)}
-                  defaultValue={(
-                    settings.condenser_max_size ??
-                    DEFAULT_SETTINGS.condenser_max_size
-                  )?.toString()}
-                  onChange={(value) => handleCondenserMaxSizeIsDirty(value)}
-                  isDisabled={isReadOnly || !settings.enable_default_condenser}
-                  className="w-full max-w-[680px] capitalize"
-                />
-                <p className="text-xs text-tertiary-alt mt-6">
-                  {t(I18nKey.SETTINGS$CONDENSER_MAX_SIZE_TOOLTIP)}
-                </p>
-              </div>
-
-              <SettingsSwitch
-                testId="enable-memory-condenser-switch"
-                name="enable-memory-condenser-switch"
-                defaultIsToggled={settings.enable_default_condenser}
-                onToggle={handleEnableDefaultCondenserIsDirty}
-                isDisabled={isReadOnly}
-              >
-                {t(I18nKey.SETTINGS$ENABLE_MEMORY_CONDENSATION)}
-              </SettingsSwitch>
-
-              {/* Confirmation mode and security analyzer */}
-              <div className="flex items-center gap-2">
-                <SettingsSwitch
-                  testId="enable-confirmation-mode-switch"
-                  name="enable-confirmation-mode-switch"
-                  onToggle={handleConfirmationModeIsDirty}
-                  defaultIsToggled={settings.confirmation_mode}
-                  isBeta
-                  isDisabled={isReadOnly}
-                >
-                  {t(I18nKey.SETTINGS$CONFIRMATION_MODE)}
-                </SettingsSwitch>
-                <StyledTooltip
-                  content={t(I18nKey.SETTINGS$CONFIRMATION_MODE_TOOLTIP)}
-                >
-                  <span className="text-[#9099AC] hover:text-white cursor-help">
-                    <QuestionCircleIcon width={16} height={16} />
-                  </span>
-                </StyledTooltip>
-              </div>
-
-              {confirmationModeEnabled && (
-                <>
-                  <div className="w-full max-w-[680px]">
+                  {hasAgentField ? (
                     <SettingsDropdownInput
-                      testId="security-analyzer-input"
-                      name="security-analyzer-display"
-                      label={t(I18nKey.SETTINGS$SECURITY_ANALYZER)}
-                      items={getSecurityAnalyzerOptions()}
-                      placeholder={t(
-                        I18nKey.SETTINGS$SECURITY_ANALYZER_PLACEHOLDER,
-                      )}
-                      selectedKey={selectedSecurityAnalyzer || "none"}
+                      testId="agent-input"
+                      name="agent-input"
+                      label={t(I18nKey.SETTINGS$AGENT)}
+                      items={agentItems}
+                      selectedKey={agentValue}
                       isClearable={false}
-                      isDisabled={isReadOnly}
                       onSelectionChange={(key) => {
-                        const newValue = key?.toString() || "";
-                        setSelectedSecurityAnalyzer(newValue);
-                        handleSecurityAnalyzerIsDirty(newValue);
-                      }}
-                      onInputChange={(value) => {
-                        // Handle when input is cleared
-                        if (!value) {
-                          setSelectedSecurityAnalyzer("");
-                          handleSecurityAnalyzerIsDirty("");
+                        if (key) {
+                          onChange("agent", String(key));
                         }
                       }}
+                      isDisabled={isDisabled}
                       wrapperClassName="w-full"
                     />
-                    {/* Hidden input to store the actual key value for form submission */}
-                    <input
-                      type="hidden"
-                      name="security-analyzer-input"
-                      value={selectedSecurityAnalyzer || ""}
-                    />
-                  </div>
-                  <p className="text-xs text-tertiary-alt max-w-[680px]">
-                    {t(I18nKey.SETTINGS$SECURITY_ANALYZER_DESCRIPTION)}
-                  </p>
+                  ) : null}
                 </>
-              )}
+              ) : null}
             </div>
           )}
         </div>
+      );
+    },
+    [
+      hasAgentField,
+      infoMessageKey,
+      isSaasMode,
+      defaultModel,
+      schema,
+      searchApiKey,
+      selectedProvider,
+      settings?.llm_api_key_set,
+      settings?.search_api_key,
+      settings?.search_api_key_set,
+      t,
+    ],
+  );
 
-        {!isReadOnly && (
-          <div className="flex gap-6 p-6 justify-end">
-            <BrandButton
-              testId="submit-button"
-              type="submit"
-              variant="primary"
-              isDisabled={!formIsDirty || isPending}
-            >
-              {!isPending && t("SETTINGS$SAVE_CHANGES")}
-              {isPending && t("SETTINGS$SAVING")}
-            </BrandButton>
-          </div>
-        )}
-      </form>
-    </div>
+  const buildPayload = React.useCallback(
+    (
+      basePayload: Record<string, unknown>,
+      context: {
+        values: Record<string, string | boolean>;
+        view: SettingsView;
+      },
+    ) => {
+      // basePayload is a nested dict (e.g. {llm: {model: "gpt-4"}})
+      const agentSettings = structuredClone(basePayload);
+      const topLevel: Record<string, unknown> = {};
+
+      if (!isSaasMode && searchApiKeyDirty) {
+        topLevel.search_api_key = searchApiKey.trim();
+      }
+
+      const modelValue =
+        typeof context.values["llm.model"] === "string"
+          ? context.values["llm.model"]
+          : "";
+      const derivedProvider = modelValue
+        ? extractModelAndProvider(modelValue).provider || null
+        : null;
+      const activeProvider =
+        context.view === "basic"
+          ? (selectedProvider ?? derivedProvider)
+          : derivedProvider;
+      const shouldUseOpenHandsKey =
+        isSaasMode && activeProvider === "openhands";
+
+      const llm = (agentSettings.llm ?? {}) as Record<string, unknown>;
+      if (shouldUseOpenHandsKey && llm.model !== undefined) {
+        llm.api_key = "";
+        agentSettings.llm = llm;
+      }
+
+      if (context.view === "basic") {
+        llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
+        agentSettings.llm = llm;
+
+        if (!isSaasMode) {
+          topLevel.search_api_key = DEFAULT_SETTINGS.search_api_key;
+        }
+
+        if (hasAgentField) {
+          agentSettings.agent = getSchemaFieldDefaultValue(schema, "agent");
+        }
+      }
+
+      return { agent_settings: agentSettings, ...topLevel };
+    },
+    [
+      hasAgentField,
+      isSaasMode,
+      schema,
+      searchApiKey,
+      searchApiKeyDirty,
+      selectedProvider,
+    ],
+  );
+
+  return (
+    <SdkSectionPage
+      scope={scope}
+      sectionKeys={["llm", "general"]}
+      excludeKeys={LLM_EXCLUDED_KEYS}
+      header={buildHeader}
+      extraDirty={searchApiKeyDirty}
+      buildPayload={buildPayload}
+      onSaveSuccess={() => setSearchApiKeyDirty(false)}
+      getInitialView={getInitialView}
+      testId="llm-settings-screen"
+    />
   );
 }
 
-// Route protection: all roles have view_llm_settings, but this guard ensures
-// consistency with other routes and allows future restrictions if needed
 export const clientLoader = createPermissionGuard("view_llm_settings");
 
 export default LlmSettingsScreen;

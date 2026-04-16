@@ -43,7 +43,7 @@ from openhands.app_server.status.system_stats import (
     get_system_stats,
     update_last_execution_time,
 )
-from openhands.core.config.mcp_config import MCPStdioServerConfig
+from openhands.core.config.mcp_config import StdioMCPServer
 from openhands.core.exceptions import BrowserUnavailableException
 from openhands.core.logger import get_uvicorn_log_config
 from openhands.core.logger import openhands_logger as logger
@@ -873,7 +873,7 @@ if __name__ == '__main__':
         logger.info(
             f'Updating MCP server with tools: {redact_text_secrets(str(mcp_tools_to_sync))}'
         )
-        mcp_tools_to_sync = [MCPStdioServerConfig(**tool) for tool in mcp_tools_to_sync]
+        mcp_tools_to_sync = [StdioMCPServer(**tool) for tool in mcp_tools_to_sync]
         try:
             await mcp_proxy_manager.update_and_remount(app, mcp_tools_to_sync, ['*'])
             logger.info('MCP Proxy Manager updated and remounted successfully')
