@@ -46,6 +46,7 @@ services:
       - OH_SANDBOX_FWD__B1_SYSTEM_USER_EMAIL=${B1_SYSTEM_USER_EMAIL:-system@build.one}
       - OH_SANDBOX_FWD__B1_SYSTEM_USER_PASSWORD=${B1_SYSTEM_USER_PASSWORD:-}
       - OH_SANDBOX_FWD__OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OH_SANDBOX_FWD__LMNR_PROJECT_API_KEY=${LMNR_PROJECT_API_KEY:-}
 
       # --- Make sandbox containers visible in Portainer ---
       - 'OH_SANDBOX_CONTAINER_LABELS={"com.docker.compose.project": "${STACK}", "com.docker.compose.service": "agent-server"}'
