@@ -15,6 +15,10 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openhands.agent_server.models import Success
+from openhands.app_server.app_conversation.app_conversation_info_service import (
+    AppConversationInfoService,
+)
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
     AppConversationInfo,
@@ -41,6 +45,7 @@ from openhands.app_server.app_conversation.app_conversation_start_task_service i
     AppConversationStartTaskService,
 )
 from openhands.app_server.config import (
+    depends_app_conversation_info_service,
     depends_app_conversation_service,
     depends_app_conversation_start_task_service,
     depends_db_session,
@@ -89,6 +94,7 @@ router = APIRouter(
 )
 logger = logging.getLogger(__name__)
 app_conversation_service_dependency = depends_app_conversation_service()
+app_conversation_info_service_dependency = depends_app_conversation_info_service()
 app_conversation_start_task_service_dependency = (
     depends_app_conversation_start_task_service()
 )
@@ -380,6 +386,105 @@ async def update_app_conversation(
     if info is None:
         raise HTTPException(404, 'unknown_app_conversation')
     return info
+
+
+async def _finalize_sandbox_delete(
+    sandbox_service: SandboxService,
+    app_conversation_info_service: AppConversationInfoService,
+    sandbox_id: str,
+    db_session: AsyncSession,
+    httpx_client: httpx.AsyncClient,
+) -> None:
+    """Delete sandbox if no other conversations reference it, then close connections."""
+    try:
+        conversation_count = (
+            await app_conversation_info_service.count_conversations_by_sandbox_id(
+                sandbox_id
+            )
+        )
+        if conversation_count == 0:
+            await sandbox_service.delete_sandbox(sandbox_id)
+        await db_session.commit()
+    finally:
+        await asyncio.gather(
+            db_session.aclose(),
+            httpx_client.aclose(),
+        )
+
+
+@router.delete('/{conversation_id}', responses={404: {'description': 'Item not found'}})
+async def delete_app_conversation(
+    request: Request,
+    conversation_id: str,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    app_conversation_info_service: AppConversationInfoService = (
+        app_conversation_info_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    db_session: AsyncSession = db_session_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Success:
+    """Delete an app conversation and its associated data.
+
+    This endpoint deletes the conversation and cleans up sandbox resources
+    if no other conversations are using the same sandbox.
+    """
+    try:
+        conversation_uuid = UUID(conversation_id)
+    except ValueError:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, 'Invalid conversation ID format'
+        )
+
+    # Get conversation info to check if it exists and get sandbox_id
+    app_conversation_info = (
+        await app_conversation_info_service.get_app_conversation_info(conversation_uuid)
+    )
+    if not app_conversation_info:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, 'Conversation not found')
+
+    sandbox_id = app_conversation_info.sandbox_id
+
+    # Check if sandbox is shared with other conversations
+    sandbox_is_shared = False
+    if sandbox_id:
+        conversation_count = (
+            await app_conversation_info_service.count_conversations_by_sandbox_id(
+                sandbox_id
+            )
+        )
+        sandbox_is_shared = conversation_count > 1
+
+    # Delete the conversation (skip agent server DELETE if sandbox is shared)
+    deleted = await app_conversation_service.delete_app_conversation(
+        conversation_uuid,
+        skip_agent_server_delete=sandbox_is_shared,
+    )
+    if not deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, 'Failed to delete conversation')
+
+    # Commit the deletion
+    await db_session.commit()
+
+    # Keep connections open for background task
+    set_db_session_keep_open(request.state, True)
+    set_httpx_client_keep_open(request.state, True)
+
+    # Delete the sandbox in the background if no other conversations reference it
+    if sandbox_id:
+        asyncio.create_task(
+            _finalize_sandbox_delete(
+                sandbox_service,
+                app_conversation_info_service,
+                sandbox_id,
+                db_session,
+                httpx_client,
+            )
+        )
+
+    return Success()
 
 
 @router.post('/stream-start')
