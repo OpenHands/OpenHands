@@ -70,6 +70,7 @@ export function SdkSectionPage({
   excludeKeys = EMPTY_EXCLUDE_KEYS,
   scope = "personal",
   settingsSource = "agent_settings",
+  variant,
   header,
   extraDirty = false,
   buildPayload,
@@ -81,6 +82,14 @@ export function SdkSectionPage({
   excludeKeys?: Set<string>;
   scope?: SettingsScope;
   settingsSource?: SettingsValueSource;
+  /**
+   * Which ``AgentSettings`` variant ("llm" or "acp") this page owns.
+   * When set, sections and fields tagged with a different variant are
+   * hidden from the generic renderer. Leaving this undefined keeps the
+   * schema unfiltered (used for non–variant-aware pages such as
+   * condenser/verification/MCP that are already LLM-only by nature).
+   */
+  variant?: string | null;
 
   header?: (props: SdkSectionHeaderProps) => React.ReactNode;
   extraDirty?: boolean;
@@ -196,8 +205,9 @@ export function SdkSectionPage({
       values,
       view,
       excludeKeys,
+      variant,
     );
-  }, [filteredSchema, values, view, excludeKeys]);
+  }, [filteredSchema, values, view, excludeKeys, variant]);
 
   const handleFieldChange = React.useCallback(
     (fieldKey: string, nextValue: string | boolean) => {

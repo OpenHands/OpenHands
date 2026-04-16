@@ -426,43 +426,52 @@ export function buildSdkSettingsPayloadForView(
   return payload as SdkSettingsPayload;
 }
 
-/** Extract the currently-selected agent_kind from form values.
- *  Defaults to "llm" to match the server-side discriminator default. */
-function getAgentKind(values: SettingsFormValues): string {
-  const raw = values.agent_kind;
-  if (typeof raw === "string" && raw.length > 0) return raw;
-  return "llm";
-}
-
-/** Whether a section applies to the currently-selected agent_kind.
- *  Sections with variant == null are always shown. */
+/** Whether a section applies to the given ``AgentSettings`` variant.
+ *  Sections with variant == null are always shown; otherwise the
+ *  section variant must match the page's variant. When the page does
+ *  not pass a variant (default), every section is kept — used by pages
+ *  that are not variant-aware. */
 function isSectionVisibleForVariant(
   section: SettingsSectionSchema,
-  values: SettingsFormValues,
+  variant: string | null | undefined,
 ): boolean {
+  if (variant == null) return true;
   if (section.variant == null) return true;
-  return section.variant === getAgentKind(values);
+  return section.variant === variant;
+}
+
+/** Whether a field applies to the given ``AgentSettings`` variant.
+ *  Same rules as ``isSectionVisibleForVariant``. */
+function isFieldVisibleForVariant(
+  field: SettingsFieldSchema,
+  variant: string | null | undefined,
+): boolean {
+  if (variant == null) return true;
+  if (field.variant == null) return true;
+  return field.variant === variant;
 }
 
 /** Return sections with fields filtered for the current view tier.
  *  Specially-rendered fields are excluded from the generic list.
- *  Sections whose ``variant`` does not match the current ``agent_kind``
- *  value are hidden. */
+ *  Sections and fields whose ``variant`` does not match the page's
+ *  ``agent_kind`` are hidden. */
 export function getVisibleSettingsSections(
   schema: SettingsSchema,
   values: SettingsFormValues,
   view: SettingsView,
   excludeKeys: Set<string> = SPECIALLY_RENDERED_KEYS,
+  variant: string | null | undefined = null,
 ): SettingsSectionSchema[] {
   return schema.sections
-    .filter((section) => isSectionVisibleForVariant(section, values))
+    .filter((section) => isSectionVisibleForVariant(section, variant))
     .map((section) => ({
       ...section,
       fields: section.fields.filter(
         (field) =>
           !excludeKeys.has(field.key) &&
           isFieldVisibleInView(field, view) &&
-          isSettingsFieldVisible(field, values),
+          isSettingsFieldVisible(field, values) &&
+          isFieldVisibleForVariant(field, variant),
       ),
     }))
     .filter((section) => section.fields.length > 0);

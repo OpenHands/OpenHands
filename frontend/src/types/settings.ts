@@ -88,6 +88,11 @@ export type SettingsFieldSchema = {
   prominence: SettingProminence;
   secret: boolean;
   required: boolean;
+  /**
+   * When set, this field only applies to the named ``AgentSettings`` variant
+   * ("llm" or "acp"). Fields with ``variant: null`` are shown regardless.
+   */
+  variant?: string | null;
 };
 
 export type SettingsSectionSchema = {

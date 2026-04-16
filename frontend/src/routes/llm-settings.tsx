@@ -499,6 +499,11 @@ export function LlmSettingsScreen({
         }
       }
 
+      // Saving from the LLM page always commits the LLM variant — the
+      // sidebar-route is the discriminator, so inject ``agent_kind`` on
+      // write. Existing stored ACP settings are replaced.
+      agentSettings.agent_kind = "llm";
+
       return { agent_settings: agentSettings, ...topLevel };
     },
     [
@@ -516,6 +521,7 @@ export function LlmSettingsScreen({
       scope={scope}
       sectionKeys={["llm", "general"]}
       excludeKeys={LLM_EXCLUDED_KEYS}
+      variant="llm"
       header={buildHeader}
       extraDirty={searchApiKeyDirty}
       buildPayload={buildPayload}
