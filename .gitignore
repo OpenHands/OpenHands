@@ -263,6 +263,7 @@ containers/runtime/code
 # Local tooling / ad-hoc backups (Windows dev)
 .debug_console_plus/
 frontend/node_modules._old_*/
+frontend/node_modules._del_*/
 
 # Local OpenHands app data (sqlite, secrets); never commit
 .openhands/
