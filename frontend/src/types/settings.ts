@@ -94,6 +94,16 @@ export type SettingsSectionSchema = {
   key: string;
   label: string;
   fields: SettingsFieldSchema[];
+  /**
+   * When set, this section only applies to the named AgentSettings variant
+   * (currently "llm" or "acp"). Sections with variant === null are always
+   * shown regardless of agent_kind.
+   *
+   * The GUI filters sections by the user's current agent_kind so that the
+   * LLM-only sections (llm, condenser, verification) hide when the user
+   * picks "acp", and the ACP-only section hides when the user picks "llm".
+   */
+  variant?: string | null;
 };
 
 export type SettingsSchema = {

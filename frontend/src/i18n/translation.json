@@ -1070,6 +1070,23 @@
     "uk": "MCP",
     "ca": "MCP"
   },
+  "SETTINGS$NAV_ACP": {
+    "en": "ACP",
+    "ja": "ACP",
+    "zh-CN": "ACP",
+    "zh-TW": "ACP",
+    "ko-KR": "ACP",
+    "no": "ACP",
+    "it": "ACP",
+    "pt": "ACP",
+    "es": "ACP",
+    "ar": "ACP",
+    "fr": "ACP",
+    "tr": "ACP",
+    "de": "ACP",
+    "uk": "ACP",
+    "ca": "ACP"
+  },
   "SETTINGS$MCP_CONFIGURATION": {
     "en": "MCP Configuration",
     "ja": "MCP設定",

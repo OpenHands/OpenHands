@@ -92,6 +92,12 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     section: "personal",
   },
   {
+    icon: <ServerProcessIcon width={22} height={22} />,
+    to: "/settings/acp",
+    text: "SETTINGS$NAV_ACP",
+    section: "personal",
+  },
+  {
     icon: <UserIcon width={22} height={22} />,
     to: "/settings/user",
     text: "SETTINGS$NAV_USER",
@@ -143,6 +149,11 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <ServerProcessIcon width={22} height={22} />,
     to: "/settings/mcp",
     text: "SETTINGS$NAV_MCP",
+  },
+  {
+    icon: <ServerProcessIcon width={22} height={22} />,
+    to: "/settings/acp",
+    text: "SETTINGS$NAV_ACP",
   },
   {
     icon: <LightbulbIcon width={22} height={22} />,

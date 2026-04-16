@@ -426,8 +426,28 @@ export function buildSdkSettingsPayloadForView(
   return payload as SdkSettingsPayload;
 }
 
+/** Extract the currently-selected agent_kind from form values.
+ *  Defaults to "llm" to match the server-side discriminator default. */
+function getAgentKind(values: SettingsFormValues): string {
+  const raw = values.agent_kind;
+  if (typeof raw === "string" && raw.length > 0) return raw;
+  return "llm";
+}
+
+/** Whether a section applies to the currently-selected agent_kind.
+ *  Sections with variant == null are always shown. */
+function isSectionVisibleForVariant(
+  section: SettingsSectionSchema,
+  values: SettingsFormValues,
+): boolean {
+  if (section.variant == null) return true;
+  return section.variant === getAgentKind(values);
+}
+
 /** Return sections with fields filtered for the current view tier.
- *  Specially-rendered fields are excluded from the generic list. */
+ *  Specially-rendered fields are excluded from the generic list.
+ *  Sections whose ``variant`` does not match the current ``agent_kind``
+ *  value are hidden. */
 export function getVisibleSettingsSections(
   schema: SettingsSchema,
   values: SettingsFormValues,
@@ -435,6 +455,7 @@ export function getVisibleSettingsSections(
   excludeKeys: Set<string> = SPECIALLY_RENDERED_KEYS,
 ): SettingsSectionSchema[] {
   return schema.sections
+    .filter((section) => isSectionVisibleForVariant(section, values))
     .map((section) => ({
       ...section,
       fields: section.fields.filter(
