@@ -564,7 +564,7 @@ class DockerNestedConversationManager(ConversationManager):
             user_id=user_id,
         )
         llm_registry.retry_listner = session._notify_on_llm_retry
-        agent_cls = settings.agent or config.default_agent
+        agent_cls = settings.agent_settings.agent or config.default_agent
         agent_config = config.get_agent_config(agent_cls)
         agent = Agent.get_cls(agent_cls)(agent_config, llm_registry)
 

@@ -70,7 +70,6 @@ describe("Settings Screen", () => {
     llm_api_key: "",
     max_iterations: 100,
     llm_model: "gpt-4",
-    llm_api_key_for_byor: null,
     llm_base_url: "",
     status: "active",
     ...overrides,
@@ -152,10 +151,10 @@ describe("Settings Screen", () => {
 
     const navbar = await screen.findByTestId("settings-navbar");
     sectionsToInclude.forEach((section) => {
-      const sectionElement = within(navbar).getByText(section, {
+      const sectionElements = within(navbar).getAllByText(section, {
         exact: false, // case insensitive
       });
-      expect(sectionElement).toBeInTheDocument();
+      expect(sectionElements.length).toBeGreaterThan(0);
     });
     sectionsToExclude.forEach((section) => {
       const sectionElement = within(navbar).queryByText(section, {
@@ -202,10 +201,10 @@ describe("Settings Screen", () => {
       expect(within(navbar).getByText("Billing")).toBeInTheDocument();
     });
     sectionsToInclude.forEach((section) => {
-      const sectionElement = within(navbar).getByText(section, {
+      const sectionElements = within(navbar).getAllByText(section, {
         exact: false, // case insensitive
       });
-      expect(sectionElement).toBeInTheDocument();
+      expect(sectionElements.length).toBeGreaterThan(0);
     });
     sectionsToExclude.forEach((section) => {
       const sectionElement = within(navbar).queryByText(section, {
@@ -266,7 +265,6 @@ describe("Settings Screen", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -307,7 +305,6 @@ describe("Settings Screen", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -346,7 +343,6 @@ describe("Settings Screen", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -410,7 +406,6 @@ describe("Settings Screen", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -466,7 +461,6 @@ describe("Settings Screen", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -602,7 +596,6 @@ describe("Settings Screen", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });

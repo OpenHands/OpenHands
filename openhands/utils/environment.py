@@ -22,8 +22,8 @@ def get_storage_provider() -> StorageProvider:
     """Get the storage provider based on environment variables.
 
     Determines the storage provider from environment configuration:
-    - SHARED_EVENT_STORAGE_PROVIDER: Primary setting, supports 'aws', 'gcp', 'google_cloud'
-    - FILE_STORE: Legacy fallback, supports 'google_cloud'
+    - SHARED_EVENT_STORAGE_PROVIDER: Primary setting, supports 'aws', 's3', 'gcp', 'google_cloud'
+    - FILE_STORE: Legacy fallback, supports 'google_cloud', 's3', 'filesystem'
 
     Returns:
         StorageProvider: The configured storage provider (AWS, GCP, or FILESYSTEM)
@@ -34,7 +34,7 @@ def get_storage_provider() -> StorageProvider:
     if not provider:
         provider = os.environ.get('FILE_STORE', '').lower()
 
-    if provider == 'aws':
+    if provider in ('aws', 's3'):
         return StorageProvider.AWS
     elif provider in ('gcp', 'google_cloud'):
         return StorageProvider.GCP

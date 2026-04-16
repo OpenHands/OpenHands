@@ -30,7 +30,7 @@ export function HookEventItem({
   const eventTypeLabel = i18nKey ? t(i18nKey) : hookEvent.event_type;
 
   const totalHooks = hookEvent.matchers.reduce(
-    (sum, matcher) => sum + matcher.hooks.length,
+    (sum, matcher) => sum + (matcher.hooks ?? []).length,
     0,
   );
 

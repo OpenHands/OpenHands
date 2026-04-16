@@ -403,7 +403,9 @@ def _build_sandbox_image(
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--base_image', type=str, default='nikolaik/python-nodejs:python3.12-nodejs22'
+        '--base_image',
+        type=str,
+        default='nikolaik/python-nodejs:python3.12-nodejs22-slim',
     )
     parser.add_argument('--build_folder', type=str, default=None)
     parser.add_argument('--force_rebuild', action='store_true', default=False)

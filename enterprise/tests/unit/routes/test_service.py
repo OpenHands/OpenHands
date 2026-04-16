@@ -19,18 +19,14 @@ class TestValidateServiceApiKey:
     @pytest.mark.asyncio
     async def test_valid_service_key(self):
         """Test validation with valid service API key."""
-        with patch(
-            'server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'
-        ):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'):
             result = await validate_service_api_key('test-service-key')
         assert result == 'automations-service'
 
     @pytest.mark.asyncio
     async def test_missing_service_key(self):
         """Test validation with missing service API key header."""
-        with patch(
-            'server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'
-        ):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'):
             with pytest.raises(HTTPException) as exc_info:
                 await validate_service_api_key(None)
         assert exc_info.value.status_code == 401
@@ -39,9 +35,7 @@ class TestValidateServiceApiKey:
     @pytest.mark.asyncio
     async def test_invalid_service_key(self):
         """Test validation with invalid service API key."""
-        with patch(
-            'server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-service-key'
-        ):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-service-key'):
             with pytest.raises(HTTPException) as exc_info:
                 await validate_service_api_key('wrong-key')
         assert exc_info.value.status_code == 401
@@ -50,7 +44,7 @@ class TestValidateServiceApiKey:
     @pytest.mark.asyncio
     async def test_service_auth_not_configured(self):
         """Test validation when service auth is not configured."""
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', ''):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', ''):
             with pytest.raises(HTTPException) as exc_info:
                 await validate_service_api_key('any-key')
         assert exc_info.value.status_code == 503
@@ -112,7 +106,7 @@ class TestGetOrCreateApiKeyForUser:
     @pytest.mark.asyncio
     async def test_user_not_found(self, valid_user_id, valid_org_id, valid_request):
         """Test error when user doesn't exist."""
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-key'):
             with patch(
                 'server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock
             ) as mock_get_user:
@@ -132,7 +126,7 @@ class TestGetOrCreateApiKeyForUser:
         """Test error when user is not a member of the org."""
         mock_user = MagicMock()
 
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-key'):
             with patch(
                 'server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock
             ) as mock_get_user:
@@ -164,7 +158,7 @@ class TestGetOrCreateApiKeyForUser:
             return_value='sk-oh-test-key-12345678901234567890'
         )
 
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-key'):
             with patch(
                 'server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock
             ) as mock_get_user:
@@ -210,7 +204,7 @@ class TestGetOrCreateApiKeyForUser:
             side_effect=Exception('Database error')
         )
 
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-key'):
             with patch(
                 'server.routes.service.UserStore.get_user_by_id', new_callable=AsyncMock
             ) as mock_get_user:
@@ -252,7 +246,7 @@ class TestDeleteUserApiKey:
         mock_api_key_store.make_system_key_name.return_value = '__SYSTEM__:automation'
         mock_api_key_store.delete_api_key_by_name = AsyncMock(return_value=True)
 
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-key'):
             with patch(
                 'server.routes.service.ApiKeyStore.get_instance'
             ) as mock_get_store:
@@ -283,7 +277,7 @@ class TestDeleteUserApiKey:
         mock_api_key_store.make_system_key_name.return_value = '__SYSTEM__:nonexistent'
         mock_api_key_store.delete_api_key_by_name = AsyncMock(return_value=False)
 
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-key'):
             with patch(
                 'server.routes.service.ApiKeyStore.get_instance'
             ) as mock_get_store:
@@ -303,7 +297,7 @@ class TestDeleteUserApiKey:
     @pytest.mark.asyncio
     async def test_delete_invalid_service_key(self, valid_org_id):
         """Test error when service API key is invalid."""
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-key'):
             with pytest.raises(HTTPException) as exc_info:
                 await delete_user_api_key(
                     user_id='user-123',
@@ -318,7 +312,7 @@ class TestDeleteUserApiKey:
     @pytest.mark.asyncio
     async def test_delete_missing_service_key(self, valid_org_id):
         """Test error when service API key header is missing."""
-        with patch('server.routes.service.AUTOMATIONS_SERVICE_API_KEY', 'test-key'):
+        with patch('server.routes.service.AUTOMATIONS_SERVICE_KEY', 'test-key'):
             with pytest.raises(HTTPException) as exc_info:
                 await delete_user_api_key(
                     user_id='user-123',

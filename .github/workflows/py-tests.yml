@@ -19,7 +19,7 @@ jobs:
   # Run python tests on Linux
   test-on-linux:
     name: Python Tests on Linux
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     env:
       INSTALL_DOCKER: "0" # Set to '0' to skip Docker installation
     strategy:
@@ -30,20 +30,22 @@ jobs:
       pull-requests: write
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v3
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
       - name: Setup Node.js
-        uses: useblacksmith/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: "22.x"
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
       - name: Install poetry via pipx
         run: pipx install poetry
       - name: Set up Python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
@@ -63,7 +65,7 @@ jobs:
         env:
           COVERAGE_FILE: ".coverage.runtime.${{ matrix.python_version }}"
       - name: Store coverage file
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-openhands
           path: |
@@ -73,16 +75,16 @@ jobs:
 
   test-enterprise:
     name: Enterprise Python Unit Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install poetry via pipx
         run: pipx install poetry
       - name: Set up Python
-        uses: useblacksmith/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
@@ -95,7 +97,7 @@ jobs:
         env:
           COVERAGE_FILE: ".coverage.enterprise.${{ matrix.python_version }}"
       - name: Store coverage file
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-enterprise
           path: ".coverage.enterprise.${{ matrix.python_version }}"
@@ -111,9 +113,9 @@ jobs:
       pull-requests: write
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         id: download
         with:
           pattern: coverage-*

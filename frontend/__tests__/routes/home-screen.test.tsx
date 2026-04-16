@@ -13,7 +13,7 @@ import AuthService from "#/api/auth-service/auth-service.api";
 import MainApp from "#/routes/root-layout";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 
-const { DEFAULT_FEATURE_FLAGS, useIsAuthedMock, useConfigMock } = vi.hoisted(
+const { DEFAULT_FEATURE_FLAGS, useIsAuthedMock, useConfigMock, mockUseAppMode } = vi.hoisted(
   () => {
     const defaultFeatureFlags = {
       enable_billing: false,
@@ -41,6 +41,16 @@ const { DEFAULT_FEATURE_FLAGS, useIsAuthedMock, useConfigMock } = vi.hoisted(
         },
         isLoading: false,
       }),
+      mockUseAppMode: vi.fn().mockReturnValue({
+        isOss: true,
+        isSaas: false,
+        isCloud: false,
+        isSelfHosted: false,
+        isEnterpriseSelfHosted: false,
+        isEnterpriseCloud: false,
+        appMode: "oss",
+        deploymentMode: undefined,
+      }),
     };
   },
 );
@@ -51,6 +61,19 @@ vi.mock("#/hooks/query/use-is-authed", () => ({
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => useConfigMock(),
+}));
+
+vi.mock("#/hooks/use-app-mode", () => ({
+  useAppMode: () => mockUseAppMode() ?? {
+    isOss: true,
+    isSaas: false,
+    isCloud: false,
+    isSelfHosted: false,
+    isEnterpriseSelfHosted: false,
+    isEnterpriseCloud: false,
+    appMode: "oss",
+    deploymentMode: undefined,
+  },
 }));
 
 const RouterStub = createRoutesStub([
@@ -228,20 +251,17 @@ describe("HomeScreen", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     renderHomeScreen();
@@ -272,20 +292,17 @@ describe("HomeScreen", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     renderHomeScreen();
@@ -332,14 +349,11 @@ describe("HomeScreen", () => {
 
       // Mock the repository branches API call
       vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-        branches: [
+        items: [
           { name: "main", commit_sha: "123", protected: false },
           { name: "develop", commit_sha: "456", protected: false },
         ],
-        has_next_page: false,
-        current_page: 1,
-        per_page: 30,
-        total_count: 2,
+        next_page_id: null,
       });
 
       // Select a repository to enable the repo launch button
@@ -371,8 +385,8 @@ describe("HomeScreen", () => {
         "retrieveUserGitRepositories",
       );
       retrieveUserGitRepositoriesSpy.mockResolvedValue({
-        data: MOCK_RESPOSITORIES,
-        nextPage: null,
+        items: MOCK_RESPOSITORIES,
+        next_page_id: null,
       });
     });
 
@@ -621,14 +635,9 @@ describe("HomepageCTA visibility", () => {
 
     getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
 
-    // Mock localStorage to enable the PROJ_USER_JOURNEY feature flag (CTA dismissal also uses localStorage)
+    // Mock localStorage for CTA dismissal
     vi.stubGlobal("localStorage", {
-      getItem: vi.fn((key: string) => {
-        if (key === "FEATURE_PROJ_USER_JOURNEY") {
-          return "true";
-        }
-        return null;
-      }),
+      getItem: vi.fn(() => null),
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
@@ -640,7 +649,7 @@ describe("HomepageCTA visibility", () => {
     vi.unstubAllGlobals();
   });
 
-  it("should show HomepageCTA in SaaS mode when not dismissed and feature flag enabled", async () => {
+  it("should show HomepageCTA in SaaS Cloud mode when not dismissed", async () => {
     useIsAuthedMock.mockReturnValue({
       data: true,
       isLoading: false,
@@ -648,8 +657,18 @@ describe("HomepageCTA visibility", () => {
       isError: false,
     });
     useConfigMock.mockReturnValue({
-      data: { app_mode: "saas", feature_flags: DEFAULT_FEATURE_FLAGS },
+      data: { app_mode: "saas", feature_flags: { ...DEFAULT_FEATURE_FLAGS, deployment_mode: "cloud" } },
       isLoading: false,
+    });
+    mockUseAppMode.mockReturnValue({
+      isOss: false,
+      isSaas: true,
+      isCloud: true,
+      isSelfHosted: false,
+      isEnterpriseSelfHosted: false,
+      isEnterpriseCloud: true,
+      appMode: "saas",
+      deploymentMode: "cloud",
     });
 
     getConfigSpy.mockResolvedValue({
@@ -657,7 +676,7 @@ describe("HomepageCTA visibility", () => {
       posthog_client_key: "test-posthog-key",
       providers_configured: ["github"],
       auth_url: "https://auth.example.com",
-      feature_flags: DEFAULT_FEATURE_FLAGS,
+      feature_flags: { ...DEFAULT_FEATURE_FLAGS, deployment_mode: "cloud" },
       maintenance_start_time: null,
       recaptcha_site_key: null,
       faulty_models: [],
@@ -670,13 +689,11 @@ describe("HomepageCTA visibility", () => {
 
     await screen.findByTestId("home-screen");
 
-    const ctaLink = await screen.findByRole("link", {
-      name: "CTA$LEARN_MORE",
-    });
+    const ctaLink = await screen.findByTestId("homepage-cta-learn-more");
     expect(ctaLink).toBeInTheDocument();
   });
 
-  it("should not show HomepageCTA in OSS mode even with feature flag enabled", async () => {
+  it("should not show HomepageCTA in OSS mode", async () => {
     useIsAuthedMock.mockReturnValue({
       data: true,
       isLoading: false,
@@ -686,6 +703,16 @@ describe("HomepageCTA visibility", () => {
     useConfigMock.mockReturnValue({
       data: { app_mode: "oss", feature_flags: DEFAULT_FEATURE_FLAGS },
       isLoading: false,
+    });
+    mockUseAppMode.mockReturnValue({
+      isOss: true,
+      isSaas: false,
+      isCloud: false,
+      isSelfHosted: false,
+      isEnterpriseSelfHosted: false,
+      isEnterpriseCloud: false,
+      appMode: "oss",
+      deploymentMode: undefined,
     });
 
     getConfigSpy.mockResolvedValue({
@@ -706,18 +733,10 @@ describe("HomepageCTA visibility", () => {
 
     await screen.findByTestId("home-screen");
 
-    expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("homepage-cta-learn-more")).not.toBeInTheDocument();
   });
 
-  it("should not show HomepageCTA when feature flag is disabled", async () => {
-    // Override localStorage to disable the feature flag
-    vi.stubGlobal("localStorage", {
-      getItem: vi.fn(() => null), // No feature flags set
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    });
-
+  it("should not show HomepageCTA in SaaS Self-hosted mode", async () => {
     useIsAuthedMock.mockReturnValue({
       data: true,
       isLoading: false,
@@ -725,8 +744,18 @@ describe("HomepageCTA visibility", () => {
       isError: false,
     });
     useConfigMock.mockReturnValue({
-      data: { app_mode: "saas", feature_flags: DEFAULT_FEATURE_FLAGS },
+      data: { app_mode: "saas", feature_flags: { ...DEFAULT_FEATURE_FLAGS, deployment_mode: "self_hosted" } },
       isLoading: false,
+    });
+    mockUseAppMode.mockReturnValue({
+      isOss: false,
+      isSaas: true,
+      isCloud: false,
+      isSelfHosted: true,
+      isEnterpriseSelfHosted: true,
+      isEnterpriseCloud: false,
+      appMode: "saas",
+      deploymentMode: "self_hosted",
     });
 
     getConfigSpy.mockResolvedValue({
@@ -734,7 +763,7 @@ describe("HomepageCTA visibility", () => {
       posthog_client_key: "test-posthog-key",
       providers_configured: ["github"],
       auth_url: "https://auth.example.com",
-      feature_flags: DEFAULT_FEATURE_FLAGS,
+      feature_flags: { ...DEFAULT_FEATURE_FLAGS, deployment_mode: "self_hosted" },
       maintenance_start_time: null,
       recaptcha_site_key: null,
       faulty_models: [],
@@ -747,55 +776,7 @@ describe("HomepageCTA visibility", () => {
 
     await screen.findByTestId("home-screen");
 
-    expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("homepage-cta-learn-more")).not.toBeInTheDocument();
   });
 
-  it("should not show HomepageCTA when dismissed in local storage", async () => {
-    // Override localStorage to mark CTA as dismissed while keeping the feature flag enabled
-    vi.stubGlobal("localStorage", {
-      getItem: vi.fn((key: string) => {
-        if (key === "FEATURE_PROJ_USER_JOURNEY") {
-          return "true";
-        }
-        if (key === "homepage-cta-dismissed") {
-          return "true";
-        }
-        return null;
-      }),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    });
-
-    useIsAuthedMock.mockReturnValue({
-      data: true,
-      isLoading: false,
-      isFetching: false,
-      isError: false,
-    });
-    useConfigMock.mockReturnValue({
-      data: { app_mode: "saas", feature_flags: DEFAULT_FEATURE_FLAGS },
-      isLoading: false,
-    });
-
-    getConfigSpy.mockResolvedValue({
-      app_mode: "saas",
-      posthog_client_key: "test-posthog-key",
-      providers_configured: ["github"],
-      auth_url: "https://auth.example.com",
-      feature_flags: DEFAULT_FEATURE_FLAGS,
-      maintenance_start_time: null,
-      recaptcha_site_key: null,
-      faulty_models: [],
-      error_message: null,
-      updated_at: "2024-01-14T10:00:00Z",
-      github_app_slug: null,
-    });
-
-    renderHomeScreen();
-
-    await screen.findByTestId("home-screen");
-
-    expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
-  });
 });

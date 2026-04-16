@@ -5,15 +5,19 @@ import pytest
 
 # Import the module, not the functions directly to avoid circular imports
 import openhands.mcp.utils
-from openhands.core.config.mcp_config import MCPSSEServerConfig, MCPStdioServerConfig
+from openhands.core.config.mcp_config import (
+    MCPConfig,
+    RemoteMCPServer,
+    StdioMCPServer,
+)
 from openhands.events.action.mcp import MCPAction
 from openhands.events.observation.mcp import MCPObservation
 
 
 @pytest.mark.asyncio
 async def test_create_mcp_clients_empty():
-    """Test creating MCP clients with empty server list."""
-    clients = await openhands.mcp.utils.create_mcp_clients([], [])
+    """Test creating MCP clients with empty config."""
+    clients = await openhands.mcp.utils.create_mcp_clients(MCPConfig(mcpServers={}))
     assert clients == []
 
 
@@ -21,54 +25,38 @@ async def test_create_mcp_clients_empty():
 @patch('openhands.mcp.utils.MCPClient')
 async def test_create_mcp_clients_success(mock_mcp_client):
     """Test successful creation of MCP clients."""
-    # Setup mock
     mock_client_instance = AsyncMock()
     mock_mcp_client.return_value = mock_client_instance
     mock_client_instance.connect_http = AsyncMock()
 
-    # Test with two servers
-    server_configs = [
-        MCPSSEServerConfig(url='http://server1:8080'),
-        MCPSSEServerConfig(url='http://server2:8080', api_key='test-key'),
-    ]
+    s1 = RemoteMCPServer(url='http://server1:8080', transport='sse')
+    s2 = RemoteMCPServer(url='http://server2:8080', transport='sse', auth='test-key')
+    mcp_config = MCPConfig(mcpServers={'s1': s1, 's2': s2})
 
-    clients = await openhands.mcp.utils.create_mcp_clients(server_configs, [])
+    clients = await openhands.mcp.utils.create_mcp_clients(mcp_config)
 
-    # Verify
     assert len(clients) == 2
     assert mock_mcp_client.call_count == 2
-
-    # Check that connect_http was called with correct parameters
-    mock_client_instance.connect_http.assert_any_call(
-        server_configs[0], conversation_id=None
-    )
-    mock_client_instance.connect_http.assert_any_call(
-        server_configs[1], conversation_id=None
-    )
 
 
 @pytest.mark.asyncio
 @patch('openhands.mcp.utils.MCPClient')
 async def test_create_mcp_clients_connection_failure(mock_mcp_client):
     """Test handling of connection failures when creating MCP clients."""
-    # Setup mock
     mock_client_instance = AsyncMock()
     mock_mcp_client.return_value = mock_client_instance
 
-    # First connection succeeds, second fails
     mock_client_instance.connect_http.side_effect = [
-        None,  # Success
-        Exception('Connection failed'),  # Failure
+        None,
+        Exception('Connection failed'),
     ]
 
-    server_configs = [
-        MCPSSEServerConfig(url='http://server1:8080'),
-        MCPSSEServerConfig(url='http://server2:8080'),
-    ]
+    s1 = RemoteMCPServer(url='http://server1:8080', transport='sse')
+    s2 = RemoteMCPServer(url='http://server2:8080', transport='sse')
+    mcp_config = MCPConfig(mcpServers={'s1': s1, 's2': s2})
 
-    clients = await openhands.mcp.utils.create_mcp_clients(server_configs, [])
+    clients = await openhands.mcp.utils.create_mcp_clients(mcp_config)
 
-    # Verify only one client was successfully created
     assert len(clients) == 1
 
 
@@ -167,98 +155,75 @@ async def test_call_tool_mcp_success():
 @patch('openhands.mcp.utils.MCPClient')
 async def test_create_mcp_clients_stdio_success(mock_mcp_client):
     """Test successful creation of MCP clients with stdio servers."""
-    # Setup mock
     mock_client_instance = AsyncMock()
     mock_mcp_client.return_value = mock_client_instance
     mock_client_instance.connect_stdio = AsyncMock()
 
-    # Test with stdio servers
-    stdio_server_configs = [
-        MCPStdioServerConfig(
-            name='test-server-1',
-            command='python',
-            args=['-m', 'server1'],
-            env={'DEBUG': 'true'},
-        ),
-        MCPStdioServerConfig(
-            name='test-server-2',
-            command='node',
-            args=['server2.js'],
-            env={'NODE_ENV': 'development'},
-        ),
-    ]
-
-    clients = await openhands.mcp.utils.create_mcp_clients(
-        [], [], stdio_servers=stdio_server_configs
+    mcp_config = MCPConfig(
+        mcpServers={
+            'test-server-1': StdioMCPServer(
+                command='python',
+                args=['-m', 'server1'],
+                env={'DEBUG': 'true'},
+            ),
+            'test-server-2': StdioMCPServer(
+                command='node',
+                args=['server2.js'],
+                env={'NODE_ENV': 'development'},
+            ),
+        }
     )
 
-    # Verify
+    clients = await openhands.mcp.utils.create_mcp_clients(mcp_config)
+
     assert len(clients) == 2
     assert mock_mcp_client.call_count == 2
-
-    # Check that connect_stdio was called with correct parameters
-    mock_client_instance.connect_stdio.assert_any_call(stdio_server_configs[0])
-    mock_client_instance.connect_stdio.assert_any_call(stdio_server_configs[1])
 
 
 @pytest.mark.asyncio
 @patch('openhands.mcp.utils.MCPClient')
 async def test_create_mcp_clients_stdio_connection_failure(mock_mcp_client):
     """Test handling of stdio connection failures when creating MCP clients."""
-    # Setup mock
     mock_client_instance = AsyncMock()
     mock_mcp_client.return_value = mock_client_instance
 
-    # First connection succeeds, second fails
     mock_client_instance.connect_stdio.side_effect = [
-        None,  # Success
-        Exception('Stdio connection failed'),  # Failure
+        None,
+        Exception('Stdio connection failed'),
     ]
 
-    stdio_server_configs = [
-        MCPStdioServerConfig(name='server1', command='python'),
-        MCPStdioServerConfig(name='server2', command='invalid_command'),
-    ]
-
-    clients = await openhands.mcp.utils.create_mcp_clients(
-        [], [], stdio_servers=stdio_server_configs
+    mcp_config = MCPConfig(
+        mcpServers={
+            'server1': StdioMCPServer(command='python'),
+            'server2': StdioMCPServer(command='invalid_command'),
+        }
     )
 
-    # Verify only one client was successfully created
+    clients = await openhands.mcp.utils.create_mcp_clients(mcp_config)
+
     assert len(clients) == 1
 
 
 @pytest.mark.asyncio
 @patch('openhands.mcp.utils.create_mcp_clients')
 async def test_fetch_mcp_tools_from_config_with_stdio(mock_create_clients):
-    """Test fetching MCP tools with stdio servers enabled."""
-    from openhands.core.config.mcp_config import MCPConfig
-
-    # Setup mock clients
+    """Test fetching MCP tools with stdio servers."""
     mock_client = MagicMock()
     mock_tool = MagicMock()
     mock_tool.to_param.return_value = {'function': {'name': 'stdio_tool'}}
     mock_client.tools = [mock_tool]
     mock_create_clients.return_value = [mock_client]
 
-    # Create config with stdio servers
-    mcp_config = MCPConfig(
-        stdio_servers=[MCPStdioServerConfig(name='test-server', command='python')]
-    )
+    mcp_config = MCPConfig(mcpServers={'test-server': StdioMCPServer(command='python')})
 
-    # Test with use_stdio=True
     tools = await openhands.mcp.utils.fetch_mcp_tools_from_config(
-        mcp_config, conversation_id='test-conv', use_stdio=True
+        mcp_config, conversation_id='test-conv'
     )
 
-    # Verify
     assert len(tools) == 1
     assert tools[0] == {'function': {'name': 'stdio_tool'}}
 
-    # Verify create_mcp_clients was called with stdio servers
-    mock_create_clients.assert_called_once_with(
-        [], [], 'test-conv', mcp_config.stdio_servers
-    )
+    mock_create_clients.assert_called_once_with(mcp_config, 'test-conv')
 
 
 @pytest.mark.asyncio

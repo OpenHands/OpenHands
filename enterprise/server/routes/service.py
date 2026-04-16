@@ -5,7 +5,7 @@ This module provides endpoints for trusted internal services (e.g., automations 
 to perform privileged operations like creating API keys on behalf of users.
 
 Authentication is via a shared secret (X-Service-API-Key header) configured
-through the AUTOMATIONS_SERVICE_API_KEY environment variable.
+through the AUTOMATIONS_SERVICE_KEY environment variable.
 """
 
 import os
@@ -20,7 +20,7 @@ from storage.user_store import UserStore
 from openhands.core.logger import openhands_logger as logger
 
 # Environment variable for the service API key
-AUTOMATIONS_SERVICE_API_KEY = os.getenv('AUTOMATIONS_SERVICE_API_KEY', '').strip()
+AUTOMATIONS_SERVICE_KEY = os.getenv('AUTOMATIONS_SERVICE_KEY', '').strip()
 
 service_router = APIRouter(prefix='/api/service', tags=['Service'])
 
@@ -70,9 +70,9 @@ async def validate_service_api_key(
         HTTPException: 401 if key is missing or invalid
         HTTPException: 503 if service auth is not configured
     """
-    if not AUTOMATIONS_SERVICE_API_KEY:
+    if not AUTOMATIONS_SERVICE_KEY:
         logger.warning(
-            'Service authentication not configured (AUTOMATIONS_SERVICE_API_KEY not set)'
+            'Service authentication not configured (AUTOMATIONS_SERVICE_KEY not set)'
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -85,7 +85,7 @@ async def validate_service_api_key(
             detail='X-Service-API-Key header is required',
         )
 
-    if x_service_api_key != AUTOMATIONS_SERVICE_API_KEY:
+    if x_service_api_key != AUTOMATIONS_SERVICE_KEY:
         logger.warning('Invalid service API key attempted')
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -104,7 +104,7 @@ async def service_health() -> dict:
     """
     return {
         'status': 'ok',
-        'service_auth_configured': bool(AUTOMATIONS_SERVICE_API_KEY),
+        'service_auth_configured': bool(AUTOMATIONS_SERVICE_KEY),
     }
 
 

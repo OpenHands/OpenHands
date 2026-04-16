@@ -19,15 +19,13 @@ export const useNewConversationCommand = () => {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!conversation?.conversation_id || !conversation.sandbox_id) {
+      if (!conversation?.id || !conversation.sandbox_id) {
         throw new Error("No active conversation or sandbox");
       }
 
       // Fetch V1 conversation data to get llm_model (not available in legacy type)
       const v1Conversations =
-        await V1ConversationService.batchGetAppConversations([
-          conversation.conversation_id,
-        ]);
+        await V1ConversationService.batchGetAppConversations([conversation.id]);
       const llmModel = v1Conversations?.[0]?.llm_model;
 
       // Start a new conversation reusing the existing sandbox directly.
@@ -44,6 +42,7 @@ export const useNewConversationCommand = () => {
         undefined, // trigger
         undefined, // parent_conversation_id
         undefined, // agent_type
+        undefined, // plugins
         conversation.sandbox_id ?? undefined, // sandbox_id - reuse the same sandbox
         llmModel ?? undefined, // llm_model - preserve the LLM model
       );
@@ -75,7 +74,7 @@ export const useNewConversationCommand = () => {
 
       return {
         newConversationId: task.app_conversation_id,
-        oldConversationId: conversation.conversation_id,
+        oldConversationId: conversation.id,
       };
     },
     onMutate: () => {

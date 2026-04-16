@@ -25,16 +25,18 @@ from openhands.app_server.sandbox.sandbox_router import (
     get_secret_value,
     list_secret_names,
 )
-from openhands.app_server.sandbox.session_auth import validate_session_key
+from openhands.app_server.sandbox.session_auth import (
+    validate_session_key,
+    validate_session_key_ownership,
+)
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_models import UserInfo
-from openhands.app_server.user.user_router import (
-    _validate_session_key_ownership,
-    get_current_user,
-)
+from openhands.app_server.user.user_router import get_current_user
 from openhands.integrations.provider import ProviderHandler, ProviderToken
 from openhands.integrations.service_types import ProviderType
+from openhands.sdk.llm import LLM
 from openhands.sdk.secret import StaticSecret
+from openhands.sdk.settings import AgentSettings
 
 SANDBOX_ID = 'sb-test-123'
 USER_ID = 'test-user-id'
@@ -156,16 +158,20 @@ class TestGetCurrentUserExposeSecrets:
         """With valid session key, expose_secrets=true returns unmasked llm_api_key."""
         user_info = UserInfo(
             id=USER_ID,
-            llm_model='anthropic/claude-sonnet-4-20250514',
-            llm_api_key=SecretStr('sk-test-key-123'),
-            llm_base_url='https://litellm.example.com',
+            agent_settings=AgentSettings(
+                llm=LLM(
+                    model='anthropic/claude-sonnet-4-20250514',
+                    api_key=SecretStr('sk-test-key-123'),
+                    base_url='https://litellm.example.com',
+                ),
+            ),
         )
         mock_context = AsyncMock()
         mock_context.get_user_info = AsyncMock(return_value=user_info)
         mock_context.get_user_id = AsyncMock(return_value=USER_ID)
 
         with patch(
-            'openhands.app_server.user.user_router._validate_session_key_ownership'
+            'openhands.app_server.user.user_router.validate_session_key_ownership'
         ) as mock_validate:
             mock_validate.return_value = None
             result = await get_current_user(
@@ -174,20 +180,20 @@ class TestGetCurrentUserExposeSecrets:
                 x_session_api_key='valid-key',
             )
 
-        # JSONResponse — parse the body
         import json
 
         body = json.loads(result.body)
-        assert body['llm_model'] == 'anthropic/claude-sonnet-4-20250514'
-        assert body['llm_api_key'] == 'sk-test-key-123'
-        assert body['llm_base_url'] == 'https://litellm.example.com'
+        sdk_vals = body['agent_settings']
+        assert sdk_vals['llm']['model'] == 'anthropic/claude-sonnet-4-20250514'
+        assert sdk_vals['llm']['api_key'] == 'sk-test-key-123'
+        assert sdk_vals['llm']['base_url'] == 'https://litellm.example.com'
 
     async def test_expose_secrets_rejects_missing_session_key(self):
         """expose_secrets=true without X-Session-API-Key is rejected."""
         mock_context = AsyncMock()
 
         with pytest.raises(HTTPException) as exc_info:
-            await _validate_session_key_ownership(mock_context, session_api_key=None)
+            await validate_session_key_ownership(mock_context, session_api_key=None)
         assert exc_info.value.status_code == 401
         assert 'X-Session-API-Key' in exc_info.value.detail
 
@@ -203,7 +209,7 @@ class TestGetCurrentUserExposeSecrets:
             mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
             mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            await _validate_session_key_ownership(
+            await validate_session_key_ownership(
                 mock_context, session_api_key='stolen-key'
             )
 
@@ -221,7 +227,7 @@ class TestGetCurrentUserExposeSecrets:
             mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
             mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            await _validate_session_key_ownership(
+            await validate_session_key_ownership(
                 mock_context, session_api_key='some-key'
             )
 
@@ -232,7 +238,9 @@ class TestGetCurrentUserExposeSecrets:
         """Without expose_secrets, llm_api_key is masked (no session key needed)."""
         user_info = UserInfo(
             id=USER_ID,
-            llm_api_key=SecretStr('sk-test-key-123'),
+            agent_settings=AgentSettings(
+                llm=LLM(model='gpt-4o', api_key=SecretStr('sk-test-key-123')),
+            ),
         )
         mock_context = AsyncMock()
         mock_context.get_user_info = AsyncMock(return_value=user_info)
@@ -243,10 +251,9 @@ class TestGetCurrentUserExposeSecrets:
 
         # Returns UserInfo directly (FastAPI will serialize with masking)
         assert isinstance(result, UserInfo)
-        assert result.llm_api_key is not None
-        # The raw value is still in the object, but serialization masks it
         dumped = result.model_dump(mode='json')
-        assert dumped['llm_api_key'] == '**********'
+        assert dumped['agent_settings']['llm']['api_key'] != 'sk-test-key-123'
+        assert dumped['agent_settings']['llm']['api_key'] == '**********'
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +410,7 @@ def _build_integration_test_app(
 
     The ``depends_user_context`` dependency is overridden with a mock, but the
     session key validation logic in ``validate_session_key`` and
-    ``_validate_session_key_ownership`` runs unmodified.
+    ``validate_session_key_ownership`` runs unmodified.
 
     Router-level dependencies (e.g. ``check_session_api_key`` from ``SESSION_API_KEY``
     env var) are overridden to no-ops so we can exercise the endpoint-level auth logic
@@ -413,7 +420,7 @@ def _build_integration_test_app(
         router as sandbox_router,
     )
     from openhands.app_server.user.user_router import router as user_router
-    from openhands.server.dependencies import check_session_api_key
+    from openhands.app_server.utils.dependencies import check_session_api_key
 
     app = FastAPI()
 
@@ -436,7 +443,7 @@ class TestExposeSecretsIntegration:
 
     These tests exercise the full auth validation stack:
     - validate_session_key (real)
-    - _validate_session_key_ownership (real)
+    - validate_session_key_ownership (real)
     - ownership check (real)
     Only the data layer (sandbox service lookup, user context) is mocked.
     """
@@ -445,7 +452,12 @@ class TestExposeSecretsIntegration:
         """Bearer token alone cannot expose secrets (no X-Session-API-Key)."""
         mock_user_ctx = AsyncMock()
         mock_user_ctx.get_user_info = AsyncMock(
-            return_value=UserInfo(id=USER_ID, llm_api_key=SecretStr('sk-secret-123'))
+            return_value=UserInfo(
+                id=USER_ID,
+                agent_settings=AgentSettings(
+                    llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
+                ),
+            )
         )
         mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
 
@@ -461,7 +473,12 @@ class TestExposeSecretsIntegration:
         """Invalid session key (no matching sandbox) is rejected."""
         mock_user_ctx = AsyncMock()
         mock_user_ctx.get_user_info = AsyncMock(
-            return_value=UserInfo(id=USER_ID, llm_api_key=SecretStr('sk-secret-123'))
+            return_value=UserInfo(
+                id=USER_ID,
+                agent_settings=AgentSettings(
+                    llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
+                ),
+            )
         )
         mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
 
@@ -488,7 +505,12 @@ class TestExposeSecretsIntegration:
         """Session key from a different user's sandbox is rejected."""
         mock_user_ctx = AsyncMock()
         mock_user_ctx.get_user_info = AsyncMock(
-            return_value=UserInfo(id='user-A', llm_api_key=SecretStr('sk-secret-123'))
+            return_value=UserInfo(
+                id='user-A',
+                agent_settings=AgentSettings(
+                    llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
+                ),
+            )
         )
         mock_user_ctx.get_user_id = AsyncMock(return_value='user-A')
 
@@ -521,9 +543,13 @@ class TestExposeSecretsIntegration:
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
                 id=USER_ID,
-                llm_model='anthropic/claude-sonnet-4-20250514',
-                llm_api_key=SecretStr('sk-real-secret'),
-                llm_base_url='https://litellm.example.com',
+                agent_settings=AgentSettings(
+                    llm=LLM(
+                        model='anthropic/claude-sonnet-4-20250514',
+                        api_key=SecretStr('sk-real-secret'),
+                        base_url='https://litellm.example.com',
+                    ),
+                ),
             )
         )
         mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
@@ -548,17 +574,23 @@ class TestExposeSecretsIntegration:
             )
 
         assert response.status_code == 200
-        body = response.json()
-        assert body['llm_api_key'] == 'sk-real-secret'
-        assert body['llm_model'] == 'anthropic/claude-sonnet-4-20250514'
-        assert body['llm_base_url'] == 'https://litellm.example.com'
+        user = UserInfo.model_validate_json(response.text)
+        assert user.agent_settings.llm.api_key.get_secret_value() == 'sk-real-secret'
+        assert user.agent_settings.llm.model == 'anthropic/claude-sonnet-4-20250514'
+        assert user.agent_settings.llm.base_url == 'https://litellm.example.com'
 
     def test_default_masks_secrets_via_http(self):
-        """Without expose_secrets, secrets are masked even via real HTTP."""
+        """Without expose_secrets, secrets are in agent_settings."""
         mock_user_ctx = AsyncMock()
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
-                id=USER_ID, llm_api_key=SecretStr('sk-should-be-masked')
+                id=USER_ID,
+                agent_settings=AgentSettings(
+                    llm=LLM(
+                        model='gpt-4o',
+                        api_key=SecretStr('sk-should-be-masked'),
+                    ),
+                ),
             )
         )
 
@@ -568,8 +600,9 @@ class TestExposeSecretsIntegration:
         response = client.get('/api/v1/users/me')
 
         assert response.status_code == 200
-        body = response.json()
-        assert body['llm_api_key'] == '**********'
+        user = UserInfo.model_validate_json(response.text)
+        # Masked secrets are stripped to None on deserialization
+        assert user.agent_settings.llm.api_key is None
 
 
 class TestSandboxSecretsIntegration:

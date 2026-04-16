@@ -1,8 +1,12 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from openhands.core.config.openhands_config import OpenHandsConfig
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
 from openhands.storage.settings.file_settings_store import FileSettingsStore
@@ -11,6 +15,12 @@ from openhands.storage.settings.file_settings_store import FileSettingsStore
 @pytest.fixture
 def mock_file_store():
     return MagicMock(spec=FileStore)
+
+
+@pytest.fixture(autouse=True)
+def allow_short_context_windows():
+    with patch.dict(os.environ, {'ALLOW_SHORT_CONTEXT_WINDOWS': 'true'}, clear=False):
+        yield
 
 
 @pytest.fixture
@@ -33,20 +43,28 @@ async def test_store_and_load_data(file_settings_store):
     # Test data
     init_data = Settings(
         language='python',
-        agent='test-agent',
-        max_iterations=100,
-        security_analyzer='default',
-        confirmation_mode=True,
-        llm_model='test-model',
-        llm_api_key='test-key',
-        llm_base_url='https://test.com',
+        agent_settings=AgentSettings(
+            agent='test-agent',
+            llm=LLM(
+                model='test-model',
+                api_key=SecretStr('test-key'),
+                base_url='https://test.com',
+            ),
+        ),
+        conversation_settings=ConversationSettings(
+            max_iterations=100,
+            security_analyzer='llm',
+            confirmation_mode=True,
+        ),
     )
 
     # Store data
     await file_settings_store.store(init_data)
 
     # Verify store called with correct JSON
-    expected_json = init_data.model_dump_json(context={'expose_secrets': True})
+    expected_json = init_data.model_dump_json(
+        context={'expose_secrets': True, 'persist_settings': True}
+    )
     file_settings_store.file_store.write.assert_called_once_with(
         'settings.json', expected_json
     )
@@ -58,18 +76,29 @@ async def test_store_and_load_data(file_settings_store):
     loaded_data = await file_settings_store.load()
     assert loaded_data is not None
     assert loaded_data.language == init_data.language
-    assert loaded_data.agent == init_data.agent
-    assert loaded_data.max_iterations == init_data.max_iterations
-    assert loaded_data.security_analyzer == init_data.security_analyzer
-    assert loaded_data.confirmation_mode == init_data.confirmation_mode
-    assert loaded_data.llm_model == init_data.llm_model
-    assert loaded_data.llm_api_key
-    assert init_data.llm_api_key
+    assert loaded_data.agent_settings.agent == init_data.agent_settings.agent
     assert (
-        loaded_data.llm_api_key.get_secret_value()
-        == init_data.llm_api_key.get_secret_value()
+        loaded_data.conversation_settings.max_iterations
+        == init_data.conversation_settings.max_iterations
     )
-    assert loaded_data.llm_base_url == init_data.llm_base_url
+    assert (
+        loaded_data.conversation_settings.security_analyzer
+        == init_data.conversation_settings.security_analyzer
+    )
+    assert (
+        loaded_data.conversation_settings.confirmation_mode
+        == init_data.conversation_settings.confirmation_mode
+    )
+    assert loaded_data.agent_settings.llm.model == init_data.agent_settings.llm.model
+    assert loaded_data.agent_settings.llm.api_key is not None
+    assert init_data.agent_settings.llm.api_key is not None
+    assert (
+        loaded_data.agent_settings.llm.api_key.get_secret_value()
+        == init_data.agent_settings.llm.api_key.get_secret_value()
+    )
+    assert (
+        loaded_data.agent_settings.llm.base_url == init_data.agent_settings.llm.base_url
+    )
 
 
 @pytest.mark.asyncio

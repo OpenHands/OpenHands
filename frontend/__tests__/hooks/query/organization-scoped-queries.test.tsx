@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
-import { useSettings } from "#/hooks/query/use-settings";
+import { getSettingsQueryFn, useSettings } from "#/hooks/query/use-settings";
 import { useGetSecrets } from "#/hooks/query/use-get-secrets";
 import { useApiKeys } from "#/hooks/query/use-api-keys";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -60,11 +60,15 @@ describe("Organization-scoped query hooks", () => {
       await waitFor(() => expect(result.current.isFetched).toBe(true));
 
       // Verify the query was cached with the org-specific key
-      const cachedData = queryClient.getQueryData(["settings", "org-1"]);
+      const cachedData = queryClient.getQueryData([
+        "settings",
+        "personal",
+        "org-1",
+      ]);
       expect(cachedData).toBeDefined();
 
-      // Verify no data is cached under the old key without org ID
-      const oldKeyData = queryClient.getQueryData(["settings"]);
+      // Verify no data is cached under the old key without the scope segment
+      const oldKeyData = queryClient.getQueryData(["settings", "org-1"]);
       expect(oldKeyData).toBeUndefined();
     });
 
@@ -99,11 +103,38 @@ describe("Organization-scoped query hooks", () => {
       });
 
       // Verify both org caches exist independently
-      const org1Data = queryClient.getQueryData(["settings", "org-1"]);
-      const org2Data = queryClient.getQueryData(["settings", "org-2"]);
+      const org1Data = queryClient.getQueryData([
+        "settings",
+        "personal",
+        "org-1",
+      ]);
+      const org2Data = queryClient.getQueryData([
+        "settings",
+        "personal",
+        "org-2",
+      ]);
       expect(org1Data).toBeDefined();
       expect(org2Data).toBeDefined();
     });
+
+    it("should prefer schema-managed LLM values over stale legacy flat fields", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "https://stale.example/v1",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          "llm.model": MOCK_DEFAULT_USER_SETTINGS.llm_model,
+          "llm.base_url": null,
+        },
+      });
+
+      const settings = await getSettingsQueryFn();
+
+      expect(settings.llm_model).toBe(MOCK_DEFAULT_USER_SETTINGS.llm_model);
+      expect(settings.llm_base_url).toBe("");
+    });
+
   });
 
   describe("useGetSecrets", () => {
@@ -193,7 +224,9 @@ describe("Organization-scoped query hooks", () => {
       });
 
       await waitFor(() => {
-        expect(queryClient.getQueryData(["settings", "org-1"])).toBeDefined();
+        expect(
+          queryClient.getQueryData(["settings", "personal", "org-1"]),
+        ).toBeDefined();
       });
 
       // Switch to org-2
@@ -206,7 +239,9 @@ describe("Organization-scoped query hooks", () => {
       rerender();
 
       await waitFor(() => {
-        expect(queryClient.getQueryData(["settings", "org-2"])).toBeDefined();
+        expect(
+          queryClient.getQueryData(["settings", "personal", "org-2"]),
+        ).toBeDefined();
       });
 
       // Switch back to org-1 - should use cached data, not refetch
@@ -214,11 +249,19 @@ describe("Organization-scoped query hooks", () => {
       rerender();
 
       // org-1 data should still be in cache
-      const org1Cache = queryClient.getQueryData(["settings", "org-1"]) as any;
+      const org1Cache = queryClient.getQueryData([
+        "settings",
+        "personal",
+        "org-1",
+      ]) as any;
       expect(org1Cache?.language).toBe("en");
 
       // org-2 data should also still be in cache
-      const org2Cache = queryClient.getQueryData(["settings", "org-2"]) as any;
+      const org2Cache = queryClient.getQueryData([
+        "settings",
+        "personal",
+        "org-2",
+      ]) as any;
       expect(org2Cache?.language).toBe("fr");
     });
   });

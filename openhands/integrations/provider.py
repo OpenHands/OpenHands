@@ -187,13 +187,19 @@ class ProviderHandler:
         self, provider: ProviderType
     ) -> SecretStr | None:
         """Get latest token from service"""
+        if not self.REFRESH_TOKEN_URL:
+            logger.warning('Refresh token URL not set')
+            return None
         try:
             async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+                headers = (
+                    {'X-Session-API-Key': self.session_api_key}
+                    if self.session_api_key
+                    else {}
+                )
                 resp = await client.get(
                     self.REFRESH_TOKEN_URL,
-                    headers={
-                        'X-Session-API-Key': self.session_api_key,
-                    },
+                    headers=headers,
                     params={'provider': provider.value, 'sid': self.sid},
                 )
 
@@ -236,6 +242,24 @@ class ProviderHandler:
             return await service.get_installations()
         except Exception as e:
             logger.warning(f'Failed to get bitbucket data center projects {e}')
+
+        return []
+
+    async def get_github_organizations(self) -> list[str]:
+        service = self.get_service(ProviderType.GITHUB)
+        try:
+            return await service.get_organizations_from_installations()  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning(f'Failed to get github organizations {e}')
+
+        return []
+
+    async def get_gitlab_groups(self) -> list[str]:
+        service = self.get_service(ProviderType.GITLAB)
+        try:
+            return await service.get_user_groups()  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning(f'Failed to get gitlab groups {e}')
 
         return []
 

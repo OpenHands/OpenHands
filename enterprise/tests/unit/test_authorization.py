@@ -56,6 +56,7 @@ class TestPermission:
         assert Permission.VIEW_ORG_SETTINGS.value == 'view_org_settings'
         assert Permission.CHANGE_ORGANIZATION_NAME.value == 'change_organization_name'
         assert Permission.DELETE_ORGANIZATION.value == 'delete_organization'
+        assert Permission.MANAGE_AUTOMATIONS.value == 'manage_automations'
 
     def test_permission_from_string(self):
         """
@@ -142,6 +143,7 @@ class TestRolePermissions:
         assert Permission.CHANGE_USER_ROLE_OWNER in owner_perms
         assert Permission.CHANGE_ORGANIZATION_NAME in owner_perms
         assert Permission.DELETE_ORGANIZATION in owner_perms
+        assert Permission.MANAGE_AUTOMATIONS in owner_perms
 
     def test_admin_has_admin_permissions(self):
         """
@@ -159,6 +161,7 @@ class TestRolePermissions:
         assert Permission.INVITE_USER_TO_ORGANIZATION in admin_perms
         assert Permission.CHANGE_USER_ROLE_MEMBER in admin_perms
         assert Permission.CHANGE_USER_ROLE_ADMIN in admin_perms
+        assert Permission.MANAGE_AUTOMATIONS in admin_perms
         # Admin should NOT have owner-only permissions
         assert Permission.CHANGE_USER_ROLE_OWNER not in admin_perms
         assert Permission.CHANGE_ORGANIZATION_NAME not in admin_perms
@@ -177,6 +180,7 @@ class TestRolePermissions:
         assert Permission.MANAGE_INTEGRATIONS in member_perms
         assert Permission.MANAGE_APPLICATION_SETTINGS in member_perms
         assert Permission.MANAGE_API_KEYS in member_perms
+        assert Permission.MANAGE_AUTOMATIONS in member_perms
         assert Permission.VIEW_LLM_SETTINGS in member_perms
         assert Permission.VIEW_ORG_SETTINGS in member_perms
         # Member should NOT have admin/owner permissions
@@ -1008,3 +1012,234 @@ class TestGetApiKeyOrgIdFromRequest:
 
         # Assert
         assert result is None
+
+
+# =============================================================================
+# Tests for require_financial_data_access dependency
+# =============================================================================
+
+
+def _create_mock_request_with_email(api_key_org_id=None, user_email='user@example.com'):
+    """Helper to create a mock request with optional api_key_org_id and email."""
+    mock_request = MagicMock()
+    mock_user_auth = MagicMock()
+    # get_api_key_org_id is sync, not async
+    mock_user_auth.get_api_key_org_id.return_value = api_key_org_id
+    # get_user_email is async
+    mock_user_auth.get_user_email = AsyncMock(return_value=user_email)
+    mock_request.state.user_auth = mock_user_auth
+    return mock_request
+
+
+class TestRequireFinancialDataAccess:
+    """Tests for require_financial_data_access compound authorization dependency."""
+
+    @pytest.mark.asyncio
+    async def test_grants_access_for_openhands_email(self):
+        """
+        GIVEN: User with @openhands.dev email
+        WHEN: require_financial_data_access is called
+        THEN: Returns user_id (access granted)
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='admin@openhands.dev')
+
+        with patch(
+            'server.auth.authorization.get_user_auth',
+            AsyncMock(return_value=mock_request.state.user_auth),
+        ):
+            # Act
+            result = await require_financial_data_access(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+
+            # Assert
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_grants_access_for_owner_role(self):
+        """
+        GIVEN: User with owner role in organization (non-@openhands.dev email)
+        WHEN: require_financial_data_access is called
+        THEN: Returns user_id (access granted)
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='user@company.com')
+        mock_role = MagicMock()
+        mock_role.name = 'owner'
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_auth',
+                AsyncMock(return_value=mock_request.state.user_auth),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=mock_role),
+            ),
+        ):
+            # Act
+            result = await require_financial_data_access(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+
+            # Assert
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_grants_access_for_admin_role(self):
+        """
+        GIVEN: User with admin role in organization (non-@openhands.dev email)
+        WHEN: require_financial_data_access is called
+        THEN: Returns user_id (access granted)
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='user@company.com')
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_auth',
+                AsyncMock(return_value=mock_request.state.user_auth),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=mock_role),
+            ),
+        ):
+            # Act
+            result = await require_financial_data_access(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+
+            # Assert
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_denies_access_for_member_role_without_openhands_email(self):
+        """
+        GIVEN: User with member role (not admin/owner) and non-@openhands.dev email
+        WHEN: require_financial_data_access is called
+        THEN: Raises 403 Forbidden
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='user@company.com')
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_auth',
+                AsyncMock(return_value=mock_request.state.user_auth),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=mock_role),
+            ),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await require_financial_data_access(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
+
+            assert exc_info.value.status_code == 403
+            assert 'admins, owners, or OpenHands' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_denies_access_for_non_member(self):
+        """
+        GIVEN: User who is not a member of the organization
+        WHEN: require_financial_data_access is called
+        THEN: Raises 403 Forbidden
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='user@company.com')
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_auth',
+                AsyncMock(return_value=mock_request.state.user_auth),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=None),
+            ),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await require_financial_data_access(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
+
+            assert exc_info.value.status_code == 403
+            assert 'not a member' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_denies_access_when_not_authenticated(self):
+        """
+        GIVEN: No user_id (not authenticated)
+        WHEN: require_financial_data_access is called
+        THEN: Raises 401 Unauthorized
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email()
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await require_financial_data_access(
+                request=mock_request, org_id=org_id, user_id=None
+            )
+
+        assert exc_info.value.status_code == 401
+        assert 'not authenticated' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_denies_access_when_api_key_org_mismatch(self):
+        """
+        GIVEN: API key created for Org A, but user tries to access Org B
+        WHEN: require_financial_data_access is called
+        THEN: Raises 403 Forbidden with org mismatch message
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        api_key_org_id = uuid4()  # Org A
+        target_org_id = uuid4()  # Org B
+        mock_request = _create_mock_request_with_email(
+            api_key_org_id=api_key_org_id, user_email='admin@openhands.dev'
+        )
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await require_financial_data_access(
+                request=mock_request, org_id=target_org_id, user_id=user_id
+            )
+
+        assert exc_info.value.status_code == 403
+        assert 'API key is not authorized' in exc_info.value.detail

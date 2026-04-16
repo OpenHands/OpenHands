@@ -100,27 +100,25 @@ async def has_payment_method_by_user_id(user_id: str) -> bool:
     return bool(payment_methods.data)
 
 
-async def migrate_customer(user_id: str, org: Org):
-    async with a_session_maker() as session:
-        result = await session.execute(
-            select(StripeCustomer).where(StripeCustomer.keycloak_user_id == user_id)
-        )
-        stripe_customer = result.scalar_one_or_none()
-        if stripe_customer is None:
-            return
-        stripe_customer.org_id = org.id
-        customer = await stripe.Customer.modify_async(
-            id=stripe_customer.stripe_customer_id,
-            email=org.contact_email,
-            metadata={'user_id': '', 'org_id': str(org.id)},
-        )
+async def migrate_customer(session, user_id: str, org: Org):
+    result = await session.execute(
+        select(StripeCustomer).where(StripeCustomer.keycloak_user_id == user_id)
+    )
+    stripe_customer = result.scalar_one_or_none()
+    if stripe_customer is None:
+        return
+    stripe_customer.org_id = org.id
+    customer = await stripe.Customer.modify_async(
+        id=stripe_customer.stripe_customer_id,
+        email=org.contact_email,
+        metadata={'user_id': '', 'org_id': str(org.id)},
+    )
 
-        logger.info(
-            'migrated_customer',
-            extra={
-                'user_id': user_id,
-                'org_id': str(org.id),
-                'stripe_customer_id': customer.id,
-            },
-        )
-        await session.commit()
+    logger.info(
+        'migrated_customer',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org.id),
+            'stripe_customer_id': customer.id,
+        },
+    )

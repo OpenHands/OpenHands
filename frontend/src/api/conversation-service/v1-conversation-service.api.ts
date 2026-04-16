@@ -16,6 +16,7 @@ import type {
   GetSkillsResponse,
   GetHooksResponse,
   V1RuntimeConversationInfo,
+  PluginSpec,
 } from "./v1-conversation-service.types";
 
 class V1ConversationService {
@@ -68,6 +69,7 @@ class V1ConversationService {
     trigger?: ConversationTrigger,
     parent_conversation_id?: string,
     agent_type?: "default" | "plan",
+    plugins?: PluginSpec[],
     sandbox_id?: string,
     llm_model?: string,
   ): Promise<V1AppConversationStartTask> {
@@ -80,6 +82,7 @@ class V1ConversationService {
       trigger,
       parent_conversation_id: parent_conversation_id || null,
       agent_type,
+      plugins: plugins || null,
       sandbox_id: sandbox_id || null,
       llm_model: llm_model || null,
     };
@@ -198,6 +201,34 @@ class V1ConversationService {
     const { data } = await axios.post<{ success: boolean }>(
       url,
       {},
+      { headers },
+    );
+    return data;
+  }
+
+  /**
+   * Ask the agent a side question without queueing a full turn.
+   * @param conversationId The conversation ID
+   * @param conversationUrl The conversation URL
+   * @param question The side question to ask
+   * @param sessionApiKey Session API key for authentication
+   * @returns The agent's response
+   */
+  static async askAgent(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    question: string,
+    sessionApiKey?: string | null,
+  ): Promise<{ response: string }> {
+    const url = this.buildRuntimeUrl(
+      conversationUrl,
+      `/api/conversations/${conversationId}/ask_agent`,
+    );
+    const headers = buildSessionHeaders(sessionApiKey);
+
+    const { data } = await axios.post<{ response: string }>(
+      url,
+      { question },
       { headers },
     );
     return data;
@@ -463,6 +494,57 @@ class V1ConversationService {
     );
 
     return data.items;
+  }
+
+  /**
+   * Search for V1 conversations (general search with pagination)
+   * Use this to populate the side menu with user's conversations
+   *
+   * @param limit Maximum number of results (default: 20)
+   * @param pageId Optional page ID for pagination
+   * @returns Paginated list of conversations
+   */
+  static async searchConversations(
+    limit: number = 20,
+    pageId?: string,
+  ): Promise<V1AppConversationPage> {
+    const params = new URLSearchParams();
+    params.append("limit", limit.toString());
+    if (pageId) {
+      params.append("page_id", pageId);
+    }
+
+    const { data } = await openHands.get<V1AppConversationPage>(
+      `/api/v1/app-conversations/search?${params.toString()}`,
+    );
+
+    return data;
+  }
+
+  /**
+   * Delete a V1 conversation
+   * @param conversationId The conversation ID to delete
+   * @returns void on success
+   */
+  static async deleteConversation(conversationId: string): Promise<void> {
+    await openHands.delete(`/api/v1/app-conversations/${conversationId}`);
+  }
+
+  /**
+   * Update a V1 conversation's title
+   * @param conversationId The conversation ID
+   * @param title The new title
+   * @returns Updated conversation info
+   */
+  static async updateConversationTitle(
+    conversationId: string,
+    title: string,
+  ): Promise<V1AppConversation> {
+    const { data } = await openHands.patch<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      { title },
+    );
+    return data;
   }
 }
 

@@ -11,9 +11,12 @@ import { MCPServerForm } from "#/components/features/settings/mcp-settings/mcp-s
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { MCPConfig } from "#/types/settings";
+import { parseMcpConfig } from "#/utils/mcp-config";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { Typography } from "#/ui/typography";
 
 export const clientLoader = createPermissionGuard("manage_mcp");
+export const handle = { hideTitle: true };
 
 type MCPServerType = "sse" | "stdio" | "shttp";
 
@@ -44,13 +47,10 @@ function MCPSettingsScreen() {
     useState(false);
   const [serverToDelete, setServerToDelete] = useState<string | null>(null);
 
-  const mcpConfig: MCPConfig = settings?.mcp_config || {
-    sse_servers: [],
-    stdio_servers: [],
-    shttp_servers: [],
-  };
+  const mcpConfig: MCPConfig = parseMcpConfig(
+    settings?.agent_settings?.mcp_config,
+  );
 
-  // Convert servers to a unified format for display
   const allServers: MCPServerConfig[] = [
     ...mcpConfig.sse_servers.map((server, index) => ({
       id: `sse-${index}`,
@@ -118,7 +118,6 @@ function MCPSettingsScreen() {
   const handleConfirmDelete = () => {
     if (serverToDelete) {
       handleDeleteServer(serverToDelete);
-      setServerToDelete(null);
     }
   };
 
@@ -127,67 +126,67 @@ function MCPSettingsScreen() {
     setServerToDelete(null);
   };
 
-  if (isLoading) {
+  if (isLoading || !settings) {
+    return null;
+  }
+
+  if (view === "add") {
     return (
-      <div className="flex flex-col gap-5">
-        <div className="animate-pulse">
-          <div className="h-6 bg-gray-300 rounded w-1/4 mb-4" />
-          <div className="h-4 bg-gray-300 rounded w-1/2 mb-8" />
-          <div className="h-10 bg-gray-300 rounded w-32" />
-        </div>
-      </div>
+      <MCPServerForm
+        mode="add"
+        existingServers={allServers}
+        onSubmit={handleAddServer}
+        onCancel={() => setView("list")}
+      />
+    );
+  }
+
+  if (view === "edit" && editingServer) {
+    return (
+      <MCPServerForm
+        mode="edit"
+        server={editingServer}
+        existingServers={allServers}
+        onSubmit={handleEditServer}
+        onCancel={() => {
+          setEditingServer(null);
+          setView("list");
+        }}
+      />
     );
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {view === "list" && (
-        <>
-          <BrandButton
-            testId="add-mcp-server-button"
-            type="button"
-            variant="primary"
-            onClick={() => setView("add")}
-            isDisabled={isLoading}
-          >
-            {t(I18nKey.SETTINGS$MCP_ADD_SERVER)}
-          </BrandButton>
+    <div className="h-full max-w-[1000px] mx-auto flex flex-col px-6 gap-6 pb-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <Typography.H2 className="mb-2">
+            {t(I18nKey.SETTINGS$MCP_TITLE)}
+          </Typography.H2>
+          <Typography.Paragraph className="text-sm text-[#A3A3A3]">
+            {t(I18nKey.SETTINGS$MCP_DESCRIPTION)}
+          </Typography.Paragraph>
+        </div>
+        <BrandButton
+          type="button"
+          variant="primary"
+          onClick={() => setView("add")}
+        >
+          {t(I18nKey.SETTINGS$MCP_ADD_SERVER)}
+        </BrandButton>
+      </div>
 
-          <MCPServerList
-            servers={allServers}
-            onEdit={handleEditClick}
-            onDelete={handleDeleteClick}
-          />
-        </>
-      )}
+      <MCPServerList
+        servers={allServers}
+        onEdit={handleEditClick}
+        onDelete={handleDeleteClick}
+      />
 
-      {view === "add" && (
-        <MCPServerForm
-          mode="add"
-          existingServers={allServers}
-          onSubmit={handleAddServer}
-          onCancel={() => setView("list")}
-        />
-      )}
-
-      {view === "edit" && editingServer && (
-        <MCPServerForm
-          mode="edit"
-          server={editingServer}
-          existingServers={allServers}
-          onSubmit={handleEditServer}
-          onCancel={() => {
-            setView("list");
-            setEditingServer(null);
-          }}
-        />
-      )}
-
-      {confirmationModalIsVisible && (
+      {confirmationModalIsVisible && serverToDelete && (
         <ConfirmationModal
           text={t(I18nKey.SETTINGS$MCP_CONFIRM_DELETE)}
-          onConfirm={handleConfirmDelete}
           onCancel={handleCancelDelete}
+          onConfirm={handleConfirmDelete}
         />
       )}
     </div>

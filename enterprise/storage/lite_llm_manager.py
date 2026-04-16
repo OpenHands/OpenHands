@@ -17,7 +17,6 @@ from server.constants import (
     get_default_litellm_model,
 )
 from server.logger import logger
-from storage.encrypt_utils import decrypt_legacy_value
 from storage.user_settings import UserSettings
 
 from openhands.server.settings import Settings
@@ -216,11 +215,18 @@ class LiteLlmManager:
                     None,
                 )
 
-        oss_settings.agent = 'CodeActAgent'
-        # Use the model corresponding to the current user settings version
-        oss_settings.llm_model = get_default_litellm_model()
-        oss_settings.llm_api_key = SecretStr(key)
-        oss_settings.llm_base_url = LITE_LLM_API_URL
+        oss_settings.update(
+            {
+                'agent_settings': {
+                    'agent': 'CodeActAgent',
+                    'llm': {
+                        'model': get_default_litellm_model(),
+                        'api_key': key,
+                        'base_url': LITE_LLM_API_URL,
+                    },
+                }
+            }
+        )
         return oss_settings
 
     @staticmethod
@@ -354,12 +360,16 @@ class LiteLlmManager:
                 # Check if the database key exists in LiteLLM
                 # If not, generate a new key to prevent verification failures later
                 db_key = None
-                if (
-                    user_settings
-                    and user_settings.llm_api_key
-                    and user_settings.llm_base_url == LITE_LLM_API_URL
-                ):
-                    db_key = user_settings.llm_api_key
+                llm_base_url = None
+                # agent_settings is a JSON column (dict) on UserSettings
+                llm_cfg = (
+                    (user_settings.agent_settings or {}).get('llm', {})
+                    if user_settings
+                    else {}
+                )
+                llm_base_url = llm_cfg.get('base_url')
+                if llm_base_url == LITE_LLM_API_URL:
+                    db_key = llm_cfg.get('api_key')
                     if hasattr(db_key, 'get_secret_value'):
                         db_key = db_key.get_secret_value()
 
@@ -392,8 +402,13 @@ class LiteLlmManager:
                             extra={'org_id': org_id, 'user_id': keycloak_user_id},
                         )
                         # Update user_settings with the new key so it gets stored in org_member
-                        user_settings.llm_api_key = SecretStr(new_key)
-                        user_settings.llm_api_key_for_byor = SecretStr(new_key)
+                        # agent_settings is a JSON column (dict) on UserSettings
+                        if user_settings.agent_settings is None:
+                            user_settings.agent_settings = {}
+                        user_settings.agent_settings.setdefault('llm', {})[
+                            'api_key'
+                        ] = new_key
+                        user_settings.llm_api_key_for_byor_secret = SecretStr(new_key)
 
         logger.info(
             'LiteLlmManager:migrate_lite_llm_entries:complete',
@@ -860,13 +875,6 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
-
-        try:
-            # Sometimes the key we get is encrypted - attempt to decrypt.
-            key = decrypt_legacy_value(key)
-        except Exception:
-            # The key was not encrypted
-            pass
 
         payload = {
             'key': key,
@@ -1525,13 +1533,91 @@ class LiteLlmManager:
         )
 
     @staticmethod
+    async def _get_team_members_financial_data(
+        client: httpx.AsyncClient,
+        team_id: str,
+    ) -> dict:
+        """
+        Get financial data for all members in a team.
+
+        Fetches team info from LiteLLM and extracts spending/budget data for each member.
+
+        Args:
+            client: HTTP client for LiteLLM API
+            team_id: The team/organization ID
+
+        Returns:
+            Dict with structure:
+            {
+                "team_max_budget": float | None,  # Team's shared budget
+                "team_spend": float,              # Team's total spend (for shared budget calc)
+                "members": {
+                    user_id: {
+                        "spend": float,
+                        "max_budget": float | None,
+                        "uses_shared_budget": bool  # True if using team budget
+                    },
+                    ...
+                }
+            }
+            Returns empty dict if team not found or LiteLLM is not configured.
+        """
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            logger.warning('LiteLLM API configuration not found')
+            return {}
+
+        team_info = await LiteLlmManager._get_team(client, team_id)
+        if not team_info:
+            logger.warning(
+                'LiteLlmManager:_get_team_members_financial_data:team_not_found',
+                extra={'team_id': team_id},
+            )
+            return {}
+
+        members: dict[str, dict] = {}
+        team_memberships = team_info.get('team_memberships', [])
+
+        # Get team-level budget info (shared across all members in team orgs)
+        team_data = team_info.get('team_info', {})
+        team_max_budget = team_data.get('max_budget')
+        team_spend = team_data.get('spend', 0) or 0
+
+        for membership in team_memberships:
+            user_id = membership.get('user_id')
+            if not user_id:
+                continue
+
+            # Use individual max_budget_in_team if set, otherwise fall back to team budget
+            member_max_budget = membership.get('max_budget_in_team')
+            uses_shared_budget = member_max_budget is None
+            if uses_shared_budget:
+                member_max_budget = team_max_budget
+
+            members[user_id] = {
+                'spend': membership.get('spend', 0) or 0,
+                'max_budget': member_max_budget,
+                'uses_shared_budget': uses_shared_budget,
+            }
+
+        logger.debug(
+            'LiteLlmManager:_get_team_members_financial_data:success',
+            extra={'team_id': team_id, 'member_count': len(members)},
+        )
+        return {
+            'team_max_budget': team_max_budget,
+            'team_spend': team_spend,
+            'members': members,
+        }
+
+    @staticmethod
     def with_http_client(
         internal_fn: Callable[..., Awaitable[Any]],
     ) -> Callable[..., Awaitable[Any]]:
         @functools.wraps(internal_fn)
         async def wrapper(*args, **kwargs):
             async with httpx.AsyncClient(
-                headers={'x-goog-api-key': LITE_LLM_API_KEY}
+                headers={'x-goog-api-key': LITE_LLM_API_KEY},
+                timeout=httpx.Timeout(30.0),
             ) as client:
                 return await internal_fn(client, *args, **kwargs)
 
@@ -1558,3 +1644,6 @@ class LiteLlmManager:
     get_user_keys = staticmethod(with_http_client(_get_user_keys))
     delete_key_by_alias = staticmethod(with_http_client(_delete_key_by_alias))
     update_user_keys = staticmethod(with_http_client(_update_user_keys))
+    get_team_members_financial_data = staticmethod(
+        with_http_client(_get_team_members_financial_data)
+    )

@@ -27,7 +27,7 @@ from storage.stored_conversation_metadata_saas import StoredConversationMetadata
 
 from openhands.controller.agent import Agent
 from openhands.core.config import LLMConfig, OpenHandsConfig
-from openhands.core.config.mcp_config import MCPConfig, MCPSHTTPServerConfig
+from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import MessageAction
 from openhands.events.event_store import EventStore
@@ -497,10 +497,16 @@ class SaasNestedConversationManager(ConversationManager):
         if not mcp_api_key:
             return None
         web_host = os.environ.get('WEB_HOST', 'app.all-hands.dev')
-        shttp_servers = [
-            MCPSHTTPServerConfig(url=f'https://{web_host}/mcp/mcp', api_key=mcp_api_key)
-        ]
-        return MCPConfig(shttp_servers=shttp_servers)
+        return MCPConfig(
+            mcpServers={
+                'openhands': RemoteMCPServer(
+                    url=f'https://{web_host}/mcp/mcp',
+                    transport='http',
+                    auth=mcp_api_key,
+                    timeout=60,
+                )
+            }
+        )
 
     async def _create_nested_conversation(
         self,
@@ -523,9 +529,11 @@ class SaasNestedConversationManager(ConversationManager):
         mcp_config = await self._get_mcp_config(user_id)
         if mcp_config:
             # Merge with any MCP config from settings
-            if settings.mcp_config:
-                mcp_config = mcp_config.merge(settings.mcp_config)
-            # Check again since theoretically merge could return None.
+            sdk_mcp = settings.agent_settings.mcp_config
+            if sdk_mcp and sdk_mcp.mcpServers:
+                from openhands.core.config.mcp_config import merge_mcp_configs
+
+                mcp_config = merge_mcp_configs(mcp_config, sdk_mcp)
             if mcp_config:
                 init_conversation['mcp_config'] = mcp_config.model_dump()
 
@@ -855,7 +863,7 @@ class SaasNestedConversationManager(ConversationManager):
             user_id=user_id,
         )
         llm_registry.retry_listner = session._notify_on_llm_retry
-        agent_cls = settings.agent or self.config.default_agent
+        agent_cls = settings.agent_settings.agent or self.config.default_agent
         agent_config = self.config.get_agent_config(agent_cls)
         agent = Agent.get_cls(agent_cls)(agent_config, llm_registry)
 

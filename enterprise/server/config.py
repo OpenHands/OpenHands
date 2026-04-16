@@ -20,6 +20,7 @@ from server.auth.constants import (
     GITLAB_APP_CLIENT_ID,
     RECAPTCHA_SITE_KEY,
 )
+from server.constants import DEPLOYMENT_MODE
 
 from openhands.core.config.utils import load_openhands_config
 from openhands.integrations.service_types import ProviderType
@@ -179,6 +180,7 @@ class SaaSServerConfig(ServerConfig):
                 'ENABLE_JIRA': self.enable_jira,
                 'ENABLE_JIRA_DC': self.enable_jira_dc,
                 'ENABLE_LINEAR': self.enable_linear,
+                'DEPLOYMENT_MODE': DEPLOYMENT_MODE,
             },
             'PROVIDERS_CONFIGURED': providers_configured,
         }

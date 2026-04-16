@@ -130,3 +130,26 @@ export interface ConversationErrorEvent extends BaseEvent {
    */
   detail: string;
 }
+
+// Server error event - contains error information
+export interface ServerErrorEvent extends BaseEvent {
+  /**
+   * Discriminator field for type guards
+   */
+  kind: "ServerErrorEvent";
+
+  /**
+   * The source is always "environment" for server error events
+   */
+  source: "environment";
+
+  /**
+   * Error code (e.g., "MCPError")
+   */
+  code: string;
+
+  /**
+   * Detailed error message
+   */
+  detail: string;
+}

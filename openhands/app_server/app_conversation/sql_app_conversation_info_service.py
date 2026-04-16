@@ -55,10 +55,9 @@ from openhands.app_server.utils.sql_utils import (
     create_json_type_decorator,
 )
 from openhands.integrations.provider import ProviderType
-from openhands.sdk.conversation.conversation_stats import ConversationStats
+from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.sdk.llm import MetricsSnapshot
-from openhands.sdk.llm.utils.metrics import TokenUsage
+from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 logger = logging.getLogger(__name__)
@@ -100,6 +99,9 @@ class StoredConversationMetadata(Base):  # type: ignore
     sandbox_id = Column(String, nullable=True, index=True)
     parent_conversation_id = Column(String, nullable=True, index=True)
     public = Column(Boolean, nullable=True, index=True)
+
+    # Tags for conversation metadata (e.g., automation context, skills used)
+    tags = Column(create_json_type_decorator(dict[str, str]), nullable=True)
 
 
 @dataclass
@@ -364,6 +366,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 else None
             ),
             public=info.public,
+            tags=info.tags if info.tags else None,
         )
 
         await self.db_session.merge(stored)
@@ -551,6 +554,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             ),
             sub_conversation_ids=sub_conversation_ids or [],
             public=stored.public,
+            tags=stored.tags or {},
             created_at=created_at,
             updated_at=updated_at,
         )

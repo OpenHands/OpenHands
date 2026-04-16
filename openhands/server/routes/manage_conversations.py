@@ -22,7 +22,7 @@ import httpx
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.app_server.app_conversation.app_conversation_info_service import (
@@ -47,6 +47,7 @@ from openhands.app_server.services.db_session_injector import set_db_session_kee
 from openhands.app_server.services.httpx_client_injector import (
     set_httpx_client_keep_open,
 )
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.logger import openhands_logger as logger
@@ -71,13 +72,12 @@ from openhands.integrations.service_types import (
 )
 from openhands.runtime import get_runtime_cls
 from openhands.runtime.runtime_status import RuntimeStatus
-from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 from openhands.server.data_models.conversation_info import ConversationInfo
 from openhands.server.data_models.conversation_info_result_set import (
     ConversationInfoResultSet,
 )
-from openhands.server.dependencies import get_dependencies
 from openhands.server.services.conversation_service import (
     create_new_conversation,
     setup_init_conversation_settings,
@@ -674,9 +674,14 @@ async def _get_num_conversations_in_sandbox(
         agent_server_url = next(
             u for u in sandbox.exposed_urls if u.name == AGENT_SERVER
         )
+        headers = (
+            {'X-Session-API-Key': sandbox.session_api_key}
+            if sandbox.session_api_key
+            else {}
+        )
         response = await httpx_client.get(
             f'{agent_server_url.url}/api/conversations/count',
-            headers={'X-Session-API-Key': sandbox.session_api_key},
+            headers=headers,
         )
         result = int(response.content)
         return result
@@ -704,13 +709,18 @@ async def _delete_v0_conversation(conversation_id: str, user_id: str | None) -> 
     return True
 
 
-@app.get('/conversations/{conversation_id}/remember-prompt')
+@app.get('/conversations/{conversation_id}/remember-prompt', deprecated=True)
 async def get_prompt(
     event_id: int,
     conversation_id: str = Depends(validate_conversation_id),
     user_settings: SettingsStore = Depends(get_user_settings_store),
     metadata: ConversationMetadata = Depends(get_conversation_metadata),
 ):
+    """Get the remember prompt for the microagent UI.
+
+    .. deprecated::
+        This endpoint is deprecated. Microagent UI is deprecated in V1.
+    """
     # get event store for the conversation
     event_store = EventStore(
         sid=conversation_id, file_store=file_store, user_id=metadata.user_id
@@ -725,14 +735,17 @@ async def get_prompt(
         # placeholder for error handling
         raise ValueError('Settings not found')
 
-    settings_base_url = settings.llm_base_url
+    agent_settings = settings.agent_settings
+    settings_base_url = agent_settings.llm.base_url
     effective_base_url = get_effective_llm_base_url(
-        settings.llm_model,
+        agent_settings.llm.model,
         settings_base_url,
     )
+    raw_api_key = settings.agent_settings.llm.api_key
+    api_key = SecretStr(raw_api_key) if isinstance(raw_api_key, str) else raw_api_key
     llm_config = LLMConfig(
-        model=settings.llm_model or '',
-        api_key=settings.llm_api_key,
+        model=agent_settings.llm.model,
+        api_key=api_key,
         base_url=effective_base_url,
     )
 
@@ -1467,7 +1480,7 @@ def _create_combined_page_id(
     return base64.b64encode(json.dumps(next_page_data).encode()).decode()
 
 
-@app.get('/microagent-management/conversations')
+@app.get('/microagent-management/conversations', deprecated=True)
 async def get_microagent_management_conversations(
     selected_repository: str,
     page_id: str | None = None,
@@ -1477,6 +1490,9 @@ async def get_microagent_management_conversations(
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
 ) -> ConversationInfoResultSet:
     """Get conversations for the microagent management page with pagination support.
+
+    .. deprecated::
+        This endpoint is deprecated. Microagent UI is deprecated in V1.
 
     This endpoint returns conversations with conversation_trigger = 'microagent_management'
     and only includes conversations with active PRs. Pagination is supported.
@@ -1562,9 +1578,12 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
             ConversationExecutionStatus.FINISHED: RuntimeStatus.READY,
             ConversationExecutionStatus.STUCK: RuntimeStatus.ERROR,
         }
-        runtime_status = runtime_status_mapping.get(
-            app_conversation.execution_status, RuntimeStatus.ERROR
-        )
+        if app_conversation.execution_status:
+            runtime_status = runtime_status_mapping.get(
+                app_conversation.execution_status, RuntimeStatus.ERROR
+            )
+        else:
+            runtime_status = RuntimeStatus.ERROR
     else:
         runtime_status = None
 
@@ -1594,4 +1613,5 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
         ],
         public=app_conversation.public,
         sandbox_id=app_conversation.sandbox_id,
+        llm_model=app_conversation.llm_model,
     )

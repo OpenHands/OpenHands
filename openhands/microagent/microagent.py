@@ -105,13 +105,22 @@ class BaseMicroagent(BaseModel):
             metadata = MicroagentMetadata(**metadata_dict)
 
             # Validate MCP tools configuration if present
-            if metadata.mcp_tools:
-                if metadata.mcp_tools.sse_servers:
-                    logger.warning(
-                        f'Microagent {metadata.name} has SSE servers. Only stdio servers are currently supported.'
-                    )
+            if metadata.mcp_tools and metadata.mcp_tools.mcpServers:
+                from openhands.core.config.mcp_config import StdioMCPServer
 
-                if not metadata.mcp_tools.stdio_servers:
+                has_stdio = any(
+                    isinstance(s, StdioMCPServer)
+                    for s in metadata.mcp_tools.mcpServers.values()
+                )
+                has_non_stdio = any(
+                    not isinstance(s, StdioMCPServer)
+                    for s in metadata.mcp_tools.mcpServers.values()
+                )
+                if has_non_stdio:
+                    logger.warning(
+                        f'Microagent {metadata.name} has remote servers. Only stdio servers are currently supported.'
+                    )
+                if not has_stdio:
                     raise MicroagentValidationError(
                         f'Microagent {metadata.name} has MCP tools configuration but no stdio servers. '
                         'Only stdio servers are currently supported.'

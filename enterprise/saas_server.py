@@ -49,6 +49,9 @@ from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.service import service_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
 from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
+from server.routes.users_v1 import (  # noqa: E402
+    override_users_me_endpoint,
+)
 from server.sharing.shared_conversation_router import (  # noqa: E402
     router as shared_conversation_router,
 )
@@ -122,6 +125,10 @@ base_app.include_router(
 # Override the default LLM models implementation with SaaS version
 # This must happen after all routers are included
 override_llm_models_dependency(base_app)
+
+# Override the /api/v1/users/me endpoint to include organization info
+# This replaces the OSS endpoint with a SAAS version that adds org_id, org_name, role, permissions
+override_users_me_endpoint(base_app)
 
 base_app.include_router(invitation_router)  # Add routes for org invitation management
 base_app.include_router(invitation_accept_router)  # Add route for accepting invitations

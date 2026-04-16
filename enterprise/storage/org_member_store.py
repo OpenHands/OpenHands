@@ -2,20 +2,20 @@
 Store class for managing organization-member relationships.
 """
 
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from server.routes.org_models import OrgMemberLLMSettings
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
-from storage.encrypt_utils import encrypt_value
 from storage.org_member import OrgMember
 from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.storage.data_models.settings import Settings
+from openhands.utils.jsonpatch_compat import deep_merge
 
 
 class OrgMemberStore:
@@ -28,9 +28,8 @@ class OrgMemberStore:
         role_id: int,
         llm_api_key: str,
         status: Optional[str] = None,
-        llm_model: Optional[str] = None,
-        llm_base_url: Optional[str] = None,
-        max_iterations: Optional[int] = None,
+        agent_settings_diff: Optional[dict[str, Any]] = None,
+        conversation_settings_diff: Optional[dict[str, Any]] = None,
     ) -> OrgMember:
         """Add a user to an organization with a specific role."""
         async with a_session_maker() as session:
@@ -40,9 +39,8 @@ class OrgMemberStore:
                 role_id=role_id,
                 llm_api_key=llm_api_key,
                 status=status,
-                llm_model=llm_model,
-                llm_base_url=llm_base_url,
-                max_iterations=max_iterations,
+                agent_settings_diff=dict(agent_settings_diff or {}),
+                conversation_settings_diff=dict(conversation_settings_diff or {}),
             )
             session.add(org_member)
             await session.commit()
@@ -149,22 +147,22 @@ class OrgMemberStore:
             return True
 
     @staticmethod
-    def get_kwargs_from_settings(settings: Settings):
-        kwargs = {
-            normalized: getattr(settings, normalized)
-            for c in OrgMember.__table__.columns
-            if (normalized := c.name.lstrip('_')) and hasattr(settings, normalized)
+    def get_kwargs_from_settings(settings: Settings) -> dict[str, Any]:
+        """Return kwargs for OrgMember construction (keys match column names)."""
+        return {
+            'llm_api_key': settings.agent_settings.llm.api_key,
+            'agent_settings_diff': {},
+            'conversation_settings_diff': {},
         }
-        return kwargs
 
     @staticmethod
-    def get_kwargs_from_user_settings(user_settings: UserSettings):
-        kwargs = {
-            normalized: getattr(user_settings, normalized)
-            for c in OrgMember.__table__.columns
-            if (normalized := c.name.lstrip('_')) and hasattr(user_settings, normalized)
+    def get_kwargs_from_user_settings(user_settings: UserSettings) -> dict[str, Any]:
+        """Return kwargs for OrgMember construction (keys match column names)."""
+        return {
+            'llm_api_key': user_settings.llm_api_key,
+            'agent_settings_diff': dict(user_settings.agent_settings),
+            'conversation_settings_diff': dict(user_settings.conversation_settings),
         }
-        return kwargs
 
     @staticmethod
     async def get_org_members_count(
@@ -244,21 +242,41 @@ class OrgMemberStore:
         org_id: UUID,
         member_settings: OrgMemberLLMSettings,
     ) -> None:
-        """Update LLM settings for all members of an organization.
+        """Update shared LLM settings for all members of an organization.
 
         Args:
             session: Database session (passed from caller for transaction)
             org_id: Organization ID
-            member_settings: Typed LLM settings to apply to all members
+            member_settings: Shared settings to apply to all members
         """
-        # Build update values from non-None fields
         values = member_settings.model_dump(exclude_none=True)
+        if not values:
+            return
 
-        # Handle encrypted llm_api_key field - map to _llm_api_key column with encryption
-        if 'llm_api_key' in values:
-            raw_key = values.pop('llm_api_key')
-            values['_llm_api_key'] = encrypt_value(raw_key)
+        result = await session.execute(
+            select(OrgMember).where(OrgMember.org_id == org_id)
+        )
+        org_members = list(result.scalars().all())
 
-        if values:
-            stmt = update(OrgMember).where(OrgMember.org_id == org_id).values(**values)
-            await session.execute(stmt)
+        raw_key = values.pop('llm_api_key', None)
+        agent_settings_diff = values.pop('agent_settings_diff', None)
+        conversation_settings_diff = values.pop('conversation_settings_diff', None)
+
+        for org_member in org_members:
+            if raw_key is not None:
+                org_member.llm_api_key = raw_key
+
+            if agent_settings_diff is not None:
+                org_member.agent_settings_diff = deep_merge(
+                    org_member.agent_settings_diff,
+                    agent_settings_diff,
+                )
+
+            if conversation_settings_diff is not None:
+                org_member.conversation_settings_diff = deep_merge(
+                    org_member.conversation_settings_diff,
+                    conversation_settings_diff,
+                )
+
+            for key, value in values.items():
+                setattr(org_member, key, value)

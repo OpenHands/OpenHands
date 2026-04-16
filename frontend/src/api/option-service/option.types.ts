@@ -1,5 +1,24 @@
 import { Provider } from "#/types/settings";
 
+export type DeploymentMode = "cloud" | "self_hosted";
+
+/**
+ * Structured response from ``GET /api/options/models``.
+ *
+ * The backend is the single source of truth — the frontend no longer carries
+ * its own hardcoded verified-model lists.
+ */
+export interface ModelsResponse {
+  /** Flat list of ``provider/model`` strings (bare names already prefixed). */
+  models: string[];
+  /** Model names (without provider) that OpenHands has verified to work well. */
+  verified_models: string[];
+  /** Provider names shown in the "Verified" section of the model selector. */
+  verified_providers: string[];
+  /** Recommended default model id (e.g. ``openhands/claude-opus-4-5-20251101``). */
+  default_model: string;
+}
+
 export interface WebClientFeatureFlags {
   enable_billing: boolean;
   hide_llm_settings: boolean;
@@ -9,6 +28,7 @@ export interface WebClientFeatureFlags {
   hide_users_page: boolean;
   hide_billing_page: boolean;
   hide_integrations_page: boolean;
+  deployment_mode?: DeploymentMode;
 }
 
 export interface WebClientConfig {
