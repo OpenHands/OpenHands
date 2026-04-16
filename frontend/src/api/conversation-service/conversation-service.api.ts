@@ -3,7 +3,6 @@ import {
   GetVSCodeUrlResponse,
   GetTrajectoryResponse,
   FileUploadSuccessResponse,
-  Conversation,
 } from "../open-hands.types";
 import { openHands } from "../open-hands-axios";
 import { V1AppConversation } from "./v1-conversation-service.types";
@@ -61,30 +60,6 @@ class ConversationService {
     const { data } = await openHands.get<GetVSCodeUrlResponse>(url, {
       headers: this.getConversationHeaders(),
     });
-    return data;
-  }
-
-  static async deleteUserConversation(conversationId: string): Promise<void> {
-    await openHands.delete(`/api/conversations/${conversationId}`);
-  }
-
-  static async getConversation(
-    conversationId: string,
-  ): Promise<Conversation | null> {
-    const { data } = await openHands.get<Conversation | null>(
-      `/api/conversations/${conversationId}`,
-    );
-
-    return data;
-  }
-
-  static async stopConversation(
-    conversationId: string,
-  ): Promise<Conversation | null> {
-    const { data } = await openHands.post<Conversation | null>(
-      `/api/conversations/${conversationId}/stop`,
-    );
-
     return data;
   }
 

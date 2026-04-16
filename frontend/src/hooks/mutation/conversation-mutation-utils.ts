@@ -1,21 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { SandboxService } from "#/api/sandbox-service/sandbox-service.api";
-
-/**
- * Gets the conversation version from the cache
- */
-export const getConversationVersionFromQueryCache = (
-  queryClient: QueryClient,
-  conversationId: string,
-): "V0" | "V1" => {
-  const conversation = queryClient.getQueryData<{
-    conversation_version?: string;
-  }>(["user", "conversation", conversationId]);
-
-  return conversation?.conversation_version === "V1" ? "V1" : "V0";
-};
 
 /**
  * Fetches a V1 conversation's sandbox_id and conversation_url
@@ -80,12 +65,6 @@ export const askV1Agent = async (
     sessionApiKey,
   );
 };
-
-/**
- * Stops a V0 conversation using the legacy API
- */
-export const stopV0Conversation = async (conversationId: string) =>
-  ConversationService.stopConversation(conversationId);
 
 /**
  * Resumes a V1 conversation sandbox by fetching the sandbox_id and resuming it
