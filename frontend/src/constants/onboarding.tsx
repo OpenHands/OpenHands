@@ -1,6 +1,6 @@
 import { I18nKey } from "#/i18n/declaration";
 
-export type OnboardingAppMode = "saas" | "self-hosted";
+export type OnboardingAppMode = "cloud" | "self-hosted" | "oss";
 
 interface BaseOnboardingQuestion {
   id: string;
@@ -43,9 +43,9 @@ export const ONBOARDING_FORM: OnboardingQuestion[] = [
   {
     id: "org_size",
     type: "single",
-    app_mode: ["saas", "self-hosted"],
+    app_mode: ["cloud", "self-hosted"],
     questionKey: I18nKey.ONBOARDING$ORG_SIZE_QUESTION,
-    subtitleKey: I18nKey.ONBOARDING$ORG_SIZE_SUBTITLE,
+    subtitleKey: I18nKey.ONBOARDING$SELECT_ONE_SUBTITLE,
     answerOptions: [
       { key: I18nKey.ONBOARDING$ORG_SIZE_SOLO, id: "solo" },
       { key: I18nKey.ONBOARDING$ORG_SIZE_2_10, id: "org_2_10" },
@@ -57,9 +57,9 @@ export const ONBOARDING_FORM: OnboardingQuestion[] = [
   {
     id: "use_case",
     type: "multi",
-    app_mode: ["saas", "self-hosted"],
+    app_mode: ["cloud", "self-hosted"],
     questionKey: I18nKey.ONBOARDING$USE_CASE_QUESTION,
-    subtitleKey: I18nKey.ONBOARDING$USE_CASE_SUBTITLE,
+    subtitleKey: I18nKey.ONBOARDING$SELECT_MULTIPLE_SUBTITLE,
     answerOptions: [
       { key: I18nKey.ONBOARDING$USE_CASE_NEW_FEATURES, id: "new_features" },
       {
@@ -78,8 +78,9 @@ export const ONBOARDING_FORM: OnboardingQuestion[] = [
   {
     id: "role",
     type: "single",
-    app_mode: ["saas"],
+    app_mode: ["cloud"],
     questionKey: I18nKey.ONBOARDING$ROLE_QUESTION,
+    subtitleKey: I18nKey.ONBOARDING$SELECT_ONE_SUBTITLE,
     answerOptions: [
       {
         key: I18nKey.ONBOARDING$ROLE_SOFTWARE_ENGINEER,

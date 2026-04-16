@@ -367,7 +367,6 @@ describe("ConversationPanel", () => {
     // Verify the mutation was called
     expect(mockStopConversationMutate).toHaveBeenCalledWith({
       conversationId: "1",
-      version: "V1",
     });
     expect(mockStopConversationMutate).toHaveBeenCalledTimes(1);
   });

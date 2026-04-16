@@ -6,6 +6,7 @@ import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
 import { SettingsLayout } from "#/components/features/settings";
 import { WebClientConfig } from "#/api/option-service/option.types";
+import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
 import { Organization } from "#/types/org";
 import { Typography } from "#/ui/typography";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
@@ -36,11 +37,11 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const { pathname } = url;
 
   // Step 1: Get config first (needed for all checks, no user data required)
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
-  if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
-  }
+  const config = await queryClient.fetchQuery<WebClientConfig>({
+    queryKey: QUERY_KEYS.WEB_CLIENT_CONFIG,
+    queryFn: OptionService.getConfig,
+    ...CONFIG_CACHE_OPTIONS,
+  });
 
   const isSaas = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;

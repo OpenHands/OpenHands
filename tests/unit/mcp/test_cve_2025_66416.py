@@ -211,11 +211,9 @@ class TestSecurityIntegration:
     def test_openhands_mcp_config_types(self):
         """Test OpenHands MCP config types are available."""
         from openhands.core.config.mcp_config import (
-            MCPSHTTPServerConfig,
-            MCPSSEServerConfig,
-            MCPStdioServerConfig,
+            RemoteMCPServer,
+            StdioMCPServer,
         )
 
-        assert MCPSSEServerConfig is not None
-        assert MCPSHTTPServerConfig is not None
-        assert MCPStdioServerConfig is not None
+        assert RemoteMCPServer is not None
+        assert StdioMCPServer is not None

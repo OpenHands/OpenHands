@@ -76,13 +76,11 @@ async def async_session_with_users(async_engine) -> AsyncGenerator[AsyncSession,
         org1 = Org(
             id=ORG1_ID,
             name='test-org-1',
-            enable_default_condenser=True,
             enable_proactive_conversation_starters=True,
         )
         org2 = Org(
             id=ORG2_ID,
             name='test-org-2',
-            enable_default_condenser=True,
             enable_proactive_conversation_starters=True,
         )
         db_session.add(org1)

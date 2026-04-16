@@ -8,17 +8,31 @@ from pydantic import SecretStr
 
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import UserGitInfo
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import (
+    AgentSettings,
+    ConversationSettings,
+    VerificationSettings,
+)
 from openhands.server.app import app
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.secrets import Secrets
+from openhands.storage.data_models.settings import Settings
 from openhands.storage.memory import InMemoryFileStore
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.file_settings_store import FileSettingsStore
 from openhands.storage.settings.settings_store import SettingsStore
 
+_EXPOSE = {'expose_secrets': True}
+
+
+def _dump(settings: Settings) -> dict:
+    """Dump settings to a JSON-compatible dict with secrets exposed."""
+    return settings.model_dump(mode='json', context=_EXPOSE, exclude_unset=True)
+
 
 class MockUserAuth(UserAuth):
-    """Mock implementation of UserAuth for testing"""
+    """Mock implementation of UserAuth for testing."""
 
     def __init__(self):
         self._settings = None
@@ -68,7 +82,11 @@ class MockUserAuth(UserAuth):
 def test_client():
     # Create a test client
     with (
-        patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
+        patch.dict(
+            os.environ,
+            {'SESSION_API_KEY': '', 'ALLOW_SHORT_CONTEXT_WINDOWS': 'true'},
+            clear=False,
+        ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
             'openhands.server.user_auth.user_auth.UserAuth.get_instance',
@@ -83,119 +101,201 @@ def test_client():
         yield client
 
 
+def test_get_agent_settings_schema_includes_critic_verification_fields(test_client):
+    response = test_client.get('/api/v1/settings/agent-schema')
+
+    assert response.status_code == 200
+    schema = response.json()
+    section_keys = [s['key'] for s in schema['sections']]
+    assert 'verification' in section_keys
+    section = next(s for s in schema['sections'] if s['key'] == 'verification')
+    field_keys = [f['key'] for f in section['fields']]
+    assert 'verification.critic_enabled' in field_keys
+    assert 'confirmation_mode' not in field_keys
+    assert 'security_analyzer' not in field_keys
+
+
+def test_get_conversation_settings_schema_endpoint(test_client):
+    response = test_client.get('/api/v1/settings/conversation-schema')
+
+    assert response.status_code == 200
+    schema = response.json()
+    assert schema['model_name'] == 'ConversationSettings'
+    section_keys = [s['key'] for s in schema['sections']]
+    assert section_keys == ['general', 'verification']
+    verification_section = next(
+        s for s in schema['sections'] if s['key'] == 'verification'
+    )
+    field_keys = [f['key'] for f in verification_section['fields']]
+    assert 'confirmation_mode' in field_keys
+    assert 'security_analyzer' in field_keys
+
+
 @pytest.mark.asyncio
 async def test_settings_api_endpoints(test_client):
-    """Test that the settings API endpoints work with the new auth system"""
-    # Test data with remote_runtime_resource_factor
-    settings_data = {
-        'language': 'en',
-        'agent': 'test-agent',
-        'max_iterations': 100,
-        'security_analyzer': 'default',
-        'confirmation_mode': True,
-        'llm_model': 'test-model',
-        'llm_api_key': 'test-key',
-        'llm_base_url': 'https://test.com',
-        'remote_runtime_resource_factor': 2,
-    }
+    """Test that the settings API endpoints work with the new auth system."""
+    settings = Settings(
+        language='en',
+        remote_runtime_resource_factor=2,
+        agent_settings=AgentSettings(
+            agent='test-agent',
+            llm=LLM(
+                model='test-model',
+                api_key=SecretStr('test-key'),
+                base_url='https://test.com',
+                timeout=123,
+                litellm_extra_body={'metadata': {'tier': 'pro'}},
+            ),
+            verification=VerificationSettings(
+                critic_enabled=True,
+                critic_mode='all_actions',
+                enable_iterative_refinement=True,
+                critic_threshold=0.7,
+                max_refinement_iterations=4,
+            ),
+        ),
+        conversation_settings=ConversationSettings(
+            max_iterations=100,
+            confirmation_mode=True,
+            security_analyzer='llm',
+        ),
+    )
 
     # Make the POST request to store settings
-    response = test_client.post('/api/v1/settings', json=settings_data)
+    response = test_client.post('/api/settings', json=_dump(settings))
 
     # We're not checking the exact response, just that it doesn't error
     assert response.status_code == 200
 
     # Test the GET settings endpoint
-    response = test_client.get('/api/v1/settings')
+    response = test_client.get('/api/settings')
     assert response.status_code == 200
+    response_data = response.json()
+    assert 'agent_settings_schema' not in response_data
+    vals = response_data['agent_settings']
+    assert vals['llm']['model'] == 'test-model'
+    assert vals['llm']['timeout'] == 123
+    assert vals['llm']['litellm_extra_body'] == {'metadata': {'tier': 'pro'}}
+    assert vals['verification']['critic_enabled'] is True
+    assert vals['verification']['critic_mode'] == 'all_actions'
+    assert vals['verification']['enable_iterative_refinement'] is True
+    assert vals['verification']['critic_threshold'] == 0.7
+    assert vals['verification']['max_refinement_iterations'] == 4
+    cs = response_data['conversation_settings']
+    assert cs['confirmation_mode'] is True
+    assert cs['security_analyzer'] == 'llm'
+    assert cs['max_iterations'] == 100
+    assert vals['llm']['api_key'] == '**********'
 
-    # Test updating with partial settings
+    # Test updating with partial settings — legacy flat fields should preserve existing
     partial_settings = {
         'language': 'fr',
-        'llm_model': None,  # Should preserve existing value
-        'llm_api_key': None,  # Should preserve existing value
+        'llm_model': None,
+        'llm_api_key': None,
     }
 
-    response = test_client.post('/api/v1/settings', json=partial_settings)
+    response = test_client.post('/api/settings', json=partial_settings)
     assert response.status_code == 200
 
+    response = test_client.get('/api/settings')
+    assert response.status_code == 200
+    assert response.json()['agent_settings']['llm']['timeout'] == 123
+
     # Test the unset-provider-tokens endpoint
-    response = test_client.delete('/api/v1/secrets/git-providers')
+    response = test_client.post('/api/unset-provider-tokens')
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_search_api_key_preservation(test_client):
-    """Test that search_api_key is preserved when sending empty string"""
-    # 1. Set initial settings with a search API key
-    initial_settings = {
-        'search_api_key': 'initial-secret-key',
-        'llm_model': 'gpt-4',
-    }
-    response = test_client.post('/api/v1/settings', json=initial_settings)
+async def test_saving_settings_with_frozen_secrets_store(test_client):
+    """Regression: POSTing settings must not fail with `secrets_store`.
+
+    See https://github.com/OpenHands/OpenHands/issues/13306.
+    """
+    payload = _dump(
+        Settings(
+            language='en',
+            agent_settings=AgentSettings(llm=LLM(model='gpt-4')),
+        )
+    )
+    # Inject an extra key the API should ignore gracefully
+    payload['secrets_store'] = {'provider_tokens': {}}
+    response = test_client.post('/api/settings', json=payload)
     assert response.status_code == 200
 
-    # Verify key is set
-    response = test_client.get('/api/v1/settings')
+
+@pytest.mark.asyncio
+async def test_search_api_key_explicit_clear(test_client):
+    """Explicit empty search_api_key payloads should clear the stored secret."""
+    response = test_client.post(
+        '/api/settings',
+        json=_dump(
+            Settings(
+                search_api_key='initial-secret-key',
+                agent_settings=AgentSettings(llm=LLM(model='gpt-4')),
+            )
+        ),
+    )
+    assert response.status_code == 200
+
+    response = test_client.get('/api/settings')
     assert response.status_code == 200
     assert response.json()['search_api_key_set'] is True
 
-    # 2. Update settings with EMPTY search API key (simulating the frontend bug)
-    # and changing another field (llm_model)
-    update_settings = {
-        'search_api_key': '',  # The frontend sends an empty string here
-        'llm_model': 'claude-3-opus',
-    }
-    response = test_client.post('/api/v1/settings', json=update_settings)
+    response = test_client.post(
+        '/api/settings',
+        json=_dump(
+            Settings(
+                search_api_key='',
+                agent_settings=AgentSettings(llm=LLM(model='claude-3-opus')),
+            )
+        ),
+    )
     assert response.status_code == 200
 
-    # 3. Verify the key was NOT wiped out (The Critical Check)
-    response = test_client.get('/api/v1/settings')
+    response = test_client.get('/api/settings')
     assert response.status_code == 200
-    # If the bug was present, this would be False
-    assert response.json()['search_api_key_set'] is True
-    # Verify the other field updated correctly
-    assert response.json()['llm_model'] == 'claude-3-opus'
+    assert response.json()['search_api_key_set'] is False
+    assert response.json()['agent_settings']['llm']['model'] == 'claude-3-opus'
 
 
 @pytest.mark.asyncio
 async def test_disabled_skills_persistence(test_client):
     """Test that disabled_skills can be saved and retrieved via the settings API."""
-    # 1. Save settings with disabled_skills
-    settings_data = {
-        'llm_model': 'test-model',
-        'llm_api_key': 'test-key',
-        'disabled_skills': ['skill_a', 'skill_b'],
-    }
-    response = test_client.post('/api/v1/settings', json=settings_data)
+    response = test_client.post(
+        '/api/settings',
+        json=_dump(
+            Settings(
+                disabled_skills=['skill_a', 'skill_b'],
+                agent_settings=AgentSettings(llm=LLM(model='test-model')),
+            )
+        ),
+    )
     assert response.status_code == 200
 
-    # 2. Retrieve and verify
-    response = test_client.get('/api/v1/settings')
+    response = test_client.get('/api/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == ['skill_a', 'skill_b']
 
-    # 3. Update with a different list
-    update_settings = {
-        'disabled_skills': ['skill_c'],
-    }
-    response = test_client.post('/api/v1/settings', json=update_settings)
+    response = test_client.post(
+        '/api/settings',
+        json=_dump(Settings(disabled_skills=['skill_c'])),
+    )
     assert response.status_code == 200
 
-    response = test_client.get('/api/v1/settings')
+    response = test_client.get('/api/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == ['skill_c']
 
-    # 4. Clear the list
-    update_settings = {
-        'disabled_skills': [],
-    }
-    response = test_client.post('/api/v1/settings', json=update_settings)
+    response = test_client.post(
+        '/api/settings',
+        json=_dump(Settings(disabled_skills=[])),
+    )
     assert response.status_code == 200
 
-    response = test_client.get('/api/v1/settings')
+    response = test_client.get('/api/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == []

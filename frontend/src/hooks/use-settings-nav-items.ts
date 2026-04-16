@@ -71,6 +71,12 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
     items = items.filter((item) => item.to !== "/settings/org-members");
   }
 
+  if (!hasPermission("edit_llm_settings") || !organizationId || isPersonalOrg) {
+    items = items.filter(
+      (item) => !item.to.startsWith("/settings/org-defaults"),
+    );
+  }
+
   // For OSS mode or non-SaaS, return flat list without sections
   if (!isSaasMode) {
     return items.map((item) => ({ type: "item", item }));

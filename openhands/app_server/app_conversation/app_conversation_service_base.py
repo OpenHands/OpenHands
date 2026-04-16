@@ -28,19 +28,18 @@ from openhands.app_server.app_conversation.skill_loader import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk import Agent
-from openhands.sdk.context.agent_context import AgentContext
-from openhands.sdk.context.condenser import LLMSummarizingCondenser
+from openhands.sdk import Agent, LLMSummarizingCondenser
+from openhands.sdk.context import AgentContext
 from openhands.sdk.context.skills import Skill
 from openhands.sdk.llm import LLM
-from openhands.sdk.security.analyzer import SecurityAnalyzerBase
-from openhands.sdk.security.confirmation_policy import (
+from openhands.sdk.security import (
     AlwaysConfirm,
     ConfirmationPolicyBase,
     ConfirmRisky,
+    LLMSecurityAnalyzer,
     NeverConfirm,
+    SecurityAnalyzerBase,
 )
-from openhands.sdk.security.llm_analyzer import LLMSecurityAnalyzer
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.utils.git import ensure_valid_git_branch_name
 

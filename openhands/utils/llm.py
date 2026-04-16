@@ -95,13 +95,20 @@ class ModelsResponse(BaseModel):
 def is_openhands_model(model: str | None) -> bool:
     """Check if the model uses the OpenHands provider.
 
+    The SDK's ``AgentSettings`` validator automatically transforms
+    ``openhands/X`` to ``litellm_proxy/X`` (the internal proxy name),
+    so both prefixes must be recognised.
+
     Args:
         model: The model name to check.
 
     Returns:
-        True if the model starts with 'openhands/', False otherwise.
+        True if the model starts with 'openhands/' or 'litellm_proxy/',
+        False otherwise.
     """
-    return bool(model and model.startswith('openhands/'))
+    return bool(
+        model and (model.startswith('openhands/') or model.startswith('litellm_proxy/'))
+    )
 
 
 def get_provider_api_base(model: str) -> str | None:

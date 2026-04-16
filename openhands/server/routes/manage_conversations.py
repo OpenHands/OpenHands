@@ -22,7 +22,7 @@ import httpx
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.app_server.app_conversation.app_conversation_info_service import (
@@ -72,7 +72,7 @@ from openhands.integrations.service_types import (
 )
 from openhands.runtime import get_runtime_cls
 from openhands.runtime.runtime_status import RuntimeStatus
-from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 from openhands.server.data_models.conversation_info import ConversationInfo
 from openhands.server.data_models.conversation_info_result_set import (
@@ -735,14 +735,17 @@ async def get_prompt(
         # placeholder for error handling
         raise ValueError('Settings not found')
 
-    settings_base_url = settings.llm_base_url
+    agent_settings = settings.agent_settings
+    settings_base_url = agent_settings.llm.base_url
     effective_base_url = get_effective_llm_base_url(
-        settings.llm_model,
+        agent_settings.llm.model,
         settings_base_url,
     )
+    raw_api_key = settings.agent_settings.llm.api_key
+    api_key = SecretStr(raw_api_key) if isinstance(raw_api_key, str) else raw_api_key
     llm_config = LLMConfig(
-        model=settings.llm_model or '',
-        api_key=settings.llm_api_key,
+        model=agent_settings.llm.model,
+        api_key=api_key,
         base_url=effective_base_url,
     )
 

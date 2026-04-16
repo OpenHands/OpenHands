@@ -90,7 +90,7 @@ from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
-from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
+from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
@@ -378,16 +378,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         processor=processor,
                     )
                 )
-
-            # Set security analyzer from settings
-            user = await self.user_context.get_user_info()
-            await self._set_security_analyzer_from_settings(
-                agent_server_url,
-                sandbox.session_api_key,
-                info.id,
-                user.security_analyzer,
-                self.httpx_client,
-            )
 
             # Update the start task
             task.status = AppConversationStartTaskStatus.READY
@@ -895,17 +885,34 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Returns:
             Configured LLM instance
         """
-        model: str = llm_model or user.llm_model or LLM.model_fields['model'].default
-        base_url = user.llm_base_url
+        model: str = (
+            llm_model
+            or user.agent_settings.llm.model
+            or LLM.model_fields['model'].default
+        )
+        base_url = user.agent_settings.llm.base_url
         if model and (
             model.startswith('openhands/') or model.startswith('litellm_proxy/')
         ):
-            base_url = user.llm_base_url or self.openhands_provider_base_url
+            # The SDK auto-fills base_url with the default public proxy for
+            # openhands/ models.  We need to distinguish "user explicitly set a
+            # custom URL" from "SDK auto-filled the default".
+            #
+            # Priority: user-explicit URL > deployment provider URL > SDK default
+            _SDK_DEFAULT_PROXY = 'https://llm-proxy.app.all-hands.dev/'
+            user_set_custom = base_url and base_url.rstrip(
+                '/'
+            ) != _SDK_DEFAULT_PROXY.rstrip('/')
+            if user_set_custom:
+                pass  # keep user's explicit base_url
+            elif self.openhands_provider_base_url:
+                base_url = self.openhands_provider_base_url
+            # else: keep the SDK default
 
         return LLM(
             model=model,
             base_url=base_url,
-            api_key=user.llm_api_key,
+            api_key=user.agent_settings.llm.api_key,
             usage_id='agent',
         )
 
@@ -968,83 +975,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         else:
             _logger.info('No search engine API key found, skipping search engine')
 
-    def _add_custom_sse_servers(
-        self, mcp_servers: dict[str, Any], sse_servers: list
-    ) -> None:
-        """Add custom SSE MCP servers from user configuration.
-
-        Args:
-            mcp_servers: Dictionary to add servers to
-            sse_servers: List of SSE server configurations
-        """
-        for sse_server in sse_servers:
-            server_config = {
-                'url': sse_server.url,
-                'transport': 'sse',
-            }
-            if sse_server.api_key:
-                server_config['headers'] = {
-                    'Authorization': f'Bearer {sse_server.api_key}'
-                }
-
-            # Generate unique server name using UUID
-            # TODO: Let the users specify the server name
-            server_name = f'sse_{uuid4().hex[:8]}'
-            mcp_servers[server_name] = server_config
-            _logger.debug(
-                f'Added custom SSE server: {server_name} for {sse_server.url}'
-            )
-
-    def _add_custom_shttp_servers(
-        self, mcp_servers: dict[str, Any], shttp_servers: list
-    ) -> None:
-        """Add custom SHTTP MCP servers from user configuration.
-
-        Args:
-            mcp_servers: Dictionary to add servers to
-            shttp_servers: List of SHTTP server configurations
-        """
-        for shttp_server in shttp_servers:
-            server_config = {
-                'url': shttp_server.url,
-                'transport': 'streamable-http',
-            }
-            if shttp_server.api_key:
-                server_config['headers'] = {
-                    'Authorization': f'Bearer {shttp_server.api_key}'
-                }
-            if shttp_server.timeout:
-                server_config['timeout'] = shttp_server.timeout
-
-            # Generate unique server name using UUID
-            # TODO: Let the users specify the server name
-            server_name = f'shttp_{uuid4().hex[:8]}'
-            mcp_servers[server_name] = server_config
-            _logger.debug(
-                f'Added custom SHTTP server: {server_name} for {shttp_server.url}'
-            )
-
-    def _add_custom_stdio_servers(
-        self, mcp_servers: dict[str, Any], stdio_servers: list
-    ) -> None:
-        """Add custom STDIO MCP servers from user configuration.
-
-        Args:
-            mcp_servers: Dictionary to add servers to
-            stdio_servers: List of STDIO server configurations
-        """
-        for stdio_server in stdio_servers:
-            server_config = {
-                'command': stdio_server.command,
-                'args': stdio_server.args,
-            }
-            if stdio_server.env:
-                server_config['env'] = stdio_server.env
-
-            # STDIO servers have an explicit name field
-            mcp_servers[stdio_server.name] = server_config
-            _logger.debug(f'Added custom STDIO server: {stdio_server.name}')
-
     def _merge_custom_mcp_config(
         self, mcp_servers: dict[str, Any], user: UserInfo
     ) -> None:
@@ -1054,27 +984,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             mcp_servers: Dictionary to add servers to
             user: User information containing custom MCP config
         """
-        if not user.mcp_config:
+        sdk_mcp = user.agent_settings.mcp_config
+        if not sdk_mcp or not sdk_mcp.mcpServers:
             return
 
         try:
-            sse_count = len(user.mcp_config.sse_servers)
-            shttp_count = len(user.mcp_config.shttp_servers)
-            stdio_count = len(user.mcp_config.stdio_servers)
-
+            count = len(sdk_mcp.mcpServers)
             _logger.info(
-                f'Loading custom MCP config from user settings: '
-                f'{sse_count} SSE, {shttp_count} SHTTP, {stdio_count} STDIO servers'
+                f'Loading custom MCP config from user settings: {count} servers'
             )
 
-            # Add each type of custom server
-            self._add_custom_sse_servers(mcp_servers, user.mcp_config.sse_servers)
-            self._add_custom_shttp_servers(mcp_servers, user.mcp_config.shttp_servers)
-            self._add_custom_stdio_servers(mcp_servers, user.mcp_config.stdio_servers)
+            for name, server in sdk_mcp.mcpServers.items():
+                mcp_servers[name] = server.model_dump(exclude_none=True)
 
             _logger.info(
-                f'Successfully merged custom MCP config: added {sse_count} SSE, '
-                f'{shttp_count} SHTTP, and {stdio_count} STDIO servers'
+                f'Successfully merged custom MCP config: added {count} servers'
             )
 
         except Exception as e:
@@ -1118,100 +1042,29 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return llm, mcp_config
 
-    def _create_agent_with_context(
-        self,
-        llm: LLM,
-        agent_type: AgentType,
-        system_message_suffix: str | None,
-        mcp_config: dict,
-        condenser_max_size: int | None,
-        secrets: dict[str, SecretValue] | None = None,
-        git_provider: ProviderType | None = None,
-        working_dir: str | None = None,
-    ) -> Agent:
-        """Create an agent with appropriate tools and context based on agent type.
-
-        Args:
-            llm: Configured LLM instance
-            agent_type: Type of agent to create (PLAN or DEFAULT)
-            system_message_suffix: Optional suffix for system messages
-            mcp_config: MCP configuration dictionary
-            condenser_max_size: condenser_max_size setting
-            secrets: Optional dictionary of secrets for authentication
-            git_provider: Optional git provider type for computing plan path
-            working_dir: Optional working directory for computing plan path
-
-        Returns:
-            Configured Agent instance with context
-        """
-        # Create condenser with user's settings
-        condenser = self._create_condenser(llm, agent_type, condenser_max_size)
-
-        # Create agent based on type
-        if agent_type == AgentType.PLAN:
-            # Compute plan path if working_dir is provided
-            plan_path = None
-            if working_dir:
-                plan_path = self._compute_plan_path(working_dir, git_provider)
-
-            agent = Agent(
-                llm=llm,
-                tools=get_planning_tools(plan_path=plan_path),
-                system_prompt_filename='system_prompt_planning.j2',
-                system_prompt_kwargs={'plan_structure': format_plan_structure()},
-                condenser=condenser,
-                mcp_config=mcp_config,
-            )
-        else:
-            agent = Agent(
-                llm=llm,
-                tools=get_default_tools(enable_browser=True),
-                system_prompt_kwargs={'cli_mode': False},
-                condenser=condenser,
-                mcp_config=mcp_config,
-            )
-
-        # Prepare system message suffix based on agent type
-        effective_system_message_suffix = system_message_suffix
-        if agent_type == AgentType.PLAN:
-            # Prepend planning-specific instruction to prevent "Ready to proceed?" behavior
-            if system_message_suffix:
-                effective_system_message_suffix = (
-                    f'{PLANNING_AGENT_INSTRUCTION}\n\n{system_message_suffix}'
-                )
-            else:
-                effective_system_message_suffix = PLANNING_AGENT_INSTRUCTION
-
-        # Add agent context
-        agent_context = AgentContext(
-            system_message_suffix=effective_system_message_suffix, secrets=secrets
-        )
-        agent = agent.model_copy(update={'agent_context': agent_context})
-
-        return agent
-
-    def _update_agent_with_llm_metadata(
-        self,
+    @staticmethod
+    def _apply_server_agent_overrides(
         agent: Agent,
+        agent_type: AgentType,
+        mcp_config: dict,
         conversation_id: UUID,
         user_id: str | None,
     ) -> Agent:
-        """Update agent's LLM and condenser LLM with litellm_extra_body metadata.
+        """Apply server-only fields that have no place in ``AgentSettings``.
 
-        This adds tracing metadata (conversation_id, user_id, etc.) to the LLM
-        for analytics and debugging purposes. Only applies to openhands/ models.
-
-        Args:
-            agent: The agent to update
-            conversation_id: The conversation ID
-            user_id: The user ID (can be None)
-
-        Returns:
-            Updated agent with LLM metadata
+        * System-prompt filename / kwargs (planning vs default agent).
+        * LLM tracing metadata for SaaS analytics.
         """
-        updates: dict[str, Any] = {}
+        overrides: dict[str, Any] = {}
+        if agent_type == AgentType.PLAN:
+            overrides['system_prompt_filename'] = 'system_prompt_planning.j2'
+            overrides['system_prompt_kwargs'] = {
+                'plan_structure': format_plan_structure()
+            }
+        else:
+            overrides['system_prompt_kwargs'] = {'cli_mode': False}
 
-        # Update main LLM if it's an openhands model
+        # LLM tracing metadata for openhands/ models
         if should_set_litellm_extra_body(agent.llm.model):
             llm_metadata = get_llm_metadata(
                 model_name=agent.llm.model,
@@ -1219,33 +1072,33 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 conversation_id=conversation_id,
                 user_id=user_id,
             )
-            updated_llm = agent.llm.model_copy(
+            overrides['llm'] = agent.llm.model_copy(
                 update={'litellm_extra_body': {'metadata': llm_metadata}}
             )
-            updates['llm'] = updated_llm
 
-        # Update condenser LLM if it exists and is an openhands model
-        if agent.condenser and hasattr(agent.condenser, 'llm'):
+        # Condenser LLM tracing
+        if agent.condenser is not None and hasattr(agent.condenser, 'llm'):
             condenser_llm = agent.condenser.llm
+            condenser_updates: dict[str, Any] = {}
+            if not condenser_llm.usage_id or condenser_llm.usage_id == 'agent':
+                condenser_updates['usage_id'] = 'condenser'
             if should_set_litellm_extra_body(condenser_llm.model):
                 condenser_metadata = get_llm_metadata(
                     model_name=condenser_llm.model,
-                    llm_type=condenser_llm.usage_id or 'condenser',
+                    llm_type='condenser',
                     conversation_id=conversation_id,
                     user_id=user_id,
                 )
-                updated_condenser_llm = condenser_llm.model_copy(
-                    update={'litellm_extra_body': {'metadata': condenser_metadata}}
-                )
+                condenser_updates['litellm_extra_body'] = {
+                    'metadata': condenser_metadata
+                }
+            if condenser_updates:
                 updated_condenser = agent.condenser.model_copy(
-                    update={'llm': updated_condenser_llm}
+                    update={'llm': condenser_llm.model_copy(update=condenser_updates)}
                 )
-                updates['condenser'] = updated_condenser
+                overrides['condenser'] = updated_condenser
 
-        # Return updated agent if there are changes
-        if updates:
-            return agent.model_copy(update=updates)
-        return agent
+        return agent.model_copy(update=overrides)
 
     def _construct_initial_message_with_plugin_params(
         self,
@@ -1359,110 +1212,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             httpx_client=self.httpx_client,
         )
 
-    async def _finalize_conversation_request(
-        self,
-        agent: Agent,
-        conversation_id: UUID,
-        user: UserInfo,
-        workspace: LocalWorkspace,
-        initial_message: SendMessageRequest | None,
-        secrets: dict[str, SecretValue],
-        sandbox: SandboxInfo,
-        remote_workspace: AsyncRemoteWorkspace | None,
-        selected_repository: str | None,
-        working_dir: str,
-        plugins: list[PluginSpec] | None = None,
-    ) -> StartConversationRequest:
-        """Finalize the conversation request with skills and metadata.
-
-        Args:
-            agent: The configured agent
-            conversation_id: Conversation ID
-            user: User information
-            workspace: Local workspace instance
-            initial_message: Optional initial message for the conversation
-            secrets: Dictionary of secrets for authentication
-            sandbox: Sandbox information
-            remote_workspace: Optional remote workspace for skills loading
-            selected_repository: Optional repository name
-            working_dir: Working directory path
-            plugins: Optional list of plugin specifications to load
-
-        Returns:
-            Complete StartConversationRequest ready for use
-        """
-        # Update agent's LLM with litellm_extra_body metadata for tracing
-        agent = self._update_agent_with_llm_metadata(agent, conversation_id, user.id)
-
-        # Load and merge skills if remote workspace is available
-        hook_config: HookConfig | None = None
-        if remote_workspace:
-            try:
-                agent = await self._load_skills_and_update_agent(
-                    sandbox,
-                    agent,
-                    remote_workspace,
-                    selected_repository,
-                    working_dir,
-                    disabled_skills=user.disabled_skills,
-                )
-            except Exception as e:
-                _logger.warning(f'Failed to load skills: {e}', exc_info=True)
-                # Continue without skills - don't fail conversation startup
-
-            # Load hooks from workspace (.openhands/hooks.json)
-            # Note: working_dir is already the resolved project_dir
-            # (includes repo name when a repo is selected), so we pass
-            # it directly without appending the repo name again.
-            try:
-                _logger.debug(
-                    f'Attempting to load hooks from workspace: '
-                    f'project_dir={working_dir}'
-                )
-                hook_config = await self._load_hooks_from_workspace(
-                    remote_workspace, working_dir
-                )
-                if hook_config:
-                    _logger.debug(
-                        f'Successfully loaded hooks: {hook_config.model_dump()}'
-                    )
-                else:
-                    _logger.debug('No hooks found in workspace')
-            except Exception as e:
-                _logger.warning(f'Failed to load hooks: {e}', exc_info=True)
-                # Continue without hooks - don't fail conversation startup
-
-        # Incorporate plugin parameters into initial message if specified
-        final_initial_message = self._construct_initial_message_with_plugin_params(
-            initial_message, plugins
-        )
-
-        # Convert PluginSpec list to SDK PluginSource list for agent server
-        sdk_plugins: list[PluginSource] | None = None
-        if plugins:
-            sdk_plugins = [
-                PluginSource(
-                    source=p.source,
-                    ref=p.ref,
-                    repo_path=p.repo_path,
-                )
-                for p in plugins
-            ]
-
-        # Create and return the final request
-        return StartConversationRequest(
-            conversation_id=conversation_id,
-            agent=agent,
-            workspace=workspace,
-            confirmation_policy=self._select_confirmation_policy(
-                bool(user.confirmation_mode), user.security_analyzer
-            ),
-            initial_message=final_initial_message,
-            secrets=secrets,
-            plugins=sdk_plugins,
-            hook_config=hook_config,
-        )
-
     async def _build_start_conversation_request_for_user(
         self,
         sandbox: SandboxInfo,
@@ -1477,57 +1226,127 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
     ) -> StartConversationRequest:
-        """Build a complete conversation request for a user.
+        """Build a complete StartConversationRequest for a user.
 
-        This method orchestrates the creation of a conversation request by:
-        1. Setting up git provider secrets
-        2. Configuring LLM and MCP settings
-        3. Creating an agent with appropriate context
-        4. Finalizing the request with skills and metadata
-        5. Passing plugins to the agent server for remote plugin loading
+        Resolves LLM, MCP, tools, secrets and agent context, then
+        builds the ``Agent`` via ``AgentSettings.create_agent()``.
+        Server-only overrides (system prompts, LLM tracing metadata,
+        skills, hooks) are applied to the agent after creation.
+        Finally delegates to ``ConversationSettings.create_request()``.
         """
         user = await self.user_context.get_user_info()
 
-        # Compute the project root — this is the repo directory when a repo is
-        # selected, or the sandbox working_dir otherwise. All tools, hooks,
-        # setup scripts, and plan paths must use this consistently.
         project_dir = get_project_dir(working_dir, selected_repository)
         workspace = LocalWorkspace(working_dir=project_dir)
 
-        # Set up secrets for all git providers
+        # --- secrets --------------------------------------------------------
         secrets = await self._setup_secrets_for_git_providers(user)
 
-        # Configure LLM and MCP
+        # --- LLM + MCP -----------------------------------------------------
         llm, mcp_config = await self._configure_llm_and_mcp(
             user, llm_model, conversation_id
         )
 
-        # Create agent with context
-        agent = self._create_agent_with_context(
-            llm,
-            agent_type,
-            system_message_suffix,
-            mcp_config,
-            user.condenser_max_size,
-            secrets=secrets,
-            git_provider=git_provider,
-            working_dir=project_dir,
+        # --- system_message_suffix (planning-agent prefix) ------------------
+        effective_suffix = system_message_suffix
+        if agent_type == AgentType.PLAN:
+            if system_message_suffix:
+                effective_suffix = (
+                    f'{PLANNING_AGENT_INSTRUCTION}\n\n{system_message_suffix}'
+                )
+            else:
+                effective_suffix = PLANNING_AGENT_INSTRUCTION
+
+        # --- tools ----------------------------------------------------------
+        if agent_type == AgentType.PLAN:
+            plan_path = None
+            if project_dir:
+                plan_path = self._compute_plan_path(project_dir, git_provider)
+            tools = get_planning_tools(plan_path=plan_path)
+        else:
+            tools = get_default_tools(enable_browser=True)
+
+        # --- build AgentSettings and create agent ---------------------------
+        from fastmcp.mcp_config import MCPConfig
+
+        configured_agent_settings = user.agent_settings.model_copy(
+            update={
+                'llm': llm,
+                'tools': tools,
+                'mcp_config': MCPConfig(**mcp_config) if mcp_config else None,
+                'agent_context': AgentContext(
+                    system_message_suffix=effective_suffix,
+                    secrets=secrets,
+                ),
+            }
+        )
+        agent = configured_agent_settings.create_agent()
+        agent = self._apply_server_agent_overrides(
+            agent, agent_type, mcp_config, conversation_id, user.id
         )
 
-        # Finalize and return the conversation request
-        return await self._finalize_conversation_request(
-            agent,
-            conversation_id,
-            user,
-            workspace,
-            initial_message,
-            secrets,
-            sandbox,
-            remote_workspace,
-            selected_repository,
-            project_dir,
-            plugins=plugins,
+        # --- skills + hooks (require remote workspace) ----------------------
+        hook_config: HookConfig | None = None
+        if remote_workspace:
+            try:
+                agent = await self._load_skills_and_update_agent(
+                    sandbox,
+                    agent,
+                    remote_workspace,
+                    selected_repository,
+                    project_dir,
+                    disabled_skills=user.disabled_skills,
+                )
+            except Exception as e:
+                _logger.warning(f'Failed to load skills: {e}', exc_info=True)
+
+            try:
+                _logger.debug(
+                    f'Attempting to load hooks from workspace: '
+                    f'project_dir={project_dir}'
+                )
+                hook_config = await self._load_hooks_from_workspace(
+                    remote_workspace, project_dir
+                )
+                if hook_config:
+                    _logger.debug(
+                        f'Successfully loaded hooks: {hook_config.model_dump()}'
+                    )
+                else:
+                    _logger.debug('No hooks found in workspace')
+            except Exception as e:
+                _logger.warning(f'Failed to load hooks: {e}', exc_info=True)
+
+        # --- plugins --------------------------------------------------------
+        final_initial_message = self._construct_initial_message_with_plugin_params(
+            initial_message, plugins
         )
+        sdk_plugins: list[PluginSource] | None = None
+        if plugins:
+            sdk_plugins = [
+                PluginSource(
+                    source=p.source,
+                    ref=p.ref,
+                    repo_path=p.repo_path,
+                )
+                for p in plugins
+            ]
+
+        # --- populate ConversationSettings and build request ----------------
+        conv_settings = user.conversation_settings.model_copy(
+            update={
+                'agent_settings': configured_agent_settings,
+                'workspace': workspace,
+                'conversation_id': conversation_id,
+                'initial_message': final_initial_message,
+                'plugins': sdk_plugins,
+                'hook_config': hook_config,
+            }
+        )
+
+        # Pass agent explicitly — it has server-only overrides (system
+        # prompts, LLM metadata, skills) applied after create_agent().
+        return conv_settings.create_request(StartConversationRequest, agent=agent)
 
     async def _process_pending_messages(
         self,

@@ -1,16 +1,17 @@
 """Unit tests for the config_models and config_router.
 
 This module tests the config router endpoints,
-focusing on the search_models endpoint for LLM models.
+focusing on the search_models and search_providers endpoints.
 """
 
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
-from openhands.app_server.config_api.config_models import LLMModel
+from openhands.app_server.config_api.config_models import LLMModel, Provider
 from openhands.app_server.config_api.config_router import (
     _get_all_models_with_verified,
+    _get_all_providers,
     router,
 )
 from openhands.app_server.utils.dependencies import check_session_api_key
@@ -23,7 +24,6 @@ class TestLLMModel:
     """Test suite for LLMModel."""
 
     def test_create_model_with_name_and_verified(self):
-        """Test that LLMModel can be created with name and verified."""
         model = LLMModel(provider='openai', name='gpt-4', verified=True)
 
         assert model.provider == 'openai'
@@ -31,7 +31,6 @@ class TestLLMModel:
         assert model.verified is True
 
     def test_create_model_with_default_verified_false(self):
-        """Test that verified defaults to False."""
         model = LLMModel(provider='openai', name='gpt-4')
 
         assert model.provider == 'openai'
@@ -39,11 +38,26 @@ class TestLLMModel:
         assert model.verified is False
 
 
+class TestProvider:
+    """Test suite for Provider."""
+
+    def test_create_provider(self):
+        provider = Provider(name='openai', verified=True)
+
+        assert provider.name == 'openai'
+        assert provider.verified is True
+
+    def test_create_provider_default_unverified(self):
+        provider = Provider(name='some-provider')
+
+        assert provider.name == 'some-provider'
+        assert provider.verified is False
+
+
 class TestPagination:
     """Test suite for pagination helper function."""
 
     def test_returns_first_page_when_no_page_id(self):
-        """Test that first page is returned when no page_id is provided."""
         models = [
             LLMModel(provider='openai', name='gpt-4', verified=True),
             LLMModel(provider='anthropic', name='claude-3', verified=True),
@@ -56,7 +70,6 @@ class TestPagination:
         assert next_page_id == encode_page_id(2)
 
     def test_returns_second_page_when_page_id_provided(self):
-        """Test that correct page is returned when page_id is provided."""
         models = [
             LLMModel(provider='openai', name='gpt-4', verified=True),
             LLMModel(provider='anthropic', name='claude-3', verified=True),
@@ -76,18 +89,48 @@ class TestGetAllModelsWithVerified:
     """Test suite for _get_all_models_with_verified function."""
 
     def test_returns_list_of_llm_models(self):
-        """Test that function returns list of LLMModel objects."""
         models = _get_all_models_with_verified(get_supported_llm_models(config))
 
         assert isinstance(models, list)
         assert all(isinstance(m, LLMModel) for m in models)
 
     def test_models_verified_mix(self):
-        """Test that models contains a mix of verified and unverified."""
         models = _get_all_models_with_verified(get_supported_llm_models(config))
 
         assert any(m.verified is True for m in models)
         assert any(m.verified is False for m in models)
+
+
+class TestGetAllProviders:
+    """Test suite for _get_all_providers function."""
+
+    def test_returns_list_of_providers(self):
+        providers = _get_all_providers(get_supported_llm_models(config))
+
+        assert isinstance(providers, list)
+        assert all(isinstance(p, Provider) for p in providers)
+
+    def test_providers_are_unique(self):
+        providers = _get_all_providers(get_supported_llm_models(config))
+        names = [p.name for p in providers]
+
+        assert len(names) == len(set(names))
+
+    def test_verified_providers_sorted_first(self):
+        providers = _get_all_providers(get_supported_llm_models(config))
+        # Find the boundary between verified and unverified
+        found_unverified = False
+        for p in providers:
+            if not p.verified:
+                found_unverified = True
+            if found_unverified and p.verified:
+                pytest.fail('Verified provider found after unverified provider')
+
+    def test_contains_verified_and_unverified(self):
+        providers = _get_all_providers(get_supported_llm_models(config))
+
+        assert any(p.verified for p in providers)
+        assert any(not p.verified for p in providers)
 
 
 @pytest.fixture
@@ -114,7 +157,6 @@ class TestSearchModelsEndpoint:
     """Test suite for /models/search endpoint."""
 
     def test_returns_200_with_paginated_results(self, test_client):
-        """Test that endpoint returns 200 with paginated results."""
         response = test_client.get('/config/models/search')
 
         assert response.status_code == status.HTTP_200_OK
@@ -123,7 +165,6 @@ class TestSearchModelsEndpoint:
         assert 'next_page_id' in data
 
     def test_respects_limit_parameter(self, test_client):
-        """Test that limit parameter is respected."""
         response = test_client.get('/config/models/search', params={'limit': 2})
 
         assert response.status_code == status.HTTP_200_OK
@@ -131,7 +172,6 @@ class TestSearchModelsEndpoint:
         assert len(data['items']) <= 2
 
     def test_filters_by_query_name_contains(self, test_client):
-        """Test that query parameter filters by name (case-insensitive)."""
         response = test_client.get('/config/models/search', params={'query': 'gpt'})
 
         assert response.status_code == status.HTTP_200_OK
@@ -140,7 +180,6 @@ class TestSearchModelsEndpoint:
             assert 'gpt' in item['name'].lower()
 
     def test_filters_by_verified_eq_true(self, test_client):
-        """Test that verified__eq=true filters to verified models only."""
         response = test_client.get(
             '/config/models/search', params={'verified__eq': True}
         )
@@ -151,9 +190,6 @@ class TestSearchModelsEndpoint:
             assert item['verified'] is True
 
     def test_filters_by_verified_eq_false(self, test_client):
-        """Test that verified__eq=false filters to non-verified models only."""
-        # Since all models from _SDK_VERIFIED_MODELS are verified,
-        # we expect empty results when filtering for non-verified
         response = test_client.get(
             '/config/models/search', params={'verified__eq': False}
         )
@@ -164,7 +200,6 @@ class TestSearchModelsEndpoint:
             assert item['verified'] is False
 
     def test_combines_query_and_verified_filters(self, test_client):
-        """Test that query and verified filters are combined."""
         response = test_client.get(
             '/config/models/search', params={'query': 'gpt', 'verified__eq': True}
         )
@@ -176,12 +211,9 @@ class TestSearchModelsEndpoint:
             assert item['verified'] is True
 
     def test_pagination_with_page_id(self, test_client):
-        """Test that pagination works with page_id."""
-        # First request - get first page
         response1 = test_client.get('/config/models/search', params={'limit': 1})
         data1 = response1.json()
 
-        # If there's a next page, test it
         if data1.get('next_page_id'):
             response2 = test_client.get(
                 '/config/models/search',
@@ -190,17 +222,97 @@ class TestSearchModelsEndpoint:
             data2 = response2.json()
 
             assert response2.status_code == status.HTTP_200_OK
-            # The items should be different
             assert data1['items'][0]['name'] != data2['items'][0]['name']
 
     def test_invalid_limit_parameter_returns_422(self, test_client):
-        """Test that invalid limit parameter returns 422."""
         response = test_client.get('/config/models/search', params={'limit': 0})
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_limit_exceeds_max_returns_422(self, test_client):
-        """Test that limit exceeding max returns 422."""
         response = test_client.get('/config/models/search', params={'limit': 101})
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+class TestSearchProvidersEndpoint:
+    """Test suite for /providers/search endpoint."""
+
+    def test_returns_200_with_paginated_results(self, test_client):
+        response = test_client.get('/config/providers/search')
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert 'items' in data
+        assert 'next_page_id' in data
+        assert len(data['items']) > 0
+
+    def test_respects_limit_parameter(self, test_client):
+        response = test_client.get('/config/providers/search', params={'limit': 2})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data['items']) <= 2
+
+    def test_filters_by_query(self, test_client):
+        response = test_client.get(
+            '/config/providers/search', params={'query': 'openai'}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        for item in data['items']:
+            assert 'openai' in item['name'].lower()
+
+    def test_filters_by_verified_eq_true(self, test_client):
+        response = test_client.get(
+            '/config/providers/search', params={'verified__eq': True}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        for item in data['items']:
+            assert item['verified'] is True
+
+    def test_filters_by_verified_eq_false(self, test_client):
+        response = test_client.get(
+            '/config/providers/search', params={'verified__eq': False}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        for item in data['items']:
+            assert item['verified'] is False
+
+    def test_pagination_with_page_id(self, test_client):
+        response1 = test_client.get('/config/providers/search', params={'limit': 1})
+        data1 = response1.json()
+
+        if data1.get('next_page_id'):
+            response2 = test_client.get(
+                '/config/providers/search',
+                params={'limit': 1, 'page_id': data1['next_page_id']},
+            )
+            data2 = response2.json()
+
+            assert response2.status_code == status.HTTP_200_OK
+            assert data1['items'][0]['name'] != data2['items'][0]['name']
+
+    def test_providers_include_verified_flag(self, test_client):
+        response = test_client.get('/config/providers/search')
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        for item in data['items']:
+            assert 'name' in item
+            assert 'verified' in item
+
+    def test_invalid_limit_parameter_returns_422(self, test_client):
+        response = test_client.get('/config/providers/search', params={'limit': 0})
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_limit_exceeds_max_returns_422(self, test_client):
+        response = test_client.get('/config/providers/search', params={'limit': 101})
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY

@@ -4,6 +4,7 @@ import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { createChatMessage } from "#/services/chat-service";
+import { BtwMessages } from "./btw-messages";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
@@ -291,6 +292,7 @@ export function ChatInterface() {
         </div>
 
         <div className="flex flex-col gap-[6px]">
+          <BtwMessages conversationId={params.conversationId} />
           <div className="flex justify-between relative">
             <div className="flex items-end gap-1">
               <ConfirmationModeEnabled />

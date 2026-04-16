@@ -3,7 +3,7 @@ SQLAlchemy model for Organization-Member relationship.
 """
 
 from pydantic import SecretStr
-from sqlalchemy import JSON, UUID, Column, ForeignKey, Integer, String
+from sqlalchemy import JSON, UUID, Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 from storage.base import Base
 from storage.encrypt_utils import decrypt_value, encrypt_value
@@ -18,12 +18,11 @@ class OrgMember(Base):  # type: ignore
     user_id = Column(UUID(as_uuid=True), ForeignKey('user.id'), primary_key=True)
     role_id = Column(Integer, ForeignKey('role.id'), nullable=False)
     _llm_api_key = Column(String, nullable=False)
-    max_iterations = Column(Integer, nullable=True)
-    llm_model = Column(String, nullable=True)
     _llm_api_key_for_byor = Column(String, nullable=True)
-    llm_base_url = Column(String, nullable=True)
+    has_custom_llm_api_key = Column(Boolean, nullable=False, default=False)
+    agent_settings_diff = Column(JSON, nullable=False, default=dict)
+    conversation_settings_diff = Column(JSON, nullable=False, default=dict)
     status = Column(String, nullable=True)
-    mcp_config = Column(JSON, nullable=True)
 
     # Relationships
     org = relationship('Org', back_populates='org_members')

@@ -5,6 +5,7 @@ user endpoints with organization context (org_id, org_name, role, permissions).
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
@@ -23,6 +24,29 @@ saas_users_v1_router = APIRouter(
     prefix='/api/v1/users', tags=['User'], dependencies=get_dependencies()
 )
 user_dependency = depends_user_context()
+
+
+def _inject_sdk_compat_fields(
+    content: dict[str, Any], *, include_api_key: bool
+) -> None:
+    """Inject flat top-level convenience fields for the SDK.
+
+    The SDK's ``get_llm()`` and ``get_mcp_config()`` read ``llm_model``,
+    ``llm_api_key``, ``llm_base_url``, and ``mcp_config`` from the top
+    level of the ``/api/v1/users/me`` response. These values live inside
+    the nested ``agent_settings`` structure, so we mirror them at the top
+    level for backward compatibility.
+
+    The canonical representation is ``agent_settings``; these flat fields
+    exist solely for SDK backward compatibility.
+    """
+    agent_settings = content.get('agent_settings') or {}
+    llm = agent_settings.get('llm') or {}
+    content['llm_model'] = llm.get('model')
+    content['llm_base_url'] = llm.get('base_url')
+    if include_api_key:
+        content['llm_api_key'] = llm.get('api_key')
+    content['mcp_config'] = agent_settings.get('mcp_config')
 
 
 @saas_users_v1_router.get('/me')
@@ -63,10 +87,13 @@ async def get_current_user_saas(
 
     if expose_secrets:
         await validate_session_key_ownership(user_context, x_session_api_key)
-        return JSONResponse(  # type: ignore[return-value]
-            content=user_info.model_dump(mode='json', context={'expose_secrets': True})
-        )
-    return user_info
+        content = user_info.model_dump(mode='json', context={'expose_secrets': True})
+        _inject_sdk_compat_fields(content, include_api_key=True)
+        return JSONResponse(content=content)  # type: ignore[return-value]
+
+    content = user_info.model_dump(mode='json')
+    _inject_sdk_compat_fields(content, include_api_key=False)
+    return JSONResponse(content=content)  # type: ignore[return-value]
 
 
 async def _get_org_info_from_context(user_context: UserContext) -> dict | None:

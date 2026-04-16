@@ -68,6 +68,7 @@ async def _poll_for_title(
             # Transient agent-server failures are acceptable; retry later.
             _logger.warning(
                 'Title poll failed for conversation %s: %s',
+                url,
                 exc,
             )
         else:
