@@ -40,8 +40,8 @@ from openhands.integrations.service_types import (
     TaskType,
 )
 from openhands.runtime.runtime_status import RuntimeStatus
-from openhands.sdk.conversation.state import ConversationExecutionStatus
-from openhands.sdk.workspace.models import FileOperationResult
+from openhands.sdk.conversation import ConversationExecutionStatus
+from openhands.sdk.workspace import FileOperationResult
 from openhands.sdk.workspace.remote.async_remote_workspace import (
     AsyncRemoteWorkspace,
 )

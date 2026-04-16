@@ -123,11 +123,13 @@ def redact_api_key_literals(text: str) -> str:
 
 def redact_text_secrets(text: str) -> str:
     """Redact secrets from a string representation of a config object."""
-    # api_key='...' patterns
+    # api_key='...' patterns (attribute style)
     text = re.sub(r"api_key='[^']*'", "api_key='<redacted>'", text)
     text = re.sub(r'api_key="[^"]*"', 'api_key="<redacted>"', text)
+    # 'api_key': '...' patterns (dict style from str())
+    text = re.sub(r"('api_key':\s*')[^']*(')", r'\g<1><redacted>\2', text)
 
-    # Dict entries with sensitive key names
+    # Dict entries with sensitive key names (uppercase)
     text = re.sub(
         r"('[A-Z_]*(?:KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*':\s*')[^']*(')",
         r'\g<1><redacted>\2',

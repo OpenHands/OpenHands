@@ -99,9 +99,7 @@ class TestAcceptInvitationEmailValidation:
         mock_keycloak_user_info = {'email': 'alice@example.com'}  # Email from Keycloak
 
         mock_org = MagicMock()
-        mock_org.default_llm_model = 'test-model'
-        mock_org.default_llm_base_url = None
-        mock_org.default_max_iterations = None
+        mock_org.agent_settings = {'llm': {'model': 'test-model'}}
 
         with (
             patch(
@@ -225,9 +223,7 @@ class TestAcceptInvitationEmailValidation:
         mock_invitation.email = 'alice@example.com'  # Lowercase in invitation
 
         mock_org = MagicMock()
-        mock_org.default_llm_model = 'test-model'
-        mock_org.default_llm_base_url = None
-        mock_org.default_max_iterations = None
+        mock_org.agent_settings = {'llm': {'model': 'test-model'}}
 
         with (
             patch(
@@ -279,8 +275,10 @@ class TestAcceptInvitationEmailValidation:
             mock_update_status.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_accept_invitation_inherits_org_llm_settings(self, mock_invitation):
-        """Test that new members inherit the organization's LLM settings when accepting invitation."""
+    async def test_accept_invitation_starts_with_empty_agent_setting_overrides(
+        self, mock_invitation
+    ):
+        """Test that new members start without copied org agent-setting overrides."""
         # Arrange
         user_id = UUID('87654321-4321-8765-4321-876543218765')
         token = 'inv-test-token-12345'
@@ -290,9 +288,15 @@ class TestAcceptInvitationEmailValidation:
         mock_user.email = 'alice@example.com'
 
         mock_org = MagicMock()
-        mock_org.default_llm_model = 'claude-sonnet-4'
-        mock_org.default_llm_base_url = 'https://api.anthropic.com'
-        mock_org.default_max_iterations = 100
+        mock_org.agent_settings = {
+            'llm': {
+                'model': 'claude-sonnet-4',
+                'base_url': 'https://api.anthropic.com',
+            },
+        }
+        mock_org.conversation_settings = {
+            'max_iterations': 100,
+        }
 
         with (
             patch(
@@ -332,7 +336,7 @@ class TestAcceptInvitationEmailValidation:
             mock_get_user.return_value = mock_user
             mock_get_member.return_value = None
             mock_settings = MagicMock()
-            mock_settings.llm_api_key = SecretStr('test-key')
+            mock_settings.agent_settings.llm.api_key = SecretStr('test-key')
             mock_create_litellm.return_value = mock_settings
             mock_get_org.return_value = mock_org
             mock_update_status.return_value = mock_invitation
@@ -340,12 +344,12 @@ class TestAcceptInvitationEmailValidation:
             # Act
             await OrgInvitationService.accept_invitation(token, user_id)
 
-            # Assert - verify add_user_to_org was called with org's LLM settings
+            # Assert - new members should inherit org defaults at read time,
+            # not by storing a copied snapshot as personal overrides.
             mock_add_user.assert_called_once()
             call_kwargs = mock_add_user.call_args.kwargs
-            assert call_kwargs['llm_model'] == 'claude-sonnet-4'
-            assert call_kwargs['llm_base_url'] == 'https://api.anthropic.com'
-            assert call_kwargs['max_iterations'] == 100
+            assert call_kwargs['llm_api_key'] == 'test-key'
+            assert call_kwargs['agent_settings_diff'] == {}
 
 
 class TestCreateInvitationsBatch:

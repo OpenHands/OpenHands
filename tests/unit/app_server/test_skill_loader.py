@@ -32,7 +32,7 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
 from openhands.integrations.service_types import AuthenticationError
-from openhands.sdk.context.skills import KeywordTrigger, Skill, TaskTrigger
+from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 # ===== Test Fixtures =====
 

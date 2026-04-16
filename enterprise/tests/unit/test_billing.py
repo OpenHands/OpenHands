@@ -75,7 +75,6 @@ async def test_org(async_session_maker):
             id=org_id,
             name=f'test-org-{org_id}',
             org_version=ORG_SETTINGS_VERSION,
-            enable_default_condenser=True,
             enable_proactive_conversation_starters=True,
         )
         session.add(org)

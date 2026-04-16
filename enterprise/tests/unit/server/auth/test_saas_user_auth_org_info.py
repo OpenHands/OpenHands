@@ -72,7 +72,6 @@ async def create_org(session_maker, org_id: uuid.UUID, name: str) -> Org:
             id=org_id,
             name=name,
             org_version=1,
-            enable_default_condenser=True,
             enable_proactive_conversation_starters=True,
         )
         session.add(org)
@@ -139,11 +138,12 @@ class TestGetOrgInfoWithRealDB:
         )
 
         # Patch the global a_session_maker in all stores that use it
-        with patch('storage.user_store.a_session_maker', async_session_maker), patch(
-            'storage.org_store.a_session_maker', async_session_maker
-        ), patch(
-            'storage.org_member_store.a_session_maker', async_session_maker
-        ), patch('storage.role_store.a_session_maker', async_session_maker):
+        with (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+            patch('storage.role_store.a_session_maker', async_session_maker),
+        ):
             org_info = await user_auth.get_org_info()
 
         assert org_info is not None
@@ -171,11 +171,12 @@ class TestGetOrgInfoWithRealDB:
             refresh_token=SecretStr('mock_refresh_token'),
         )
 
-        with patch('storage.user_store.a_session_maker', async_session_maker), patch(
-            'storage.org_store.a_session_maker', async_session_maker
-        ), patch(
-            'storage.org_member_store.a_session_maker', async_session_maker
-        ), patch('storage.role_store.a_session_maker', async_session_maker):
+        with (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+            patch('storage.role_store.a_session_maker', async_session_maker),
+        ):
             org_info = await user_auth.get_org_info()
 
         assert org_info is not None
@@ -201,11 +202,12 @@ class TestGetOrgInfoWithRealDB:
             refresh_token=SecretStr('mock_refresh_token'),
         )
 
-        with patch('storage.user_store.a_session_maker', async_session_maker), patch(
-            'storage.org_store.a_session_maker', async_session_maker
-        ), patch(
-            'storage.org_member_store.a_session_maker', async_session_maker
-        ), patch('storage.role_store.a_session_maker', async_session_maker):
+        with (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+            patch('storage.role_store.a_session_maker', async_session_maker),
+        ):
             org_info = await user_auth.get_org_info()
 
         assert org_info is not None
@@ -226,11 +228,12 @@ class TestGetOrgInfoWithRealDB:
             refresh_token=SecretStr('mock_refresh_token'),
         )
 
-        with patch('storage.user_store.a_session_maker', async_session_maker), patch(
-            'storage.org_store.a_session_maker', async_session_maker
-        ), patch(
-            'storage.org_member_store.a_session_maker', async_session_maker
-        ), patch('storage.role_store.a_session_maker', async_session_maker):
+        with (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+            patch('storage.role_store.a_session_maker', async_session_maker),
+        ):
             org_info = await user_auth.get_org_info()
 
         assert org_info is None
@@ -257,11 +260,12 @@ class TestGetOrgInfoWithRealDB:
             refresh_token=SecretStr('mock_refresh_token'),
         )
 
-        with patch('storage.user_store.a_session_maker', async_session_maker), patch(
-            'storage.org_store.a_session_maker', async_session_maker
-        ), patch(
-            'storage.org_member_store.a_session_maker', async_session_maker
-        ), patch('storage.role_store.a_session_maker', async_session_maker):
+        with (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+            patch('storage.role_store.a_session_maker', async_session_maker),
+        ):
             org_info = await user_auth.get_org_info()
 
         assert org_info is None
@@ -282,11 +286,12 @@ class TestGetOrgInfoWithRealDB:
             refresh_token=SecretStr('mock_refresh_token'),
         )
 
-        with patch('storage.user_store.a_session_maker', async_session_maker), patch(
-            'storage.org_store.a_session_maker', async_session_maker
-        ), patch(
-            'storage.org_member_store.a_session_maker', async_session_maker
-        ), patch('storage.role_store.a_session_maker', async_session_maker):
+        with (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+            patch('storage.role_store.a_session_maker', async_session_maker),
+        ):
             # First call
             org_info1 = await user_auth.get_org_info()
             assert org_info1 is not None
@@ -307,11 +312,12 @@ class TestGetOrgInfoWithRealDB:
             refresh_token=SecretStr('mock_refresh_token'),
         )
 
-        with patch('storage.user_store.a_session_maker', async_session_maker), patch(
-            'storage.org_store.a_session_maker', async_session_maker
-        ), patch(
-            'storage.org_member_store.a_session_maker', async_session_maker
-        ), patch('storage.role_store.a_session_maker', async_session_maker):
+        with (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+            patch('storage.role_store.a_session_maker', async_session_maker),
+        ):
             # First call
             org_info1 = await user_auth.get_org_info()
             assert org_info1 is None
@@ -337,11 +343,12 @@ class TestGetOrgInfoWithRealDB:
             refresh_token=SecretStr('mock_refresh_token'),
         )
 
-        with patch('storage.user_store.a_session_maker', async_session_maker), patch(
-            'storage.org_store.a_session_maker', async_session_maker
-        ), patch(
-            'storage.org_member_store.a_session_maker', async_session_maker
-        ), patch('storage.role_store.a_session_maker', async_session_maker):
+        with (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+            patch('storage.role_store.a_session_maker', async_session_maker),
+        ):
             org_info = await user_auth.get_org_info()
 
         assert org_info is not None

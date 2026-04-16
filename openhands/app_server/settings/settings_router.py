@@ -4,6 +4,7 @@ This module provides the V1 API routes for user settings under /api/v1/settings.
 """
 
 import os
+from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
@@ -14,6 +15,7 @@ from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
 )
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.server.routes.secrets import invalidate_legacy_secrets_store
 from openhands.server.settings import (
     GETSettingsModel,
@@ -42,66 +44,28 @@ router = APIRouter(
 )
 
 
-async def store_llm_settings(
-    settings: Settings, existing_settings: Settings
-) -> Settings:
-    """Merge LLM settings with existing settings."""
-    if not existing_settings:
-        return settings
+def _post_merge_llm_fixups(settings: Settings) -> None:
+    """Apply LLM-specific fixups after merging settings.
 
-    # Preserve unset LLM settings
-    settings.llm_api_key = settings.llm_api_key or existing_settings.llm_api_key
-    settings.llm_model = settings.llm_model or existing_settings.llm_model
+    When the merged LLM base_url is empty-string, treat it as cleared.
+    When it is None, try to auto-detect the provider default.
+    """
+    llm = settings.agent_settings.llm
 
-    if settings.llm_base_url is None:
-        # Not provided at all (e.g. MCP config save) - preserve existing or auto-detect
-        if existing_settings.llm_base_url:
-            settings.llm_base_url = existing_settings.llm_base_url
-        elif is_openhands_model(settings.llm_model):
-            # OpenHands models use the LiteLLM proxy
-            settings.llm_base_url = LITE_LLM_API_URL
-        elif settings.llm_model:
-            # For non-openhands models, try to get URL from litellm
+    if llm.base_url == '':
+        llm.base_url = None
+    elif llm.base_url is None and llm.model:
+        if is_openhands_model(llm.model):
+            llm.base_url = LITE_LLM_API_URL
+        else:
             try:
-                api_base = get_provider_api_base(settings.llm_model)
+                api_base = get_provider_api_base(llm.model)
                 if api_base:
-                    settings.llm_base_url = api_base
-                else:
-                    logger.debug(
-                        f'No api_base found in litellm for model: {settings.llm_model}'
-                    )
+                    llm.base_url = api_base
             except Exception as e:
                 logger.error(
-                    f'Failed to get api_base from litellm for model {settings.llm_model}: {e}'
+                    f'Failed to get api_base from litellm for model {llm.model}: {e}'
                 )
-    elif settings.llm_base_url == '':
-        # Explicitly cleared by the user (basic view save or advanced view clear)
-        settings.llm_base_url = None
-
-    settings.search_api_key = (
-        settings.search_api_key or existing_settings.search_api_key
-    )
-    return settings
-
-
-def convert_to_settings(settings_with_token_data: Settings) -> Settings:
-    """Convert settings with token data to Settings model."""
-    settings_data = settings_with_token_data.model_dump()
-
-    # Filter out additional fields from `SettingsWithTokenData`
-    filtered_settings_data = {
-        key: value
-        for key, value in settings_data.items()
-        if key in Settings.model_fields  # Ensures only `Settings` fields are included
-    }
-
-    # Convert the API keys to `SecretStr` instances
-    filtered_settings_data['llm_api_key'] = settings_with_token_data.llm_api_key
-    filtered_settings_data['search_api_key'] = settings_with_token_data.search_api_key
-
-    # Create a new Settings instance
-    settings = Settings(**filtered_settings_data)
-    return settings
 
 
 # NOTE: We use response_model=None for endpoints that return JSONResponse directly.
@@ -157,26 +121,34 @@ async def load_settings(
                 if provider_token.token or provider_token.user_id:
                     provider_tokens_set[provider_type] = provider_token.host
 
+        llm = settings.agent_settings.llm
         settings_with_token_data = GETSettingsModel(
             **settings.model_dump(exclude={'secrets_store'}),
-            llm_api_key_set=settings.llm_api_key is not None
-            and bool(settings.llm_api_key),
+            llm_api_key_set=settings.llm_api_key_is_set,
             search_api_key_set=settings.search_api_key is not None
             and bool(settings.search_api_key),
             provider_tokens_set=provider_tokens_set,
         )
 
-        # If the base url matches the default for the provider, we don't send it
-        # So that the frontend can display basic mode
-        if is_openhands_model(settings.llm_model):
-            if settings.llm_base_url == LITE_LLM_API_URL:
-                settings_with_token_data.llm_base_url = None
-        elif settings.llm_model and settings.llm_base_url == get_provider_api_base(
-            settings.llm_model
-        ):
-            settings_with_token_data.llm_base_url = None
+        # Convert litellm_proxy/ back to openhands/ for the frontend
+        resp_llm = settings_with_token_data.agent_settings.llm
+        if resp_llm.model and resp_llm.model.startswith('litellm_proxy/'):
+            resp_llm.model = (
+                f'openhands/{resp_llm.model.removeprefix("litellm_proxy/")}'
+            )
 
-        settings_with_token_data.llm_api_key = None
+        # If the base url matches the default for the provider, we don't send it
+        # So that the frontend can display basic mode.
+        # Normalize trailing slashes for comparison since the SDK may add one.
+        normalized_base = (llm.base_url or '').rstrip('/')
+        normalized_proxy = LITE_LLM_API_URL.rstrip('/')
+        if is_openhands_model(llm.model):
+            if normalized_base == normalized_proxy:
+                resp_llm.base_url = None
+        elif llm.model and llm.base_url == get_provider_api_base(llm.model):
+            resp_llm.base_url = None
+
+        resp_llm.api_key = None
         settings_with_token_data.search_api_key = None
         settings_with_token_data.sandbox_api_key = None
         return settings_with_token_data
@@ -202,33 +174,33 @@ async def load_settings(
     },
 )
 async def store_settings(
-    settings: Settings,
+    payload: dict[str, Any],
     settings_store: SettingsStore = Depends(get_user_settings_store),
 ) -> JSONResponse:
     """Store user settings.
 
-    Saves the user settings including LLM configuration, provider tokens,
-    and other user preferences.
+    Accepts a partial payload and deep-merges ``agent_settings`` and
+    ``conversation_settings`` with the existing persisted values so that
+    saving one settings page never overwrites fields owned by another.
 
     Returns:
         200: Settings stored successfully
         500: Error storing settings
     """
-    # Check provider tokens are valid
     try:
         existing_settings = await settings_store.load()
+        settings = existing_settings.model_copy() if existing_settings else Settings()
+        settings.update(payload)
 
-        # Convert to Settings model and merge with existing settings
+        _post_merge_llm_fixups(settings)
+
         if existing_settings:
-            settings = await store_llm_settings(settings, existing_settings)
-
-            # Keep existing analytics consent if not provided
+            if 'search_api_key' not in payload and settings.search_api_key is None:
+                settings.search_api_key = existing_settings.search_api_key
             if settings.user_consents_to_analytics is None:
                 settings.user_consents_to_analytics = (
                     existing_settings.user_consents_to_analytics
                 )
-
-            # Keep existing disabled_skills if not provided
             if settings.disabled_skills is None:
                 settings.disabled_skills = existing_settings.disabled_skills
 
@@ -247,14 +219,11 @@ async def store_settings(
             config.git_user_email = settings.git_user_email
             git_config_updated = True
 
-        # Note: Git configuration will be applied when new sessions are initialized
-        # Existing sessions will continue with their current git configuration
         if git_config_updated:
             logger.info(
                 f'Updated global git configuration: name={config.git_user_name}, email={config.git_user_email}'
             )
 
-        settings = convert_to_settings(settings)
         await settings_store.store(settings)
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -266,3 +235,15 @@ async def store_settings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': 'Something went wrong storing settings'},
         )
+
+
+@router.get('/agent-schema')
+async def load_settings_schema() -> dict[str, Any]:
+    """Load the schema for settings"""
+    return AgentSettings.export_schema().model_dump(mode='json')
+
+
+@router.get('/conversation-schema')
+async def load_conversation_settings_schema() -> dict[str, Any]:
+    """Load the schema for conversations"""
+    return ConversationSettings.export_schema().model_dump(mode='json')

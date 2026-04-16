@@ -5,7 +5,16 @@ import {
   OrganizationMembersPage,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
+import { Settings } from "#/types/settings";
 import { openHands } from "../open-hands-axios";
+
+type OrganizationAgentSettingsResponse = Pick<
+  Settings,
+  | "agent_settings"
+  | "conversation_settings"
+  | "search_api_key"
+  | "llm_api_key_set"
+>;
 
 export const organizationService = {
   getMe: async ({ orgId }: { orgId: string }) => {
@@ -166,6 +175,23 @@ export const organizationService = {
       role: string;
     }>("/api/organizations/members/invite/accept", { token });
 
+    return data;
+  },
+
+  getOrganizationAgentSettings: async () => {
+    const { data } = await openHands.get<OrganizationAgentSettingsResponse>(
+      "/api/organizations/llm",
+    );
+    return data;
+  },
+
+  saveOrganizationAgentSettings: async (
+    settings: Partial<Settings> & Record<string, unknown>,
+  ) => {
+    const { data } = await openHands.post<OrganizationAgentSettingsResponse>(
+      "/api/organizations/llm",
+      settings,
+    );
     return data;
   },
 

@@ -12,7 +12,7 @@ from conftest import (
 )
 
 from openhands.core.config import MCPConfig
-from openhands.core.config.mcp_config import MCPStdioServerConfig
+from openhands.core.config.mcp_config import StdioMCPServer
 from openhands.mcp.utils import add_mcp_tools_to_agent
 from openhands.microagent.microagent import (
     BaseMicroagent,
@@ -396,7 +396,7 @@ async def test_add_mcp_tools_from_microagents():
     mock_memory = MagicMock()
 
     # Configure the mock memory to return a microagent MCP config
-    mock_stdio_server = MCPStdioServerConfig(
+    mock_stdio_server = StdioMCPServer(
         name='test-tool', command='test-command', args=['test-arg1', 'test-arg2']
     )
     mock_microagent_mcp_config = MCPConfig(stdio_servers=[mock_stdio_server])
