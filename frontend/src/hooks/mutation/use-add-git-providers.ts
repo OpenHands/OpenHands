@@ -2,12 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SecretsService } from "#/api/secrets-service";
 import { Provider, ProviderToken } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
-import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 export const useAddGitProviders = () => {
   const queryClient = useQueryClient();
   const { trackGitProviderConnected } = useTracking();
-  const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: ({
@@ -28,7 +26,7 @@ export const useAddGitProviders = () => {
       }
 
       await queryClient.invalidateQueries({
-        queryKey: ["settings", organizationId],
+        queryKey: ["settings"],
       });
     },
     meta: {
