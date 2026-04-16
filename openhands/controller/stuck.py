@@ -42,6 +42,22 @@ class StuckDetector:
         self.state = state
         self.stuck_analysis: Optional[StuckDetector.StuckAnalysis] = None
 
+    # Corrective nudge content injected by the agent when the LLM produces
+    # an empty response.  These system-generated user messages should NOT
+    # reset the stuck-detection window because they are not genuine user input.
+    _CORRECTIVE_NUDGE_FRAGMENTS = (
+        'Your last response did not include a function call',
+        'did not include a function call or a message',
+        'Please use a tool to proceed',
+    )
+
+    def _is_corrective_nudge(self, event: Event) -> bool:
+        """Return True if *event* is a system-generated corrective nudge."""
+        if not (isinstance(event, MessageAction) and event.source == EventSource.USER):
+            return False
+        content = event.content or ''
+        return any(frag in content for frag in self._CORRECTIVE_NUDGE_FRAGMENTS)
+
     def is_stuck(self, headless_mode: bool = True) -> bool:
         """Checks if the agent is stuck in a loop.
 
@@ -55,12 +71,15 @@ class StuckDetector:
         """
         filtered_history_offset = 0
         if not headless_mode:
-            # In interactive mode, only look at history after the last user message
+            # In interactive mode, only look at history after the last user message.
+            # Skip corrective nudges (system-generated user messages) so they
+            # don't reset the detection window for empty-response loops.
             last_user_msg_idx = -1
             for i, event in enumerate(reversed(self.state.history)):
                 if (
                     isinstance(event, MessageAction)
                     and event.source == EventSource.USER
+                    and not self._is_corrective_nudge(event)
                 ):
                     last_user_msg_idx = len(self.state.history) - i - 1
                     break
@@ -132,6 +151,15 @@ class StuckDetector:
                 filtered_history, filtered_history_offset
             ):
                 return True
+
+        # scenario 6: empty response loop
+        # Detects when the LLM produces empty responses that are followed by
+        # corrective nudges (source=USER), causing a loop that bypasses
+        # the monologue detector because the nudge resets the user-message boundary.
+        if self._is_stuck_empty_response_loop(
+            filtered_history, filtered_history_offset
+        ):
+            return True
 
         # Empty stuck_analysis when not stuck
         self.stuck_analysis = None
@@ -459,6 +487,49 @@ class StuckDetector:
                 )
                 return True
 
+        return False
+
+    def _is_stuck_empty_response_loop(
+        self, filtered_history: list[Event], filtered_history_offset: int = 0
+    ) -> bool:
+        """Detect when the agent is stuck producing empty responses.
+
+        This catches a pattern where the LLM repeatedly returns empty responses
+        (no tool calls, no meaningful content). Each empty response may be
+        followed by a corrective nudge with source=USER, which defeats the
+        monologue detector. We detect the pattern by counting consecutive
+        empty MessageActions from the agent (content is empty or whitespace-only).
+        """
+        # Count consecutive empty agent messages from the end of history
+        consecutive_empty = 0
+        first_empty_idx = -1
+
+        for i in range(len(filtered_history) - 1, -1, -1):
+            event = filtered_history[i]
+            if isinstance(event, MessageAction) and event.source == EventSource.AGENT:
+                if not event.content or not event.content.strip():
+                    consecutive_empty += 1
+                    first_empty_idx = i
+                else:
+                    break
+            # Skip non-MessageAction events (like NullObservation, which is filtered)
+            # but stop if we hit an action or observation that suggests real work
+            elif isinstance(event, Action) and not isinstance(event, MessageAction):
+                break
+            elif isinstance(event, Observation):
+                break
+
+        if consecutive_empty >= 3:
+            logger.warning(
+                f'Empty response loop detected: {consecutive_empty} consecutive '
+                'empty agent messages'
+            )
+            self.stuck_analysis = StuckDetector.StuckAnalysis(
+                loop_type='empty_response_loop',
+                loop_repeat_times=consecutive_empty,
+                loop_start_idx=first_empty_idx + filtered_history_offset,
+            )
+            return True
         return False
 
     def _eq_no_pid(self, obj1: Event, obj2: Event) -> bool:

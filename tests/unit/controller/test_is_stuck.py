@@ -1012,6 +1012,153 @@ class TestStuckDetector:
         )
 
 
+    def test_is_stuck_empty_response_loop_with_nudges(self, stuck_detector):
+        """Test that consecutive empty agent responses with nudges are detected.
+
+        In V0, the monologue detector catches this because nudges (source=USER)
+        are filtered out, leaving consecutive identical empty agent messages.
+        """
+        state = stuck_detector.state
+
+        # Initial user message
+        user_msg = MessageAction(content='Build me an app', wait_for_response=False)
+        user_msg._source = EventSource.USER
+        state.history.append(user_msg)
+
+        # Simulate 3 consecutive empty agent responses interleaved with nudges
+        for _ in range(3):
+            empty_agent_msg = MessageAction(content='', wait_for_response=False)
+            empty_agent_msg._source = EventSource.AGENT
+            state.history.append(empty_agent_msg)
+
+            nudge_msg = MessageAction(
+                content='Your last response did not include a function call or a message. Please use a tool to proceed with the task.',
+                wait_for_response=False,
+            )
+            nudge_msg._source = EventSource.USER
+            state.history.append(nudge_msg)
+
+        # Detected as stuck (monologue catches identical empty messages)
+        assert stuck_detector.is_stuck(headless_mode=True)
+
+    def test_is_stuck_empty_response_loop_non_headless(self, stuck_detector):
+        """Test that empty response loop is detected in non-headless (interactive) mode.
+
+        The corrective nudges have source=USER, which would normally reset the
+        detection window in non-headless mode. We skip nudges when finding the
+        last real user message so the detection still works.
+        """
+        state = stuck_detector.state
+
+        # Real user message
+        user_msg = MessageAction(content='Build me an app', wait_for_response=False)
+        user_msg._source = EventSource.USER
+        state.history.append(user_msg)
+
+        # Simulate 3 consecutive empty agent responses with nudges
+        for _ in range(3):
+            empty_agent_msg = MessageAction(content='', wait_for_response=False)
+            empty_agent_msg._source = EventSource.AGENT
+            state.history.append(empty_agent_msg)
+
+            nudge_msg = MessageAction(
+                content='Your last response did not include a function call or a message. Please use a tool to proceed with the task.',
+                wait_for_response=False,
+            )
+            nudge_msg._source = EventSource.USER
+            state.history.append(nudge_msg)
+
+        # Should still detect stuck in non-headless mode
+        # because we skip corrective nudges when finding the user message boundary
+        assert stuck_detector.is_stuck(headless_mode=False)
+
+    def test_is_not_stuck_only_two_empty_responses(self, stuck_detector):
+        """Two empty responses is not enough to detect the loop."""
+        state = stuck_detector.state
+
+        user_msg = MessageAction(content='Hello', wait_for_response=False)
+        user_msg._source = EventSource.USER
+        state.history.append(user_msg)
+
+        for _ in range(2):
+            empty_agent_msg = MessageAction(content='', wait_for_response=False)
+            empty_agent_msg._source = EventSource.AGENT
+            state.history.append(empty_agent_msg)
+
+        assert stuck_detector.is_stuck(headless_mode=True) is False
+
+    def test_is_not_stuck_non_empty_response_breaks_loop(self, stuck_detector):
+        """A non-empty response breaks the empty response loop pattern."""
+        state = stuck_detector.state
+
+        user_msg = MessageAction(content='Hello', wait_for_response=False)
+        user_msg._source = EventSource.USER
+        state.history.append(user_msg)
+
+        # Two empty responses
+        for _ in range(2):
+            empty_msg = MessageAction(content='', wait_for_response=False)
+            empty_msg._source = EventSource.AGENT
+            state.history.append(empty_msg)
+
+        # Non-empty response breaks the pattern
+        real_msg = MessageAction(
+            content='Let me help you with that.', wait_for_response=False
+        )
+        real_msg._source = EventSource.AGENT
+        state.history.append(real_msg)
+
+        # Two more empty responses (not enough after the break)
+        for _ in range(2):
+            empty_msg = MessageAction(content='', wait_for_response=False)
+            empty_msg._source = EventSource.AGENT
+            state.history.append(empty_msg)
+
+        assert stuck_detector.is_stuck(headless_mode=True) is False
+
+    def test_is_stuck_whitespace_only_responses(self, stuck_detector):
+        """Whitespace-only responses should be detected by the empty response detector.
+
+        The monologue detector requires identical messages; the empty response
+        detector catches varying whitespace-only content.
+        """
+        state = stuck_detector.state
+
+        user_msg = MessageAction(content='Hello', wait_for_response=False)
+        user_msg._source = EventSource.USER
+        state.history.append(user_msg)
+
+        for content in ['', '  ', '\n', '\t  \n']:
+            empty_msg = MessageAction(content=content, wait_for_response=False)
+            empty_msg._source = EventSource.AGENT
+            state.history.append(empty_msg)
+
+        assert stuck_detector.is_stuck(headless_mode=True)
+        assert stuck_detector.stuck_analysis.loop_type == 'empty_response_loop'
+
+    def test_is_stuck_empty_response_with_varying_content(self, stuck_detector):
+        """Empty responses with different whitespace bypass the monologue detector.
+
+        The monologue detector requires identical messages. When the empty
+        responses differ (e.g., '' vs ' '), only the empty response detector
+        catches them.
+        """
+        state = stuck_detector.state
+
+        user_msg = MessageAction(content='Hello', wait_for_response=False)
+        user_msg._source = EventSource.USER
+        state.history.append(user_msg)
+
+        # These are all "empty" but not identical, so monologue won't catch them
+        for content in [' ', '  ', '   ']:
+            empty_msg = MessageAction(content=content, wait_for_response=False)
+            empty_msg._source = EventSource.AGENT
+            state.history.append(empty_msg)
+
+        assert stuck_detector.is_stuck(headless_mode=True)
+        assert stuck_detector.stuck_analysis.loop_type == 'empty_response_loop'
+
+
 class TestAgentController:
     @pytest.fixture
     def controller(self):
