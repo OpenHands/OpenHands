@@ -1,10 +1,11 @@
 import logging
 import os
+import shlex
 import tempfile
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -27,20 +28,20 @@ from openhands.app_server.app_conversation.skill_loader import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk import Agent
-from openhands.sdk.context.agent_context import AgentContext
-from openhands.sdk.context.condenser import LLMSummarizingCondenser
+from openhands.sdk import Agent, LLMSummarizingCondenser
+from openhands.sdk.context import AgentContext
 from openhands.sdk.context.skills import Skill
 from openhands.sdk.llm import LLM
-from openhands.sdk.security.analyzer import SecurityAnalyzerBase
-from openhands.sdk.security.confirmation_policy import (
+from openhands.sdk.security import (
     AlwaysConfirm,
     ConfirmationPolicyBase,
     ConfirmRisky,
+    LLMSecurityAnalyzer,
     NeverConfirm,
+    SecurityAnalyzerBase,
 )
-from openhands.sdk.security.llm_analyzer import LLMSecurityAnalyzer
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.utils.git import ensure_valid_git_branch_name
 
 _logger = logging.getLogger(__name__)
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
@@ -323,7 +324,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         # Create the projects directory if it does not exist yet
         parent = Path(workspace.working_dir).parent
         result = await workspace.execute_command(
-            f'mkdir {workspace.working_dir}', parent
+            f'mkdir -p {workspace.working_dir}', parent
         )
         if result.exit_code:
             _logger.warning(f'mkdir failed: {result.stderr}')
@@ -352,9 +353,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
             raise ValueError('Missing either Git token or valid repository')
 
         dir_name = request.selected_repository.split('/')[-1]
+        quoted_remote_repo_url = shlex.quote(remote_repo_url)
+        quoted_dir_name = shlex.quote(dir_name)
 
         # Clone the repo - this is the slow part!
-        clone_command = f'git clone {remote_repo_url} {dir_name}'
+        clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
         )
@@ -363,12 +366,15 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         # Checkout the appropriate branch
         if request.selected_branch:
-            checkout_command = f'git checkout {request.selected_branch}'
+            ensure_valid_git_branch_name(request.selected_branch)
+            checkout_command = f'git checkout {shlex.quote(request.selected_branch)}'
         else:
             # Generate a random branch name to avoid conflicts
             random_str = base62.encodebytes(os.urandom(16))
             openhands_workspace_branch = f'openhands-workspace-{random_str}'
-            checkout_command = f'git checkout -b {openhands_workspace_branch}'
+            checkout_command = (
+                f'git checkout -b {shlex.quote(openhands_workspace_branch)}'
+            )
         git_dir = Path(workspace.working_dir) / dir_name
         result = await workspace.execute_command(checkout_command, git_dir)
         if result.exit_code:
@@ -405,14 +411,18 @@ class AppConversationServiceBase(AppConversationService, ABC):
             project_dir: Project root directory (repo root when a repo is selected).
         """
         command = 'mkdir -p .git/hooks && chmod +x .openhands/pre-commit.sh'
-        result = await workspace.execute_command(command, project_dir)
-        if result.exit_code:
+        pre_commit_command_result = await workspace.execute_command(
+            command, project_dir
+        )
+        if pre_commit_command_result.exit_code:
             return
 
         # Check if there's an existing pre-commit hook
         with tempfile.TemporaryFile(mode='w+t') as temp_file:
-            result = await workspace.file_download(PRE_COMMIT_HOOK, str(temp_file))
-            if result.success:
+            download_result = await workspace.file_download(
+                PRE_COMMIT_HOOK, str(temp_file)
+            )
+            if download_result.success:
                 _logger.info('Preserving existing pre-commit hook')
                 # an existing pre-commit hook exists
                 if 'This hook was installed by OpenHands' not in temp_file.read():
@@ -421,10 +431,12 @@ class AppConversationServiceBase(AppConversationService, ABC):
                         f'mv {PRE_COMMIT_HOOK} {PRE_COMMIT_LOCAL} &&'
                         f'chmod +x {PRE_COMMIT_LOCAL}'
                     )
-                    result = await workspace.execute_command(command, project_dir)
-                    if result.exit_code != 0:
+                    mv_chmod_result = await workspace.execute_command(
+                        command, project_dir
+                    )
+                    if mv_chmod_result.exit_code != 0:
                         _logger.error(
-                            f'Failed to preserve existing pre-commit hook: {result.stderr}',
+                            f'Failed to preserve existing pre-commit hook: {mv_chmod_result.stderr}',
                         )
                         return
 
@@ -435,9 +447,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
         )
 
         # Make the pre-commit hook executable
-        result = await workspace.execute_command(f'chmod +x {PRE_COMMIT_HOOK}')
-        if result.exit_code:
-            _logger.error(f'Failed to make pre-commit hook executable: {result.stderr}')
+        chmod_result = await workspace.execute_command(f'chmod +x {PRE_COMMIT_HOOK}')
+        if chmod_result.exit_code:
+            _logger.error(
+                f'Failed to make pre-commit hook executable: {chmod_result.stderr}'
+            )
             return
 
         _logger.info('Git pre-commit hook installed successfully')
@@ -459,7 +473,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             Configured LLMSummarizingCondenser instance
         """
         # LLMSummarizingCondenser SDK defaults: max_size=240, keep_first=2
-        condenser_kwargs = {
+        condenser_kwargs: dict[str, Any] = {
             'llm': llm.model_copy(
                 update={
                     'usage_id': (

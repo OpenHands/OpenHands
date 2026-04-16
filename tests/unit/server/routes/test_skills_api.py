@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from openhands.integrations.provider import ProviderToken, ProviderType
+from openhands.integrations.service_types import UserGitInfo
 from openhands.server.app import app
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.secrets import Secrets
@@ -52,6 +53,9 @@ class MockUserAuth(UserAuth):
     async def get_mcp_api_key(self) -> str | None:
         return None
 
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        return None
+
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         return MockUserAuth()
@@ -65,7 +69,7 @@ class MockUserAuth(UserAuth):
 def test_client():
     with (
         patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
-        patch('openhands.server.dependencies._SESSION_API_KEY', None),
+        patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
             'openhands.server.user_auth.user_auth.UserAuth.get_instance',
             return_value=MockUserAuth(),

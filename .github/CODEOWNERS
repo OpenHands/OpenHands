@@ -1,8 +1,0 @@
-# CODEOWNERS file for OpenHands repository
-# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
-
-/frontend/ @amanape @hieptl
-/openhands-ui/ @amanape @hieptl
-/openhands/ @tofarr @malhotra5 @hieptl
-/enterprise/ @chuckbutkus @tofarr @malhotra5
-/evaluation/ @xingyaoww @neubig

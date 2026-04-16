@@ -84,6 +84,12 @@ class Permission(str, Enum):
     # Temporary permissions until we finish the API updates.
     EDIT_ORG_SETTINGS = 'edit_org_settings'
 
+    # Git organization claims
+    MANAGE_ORG_CLAIMS = 'manage_org_claims'
+
+    # Manage Automations
+    MANAGE_AUTOMATIONS = 'manage_automations'
+
 
 class RoleName(str, Enum):
     """Role names used in the system."""
@@ -118,6 +124,10 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             # Organization Management (Owner only)
             Permission.CHANGE_ORGANIZATION_NAME,
             Permission.DELETE_ORGANIZATION,
+            # Git organization claims
+            Permission.MANAGE_ORG_CLAIMS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
     RoleName.ADMIN: frozenset(
@@ -139,6 +149,10 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             # Organization Management
             Permission.VIEW_ORG_SETTINGS,
             Permission.EDIT_ORG_SETTINGS,
+            # Git organization claims
+            Permission.MANAGE_ORG_CLAIMS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
     RoleName.MEMBER: frozenset(
@@ -152,6 +166,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             # Settings (View only)
             Permission.VIEW_ORG_SETTINGS,
             Permission.VIEW_LLM_SETTINGS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
 }

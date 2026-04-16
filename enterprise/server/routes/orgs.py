@@ -10,6 +10,9 @@ from server.auth.authorization import (
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
+    GitOrgAlreadyClaimedError,
+    GitOrgClaimRequest,
+    GitOrgClaimResponse,
     InsufficientPermissionError,
     InvalidRoleError,
     LastOwnerError,
@@ -46,6 +49,8 @@ from server.services.org_llm_settings_service import (
 )
 from server.services.org_member_financial_service import OrgMemberFinancialService
 from server.services.org_member_service import OrgMemberService
+from sqlalchemy.exc import IntegrityError
+from storage.org_git_claim_store import OrgGitClaimStore
 from storage.org_service import OrgService
 from storage.user_store import UserStore
 
@@ -1211,4 +1216,182 @@ async def update_org_member(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to update member',
+        )
+
+
+@org_router.get(
+    '/{org_id}/git-claims',
+    response_model=list[GitOrgClaimResponse],
+)
+async def get_git_claims(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.MANAGE_ORG_CLAIMS)),
+) -> list[GitOrgClaimResponse]:
+    """Get all Git organization claims for an OpenHands organization.
+
+    Only admin and owner roles can view Git organization claims.
+
+    Args:
+        org_id: OpenHands organization UUID
+        user_id: Authenticated user ID (injected by permission check)
+
+    Returns:
+        List of GitOrgClaimResponse with claim details
+    """
+    try:
+        claims = await OrgGitClaimStore.get_claims_by_org_id(org_id=org_id)
+        return [
+            GitOrgClaimResponse(
+                id=str(claim.id),
+                org_id=str(claim.org_id),
+                provider=claim.provider,
+                git_organization=claim.git_organization,
+                claimed_by=str(claim.claimed_by),
+                claimed_at=claim.claimed_at.isoformat(),
+            )
+            for claim in claims
+        ]
+    except Exception:
+        logger.exception('Error fetching Git organization claims')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to fetch Git organization claims',
+        )
+
+
+@org_router.post(
+    '/{org_id}/git-claims',
+    response_model=GitOrgClaimResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def claim_git_organization(
+    org_id: UUID,
+    request: GitOrgClaimRequest,
+    user_id: str = Depends(require_permission(Permission.MANAGE_ORG_CLAIMS)),
+) -> GitOrgClaimResponse:
+    """Claim a Git organization for an OpenHands organization.
+
+    Only admin and owner roles can claim Git organizations.
+    A Git organization can only be claimed by one OpenHands organization at a time.
+
+    Args:
+        org_id: OpenHands organization UUID
+        request: Claim request with provider and git_organization
+        user_id: Authenticated user ID (injected by permission check)
+
+    Returns:
+        GitOrgClaimResponse with the created claim details
+
+    Raises:
+        HTTPException 409: If the Git organization is already claimed
+        HTTPException 403: If user lacks permission
+    """
+    try:
+        # Check if this Git org is already claimed (early feedback for the common case)
+        existing_claim = await OrgGitClaimStore.get_claim_by_provider_and_git_org(
+            provider=request.provider,
+            git_organization=request.git_organization,
+        )
+
+        if existing_claim:
+            raise GitOrgAlreadyClaimedError(
+                provider=request.provider,
+                git_organization=request.git_organization,
+            )
+
+        # Create the claim — the DB unique constraint handles the race condition
+        # where two concurrent requests both pass the check above.
+        claim = await OrgGitClaimStore.create_claim(
+            org_id=org_id,
+            provider=request.provider,
+            git_organization=request.git_organization,
+            claimed_by=UUID(user_id),
+        )
+
+        return GitOrgClaimResponse(
+            id=str(claim.id),
+            org_id=str(claim.org_id),
+            provider=claim.provider,
+            git_organization=claim.git_organization,
+            claimed_by=str(claim.claimed_by),
+            claimed_at=claim.claimed_at.isoformat(),
+        )
+
+    except GitOrgAlreadyClaimedError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except IntegrityError as e:
+        # Only treat the unique constraint violation as a duplicate claim.
+        # Other integrity errors (e.g. FK violations) should surface as 500s.
+        if 'uq_provider_git_org' in str(e.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(
+                    GitOrgAlreadyClaimedError(
+                        provider=request.provider,
+                        git_organization=request.git_organization,
+                    )
+                ),
+            )
+        logger.exception('Integrity error claiming Git organization')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to claim Git organization',
+        )
+    except Exception:
+        logger.exception('Error claiming Git organization')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to claim Git organization',
+        )
+
+
+@org_router.delete(
+    '/{org_id}/git-claims/{claim_id}',
+    status_code=status.HTTP_200_OK,
+)
+async def disconnect_git_organization(
+    org_id: UUID,
+    claim_id: UUID,
+    user_id: str = Depends(require_permission(Permission.MANAGE_ORG_CLAIMS)),
+) -> dict:
+    """Remove a Git organization claim from an OpenHands organization.
+
+    Only admin and owner roles can disconnect Git organization claims.
+
+    Args:
+        org_id: OpenHands organization UUID
+        claim_id: Claim UUID to remove
+        user_id: Authenticated user ID (injected by permission check)
+
+    Returns:
+        dict: Confirmation message on successful deletion
+
+    Raises:
+        HTTPException 404: If the claim is not found for this organization
+        HTTPException 403: If user lacks permission
+    """
+    try:
+        deleted = await OrgGitClaimStore.delete_claim(
+            claim_id=claim_id,
+            org_id=org_id,
+        )
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='Git organization claim not found',
+            )
+
+        return {'message': 'Git organization claim removed successfully'}
+
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception('Error disconnecting Git organization')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to disconnect Git organization',
         )

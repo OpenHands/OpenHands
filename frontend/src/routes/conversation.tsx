@@ -8,9 +8,7 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentStore } from "#/stores/agent-store";
 import { AgentState } from "#/types/agent-state";
 
-import { useBatchFeedback } from "#/hooks/query/use-batch-feedback";
 import { EventHandler } from "../wrapper/event-handler";
-import { useConversationConfig } from "#/hooks/query/use-conversation-config";
 
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
@@ -29,7 +27,6 @@ import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 
 function AppContent() {
-  useConversationConfig();
   const { t } = useTranslation();
   const { conversationId } = useConversationId();
   const clearEvents = useEventStore((state) => state.clearEvents);
@@ -48,9 +45,6 @@ function AppContent() {
   const removeErrorMessage = useErrorMessageStore(
     (state) => state.removeErrorMessage,
   );
-
-  // Fetch batch feedback data when conversation is loaded
-  useBatchFeedback();
 
   // 1. Cleanup Effect - runs when navigating to a different conversation
   React.useEffect(() => {
@@ -90,8 +84,6 @@ function AppContent() {
     }
   }, [conversation, isFetched, isAuthed, navigate, t]);
 
-  const isV0Conversation = conversation?.conversation_version === "V0";
-
   const content = (
     <ConversationSubscriptionsProvider>
       <EventHandler>
@@ -113,10 +105,7 @@ function AppContent() {
   // Render WebSocket provider immediately to avoid mount/remount cycles
   // The providers internally handle waiting for conversation data to be ready
   return (
-    <WebSocketProviderWrapper
-      version={isV0Conversation ? 0 : 1}
-      conversationId={conversationId}
-    >
+    <WebSocketProviderWrapper conversationId={conversationId}>
       {content}
     </WebSocketProviderWrapper>
   );

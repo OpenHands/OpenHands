@@ -50,12 +50,65 @@ export type MCPConfig = {
   shttp_servers: (string | MCPSHTTPServer)[];
 };
 
+export type SettingsChoiceValue = boolean | number | string;
+
+export type SettingsChoice = {
+  label: string;
+  value: SettingsChoiceValue;
+};
+
+export type SettingsValue =
+  | boolean
+  | number
+  | string
+  | null
+  | SettingsValue[]
+  | { [key: string]: SettingsValue };
+
+export type SettingsValueType =
+  | "string"
+  | "integer"
+  | "number"
+  | "boolean"
+  | "array"
+  | "object";
+
+export type SettingProminence = "critical" | "major" | "minor";
+
+export type SettingsFieldSchema = {
+  key: string;
+  label: string;
+  description?: string | null;
+  section: string;
+  section_label: string;
+  value_type: SettingsValueType;
+  default?: SettingsValue;
+  choices: SettingsChoice[];
+  depends_on: string[];
+  prominence: SettingProminence;
+  secret: boolean;
+  required: boolean;
+};
+
+export type SettingsSectionSchema = {
+  key: string;
+  label: string;
+  fields: SettingsFieldSchema[];
+};
+
+export type SettingsSchema = {
+  model_name: string;
+  sections: SettingsSectionSchema[];
+};
+
 export type SkillInfo = {
   name: string;
   type: string;
   source: string;
   triggers?: string[];
 };
+
+export type SettingsScope = "personal" | "org";
 
 export type Settings = {
   llm_model: string;
@@ -67,10 +120,10 @@ export type Settings = {
   search_api_key_set: boolean;
   confirmation_mode: boolean;
   security_analyzer: string | null;
+  max_iterations: number | null;
   remote_runtime_resource_factor: number | null;
   provider_tokens_set: Partial<Record<Provider, string | null>>;
   enable_default_condenser: boolean;
-  // Maximum number of events before the condenser runs
   condenser_max_size: number | null;
   enable_sound_notifications: boolean;
   enable_proactive_conversation_starters: boolean;
@@ -86,5 +139,9 @@ export type Settings = {
   git_user_name?: string;
   git_user_email?: string;
   v1_enabled?: boolean;
+  agent_settings_schema?: SettingsSchema | null;
+  agent_settings?: Record<string, SettingsValue> | null;
+  conversation_settings_schema?: SettingsSchema | null;
+  conversation_settings?: Record<string, SettingsValue> | null;
   sandbox_grouping_strategy?: SandboxGroupingStrategy;
 };

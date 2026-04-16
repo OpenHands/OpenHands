@@ -17,8 +17,7 @@ from server.sharing.shared_conversation_models import SharedConversation
 
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event.event_service import EventService
-from openhands.sdk.llm import MetricsSnapshot
-from openhands.sdk.llm.utils.metrics import TokenUsage
+from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 
 
 @pytest.fixture

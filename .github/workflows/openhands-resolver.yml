@@ -86,7 +86,7 @@ jobs:
     runs-on: "${{ inputs.runner || 'ubuntu-latest' }}"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -269,7 +269,7 @@ jobs:
           fi
 
       - name: Upload output.jsonl as artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always() # Upload even if the previous steps fail
         with:
           name: resolver-output

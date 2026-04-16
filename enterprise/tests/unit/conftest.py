@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime
 from uuid import UUID
@@ -25,6 +26,7 @@ from storage.device_code import DeviceCode  # noqa: F401
 from storage.feedback import Feedback
 from storage.github_app_installation import GithubAppInstallation
 from storage.org import Org
+from storage.org_git_claim import OrgGitClaim  # noqa: F401
 from storage.org_invitation import OrgInvitation  # noqa: F401
 from storage.org_member import OrgMember
 from storage.role import Role
@@ -36,6 +38,20 @@ from storage.stored_conversation_metadata_saas import (
 from storage.stored_offline_token import StoredOfflineToken
 from storage.stripe_customer import StripeCustomer
 from storage.user import User
+from storage.user_settings import UserSettings  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def allow_short_context_windows():
+    old = os.environ.get('ALLOW_SHORT_CONTEXT_WINDOWS')
+    os.environ['ALLOW_SHORT_CONTEXT_WINDOWS'] = 'true'
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop('ALLOW_SHORT_CONTEXT_WINDOWS', None)
+        else:
+            os.environ['ALLOW_SHORT_CONTEXT_WINDOWS'] = old
 
 
 @pytest.fixture
@@ -171,7 +187,6 @@ def add_minimal_fixtures(session_maker):
                 id=uuid.UUID('5594c7b6-f959-4b81-92e9-b09c206f5081'),
                 name='mock-org',
                 org_version=ORG_SETTINGS_VERSION,
-                enable_default_condenser=True,
                 enable_proactive_conversation_starters=True,
             )
         )

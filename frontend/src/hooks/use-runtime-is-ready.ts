@@ -24,7 +24,7 @@ export const useRuntimeIsReady = ({
     : RUNTIME_INACTIVE_STATES;
 
   return (
-    conversation?.status === "RUNNING" &&
+    conversation?.sandbox_status === "RUNNING" &&
     !inactiveStates.includes(curAgentState)
   );
 };

@@ -80,6 +80,25 @@ const TASKS_2: SuggestedTask[] = [
 export const MOCK_TASKS = [...TASKS_1, ...TASKS_2];
 
 export const TASK_SUGGESTIONS_HANDLERS = [
+  // New V1 endpoint with pagination
+  http.get("/api/v1/git/suggested-tasks/search", async ({ request }) => {
+    const url = new URL(request.url);
+    const limit = url.searchParams.get("limit");
+    const pageId = url.searchParams.get("page_id");
+
+    // Simple pagination: return all items if no pagination params, otherwise apply limit
+    let tasks = [...MOCK_TASKS];
+    if (pageId || limit) {
+      const limitNum = limit ? parseInt(limit, 10) : 30;
+      tasks = tasks.slice(0, limitNum);
+    }
+
+    return HttpResponse.json({
+      items: tasks,
+      next_page_id: null, // No pagination in mock data
+    });
+  }),
+  // Deprecated V0 endpoint (keep for backward compatibility)
   http.get("/api/user/suggested-tasks", async () =>
     HttpResponse.json(MOCK_TASKS),
   ),

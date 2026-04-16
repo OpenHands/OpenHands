@@ -12,7 +12,7 @@ from openhands.app_server.event_callback.event_callback_models import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.integrations.service_types import ProviderType, SuggestedTask
-from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
@@ -90,6 +90,9 @@ class AppConversationInfo(BaseModel):
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
 
     public: bool | None = None
+
+    # Tags for conversation metadata (e.g., automation context, skills used)
+    tags: dict[str, str] = Field(default_factory=dict)
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)

@@ -50,7 +50,6 @@ describe("parseMaxBudgetPerTask", () => {
 
 describe("extractSettings", () => {
   it("should preserve model name case when extracting settings", () => {
-    // Test cases with various model name formats
     const testCases = [
       { provider: "sambanova", model: "Meta-Llama-3.1-8B-Instruct" },
       { provider: "openai", model: "GPT-4o" },
@@ -65,17 +64,17 @@ describe("extractSettings", () => {
 
       const settings = extractSettings(formData);
 
-      // Verify that the model name case is preserved
       const expectedModel = `${provider}/${model}`;
-      expect(settings.llm_model).toBe(expectedModel);
-      // Only test that it's not lowercased if the original has uppercase letters
+      const as = settings.agent_settings as Record<string, unknown>;
+      const llm = as?.llm as Record<string, unknown>;
+      expect(llm?.model).toBe(expectedModel);
       if (expectedModel !== expectedModel.toLowerCase()) {
-        expect(settings.llm_model).not.toBe(expectedModel.toLowerCase());
+        expect(llm?.model).not.toBe(expectedModel.toLowerCase());
       }
     });
   });
 
-  it("should handle custom model without lowercasing", () => {
+  it("should preserve selected model case and ignore unsupported custom-model inputs", () => {
     const formData = new FormData();
     formData.set("llm-provider-input", "sambanova");
     formData.set("llm-model-input", "Meta-Llama-3.1-8B-Instruct");
@@ -84,8 +83,9 @@ describe("extractSettings", () => {
 
     const settings = extractSettings(formData);
 
-    // Custom model should take precedence and preserve case
-    expect(settings.llm_model).toBe("Custom-Model-Name");
-    expect(settings.llm_model).not.toBe("custom-model-name");
+    const as = settings.agent_settings as Record<string, unknown>;
+    const llm = as?.llm as Record<string, unknown>;
+    expect(llm?.model).toBe("sambanova/Meta-Llama-3.1-8B-Instruct");
+    expect(llm?.model).not.toBe("custom-model-name");
   });
 });

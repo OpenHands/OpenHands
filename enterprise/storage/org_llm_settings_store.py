@@ -10,8 +10,9 @@ from server.routes.org_models import OrgLLMSettingsUpdate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.org import Org
-from storage.org_member_store import OrgMemberStore
 from storage.user import User
+
+from openhands.utils.jsonpatch_compat import deep_merge
 
 
 @dataclass
@@ -49,7 +50,6 @@ class OrgLLMSettingsStore:
     ) -> Org | None:
         """Update organization LLM settings.
 
-        Also propagates relevant settings to all org members.
         Uses flush() - commit happens at request end via DbSessionInjector.
 
         Args:
@@ -67,14 +67,16 @@ class OrgLLMSettingsStore:
         if not org:
             return None
 
-        # Apply updates to org (excludes llm_api_key which is member-only)
         update_data.apply_to_org(org)
-
-        # Propagate relevant settings to all org members
-        member_updates = update_data.get_member_updates()
-        if member_updates:
-            await OrgMemberStore.update_all_members_llm_settings_async(
-                self.db_session, org_id, member_updates
+        if update_data.agent_settings_diff:
+            org.agent_settings = deep_merge(
+                org.agent_settings,
+                update_data.agent_settings_diff,
+            )
+        if update_data.conversation_settings_diff:
+            org.conversation_settings = deep_merge(
+                org.conversation_settings,
+                update_data.conversation_settings_diff,
             )
 
         # flush instead of commit - DbSessionInjector auto-commits at request end

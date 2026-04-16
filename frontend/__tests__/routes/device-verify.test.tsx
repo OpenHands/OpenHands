@@ -5,12 +5,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRoutesStub } from "react-router";
 import DeviceVerify from "#/routes/device-verify";
 
-const { useIsAuthedMock, ENABLE_PROJ_USER_JOURNEY_MOCK } = vi.hoisted(() => ({
+const { useIsAuthedMock, mockUseAppMode } = vi.hoisted(() => ({
   useIsAuthedMock: vi.fn(() => ({
     data: false as boolean | undefined,
     isLoading: false,
   })),
-  ENABLE_PROJ_USER_JOURNEY_MOCK: vi.fn(() => true),
+  mockUseAppMode: vi.fn(() => ({
+    isOss: false,
+    isSaas: true,
+    isCloud: true,
+    isSelfHosted: false,
+    isEnterpriseSelfHosted: false,
+    isEnterpriseCloud: true,
+    appMode: "saas" as string | undefined,
+    deploymentMode: "cloud" as string | undefined,
+  })),
 }));
 
 vi.mock("#/hooks/query/use-is-authed", () => ({
@@ -23,8 +32,8 @@ vi.mock("posthog-js/react", () => ({
   }),
 }));
 
-vi.mock("#/utils/feature-flags", () => ({
-  ENABLE_PROJ_USER_JOURNEY: () => ENABLE_PROJ_USER_JOURNEY_MOCK(),
+vi.mock("#/hooks/use-app-mode", () => ({
+  useAppMode: () => mockUseAppMode(),
 }));
 
 const RouterStub = createRoutesStub([
@@ -66,8 +75,17 @@ describe("DeviceVerify", () => {
         }),
       ),
     );
-    // Enable feature flag by default
-    ENABLE_PROJ_USER_JOURNEY_MOCK.mockReturnValue(true);
+    // Reset useAppMode to SaaS Cloud (CTA enabled) by default
+    mockUseAppMode.mockReturnValue({
+      isOss: false,
+      isSaas: true,
+      isCloud: true,
+      isSelfHosted: false,
+      isEnterpriseSelfHosted: false,
+      isEnterpriseCloud: true,
+      appMode: "saas",
+      deploymentMode: "cloud",
+    });
   });
 
   afterEach(() => {
@@ -235,7 +253,17 @@ describe("DeviceVerify", () => {
       });
     });
 
-    it("should include the LoginCTA component when feature flag is enabled", async () => {
+    it("should include the LoginCTA component when in SaaS Cloud mode", async () => {
+      mockUseAppMode.mockReturnValue({
+        isOss: false,
+        isSaas: true,
+        isCloud: true,
+        isSelfHosted: false,
+        isEnterpriseSelfHosted: false,
+        isEnterpriseCloud: true,
+        appMode: "saas",
+        deploymentMode: "cloud",
+      });
       useIsAuthedMock.mockReturnValue({
         data: true,
         isLoading: false,
@@ -253,8 +281,45 @@ describe("DeviceVerify", () => {
       });
     });
 
-    it("should not include the LoginCTA and be center-aligned when feature flag is disabled", async () => {
-      ENABLE_PROJ_USER_JOURNEY_MOCK.mockReturnValue(false);
+    it("should not include the LoginCTA component when in OSS mode", async () => {
+      mockUseAppMode.mockReturnValue({
+        isOss: true,
+        isSaas: false,
+        isCloud: false,
+        isSelfHosted: false,
+        isEnterpriseSelfHosted: false,
+        isEnterpriseCloud: false,
+        appMode: "oss",
+        deploymentMode: undefined,
+      });
+      useIsAuthedMock.mockReturnValue({
+        data: true,
+        isLoading: false,
+      });
+
+      render(
+        <RouterStub initialEntries={["/device-verify?user_code=ABC-123"]} />,
+        {
+          wrapper: createWrapper(),
+        },
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
+      });
+    });
+
+    it("should not include the LoginCTA and be center-aligned when in SaaS Self-hosted mode", async () => {
+      mockUseAppMode.mockReturnValue({
+        isOss: false,
+        isSaas: true,
+        isCloud: false,
+        isSelfHosted: true,
+        isEnterpriseSelfHosted: true,
+        isEnterpriseCloud: false,
+        appMode: "saas",
+        deploymentMode: "self_hosted",
+      });
       useIsAuthedMock.mockReturnValue({
         data: true,
         isLoading: false,
