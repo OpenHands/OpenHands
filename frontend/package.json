@@ -48,10 +48,10 @@
     "zustand": "^5.0.10"
   },
   "scripts": {
-    "dev": "npm run make-i18n && cross-env VITE_MOCK_API=false react-router dev",
-    "dev:mock": "npm run make-i18n && cross-env VITE_MOCK_API=true VITE_MOCK_SAAS=false react-router dev",
-    "dev:mock:saas": "npm run make-i18n && cross-env VITE_MOCK_API=true VITE_MOCK_SAAS=true react-router dev",
-    "build": "npm run make-i18n && react-router build",
+    "dev": "npm run make-i18n && cross-env VITE_MOCK_API=false npx react-router dev",
+    "dev:mock": "npm run make-i18n && cross-env VITE_MOCK_API=true VITE_MOCK_SAAS=false npx react-router dev",
+    "dev:mock:saas": "npm run make-i18n && cross-env VITE_MOCK_API=true VITE_MOCK_SAAS=true npx react-router dev",
+    "build": "npm run make-i18n && npx react-router build",
     "start": "npx sirv-cli build/ --single",
     "test": "vitest run",
     "test:e2e": "playwright test",
@@ -63,8 +63,8 @@
     "lint": "npm run typecheck && eslint src --ext .ts,.tsx,.js && prettier --check src/**/*.{ts,tsx}",
     "lint:fix": "eslint src --ext .ts,.tsx,.js --fix && prettier --write src/**/*.{ts,tsx}",
     "prepare": "cd .. && husky frontend/.husky",
-    "typecheck": "react-router typegen && tsc",
-    "typecheck:staged": "react-router typegen && npx tsc --noEmit --skipLibCheck",
+    "typecheck": "npx react-router typegen && tsc",
+    "typecheck:staged": "npx react-router typegen && npx tsc --noEmit --skipLibCheck",
     "check-translation-completeness": "node scripts/check-translation-completeness.cjs"
   },
   "lint-staged": {
