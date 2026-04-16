@@ -52,8 +52,8 @@ def file_secrets_store(temp_dir):
 
 
 @pytest.mark.asyncio
-async def test_load_custom_secrets_names(test_client, file_secrets_store):
-    """Test loading custom secrets names."""
+async def test_search_custom_secrets(test_client, file_secrets_store):
+    """Test searching custom secrets."""
     # Create initial settings with custom secrets
     custom_secrets = {
         'API_KEY': CustomSecret(secret=SecretStr('api-key-value')),
@@ -70,16 +70,18 @@ async def test_load_custom_secrets_names(test_client, file_secrets_store):
     await file_secrets_store.store(user_secrets)
 
     # Make the GET request
-    response = test_client.get('/secrets')
+    response = test_client.get('/secrets/search')
     print(response)
     assert response.status_code == 200
 
     # Check the response
     data = response.json()
-    assert 'custom_secrets' in data
+    assert 'items' in data
     # Extract just the names from the list of custom secrets
-    secret_names = [secret['name'] for secret in data['custom_secrets']]
+    secret_names = [secret['name'] for secret in data['items']]
     assert sorted(secret_names) == ['API_KEY', 'DB_PASSWORD']
+    # Verify pagination field exists
+    assert 'next_page_id' in data
 
     # Verify that the original settings were not modified
     stored_settings = await file_secrets_store.load()
@@ -95,8 +97,8 @@ async def test_load_custom_secrets_names(test_client, file_secrets_store):
 
 
 @pytest.mark.asyncio
-async def test_load_custom_secrets_names_empty(test_client, file_secrets_store):
-    """Test loading custom secrets names when there are no custom secrets."""
+async def test_search_custom_secrets_empty(test_client, file_secrets_store):
+    """Test searching custom secrets when there are no custom secrets."""
     # Create initial settings with no custom secrets
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
@@ -107,13 +109,79 @@ async def test_load_custom_secrets_names_empty(test_client, file_secrets_store):
     await file_secrets_store.store(user_secrets)
 
     # Make the GET request
-    response = test_client.get('/secrets')
+    response = test_client.get('/secrets/search')
     assert response.status_code == 200
 
     # Check the response
     data = response.json()
-    assert 'custom_secrets' in data
-    assert data['custom_secrets'] == []
+    assert 'items' in data
+    assert data['items'] == []
+    assert data['next_page_id'] is None
+
+
+@pytest.mark.asyncio
+async def test_search_custom_secrets_with_filter(test_client, file_secrets_store):
+    """Test searching custom secrets with name filter."""
+    # Create initial settings with custom secrets
+    custom_secrets = {
+        'API_KEY': CustomSecret(secret=SecretStr('api-key-value')),
+        'DB_PASSWORD': CustomSecret(secret=SecretStr('db-password-value')),
+        'DB_USER': CustomSecret(secret=SecretStr('db-user-value')),
+    }
+    user_secrets = Secrets(custom_secrets=custom_secrets)
+
+    # Store the initial settings
+    await file_secrets_store.store(user_secrets)
+
+    # Make the GET request with filter
+    response = test_client.get('/secrets/search', params={'name__contains': 'DB'})
+    assert response.status_code == 200
+
+    # Check the response
+    data = response.json()
+    assert 'items' in data
+    secret_names = [secret['name'] for secret in data['items']]
+    assert sorted(secret_names) == ['DB_PASSWORD', 'DB_USER']
+
+
+@pytest.mark.asyncio
+async def test_search_custom_secrets_pagination(test_client, file_secrets_store):
+    """Test searching custom secrets with pagination."""
+    # Create initial settings with many custom secrets
+    custom_secrets = {
+        f'SECRET_{i:02d}': CustomSecret(secret=SecretStr(f'value-{i}'))
+        for i in range(5)
+    }
+    user_secrets = Secrets(custom_secrets=custom_secrets)
+
+    # Store the initial settings
+    await file_secrets_store.store(user_secrets)
+
+    # Make the first GET request with limit
+    response = test_client.get('/secrets/search', params={'limit': 2})
+    assert response.status_code == 200
+
+    # Check the response
+    data = response.json()
+    assert 'items' in data
+    assert len(data['items']) == 2
+    # Results should be sorted alphabetically
+    assert data['items'][0]['name'] == 'SECRET_00'
+    assert data['items'][1]['name'] == 'SECRET_01'
+    # Since there are more items, next_page_id should be set
+    assert data['next_page_id'] == 'SECRET_01'
+
+    # Make the second GET request with page_id
+    response = test_client.get(
+        '/secrets/search', params={'limit': 2, 'page_id': data['next_page_id']}
+    )
+    assert response.status_code == 200
+
+    # Check the response
+    data = response.json()
+    assert len(data['items']) == 2
+    assert data['items'][0]['name'] == 'SECRET_02'
+    assert data['items'][1]['name'] == 'SECRET_03'
 
 
 @pytest.mark.asyncio
