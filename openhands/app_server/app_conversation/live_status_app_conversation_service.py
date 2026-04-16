@@ -52,7 +52,10 @@ from openhands.app_server.app_conversation.hook_loader import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
-from openhands.app_server.config import get_event_callback_service
+from openhands.app_server.config import (
+    get_event_callback_service,
+    resolve_provider_llm_base_url,
+)
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
@@ -890,7 +893,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             or user.agent_settings.llm.model
             or LLM.model_fields['model'].default
         )
-        from openhands.app_server.config import resolve_provider_llm_base_url
 
         base_url = resolve_provider_llm_base_url(
             model,
