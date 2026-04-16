@@ -26,6 +26,7 @@ import { OpenHandsAction } from "#/types/core/actions";
 import { useEventStore } from "#/stores/use-event-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
+import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 
 vi.mock("#/context/ws-client-provider");
 vi.mock("#/hooks/query/use-config");
@@ -54,6 +55,10 @@ vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(() => ({
     curAgentState: AgentState.AWAITING_USER_INPUT,
   })),
+}));
+
+vi.mock("#/contexts/conversation-websocket-context", () => ({
+  useConversationWebSocket: vi.fn(() => null),
 }));
 
 // Helper function to render with Router context
@@ -272,7 +277,11 @@ describe("ChatInterface - Empty state", () => {
   );
 });
 
-describe('ChatInterface - Status Indicator', () => {
+describe("ChatInterface - Status Indicator", () => {
+  beforeEach(() => {
+    vi.mocked(useConversationWebSocket).mockReturnValue(null);
+  });
+
   it("should render ChatStatusIndicator when agent is not awaiting user input / conversation is NOT ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.LOADING,
@@ -281,6 +290,25 @@ describe('ChatInterface - Status Indicator', () => {
     renderChatInterfaceWithRouter();
 
     expect(screen.getByTestId("chat-status-indicator")).toBeInTheDocument();
+  });
+
+  it("should show LOADING_CONVERSATION when V1 history is loading and agent is LOADING", () => {
+    vi.mocked(useConversationWebSocket).mockReturnValue({
+      connectionState: "OPEN",
+      sendMessage: vi.fn(),
+      isLoadingHistory: true,
+    });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.LOADING,
+    });
+
+    renderChatInterfaceWithRouter();
+
+    expect(
+      within(screen.getByTestId("chat-status-indicator")).getByText(
+        "CHAT_INTERFACE$LOADING_CONVERSATION",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("should NOT render ChatStatusIndicator when agent is awaiting user input / conversation is ready", () => {
