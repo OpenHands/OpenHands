@@ -32,7 +32,7 @@ export function AgentStatus({
 }: AgentStatusProps) {
   const { t } = useTranslation();
   const { setShouldShownAgentLoading } = useConversationStore();
-  const { curAgentState } = useAgentState();
+  const { curAgentState, executionStatus } = useAgentState();
   const webSocketStatus = useUnifiedWebSocketStatus();
   const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
@@ -48,7 +48,7 @@ export function AgentStatus({
 
   const statusCode = getStatusCode(
     webSocketStatus,
-    conversation?.execution_status || null,
+    executionStatus ?? null,
     conversation?.sandbox_status || null,
     taskStatus,
     subConversationTaskStatus,
