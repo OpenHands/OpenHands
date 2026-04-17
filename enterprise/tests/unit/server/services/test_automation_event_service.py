@@ -5,15 +5,22 @@ Tests the service that forwards GitHub webhook events to the automation service.
 
 The service is optimized for high-traffic with:
 - Redis caching for org claim lookups (1 hour TTL)
-- Redis caching for GitHub→Keycloak user ID mappings (24 hour TTL)
+- Redis caching for provider→Keycloak user ID mappings (24 hour TTL)
 - Lazy access control (membership checks deferred to execution time)
 - Separate AUTOMATION_WEBHOOK_SECRET for internal service communication
 """
 
 import uuid
+from enum import Enum
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+# Local copy of ProviderType enum for testing without full openhands dependencies
+class ProviderType(Enum):
+    GITHUB = 'github'
+
 
 # Default patches for constants
 CONSTANT_PATCHES = {
@@ -101,16 +108,16 @@ def create_service(mock_token_manager):
         return AutomationEventService(mock_token_manager)
 
 
-class TestResolveGithubOrg:
-    """Tests for _resolve_github_org method with caching."""
+class TestResolveGitOrg:
+    """Tests for _resolve_git_org method with caching."""
 
     @pytest.mark.asyncio
-    async def test_resolve_github_org_cache_miss_found(
+    async def test_resolve_git_org_cache_miss_found(
         self, mock_token_manager, mock_org_git_claim
     ):
         """
         GIVEN: Cache miss and org claim exists in DB
-        WHEN: _resolve_github_org is called
+        WHEN: _resolve_git_org is called
         THEN: Org ID is returned and cached
         """
         mock_redis = AsyncMock()
@@ -125,17 +132,17 @@ class TestResolveGithubOrg:
             mock_sio.manager.redis = mock_redis
 
             service = create_service(mock_token_manager)
-            result = await service._resolve_github_org('test-org')
+            result = await service._resolve_git_org(ProviderType.GITHUB, 'test-org')
 
             assert result == mock_org_git_claim.org_id
             # Verify result was cached
             mock_redis.setex.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_resolve_github_org_cache_hit(self, mock_token_manager):
+    async def test_resolve_git_org_cache_hit(self, mock_token_manager):
         """
         GIVEN: Org ID is cached in Redis
-        WHEN: _resolve_github_org is called
+        WHEN: _resolve_git_org is called
         THEN: Cached value is returned without calling resolve_org_for_repo
         """
         cached_org_id = '12345678-1234-5678-1234-567812345678'
@@ -151,17 +158,17 @@ class TestResolveGithubOrg:
             mock_sio.manager.redis = mock_redis
 
             service = create_service(mock_token_manager)
-            result = await service._resolve_github_org('test-org')
+            result = await service._resolve_git_org(ProviderType.GITHUB, 'test-org')
 
             assert result == uuid.UUID(cached_org_id)
             # resolve_org_for_repo should NOT be called
             mock_resolver.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_resolve_github_org_cache_miss_not_found(self, mock_token_manager):
+    async def test_resolve_git_org_cache_miss_not_found(self, mock_token_manager):
         """
         GIVEN: Cache miss and org claim does NOT exist in DB
-        WHEN: _resolve_github_org is called
+        WHEN: _resolve_git_org is called
         THEN: None is returned and negative result is cached
         """
         mock_redis = AsyncMock()
@@ -176,7 +183,9 @@ class TestResolveGithubOrg:
             mock_sio.manager.redis = mock_redis
 
             service = create_service(mock_token_manager)
-            result = await service._resolve_github_org('unclaimed-org')
+            result = await service._resolve_git_org(
+                ProviderType.GITHUB, 'unclaimed-org'
+            )
 
             assert result is None
             # Verify negative result was cached
@@ -186,10 +195,10 @@ class TestResolveGithubOrg:
             assert call_args[0][2] == 'none'  # Negative cache value
 
     @pytest.mark.asyncio
-    async def test_resolve_github_org_negative_cache_hit(self, mock_token_manager):
+    async def test_resolve_git_org_negative_cache_hit(self, mock_token_manager):
         """
         GIVEN: Negative result is cached (org not claimed)
-        WHEN: _resolve_github_org is called
+        WHEN: _resolve_git_org is called
         THEN: None is returned without calling resolve_org_for_repo
         """
         mock_redis = AsyncMock()
@@ -204,10 +213,41 @@ class TestResolveGithubOrg:
             mock_sio.manager.redis = mock_redis
 
             service = create_service(mock_token_manager)
-            result = await service._resolve_github_org('unclaimed-org')
+            result = await service._resolve_git_org(
+                ProviderType.GITHUB, 'unclaimed-org'
+            )
 
             assert result is None
             mock_resolver.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resolve_git_org_includes_provider_in_cache_key(
+        self, mock_token_manager, mock_org_git_claim
+    ):
+        """
+        GIVEN: GitHub provider with an org name
+        WHEN: _resolve_git_org is called
+        THEN: Cache key includes the provider name
+        """
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with patch(
+            'server.services.automation_event_service.resolve_org_for_repo',
+            new_callable=AsyncMock,
+            return_value=mock_org_git_claim.org_id,
+        ), patch('server.services.automation_event_service.sio') as mock_sio:
+            mock_sio.manager.redis = mock_redis
+
+            service = create_service(mock_token_manager)
+
+            # Call for GitHub
+            await service._resolve_git_org(ProviderType.GITHUB, 'test-org')
+            github_cache_key = mock_redis.setex.call_args_list[0][0][0]
+
+            # Cache key should include provider
+            assert 'github' in github_cache_key
 
 
 class TestResolvePersonalOrg:
@@ -233,7 +273,7 @@ class TestResolvePersonalOrg:
             mock_sio.manager.redis = mock_redis
 
             service = create_service(mock_token_manager)
-            result = await service._resolve_personal_org(12345)
+            result = await service._resolve_personal_org(ProviderType.GITHUB, 12345)
 
             assert result == uuid.UUID(keycloak_id)
             mock_redis.setex.assert_called_once()
@@ -253,27 +293,57 @@ class TestResolvePersonalOrg:
             mock_sio.manager.redis = mock_redis
 
             service = create_service(mock_token_manager)
-            result = await service._resolve_personal_org(12345)
+            result = await service._resolve_personal_org(ProviderType.GITHUB, 12345)
 
             assert result == uuid.UUID(keycloak_id)
             # Token manager should NOT be called
             mock_token_manager.get_user_id_from_idp_user_id.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_resolve_personal_org_no_github_user_id(self, mock_token_manager):
+    async def test_resolve_personal_org_no_user_id(self, mock_token_manager):
         """
-        GIVEN: No GitHub user ID provided
+        GIVEN: No provider user ID provided
         WHEN: _resolve_personal_org is called
         THEN: None is returned immediately
         """
         service = create_service(mock_token_manager)
-        result = await service._resolve_personal_org(None)
+        result = await service._resolve_personal_org(ProviderType.GITHUB, None)
 
         assert result is None
 
+    @pytest.mark.asyncio
+    async def test_resolve_personal_org_includes_provider_in_cache_key(
+        self, mock_token_manager
+    ):
+        """
+        GIVEN: GitHub provider with a user ID
+        WHEN: _resolve_personal_org is called
+        THEN: Cache key includes the provider name
+        """
+        keycloak_id = '87654321-4321-8765-4321-876543218765'
+        mock_token_manager.get_user_id_from_idp_user_id = AsyncMock(
+            return_value=keycloak_id
+        )
 
-class TestForwardGithubEvent:
-    """Tests for forward_github_event method (minimal payload, no access control)."""
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with patch('server.services.automation_event_service.sio') as mock_sio:
+            mock_sio.manager.redis = mock_redis
+
+            service = create_service(mock_token_manager)
+
+            # Call for GitHub
+            await service._resolve_personal_org(ProviderType.GITHUB, 12345)
+            github_cache_key = mock_redis.setex.call_args_list[0][0][0]
+
+            # Cache key should include provider
+            assert 'github' in github_cache_key
+
+
+class TestForwardEvent:
+    """Tests for forward_event method (minimal payload, no access control)."""
 
     @pytest.mark.asyncio
     async def test_forward_org_event_success(
@@ -281,7 +351,7 @@ class TestForwardGithubEvent:
     ):
         """
         GIVEN: A GitHub event from a claimed organization repo
-        WHEN: forward_github_event is called
+        WHEN: forward_event is called
         THEN: Minimal payload is forwarded (no access_control)
         """
         from server.services.automation_event_service import AutomationEventService
@@ -304,17 +374,20 @@ class TestForwardGithubEvent:
             mock_sio.manager.redis = mock_redis
 
             service = AutomationEventService(mock_token_manager)
-            await service.forward_github_event(
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
                 payload=github_org_payload,
                 installation_id=99999,
             )
 
             mock_send.assert_called_once()
             call_args = mock_send.call_args
-            assert call_args[0][0] == mock_org_git_claim.org_id
+            # Provider is first arg, org_id is second
+            assert call_args[0][0] == ProviderType.GITHUB
+            assert call_args[0][1] == mock_org_git_claim.org_id
 
-            payload = call_args[0][1]
-            assert payload['organization']['github_org'] == 'test-org'
+            payload = call_args[0][2]
+            assert payload['organization']['git_org'] == 'test-org'
             assert 'payload' in payload
             # access_control should NOT be in payload (lazy evaluation)
             assert 'access_control' not in payload
@@ -325,7 +398,7 @@ class TestForwardGithubEvent:
     ):
         """
         GIVEN: A GitHub event from a personal repo with linked OpenHands account
-        WHEN: forward_github_event is called
+        WHEN: forward_event is called
         THEN: Event is forwarded using the user's personal org (keycloak ID)
         """
         from server.services.automation_event_service import AutomationEventService
@@ -353,24 +426,26 @@ class TestForwardGithubEvent:
             mock_sio.manager.redis = mock_redis
 
             service = AutomationEventService(mock_token_manager)
-            await service.forward_github_event(
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
                 payload=github_user_payload,
                 installation_id=99999,
             )
 
             mock_send.assert_called_once()
             call_args = mock_send.call_args
-            # Personal org should be keycloak ID
-            assert call_args[0][0] == uuid.UUID(keycloak_id)
-            payload = call_args[0][1]
-            assert payload['organization']['github_org'] == 'testuser'
+            # Provider is first arg, org_id is second (personal org = keycloak ID)
+            assert call_args[0][0] == ProviderType.GITHUB
+            assert call_args[0][1] == uuid.UUID(keycloak_id)
+            payload = call_args[0][2]
+            assert payload['organization']['git_org'] == 'testuser'
             assert payload['organization']['openhands_org_id'] == keycloak_id
 
     @pytest.mark.asyncio
     async def test_forward_event_no_owner_in_payload(self, mock_token_manager):
         """
         GIVEN: A GitHub event with no repository owner in payload
-        WHEN: forward_github_event is called
+        WHEN: forward_event is called
         THEN: Event is skipped with warning log
         """
         from server.services.automation_event_service import AutomationEventService
@@ -388,7 +463,8 @@ class TestForwardGithubEvent:
             new_callable=AsyncMock,
         ) as mock_send:
             service = AutomationEventService(mock_token_manager)
-            await service.forward_github_event(
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
                 payload=payload,
                 installation_id=99999,
             )
@@ -403,7 +479,7 @@ class TestForwardGithubEvent:
     ):
         """
         GIVEN: A GitHub event from an org that isn't claimed (and isn't personal)
-        WHEN: forward_github_event is called
+        WHEN: forward_event is called
         THEN: Event is skipped with warning log
         """
         from server.services.automation_event_service import AutomationEventService
@@ -426,7 +502,8 @@ class TestForwardGithubEvent:
             mock_sio.manager.redis = mock_redis
 
             service = AutomationEventService(mock_token_manager)
-            await service.forward_github_event(
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
                 payload=github_org_payload,
                 installation_id=99999,
             )
@@ -434,6 +511,42 @@ class TestForwardGithubEvent:
             mock_send.assert_not_called()
             mock_logger.warning.assert_called()
             assert 'not claimed' in str(mock_logger.warning.call_args)
+
+
+class TestExtractOwnerInfo:
+    """Tests for _extract_owner_info method."""
+
+    def test_extract_github_owner_info(self, mock_token_manager, github_org_payload):
+        """
+        GIVEN: A GitHub webhook payload
+        WHEN: _extract_owner_info is called
+        THEN: GitHub owner info is correctly extracted
+        """
+        service = create_service(mock_token_manager)
+        git_org, owner_type, owner_id = service._extract_owner_info(
+            ProviderType.GITHUB, github_org_payload
+        )
+
+        assert git_org == 'test-org'
+        assert owner_type == 'Organization'
+        assert owner_id == 789
+
+    def test_extract_github_user_owner_info(
+        self, mock_token_manager, github_user_payload
+    ):
+        """
+        GIVEN: A GitHub webhook payload from a personal repo
+        WHEN: _extract_owner_info is called
+        THEN: User owner info is correctly extracted
+        """
+        service = create_service(mock_token_manager)
+        git_org, owner_type, owner_id = service._extract_owner_info(
+            ProviderType.GITHUB, github_user_payload
+        )
+
+        assert git_org == 'testuser'
+        assert owner_type == 'User'
+        assert owner_id == 12345
 
 
 class TestBuildEventPayload:
@@ -451,7 +564,7 @@ class TestBuildEventPayload:
 
         org_context = OrgContext(
             org_id=uuid.UUID('12345678-1234-5678-1234-567812345678'),
-            github_org='test-org',
+            git_org='test-org',
         )
         test_payload = {'action': 'opened', 'sender': {'login': 'user'}}
 
@@ -459,7 +572,7 @@ class TestBuildEventPayload:
 
         assert result == {
             'organization': {
-                'github_org': 'test-org',
+                'git_org': 'test-org',
                 'openhands_org_id': '12345678-1234-5678-1234-567812345678',
             },
             'payload': test_payload,
@@ -476,11 +589,11 @@ class TestSendToAutomationService:
         """
         GIVEN: AUTOMATION_SERVICE_URL is configured
         WHEN: _send_to_automation_service is called
-        THEN: Request is sent with correct signature
+        THEN: Request is sent with correct signature and provider in URL
         """
 
         org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
-        payload = {'organization': {'github_org': 'test'}, 'payload': {}}
+        payload = {'organization': {'git_org': 'test'}, 'payload': {}}
 
         mock_response = MagicMock()
         mock_response.status = 200
@@ -505,10 +618,58 @@ class TestSendToAutomationService:
             return_value=mock_session_context,
         ):
             service = create_service(mock_token_manager)
-            await service._send_to_automation_service(org_id, payload)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
 
             # Verify the POST was called
             mock_session_instance.post.assert_called_once()
+            # Verify URL includes provider
+            call_args = mock_session_instance.post.call_args
+            url = call_args[0][0]
+            assert '/github' in url
+            assert str(org_id) in url
+
+    @pytest.mark.asyncio
+    async def test_send_includes_provider_in_url(self, mock_token_manager):
+        """
+        GIVEN: GitHub provider
+        WHEN: _send_to_automation_service is called
+        THEN: The URL includes the provider name
+        """
+        org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        payload = {}
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={'matched': 0})
+
+        mock_post_context = MagicMock()
+        mock_post_context.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_post_context.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = MagicMock(return_value=mock_post_context)
+
+        mock_session_context = MagicMock()
+        mock_session_context.__aenter__ = AsyncMock(return_value=mock_session_instance)
+        mock_session_context.__aexit__ = AsyncMock(return_value=None)
+
+        with patch(
+            'server.services.automation_event_service.AUTOMATION_SERVICE_URL',
+            'https://automation.example.com',
+        ), patch('server.services.automation_event_service.sio'), patch(
+            'server.services.automation_event_service.aiohttp.ClientSession',
+            return_value=mock_session_context,
+        ):
+            service = create_service(mock_token_manager)
+
+            # Test GitHub
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
+            github_url = mock_session_instance.post.call_args_list[0][0][0]
+            assert github_url.endswith('/github')
 
     @pytest.mark.asyncio
     async def test_send_no_url_configured(self, mock_token_manager):
@@ -526,7 +687,9 @@ class TestSendToAutomationService:
             'server.services.automation_event_service.logger'
         ) as mock_logger:
             service = create_service(mock_token_manager)
-            await service._send_to_automation_service(org_id, payload)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
 
             mock_logger.warning.assert_called()
             assert 'not configured' in str(mock_logger.warning.call_args)

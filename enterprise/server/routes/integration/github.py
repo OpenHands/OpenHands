@@ -16,6 +16,7 @@ from server.auth.token_manager import TokenManager
 from server.services.automation_event_service import AutomationEventService
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.integrations.provider import ProviderType
 
 # Environment variable to disable GitHub webhooks
 GITHUB_WEBHOOKS_ENABLED = os.environ.get('GITHUB_WEBHOOKS_ENABLED', '1') in (
@@ -57,9 +58,7 @@ async def github_events(
 ):
     # Check if GitHub webhooks are enabled
     if not GITHUB_WEBHOOKS_ENABLED:
-        logger.info(
-            'GitHub webhooks are disabled by GITHUB_WEBHOOKS_ENABLED environment variable'
-        )
+        logger.info('GitHub webhooks disabled by GITHUB_WEBHOOKS_ENABLED env variable')
         return JSONResponse(
             status_code=200,
             content={'message': 'GitHub webhooks are currently disabled.'},
@@ -82,7 +81,8 @@ async def github_events(
         # Forward to automation service (fire-and-forget background task)
         if AUTOMATION_EVENT_FORWARDING_ENABLED:
             background_tasks.add_task(
-                automation_event_service.forward_github_event,
+                automation_event_service.forward_event,
+                provider=ProviderType.GITHUB,
                 payload=payload_data,
                 installation_id=installation_id,
             )
