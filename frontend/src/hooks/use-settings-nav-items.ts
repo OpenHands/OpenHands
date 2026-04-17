@@ -9,9 +9,37 @@ import { OrganizationUserRole } from "#/types/org";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
 import { isSettingsPageHidden } from "#/utils/settings-utils";
 import { useMe } from "./query/use-me";
+import { useSettings } from "./query/use-settings";
 import { usePermission } from "./organizations/use-permissions";
 import { useOrgTypeAndAccess } from "./use-org-type-and-access";
 import { I18nKey } from "#/i18n/declaration";
+
+/** Settings-nav entries that only make sense for the standard LLM agent.
+ *
+ * When the user has picked the ACP variant (``agent_kind === "acp"``),
+ * the ACP subprocess owns its own system prompt, tool set, memory,
+ * skills, and MCP — so these nav entries would just route to pages
+ * that silently ignore what the user saves. We hide them so the
+ * sidebar reflects reality. The Agent Type page
+ * (``/settings/agent-type``) is how the user switches back. */
+const LLM_ONLY_NAV_PATHS = new Set<string>([
+  "/settings", // LLM page — only applies to the OpenHands agent.
+  "/settings/condenser",
+  "/settings/verification",
+  "/settings/mcp",
+  "/settings/skills", // Skills get injected into LLM agent_context; ACP ignores them.
+  "/settings/org-defaults",
+  "/settings/org-defaults/condenser",
+  "/settings/org-defaults/verification",
+]);
+
+/** Settings-nav entries that only apply to the ACP variant. Hidden
+ *  when ``agent_kind !== "acp"`` so OpenHands-agent users don't see
+ *  ACP-subprocess configuration they can't act on. */
+const ACP_ONLY_NAV_PATHS = new Set<string>([
+  "/settings/acp-server",
+  "/settings/acp-model",
+]);
 
 // Rendered navigation item types
 export type SettingsNavRenderedItem =
@@ -36,9 +64,21 @@ const SECTION_HEADERS: Partial<Record<SettingsNavSection, I18nKey>> = {
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
   const { data: user } = useMe();
+  const { data: settings } = useSettings();
   const userRole: OrganizationUserRole = user?.role ?? "member";
   const { hasPermission } = usePermission(userRole);
   const { isPersonalOrg, isTeamOrg, organizationId } = useOrgTypeAndAccess();
+
+  // ACP replaces the standard LLM agent wholesale; hide the LLM-only
+  // sub-tabs so the sidebar doesn't suggest they still apply.
+  const agentSettings = settings?.agent_settings as
+    | Record<string, unknown>
+    | undefined;
+  const agentKind =
+    typeof agentSettings?.agent_kind === "string"
+      ? (agentSettings.agent_kind as string)
+      : "llm";
+  const hideLlmOnlyNav = agentKind === "acp";
 
   const shouldHideBilling = isBillingHidden(
     config,
@@ -52,6 +92,18 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
 
   // First apply feature flag-based hiding
   items = items.filter((item) => !isSettingsPageHidden(item.to, featureFlags));
+
+  // Reshape the sidebar to match the active agent kind:
+  // - ACP mode hides LLM-only sub-tabs (LLM, Condenser, Verification,
+  //   MCP, Skills) — those don't apply when the ACP subprocess owns
+  //   the agent loop.
+  // - LLM (OpenHands) mode hides the ACP-only sub-tabs (ACP Server,
+  //   ACP Model).
+  if (hideLlmOnlyNav) {
+    items = items.filter((item) => !LLM_ONLY_NAV_PATHS.has(item.to));
+  } else {
+    items = items.filter((item) => !ACP_ONLY_NAV_PATHS.has(item.to));
+  }
 
   // Hide billing when billing is not accessible OR when in team org
   if (shouldHideBilling || isTeamOrg) {

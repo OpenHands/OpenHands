@@ -55,6 +55,33 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     text: "SETTINGS$NAV_VERIFICATION",
     section: "org",
   },
+  // Agent Type is the top-level selector — defaults to OpenHands (the
+  // standard LLM agent). Saving ACP here reshapes the nav below so the
+  // user only sees settings that apply to their chosen agent type.
+  {
+    icon: <CircuitIcon width={22} height={22} />,
+    to: "/settings/agent-type",
+    text: "SETTINGS$NAV_AGENT_TYPE",
+    section: "personal",
+  },
+  // ACP-agent sub-configuration. Only visible when agent_kind=acp —
+  // see ``ACP_ONLY_NAV_PATHS`` in ``use-settings-nav-items.ts``.
+  {
+    icon: <ServerProcessIcon width={22} height={22} />,
+    to: "/settings/acp-server",
+    text: "SETTINGS$NAV_ACP_SERVER",
+    section: "personal",
+  },
+  {
+    icon: <CircuitIcon width={22} height={22} />,
+    to: "/settings/acp-model",
+    text: "SETTINGS$NAV_ACP_MODEL",
+    section: "personal",
+  },
+  // OpenHands-agent sub-configuration. These nav entries hide when
+  // agent_kind=acp because the ACP subprocess manages its own
+  // LLM/condenser/security/MCP — see ``LLM_ONLY_NAV_PATHS`` in
+  // ``use-settings-nav-items.ts``.
   {
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",
@@ -74,6 +101,12 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     section: "personal",
   },
   {
+    icon: <ServerProcessIcon width={22} height={22} />,
+    to: "/settings/mcp",
+    text: "SETTINGS$NAV_MCP",
+    section: "personal",
+  },
+  {
     icon: <KeyIcon width={22} height={22} />,
     to: "/settings/api-keys",
     text: "SETTINGS$NAV_API_KEYS",
@@ -83,18 +116,6 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <KeyIcon width={22} height={22} />,
     to: "/settings/secrets",
     text: "SETTINGS$NAV_SECRETS",
-    section: "personal",
-  },
-  {
-    icon: <ServerProcessIcon width={22} height={22} />,
-    to: "/settings/mcp",
-    text: "SETTINGS$NAV_MCP",
-    section: "personal",
-  },
-  {
-    icon: <ServerProcessIcon width={22} height={22} />,
-    to: "/settings/acp",
-    text: "SETTINGS$NAV_ACP",
     section: "personal",
   },
   {
@@ -130,6 +151,24 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
 ];
 
 export const OSS_NAV_ITEMS: SettingsNavItem[] = [
+  // Agent Type — top-level selector (OpenHands / ACP).
+  {
+    icon: <CircuitIcon width={22} height={22} />,
+    to: "/settings/agent-type",
+    text: "SETTINGS$NAV_AGENT_TYPE",
+  },
+  // ACP-agent sub-configuration (only visible in ACP mode).
+  {
+    icon: <ServerProcessIcon width={22} height={22} />,
+    to: "/settings/acp-server",
+    text: "SETTINGS$NAV_ACP_SERVER",
+  },
+  {
+    icon: <CircuitIcon width={22} height={22} />,
+    to: "/settings/acp-model",
+    text: "SETTINGS$NAV_ACP_MODEL",
+  },
+  // OpenHands-agent sub-configuration (all hidden in ACP mode).
   {
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",
@@ -149,11 +188,6 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <ServerProcessIcon width={22} height={22} />,
     to: "/settings/mcp",
     text: "SETTINGS$NAV_MCP",
-  },
-  {
-    icon: <ServerProcessIcon width={22} height={22} />,
-    to: "/settings/acp",
-    text: "SETTINGS$NAV_ACP",
   },
   {
     icon: <LightbulbIcon width={22} height={22} />,

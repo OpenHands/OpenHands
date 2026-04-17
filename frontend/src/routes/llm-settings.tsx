@@ -516,19 +516,38 @@ export function LlmSettingsScreen({
     ],
   );
 
+  // When the user previously picked the ACP variant, warn them that
+  // saving this page will overwrite it. Only the active (persisted)
+  // agent_kind matters here — we don't try to infer from form dirtiness.
+  const persistedAgentKind = (
+    settings?.agent_settings as Record<string, unknown> | undefined
+  )?.agent_kind;
+  const acpCurrentlyActive = persistedAgentKind === "acp";
+
   return (
-    <SdkSectionPage
-      scope={scope}
-      sectionKeys={["llm", "general"]}
-      excludeKeys={LLM_EXCLUDED_KEYS}
-      variant="llm"
-      header={buildHeader}
-      extraDirty={searchApiKeyDirty}
-      buildPayload={buildPayload}
-      onSaveSuccess={() => setSearchApiKeyDirty(false)}
-      getInitialView={getInitialView}
-      testId="llm-settings-screen"
-    />
+    <>
+      {acpCurrentlyActive ? (
+        <div
+          role="note"
+          data-testid="llm-settings-acp-active-notice"
+          className="mb-4 rounded-md border border-[color:var(--color-warning-subtle,#8a6d3b)] bg-[color:var(--color-warning-bg,rgba(255,176,0,0.12))] p-4 text-sm"
+        >
+          <p>{t(I18nKey.SETTINGS$LLM_ACP_ACTIVE_NOTICE)}</p>
+        </div>
+      ) : null}
+      <SdkSectionPage
+        scope={scope}
+        sectionKeys={["llm", "general"]}
+        excludeKeys={LLM_EXCLUDED_KEYS}
+        variant="llm"
+        header={buildHeader}
+        extraDirty={searchApiKeyDirty}
+        buildPayload={buildPayload}
+        onSaveSuccess={() => setSearchApiKeyDirty(false)}
+        getInitialView={getInitialView}
+        testId="llm-settings-screen"
+      />
+    </>
   );
 }
 
