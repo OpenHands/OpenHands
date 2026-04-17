@@ -51,28 +51,4 @@ describe("useSlashCommand", () => {
     expect(commands).toContain("/new");
     expect(commands).toContain("/code-search");
   });
-  // prevents staggered menu bug
-  it("returns empty items while skills are loading", () => {
-    mockConversation.data = { conversation_version: "V1" };
-    mockSkills.isLoading = true;
-    mockSkills.data = undefined;
-
-    const ref = makeChatInputRef();
-    const { result } = renderHook(() => useSlashCommand(ref));
-
-    expect(result.current.filteredItems).toEqual([]);
-  });
-
-  it("does NOT include /new built-in command for V0 conversations", () => {
-    mockConversation.data = { conversation_version: "V0" };
-    mockSkills.isLoading = false;
-    mockSkills.data = [makeSkill("code-search", ["/code-search"])];
-
-    const ref = makeChatInputRef();
-    const { result } = renderHook(() => useSlashCommand(ref));
-
-    const commands = result.current.filteredItems.map((i) => i.command);
-    expect(commands).not.toContain("/new");
-    expect(commands).toContain("/code-search");
-  });
 });

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
 from fastapi import Request
-from pydantic import PrivateAttr
+from pydantic import PrivateAttr, SecretStr
 
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
@@ -14,6 +14,7 @@ from openhands.integrations.provider import (
     ProviderHandler,
     ProviderType,
 )
+from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
@@ -95,6 +96,8 @@ class AuthUserContext(UserContext):
         provider_handler = await self.get_provider_handler()
         service = provider_handler.get_service(provider_type)
         token = await service.get_latest_token()
+        if isinstance(token, SecretStr):
+            return token.get_secret_value()
         return token
 
     async def get_secrets(self) -> dict[str, SecretSource]:
@@ -116,6 +119,9 @@ class AuthUserContext(UserContext):
     async def get_mcp_api_key(self) -> str | None:
         mcp_api_key = await self.user_auth.get_mcp_api_key()
         return mcp_api_key
+
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        return await self.user_auth.get_user_git_info()
 
 
 USER_ID_ATTR = 'user_id'

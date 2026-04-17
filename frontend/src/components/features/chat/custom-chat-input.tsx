@@ -1,5 +1,4 @@
 import React, { useEffect } from "react";
-import { ConversationStatus } from "#/types/conversation-status";
 import { useChatInputLogic } from "#/hooks/chat/use-chat-input-logic";
 import { useFileHandling } from "#/hooks/chat/use-file-handling";
 import { useGripResize } from "#/hooks/chat/use-grip-resize";
@@ -10,12 +9,13 @@ import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
 import { useConversationStore } from "#/stores/conversation-store";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 
 export interface CustomChatInputProps {
   disabled?: boolean;
   isNewConversationPending?: boolean;
   showButton?: boolean;
-  conversationStatus?: ConversationStatus | null;
+  sandboxStatus?: V1SandboxStatus | null;
   onSubmit: (message: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
@@ -28,7 +28,7 @@ export function CustomChatInput({
   disabled = false,
   isNewConversationPending = false,
   showButton = true,
-  conversationStatus = null,
+  sandboxStatus = null,
   onSubmit,
   onFocus,
   onBlur,
@@ -44,7 +44,7 @@ export function CustomChatInput({
   } = useConversationStore();
 
   // Disable input when conversation is stopped
-  const isConversationStopped = conversationStatus === "STOPPED";
+  const isConversationStopped = sandboxStatus === "MISSING";
   const isDisabled = disabled || isConversationStopped;
 
   // Listen to submittedMessage state changes
@@ -90,7 +90,7 @@ export function CustomChatInput({
     messageToSend,
   );
 
-  const { handleSubmit, handleResumeAgent } = useChatSubmission(
+  const { handleSubmit } = useChatSubmission(
     chatInputRef as React.RefObject<HTMLDivElement | null>,
     fileInputRef as React.RefObject<HTMLInputElement | null>,
     smartResize,
@@ -155,7 +155,6 @@ export function CustomChatInput({
           chatInputRef={chatInputRef}
           handleFileIconClick={handleFileIconClick}
           handleSubmit={handleSubmit}
-          handleResumeAgent={handleResumeAgent}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}

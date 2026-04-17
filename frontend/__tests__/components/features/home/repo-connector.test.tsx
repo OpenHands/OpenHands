@@ -90,14 +90,15 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     // Mock the search function that's used by the dropdown
-    vi.spyOn(GitService, "searchGitRepositories").mockResolvedValue(
-      MOCK_RESPOSITORIES,
-    );
+    vi.spyOn(GitService, "searchGitRepositories").mockResolvedValue({
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
+    });
 
     renderRepoConnector();
 
@@ -127,8 +128,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -138,14 +139,11 @@ describe("RepoConnector", () => {
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     // First select the provider
@@ -199,8 +197,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -246,8 +244,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -290,8 +288,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -347,8 +345,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -363,14 +361,11 @@ describe("RepoConnector", () => {
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     // First select the provider
@@ -427,20 +422,17 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     renderRepoConnector();

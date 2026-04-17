@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from storage.org import Org
 from storage.user import User
 
+from openhands.utils.jsonpatch_compat import deep_merge
+
 
 @dataclass
 class OrgAppSettingsStore:
@@ -65,8 +67,15 @@ class OrgAppSettingsStore:
         """
         if org.org_version < ORG_SETTINGS_VERSION:
             org.org_version = ORG_SETTINGS_VERSION
-            org.default_llm_model = get_default_litellm_model()
-            org.llm_base_url = LITE_LLM_API_URL
+            org.agent_settings = deep_merge(
+                org.agent_settings,
+                {
+                    'llm': {
+                        'model': get_default_litellm_model(),
+                        'base_url': LITE_LLM_API_URL,
+                    },
+                },
+            )
             await self.db_session.flush()
             await self.db_session.refresh(org)
 

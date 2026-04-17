@@ -1,10 +1,20 @@
 import {
+  GitOrgClaim,
   Organization,
   OrganizationMember,
   OrganizationMembersPage,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
+import { Settings } from "#/types/settings";
 import { openHands } from "../open-hands-axios";
+
+type OrganizationAgentSettingsResponse = Pick<
+  Settings,
+  | "agent_settings"
+  | "conversation_settings"
+  | "search_api_key"
+  | "llm_api_key_set"
+>;
 
 export const organizationService = {
   getMe: async ({ orgId }: { orgId: string }) => {
@@ -166,5 +176,55 @@ export const organizationService = {
     }>("/api/organizations/members/invite/accept", { token });
 
     return data;
+  },
+
+  getOrganizationAgentSettings: async () => {
+    const { data } = await openHands.get<OrganizationAgentSettingsResponse>(
+      "/api/organizations/llm",
+    );
+    return data;
+  },
+
+  saveOrganizationAgentSettings: async (
+    settings: Partial<Settings> & Record<string, unknown>,
+  ) => {
+    const { data } = await openHands.post<OrganizationAgentSettingsResponse>(
+      "/api/organizations/llm",
+      settings,
+    );
+    return data;
+  },
+
+  getGitClaims: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<GitOrgClaim[]>(
+      `/api/organizations/${orgId}/git-claims`,
+    );
+    return data;
+  },
+
+  claimGitOrg: async ({
+    orgId,
+    provider,
+    gitOrganization,
+  }: {
+    orgId: string;
+    provider: string;
+    gitOrganization: string;
+  }) => {
+    const { data } = await openHands.post<GitOrgClaim>(
+      `/api/organizations/${orgId}/git-claims`,
+      { provider, git_organization: gitOrganization },
+    );
+    return data;
+  },
+
+  disconnectGitOrg: async ({
+    orgId,
+    claimId,
+  }: {
+    orgId: string;
+    claimId: string;
+  }) => {
+    await openHands.delete(`/api/organizations/${orgId}/git-claims/${claimId}`);
   },
 };

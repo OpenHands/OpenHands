@@ -8,7 +8,7 @@ export const useSuggestedTasks = () => {
 
   return useQuery({
     queryKey: ["tasks"],
-    queryFn: SuggestionsService.getSuggestedTasks,
+    queryFn: () => SuggestionsService.getSuggestedTasks(),
     select: groupSuggestedTasks,
     enabled: shouldShowUserFeatures,
   });

@@ -15,6 +15,33 @@ IS_FEATURE_ENV = (
 )  # Does not include the staging deployment
 IS_LOCAL_ENV = bool(HOST == 'localhost')
 
+
+# _is_all_hands_managed_domain() can be removed/replaced when a self-hosted specific
+# env var is created (e.g is_self_hosted` or `deployment_mode`)
+def _is_all_hands_managed_domain(host: str) -> bool:
+    """Check if the host is an All-Hands managed domain."""
+    return (
+        host == 'app.all-hands.dev'
+        or host == 'app.openhands.ai'
+        or host.endswith('.all-hands.dev')
+        or host.endswith('.openhands.ai')
+    )
+
+
+def _get_deployment_mode() -> str:
+    """Determine deployment mode based on WEB_HOST.
+
+    Returns:
+        'cloud' for All-Hands managed infrastructure (app.all-hands.dev, etc.)
+        'self_hosted' for enterprise self-hosted deployments (customer domains)
+    """
+    if _is_all_hands_managed_domain(HOST):
+        return 'cloud'
+    return 'self_hosted'
+
+
+DEPLOYMENT_MODE = _get_deployment_mode()
+
 # Role name constants
 ROLE_OWNER = 'owner'
 ROLE_ADMIN = 'admin'

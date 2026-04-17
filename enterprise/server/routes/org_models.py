@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
@@ -11,6 +11,8 @@ from pydantic import (
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
+
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 
 
 class OrgCreationError(Exception):
@@ -144,21 +146,16 @@ class OrgResponse(BaseModel):
     contact_name: str
     contact_email: str
     conversation_expiration: int | None = None
-    agent: str | None = None
-    default_max_iterations: int | None = None
-    security_analyzer: str | None = None
-    confirmation_mode: bool | None = None
-    default_llm_model: str | None = None
-    default_llm_api_key_for_byor: str | None = None
-    default_llm_base_url: str | None = None
     remote_runtime_resource_factor: int | None = None
-    enable_default_condenser: bool = True
     billing_margin: float | None = None
     enable_proactive_conversation_starters: bool = True
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
     org_version: int = 0
-    mcp_config: dict | None = None
+    agent_settings: AgentSettings = Field(default_factory=AgentSettings)
+    conversation_settings: ConversationSettings = Field(
+        default_factory=ConversationSettings
+    )
     search_api_key: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = None
@@ -171,33 +168,14 @@ class OrgResponse(BaseModel):
     def from_org(
         cls, org: Org, credits: float | None = None, user_id: str | None = None
     ) -> 'OrgResponse':
-        """Create an OrgResponse from an Org entity.
-
-        Args:
-            org: The organization entity to convert
-            credits: Optional credits value (defaults to None)
-            user_id: Optional user ID to determine if org is personal (defaults to None)
-
-        Returns:
-            OrgResponse: The response model instance
-        """
+        """Create an OrgResponse from an Org entity."""
         return cls(
             id=str(org.id),
             name=org.name,
             contact_name=org.contact_name,
             contact_email=org.contact_email,
             conversation_expiration=org.conversation_expiration,
-            agent=org.agent,
-            default_max_iterations=org.default_max_iterations,
-            security_analyzer=org.security_analyzer,
-            confirmation_mode=org.confirmation_mode,
-            default_llm_model=org.default_llm_model,
-            default_llm_api_key_for_byor=None,
-            default_llm_base_url=org.default_llm_base_url,
             remote_runtime_resource_factor=org.remote_runtime_resource_factor,
-            enable_default_condenser=org.enable_default_condenser
-            if org.enable_default_condenser is not None
-            else True,
             billing_margin=org.billing_margin,
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
             if org.enable_proactive_conversation_starters is not None
@@ -205,7 +183,12 @@ class OrgResponse(BaseModel):
             sandbox_base_container_image=org.sandbox_base_container_image,
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             org_version=org.org_version if org.org_version is not None else 0,
-            mcp_config=org.mcp_config,
+            agent_settings=AgentSettings.model_validate(
+                dict(org.agent_settings) if org.agent_settings else {}
+            ),
+            conversation_settings=ConversationSettings.model_validate(
+                dict(org.conversation_settings) if org.conversation_settings else {}
+            ),
             search_api_key=None,
             sandbox_api_key=None,
             max_budget_per_task=org.max_budget_per_task,
@@ -227,7 +210,6 @@ class OrgPage(BaseModel):
 class OrgUpdate(BaseModel):
     """Request model for updating an organization."""
 
-    # Basic organization information (any authenticated user can update)
     name: Annotated[
         str | None,
         StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
@@ -235,7 +217,6 @@ class OrgUpdate(BaseModel):
     contact_name: str | None = None
     contact_email: EmailStr | None = None
     conversation_expiration: int | None = None
-    default_max_iterations: int | None = Field(default=None, gt=0)
     remote_runtime_resource_factor: int | None = Field(default=None, gt=0)
     billing_margin: float | None = Field(default=None, ge=0, le=1)
     enable_proactive_conversation_starters: bool | None = None
@@ -245,31 +226,20 @@ class OrgUpdate(BaseModel):
     max_budget_per_task: float | None = Field(default=None, gt=0)
     enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
-
-    # LLM settings (require admin/owner role)
-    default_llm_model: str | None = None
-    default_llm_api_key_for_byor: str | None = None
-    default_llm_base_url: str | None = None
     search_api_key: str | None = None
-    security_analyzer: str | None = None
-    agent: str | None = None
-    confirmation_mode: bool | None = None
-    enable_default_condenser: bool | None = None
-    condenser_max_size: int | None = Field(default=None, ge=20)
+    agent_settings_diff: dict[str, Any] | None = None
+    conversation_settings_diff: dict[str, Any] | None = None
 
 
 class OrgLLMSettingsResponse(BaseModel):
-    """Response model for organization LLM settings."""
+    """Response model for organization default LLM settings."""
 
-    default_llm_model: str | None = None
-    default_llm_base_url: str | None = None
+    agent_settings: AgentSettings = Field(default_factory=AgentSettings)
+    conversation_settings: ConversationSettings = Field(
+        default_factory=ConversationSettings
+    )
+    llm_api_key_set: bool = False
     search_api_key: str | None = None  # Masked in response
-    agent: str | None = None
-    confirmation_mode: bool | None = None
-    security_analyzer: str | None = None
-    enable_default_condenser: bool = True
-    condenser_max_size: int | None = None
-    default_max_iterations: int | None = None
 
     @staticmethod
     def _mask_key(secret: SecretStr | None) -> str | None:
@@ -287,83 +257,55 @@ class OrgLLMSettingsResponse(BaseModel):
     def from_org(cls, org: Org) -> 'OrgLLMSettingsResponse':
         """Create response from Org entity."""
         return cls(
-            default_llm_model=org.default_llm_model,
-            default_llm_base_url=org.default_llm_base_url,
+            agent_settings=AgentSettings.model_validate(
+                dict(org.agent_settings) if org.agent_settings else {}
+            ),
+            conversation_settings=ConversationSettings.model_validate(
+                dict(org.conversation_settings) if org.conversation_settings else {}
+            ),
+            llm_api_key_set=org.llm_api_key is not None,
             search_api_key=cls._mask_key(org.search_api_key),
-            agent=org.agent,
-            confirmation_mode=org.confirmation_mode,
-            security_analyzer=org.security_analyzer,
-            enable_default_condenser=org.enable_default_condenser
-            if org.enable_default_condenser is not None
-            else True,
-            condenser_max_size=org.condenser_max_size,
-            default_max_iterations=org.default_max_iterations,
         )
 
 
 class OrgMemberLLMSettings(BaseModel):
-    """LLM settings to propagate to organization members.
+    """Shared LLM settings that may be propagated to organization members."""
 
-    Field names match OrgMember DB columns.
-    """
-
-    llm_model: str | None = None
-    llm_base_url: str | None = None
-    max_iterations: int | None = None
+    agent_settings_diff: dict[str, Any] | None = None
+    conversation_settings_diff: dict[str, Any] | None = None
     llm_api_key: str | None = None
 
     def has_updates(self) -> bool:
         """Check if any field is set (not None)."""
-        return any(getattr(self, field) is not None for field in self.model_fields)
+        return any(
+            getattr(self, field) is not None for field in type(self).model_fields
+        )
 
 
 class OrgLLMSettingsUpdate(BaseModel):
-    """Request model for updating organization LLM settings.
+    """Request model for updating organization LLM settings."""
 
-    Field names match Org DB columns exactly.
-    """
-
-    default_llm_model: str | None = None
-    default_llm_base_url: str | None = None
+    agent_settings_diff: dict[str, Any] | None = None
+    conversation_settings_diff: dict[str, Any] | None = None
     search_api_key: str | None = None
-    agent: str | None = None
-    confirmation_mode: bool | None = None
-    security_analyzer: str | None = None
-    enable_default_condenser: bool | None = None
-    condenser_max_size: int | None = Field(default=None, ge=20)
-    default_max_iterations: int | None = Field(default=None, gt=0)
     llm_api_key: str | None = None
 
     def has_updates(self) -> bool:
         """Check if any field is set (not None)."""
-        return any(getattr(self, field) is not None for field in self.model_fields)
+        return any(
+            getattr(self, field) is not None for field in type(self).model_fields
+        )
 
     def apply_to_org(self, org: Org) -> None:
-        """Apply non-None settings to the organization model.
-
-        Args:
-            org: Organization entity to update in place
-        """
-        for field_name in self.model_fields:
-            value = getattr(self, field_name)
-            # Skip llm_api_key - it's only for member propagation, not org-level
-            if value is not None and field_name != 'llm_api_key':
-                setattr(org, field_name, value)
+        """Apply non-None settings to the organization model."""
+        if self.search_api_key is not None:
+            org.search_api_key = self.search_api_key or None
+        if self.llm_api_key is not None:
+            org.llm_api_key = self.llm_api_key or None
 
     def get_member_updates(self) -> OrgMemberLLMSettings | None:
-        """Get updates that need to be propagated to org members.
-
-        Returns:
-            OrgMemberLLMSettings with mapped field values, or None if no member updates needed.
-            Maps: default_llm_model → llm_model, default_llm_base_url → llm_base_url,
-                  default_max_iterations → max_iterations, llm_api_key → llm_api_key
-        """
-        member_settings = OrgMemberLLMSettings(
-            llm_model=self.default_llm_model,
-            llm_base_url=self.default_llm_base_url,
-            max_iterations=self.default_max_iterations,
-            llm_api_key=self.llm_api_key,
-        )
+        """Get updates that need to be propagated to org members."""
+        member_settings = OrgMemberLLMSettings(llm_api_key=self.llm_api_key)
         return member_settings if member_settings.has_updates() else None
 
 
@@ -393,25 +335,28 @@ class OrgMemberUpdate(BaseModel):
 
 
 class MeResponse(BaseModel):
-    """Response model for the current user's membership in an organization."""
+    """Response model for the current user's membership in an organization.
+
+    ``agent_settings_diff`` and ``conversation_settings_diff`` carry the
+    member-level overrides on top of the organization defaults.
+    """
 
     org_id: str
     user_id: str
     email: str
     role: str
     llm_api_key: str
-    max_iterations: int | None = None
-    llm_model: str | None = None
     llm_api_key_for_byor: str | None = None
-    llm_base_url: str | None = None
+    agent_settings_diff: dict[str, Any] = Field(default_factory=dict)
+    conversation_settings_diff: dict[str, Any] = Field(default_factory=dict)
     status: str | None = None
 
     @staticmethod
-    def _mask_key(secret: SecretStr | None) -> str:
+    def _mask_key(secret: str | SecretStr | None) -> str:
         """Mask an API key, showing only last 4 characters."""
         if secret is None:
             return ''
-        raw = secret.get_secret_value()
+        raw = secret.get_secret_value() if isinstance(secret, SecretStr) else secret
         if not raw:
             return ''
         if len(raw) <= 4:
@@ -419,27 +364,22 @@ class MeResponse(BaseModel):
         return '****' + raw[-4:]
 
     @classmethod
-    def from_org_member(cls, member: OrgMember, role: Role, email: str) -> 'MeResponse':
-        """Create a MeResponse from an OrgMember, Role, and user email.
-
-        Args:
-            member: The OrgMember entity
-            role: The Role entity (provides role name)
-            email: The user's email address
-
-        Returns:
-            MeResponse with masked API keys
-        """
+    def from_org_member(
+        cls,
+        member: OrgMember,
+        role: Role,
+        email: str,
+    ) -> 'MeResponse':
+        """Create a MeResponse from an OrgMember, Role, and user email."""
         return cls(
             org_id=str(member.org_id),
             user_id=str(member.user_id),
             email=email,
             role=role.name,
             llm_api_key=cls._mask_key(member.llm_api_key),
-            max_iterations=member.max_iterations,
-            llm_model=member.llm_model,
             llm_api_key_for_byor=cls._mask_key(member.llm_api_key_for_byor) or None,
-            llm_base_url=member.llm_base_url,
+            agent_settings_diff=dict(member.agent_settings_diff or {}),
+            conversation_settings_diff=dict(member.conversation_settings_diff or {}),
             status=member.status,
         )
 

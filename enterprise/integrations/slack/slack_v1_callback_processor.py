@@ -111,9 +111,11 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
         try:
             # Post the summary as a threaded reply
+            # Use markdown_text instead of text to properly render standard Markdown
+            # (e.g., **bold**, [link](url)) which is used throughout the codebase
             response = client.chat_postMessage(
                 channel=channel_id,
-                text=summary,
+                markdown_text=summary,
                 thread_ts=thread_ts,
                 unfurl_links=False,
                 unfurl_media=False,

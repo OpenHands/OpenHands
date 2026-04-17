@@ -27,7 +27,7 @@ from openhands.app_server.sandbox.sandbox_models import (
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk.context.skills import KeywordTrigger, Skill, TaskTrigger
+from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 
 def _make_service_mock(
@@ -38,7 +38,6 @@ def _make_service_mock(
     raise_on_load: bool = False,
 ):
     """Create a mock service that passes the isinstance check and returns the desired values."""
-
     mock_cls = type('AppConversationServiceMock', (MagicMock,), {})
     AppConversationServiceBase.register(mock_cls)
 

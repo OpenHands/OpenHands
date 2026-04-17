@@ -22,11 +22,43 @@ from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.storage.data_models.settings import Settings
+from openhands.utils.jsonpatch_compat import deep_merge
+
+_ORG_SETTINGS_EXCLUDED_FIELDS = {
+    'id',
+    'name',
+    'contact_name',
+    'contact_email',
+    'org_version',
+    'llm_api_key',
+}
+_ORG_SETTINGS_FIELDS = {
+    normalized
+    for column in Org.__table__.columns
+    if (normalized := column.name.lstrip('_')) not in _ORG_SETTINGS_EXCLUDED_FIELDS
+}
 
 
 class OrgStore:
     """Store for managing organizations."""
+
+    @staticmethod
+    def get_agent_settings_from_org(org: Org) -> AgentSettings:
+        return AgentSettings.model_validate(dict(org.agent_settings))
+
+    @staticmethod
+    def get_conversation_settings_from_org(org: Org) -> ConversationSettings:
+        return ConversationSettings.model_validate(dict(org.conversation_settings))
+
+    @staticmethod
+    def sync_agent_settings(org: Org) -> None:
+        org.agent_settings = dict(org.agent_settings)
+
+    @staticmethod
+    def sync_conversation_settings(org: Org) -> None:
+        org.conversation_settings = dict(org.conversation_settings)
 
     @staticmethod
     async def create_org(
@@ -36,7 +68,16 @@ class OrgStore:
         async with a_session_maker() as session:
             org = Org(**kwargs)
             org.org_version = ORG_SETTINGS_VERSION
-            org.default_llm_model = get_default_litellm_model()
+            agent_settings = org.agent_settings or {}
+            org.agent_settings = deep_merge(
+                agent_settings,
+                {
+                    'llm': {
+                        'model': agent_settings.get('llm', {}).get('model')
+                        or get_default_litellm_model()
+                    }
+                },
+            )
             if org.v1_enabled is None:
                 org.v1_enabled = DEFAULT_V1_ENABLED
             session.add(org)
@@ -92,8 +133,12 @@ class OrgStore:
                 org.id,
                 {
                     'org_version': ORG_SETTINGS_VERSION,
-                    'default_llm_model': get_default_litellm_model(),
-                    'llm_base_url': LITE_LLM_API_URL,
+                    'agent_settings_diff': {
+                        'llm': {
+                            'model': get_default_litellm_model(),
+                            'base_url': LITE_LLM_API_URL,
+                        },
+                    },
                 },
             )
         return org
@@ -180,9 +225,24 @@ class OrgStore:
 
             if 'id' in kwargs:
                 kwargs.pop('id')
+
+            agent_settings_diff = kwargs.pop('agent_settings_diff', None)
+            conversation_settings_diff = kwargs.pop('conversation_settings_diff', None)
             for key, value in kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
+
+            if agent_settings_diff is not None:
+                org.agent_settings = deep_merge(
+                    org.agent_settings,
+                    agent_settings_diff,
+                )
+
+            if conversation_settings_diff is not None:
+                org.conversation_settings = deep_merge(
+                    org.conversation_settings,
+                    conversation_settings_diff,
+                )
 
             await session.commit()
             await session.refresh(org)
@@ -190,46 +250,18 @@ class OrgStore:
 
     @staticmethod
     def get_kwargs_from_settings(settings: Settings):
-        kwargs = {}
-
-        for c in Org.__table__.columns:
-            # Normalize for lookup
-            normalized = (
-                c.name.removeprefix('_default_').removeprefix('default_').lstrip('_')
-            )
-
-            if not hasattr(settings, normalized):
-                continue
-
-            # ---- FIX: Output key should drop *only* leading "_" but preserve "default" ----
-            key = c.name
-            if key.startswith('_'):
-                key = key[1:]  # remove only the very first leading underscore
-
-            kwargs[key] = getattr(settings, normalized)
-
-        return kwargs
+        dumped = settings.model_dump(mode='json', context={'expose_secrets': True})
+        return {
+            field: dumped[field] for field in _ORG_SETTINGS_FIELDS if field in dumped
+        }
 
     @staticmethod
     def get_kwargs_from_user_settings(user_settings: UserSettings):
-        kwargs = {}
-
-        for c in Org.__table__.columns:
-            # Normalize for lookup
-            normalized = (
-                c.name.removeprefix('_default_').removeprefix('default_').lstrip('_')
-            )
-
-            if not hasattr(user_settings, normalized):
-                continue
-
-            # ---- FIX: Output key should drop *only* leading "_" but preserve "default" ----
-            key = c.name
-            if key.startswith('_'):
-                key = key[1:]  # remove only the very first leading underscore
-
-            kwargs[key] = getattr(user_settings, normalized)
-
+        kwargs = {
+            field: getattr(user_settings, field)
+            for field in _ORG_SETTINGS_FIELDS
+            if hasattr(user_settings, field)
+        }
         kwargs['org_version'] = user_settings.user_version
         return kwargs
 
@@ -431,8 +463,17 @@ class OrgStore:
             if not org:
                 return None
 
-            # Apply updates to org
             llm_settings.apply_to_org(org)
+            if llm_settings.agent_settings_diff is not None:
+                org.agent_settings = deep_merge(
+                    org.agent_settings,
+                    llm_settings.agent_settings_diff,
+                )
+            if llm_settings.conversation_settings_diff is not None:
+                org.conversation_settings = deep_merge(
+                    org.conversation_settings,
+                    llm_settings.conversation_settings_diff,
+                )
 
             # Propagate relevant settings to all org members
             member_updates = llm_settings.get_member_updates()

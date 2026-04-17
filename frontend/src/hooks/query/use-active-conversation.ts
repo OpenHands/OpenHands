@@ -14,7 +14,7 @@ export const useActiveConversation = () => {
   const userConversation = useUserConversation(
     actualConversationId,
     (query) => {
-      if (query.state.data?.status === "STARTING") {
+      if (query.state.data?.sandbox_status === "STARTING") {
         return 3000; // 3 seconds
       }
       // TODO: Return conversation title as a WS event to avoid polling
@@ -29,7 +29,7 @@ export const useActiveConversation = () => {
   }, [
     conversationId,
     userConversation.isFetched,
-    userConversation?.data?.status,
+    userConversation?.data?.sandbox_status,
   ]);
   return userConversation;
 };

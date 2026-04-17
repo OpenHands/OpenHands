@@ -106,8 +106,9 @@ async def test_create_org_success(mock_app):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
-        enable_default_condenser=True,
+        agent_settings={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+        },
         enable_proactive_conversation_starters=True,
     )
 
@@ -140,7 +141,10 @@ async def test_create_org_success(mock_app):
         assert response_data['contact_email'] == 'john@example.com'
         assert response_data['credits'] == 100.0
         assert response_data['org_version'] == 5
-        assert response_data['default_llm_model'] == 'claude-opus-4-5-20251101'
+        assert (
+            response_data['agent_settings']['llm']['model']
+            == 'claude-opus-4-5-20251101'
+        )
 
 
 @pytest.mark.asyncio
@@ -427,8 +431,10 @@ async def test_create_org_sensitive_fields_not_exposed(mock_app):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
-        enable_default_condenser=True,
+        agent_settings={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
+        },
         enable_proactive_conversation_starters=True,
     )
 
@@ -507,7 +513,9 @@ async def test_list_user_orgs_success(mock_app_list):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        agent_settings={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+        },
     )
     mock_user = MagicMock()
     mock_user.current_org_id = org_id
@@ -918,20 +926,25 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
         contact_name='John Doe',
         contact_email='john@example.com',
         conversation_expiration=3600,
-        agent='CodeActAgent',
-        default_max_iterations=50,
-        security_analyzer='enabled',
-        confirmation_mode=True,
-        default_llm_model='claude-opus-4-5-20251101',
-        default_llm_base_url='https://api.example.com',
+        agent_settings={
+            'agent': 'CodeActAgent',
+            'llm': {
+                'model': 'claude-opus-4-5-20251101',
+                'base_url': 'https://api.example.com',
+            },
+            'condenser': {'enabled': True},
+        },
+        conversation_settings={
+            'max_iterations': 50,
+            'security_analyzer': 'llm',
+            'confirmation_mode': True,
+        },
         remote_runtime_resource_factor=2,
-        enable_default_condenser=True,
         billing_margin=0.15,
         enable_proactive_conversation_starters=True,
         sandbox_base_container_image='test-image',
         sandbox_runtime_container_image='test-runtime',
         org_version=5,
-        mcp_config={'key': 'value'},
         max_budget_per_task=1000.0,
         enable_solvability_analysis=True,
         v1_enabled=True,
@@ -962,20 +975,20 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
         assert org_data['contact_name'] == 'John Doe'
         assert org_data['contact_email'] == 'john@example.com'
         assert org_data['conversation_expiration'] == 3600
-        assert org_data['agent'] == 'CodeActAgent'
-        assert org_data['default_max_iterations'] == 50
-        assert org_data['security_analyzer'] == 'enabled'
-        assert org_data['confirmation_mode'] is True
-        assert org_data['default_llm_model'] == 'claude-opus-4-5-20251101'
-        assert org_data['default_llm_base_url'] == 'https://api.example.com'
+        assert org_data['agent_settings']['agent'] == 'CodeActAgent'
+        assert org_data['agent_settings']['llm']['model'] == 'claude-opus-4-5-20251101'
+        assert (
+            org_data['agent_settings']['llm']['base_url'] == 'https://api.example.com'
+        )
+        assert org_data['conversation_settings']['max_iterations'] == 50
+        assert org_data['conversation_settings']['security_analyzer'] == 'llm'
+        assert org_data['conversation_settings']['confirmation_mode'] is True
         assert org_data['remote_runtime_resource_factor'] == 2
-        assert org_data['enable_default_condenser'] is True
         assert org_data['billing_margin'] == 0.15
         assert org_data['enable_proactive_conversation_starters'] is True
         assert org_data['sandbox_base_container_image'] == 'test-image'
         assert org_data['sandbox_runtime_container_image'] == 'test-runtime'
         assert org_data['org_version'] == 5
-        assert org_data['mcp_config'] == {'key': 'value'}
         assert org_data['max_budget_per_task'] == 1000.0
         assert org_data['enable_solvability_analysis'] is True
         assert org_data['v1_enabled'] is True
@@ -1020,8 +1033,10 @@ async def test_get_org_success(mock_app_with_get_user_id, mock_owner_role):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
-        enable_default_condenser=True,
+        agent_settings={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
+        },
         enable_proactive_conversation_starters=True,
     )
 
@@ -1298,8 +1313,10 @@ async def test_get_org_with_credits_none(mock_app_with_get_user_id, mock_owner_r
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
-        enable_default_condenser=True,
+        agent_settings={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
+        },
         enable_proactive_conversation_starters=True,
     )
 
@@ -1345,10 +1362,12 @@ async def test_get_org_sensitive_fields_not_exposed(
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        agent_settings={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
+        },
         search_api_key='secret-search-key-123',  # Should not be exposed
         sandbox_api_key='secret-sandbox-key-123',  # Should not be exposed
-        enable_default_condenser=True,
         enable_proactive_conversation_starters=True,
     )
 
@@ -1872,7 +1891,9 @@ async def test_update_org_permission_denied_llm_settings(
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {'default_llm_model': 'claude-opus-4-5-20251101'}
+    update_data = {
+        'agent_settings_diff': {'llm': {'model': 'claude-opus-4-5-20251101'}}
+    }
 
     with (
         patch(
@@ -2032,13 +2053,13 @@ async def test_update_org_invalid_uuid_format(mock_update_app):
 @pytest.mark.asyncio
 async def test_update_org_invalid_field_values(mock_update_app, mock_owner_role):
     """
-    GIVEN: Update request with invalid field values (e.g., negative max_iterations)
+    GIVEN: Update request with invalid field values (e.g., negative billing margin)
     WHEN: PATCH /api/organizations/{org_id} is called
     THEN: 422 validation error is returned
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {'default_max_iterations': -1}  # Invalid: must be > 0
+    update_data = {'billing_margin': -1}  # Invalid: must be >= 0
 
     with patch(
         'server.auth.authorization.get_user_org_role',
@@ -2995,20 +3016,24 @@ class TestGetMeEndpoint:
         llm_model='gpt-4',
         llm_base_url='https://api.example.com',
         max_iterations=50,
-        llm_api_key_for_byor=None,
         status_val='active',
     ):
         """Create a MeResponse for testing."""
+        agent_settings = {'schema_version': 1}
+        if llm_model is not None:
+            agent_settings.setdefault('llm', {})['model'] = llm_model
+        if llm_base_url is not None:
+            agent_settings.setdefault('llm', {})['base_url'] = llm_base_url
+        if max_iterations is not None:
+            agent_settings['max_iterations'] = max_iterations
+
         return MeResponse(
             org_id=str(org_id),
             user_id=str(user_id),
             email=email,
             role=role,
             llm_api_key=llm_api_key,
-            llm_model=llm_model,
-            llm_base_url=llm_base_url,
-            max_iterations=max_iterations,
-            llm_api_key_for_byor=llm_api_key_for_byor,
+            agent_settings_diff=agent_settings,
             status=status_val,
         )
 
@@ -3043,9 +3068,11 @@ class TestGetMeEndpoint:
         assert data['user_id'] == test_user_id
         assert data['email'] == 'owner@example.com'
         assert data['role'] == 'owner'
-        assert data['llm_model'] == 'gpt-4'
-        assert data['llm_base_url'] == 'https://api.example.com'
-        assert data['max_iterations'] == 50
+        assert data['agent_settings_diff']['llm']['model'] == 'gpt-4'
+        assert (
+            data['agent_settings_diff']['llm']['base_url'] == 'https://api.example.com'
+        )
+        assert data['agent_settings_diff']['max_iterations'] == 50
         assert data['status'] == 'active'
 
     @pytest.mark.asyncio
@@ -3169,9 +3196,7 @@ class TestGetMeEndpoint:
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data['llm_model'] is None
-        assert data['llm_base_url'] is None
-        assert data['max_iterations'] is None
+        assert data['agent_settings_diff'] == {'schema_version': 1}
 
     @pytest.mark.asyncio
     async def test_get_me_with_admin_role(self, mock_me_app, test_user_id, test_org_id):
@@ -3199,35 +3224,6 @@ class TestGetMeEndpoint:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data['role'] == 'admin'
-
-    @pytest.mark.asyncio
-    async def test_get_me_masks_byor_api_key(
-        self, mock_me_app, test_user_id, test_org_id
-    ):
-        """GIVEN: User has an llm_api_key_for_byor set
-        WHEN: GET /api/organizations/{org_id}/me is called
-        THEN: The llm_api_key_for_byor field is also masked
-        """
-        me_response = self._make_me_response(
-            org_id=test_org_id,
-            user_id=test_user_id,
-            llm_api_key_for_byor='****-key',  # Masked key
-        )
-
-        with patch(
-            'server.routes.orgs.OrgMemberService.get_me',
-            new_callable=AsyncMock,
-            return_value=me_response,
-        ):
-            client = TestClient(mock_me_app)
-            response = client.get(f'/api/organizations/{test_org_id}/me')
-
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data['llm_api_key_for_byor'] != 'sk-byor-secret-key'
-        assert (
-            data['llm_api_key_for_byor'] is None or '**' in data['llm_api_key_for_byor']
-        )
 
     @pytest.mark.asyncio
     async def test_get_me_role_not_found_returns_500(self, mock_me_app, test_org_id):
@@ -3315,7 +3311,9 @@ async def test_switch_org_success(mock_app_with_get_user_id):
         contact_name='John Doe',
         contact_email='john@example.com',
         org_version=5,
-        default_llm_model='claude-opus-4-5-20251101',
+        agent_settings={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+        },
     )
 
     with (

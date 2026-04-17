@@ -20,15 +20,17 @@ export function useSearchBranches(
       selectedProvider,
     ],
     queryFn: async () => {
-      if (!repository || !query) return [];
-      return GitService.searchRepositoryBranches(
+      if (!repository || !query || !selectedProvider) return [];
+      const response = await GitService.searchRepositoryBranches(
         repository,
-        query,
-        perPage,
         selectedProvider,
+        query,
+        undefined, // pageId
+        perPage,
       );
+      return response.items;
     },
-    enabled: !!repository && !!query,
+    enabled: !!repository && !!query && !!selectedProvider,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
   });
