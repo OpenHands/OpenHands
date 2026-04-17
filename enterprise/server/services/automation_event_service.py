@@ -199,12 +199,14 @@ class AutomationEventService:
             - owner_type: 'User' or 'Organization' (or provider-specific equivalent)
             - owner_id: The numeric ID of the owner (for personal org resolution)
         """
-        if provider == ProviderType.GITHUB:
+        # Compare using .value to handle different ProviderType enum instances
+        # (e.g., test mocks may use a different enum class with the same values)
+        if provider.value == ProviderType.GITHUB.value:
             repo = payload.get('repository', {})
             owner = repo.get('owner', {})
             return owner.get('login'), owner.get('type'), owner.get('id')
 
-        logger.warning(f'Invalid provider ({provider})')
+        logger.warning(f'Unsupported provider ({provider.value})')
         return None, None, None
 
     def _build_event_payload(
