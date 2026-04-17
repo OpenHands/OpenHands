@@ -34,6 +34,7 @@ from openhands.app_server.sandbox.sandbox_service import (
     SandboxService,
     SandboxServiceInjector,
 )
+from openhands.app_server.sandbox.sandbox_spec_models import ExposedPort
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.docker_utils import (
@@ -66,16 +67,6 @@ class VolumeMount(BaseModel):
     host_path: str
     container_path: str
     mode: str = 'rw'
-
-    model_config = ConfigDict(frozen=True)
-
-
-class ExposedPort(BaseModel):
-    """Exposed port within container to be matched to a free port on the host."""
-
-    name: str
-    description: str
-    container_port: int = 8000
 
     model_config = ConfigDict(frozen=True)
 
@@ -139,6 +130,39 @@ class DockerSandboxService(SandboxService):
                 result[env_var] = None
         return result
 
+    def _build_exposed_url(
+        self,
+        exposed_port: ExposedPort,
+        host_port: int,
+        session_api_key: str | None,
+        working_dir: str,
+    ) -> str:
+        """Build the URL for an exposed port.
+
+        Uses the port's url_template if provided, otherwise falls back to
+        container_url_pattern. Handles special cases like VSCODE which needs
+        additional query parameters.
+        """
+        # Extract host from container_url_pattern for url_template
+        # container_url_pattern is like "http://localhost:{port}"
+        # We need to extract "localhost" for {host} placeholder
+        host = 'localhost'
+        if '://' in self.container_url_pattern:
+            # Extract host from pattern like "http://192.168.1.100:{port}"
+            after_scheme = self.container_url_pattern.split('://')[1]
+            host = after_scheme.split(':')[0].split('/')[0]
+
+        if exposed_port.url_template:
+            url = exposed_port.url_template.format(host=host, port=host_port)
+        else:
+            url = self.container_url_pattern.format(port=host_port)
+
+        # VSCode URLs require the api_key and working dir
+        if exposed_port.name == VSCODE:
+            url += f'/?tkn={session_api_key}&folder={working_dir}'
+
+        return url
+
     async def _container_to_sandbox_info(self, container) -> SandboxInfo | None:
         """Convert Docker container to SandboxInfo."""
         # Convert Docker status to runtime status
@@ -170,18 +194,16 @@ class DockerSandboxService(SandboxService):
             if is_host_network:
                 # Host network mode: container ports are directly accessible on host
                 for exposed_port in self.exposed_ports:
-                    host_port = exposed_port.container_port
-                    url = self.container_url_pattern.format(port=host_port)
-
-                    # VSCode URLs require the api_key and working dir
-                    if exposed_port.name == VSCODE:
-                        url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
-
+                    host_port = exposed_port.port
+                    url = self._build_exposed_url(
+                        exposed_port, host_port, session_api_key,
+                        container.attrs['Config']['WorkingDir']
+                    )
                     exposed_urls.append(
                         ExposedUrl(
                             name=exposed_port.name,
                             url=url,
-                            port=exposed_port.container_port,
+                            port=exposed_port.port,
                         )
                     )
             else:
@@ -190,29 +212,27 @@ class DockerSandboxService(SandboxService):
                     'Ports', {}
                 )
                 if port_bindings:
-                    for container_port, host_bindings in port_bindings.items():
+                    for container_port_key, host_bindings in port_bindings.items():
                         if host_bindings:
                             host_port = int(host_bindings[0]['HostPort'])
                             matching_port = next(
                                 (
                                     ep
                                     for ep in self.exposed_ports
-                                    if container_port == f'{ep.container_port}/tcp'
+                                    if container_port_key == f'{ep.port}/tcp'
                                 ),
                                 None,
                             )
                             if matching_port:
-                                url = self.container_url_pattern.format(port=host_port)
-
-                                # VSCode URLs require the api_key and working dir
-                                if matching_port.name == VSCODE:
-                                    url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
-
+                                url = self._build_exposed_url(
+                                    matching_port, host_port, session_api_key,
+                                    container.attrs['Config']['WorkingDir']
+                                )
                                 exposed_urls.append(
                                     ExposedUrl(
                                         name=matching_port.name,
                                         url=url,
-                                        port=matching_port.container_port,
+                                        port=matching_port.port,
                                     )
                                 )
 
@@ -426,14 +446,14 @@ class DockerSandboxService(SandboxService):
         if self.use_host_network:
             # Host network mode: container ports are directly accessible
             for exposed_port in self.exposed_ports:
-                env_vars[exposed_port.name] = str(exposed_port.container_port)
+                env_vars[exposed_port.name] = str(exposed_port.port)
         else:
             # Bridge network mode: map container ports to random host ports
             port_mappings = {}
             for exposed_port in self.exposed_ports:
                 host_port = self._find_unused_port()
-                port_mappings[exposed_port.container_port] = host_port
-                env_vars[exposed_port.name] = str(exposed_port.container_port)
+                port_mappings[exposed_port.port] = host_port
+                env_vars[exposed_port.name] = str(exposed_port.port)
 
         # Prepare labels
         labels = {
@@ -589,38 +609,29 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
         default_factory=lambda: [
             ExposedPort(
                 name=AGENT_SERVER,
-                description=(
-                    'The port on which the agent server runs within the container'
-                ),
-                container_port=8000,
+                description='The port on which the agent server runs within the container',
+                port=8000,
             ),
             ExposedPort(
                 name=VSCODE,
-                description=(
-                    'The port on which the VSCode server runs within the container'
-                ),
-                container_port=8001,
+                description='The port on which the VSCode server runs within the container',
+                port=8001,
             ),
             ExposedPort(
                 name=SSH,
-                description=(
-                    'The port on which the SSH server runs for local VSCode Remote-SSH access'
-                ),
-                container_port=2222,
+                description='The port on which the SSH server runs for local VSCode Remote-SSH access',
+                port=2222,
+                url_template='ssh://{host}:{port}',
             ),
             ExposedPort(
                 name=WORKER_1,
-                description=(
-                    'The first port on which the agent should start application servers.'
-                ),
-                container_port=8011,
+                description='The first port on which the agent should start application servers.',
+                port=8011,
             ),
             ExposedPort(
                 name=WORKER_2,
-                description=(
-                    'The second port on which the agent should start application servers.'
-                ),
-                container_port=8012,
+                description='The second port on which the agent should start application servers.',
+                port=8012,
             ),
         ]
     )
