@@ -52,8 +52,8 @@ class DefaultUserAuth(UserAuth):
     _session_cookie: tuple[str, str] | None = field(default=None, repr=False)
 
     async def get_user_id(self) -> str | None:
-        if self._better_auth_user:
-            return self._better_auth_user.get('id')
+        # Single-user deployment; V1 OSS storage doesn't track per-user
+        # ownership, so returning an id only makes owner checks fail.
         return None
 
     async def get_user_email(self) -> str | None:
