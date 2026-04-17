@@ -7,8 +7,7 @@ import { useUpdateSecret } from "#/hooks/mutation/use-update-secret";
 import { SettingsInput } from "../settings-input";
 import { cn } from "#/utils/utils";
 import { BrandButton } from "../brand-button";
-import { useGetSecrets } from "#/hooks/query/use-get-secrets";
-import { GetSecretsResponse } from "#/api/secrets-service.types";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { OptionalTag } from "../optional-tag";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
@@ -27,7 +26,7 @@ export function SecretForm({
   const { t } = useTranslation();
   const { organizationId } = useSelectedOrganizationId();
 
-  const { data: secrets } = useGetSecrets();
+  const { data: secrets } = useSearchSecrets();
   const { mutate: createSecret } = useCreateSecret();
   const { mutate: updateSecret } = useUpdateSecret();
 
@@ -41,6 +40,16 @@ export function SecretForm({
         ?.description?.trim()) ||
     "";
 
+  const invalidateSecrets = () => {
+    // Invalidate both the new infinite query and the legacy query for compatibility
+    queryClient.invalidateQueries({
+      queryKey: ["secrets-search"],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["secrets", organizationId],
+    });
+  };
+
   const handleCreateSecret = (
     name: string,
     value: string,
@@ -50,40 +59,9 @@ export function SecretForm({
       { name, value, description },
       {
         onSettled: onCancel,
-        onSuccess: async () => {
-          await queryClient.invalidateQueries({
-            queryKey: ["secrets", organizationId],
-          });
-        },
+        onSuccess: invalidateSecrets,
       },
     );
-  };
-
-  const updateSecretOptimistically = (
-    oldName: string,
-    name: string,
-    description?: string,
-  ) => {
-    queryClient.setQueryData<GetSecretsResponse["custom_secrets"]>(
-      ["secrets", organizationId],
-      (oldSecrets) => {
-        if (!oldSecrets) return [];
-        return oldSecrets.map((secret) => {
-          if (secret.name === oldName) {
-            return {
-              ...secret,
-              name,
-              description,
-            };
-          }
-          return secret;
-        });
-      },
-    );
-  };
-
-  const revertOptimisticUpdate = () => {
-    queryClient.invalidateQueries({ queryKey: ["secrets", organizationId] });
   };
 
   const handleEditSecret = (
@@ -91,12 +69,11 @@ export function SecretForm({
     name: string,
     description?: string,
   ) => {
-    updateSecretOptimistically(secretToEdit, name, description);
     updateSecret(
       { secretToEdit, name, description },
       {
         onSettled: onCancel,
-        onError: revertOptimisticUpdate,
+        onSuccess: invalidateSecrets,
       },
     );
   };
