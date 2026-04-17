@@ -11,13 +11,11 @@ The service is optimized for high-traffic with:
 """
 
 import uuid
-from enum import Enum
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from openhands.integrations.service_types import ProviderType
-
 
 # Default patches for constants
 CONSTANT_PATCHES = {
