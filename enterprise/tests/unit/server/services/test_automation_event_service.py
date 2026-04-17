@@ -16,10 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
-# Local copy of ProviderType enum for testing without full openhands dependencies
-class ProviderType(Enum):
-    GITHUB = 'github'
+from openhands.integrations.service_types import ProviderType
 
 
 # Default patches for constants

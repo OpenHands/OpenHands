@@ -201,7 +201,7 @@ class AutomationEventService:
         """
         # Compare using .value to handle different ProviderType enum instances
         # (e.g., test mocks may use a different enum class with the same values)
-        if provider.value == ProviderType.GITHUB.value:
+        if provider == ProviderType.GITHUB:
             repo = payload.get('repository', {})
             owner = repo.get('owner', {})
             return owner.get('login'), owner.get('type'), owner.get('id')
