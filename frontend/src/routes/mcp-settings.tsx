@@ -157,7 +157,7 @@ function MCPSettingsScreen() {
   }
 
   return (
-    <div className="h-full max-w-[1000px] mx-auto flex flex-col px-6 gap-6 pb-8">
+    <div className="h-full flex flex-col gap-6 pb-8">
       <div className="flex justify-between items-center">
         <div>
           <Typography.H2 className="mb-2">
