@@ -1,6 +1,8 @@
 import { QueryClient } from "@tanstack/react-query";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 import { SandboxService } from "#/api/sandbox-service/sandbox-service.api";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 
 /**
  * Fetches a V1 conversation's sandbox_id and conversation_url
@@ -93,20 +95,20 @@ export const resumeV1Conversation = async (conversationId: string) => {
 export const updateConversationSandboxStatusInCache = (
   queryClient: QueryClient,
   conversationId: string,
-  sandbox_status: string,
+  sandbox_status: V1SandboxStatus,
 ): void => {
   // Update the individual conversation cache
-  queryClient.setQueryData<{ status: string }>(
+  queryClient.setQueryData<V1AppConversation | null>(
     ["user", "conversation", conversationId],
     (oldData) => {
       if (!oldData) return oldData;
-      let status = sandbox_status;
-      if (status === "PAUSED") {
-        status = "STOPPED";
-      } else if (status === "MISSING") {
-        status = "ARCHIVED";
-      }
-      return { ...oldData, status };
+
+      return {
+        ...oldData,
+        sandbox_status,
+        execution_status:
+          sandbox_status === "RUNNING" ? oldData.execution_status : null,
+      };
     },
   );
 

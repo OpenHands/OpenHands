@@ -12,7 +12,10 @@ from fastapi.responses import JSONResponse
 from server.auth.saas_user_auth import SaasUserAuth
 from server.models.user_models import SaasUserInfo
 
-from openhands.app_server.config import depends_user_context
+from openhands.app_server.config import (
+    depends_user_context,
+    resolve_provider_llm_base_url,
+)
 from openhands.app_server.sandbox.session_auth import validate_session_key_ownership
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_context import UserContext
@@ -42,8 +45,9 @@ def _inject_sdk_compat_fields(
     """
     agent_settings = content.get('agent_settings') or {}
     llm = agent_settings.get('llm') or {}
-    content['llm_model'] = llm.get('model')
-    content['llm_base_url'] = llm.get('base_url')
+    model = llm.get('model')
+    content['llm_model'] = model
+    content['llm_base_url'] = resolve_provider_llm_base_url(model, llm.get('base_url'))
     if include_api_key:
         content['llm_api_key'] = llm.get('api_key')
     content['mcp_config'] = agent_settings.get('mcp_config')
