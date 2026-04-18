@@ -126,25 +126,28 @@ check-tmux:
 
 check-poetry:
 	@echo "$(YELLOW)Checking Poetry installation...$(RESET)"
-	@if command -v poetry > /dev/null; then \
+	@if [ -z "$(PYTHON)" ]; then \
+		echo "$(RED)A compatible Python interpreter (>= $(PYTHON_MIN_VERSION), < $(PYTHON_MAX_VERSION)) is required. Please install Python 3.12 or 3.13 to continue.$(RESET)"; \
+		exit 1; \
+	elif command -v poetry > /dev/null; then \
 		POETRY_VERSION=$(shell poetry --version 2>&1 | sed -E 's/Poetry \(version ([0-9]+\.[0-9]+\.[0-9]+)\)/\1/'); \
 		IFS='.' read -r -a POETRY_VERSION_ARRAY <<< "$$POETRY_VERSION"; \
 		if [ $${POETRY_VERSION_ARRAY[0]} -gt 1 ] || ([ $${POETRY_VERSION_ARRAY[0]} -eq 1 ] && [ $${POETRY_VERSION_ARRAY[1]} -ge 8 ]); then \
 			echo "$(BLUE)$(shell poetry --version) is already installed.$(RESET)"; \
 		else \
 			echo "$(RED)Poetry 1.8 or later is required. You can install poetry by running the following command, then adding Poetry to your PATH:"; \
-			echo "$(RED) curl -sSL https://install.python-poetry.org | $(if $(PYTHON),$(PYTHON),python3.13) -$(RESET)"; \
+			echo "$(RED) curl -sSL https://install.python-poetry.org | $(PYTHON) -$(RESET)"; \
 			echo "$(RED)More detail here: https://python-poetry.org/docs/#installing-with-the-official-installer$(RESET)"; \
 			exit 1; \
 		fi; \
 	else \
 		echo "$(RED)Poetry is not installed. You can install poetry by running the following command, then adding Poetry to your PATH:"; \
-		echo "$(RED) curl -sSL https://install.python-poetry.org | $(if $(PYTHON),$(PYTHON),python3.13) -$(RESET)"; \
+		echo "$(RED) curl -sSL https://install.python-poetry.org | $(PYTHON) -$(RESET)"; \
 		echo "$(RED)More detail here: https://python-poetry.org/docs/#installing-with-the-official-installer$(RESET)"; \
 		exit 1; \
 	fi
 
-install-python-dependencies:
+install-python-dependencies: check-python
 	@echo "$(GREEN)Installing Python dependencies...$(RESET)"
 	@if [ -z "${TZ}" ]; then \
 		echo "Defaulting TZ (timezone) to UTC"; \
