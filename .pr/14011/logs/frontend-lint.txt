@@ -1,0 +1,32 @@
+
+> openhands-frontend@1.6.0 prelint
+> npm run make-i18n
+
+
+> openhands-frontend@1.6.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+
+> openhands-frontend@1.6.0 lint
+> npm run typecheck && eslint src --ext .ts,.tsx,.js && prettier --check src/**/*.{ts,tsx}
+
+
+> openhands-frontend@1.6.0 typecheck
+> react-router typegen && tsc
+
+
+/workspace/project/OpenHands/frontend/src/hooks/query/use-repository-branches.ts
+  49:5  warning  Object rest destructuring on a query will observe all changes to the query, leading to excessive re-renders  @tanstack/query/no-rest-destructuring
+
+/workspace/project/OpenHands/frontend/src/utils/conversation-local-storage.ts
+   91:5  warning  Unexpected console statement  no-console
+  108:5  warning  Unexpected console statement  no-console
+
+/workspace/project/OpenHands/frontend/src/utils/sdk-settings-field-metadata.test.ts
+  13:22  warning  Unexpected console statement  no-console
+  22:3   warning  Unexpected console statement  no-console
+
+✖ 5 problems (0 errors, 5 warnings)
+
+Checking formatting...
+All matched files use Prettier code style!

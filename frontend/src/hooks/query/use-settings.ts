@@ -13,6 +13,7 @@ import {
   pickNullableString,
 } from "#/utils/settings-value-pickers";
 import { parseMcpConfig } from "#/utils/mcp-config";
+import { SETTINGS_QUERY_KEYS } from "./query-keys";
 
 /** Look up a value in a nested object by dotted key path. */
 const lookupNested = (obj: Record<string, unknown>, key: string): unknown => {
@@ -130,7 +131,7 @@ export const useSettings = (scope: SettingsScope = "personal") => {
   const isOss = config?.app_mode === "oss";
 
   const query = useQuery({
-    queryKey: ["settings", scope, organizationId],
+    queryKey: SETTINGS_QUERY_KEYS.byScope(scope, organizationId),
     queryFn: () => getSettingsQueryFn(scope, organizationId),
     retry: (_, error) => error.status !== 404,
     refetchOnWindowFocus: false,

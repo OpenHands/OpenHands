@@ -1,0 +1,6 @@
+
+/workspace/project/OpenHands/frontend/src/routes/user-settings.tsx
+  1:27  error  Use SETTINGS_QUERY_KEYS helpers instead of raw settings query key arrays  no-restricted-syntax
+
+✖ 1 problem (1 error, 0 warnings)
+
