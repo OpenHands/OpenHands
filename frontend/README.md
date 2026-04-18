@@ -68,7 +68,7 @@ Or to run backend and frontend separately.
 make start-backend
 
 # Serve the frontend
-make start-frontend 
+make start-frontend
 # or
 cd frontend && npm start -- --port 3001
 ```
