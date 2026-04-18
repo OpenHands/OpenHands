@@ -124,6 +124,37 @@ function buildSettingsWithAdvancedToggle(
   return buildSettings({ ...overrides, agent_settings_schema: schema });
 }
 
+function buildSettingsWithAllToggle(
+  overrides: Partial<Settings> = {},
+): Settings {
+  const schema = structuredClone(
+    overrides.agent_settings_schema ??
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+  );
+  const llmSection = schema.sections.find((section) => section.key === "llm");
+
+  if (
+    llmSection &&
+    !llmSection.fields.some((field) => field.key === "llm.temperature")
+  ) {
+    llmSection.fields.push({
+      key: "llm.temperature",
+      label: "Temperature",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "number",
+      default: null,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+  }
+
+  return buildSettings({ ...overrides, agent_settings_schema: schema });
+}
+
 async function selectProvider(providerLabel: "OpenHands" | "OpenAI") {
   const providerInput = screen.getByTestId("llm-provider-input");
   await userEvent.click(providerInput);
@@ -234,6 +265,46 @@ describe("LlmSettingsScreen", () => {
     await screen.findByTestId("llm-settings-form-advanced");
     expect(screen.getByTestId("llm-custom-model-input")).toBeInTheDocument();
     expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
+  });
+
+  it("shows the All toggle in OSS mode when the LLM schema has minor settings", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAllToggle(),
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(screen.getByTestId("sdk-section-all-toggle")).toBeInTheDocument();
+  });
+
+  it("hides the All toggle in SaaS mode even when minor LLM settings are configured", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAllToggle({
+        agent_settings: {
+          llm: {
+            model: "openai/gpt-4o",
+            temperature: 0.2,
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "saas", scope: "org" });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      screen.queryByTestId("sdk-section-all-toggle"),
+    ).not.toBeInTheDocument();
+
+    const advancedToggle = screen.queryByTestId("sdk-section-advanced-toggle");
+    if (advancedToggle) {
+      await userEvent.click(advancedToggle);
+    }
+
+    expect(
+      screen.queryByTestId("sdk-settings-llm.temperature"),
+    ).not.toBeInTheDocument();
   });
 
   it("uses schema defaults for custom-rendered advanced fields", async () => {

@@ -49,6 +49,17 @@ const getLessDetailedView = (
 ): SettingsView =>
   VIEW_ORDER[nextView] < VIEW_ORDER[currentView] ? nextView : currentView;
 
+const normalizeView = (
+  view: SettingsView,
+  allowAllView: boolean,
+): SettingsView => {
+  if (allowAllView || view !== "all") {
+    return view;
+  }
+
+  return "advanced";
+};
+
 export interface SdkSectionHeaderProps {
   values: SettingsFormValues;
   isDisabled: boolean;
@@ -75,6 +86,7 @@ export function SdkSectionPage({
   buildPayload,
   onSaveSuccess,
   getInitialView,
+  allowAllView = true,
   testId = "sdk-section-settings-screen",
 }: {
   sectionKeys: string[];
@@ -97,6 +109,7 @@ export function SdkSectionPage({
     settings: Settings,
     filteredSchema: SettingsSchema,
   ) => SettingsView;
+  allowAllView?: boolean;
   testId?: string;
 }) {
   const { t } = useTranslation();
@@ -149,7 +162,7 @@ export function SdkSectionPage({
   }, [schema, stableSectionKeys]);
 
   const showAdvanced = hasAdvancedSettings(filteredSchema);
-  const showAll = hasMinorSettings(filteredSchema);
+  const showAll = allowAllView && hasMinorSettings(filteredSchema);
 
   const initialValues = React.useMemo(() => {
     if (!settings || !filteredSchema) return null;
@@ -162,10 +175,13 @@ export function SdkSectionPage({
 
   const initialView = React.useMemo(() => {
     if (!settings || !filteredSchema) return null;
-    return getInitialView
+
+    const resolvedInitialView = getInitialView
       ? getInitialView(settings, filteredSchema)
       : inferInitialView(settings, filteredSchema, settingsSource);
-  }, [settings, filteredSchema, getInitialView, settingsSource]);
+
+    return normalizeView(resolvedInitialView, allowAllView);
+  }, [settings, filteredSchema, getInitialView, settingsSource, allowAllView]);
 
   React.useEffect(() => {
     hasHydratedViewRef.current = false;

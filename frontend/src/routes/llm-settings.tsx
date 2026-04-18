@@ -521,6 +521,7 @@ export function LlmSettingsScreen({
       buildPayload={buildPayload}
       onSaveSuccess={() => setSearchApiKeyDirty(false)}
       getInitialView={getInitialView}
+      allowAllView={!isSaasMode}
       testId="llm-settings-screen"
     />
   );
