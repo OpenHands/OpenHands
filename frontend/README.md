@@ -68,7 +68,8 @@ Or to run backend and frontend separately.
 make start-backend
 
 # Serve the frontend
-make start-frontend or
+make start-frontend 
+# or
 cd frontend && npm start -- --port 3001
 ```
 
@@ -176,7 +177,7 @@ npm run test:coverage
 3. **Mocking**
    - We test components that make network requests by mocking those requests with Mock Service Worker (MSW)
    - Use `vi.fn()` to create mock functions for callbacks and event handlers
-   - Mock external dependencies and API calls (more info)[https://mswjs.io/docs/getting-started]
+   - Mock external dependencies and API calls [more info](https://mswjs.io/docs/getting-started)
    - Verify mock function calls using `.toHaveBeenCalledWith()`, `.toHaveBeenCalledTimes()`
 
 4. **Accessibility Testing**
@@ -251,4 +252,5 @@ Please read the [CONTRIBUTING.md](../CONTRIBUTING.md) file for details on our co
 
 ## Troubleshooting
 
-TODO
+- **Node Version Issues**: Ensure you are using Node.js v22.12.x or later. You can check your version with `node --version`.
+- **Frontend Start Failures**: If Vite fails to start, try removing your `node_modules` directory and reinstalling dependencies: `rm -rf node_modules && npm install`.
