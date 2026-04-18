@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
 from fastapi import Request
-from pydantic import PrivateAttr
+from pydantic import PrivateAttr, SecretStr
 
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
@@ -96,6 +96,8 @@ class AuthUserContext(UserContext):
         provider_handler = await self.get_provider_handler()
         service = provider_handler.get_service(provider_type)
         token = await service.get_latest_token()
+        if isinstance(token, SecretStr):
+            return token.get_secret_value()
         return token
 
     async def get_secrets(self) -> dict[str, SecretSource]:

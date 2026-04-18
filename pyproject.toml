@@ -81,7 +81,7 @@ dependencies = [
   "python-dotenv",
   "python-frontmatter>=1.1",
   "python-json-logger>=3.2.1",
-  "python-multipart>=0.0.22",
+  "python-multipart>=0.0.26",
   "python-pptx",
   "python-socketio==5.14",
   "pythonnet; sys_platform=='win32'",
@@ -186,7 +186,7 @@ html2text = "*"
 deprecated = "*"
 pexpect = "*"
 jinja2 = "^3.1.6"
-python-multipart = ">=0.0.22"
+python-multipart = ">=0.0.26"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = ">=0.12.1,<1.1.0"

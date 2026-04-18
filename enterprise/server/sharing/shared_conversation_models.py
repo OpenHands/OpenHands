@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import Enum
 
 # Simplified imports to avoid dependency chain issues
 # from openhands.integrations.service_types import ProviderType
@@ -40,17 +39,3 @@ class SharedConversation(BaseModel):
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
-
-
-class SharedConversationSortOrder(Enum):
-    CREATED_AT = 'CREATED_AT'
-    CREATED_AT_DESC = 'CREATED_AT_DESC'
-    UPDATED_AT = 'UPDATED_AT'
-    UPDATED_AT_DESC = 'UPDATED_AT_DESC'
-    TITLE = 'TITLE'
-    TITLE_DESC = 'TITLE_DESC'
-
-
-class SharedConversationPage(BaseModel):
-    items: list[SharedConversation]
-    next_page_id: str | None = None
