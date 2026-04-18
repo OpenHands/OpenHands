@@ -11,7 +11,15 @@ DEFAULT_WORKSPACE_DIR = "./workspace"
 DEFAULT_MODEL = "gpt-4o"
 CONFIG_FILE = config.toml
 PRE_COMMIT_CONFIG_PATH = "./dev_config/python/.pre-commit-config.yaml"
-PYTHON_VERSION = 3.12
+PYTHON_MIN_VERSION = 3.12
+PYTHON_MAX_VERSION = 3.14
+PYTHON_CANDIDATES ?= python3.13 python3.12 python3
+PYTHON ?= $(shell for cmd in $(PYTHON_CANDIDATES); do \
+	if command -v $$cmd > /dev/null 2>&1 && $$cmd -c 'import sys; raise SystemExit(0 if ((3, 12) <= sys.version_info[:2] < (3, 14)) else 1)' > /dev/null 2>&1; then \
+		echo $$cmd; \
+		exit 0; \
+	fi; \
+ done)
 KIND_CLUSTER_NAME = "local-hands"
 
 # ANSI color codes
@@ -63,10 +71,10 @@ check-system:
 
 check-python:
 	@echo "$(YELLOW)Checking Python installation...$(RESET)"
-	@if command -v python$(PYTHON_VERSION) > /dev/null; then \
-		echo "$(BLUE)$(shell python$(PYTHON_VERSION) --version) is already installed.$(RESET)"; \
+	@if [ -n "$(PYTHON)" ]; then \
+		echo "$(BLUE)$$($(PYTHON) --version) is already installed (using $(PYTHON)).$(RESET)"; \
 	else \
-		echo "$(RED)Python $(PYTHON_VERSION) is not installed. Please install Python $(PYTHON_VERSION) to continue.$(RESET)"; \
+		echo "$(RED)A compatible Python interpreter (>= $(PYTHON_MIN_VERSION), < $(PYTHON_MAX_VERSION)) is required. Please install Python 3.12 or 3.13 to continue.$(RESET)"; \
 		exit 1; \
 	fi
 
@@ -125,13 +133,13 @@ check-poetry:
 			echo "$(BLUE)$(shell poetry --version) is already installed.$(RESET)"; \
 		else \
 			echo "$(RED)Poetry 1.8 or later is required. You can install poetry by running the following command, then adding Poetry to your PATH:"; \
-			echo "$(RED) curl -sSL https://install.python-poetry.org | python$(PYTHON_VERSION) -$(RESET)"; \
+			echo "$(RED) curl -sSL https://install.python-poetry.org | $(if $(PYTHON),$(PYTHON),python3.13) -$(RESET)"; \
 			echo "$(RED)More detail here: https://python-poetry.org/docs/#installing-with-the-official-installer$(RESET)"; \
 			exit 1; \
 		fi; \
 	else \
 		echo "$(RED)Poetry is not installed. You can install poetry by running the following command, then adding Poetry to your PATH:"; \
-		echo "$(RED) curl -sSL https://install.python-poetry.org | python$(PYTHON_VERSION) -$(RESET)"; \
+		echo "$(RED) curl -sSL https://install.python-poetry.org | $(if $(PYTHON),$(PYTHON),python3.13) -$(RESET)"; \
 		echo "$(RED)More detail here: https://python-poetry.org/docs/#installing-with-the-official-installer$(RESET)"; \
 		exit 1; \
 	fi
@@ -142,7 +150,7 @@ install-python-dependencies:
 		echo "Defaulting TZ (timezone) to UTC"; \
 		export TZ="UTC"; \
 	fi
-	poetry env use python$(PYTHON_VERSION)
+	poetry env use $(PYTHON)
 	@if [ "$(shell uname)" = "Darwin" ]; then \
 		echo "$(BLUE)Installing chroma-hnswlib...$(RESET)"; \
 		export HNSWLIB_NO_NATIVE=1; \
