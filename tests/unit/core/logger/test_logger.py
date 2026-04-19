@@ -330,4 +330,3 @@ def test_uvicorn_configs_all_handlers_have_redact_filter():
                 f"Handler '{handler_name}' in {config_fn.__name__} is missing "
                 f"the 'redact_url_params' filter"
             )
-
