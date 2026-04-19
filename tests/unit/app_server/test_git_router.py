@@ -26,6 +26,7 @@ from openhands.integrations.service_types import (
     Branch,
     ProviderType,
     Repository,
+    SearchBranchesOutcome,
     SuggestedTask,
     TaskType,
 )
@@ -708,12 +709,15 @@ class TestSearchBranches:
         """Test that search branches are returned with pagination."""
         # Arrange
         mock_handler = MagicMock()
-        mock_handler.search_branches = AsyncMock(
-            return_value=[
-                Branch(name='main', commit_sha='abc123', protected=False),
-                Branch(name='develop', commit_sha='def456', protected=False),
-                Branch(name='feature-branch', commit_sha='ghi789', protected=False),
-            ]
+        mock_handler.search_branches_page = AsyncMock(
+            return_value=SearchBranchesOutcome(
+                branches=[
+                    Branch(name='main', commit_sha='abc123', protected=False),
+                    Branch(name='develop', commit_sha='def456', protected=False),
+                    Branch(name='feature-branch', commit_sha='ghi789', protected=False),
+                ],
+                github_next_after_cursor=None,
+            )
         )
         mock_handler_cls.return_value = mock_handler
 
@@ -746,7 +750,11 @@ class TestSearchBranches:
         """Test that all parameters are passed through to the provider."""
         # Arrange
         mock_handler = MagicMock()
-        mock_handler.search_branches = AsyncMock(return_value=[])
+        mock_handler.search_branches_page = AsyncMock(
+            return_value=SearchBranchesOutcome(
+                branches=[], github_next_after_cursor=None
+            )
+        )
         mock_handler_cls.return_value = mock_handler
 
         mock_context = _make_mock_user_context(
@@ -767,12 +775,49 @@ class TestSearchBranches:
         )
 
         # Assert
-        mock_handler.search_branches.assert_called_once()
-        call_kwargs = mock_handler.search_branches.call_args.kwargs
+        mock_handler.search_branches_page.assert_called_once()
+        call_kwargs = mock_handler.search_branches_page.call_args.kwargs
         assert call_kwargs.get('selected_provider') == ProviderType.GITHUB
         assert call_kwargs.get('repository') == 'user/repo'
         assert call_kwargs.get('query') == 'feature'
         assert call_kwargs.get('per_page') == 11  # limit + 1
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_search_branches_second_page_with_query(self, mock_handler_cls):
+        """Non-empty branch search supports page_id (REST providers use numeric pages)."""
+        mock_handler = MagicMock()
+        mock_handler.search_branches_page = AsyncMock(
+            return_value=SearchBranchesOutcome(
+                branches=[
+                    Branch(name='p2-a', commit_sha='1', protected=False),
+                    Branch(name='p2-b', commit_sha='2', protected=False),
+                ],
+                github_next_after_cursor=None,
+            )
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITLAB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        result = await search_branches(
+            provider=ProviderType.GITLAB,
+            repository='group/repo',
+            query='feat',
+            page_id=encode_page_id(2),
+            limit=10,
+            user_context=mock_context,
+        )
+
+        assert len(result.items) == 2
+        call_kwargs = mock_handler.search_branches_page.call_args.kwargs
+        assert call_kwargs.get('page') == 2
+        assert call_kwargs.get('after') is None
 
     def test_returns_401_when_no_provider_tokens(self, test_client):
         """Test that 401 is returned when no provider tokens."""

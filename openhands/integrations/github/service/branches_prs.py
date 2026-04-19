@@ -3,7 +3,11 @@ from openhands.integrations.github.queries import (
     search_branches_graphql_query,
 )
 from openhands.integrations.github.service.base import GitHubMixinBase
-from openhands.integrations.service_types import Branch, PaginatedBranchesResponse
+from openhands.integrations.service_types import (
+    Branch,
+    PaginatedBranchesResponse,
+    SearchBranchesOutcome,
+)
 
 
 class GitHubBranchesMixin(GitHubMixinBase):
@@ -100,27 +104,46 @@ class GitHubBranchesMixin(GitHubMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self,
+        repository: str,
+        query: str,
+        per_page: int = 30,
+        *,
+        page: int = 1,
+        after: str | None = None,
     ) -> list[Branch]:
         """Search branches by name using GitHub GraphQL with a partial query."""
-        # Require a non-empty query
-        if not query:
-            return []
+        out = await self.search_branches_with_continuation(
+            repository, query, per_page, after
+        )
+        return out.branches
 
-        # Clamp per_page to GitHub GraphQL limits
+    async def search_branches_with_continuation(
+        self,
+        repository: str,
+        query: str,
+        per_page: int = 30,
+        after: str | None = None,
+    ) -> SearchBranchesOutcome:
+        """Search branches and return one page plus optional GraphQL `after` cursor."""
+        if not query:
+            return SearchBranchesOutcome(branches=[], github_next_after_cursor=None)
+
         per_page = min(max(per_page, 1), 100)
 
-        # Extract owner and repo name from the repository string
         parts = repository.split('/')
         if len(parts) < 2:
-            return []
+            return SearchBranchesOutcome(branches=[], github_next_after_cursor=None)
+
         owner, name = parts[-2], parts[-1]
 
+        first = min(per_page, 100)
         variables = {
             'owner': owner,
             'name': name,
             'query': query or '',
-            'perPage': per_page,
+            'first': first,
+            'after': after,
         }
 
         try:
@@ -129,15 +152,17 @@ class GitHubBranchesMixin(GitHubMixinBase):
             )
         except Exception as e:
             logger.warning(f'Failed to search for branches: {e}')
-            # Fallback to empty result on any GraphQL error
-            return []
+            return SearchBranchesOutcome(branches=[], github_next_after_cursor=None)
 
         repo = result.get('data', {}).get('repository')
-        if not repo or not repo.get('refs'):
-            return []
+        refs_block = repo.get('refs') if repo else None
+        if not refs_block:
+            return SearchBranchesOutcome(branches=[], github_next_after_cursor=None)
 
+        edges = refs_block.get('edges') or []
         branches: list[Branch] = []
-        for node in repo['refs'].get('nodes', []):
+        for edge in edges:
+            node = edge.get('node') or {}
             bname = node.get('name') or ''
             target = node.get('target') or {}
             typename = target.get('__typename')
@@ -158,4 +183,11 @@ class GitHubBranchesMixin(GitHubMixinBase):
                 )
             )
 
-        return branches
+        page_info = refs_block.get('pageInfo') or {}
+        next_cursor: str | None = None
+        if edges and page_info.get('hasNextPage'):
+            next_cursor = edges[-1].get('cursor')
+
+        return SearchBranchesOutcome(
+            branches=branches, github_next_after_cursor=next_cursor
+        )

@@ -4,7 +4,11 @@ import pytest
 from pydantic import SecretStr
 
 from openhands.integrations.github.github_service import GitHubService
-from openhands.integrations.service_types import Branch, PaginatedBranchesResponse
+from openhands.integrations.service_types import (
+    Branch,
+    PaginatedBranchesResponse,
+    SearchBranchesOutcome,
+)
 
 
 @pytest.mark.asyncio
@@ -86,30 +90,37 @@ async def test_get_paginated_branches_github_no_next_page():
 async def test_search_branches_github_success_and_variables():
     service = GitHubService(token=SecretStr('t'))
 
-    # Prepare a fake GraphQL response structure
+    # Prepare a fake GraphQL response structure (Relay edges + pageInfo)
     graphql_result = {
         'data': {
             'repository': {
                 'refs': {
-                    'nodes': [
+                    'pageInfo': {'hasNextPage': False},
+                    'edges': [
                         {
-                            'name': 'feature/bar',
-                            'target': {
-                                '__typename': 'Commit',
-                                'oid': 'aaa111',
-                                'committedDate': '2024-01-05T10:00:00Z',
+                            'cursor': 'c1',
+                            'node': {
+                                'name': 'feature/bar',
+                                'target': {
+                                    '__typename': 'Commit',
+                                    'oid': 'aaa111',
+                                    'committedDate': '2024-01-05T10:00:00Z',
+                                },
+                                'branchProtectionRule': {},  # indicates protected
                             },
-                            'branchProtectionRule': {},  # indicates protected
                         },
                         {
-                            'name': 'chore/update',
-                            'target': {
-                                '__typename': 'Tag',
-                                'oid': 'should_be_ignored_for_commit',
+                            'cursor': 'c2',
+                            'node': {
+                                'name': 'chore/update',
+                                'target': {
+                                    '__typename': 'Tag',
+                                    'oid': 'should_be_ignored_for_commit',
+                                },
+                                'branchProtectionRule': None,
                             },
-                            'branchProtectionRule': None,
                         },
-                    ]
+                    ],
                 }
             }
         }
@@ -121,12 +132,12 @@ async def test_search_branches_github_success_and_variables():
 
         # per_page should be clamped to <= 100 when passed to GraphQL variables
         args, kwargs = mock_exec.call_args
-        _query = args[0]
         variables = args[1]
         assert variables['owner'] == 'foo'
         assert variables['name'] == 'bar'
         assert variables['query'] == 'fe'
-        assert 1 <= variables['perPage'] <= 100
+        assert variables['first'] == 100
+        assert variables['after'] is None
 
         assert len(branches) == 2
         b0, b1 = branches
@@ -140,6 +151,39 @@ async def test_search_branches_github_success_and_variables():
         assert b1.commit_sha == ''
         assert b1.last_push_date is None
         assert b1.protected is False
+
+
+@pytest.mark.asyncio
+async def test_search_branches_with_continuation_sets_next_cursor():
+    service = GitHubService(token=SecretStr('t'))
+    graphql_result = {
+        'data': {
+            'repository': {
+                'refs': {
+                    'pageInfo': {'hasNextPage': True},
+                    'edges': [
+                        {
+                            'cursor': 'curA',
+                            'node': {
+                                'name': 'a',
+                                'target': {'__typename': 'Commit', 'oid': '1'},
+                                'branchProtectionRule': None,
+                            },
+                        }
+                    ],
+                }
+            }
+        }
+    }
+    with patch.object(
+        service, 'execute_graphql_query', AsyncMock(return_value=graphql_result)
+    ):
+        out = await service.search_branches_with_continuation(
+            'o/r', query='a', per_page=10, after=None
+        )
+        assert isinstance(out, SearchBranchesOutcome)
+        assert len(out.branches) == 1
+        assert out.github_next_after_cursor == 'curA'
 
 
 @pytest.mark.asyncio

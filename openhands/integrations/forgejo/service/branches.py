@@ -65,10 +65,17 @@ class ForgejoBranchesMixin(ForgejoMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self,
+        repository: str,
+        query: str,
+        per_page: int = 30,
+        *,
+        page: int = 1,
+        after: str | None = None,
     ) -> list[Branch]:  # type: ignore[override]
+        del after
         all_branches = await self.get_branches(repository)
         lowered = query.lower()
-        return [branch for branch in all_branches if lowered in branch.name.lower()][
-            :per_page
-        ]
+        matches = [b for b in all_branches if lowered in b.name.lower()]
+        start = (page - 1) * per_page
+        return matches[start : start + per_page + 1]

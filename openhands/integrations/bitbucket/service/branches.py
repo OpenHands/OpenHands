@@ -84,9 +84,16 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self,
+        repository: str,
+        query: str,
+        per_page: int = 30,
+        *,
+        page: int = 1,
+        after: str | None = None,
     ) -> list[Branch]:
         """Search branches by name using Bitbucket API with `q` param."""
+        del after  # Bitbucket Cloud uses numeric pages only
         parts = repository.split('/')
         if len(parts) < 2:
             raise ValueError(f'Invalid repository name: {repository}')
@@ -98,6 +105,7 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
         # Bitbucket filtering: name ~ "query"
         params = {
             'pagelen': per_page,
+            'page': page,
             'q': f'name~"{query}"',
             'sort': '-target.date',
         }

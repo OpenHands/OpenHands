@@ -103,6 +103,7 @@ async def test_search_branches_gitlab_uses_search_param():
         assert 'repository/branches' in url
         assert params['per_page'] == '50'
         assert params['search'] == 'feat'
+        assert params['page'] == '1'
 
         assert len(branches) == 2
         assert branches[0] == Branch(

@@ -7,6 +7,7 @@ from the page_id contents, as this may change in the future.
 """
 
 import base64
+import json
 
 
 def encode_page_id(value: int) -> str:
@@ -79,3 +80,40 @@ def paginate_results(
         next_page_id = encode_page_id(end_offset)
 
     return paginated_items, next_page_id
+
+
+def encode_github_branch_search_continuation(after_cursor: str) -> str:
+    """Encode a GitHub GraphQL `after` cursor for branch search pagination.
+
+    Tokens are opaque to API clients; do not parse or construct them manually.
+    """
+    payload = json.dumps({'a': after_cursor}, separators=(',', ':'))
+    return base64.urlsafe_b64encode(payload.encode()).decode().rstrip('=')
+
+
+def decode_branch_search_continuation(
+    page_id: str | None,
+) -> tuple[int, str | None]:
+    """Decode branch search `page_id` for `/git/branches/search`.
+
+    Returns:
+        (page, github_after_cursor). For REST-based providers, `page` is 1-based.
+        For GitHub GraphQL continuation, `github_after_cursor` is set and `page`
+        is ignored by the integration layer.
+    """
+    if not page_id:
+        return (1, None)
+
+    padded = page_id + '=' * (4 - len(page_id) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        # GitHub cursor token: JSON object with key "a"
+        if raw.startswith('{'):
+            data = json.loads(raw)
+            if isinstance(data, dict) and 'a' in data and isinstance(data['a'], str):
+                return (1, data['a'])
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, KeyError):
+        pass
+
+    dec = decode_page_id(page_id)
+    return (dec if dec is not None else 1, None)

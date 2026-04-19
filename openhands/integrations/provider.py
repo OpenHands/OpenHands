@@ -39,6 +39,7 @@ from openhands.integrations.service_types import (
     ProviderType,
     Repository,
     ResourceNotFoundError,
+    SearchBranchesOutcome,
     SuggestedTask,
     TokenResponse,
     User,
@@ -324,32 +325,69 @@ class ProviderHandler:
 
         return tasks
 
+    async def search_branches_page(
+        self,
+        selected_provider: ProviderType | None,
+        repository: str,
+        query: str,
+        per_page: int,
+        *,
+        page: int = 1,
+        after: str | None = None,
+    ) -> SearchBranchesOutcome:
+        """Search branches with pagination metadata (used by V1 git router)."""
+        try:
+            if selected_provider:
+                service = self.get_service(selected_provider)
+                if selected_provider == ProviderType.GITHUB:
+                    return await service.search_branches_with_continuation(  # type: ignore[attr-defined]
+                        repository, query, per_page, after
+                    )
+                branches = await service.search_branches(
+                    repository, query, per_page, page=page, after=after
+                )
+                return SearchBranchesOutcome(
+                    branches=branches, github_next_after_cursor=None
+                )
+
+            repo_details = await self.verify_repo_provider(repository)
+            service = self.get_service(repo_details.git_provider)
+            if repo_details.git_provider == ProviderType.GITHUB:
+                return await service.search_branches_with_continuation(  # type: ignore[attr-defined]
+                    repository, query, per_page, after
+                )
+            branches = await service.search_branches(
+                repository, query, per_page, page=page, after=after
+            )
+            return SearchBranchesOutcome(
+                branches=branches, github_next_after_cursor=None
+            )
+        except Exception as e:
+            logger.warning(
+                f'Error searching branches for {repository} (provider={selected_provider}): {e}'
+            )
+            return SearchBranchesOutcome(branches=[], github_next_after_cursor=None)
+
     async def search_branches(
         self,
         selected_provider: ProviderType | None,
         repository: str,
         query: str,
         per_page: int = 30,
+        *,
+        page: int = 1,
+        after: str | None = None,
     ) -> list[Branch]:
         """Search for branches within a repository using the appropriate provider service."""
-        if selected_provider:
-            service = self.get_service(selected_provider)
-            try:
-                return await service.search_branches(repository, query, per_page)
-            except Exception as e:
-                logger.warning(
-                    f'Error searching branches from selected provider {selected_provider}: {e}'
-                )
-                return []
-
-        # If provider not specified, determine provider by verifying repository access
-        try:
-            repo_details = await self.verify_repo_provider(repository)
-            service = self.get_service(repo_details.git_provider)
-            return await service.search_branches(repository, query, per_page)
-        except Exception as e:
-            logger.warning(f'Error searching branches for {repository}: {e}')
-            return []
+        outcome = await self.search_branches_page(
+            selected_provider,
+            repository,
+            query,
+            per_page,
+            page=page,
+            after=after,
+        )
+        return outcome.branches
 
     async def search_repositories(
         self,

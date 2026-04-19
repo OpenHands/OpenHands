@@ -154,6 +154,13 @@ class PaginatedBranchesResponse(BaseModel):
     total_count: int | None = None  # Some APIs don't provide total count
 
 
+class SearchBranchesOutcome(BaseModel):
+    """One page of branch search results, with optional GitHub GraphQL continuation."""
+
+    branches: list[Branch]
+    github_next_after_cursor: str | None = None
+
+
 class Repository(BaseModel):
     id: str
     full_name: str
@@ -527,7 +534,13 @@ class GitService(Protocol):
         """Get branches for a repository with pagination"""
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self,
+        repository: str,
+        query: str,
+        per_page: int = 30,
+        *,
+        page: int = 1,
+        after: str | None = None,
     ) -> list[Branch]:
         """Search for branches within a repository"""
 
