@@ -155,6 +155,14 @@ function buildSettingsWithAllToggle(
   return buildSettings({ ...overrides, agent_settings_schema: schema });
 }
 
+function buildSettingsWithAdvancedAndAllToggles(
+  overrides: Partial<Settings> = {},
+): Settings {
+  return buildSettingsWithAllToggle(
+    buildSettingsWithAdvancedToggle(overrides) as Partial<Settings>,
+  );
+}
+
 async function selectProvider(providerLabel: "OpenHands" | "OpenAI") {
   const providerInput = screen.getByTestId("llm-provider-input");
   await userEvent.click(providerInput);
@@ -267,23 +275,30 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
   });
 
-  it("shows the All toggle in OSS mode when the LLM schema has minor settings", async () => {
+  it("shows Advanced and All toggles in OSS mode when the LLM schema has major and minor settings", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettingsWithAllToggle(),
+      buildSettingsWithAdvancedAndAllToggles(),
     );
 
     renderLlmSettingsScreen({ appMode: "oss" });
 
     await screen.findByTestId("llm-settings-screen");
+    expect(
+      screen.getByTestId("sdk-section-advanced-toggle"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("sdk-section-all-toggle")).toBeInTheDocument();
   });
 
-  it("hides the All toggle in SaaS mode even when minor LLM settings are configured", async () => {
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettingsWithAllToggle({
+  it("keeps Advanced visible but hides All in SaaS mode when minor LLM settings are configured", async () => {
+    vi.spyOn(
+      organizationService,
+      "getOrganizationAgentSettings",
+    ).mockResolvedValue(
+      buildSettingsWithAdvancedAndAllToggles({
         agent_settings: {
           llm: {
             model: "openai/gpt-4o",
+            timeout: 30,
             temperature: 0.2,
           },
         },
@@ -294,14 +309,15 @@ describe("LlmSettingsScreen", () => {
 
     await screen.findByTestId("llm-settings-screen");
     expect(
+      screen.getByTestId("sdk-section-advanced-toggle"),
+    ).toBeInTheDocument();
+    expect(
       screen.queryByTestId("sdk-section-all-toggle"),
     ).not.toBeInTheDocument();
 
-    const advancedToggle = screen.queryByTestId("sdk-section-advanced-toggle");
-    if (advancedToggle) {
-      await userEvent.click(advancedToggle);
-    }
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
 
+    expect(screen.getByTestId("sdk-settings-llm.timeout")).toBeInTheDocument();
     expect(
       screen.queryByTestId("sdk-settings-llm.temperature"),
     ).not.toBeInTheDocument();
