@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import OptionService from "#/api/option-service/option-service.api";
 import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
+import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "./query-keys";
 
 interface UseConfigOptions {
   enabled?: boolean;
@@ -10,10 +11,9 @@ export const useConfig = (options?: UseConfigOptions) => {
   const isOnIntermediatePage = useIsOnIntermediatePage();
 
   return useQuery({
-    queryKey: ["web-client-config"],
+    queryKey: QUERY_KEYS.WEB_CLIENT_CONFIG,
     queryFn: OptionService.getConfig,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 15, // 15 minutes,
+    ...CONFIG_CACHE_OPTIONS,
     enabled: options?.enabled ?? !isOnIntermediatePage,
   });
 };

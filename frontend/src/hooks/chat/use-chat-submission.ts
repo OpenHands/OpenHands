@@ -36,23 +36,6 @@ export const useChatSubmission = (
     resetManualResize?.();
   }, [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize]);
 
-  // Resume agent button click handler
-  const handleResumeAgent = useCallback(() => {
-    const message = chatInputRef.current?.innerText || "continue";
-
-    onSubmit(message.trim());
-
-    // Clear the input
-    clearTextContent(chatInputRef.current);
-    clearFileInput(fileInputRef.current);
-
-    // Reset height and show suggestions again
-    smartResize();
-
-    // Reset manual resize state for next message
-    resetManualResize?.();
-  }, [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize]);
-
   // Handle stop button click
   const handleStop = useCallback((onStop?: () => void) => {
     if (onStop) {
@@ -62,7 +45,6 @@ export const useChatSubmission = (
 
   return {
     handleSubmit,
-    handleResumeAgent,
     handleStop,
   };
 };

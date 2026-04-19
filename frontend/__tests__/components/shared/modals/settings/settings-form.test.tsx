@@ -6,6 +6,7 @@ import { screen } from "@testing-library/react";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SettingsForm } from "#/components/shared/modals/settings/settings-form";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import { getAgentSettingValue } from "#/utils/sdk-settings-schema";
 
 describe("SettingsForm", () => {
   const onCloseMock = vi.fn();
@@ -14,13 +15,7 @@ describe("SettingsForm", () => {
   const RouteStub = createRoutesStub([
     {
       Component: () => (
-        <SettingsForm
-          settings={DEFAULT_SETTINGS}
-          models={[DEFAULT_SETTINGS.llm_model]}
-          verifiedModels={[]}
-          verifiedProviders={["openhands"]}
-          onClose={onCloseMock}
-        />
+        <SettingsForm settings={DEFAULT_SETTINGS} onClose={onCloseMock} />
       ),
       path: "/",
     },
@@ -35,7 +30,11 @@ describe("SettingsForm", () => {
 
     expect(saveSettingsSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        llm_model: DEFAULT_SETTINGS.llm_model,
+        agent_settings: expect.objectContaining({
+          llm: expect.objectContaining({
+            model: getAgentSettingValue(DEFAULT_SETTINGS, "llm.model"),
+          }),
+        }),
       }),
     );
   });

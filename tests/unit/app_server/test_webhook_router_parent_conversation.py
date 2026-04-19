@@ -24,7 +24,7 @@ from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStat
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
 from openhands.integrations.provider import ProviderType
-from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 

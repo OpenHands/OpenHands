@@ -1,5 +1,4 @@
 import type { V1AppConversationStartTaskStatus } from "#/api/conversation-service/v1-conversation-service.types";
-import { ConversationVersionBadge } from "../conversation-card/conversation-version-badge";
 import { StartTaskStatusIndicator } from "./start-task-status-indicator";
 import { StartTaskStatusBadge } from "./start-task-status-badge";
 
@@ -18,9 +17,6 @@ export function StartTaskCardHeader({
       <div className="flex items-center">
         <StartTaskStatusIndicator taskStatus={taskStatus} />
       </div>
-
-      {/* Version Badge - V1 tasks are always V1 */}
-      <ConversationVersionBadge version="V1" />
 
       {/* Title */}
       <h3 className="text-sm font-medium text-neutral-100 truncate flex-1">

@@ -40,7 +40,8 @@ The State object stores information about:
 * Extra data:
   * additional task-specific data
 
-The agent can add and modify subtasks through the `AddTaskAction` and `ModifyTaskAction`
+The agent can manage a structured task list through [`TaskTrackingAction`](../events/action/agent.py),
+which powers the `task_tracker` tool used by agents such as `CodeActAgent`.
 
 ## Actions
 
@@ -51,8 +52,7 @@ Here is a list of available Actions, which can be returned by `agent.step()`:
 - [`FileReadAction`](../events/action/files.py) - Reads the content of a file
 - [`FileWriteAction`](../events/action/files.py) - Writes new content to a file
 - [`BrowseURLAction`](../events/action/browse.py) - Gets the content of a URL
-- [`AddTaskAction`](../events/action/tasks.py) - Adds a subtask to the plan
-- [`ModifyTaskAction`](../events/action/tasks.py) - Changes the state of a subtask.
+- [`TaskTrackingAction`](../events/action/agent.py) - Views or updates the task list used for task management.
 - [`AgentFinishAction`](../events/action/agent.py) - Stops the control loop, allowing the user/delegator agent to enter a new task
 - [`AgentRejectAction`](../events/action/agent.py) - Stops the control loop, allowing the user/delegator agent to enter a new task
 - [`AgentFinishAction`](../events/action/agent.py) - Stops the control loop, allowing the user to enter a new task
@@ -74,6 +74,7 @@ Here is a list of available Observations:
 - [`BrowserOutputObservation`](../events/observation/browse.py)
 - [`FileReadObservation`](../events/observation/files.py)
 - [`FileWriteObservation`](../events/observation/files.py)
+- [`TaskTrackingObservation`](../events/observation/task_tracking.py)
 - [`ErrorObservation`](../events/observation/error.py)
 - [`SuccessObservation`](../events/observation/success.py)
 

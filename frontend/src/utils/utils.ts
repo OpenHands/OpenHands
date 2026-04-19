@@ -146,28 +146,6 @@ export const removeUnwantedKeys = (
     });
 };
 
-export const removeApiKey = (
-  data: EventActionHistory[],
-): EventActionHistory[] =>
-  data.map((item) => {
-    // Create a shallow copy of item
-    const newItem = { ...item };
-
-    // Check if LLM_API_KEY exists and delete it from a new args object
-    if (newItem.args?.LLM_API_KEY) {
-      const newArgs = { ...newItem.args };
-      delete newArgs.LLM_API_KEY;
-      newItem.args = newArgs;
-    }
-
-    return newItem;
-  });
-
-export const getExtension = (code: string) => {
-  if (code.includes(".")) return code.split(".").pop() || "";
-  return "";
-};
-
 /**
  * Get file extension from file name in uppercase format
  * @param fileName The file name to extract extension from
@@ -182,25 +160,6 @@ export const getFileExtension = (fileName: string): string => {
   const extension = fileName.split(".").pop()?.toUpperCase();
   return extension || "FILE";
 };
-
-/**
- * Format a timestamp to a human-readable format
- * @param timestamp The timestamp to format (ISO 8601)
- * @returns The formatted timestamp
- *
- * @example
- * formatTimestamp("2021-10-10T10:10:10.000") // "10/10/2021, 10:10:10"
- * formatTimestamp("2021-10-10T22:10:10.000") // "10/10/2021, 22:10:10"
- */
-export const formatTimestamp = (timestamp: string) =>
-  new Date(timestamp).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
 
 export const shouldUseInstallationRepos = (
   provider: Provider,

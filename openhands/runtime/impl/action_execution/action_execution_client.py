@@ -20,8 +20,8 @@ from openhands.app_server.status.system_stats import update_last_execution_time
 from openhands.core.config import OpenHandsConfig
 from openhands.core.config.mcp_config import (
     MCPConfig,
-    MCPSSEServerConfig,
-    MCPStdioServerConfig,
+    RemoteMCPServer,
+    StdioMCPServer,
 )
 from openhands.core.exceptions import (
     AgentRuntimeTimeoutError,
@@ -90,7 +90,7 @@ class ActionExecutionClient(Runtime):
         self.action_semaphore = threading.Semaphore(1)  # Ensure one action at a time
         self._runtime_closed: bool = False
         self._vscode_token: str | None = None  # initial dummy value
-        self._last_updated_mcp_stdio_servers: list[MCPStdioServerConfig] = []
+        self._last_updated_mcp_stdio_servers: dict[str, StdioMCPServer] = {}
         super().__init__(
             config,
             event_stream,
@@ -370,55 +370,49 @@ class ActionExecutionClient(Runtime):
         return self.send_action_for_execution(action)
 
     def get_mcp_config(
-        self, extra_stdio_servers: list[MCPStdioServerConfig] | None = None
+        self, extra_stdio_servers: dict[str, StdioMCPServer] | None = None
     ) -> MCPConfig:
         import sys
 
-        # Check if we're on Windows - MCP is disabled on Windows
         if sys.platform == 'win32':
-            # Return empty MCP config on Windows
             self.log('debug', 'MCP is disabled on Windows, returning empty config')
-            return MCPConfig(sse_servers=[], stdio_servers=[])
+            return MCPConfig(mcpServers={})
 
-        # Add the runtime as another MCP server
         updated_mcp_config = self.config.mcp.model_copy()
 
-        # Get current stdio servers
-        current_stdio_servers: list[MCPStdioServerConfig] = list(
-            updated_mcp_config.stdio_servers
-        )
+        # Collect current stdio servers from config + extras
+        current_stdio: dict[str, StdioMCPServer] = {
+            name: server
+            for name, server in updated_mcp_config.mcpServers.items()
+            if isinstance(server, StdioMCPServer)
+        }
         if extra_stdio_servers:
-            current_stdio_servers.extend(extra_stdio_servers)
+            current_stdio.update(extra_stdio_servers)
 
-        # Check if there are any new servers using the __eq__ operator
-        new_servers = [
-            server
-            for server in current_stdio_servers
-            if server not in self._last_updated_mcp_stdio_servers
-        ]
+        # Find servers not yet sent to the action execution server
+        new_servers = {
+            name: server
+            for name, server in current_stdio.items()
+            if name not in self._last_updated_mcp_stdio_servers
+        }
 
         self.log(
             'debug',
-            f'adding {len(new_servers)} new stdio servers to MCP config: {new_servers}',
+            f'adding {len(new_servers)} new stdio servers to MCP config: {list(new_servers.keys())}',
         )
 
-        # Only send update request if there are new servers
         if new_servers:
-            # Use a union of current servers and last updated servers for the update
-            # This ensures we don't lose any servers that might be missing from either list
-            combined_servers = current_stdio_servers.copy()
-            for server in self._last_updated_mcp_stdio_servers:
-                if server not in combined_servers:
-                    combined_servers.append(server)
+            # Merge current + previously-sent for the update payload
+            combined = {**self._last_updated_mcp_stdio_servers, **current_stdio}
 
             stdio_tools = [
-                server.model_dump(mode='json') for server in combined_servers
+                {'name': name, **server.model_dump(mode='json')}
+                for name, server in sorted(combined.items())
             ]
-            stdio_tools.sort(key=lambda x: x.get('name', ''))  # Sort by server name
 
             self.log(
                 'debug',
-                f'Updating MCP server with {len(new_servers)} new stdio servers (total: {len(combined_servers)})',
+                f'Updating MCP server with {len(new_servers)} new stdio servers (total: {len(combined)})',
             )
             response = self._send_action_server_request(
                 'POST',
@@ -435,27 +429,24 @@ class ActionExecutionClient(Runtime):
                         'warning',
                         f'Some MCP servers failed to be added: {result["router_error_log"]}',
                     )
-
-                # Update our cached list with combined servers after successful update
-                self._last_updated_mcp_stdio_servers = combined_servers.copy()
+                self._last_updated_mcp_stdio_servers = dict(combined)
                 self.log(
                     'debug',
-                    f'Successfully updated MCP stdio servers, now tracking {len(combined_servers)} servers',
+                    f'Successfully updated MCP stdio servers, now tracking {len(combined)} servers',
                 )
             self.log(
                 'info',
-                f'Updated MCP config: {updated_mcp_config.sse_servers}',
+                f'Updated MCP config: {list(updated_mcp_config.mcpServers.keys())}',
             )
         else:
             self.log('debug', 'No new stdio servers to update')
 
-        if len(self._last_updated_mcp_stdio_servers) > 0:
-            # We should always include the runtime as an MCP server whenever there's > 0 stdio servers
-            updated_mcp_config.sse_servers.append(
-                MCPSSEServerConfig(
-                    url=self.action_execution_server_url.rstrip('/') + '/mcp/sse',
-                    api_key=self.session_api_key,
-                )
+        # Expose the runtime's MCP SSE proxy when stdio servers exist
+        if self._last_updated_mcp_stdio_servers:
+            updated_mcp_config.mcpServers['_runtime_proxy'] = RemoteMCPServer(
+                url=self.action_execution_server_url.rstrip('/') + '/mcp/sse',
+                transport='sse',
+                auth=self.session_api_key,
             )
 
         return updated_mcp_config
@@ -478,13 +469,11 @@ class ActionExecutionClient(Runtime):
         updated_mcp_config = self.get_mcp_config()
         self.log(
             'debug',
-            f'Creating MCP clients with servers: {updated_mcp_config.sse_servers}',
+            f'Creating MCP clients with servers: {list(updated_mcp_config.mcpServers.keys())}',
         )
 
         # Create clients for this specific operation
-        mcp_clients = await create_mcp_clients(
-            updated_mcp_config.sse_servers, updated_mcp_config.shttp_servers, self.sid
-        )
+        mcp_clients = await create_mcp_clients(updated_mcp_config, self.sid)
 
         # Call the tool and return the result
         # No need for try/finally since disconnect() is now just resetting state

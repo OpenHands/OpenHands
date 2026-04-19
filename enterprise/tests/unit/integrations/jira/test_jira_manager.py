@@ -202,14 +202,10 @@ class TestStartJob:
         )
         jira_manager._send_comment = AsyncMock()
 
-        with patch(
-            'integrations.jira.jira_manager.register_callback_processor'
-        ) as mock_register:
-            await jira_manager.start_job(new_conversation_view)
+        await jira_manager.start_job(new_conversation_view)
 
-            new_conversation_view.create_or_update_conversation.assert_called_once()
-            mock_register.assert_called_once()
-            jira_manager._send_comment.assert_called_once()
+        new_conversation_view.create_or_update_conversation.assert_called_once()
+        jira_manager._send_comment.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_job_missing_settings_error(

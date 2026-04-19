@@ -14,9 +14,7 @@ from openhands.app_server.secrets.secrets_router import (
 from openhands.app_server.secrets.secrets_router import (
     delete_custom_secret as v1_delete_custom_secret,
 )
-from openhands.app_server.secrets.secrets_router import (
-    load_custom_secrets_names as v1_load_custom_secrets_names,
-)
+from openhands.app_server.secrets.secrets_router import search_custom_secrets
 from openhands.app_server.secrets.secrets_router import (
     store_provider_tokens as v1_store_provider_tokens,
 )
@@ -29,6 +27,7 @@ from openhands.app_server.secrets.secrets_router import (
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.models import EditResponse
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
+from openhands.sdk.utils.paging import page_iterator
 from openhands.server.settings import (
     CustomSecretModel,
     CustomSecretWithoutValueModel,
@@ -81,6 +80,12 @@ async def store_provider_tokens(
     secrets_store: SecretsStore = Depends(get_secrets_store),
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
 ) -> EditResponse:
+    """Store git provider tokens.
+
+    .. deprecated::
+        Use ``POST /api/v1/secrets/git-providers`` instead. This V0 endpoint will be removed
+        April 1, 2026.
+    """
     return await v1_store_provider_tokens(provider_info, secrets_store, provider_tokens)
 
 
@@ -88,6 +93,12 @@ async def store_provider_tokens(
 async def unset_provider_tokens(
     secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> EditResponse:
+    """Unset (delete) all git provider tokens.
+
+    .. deprecated::
+        Use ``DELETE /api/v1/secrets/git-providers`` instead. This V0 endpoint will be removed
+        April 1, 2026.
+    """
     return await v1_unset_provider_tokens(secrets_store)
 
 
@@ -100,7 +111,23 @@ async def unset_provider_tokens(
 async def load_custom_secrets_names(
     user_secrets: Secrets | None = Depends(get_secrets),
 ) -> GETCustomSecrets:
-    return await v1_load_custom_secrets_names(user_secrets)
+    """Load custom secret names.
+
+    .. deprecated::
+        Use ``GET /api/v1/secrets/search`` instead. This V0 endpoint will be removed
+        April 1, 2026. The V1 endpoint provides pagination and filtering support.
+    """
+    custom_secrets = []
+    async for custom_secret in page_iterator(
+        search_custom_secrets, user_secrets=user_secrets
+    ):
+        custom_secrets.append(
+            CustomSecretWithoutValueModel(
+                name=custom_secret.name, description=custom_secret.description
+            )
+        )
+    result = GETCustomSecrets(custom_secrets=custom_secrets)
+    return result
 
 
 @app.post('/secrets', status_code=status.HTTP_201_CREATED, deprecated=True)
@@ -108,6 +135,12 @@ async def create_custom_secret(
     incoming_secret: CustomSecretModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> EditResponse:
+    """Create a custom secret.
+
+    .. deprecated::
+        Use ``POST /api/v1/secrets`` instead. This V0 endpoint will be removed
+        April 1, 2026.
+    """
     return await v1_create_custom_secret(incoming_secret, secrets_store)
 
 
@@ -117,6 +150,12 @@ async def update_custom_secret(
     incoming_secret: CustomSecretWithoutValueModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> EditResponse:
+    """Update a custom secret.
+
+    .. deprecated::
+        Use ``PUT /api/v1/secrets/{secret_id}`` instead. This V0 endpoint will be removed
+        April 1, 2026.
+    """
     return await v1_update_custom_secret(secret_id, incoming_secret, secrets_store)
 
 
@@ -125,4 +164,10 @@ async def delete_custom_secret(
     secret_id: str,
     secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> EditResponse:
+    """Delete a custom secret.
+
+    .. deprecated::
+        Use ``DELETE /api/v1/secrets/{secret_id}`` instead. This V0 endpoint will be removed
+        April 1, 2026.
+    """
     return await v1_delete_custom_secret(secret_id, secrets_store)

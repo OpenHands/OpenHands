@@ -115,8 +115,8 @@ describe("TaskCard", () => {
         "retrieveUserGitRepositories",
       );
       retrieveUserGitRepositoriesSpy.mockResolvedValue({
-        data: MOCK_RESPOSITORIES,
-        nextPage: null,
+        items: MOCK_RESPOSITORIES,
+        next_page_id: null,
       });
     });
 

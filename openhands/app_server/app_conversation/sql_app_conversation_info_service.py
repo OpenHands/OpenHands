@@ -55,10 +55,9 @@ from openhands.app_server.utils.sql_utils import (
     create_json_type_decorator,
 )
 from openhands.integrations.provider import ProviderType
-from openhands.sdk.conversation.conversation_stats import ConversationStats
+from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.sdk.llm import MetricsSnapshot
-from openhands.sdk.llm.utils.metrics import TokenUsage
+from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 logger = logging.getLogger(__name__)

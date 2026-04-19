@@ -14,7 +14,6 @@ import { HooksModal } from "../conversation-panel/hooks-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { MetricsModal } from "./metrics-modal/metrics-modal";
-import { ConversationVersionBadge } from "../conversation-panel/conversation-card/conversation-version-badge";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
 
 export function ConversationName() {
@@ -31,13 +30,11 @@ export function ConversationName() {
   const {
     handleDelete,
     handleStop,
-    handleDownloadViaVSCode,
     handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
     handleShowSkills,
     handleShowHooks,
-    handleExportConversation,
     handleTogglePublic,
     handleCopyShareLink,
     shareUrl,
@@ -57,8 +54,6 @@ export function ConversationName() {
     setConfirmStopModalVisible,
     systemMessage,
     shouldShowStop,
-    shouldShowDownload,
-    shouldShowExport,
     shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
@@ -66,7 +61,7 @@ export function ConversationName() {
     shouldShowHooks,
   } = useConversationNameContextMenu({
     conversationId,
-    conversationStatus: conversation?.status,
+    sandboxStatus: conversation?.sandbox_status,
     showOptions: true, // Enable all options for conversation name
     onContextMenuToggle: setContextMenuOpen,
   });
@@ -150,7 +145,7 @@ export function ConversationName() {
             onBlur={handleBlur}
             onKeyUp={handleKeyUp}
             type="text"
-            defaultValue={conversation.title}
+            defaultValue={conversation.title || ""}
             className="text-white leading-5 bg-transparent border-none outline-none text-base font-normal w-fit max-w-fit field-sizing-content"
           />
         ) : (
@@ -158,16 +153,10 @@ export function ConversationName() {
             className="text-white leading-5 w-fit max-w-fit truncate"
             data-testid="conversation-name-title"
             onDoubleClick={handleDoubleClick}
-            title={conversation.title}
+            title={conversation.title || ""}
           >
             {conversation.title}
           </div>
-        )}
-
-        {titleMode !== "edit" && (
-          <ConversationVersionBadge
-            version={conversation.conversation_version}
-          />
         )}
 
         {titleMode !== "edit" && conversation.llm_model && (
@@ -198,12 +187,6 @@ export function ConversationName() {
                 }
                 onShowSkills={shouldShowSkills ? handleShowSkills : undefined}
                 onShowHooks={shouldShowHooks ? handleShowHooks : undefined}
-                onExportConversation={
-                  shouldShowExport ? handleExportConversation : undefined
-                }
-                onDownloadViaVSCode={
-                  shouldShowDownload ? handleDownloadViaVSCode : undefined
-                }
                 onTogglePublic={handleTogglePublic}
                 shareUrl={shareUrl}
                 onCopyShareLink={handleCopyShareLink}
@@ -247,7 +230,7 @@ export function ConversationName() {
         <ConfirmDeleteModal
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmDeleteModalVisible(false)}
-          conversationTitle={conversation?.title}
+          conversationTitle={conversation?.title || ""}
         />
       )}
 

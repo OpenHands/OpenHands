@@ -15,10 +15,9 @@ import { ContextMenuCTA } from "../context-menu/context-menu-cta";
 import { ContextMenuNavLink } from "../context-menu/context-menu-nav-link";
 import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
 import { useBreakpoint } from "#/hooks/use-breakpoint";
-import { useConfig } from "#/hooks/query/use-config";
-import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 import { SettingsNavHeader } from "../settings/settings-nav-header";
 import { SettingsNavDivider } from "../settings/settings-nav-divider";
+import { useAppMode } from "#/hooks/use-app-mode";
 
 // Shared className for context menu list items in the user context menu
 const contextMenuListItemClassName = cn(
@@ -42,13 +41,12 @@ export function UserContextMenu({
   const settingsNavItems = useSettingsNavItems();
   const shouldHideSelector = useShouldHideOrgSelector();
   const isMobile = useBreakpoint(768);
-  const { data: config } = useConfig();
+  const { isSaas, isEnterpriseCloud } = useAppMode();
 
   // Keep all nav items including headers and dividers for proper section grouping
   const navItems = settingsNavItems;
 
   const isMember = type === "member";
-  const isSaasMode = config?.app_mode === "saas";
 
   // Check if the ORG SETTINGS header exists in nav items
   const hasOrgHeader = navItems.some(
@@ -60,8 +58,9 @@ export function UserContextMenu({
   // Show invite button for admin/owner in team orgs
   const showInviteButton = !isMember && !isPersonalOrg;
 
-  // CTA only renders in SaaS desktop with feature flag enabled
-  const showCta = isSaasMode && !isMobile && ENABLE_PROJ_USER_JOURNEY();
+  // CTA only renders in SaaS Cloud desktop mode
+  const isCTAEnabled = isEnterpriseCloud && !isMobile;
+
   const handleLogout = () => {
     logout();
     onClose();
@@ -155,7 +154,7 @@ export function UserContextMenu({
           </a>
 
           {/* Only show logout in saas mode - oss mode has no session to invalidate */}
-          {isSaasMode && (
+          {isSaas && (
             <ContextMenuListItem
               onClick={handleLogout}
               className={contextMenuListItemClassName}
@@ -167,7 +166,7 @@ export function UserContextMenu({
         </div>
       </div>
 
-      {showCta && <ContextMenuCTA />}
+      {isCTAEnabled && <ContextMenuCTA />}
     </ContextMenuContainer>
   );
 }

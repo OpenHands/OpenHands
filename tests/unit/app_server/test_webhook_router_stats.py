@@ -22,9 +22,9 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 )
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
-from openhands.sdk.conversation.conversation_stats import ConversationStats
+from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.sdk.llm.utils.metrics import Metrics, TokenUsage
+from openhands.sdk.llm import Metrics, TokenUsage
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -492,7 +492,7 @@ class TestOnEventStatsProcessing:
         # Set up process_stats_event to call update_conversation_statistics
         async def process_stats_event_side_effect(event, conversation_id):
             # Simulate what process_stats_event does - call update_conversation_statistics
-            from openhands.sdk.conversation.conversation_stats import ConversationStats
+            from openhands.sdk import ConversationStats
 
             if isinstance(event.value, dict):
                 stats = ConversationStats.model_validate(event.value)

@@ -2,9 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Provider } from "#/types/settings";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import {
-  getConversationVersionFromQueryCache,
   resumeV1ConversationSandbox,
-  startV0Conversation,
   updateConversationSandboxStatusInCache,
   invalidateConversationQueries,
 } from "./conversation-mutation-utils";
@@ -31,36 +29,7 @@ export const useUnifiedResumeConversationSandbox = () => {
     mutationFn: async (variables: {
       conversationId: string;
       providers?: Provider[];
-      version?: "V0" | "V1";
-    }) => {
-      // Guard: If conversation is no longer in cache and no explicit version provided,
-      // skip the mutation. This handles race conditions like org switching where cache
-      // is cleared before the mutation executes.
-      // We return undefined (not throw) to avoid triggering the global MutationCache.onError
-      // handler which would display an error toast to the user.
-      const cachedConversation = queryClient.getQueryData([
-        "user",
-        "conversation",
-        variables.conversationId,
-      ]);
-      if (!cachedConversation && !variables.version) {
-        return undefined;
-      }
-
-      // Use provided version or fallback to cache lookup
-      const version =
-        variables.version ||
-        getConversationVersionFromQueryCache(
-          queryClient,
-          variables.conversationId,
-        );
-
-      if (version === "V1") {
-        return resumeV1ConversationSandbox(variables.conversationId);
-      }
-
-      return startV0Conversation(variables.conversationId, variables.providers);
-    },
+    }) => resumeV1ConversationSandbox(variables.conversationId),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
       const previousConversations = queryClient.getQueryData([
