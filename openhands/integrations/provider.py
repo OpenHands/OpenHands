@@ -400,7 +400,7 @@ class ProviderHandler:
         unique_repos = []
         for repo in repos:
             if repo.full_name not in seen:
-                seen.add(repo.id)
+                seen.add(repo.full_name)
                 unique_repos.append(repo)
         return unique_repos
 
