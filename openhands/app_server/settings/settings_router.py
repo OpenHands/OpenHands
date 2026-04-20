@@ -16,7 +16,6 @@ from openhands.integrations.provider import (
     ProviderType,
 )
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.server.routes.secrets import invalidate_legacy_secrets_store
 from openhands.server.settings import (
     GETSettingsModel,
 )
@@ -27,6 +26,7 @@ from openhands.server.user_auth import (
     get_user_settings,
     get_user_settings_store,
 )
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
@@ -247,3 +247,25 @@ async def load_settings_schema() -> dict[str, Any]:
 async def load_conversation_settings_schema() -> dict[str, Any]:
     """Load the schema for conversations"""
     return ConversationSettings.export_schema().model_dump(mode='json')
+
+
+async def invalidate_legacy_secrets_store(
+    settings: Settings, settings_store: SettingsStore, secrets_store: SecretsStore
+) -> Secrets | None:
+    """We are moving `secrets_store` (a field from `Settings` object) to its own dedicated store
+    This function moves the values from Settings to Secrets, and deletes the values in Settings
+    While this function in called multiple times, the migration only ever happens once
+    """
+    if len(settings.secrets_store.provider_tokens.items()) > 0:
+        user_secrets = Secrets(provider_tokens=settings.secrets_store.provider_tokens)
+        await secrets_store.store(user_secrets)
+
+        # Invalidate old tokens via settings store serializer
+        invalidated_secrets_settings = settings.model_copy(
+            update={'secrets_store': Secrets()}
+        )
+        await settings_store.store(invalidated_secrets_settings)
+
+        return user_secrets
+
+    return None

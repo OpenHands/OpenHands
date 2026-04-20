@@ -11,6 +11,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { SettingsScope } from "#/types/settings";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { requirePersonalWorkspaceLoader } from "#/utils/org/personal-workspace-guard";
 
 const VERIFICATION_SCHEMA_EXCLUDE_KEYS = new Set([
   "confirmation_mode",
@@ -188,6 +189,15 @@ export function VerificationSettingsScreen({
   );
 }
 
-export const clientLoader = createPermissionGuard("view_llm_settings");
+const personalWorkspaceGuard = requirePersonalWorkspaceLoader(
+  "/settings/org-defaults/verification",
+);
+const verificationPermissionGuard = createPermissionGuard("view_llm_settings");
+
+export const clientLoader = async (args: { request: Request }) => {
+  const blocked = await personalWorkspaceGuard(args);
+  if (blocked) return blocked;
+  return verificationPermissionGuard(args);
+};
 
 export default VerificationSettingsScreen;
