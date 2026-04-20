@@ -17,7 +17,31 @@ interface SSHConnectionResult {
   error: string | null;
 }
 
+interface SSHStatusResponse {
+  enabled: boolean;
+  running: boolean;
+  error: string | null;
+  port: number;
+}
+
 const DEFAULT_WORKSPACE_PATH = "/workspace/project";
+
+/**
+ * Fetch SSH status from the agent server to get detailed error messages
+ */
+async function fetchSSHStatus(
+  agentServerUrl: string,
+): Promise<SSHStatusResponse | null> {
+  try {
+    const response = await fetch(`${agentServerUrl}/ssh_status`);
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch {
+    // If we can't reach the agent server, return null
+  }
+  return null;
+}
 
 /**
  * Hook to get SSH connection info for V1 conversations
@@ -63,6 +87,37 @@ export const useSSHConnection = () => {
       }
 
       if (!sandbox) {
+        return {
+          host: null,
+          port: null,
+          vscodeRemoteUrl: null,
+          error: t(I18nKey.SSH$URL_NOT_AVAILABLE),
+        };
+      }
+
+      // Get agent server URL to fetch SSH status with detailed error messages
+      const agentServerUrl = sandbox.exposed_urls?.find(
+        (url) => url.name === "AGENT_SERVER",
+      );
+
+      // Fetch SSH status from agent server for detailed error messages
+      let sshStatus: SSHStatusResponse | null = null;
+      if (agentServerUrl) {
+        sshStatus = await fetchSSHStatus(agentServerUrl.url);
+      }
+
+      // If SSH status indicates an error, return it
+      if (sshStatus?.error) {
+        return {
+          host: null,
+          port: null,
+          vscodeRemoteUrl: null,
+          error: sshStatus.error,
+        };
+      }
+
+      // If SSH is not running (but no specific error), return generic message
+      if (sshStatus && !sshStatus.running) {
         return {
           host: null,
           port: null,

@@ -5,6 +5,7 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { useUnifiedVSCodeUrl } from "#/hooks/query/use-unified-vscode-url";
 import { useSSHConnection } from "#/hooks/query/use-ssh-connection";
 import { RUNTIME_STARTING_STATES } from "#/types/agent-state";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 export function VSCodeTooltipContent() {
   const { curAgentState } = useAgentState();
@@ -33,15 +34,20 @@ export function VSCodeTooltipContent() {
     e.preventDefault();
     e.stopPropagation();
 
-    let vscodeRemoteUrl = sshData?.vscodeRemoteUrl;
+    // Refetch to get latest status
+    const result = await refetchSSH();
+    const currentData = result.data ?? sshData;
 
-    if (!vscodeRemoteUrl) {
-      const result = await refetchSSH();
-      vscodeRemoteUrl = result.data?.vscodeRemoteUrl ?? null;
+    // Check for errors and show toast if SSH is not available
+    if (currentData?.error) {
+      displayErrorToast(currentData.error);
+      return;
     }
 
-    if (vscodeRemoteUrl) {
-      window.location.href = vscodeRemoteUrl;
+    if (currentData?.vscodeRemoteUrl) {
+      window.location.href = currentData.vscodeRemoteUrl;
+    } else {
+      displayErrorToast(t(I18nKey.SSH$URL_NOT_AVAILABLE));
     }
   };
 
@@ -57,7 +63,7 @@ export function VSCodeTooltipContent() {
           />
         ) : null}
       </div>
-      {!isRuntimeStarting && sshData?.vscodeRemoteUrl ? (
+      {!isRuntimeStarting ? (
         <div
           className="flex items-center gap-2 cursor-pointer text-xs opacity-80 hover:opacity-100"
           onClick={handleLocalVSCodeClick}
