@@ -414,32 +414,4 @@ class FileEditRuntimeMixin(FileEditRuntimeInterface):
     def correct_edit(
         self, file_content: str, error_obs: ErrorObservation, retry_num: int = 0
     ) -> Observation:
-        import openhands.agenthub.codeact_agent.function_calling as codeact_function_calling
-        from openhands.agenthub.codeact_agent.tools import LLMBasedFileEditTool
-        from openhands.llm.llm_utils import check_tools
-
-        _retry_num = retry_num + 1
-        if self.check_retry_num(_retry_num):
-            return error_obs
-        tools = check_tools([LLMBasedFileEditTool], self.draft_editor_llm.config)
-        messages = [
-            {'role': 'system', 'content': CORRECT_SYS_MSG},
-            {
-                'role': 'user',
-                'content': CORRECT_USER_MSG.format(
-                    file_content=file_content, lint_error=error_obs.content
-                ),
-            },
-        ]
-        params: dict = {'messages': messages, 'tools': tools}
-        try:
-            response = self.draft_editor_llm.completion(**params)
-            actions = codeact_function_calling.response_to_actions(response)
-            if len(actions) != 1:
-                return error_obs
-            for action in actions:
-                if isinstance(action, FileEditAction):
-                    return self.llm_based_edit(action, _retry_num)
-        except Exception as e:
-            logger.error(f'correct lint error is failed: {e}')
         return error_obs

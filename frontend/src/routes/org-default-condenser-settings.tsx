@@ -16,7 +16,7 @@ function OrgDefaultCondenserSettingsScreen() {
 }
 
 export const clientLoader = createPermissionGuard(
-  "edit_llm_settings",
+  "view_llm_settings",
   "/settings/condenser",
 );
 
