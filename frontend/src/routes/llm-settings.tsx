@@ -10,7 +10,6 @@ import { HelpLink } from "#/ui/help-link";
 import { useConfig } from "#/hooks/query/use-config";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
-import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import {
   SdkSectionHeaderProps,
   SdkSectionPage,
@@ -29,27 +28,12 @@ import {
 } from "#/utils/sdk-settings-schema";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 
-const LLM_EXCLUDED_KEYS = new Set([
-  "llm.model",
-  "llm.api_key",
-  "llm.base_url",
-  "agent",
-  "tools",
-  "mcp_config",
-]);
+const LLM_EXCLUDED_KEYS = new Set(["llm.model", "llm.api_key", "llm.base_url"]);
 
 const buildModelId = (provider: string | null, model: string | null) => {
   if (!provider || !model) return null;
   return `${provider}/${model}`;
 };
-
-const hasSchemaField = (
-  schema: SettingsSchema | null | undefined,
-  fieldKey: string,
-) =>
-  schema?.sections.some((section) =>
-    section.fields.some((field) => field.key === fieldKey),
-  ) ?? false;
 
 const getSchemaFieldDefaultValue = (
   schema: SettingsSchema | null | undefined,
@@ -58,14 +42,6 @@ const getSchemaFieldDefaultValue = (
   schema?.sections
     .flatMap((section) => section.fields)
     .find((field) => field.key === fieldKey)?.default ?? null;
-
-const getSchemaFieldChoices = (
-  schema: SettingsSchema | null | undefined,
-  fieldKey: string,
-) =>
-  schema?.sections
-    .flatMap((section) => section.fields)
-    .find((field) => field.key === fieldKey)?.choices ?? [];
 
 const KNOWN_PROVIDER_DEFAULT_BASE_URLS: Partial<Record<string, Set<string>>> = {
   openai: new Set(["https://api.openai.com", "https://api.openai.com/v1"]),
@@ -162,7 +138,6 @@ export function LlmSettingsScreen({
   );
 
   const isSaasMode = config?.app_mode === "saas";
-  const hasAgentField = hasSchemaField(schema, "agent");
 
   React.useEffect(() => {
     if (settings?.llm_model) {
@@ -233,8 +208,6 @@ export function LlmSettingsScreen({
         typeof values["llm.base_url"] === "string"
           ? values["llm.base_url"]
           : "";
-      const agentValue =
-        typeof values.agent === "string" ? values.agent : undefined;
       const derivedProvider = modelValue
         ? extractModelAndProvider(modelValue).provider || null
         : null;
@@ -282,21 +255,6 @@ export function LlmSettingsScreen({
           </>
         );
       };
-
-      const agentItems = getSchemaFieldChoices(schema, "agent").map(
-        (choice) => ({
-          key: String(choice.value),
-          label: choice.label,
-        }),
-      );
-
-      if (
-        hasAgentField &&
-        agentValue &&
-        !agentItems.some((item) => item.key === agentValue)
-      ) {
-        agentItems.unshift({ key: agentValue, label: agentValue });
-      }
 
       return (
         <div className="flex flex-col gap-6">
@@ -373,35 +331,15 @@ export function LlmSettingsScreen({
                 "llm-api-key-input",
                 "llm-api-key-help-anchor-advanced",
               )}
-
-              {!isSaasMode && hasAgentField ? (
-                <SettingsDropdownInput
-                  testId="agent-input"
-                  name="agent-input"
-                  label={t(I18nKey.SETTINGS$AGENT)}
-                  items={agentItems}
-                  selectedKey={agentValue}
-                  isClearable={false}
-                  onSelectionChange={(key) => {
-                    if (key) {
-                      onChange("agent", String(key));
-                    }
-                  }}
-                  isDisabled={isDisabled}
-                  wrapperClassName="w-full"
-                />
-              ) : null}
             </div>
           )}
         </div>
       );
     },
     [
-      hasAgentField,
       infoMessageKey,
       isSaasMode,
       defaultModel,
-      schema,
       selectedProvider,
       settings?.llm_api_key_set,
       t,
@@ -442,21 +380,17 @@ export function LlmSettingsScreen({
       if (context.view === "basic") {
         llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
         agentSettings.llm = llm;
-
-        if (hasAgentField) {
-          agentSettings.agent = getSchemaFieldDefaultValue(schema, "agent");
-        }
       }
 
       return { agent_settings: agentSettings };
     },
-    [hasAgentField, isSaasMode, schema, selectedProvider],
+    [isSaasMode, schema, selectedProvider],
   );
 
   return (
     <SdkSectionPage
       scope={scope}
-      sectionKeys={["llm", "general"]}
+      sectionKeys={["llm"]}
       excludeKeys={LLM_EXCLUDED_KEYS}
       header={buildHeader}
       buildPayload={buildPayload}
