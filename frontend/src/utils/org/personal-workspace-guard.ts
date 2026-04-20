@@ -22,6 +22,10 @@ const fetchOrganizations = () =>
     staleTime: 1000 * 60 * 5,
   });
 
+// Fails open (returns null, allowing access) when org context cannot be
+// resolved — config fetch, org fetch, or active-org lookup. Backend permission
+// checks remain authoritative, so an outage degrades to "show the page" rather
+// than locking every user out of personal LLM settings.
 export const requirePersonalWorkspaceLoader =
   (redirectPath: string = FALLBACK_REDIRECT_PATH) =>
   async ({ request }: { request: Request }) => {
