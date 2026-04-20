@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { requirePersonalWorkspaceLoader } from "#/utils/org/personal-workspace-guard";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -526,6 +527,15 @@ export function LlmSettingsScreen({
   );
 }
 
-export const clientLoader = createPermissionGuard("view_llm_settings");
+const personalWorkspaceGuard = requirePersonalWorkspaceLoader(
+  "/settings/org-defaults",
+);
+const llmPermissionGuard = createPermissionGuard("view_llm_settings");
+
+export const clientLoader = async (args: { request: Request }) => {
+  const blocked = await personalWorkspaceGuard(args);
+  if (blocked) return blocked;
+  return llmPermissionGuard(args);
+};
 
 export default LlmSettingsScreen;

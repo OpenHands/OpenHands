@@ -77,6 +77,15 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
     );
   }
 
+  const PERSONAL_LLM_PATHS = new Set([
+    "/settings",
+    "/settings/condenser",
+    "/settings/verification",
+  ]);
+  if (isTeamOrg) {
+    items = items.filter((item) => !PERSONAL_LLM_PATHS.has(item.to));
+  }
+
   // For OSS mode or non-SaaS, return flat list without sections
   if (!isSaasMode) {
     return items.map((item) => ({ type: "item", item }));
