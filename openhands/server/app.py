@@ -22,7 +22,6 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 
-import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
 from openhands.app_server import v1_router
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.status.status_router import router as health_router
