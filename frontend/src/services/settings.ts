@@ -35,6 +35,8 @@ export const DEFAULT_SETTINGS: Settings = {
   git_user_email: "openhands@all-hands.dev",
   v1_enabled: true,
   sandbox_grouping_strategy: "NO_GROUPING",
+  sandbox_enable_gpu: false,
+  sandbox_gpu_base_container_image: "",
 };
 
 /**

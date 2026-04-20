@@ -12,6 +12,7 @@ The functionality includes:
 """
 
 import os
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -278,6 +279,10 @@ class TestLLMAutoForwarding:
             result = get_agent_server_env()
             assert result == {}
 
+    @pytest.mark.skipif(
+        sys.platform == 'win32',
+        reason='Windows maps os.environ keys case-insensitively; distinct LLM_* casings cannot be preserved.',
+    )
     def test_llm_prefix_is_case_sensitive(self):
         """Test that LLM_ prefix matching is case-sensitive."""
         env_vars = {

@@ -29,11 +29,20 @@ OPENHANDS_WORKSPACE=$(git rev-parse --show-toplevel)
 cd "$OPENHANDS_WORKSPACE/containers/dev/" || exit 1
 
 ##
+# Faster image builds (layer cache / parallel); safe to disable with DOCKER_BUILDKIT=0
+export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+export COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}"
+
+##
 export BACKEND_HOST="0.0.0.0"
 #
 export SANDBOX_USER_ID=$(id -u)
 export WORKSPACE_BASE=${WORKSPACE_BASE:-$OPENHANDS_WORKSPACE/workspace}
 
-docker compose run --rm --service-ports "$@" dev
+if [ "${OPENHANDS_GPU:-0}" = "1" ]; then
+	docker compose -f compose.yml -f compose-gpu.yml run --rm --service-ports "$@" dev
+else
+	docker compose -f compose.yml run --rm --service-ports "$@" dev
+fi
 
 ##

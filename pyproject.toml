@@ -123,6 +123,7 @@ dev = [
   "pytest>=8.4",
   "pytest-asyncio>=1.3",
   "ruff==0.12.5",
+  "types-PyYAML",
   "types-setuptools",
 ]
 test = [

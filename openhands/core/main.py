@@ -200,9 +200,15 @@ async def run_controller(
             logger.info('Received second SIGINT. Forcing immediate exit...')
             sys.exit(1)
 
-    # Register the asyncio signal handler (safer for async contexts)
+    # Register the asyncio signal handler (safer for async contexts).
+    # Windows ProactorEventLoop does not support add_signal_handler for SIGINT.
     loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, signal_handler)
+    try:
+        loop.add_signal_handler(signal.SIGINT, signal_handler)
+    except (NotImplementedError, RuntimeError):
+        logger.debug(
+            'SIGINT signal handler not registered (unsupported on this platform/event loop)'
+        )
 
     # start event is a MessageAction with the task, either resumed or new
     if initial_state is not None and initial_state.last_error:

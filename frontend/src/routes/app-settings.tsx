@@ -67,6 +67,10 @@ function AppSettingsScreen() {
     React.useState(false);
   const [gitUserEmailHasChanged, setGitUserEmailHasChanged] =
     React.useState(false);
+  const [sandboxGpuSwitchHasChanged, setSandboxGpuSwitchHasChanged] =
+    React.useState(false);
+  const [sandboxGpuImageHasChanged, setSandboxGpuImageHasChanged] =
+    React.useState(false);
 
   const formAction = (formData: FormData) => {
     const languageLabel = formData.get("language-input")?.toString();
@@ -104,6 +108,14 @@ function AppSettingsScreen() {
       formData.get("git-user-email-input")?.toString() ||
       DEFAULT_SETTINGS.git_user_email;
 
+    const isLegacyRuntime = settings?.v1_enabled === false;
+    const enableSandboxGpu = isLegacyRuntime
+      ? formData.get("enable-sandbox-gpu-switch")?.toString() === "on"
+      : (settings.sandbox_enable_gpu ?? DEFAULT_SETTINGS.sandbox_enable_gpu);
+    const sandboxGpuBaseImage = isLegacyRuntime
+      ? (formData.get("sandbox-gpu-base-image-input")?.toString() ?? "")
+      : (settings.sandbox_gpu_base_container_image ?? "");
+
     saveSettings(
       {
         language,
@@ -115,6 +127,8 @@ function AppSettingsScreen() {
         max_budget_per_task: maxBudgetPerTask,
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
+        sandbox_enable_gpu: enableSandboxGpu,
+        sandbox_gpu_base_container_image: sandboxGpuBaseImage.trim(),
       },
       {
         onSuccess: () => {
@@ -135,6 +149,8 @@ function AppSettingsScreen() {
           setMaxBudgetPerTaskHasChanged(false);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
+          setSandboxGpuSwitchHasChanged(false);
+          setSandboxGpuImageHasChanged(false);
         },
       },
     );
@@ -204,6 +220,19 @@ function AppSettingsScreen() {
     setGitUserEmailHasChanged(value !== currentValue);
   };
 
+  const checkIfSandboxGpuSwitchHasChanged = (checked: boolean) => {
+    const current =
+      settings?.sandbox_enable_gpu ?? DEFAULT_SETTINGS.sandbox_enable_gpu;
+    setSandboxGpuSwitchHasChanged(checked !== !!current);
+  };
+
+  const checkIfSandboxGpuImageHasChanged = (value: string) => {
+    const current =
+      settings?.sandbox_gpu_base_container_image ??
+      DEFAULT_SETTINGS.sandbox_gpu_base_container_image;
+    setSandboxGpuImageHasChanged(value.trim() !== (current ?? "").trim());
+  };
+
   const formIsClean =
     !languageInputHasChanged &&
     !analyticsSwitchHasChanged &&
@@ -213,7 +242,9 @@ function AppSettingsScreen() {
     !sandboxGroupingStrategyHasChanged &&
     !maxBudgetPerTaskHasChanged &&
     !gitUserNameHasChanged &&
-    !gitUserEmailHasChanged;
+    !gitUserEmailHasChanged &&
+    !sandboxGpuSwitchHasChanged &&
+    !sandboxGpuImageHasChanged;
 
   const shouldBeLoading = !settings || isLoading || isPending;
 
@@ -295,18 +326,54 @@ function AppSettingsScreen() {
           )}
 
           {!settings?.v1_enabled && (
-            <SettingsInput
-              testId="max-budget-per-task-input"
-              name="max-budget-per-task-input"
-              type="number"
-              label={t(I18nKey.SETTINGS$MAX_BUDGET_PER_CONVERSATION)}
-              defaultValue={settings.max_budget_per_task?.toString() || ""}
-              onChange={checkIfMaxBudgetPerTaskHasChanged}
-              placeholder={t(I18nKey.SETTINGS$MAXIMUM_BUDGET_USD)}
-              min={1}
-              step={1}
-              className="w-full max-w-[680px]" // Match the width of the language field
-            />
+            <>
+              <SettingsInput
+                testId="max-budget-per-task-input"
+                name="max-budget-per-task-input"
+                type="number"
+                label={t(I18nKey.SETTINGS$MAX_BUDGET_PER_CONVERSATION)}
+                defaultValue={settings.max_budget_per_task?.toString() || ""}
+                onChange={checkIfMaxBudgetPerTaskHasChanged}
+                placeholder={t(I18nKey.SETTINGS$MAXIMUM_BUDGET_USD)}
+                min={1}
+                step={1}
+                className="w-full max-w-[680px]" // Match the width of the language field
+              />
+
+              <div className="border-t border-t-tertiary pt-6 mt-2">
+                <h3 className="text-lg font-medium mb-2">
+                  {t(I18nKey.SETTINGS$SANDBOX_GPU_RUNTIME)}
+                </h3>
+                <p className="text-xs mb-4">
+                  {t(I18nKey.SETTINGS$SANDBOX_GPU_RUNTIME_DESCRIPTION)}
+                </p>
+                <div className="flex flex-col gap-6">
+                  <SettingsSwitch
+                    testId="enable-sandbox-gpu-switch"
+                    name="enable-sandbox-gpu-switch"
+                    defaultIsToggled={
+                      settings.sandbox_enable_gpu ??
+                      DEFAULT_SETTINGS.sandbox_enable_gpu
+                    }
+                    onToggle={checkIfSandboxGpuSwitchHasChanged}
+                  >
+                    {t(I18nKey.SETTINGS$SANDBOX_ENABLE_GPU)}
+                  </SettingsSwitch>
+                  <SettingsInput
+                    testId="sandbox-gpu-base-image-input"
+                    name="sandbox-gpu-base-image-input"
+                    type="text"
+                    label={t(I18nKey.SETTINGS$SANDBOX_GPU_CUDA_IMAGE)}
+                    defaultValue={
+                      settings.sandbox_gpu_base_container_image ?? ""
+                    }
+                    onChange={checkIfSandboxGpuImageHasChanged}
+                    placeholder="nvidia/cuda:12.0.1-cudnn8-runtime-ubuntu22.04"
+                    className="w-full max-w-[680px]"
+                  />
+                </div>
+              </div>
+            </>
           )}
 
           <div className="border-t border-t-tertiary pt-6 mt-2">

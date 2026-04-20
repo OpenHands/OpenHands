@@ -84,9 +84,21 @@ class Memory:
         # Load user microagents from ~/.openhands/microagents/
         self._load_user_microagents()
 
-    def on_event(self, event: Event):
-        """Handle an event from the event stream."""
-        asyncio.get_event_loop().run_until_complete(self._on_event(event))
+    def on_event(self, event: Event) -> None:
+        """Handle an event from the event stream (runs on the EventStream thread pool)."""
+        # Thread-pool worker sets a dedicated loop in EventStream (see stream._init_thread_loop).
+        # Prefer the same pattern as other callback codepaths: avoid relying on deprecated
+        # implicit main-thread loop creation on platforms like Windows.
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+        else:
+            if loop.is_running():
+                raise RuntimeError(
+                    'Memory.on_event invoked while an event loop is already running'
+                )
+        loop.run_until_complete(self._on_event(event))
 
     async def _on_event(self, event: Event):
         """Handle an event from the event stream asynchronously."""

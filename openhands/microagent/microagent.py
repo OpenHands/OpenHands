@@ -66,13 +66,15 @@ class BaseMicroagent(BaseModel):
         derived_name = None
         if microagent_dir is not None:
             # Special handling for files which are not in microagent_dir
-            derived_name = cls.PATH_TO_THIRD_PARTY_MICROAGENT_NAME.get(
-                path.name.lower()
-            ) or str(path.relative_to(microagent_dir).with_suffix(''))
+            # Use POSIX-style names so nested knowledge agents match across OSes (Windows vs Linux CI).
+            derived_name = (
+                cls.PATH_TO_THIRD_PARTY_MICROAGENT_NAME.get(path.name.lower())
+                or path.relative_to(microagent_dir).with_suffix('').as_posix()
+            )
 
         # Only load directly from path if file_content is not provided
         if file_content is None:
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 file_content = f.read()
 
         # Legacy repo instructions are stored in .openhands_instructions

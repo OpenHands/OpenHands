@@ -152,6 +152,12 @@ class WebSession:
             if settings.security_analyzer is None
             else settings.security_analyzer
         )
+        if settings.sandbox_enable_gpu is not None:
+            self.config.sandbox.enable_gpu = settings.sandbox_enable_gpu
+        if settings.sandbox_gpu_base_container_image is not None:
+            stripped = settings.sandbox_gpu_base_container_image.strip()
+            self.config.sandbox.gpu_base_container_image = stripped or None
+
         self.config.sandbox.base_container_image = (
             settings.sandbox_base_container_image
             or self.config.sandbox.base_container_image
@@ -162,6 +168,7 @@ class WebSession:
             or settings.sandbox_runtime_container_image
             else self.config.sandbox.runtime_container_image
         )
+        self.config.sandbox.apply_gpu_base_image_defaults()
 
         # Set Git user configuration if provided in settings
         git_user_name = getattr(settings, 'git_user_name', None)

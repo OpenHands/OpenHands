@@ -11,6 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from openhands.core.logger import openhands_logger as logger
 
+# Default runtime build base (CPU). When `enable_gpu` is True and this is still the base,
+# `set_default_base_image` swaps to a CUDA image so GPU libraries are available inside the sandbox.
+_DEFAULT_SANDBOX_CPU_BASE_IMAGE = 'nikolaik/python-nodejs:python3.12-nodejs22-slim'
+# Public CUDA runtime (Ubuntu 22.04); override with env SANDBOX_BASE_IMAGE_GPU if you need another tag.
+_DEFAULT_SANDBOX_GPU_BASE_IMAGE_FALLBACK = (
+    'nvidia/cuda:12.0.1-cudnn8-runtime-ubuntu22.04'
+)
+
 
 class SandboxConfig(BaseModel):
     """Configuration for the sandbox.
@@ -45,7 +53,12 @@ class SandboxConfig(BaseModel):
         platform: The platform on which the image should be built. Default is None.
         remote_runtime_resource_factor: Factor to scale the resource allocation for remote runtime.
             Must be one of [1, 2, 4, 8]. Will only be used if the runtime is remote.
-        enable_gpu: Whether to enable GPU.
+        enable_gpu: Whether to enable GPU passthrough (Docker device_requests) and, when still using the
+            default CPU base image, swap the runtime build base to a CUDA image so frameworks like PyTorch
+            can use the GPU inside the sandbox. Override the CUDA image with ``gpu_base_container_image``
+            or env ``SANDBOX_BASE_IMAGE_GPU``.
+        gpu_base_container_image: Optional CUDA base image used when ``enable_gpu`` is True and the base image
+            is still the default CPU image. Overrides ``SANDBOX_BASE_IMAGE_GPU`` when set.
         docker_runtime_kwargs: Additional keyword arguments to pass to the Docker runtime when running containers.
             This should be a Python dictionary literal string that will be parsed into a dictionary.
         trusted_dirs: List of directories that can be trusted to run the OpenHands CLI.
@@ -59,9 +72,7 @@ class SandboxConfig(BaseModel):
     pause_closed_runtimes: bool = Field(default=True)
     rm_all_containers: bool = Field(default=False)
     api_key: str | None = Field(default=None)
-    base_container_image: str | None = Field(
-        default='nikolaik/python-nodejs:python3.12-nodejs22-slim'
-    )
+    base_container_image: str | None = Field(default=_DEFAULT_SANDBOX_CPU_BASE_IMAGE)
     runtime_container_image: str | None = Field(default=None)
     user_id: int = Field(default=os.getuid() if hasattr(os, 'getuid') else 1000)
     logger.debug(f'SandboxConfig user_id default: {user_id}')
@@ -90,7 +101,14 @@ class SandboxConfig(BaseModel):
         description='The delay in seconds before closing the sandbox after the agent is done.',
     )
     remote_runtime_resource_factor: int = Field(default=1)
-    enable_gpu: bool = Field(default=False)
+    enable_gpu: bool = Field(
+        default=False,
+        description='Mount NVIDIA GPU(s) into the sandbox and use a CUDA-capable base image when the CPU default is unchanged.',
+    )
+    gpu_base_container_image: str | None = Field(
+        default=None,
+        description='CUDA base image when enable_gpu is True and base_container_image is still the default CPU image.',
+    )
     docker_runtime_kwargs: dict | None = Field(default=None)
     selected_repo: str | None = Field(default=None)
     trusted_dirs: list[str] = Field(default_factory=list)
@@ -123,10 +141,22 @@ class SandboxConfig(BaseModel):
 
         return sandbox_mapping
 
+    def apply_gpu_base_image_defaults(self) -> None:
+        """Resolve default CPU/CUDA base image after field updates (session merge, env)."""
+        if self.base_container_image is None:
+            self.base_container_image = _DEFAULT_SANDBOX_CPU_BASE_IMAGE
+        if (
+            self.enable_gpu
+            and self.base_container_image == _DEFAULT_SANDBOX_CPU_BASE_IMAGE
+        ):
+            cuda_image = (
+                self.gpu_base_container_image
+                or os.environ.get('SANDBOX_BASE_IMAGE_GPU')
+                or _DEFAULT_SANDBOX_GPU_BASE_IMAGE_FALLBACK
+            )
+            self.base_container_image = cuda_image
+
     @model_validator(mode='after')
     def set_default_base_image(self) -> 'SandboxConfig':
-        if self.base_container_image is None:
-            self.base_container_image = (
-                'nikolaik/python-nodejs:python3.12-nodejs22-slim'
-            )
+        self.apply_gpu_base_image_defaults()
         return self

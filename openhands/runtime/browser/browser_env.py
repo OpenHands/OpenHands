@@ -184,7 +184,7 @@ class BrowserEnv:
 
                     # EVAL ONLY: Save the rewards into file for evaluation
                     if self.eval_mode:
-                        self.eval_rewards.append(reward)
+                        self.eval_rewards.append(float(reward))
 
                     # add text content of the page
                     html_str = flatten_dom_to_str(obs['dom_object'])

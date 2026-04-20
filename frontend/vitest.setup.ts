@@ -1,7 +1,12 @@
-import { afterAll, afterEach, beforeAll, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
-import { server } from "#/mocks/node";
 import "@testing-library/jest-dom/vitest";
+import { cleanup, configure } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, vi } from "vitest";
+
+import { server } from "#/mocks/node";
+
+// Windows / cold-start: first test in a file can exceed the default 1000ms for
+// findBy/waitFor while MSW + React Query resolve; aligns with typical testTimeout.
+configure({ asyncUtilTimeout: 5000 });
 
 HTMLCanvasElement.prototype.getContext = vi.fn();
 HTMLElement.prototype.scrollTo = vi.fn();

@@ -2,7 +2,8 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import AsyncGenerator
+from datetime import datetime
+from typing import AsyncGenerator, cast
 
 from fastapi import Request
 from pydantic import TypeAdapter
@@ -126,11 +127,11 @@ class SQLPendingMessageService(PendingMessageService):
 
         return [
             PendingMessage(
-                id=msg.id,
-                conversation_id=msg.conversation_id,
-                role=msg.role,
+                id=cast(str, msg.id),
+                conversation_id=cast(str, msg.conversation_id),
+                role=cast(str, msg.role),
                 content=_content_type_adapter.validate_python(msg.content),
-                created_at=msg.created_at,
+                created_at=cast(datetime, msg.created_at),
             )
             for msg in stored_messages
         ]
@@ -172,7 +173,7 @@ class SQLPendingMessageService(PendingMessageService):
 
         count = len(stored_messages)
         for msg in stored_messages:
-            msg.conversation_id = new_conversation_id
+            msg.conversation_id = new_conversation_id  # type: ignore[assignment]
 
         if count > 0:
             await self.db_session.commit()

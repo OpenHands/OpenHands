@@ -281,16 +281,17 @@ REPOSITORY INSTRUCTIONS: This is a test repository.
         microagent_action._source = EventSource.USER  # type: ignore[attr-defined]
         event_stream.add_event(microagent_action, EventSource.USER)
 
-        # Give it a little time to process
-        time.sleep(0.3)
-
-        # Get all events from the stream
-        events = list(event_stream.get_events())
-
-        # Find the RecallObservation event
-        microagent_obs_events = [
-            event for event in events if isinstance(event, RecallObservation)
-        ]
+        # Wait for MEMORY subscriber (thread pool) to emit RecallObservation
+        deadline = time.monotonic() + 10.0
+        microagent_obs_events = []
+        while time.monotonic() < deadline:
+            events = list(event_stream.get_events())
+            microagent_obs_events = [
+                event for event in events if isinstance(event, RecallObservation)
+            ]
+            if microagent_obs_events:
+                break
+            time.sleep(0.05)
 
         # We should have at least one RecallObservation
         assert len(microagent_obs_events) > 0
@@ -576,16 +577,16 @@ REPOSITORY INSTRUCTIONS: This is the second test repository.
         microagent_action._source = EventSource.USER  # type: ignore[attr-defined]
         event_stream.add_event(microagent_action, EventSource.USER)
 
-        # Give it a little time to process
-        time.sleep(0.3)
-
-        # Get all events from the stream
-        events = list(event_stream.get_events())
-
-        # Find the RecallObservation event
-        microagent_obs_events = [
-            event for event in events if isinstance(event, RecallObservation)
-        ]
+        deadline = time.monotonic() + 10.0
+        microagent_obs_events = []
+        while time.monotonic() < deadline:
+            events = list(event_stream.get_events())
+            microagent_obs_events = [
+                event for event in events if isinstance(event, RecallObservation)
+            ]
+            if microagent_obs_events:
+                break
+            time.sleep(0.05)
 
         # We should have one RecallObservation
         assert len(microagent_obs_events) > 0

@@ -80,7 +80,7 @@ def test_litellm_loggers_suppressed_with_uvicorn_json_config(reset_litellm):
     logger_file = project_root / 'openhands' / 'core' / 'logger.py'
 
     # Read the actual source file
-    with open(logger_file, 'r') as f:
+    with open(logger_file, 'r', encoding='utf-8') as f:
         source = f.read()
 
     # Verify that the fix is present in the source code

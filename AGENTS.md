@@ -13,6 +13,12 @@ Use the right compose file depending on whether you are **developing** this repo
 
 - **Packaged build (production-like UI in Docker):** Use the root [`docker-compose.yml`](docker-compose.yml). It builds `openhands:latest` via [`containers/app/Dockerfile`](containers/app/Dockerfile), publishes **3000:3000**, and passes `AGENT_SERVER_IMAGE_*` to match the canonical tag in [`openhands/app_server/sandbox/sandbox_spec_service.py`](openhands/app_server/sandbox/sandbox_spec_service.py) (default `1.16.1-python`). Run `docker compose build` when dependencies or Dockerfile change; otherwise `docker compose up -d` reuses the local image.
 
+- **GPU (NVIDIA):** Install [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). Merge [`docker-compose.gpu.yml`](docker-compose.gpu.yml) with the packaged compose file, or run `make docker-run-gpu`. For the dev agent, use `make docker-dev-gpu` (sets `OPENHANDS_GPU=1` for [`containers/dev/dev.sh`](containers/dev/dev.sh), which merges [`containers/dev/compose-gpu.yml`](containers/dev/compose-gpu.yml)).
+
+- **Faster local builds:** The Makefile exports `DOCKER_BUILDKIT=1` by default for Docker; `make install-frontend-dependencies` uses `npm ci` when `frontend/package-lock.json` exists (faster installs). Override with `NPM_CI_FLAGS=` if you need `npm audit`, or `DOCKER_BUILDKIT=0` to disable BuildKit.
+
+- **Sandbox GPU / CUDA (legacy V0 Docker runtime):** With `[sandbox] enable_gpu = true` (and NVIDIA Container Toolkit on the host), OpenHands mounts GPU devices into the sandbox and, if you still use the default CPU base image (`nikolaik/python-nodejs:...`), automatically switches the **runtime build** base to a **CUDA** image (`nvidia/cuda:12.0.1-cudnn8-runtime-ubuntu22.04` by default) so libraries like PyTorch can see the GPU. Set a different CUDA base with environment variable `SANDBOX_BASE_IMAGE_GPU`, or set `base_container_image` explicitly in config to any image you want. V1 cloud runs use a separate agent-server image; this behavior applies to the in-repo Docker runtime path.
+
 - **Windows:** Set `WORKSPACE_BASE` to an absolute path (for example `C:\path\to\openhands\workspace`) so bind mounts resolve.
 
 ## Running OpenHands with OpenHands:

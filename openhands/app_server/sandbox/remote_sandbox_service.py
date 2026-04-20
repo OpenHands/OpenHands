@@ -3,7 +3,8 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Union
+from datetime import datetime
+from typing import Any, AsyncGenerator, Union, cast
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -166,15 +167,15 @@ class RemoteSandboxService(SandboxService):
             session_api_key = None
             exposed_urls = None
 
-        sandbox_spec_id = stored.sandbox_spec_id
+        sandbox_spec_id = cast(str, stored.sandbox_spec_id)
         return SandboxInfo(
-            id=stored.id,
-            created_by_user_id=stored.created_by_user_id,
+            id=cast(str, stored.id),
+            created_by_user_id=cast(str | None, stored.created_by_user_id),
             sandbox_spec_id=sandbox_spec_id,
             status=status,
             session_api_key=session_api_key,
             exposed_urls=exposed_urls,
-            created_at=stored.created_at,
+            created_at=cast(datetime, stored.created_at),
         )
 
     def _get_sandbox_status_from_runtime(
@@ -316,7 +317,9 @@ class RemoteSandboxService(SandboxService):
 
         # Convert stored sandboxes to domain models with runtime data
         items = [
-            self._to_sandbox_info(stored_sandbox, runtimes_by_id.get(stored_sandbox.id))
+            self._to_sandbox_info(
+                stored_sandbox, runtimes_by_id.get(cast(str, stored_sandbox.id))
+            )
             for stored_sandbox in stored_sandboxes
         ]
 
@@ -330,7 +333,7 @@ class RemoteSandboxService(SandboxService):
 
         runtime = None
         try:
-            runtime = await self._get_runtime(stored_sandbox.id)
+            runtime = await self._get_runtime(cast(str, stored_sandbox.id))
         except Exception:
             _logger.exception(
                 f'Error getting runtime: {stored_sandbox.id}', stack_info=True
@@ -381,7 +384,7 @@ class RemoteSandboxService(SandboxService):
         # Check each sandbox's runtime data for matching session_api_key
         for stored_sandbox in stored_sandboxes:
             try:
-                runtime = await self._get_runtime(stored_sandbox.id)
+                runtime = await self._get_runtime(cast(str, stored_sandbox.id))
                 if runtime and runtime.get('session_api_key') == session_api_key:
                     # Backfill the hash for future lookups (Auto committed at end of request)
                     stored_sandbox.session_api_key_hash = _hash_session_api_key(
@@ -415,7 +418,7 @@ class RemoteSandboxService(SandboxService):
 
         if stored_sandbox:
             try:
-                runtime = await self._get_runtime(stored_sandbox.id)
+                runtime = await self._get_runtime(cast(str, stored_sandbox.id))
                 return self._to_sandbox_info(stored_sandbox, runtime)
             except Exception:
                 _logger.exception(
@@ -496,7 +499,7 @@ class RemoteSandboxService(SandboxService):
             # Store the session_api_key hash for efficient lookups
             session_api_key = runtime_data.get('session_api_key')
             if session_api_key:
-                stored_sandbox.session_api_key_hash = _hash_session_api_key(
+                stored_sandbox.session_api_key_hash = _hash_session_api_key(  # type: ignore[assignment]
                     session_api_key
                 )
 

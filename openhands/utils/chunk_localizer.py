@@ -4,6 +4,8 @@ This is primarily used to localize the most relevant chunks in a file
 for a given query (e.g. edit draft produced by the agent).
 """
 
+from typing import Any, cast
+
 from pydantic import BaseModel
 from rapidfuzz.distance import LCSseq
 from tree_sitter_language_pack import get_parser
@@ -43,7 +45,7 @@ def create_chunks(
     text: str, size: int = 100, language: str | None = None
 ) -> list[Chunk]:
     try:
-        parser = get_parser(language) if language is not None else None
+        parser = get_parser(cast(Any, language)) if language is not None else None
     except AttributeError:
         logger.debug(f'Language {language} not supported. Falling back to raw string.')
         parser = None

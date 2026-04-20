@@ -621,8 +621,12 @@ def test_callback_dictionary_modification(temp_dir: str):
     # Add an event to trigger callbacks
     event_stream.add_event(NullObservation('test'), EventSource.AGENT)
 
-    # Give some time for the callbacks to execute
-    time.sleep(0.5)
+    # Wait until thread-pool callbacks run (avoid fixed sleep flakiness on slow/Windows CI)
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if callback_executed[0] and callback_executed[1]:
+            break
+        time.sleep(0.05)
 
     # Verify that the first two callbacks were executed
     assert callback_executed[0] is True, 'First callback should have been executed'
@@ -638,8 +642,11 @@ def test_callback_dictionary_modification(temp_dir: str):
     callback_executed = [False, False, False]  # Reset execution tracking
     event_stream.add_event(NullObservation('test2'), EventSource.AGENT)
 
-    # Give some time for the callbacks to execute
-    time.sleep(0.5)
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if callback_executed[0] and callback_executed[1] and callback_executed[2]:
+            break
+        time.sleep(0.05)
 
     # Now all three callbacks should have been executed
     assert callback_executed[0] is True, 'First callback should have been executed'

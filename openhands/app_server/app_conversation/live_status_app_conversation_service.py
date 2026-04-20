@@ -90,7 +90,12 @@ from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
-from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
+from openhands.sdk.secret import (
+    LookupSecret,
+    SecretSource,
+    SecretValue,
+    StaticSecret,
+)
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
@@ -479,8 +484,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             data = response.json()
             conversation_info = _conversation_info_type_adapter.validate_python(data)
-            conversation_info = [c for c in conversation_info if c]
-            return conversation_info
+            return [c for c in conversation_info if c is not None]
         except httpx.HTTPStatusError:
             # The runtime API stops idle sandboxes all the time and they return a 404 or a 503.
             # This is normal and should not be considered an error.
@@ -1458,7 +1462,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 bool(user.confirmation_mode), user.security_analyzer
             ),
             initial_message=final_initial_message,
-            secrets=secrets,
+            secrets=cast(dict[str, SecretSource], secrets),
             plugins=sdk_plugins,
             hook_config=hook_config,
         )

@@ -253,7 +253,7 @@ async def update_custom_secret(
     if existing_secrets:
         # Check if the secret to update exists
         if secret_id not in existing_secrets.custom_secrets:
-            return HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f'Secret with ID {secret_id} not found',
             )

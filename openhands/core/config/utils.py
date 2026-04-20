@@ -436,8 +436,20 @@ def finalize_config(cfg: OpenHandsConfig) -> None:
 
         if cfg.workspace_mount_rewrite:
             base = cfg.workspace_base or os.getcwd()
-            parts = cfg.workspace_mount_rewrite.split(':')
-            cfg.workspace_mount_path = base.replace(parts[0], parts[1])
+            parts = cfg.workspace_mount_rewrite.split(':', 1)
+            if len(parts) == 2:
+                old_seg, new_seg = parts
+                # Normalize slashes so Unix-style rewrites apply on Windows paths
+                # (e.g. C:/home/user/project contains /home/user).
+                base_slash = str(pathlib.Path(base)).replace('\\', '/')
+                old_slash = old_seg.replace('\\', '/')
+                new_slash = new_seg.replace('\\', '/')
+                if old_slash in base_slash:
+                    cfg.workspace_mount_path = base_slash.replace(
+                        old_slash, new_slash, 1
+                    )
+                else:
+                    cfg.workspace_mount_path = base.replace(old_seg, new_seg)
 
     # make sure log_completions_folder is an absolute path
     for llm in cfg.llms.values():

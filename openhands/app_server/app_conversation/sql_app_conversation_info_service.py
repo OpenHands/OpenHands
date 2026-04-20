@@ -21,7 +21,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
@@ -36,6 +36,7 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.utils import utc_now
@@ -232,7 +233,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         sandbox_id__eq: str | None = None,
     ) -> Select:
         # Apply the same filters as search_app_conversations
-        conditions = []
+        conditions: list[Any] = []
         if title__contains is not None:
             conditions.append(
                 StoredConversationMetadata.title.like(f'%{title__contains}%')
@@ -513,49 +514,59 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         sandbox_id = stored.sandbox_id
         assert sandbox_id is not None
 
-        # Rebuild token usage
+        # Rebuild token usage (ORM columns are typed as Column[T]; cast for pydantic models)
         token_usage = TokenUsage(
-            prompt_tokens=stored.prompt_tokens,
-            completion_tokens=stored.completion_tokens,
-            cache_read_tokens=stored.cache_read_tokens,
-            cache_write_tokens=stored.cache_write_tokens,
-            context_window=stored.context_window,
-            per_turn_token=stored.per_turn_token,
+            prompt_tokens=cast(int, stored.prompt_tokens),
+            completion_tokens=cast(int, stored.completion_tokens),
+            cache_read_tokens=cast(int, stored.cache_read_tokens),
+            cache_write_tokens=cast(int, stored.cache_write_tokens),
+            context_window=cast(int, stored.context_window),
+            per_turn_token=cast(int, stored.per_turn_token),
         )
 
         # Rebuild metrics object
         metrics = MetricsSnapshot(
-            accumulated_cost=stored.accumulated_cost,
-            max_budget_per_task=stored.max_budget_per_task,
+            accumulated_cost=cast(float, stored.accumulated_cost),
+            max_budget_per_task=cast(float | None, stored.max_budget_per_task),
             accumulated_token_usage=token_usage,
         )
 
         # Get timestamps
-        created_at = self._fix_timezone(stored.created_at)
-        updated_at = self._fix_timezone(stored.last_updated_at)
+        created_at = self._fix_timezone(cast(datetime, stored.created_at))
+        updated_at = self._fix_timezone(cast(datetime, stored.last_updated_at))
 
         return AppConversationInfo(
-            id=UUID(stored.conversation_id),
+            id=UUID(cast(str, stored.conversation_id)),
             created_by_user_id=None,  # User ID is now stored in ConversationMetadataSaas
-            sandbox_id=stored.sandbox_id,
-            selected_repository=stored.selected_repository,
-            selected_branch=stored.selected_branch,
+            sandbox_id=cast(str, stored.sandbox_id),
+            selected_repository=cast(str | None, stored.selected_repository),
+            selected_branch=cast(str | None, stored.selected_branch),
             git_provider=(
-                ProviderType(stored.git_provider) if stored.git_provider else None
+                ProviderType(cast(str, stored.git_provider))
+                if stored.git_provider
+                else None
             ),
-            title=stored.title,
-            trigger=ConversationTrigger(stored.trigger) if stored.trigger else None,
-            pr_number=stored.pr_number,
-            llm_model=stored.llm_model,
+            title=cast(str | None, stored.title),
+            trigger=(
+                ConversationTrigger(cast(str, stored.trigger))
+                if stored.trigger
+                else None
+            ),
+            pr_number=(
+                cast(list[int], stored.pr_number)
+                if stored.pr_number is not None
+                else []
+            ),
+            llm_model=cast(str | None, stored.llm_model),
             metrics=metrics,
             parent_conversation_id=(
-                UUID(stored.parent_conversation_id)
+                UUID(cast(str, stored.parent_conversation_id))
                 if stored.parent_conversation_id
                 else None
             ),
             sub_conversation_ids=sub_conversation_ids or [],
-            public=stored.public,
-            tags=stored.tags or {},
+            public=cast(bool | None, stored.public),
+            tags=cast(dict[str, str], stored.tags or {}),
             created_at=created_at,
             updated_at=updated_at,
         )
@@ -585,8 +596,8 @@ class SQLAppConversationInfoService(AppConversationInfoService):
 
         # Execute the secure delete query
         result = await self.db_session.execute(delete_query)
-
-        return result.rowcount > 0
+        rowcount = cast(CursorResult[Any], result).rowcount
+        return (rowcount or 0) > 0
 
 
 class SQLAppConversationInfoServiceInjector(AppConversationInfoServiceInjector):

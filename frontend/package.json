@@ -48,10 +48,10 @@
     "zustand": "^5.0.10"
   },
   "scripts": {
-    "dev": "npm run make-i18n && cross-env VITE_MOCK_API=false npx react-router dev",
-    "dev:mock": "npm run make-i18n && cross-env VITE_MOCK_API=true VITE_MOCK_SAAS=false npx react-router dev",
-    "dev:mock:saas": "npm run make-i18n && cross-env VITE_MOCK_API=true VITE_MOCK_SAAS=true npx react-router dev",
-    "build": "npm run make-i18n && npx react-router build",
+    "dev": "npm run make-i18n && cross-env VITE_MOCK_API=false node ./node_modules/@react-router/dev/bin.js dev",
+    "dev:mock": "npm run make-i18n && cross-env VITE_MOCK_API=true VITE_MOCK_SAAS=false node ./node_modules/@react-router/dev/bin.js dev",
+    "dev:mock:saas": "npm run make-i18n && cross-env VITE_MOCK_API=true VITE_MOCK_SAAS=true node ./node_modules/@react-router/dev/bin.js dev",
+    "build": "npm run make-i18n && node ./node_modules/@react-router/dev/bin.js build",
     "start": "npx sirv-cli build/ --single",
     "test": "vitest run",
     "test:e2e": "playwright test",
@@ -60,11 +60,11 @@
     "preview": "vite preview",
     "make-i18n": "node scripts/make-i18n-translations.cjs",
     "prelint": "npm run make-i18n",
-    "lint": "npm run typecheck && eslint src --ext .ts,.tsx,.js && prettier --check src/**/*.{ts,tsx}",
-    "lint:fix": "eslint src --ext .ts,.tsx,.js --fix && prettier --write src/**/*.{ts,tsx}",
+    "lint": "npm run typecheck && node ./node_modules/eslint/bin/eslint.js src --ext .ts,.tsx,.js && node ./node_modules/prettier/bin/prettier.cjs --check \"src/**/*.{ts,tsx}\"",
+    "lint:fix": "node ./node_modules/eslint/bin/eslint.js src --ext .ts,.tsx,.js --fix && node ./node_modules/prettier/bin/prettier.cjs --write \"src/**/*.{ts,tsx}\"",
     "prepare": "cd .. && husky frontend/.husky",
-    "typecheck": "npx react-router typegen && tsc",
-    "typecheck:staged": "npx react-router typegen && npx tsc --noEmit --skipLibCheck",
+    "typecheck": "node ./node_modules/@react-router/dev/bin.js typegen && tsc",
+    "typecheck:staged": "node ./node_modules/@react-router/dev/bin.js typegen && npx tsc --noEmit --skipLibCheck",
     "check-translation-completeness": "node scripts/check-translation-completeness.cjs"
   },
   "lint-staged": {
@@ -111,6 +111,7 @@
     "husky": "^9.1.7",
     "jsdom": "^27.4.0",
     "lint-staged": "^16.2.7",
+    "lodash": "^4.17.21",
     "msw": "^2.6.6",
     "prettier": "^3.8.0",
     "tailwindcss": "^4.1.8",

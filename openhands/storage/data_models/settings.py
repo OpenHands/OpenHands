@@ -58,6 +58,8 @@ class Settings(BaseModel):
     user_consents_to_analytics: bool | None = None
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
+    sandbox_enable_gpu: bool | None = None
+    sandbox_gpu_base_container_image: str | None = None
     mcp_config: MCPConfig | None = None
     disabled_skills: list[str] | None = None
     search_api_key: SecretStr | None = None
@@ -142,6 +144,14 @@ class Settings(BaseModel):
         if v < 20:
             raise ValueError('condenser_max_size must be at least 20')
         return v
+
+    @field_validator('sandbox_gpu_base_container_image')
+    @classmethod
+    def strip_optional_gpu_base(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped or None
 
     @field_serializer('secrets_store')
     def secrets_store_serializer(self, secrets: Secrets, info: SerializationInfo):

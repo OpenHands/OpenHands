@@ -9,7 +9,7 @@
 import contextlib
 import warnings
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from fastapi.routing import Mount
 
@@ -65,7 +65,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
 
 
-lifespans = [_lifespan, mcp_app.lifespan]
+lifespans: list[Any] = [_lifespan, mcp_app.lifespan]
 app_lifespan_ = get_app_lifespan_service()
 if app_lifespan_:
     lifespans.append(app_lifespan_.lifespan)

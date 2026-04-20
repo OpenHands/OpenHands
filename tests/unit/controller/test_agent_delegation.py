@@ -1,4 +1,5 @@
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import uuid4
@@ -212,10 +213,18 @@ async def test_delegation_flow(
     message_action._source = EventSource.USER
     await parent_controller._on_event(message_action)
 
-    # Give time for the async step() to execute
-    await asyncio.sleep(1)
-
-    # Verify that a RecallObservation was added to the event stream
+    # Recall + delegate run on the event-stream queue; poll so Windows/slow CI is reliable
+    deadline = time.monotonic() + 15.0
+    while time.monotonic() < deadline:
+        events = list(mock_event_stream.get_events())
+        if (
+            mock_event_stream.get_latest_event_id() >= 3
+            and any(isinstance(e, RecallObservation) for e in events)
+            and any(isinstance(e, AgentDelegateAction) for e in events)
+            and parent_controller.delegate is not None
+        ):
+            break
+        await asyncio.sleep(0.05)
     events = list(mock_event_stream.get_events())
 
     # The exact number of events might vary depending on implementation details
@@ -433,10 +442,17 @@ async def test_delegate_hits_global_limits(
     message_action._source = EventSource.USER
     await parent_controller._on_event(message_action)
 
-    # Give time for the async step() to execute
-    await asyncio.sleep(1)
-
-    # Verify that a RecallObservation was added to the event stream
+    deadline = time.monotonic() + 15.0
+    while time.monotonic() < deadline:
+        events = list(mock_event_stream.get_events())
+        if (
+            mock_event_stream.get_latest_event_id() >= 3
+            and any(isinstance(e, RecallObservation) for e in events)
+            and any(isinstance(e, AgentDelegateAction) for e in events)
+            and parent_controller.delegate is not None
+        ):
+            break
+        await asyncio.sleep(0.05)
     events = list(mock_event_stream.get_events())
 
     # The exact number of events might vary depending on implementation details

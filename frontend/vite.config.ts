@@ -1,11 +1,11 @@
 /// <reference types="vitest" />
 /// <reference types="vite-plugin-svgr/client" />
-import { defineConfig, loadEnv } from "vite";
-import viteTsconfigPaths from "vite-tsconfig-paths";
-import svgr from "vite-plugin-svgr";
 import { reactRouter } from "@react-router/dev/vite";
-import { configDefaults } from "vitest/config";
 import tailwindcss from "@tailwindcss/vite";
+import { defineConfig, loadEnv } from "vite";
+import svgr from "vite-plugin-svgr";
+import viteTsconfigPaths from "vite-tsconfig-paths";
+import { configDefaults } from "vitest/config";
 
 export default defineConfig(({ mode }) => {
   const {
@@ -107,6 +107,10 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: "jsdom",
       setupFiles: ["vitest.setup.ts"],
+      // Sequential test files reduces flaky failures on Windows (shared MSW/jsdom state).
+      fileParallelism: false,
+      // LLM settings and similar suites use userEvent + MSW; default 5s is tight on Windows CI.
+      testTimeout: 20000,
       exclude: [...configDefaults.exclude, "tests"],
       coverage: {
         reporter: ["text", "json", "html", "lcov", "text-summary"],

@@ -48,7 +48,7 @@ class StoredEventCallback(Base):  # type: ignore
     __tablename__ = 'event_callback'
     id = Column(SQLUUID, primary_key=True)
     conversation_id = Column(SQLUUID, nullable=True)
-    status = Column(
+    status = Column(  # type: ignore[var-annotated]
         Enum(EventCallbackStatus), nullable=False, default=EventCallbackStatus.ACTIVE
     )
     processor = Column(create_json_type_decorator(EventCallbackProcessor))
@@ -60,7 +60,7 @@ class StoredEventCallback(Base):  # type: ignore
 class StoredEventCallbackResult(Base):  # type: ignore
     __tablename__ = 'event_callback_result'
     id = Column(SQLUUID, primary_key=True, default=uuid4)
-    status = Column(Enum(EventCallbackResultStatus), nullable=True)
+    status = Column(Enum(EventCallbackResultStatus), nullable=True)  # type: ignore[var-annotated]
     event_callback_id = Column(SQLUUID, index=True)
     event_id = Column(String, index=True)
     conversation_id = Column(SQLUUID, index=True)

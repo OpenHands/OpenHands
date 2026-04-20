@@ -794,12 +794,12 @@ if __name__ == '__main__':
     @app.middleware('http')
     async def authenticate_requests(request: Request, call_next):
         if request.url.path != '/alive' and request.url.path != '/server_info':
-            try:
-                verify_api_key(request.headers.get('X-Session-API-Key'))
-            except HTTPException as e:
-                return JSONResponse(
-                    status_code=e.status_code, content={'detail': e.detail}
-                )
+            if SESSION_API_KEY:
+                api_key = request.headers.get('X-Session-API-Key')
+                if api_key != SESSION_API_KEY:
+                    return JSONResponse(
+                        status_code=403, content={'detail': 'Invalid API Key'}
+                    )
         response = await call_next(request)
         return response
 
@@ -909,14 +909,18 @@ if __name__ == '__main__':
             if not os.path.exists(full_dest_path):
                 os.makedirs(full_dest_path, exist_ok=True)
 
-            if recursive or file.filename.endswith('.zip'):
+            upload_name = file.filename
+            if upload_name is None:
+                raise HTTPException(status_code=400, detail='Missing upload filename')
+
+            if recursive or upload_name.endswith('.zip'):
                 # For recursive uploads, we expect a zip file
-                if not file.filename.endswith('.zip'):
+                if not upload_name.endswith('.zip'):
                     raise HTTPException(
                         status_code=400, detail='Recursive uploads must be zip files'
                     )
 
-                zip_path = os.path.join(full_dest_path, file.filename)
+                zip_path = os.path.join(full_dest_path, upload_name)
                 with open(zip_path, 'wb') as buffer:
                     shutil.copyfileobj(file.file, buffer)
 
@@ -925,18 +929,18 @@ if __name__ == '__main__':
                 os.remove(zip_path)  # Remove the zip file after extraction
 
                 logger.debug(
-                    f'Uploaded file {file.filename} and extracted to {destination}'
+                    f'Uploaded file {upload_name} and extracted to {destination}'
                 )
             else:
                 # For single file uploads
-                file_path = os.path.join(full_dest_path, file.filename)
+                file_path = os.path.join(full_dest_path, upload_name)
                 with open(file_path, 'wb') as buffer:
                     shutil.copyfileobj(file.file, buffer)
-                logger.debug(f'Uploaded file {file.filename} to {destination}')
+                logger.debug(f'Uploaded file {upload_name} to {destination}')
 
             return JSONResponse(
                 content={
-                    'filename': file.filename,
+                    'filename': upload_name,
                     'destination': destination,
                     'recursive': recursive,
                 },

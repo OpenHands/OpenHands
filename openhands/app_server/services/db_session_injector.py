@@ -24,7 +24,7 @@ DB_SESSION_ATTR = 'db_session'
 DB_SESSION_KEEP_OPEN_ATTR = 'db_session_keep_open'
 
 
-class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
+class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     persistence_dir: Path
     host: str | None = None
     port: int | None = None
@@ -166,6 +166,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         if self.gcp_db_instance:  # GCP environments
             async_engine = await self._create_async_gcp_engine()
         else:
+            db_url: URL | str
             if self.host:
                 try:
                     import asyncpg  # noqa: F401
@@ -174,7 +175,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                         "PostgreSQL driver 'asyncpg' is required for async connections but is not installed."
                     ) from e
                 password = self.password.get_secret_value() if self.password else None
-                url = URL.create(
+                db_url = URL.create(
                     'postgresql+asyncpg',
                     username=self.user or '',
                     password=password,
@@ -183,11 +184,11 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                     database=self.name,
                 )
             else:
-                url = f'sqlite+aiosqlite:///{str(self.persistence_dir)}/openhands.db'
+                db_url = f'sqlite+aiosqlite:///{str(self.persistence_dir)}/openhands.db'
 
             if self.host:
                 async_engine = create_async_engine(
-                    url,
+                    db_url,
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
                     pool_recycle=self.pool_recycle,
@@ -195,7 +196,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                 )
             else:
                 async_engine = create_async_engine(
-                    url,
+                    db_url,
                     poolclass=NullPool,
                     pool_pre_ping=True,
                 )
@@ -209,6 +210,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         if self.gcp_db_instance:  # GCP environments
             engine = self._create_gcp_engine()
         else:
+            db_url: URL | str
             if self.host:
                 try:
                     import pg8000  # noqa: F401
@@ -217,7 +219,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                         "PostgreSQL driver 'pg8000' is required for sync connections but is not installed."
                     ) from e
                 password = self.password.get_secret_value() if self.password else None
-                url = URL.create(
+                db_url = URL.create(
                     'postgresql+pg8000',
                     username=self.user or '',
                     password=password,
@@ -226,9 +228,9 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                     database=self.name,
                 )
             else:
-                url = f'sqlite:///{self.persistence_dir}/openhands.db'
+                db_url = f'sqlite:///{self.persistence_dir}/openhands.db'
             engine = create_engine(
-                url,
+                db_url,
                 pool_size=self.pool_size,
                 max_overflow=self.max_overflow,
                 pool_recycle=self.pool_recycle,

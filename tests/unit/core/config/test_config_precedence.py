@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -97,12 +98,17 @@ def test_llm_config_precedence_cli_highest(mock_expanduser, temp_config_files):
 
 @patch('openhands.core.config.utils.os.path.expanduser')
 def test_current_dir_toml_precedence_over_user_config(
-    mock_expanduser, temp_config_files
+    mock_expanduser, temp_config_files, monkeypatch
 ):
     """Test that config.toml in current directory has precedence over ~/.openhands/config.toml."""
     mock_expanduser.side_effect = lambda path: path.replace(
         '~', temp_config_files['home_dir']
     )
+
+    # Isolate from developer machine env (e.g. LLM_MODEL in the shell breaks precedence).
+    for key in list(os.environ.keys()):
+        if key.upper().startswith('LLM_'):
+            monkeypatch.delenv(key, raising=False)
 
     # Create mock args without CLI parameters
     mock_args = MagicMock()

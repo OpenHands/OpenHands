@@ -1180,8 +1180,9 @@ def test_main(
     # Other assertions
     mock_parser.assert_called_once()
     mock_getenv.assert_any_call('GITHUB_TOKEN')
-    mock_path_exists.assert_called_with('/mock/output')
-    mock_load_single_resolver_output.assert_called_with('/mock/output/output.jsonl', 42)
+    expected_output_jsonl = os.path.join(mock_args.output_dir, 'output.jsonl')
+    mock_path_exists.assert_called_with(mock_args.output_dir)
+    mock_load_single_resolver_output.assert_called_with(expected_output_jsonl, 42)
 
     # Test for invalid issue number
     mock_args.issue_number = 'invalid'

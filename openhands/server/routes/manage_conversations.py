@@ -230,14 +230,14 @@ class ProvidersSetModel(BaseModel):
     providers_set: list[ProviderType] | None = None
 
 
-@app.post('/conversations', deprecated=True)
+@app.post('/conversations', deprecated=True, response_model=None)
 async def new_conversation(
     data: InitSessionRequest,
     user_id: str = Depends(get_user_id),
     provider_tokens: PROVIDER_TOKEN_TYPE = Depends(get_provider_tokens),
     user_secrets: Secrets = Depends(get_secrets),
     auth_type: AuthType | None = Depends(get_auth_type),
-) -> ConversationResponse:
+) -> ConversationResponse | JSONResponse:
     """Initialize a new session or join an existing one.
 
     After successful initialization, the client should connect to the WebSocket
@@ -822,7 +822,9 @@ async def _get_conversation_info(
         return None
 
 
-@app.post('/conversations/{conversation_id}/start', deprecated=True)
+@app.post(
+    '/conversations/{conversation_id}/start', deprecated=True, response_model=None
+)
 async def start_conversation(
     providers_set: ProvidersSetModel,
     conversation_id: str = Depends(validate_conversation_id),
@@ -830,7 +832,7 @@ async def start_conversation(
     provider_tokens: PROVIDER_TOKEN_TYPE = Depends(get_provider_tokens),
     settings: Settings = Depends(get_user_settings),
     conversation_store: ConversationStore = Depends(get_conversation_store),
-) -> ConversationResponse:
+) -> ConversationResponse | JSONResponse:
     """Start an agent loop for a conversation.
 
     This endpoint calls the conversation_manager's maybe_start_agent_loop method
@@ -903,11 +905,11 @@ async def start_conversation(
         )
 
 
-@app.post('/conversations/{conversation_id}/stop', deprecated=True)
+@app.post('/conversations/{conversation_id}/stop', deprecated=True, response_model=None)
 async def stop_conversation(
     conversation_id: str = Depends(validate_conversation_id),
     user_id: str = Depends(get_user_id),
-) -> ConversationResponse:
+) -> ConversationResponse | JSONResponse:
     """Stop an agent loop for a conversation.
 
     This endpoint calls the conversation_manager's close_session method
@@ -1018,7 +1020,7 @@ async def _update_v1_conversation(
     user_id: str | None,
     app_conversation_info_service: AppConversationInfoService,
     app_conversation_service: AppConversationService,
-) -> JSONResponse | bool:
+) -> JSONResponse | bool | None:
     """Update a V1 conversation title.
 
     Args:
@@ -1029,7 +1031,8 @@ async def _update_v1_conversation(
         app_conversation_service: The app conversation service for agent-server communication
 
     Returns:
-        JSONResponse on error, True on success
+        ``None`` if this is not a V1 conversation; ``True`` on success;
+        ``JSONResponse`` on error.
     """
     conversation_id = str(conversation_uuid)
     logger.info(
@@ -1185,7 +1188,7 @@ async def _update_v0_conversation(
     return True
 
 
-@app.patch('/conversations/{conversation_id}', deprecated=True)
+@app.patch('/conversations/{conversation_id}', deprecated=True, response_model=None)
 async def update_conversation(
     data: UpdateConversationRequest,
     conversation_id: str = Depends(validate_conversation_id),
@@ -1193,7 +1196,7 @@ async def update_conversation(
     conversation_store: ConversationStore = Depends(get_conversation_store),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
-) -> bool:
+) -> bool | JSONResponse:
     """Update conversation metadata.
 
     This endpoint allows updating conversation details like title.

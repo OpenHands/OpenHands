@@ -1,6 +1,7 @@
 """Configuration for the OpenHands App Server."""
 
 import os
+import tempfile
 from pathlib import Path
 from typing import AsyncContextManager
 
@@ -74,7 +75,11 @@ def get_default_persistence_dir() -> Path:
     if persistence_dir:
         result = Path(persistence_dir)
     else:
-        result = Path.home() / '.openhands'
+        try:
+            home = Path.home()
+        except RuntimeError:
+            home = Path(tempfile.gettempdir())
+        result = home / '.openhands'
 
     result.mkdir(parents=True, exist_ok=True)
     return result

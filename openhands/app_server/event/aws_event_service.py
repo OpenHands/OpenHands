@@ -37,7 +37,9 @@ class AwsEventService(EventServiceBase):
     def _load_event(self, path: Path) -> Event | None:
         """Get the event at the path given."""
         try:
-            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=str(path))
+            response = self.s3_client.get_object(
+                Bucket=self.bucket_name, Key=path.as_posix()
+            )
             with response['Body'] as stream:
                 json_data = stream.read().decode('utf-8')
             event = Event.model_validate_json(json_data)
@@ -57,7 +59,7 @@ class AwsEventService(EventServiceBase):
         json_str = json.dumps(data, indent=2)
         self.s3_client.put_object(
             Bucket=self.bucket_name,
-            Key=str(path),
+            Key=path.as_posix(),
             Body=json_str.encode('utf-8'),
         )
 
@@ -65,7 +67,7 @@ class AwsEventService(EventServiceBase):
         """Search paths."""
         kwargs: dict[str, Any] = {
             'Bucket': self.bucket_name,
-            'Prefix': str(prefix),
+            'Prefix': prefix.as_posix(),
         }
         if page_id:
             kwargs['ContinuationToken'] = page_id

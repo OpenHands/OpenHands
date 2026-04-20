@@ -6,6 +6,12 @@ from unittest.mock import patch
 
 import pytest
 
+
+def _abspath_from_env_host_fragment(host_fragment: str) -> str:
+    """Match str_replace_editor: host side of `host:/workspace` is passed through abspath."""
+    return os.path.abspath(host_fragment)
+
+
 # Import the functions directly to avoid dependency issues
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
 
@@ -47,7 +53,7 @@ class TestWorkspacePathDetection:
         """Test that LocalRuntime uses host path from SANDBOX_VOLUMES."""
         with patch.dict(os.environ, {'SANDBOX_VOLUMES': '/host/app:/workspace:rw'}):
             result = _get_workspace_mount_path_from_env(runtime_type='local')
-            assert result == '/host/app'
+            assert result == _abspath_from_env_host_fragment('/host/app')
 
     def test_local_runtime_multiple_mounts(self):
         """Test LocalRuntime with multiple mounts, finds /workspace mount."""
@@ -58,7 +64,7 @@ class TestWorkspacePathDetection:
             },
         ):
             result = _get_workspace_mount_path_from_env(runtime_type='local')
-            assert result == '/home/user/project'
+            assert result == _abspath_from_env_host_fragment('/home/user/project')
 
     def test_cli_runtime_multiple_mounts(self):
         """Test CLIRuntime with multiple mounts, finds /workspace mount."""
@@ -69,7 +75,7 @@ class TestWorkspacePathDetection:
             },
         ):
             result = _get_workspace_mount_path_from_env(runtime_type='cli')
-            assert result == '/home/user/project'
+            assert result == _abspath_from_env_host_fragment('/home/user/project')
 
     def test_local_runtime_no_workspace_mount(self):
         """Test LocalRuntime with no /workspace mount falls back to current directory."""
@@ -97,7 +103,8 @@ class TestWorkspacePathDetection:
             result = _get_workspace_mount_path_from_env(runtime_type='local')
             # Should be converted to absolute path
             assert os.path.isabs(result)
-            assert result.endswith('relative/path')
+            norm = result.replace('\\', '/')
+            assert norm.endswith('relative/path')
 
     def test_unknown_runtime_type(self):
         """Test that unknown runtime types use default container path."""
@@ -134,8 +141,12 @@ class TestToolCreation:
             path_description = tool['function']['parameters']['properties']['path'][
                 'description'
             ]
-            assert '/host/app/file.py' in path_description
-            assert '/host/app`.' in path_description
+            host = _abspath_from_env_host_fragment('/host/app')
+            assert (
+                f'{host}/file.py' in path_description
+                or f'{host}\\file.py' in path_description
+            )
+            assert f'{host}`.' in path_description or f'{host}/`.' in path_description
 
     def test_tool_creation_cli_runtime(self):
         """Test tool creation in CLIRuntime shows host path in description."""
@@ -144,8 +155,12 @@ class TestToolCreation:
             path_description = tool['function']['parameters']['properties']['path'][
                 'description'
             ]
-            assert '/host/app/file.py' in path_description
-            assert '/host/app`.' in path_description
+            host = _abspath_from_env_host_fragment('/host/app')
+            assert (
+                f'{host}/file.py' in path_description
+                or f'{host}\\file.py' in path_description
+            )
+            assert f'{host}`.' in path_description or f'{host}/`.' in path_description
 
     def test_tool_creation_remote_runtime(self):
         """Test tool creation in RemoteRuntime shows /workspace in description."""
@@ -191,8 +206,12 @@ class TestToolCreation:
             path_description = tool['function']['parameters']['properties']['path'][
                 'description'
             ]
-            assert '/host/app/file.py' in path_description
-            assert '/host/app`.' in path_description
+            host = _abspath_from_env_host_fragment('/host/app')
+            assert (
+                f'{host}/file.py' in path_description
+                or f'{host}\\file.py' in path_description
+            )
+            assert f'{host}`.' in path_description or f'{host}/`.' in path_description
 
 
 class TestEdgeCases:
@@ -222,4 +241,6 @@ class TestEdgeCases:
         for sandbox_volumes in test_cases:
             with patch.dict(os.environ, {'SANDBOX_VOLUMES': sandbox_volumes}):
                 result = _get_workspace_mount_path_from_env(runtime_type='local')
-                assert result == '/host/app', f'Failed for: {sandbox_volumes}'
+                assert result == _abspath_from_env_host_fragment('/host/app'), (
+                    f'Failed for: {sandbox_volumes}'
+                )

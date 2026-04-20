@@ -262,8 +262,22 @@ containers/runtime/code
 
 # Local tooling / ad-hoc backups (Windows dev)
 .debug_console_plus/
+.continue/
 frontend/node_modules._old_*/
 frontend/node_modules._del_*/
+
+# Ad-hoc tool output (mypy/pytest/pre-commit local runs)
+_mypy_agent_tmp/
+_mypy_agent_out.txt
+.mypy-out.txt
+.mypy_direct.log
+.mypy_precommit_run.log
+.precommit_mypy.log
+.pytest-mcp-out.txt
+.pr/pytest-out.txt
+.pre-commit-home/
+.pre-commit-home/.lock
+.pre-commit-home/db.db
 
 # Local OpenHands app data (sqlite, secrets); never commit
 .openhands/

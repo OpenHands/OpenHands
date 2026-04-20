@@ -1,19 +1,19 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
-import LlmSettingsScreen from "#/routes/llm-settings";
+import OptionService from "#/api/option-service/option-service.api";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   MOCK_DEFAULT_USER_SETTINGS,
   resetTestHandlersMockSettings,
 } from "#/mocks/handlers";
-import * as AdvancedSettingsUtlls from "#/utils/has-advanced-settings-set";
-import * as ToastHandlers from "#/utils/custom-toast-handlers";
-import OptionService from "#/api/option-service/option-service.api";
-import { organizationService } from "#/api/organization-service/organization-service.api";
+import LlmSettingsScreen from "#/routes/llm-settings";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 import type { Organization, OrganizationMember } from "#/types/org";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
+import * as AdvancedSettingsUtlls from "#/utils/has-advanced-settings-set";
 
 /** Creates a mock Organization with default values for testing */
 const createMockOrganization = (
@@ -132,7 +132,11 @@ const renderLlmSettingsScreen = (
 };
 
 beforeEach(() => {
-  vi.resetAllMocks();
+  // resetAllMocks clears spy implementations to `undefined`, which breaks
+  // SettingsService.getSettings after any test used vi.spyOn on it — MSW
+  // never runs and the screen stays on the skeleton. restoreAllMocks
+  // brings back real methods; we then re-apply hook mocks below.
+  vi.restoreAllMocks();
   resetTestHandlersMockSettings();
 
   // Default mock for useSearchParams - returns empty params
@@ -172,7 +176,11 @@ beforeEach(() => {
 
   // Default mock for useOrgTypeAndAccess - returns team org by default
   mockUseOrgTypeAndAccess.mockReturnValue({
-    selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+    selectedOrg: createMockOrganization({
+      id: "1",
+      name: "Test Org",
+      is_personal: false,
+    }),
     isPersonalOrg: false,
     isTeamOrg: true,
     canViewOrgRoutes: true,
@@ -409,41 +417,41 @@ describe("Content", () => {
     });
 
     it("should show custom security analyzers", async () => {
-    // Mock the config to enable security analyzer functionality
-    mockUseConfig.mockReturnValue({
-      data: { app_mode: "saas" },
-      isLoading: false,
+      // Mock the config to enable security analyzer functionality
+      mockUseConfig.mockReturnValue({
+        data: { app_mode: "saas" },
+        isLoading: false,
+      });
+      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+      getSettingsSpy.mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        confirmation_mode: true,
+        security_analyzer: "llm",
+      });
+
+      const getSecurityAnalyzersSpy = vi.spyOn(
+        OptionService,
+        "getSecurityAnalyzers",
+      );
+      // Only custom analyzer (not invariant which is filtered out)
+      getSecurityAnalyzersSpy.mockResolvedValue(["llm", "none", "custom"]);
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+      await userEvent.click(advancedSwitch);
+
+      const securityAnalyzer = await screen.findByTestId(
+        "security-analyzer-input",
+      );
+      await userEvent.click(securityAnalyzer);
+
+      // Custom analyzers should be available, but invariant is filtered out
+      screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
+      screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
+      expect(screen.getByText("custom")).toBeInTheDocument();
     });
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      confirmation_mode: true,
-      security_analyzer: "llm",
-    });
-
-    const getSecurityAnalyzersSpy = vi.spyOn(
-      OptionService,
-      "getSecurityAnalyzers",
-    );
-    // Only custom analyzer (not invariant which is filtered out)
-    getSecurityAnalyzersSpy.mockResolvedValue(["llm", "none", "custom"]);
-
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
-
-    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-    await userEvent.click(advancedSwitch);
-
-    const securityAnalyzer = await screen.findByTestId(
-      "security-analyzer-input",
-    );
-    await userEvent.click(securityAnalyzer);
-
-    // Custom analyzers should be available, but invariant is filtered out
-    screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
-    screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
-    expect(screen.getByText("custom")).toBeInTheDocument();
-  });
   });
 
   it.todo("should render an indicator if the llm api key is set");
@@ -751,7 +759,7 @@ describe("Form submission", () => {
         security_analyzer: null,
       }),
     );
-  });
+  }, 60_000);
 
   it("should disable the button if there are no changes in the basic form", async () => {
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
@@ -796,6 +804,7 @@ describe("Form submission", () => {
     expect(submitButton).toBeDisabled();
   });
 
+  // Many sequential userEvent steps; allow extra time on slow Windows runners.
   it("should disable the button if there are no changes in the advanced form", async () => {
     // V1 is always enabled, so no agent-input in the form
     mockUseConfig.mockReturnValue({
@@ -909,7 +918,7 @@ describe("Form submission", () => {
       "SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT",
     );
     expect(submitButton).toBeDisabled();
-  });
+  }, 60_000);
 
   it("should reset button state when switching between forms", async () => {
     renderLlmSettingsScreen();
@@ -1738,7 +1747,11 @@ describe("Contextual info messages", () => {
       isLoading: false,
     });
     mockUseOrgTypeAndAccess.mockReturnValue({
-      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      selectedOrg: createMockOrganization({
+        id: "1",
+        name: "Test Org",
+        is_personal: false,
+      }),
       isPersonalOrg: false,
       isTeamOrg: true,
       canViewOrgRoutes: true,
@@ -1773,7 +1786,11 @@ describe("Contextual info messages", () => {
       isLoading: false,
     });
     mockUseOrgTypeAndAccess.mockReturnValue({
-      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      selectedOrg: createMockOrganization({
+        id: "1",
+        name: "Test Org",
+        is_personal: false,
+      }),
       isPersonalOrg: false,
       isTeamOrg: true,
       canViewOrgRoutes: true,
@@ -1808,7 +1825,11 @@ describe("Contextual info messages", () => {
       isLoading: false,
     });
     mockUseOrgTypeAndAccess.mockReturnValue({
-      selectedOrg: createMockOrganization({ id: "1", name: "Personal Org", is_personal: true }),
+      selectedOrg: createMockOrganization({
+        id: "1",
+        name: "Personal Org",
+        is_personal: true,
+      }),
       isPersonalOrg: true,
       isTeamOrg: false,
       canViewOrgRoutes: false,
@@ -1820,7 +1841,9 @@ describe("Contextual info messages", () => {
     await screen.findByTestId("llm-settings-screen");
 
     // Assert
-    expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("llm-settings-info-message"),
+    ).not.toBeInTheDocument();
   });
 
   it("should not show info message in OSS mode", async () => {
@@ -1830,7 +1853,11 @@ describe("Contextual info messages", () => {
       isLoading: false,
     });
     mockUseOrgTypeAndAccess.mockReturnValue({
-      selectedOrg: createMockOrganization({ id: "1", name: "Test Org", is_personal: false }),
+      selectedOrg: createMockOrganization({
+        id: "1",
+        name: "Test Org",
+        is_personal: false,
+      }),
       isPersonalOrg: false,
       isTeamOrg: true,
       canViewOrgRoutes: true,
@@ -1842,7 +1869,9 @@ describe("Contextual info messages", () => {
     await screen.findByTestId("llm-settings-screen");
 
     // Assert
-    expect(screen.queryByTestId("llm-settings-info-message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("llm-settings-info-message"),
+    ).not.toBeInTheDocument();
   });
 });
 

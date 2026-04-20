@@ -16,16 +16,17 @@ const unpackClientDirectory = async () => {
   const clientDir = path.resolve(buildDir, "client");
 
   const files = await fs.promises.readdir(clientDir);
-  await Promise.all(
-    files.map((file) =>
-      fs.promises.rename(
-        path.resolve(clientDir, file),
-        path.resolve(buildDir, file),
-      ),
-    ),
-  );
+  // Sequential renames: parallel renames on Windows can fail with EPERM (AV/indexer locks).
+  /* eslint-disable no-await-in-loop -- must rename one file at a time on Windows */
+  for (const file of files) {
+    await fs.promises.rename(
+      path.resolve(clientDir, file),
+      path.resolve(buildDir, file),
+    );
+  }
+  /* eslint-enable no-await-in-loop */
 
-  await fs.promises.rmdir(clientDir);
+  await fs.promises.rm(clientDir, { recursive: true, force: true });
 };
 
 export default {

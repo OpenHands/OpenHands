@@ -1,4 +1,5 @@
 import json
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 import openhands.mcp.utils
 from openhands.core.config.mcp_config import MCPSSEServerConfig, MCPStdioServerConfig
 from openhands.events.action.mcp import MCPAction
+from openhands.events.observation import ErrorObservation
 from openhands.events.observation.mcp import MCPObservation
 
 
@@ -164,8 +166,9 @@ async def test_call_tool_mcp_success():
 
 
 @pytest.mark.asyncio
+@patch('openhands.mcp.utils.shutil.which', return_value='/fake/bin/exe')
 @patch('openhands.mcp.utils.MCPClient')
-async def test_create_mcp_clients_stdio_success(mock_mcp_client):
+async def test_create_mcp_clients_stdio_success(mock_mcp_client, _mock_which):
     """Test successful creation of MCP clients with stdio servers."""
     # Setup mock
     mock_client_instance = AsyncMock()
@@ -202,8 +205,11 @@ async def test_create_mcp_clients_stdio_success(mock_mcp_client):
 
 
 @pytest.mark.asyncio
+@patch('openhands.mcp.utils.shutil.which', return_value='/fake/bin/exe')
 @patch('openhands.mcp.utils.MCPClient')
-async def test_create_mcp_clients_stdio_connection_failure(mock_mcp_client):
+async def test_create_mcp_clients_stdio_connection_failure(
+    mock_mcp_client, _mock_which
+):
     """Test handling of stdio connection failures when creating MCP clients."""
     # Setup mock
     mock_client_instance = AsyncMock()
@@ -294,3 +300,31 @@ async def test_call_tool_mcp_stdio_client():
     mock_client.call_tool.assert_called_once_with(
         'stdio_test_tool', {'input': 'test_input'}
     )
+
+
+@pytest.mark.asyncio
+async def test_create_mcp_clients_noop_on_windows(monkeypatch):
+    """Production code skips MCP client creation on win32."""
+    monkeypatch.setattr(sys, 'platform', 'win32')
+    clients = await openhands.mcp.utils.create_mcp_clients(
+        [MCPSSEServerConfig(url='http://127.0.0.1:9')], []
+    )
+    assert clients == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_mcp_tools_from_config_noop_on_windows(monkeypatch):
+    monkeypatch.setattr(sys, 'platform', 'win32')
+    from openhands.core.config.mcp_config import MCPConfig
+
+    tools = await openhands.mcp.utils.fetch_mcp_tools_from_config(MCPConfig())
+    assert tools == []
+
+
+@pytest.mark.asyncio
+async def test_call_tool_mcp_error_observation_on_windows(monkeypatch):
+    monkeypatch.setattr(sys, 'platform', 'win32')
+    action = MCPAction(name='any_tool', arguments={})
+    obs = await openhands.mcp.utils.call_tool_mcp([], action)
+    assert isinstance(obs, ErrorObservation)
+    assert 'Windows' in obs.content

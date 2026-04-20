@@ -1,6 +1,15 @@
 SHELL=/usr/bin/env bash
 # Makefile for OpenHands project
 
+# Faster Docker image builds (BuildKit cache/parallelism). Disable with `make docker-run DOCKER_BUILDKIT=0`.
+DOCKER_BUILDKIT ?= 1
+COMPOSE_DOCKER_CLI_BUILD ?= 1
+export DOCKER_BUILDKIT
+export COMPOSE_DOCKER_CLI_BUILD
+
+# Faster npm installs when package-lock.json is present (override e.g. NPM_CI_FLAGS= to run audits).
+NPM_CI_FLAGS ?= --no-audit --no-fund
+
 # Variables
 BACKEND_HOST ?= "127.0.0.1"
 BACKEND_PORT ?= 3000
@@ -178,8 +187,14 @@ install-frontend-dependencies: check-npm check-nodejs
 	@echo "$(YELLOW)Setting up frontend environment...$(RESET)"
 	@echo "$(YELLOW)Detect Node.js version...$(RESET)"
 	@cd frontend && node ./scripts/detect-node-version.js
-	echo "$(BLUE)Installing frontend dependencies with npm...$(RESET)"
-	@cd frontend && npm install
+	@echo "$(BLUE)Installing frontend dependencies with npm...$(RESET)"
+	@cd frontend && \
+	if [ -f package-lock.json ]; then \
+		echo "$(BLUE)Using npm ci from package-lock.json (override NPM_CI_FLAGS if you need audits).$(RESET)"; \
+		npm ci $(NPM_CI_FLAGS); \
+	else \
+		npm install; \
+	fi
 	@echo "$(GREEN)Frontend dependencies installed successfully.$(RESET)"
 
 install-pre-commit-hooks: check-python check-poetry install-python-dependencies
@@ -296,6 +311,25 @@ docker-run:
 		docker compose up $(OPTIONS); \
 	fi
 
+# Packaged UI with NVIDIA GPU (requires NVIDIA Container Toolkit + drivers). Merges docker-compose.gpu.yml.
+docker-run-gpu: WORKSPACE_BASE ?= $(PWD)/workspace
+docker-run-gpu:
+	@if [ -f /.dockerenv ]; then \
+		echo "Running inside a Docker container. Exiting..."; \
+		exit 0; \
+	else \
+		echo "$(YELLOW)Running the app in Docker with GPU $(OPTIONS)...$(RESET)"; \
+		export WORKSPACE_BASE=${WORKSPACE_BASE}; \
+		export SANDBOX_USER_ID=$(shell id -u); \
+		export DATE=$(shell date +%Y%m%d%H%M%S); \
+		docker compose -f docker-compose.yml -f docker-compose.gpu.yml up $(OPTIONS); \
+	fi
+
+# Build only the packaged app image (uses BuildKit from exports above).
+docker-build-app:
+	@echo "$(YELLOW)Building openhands:latest...$(RESET)"
+	docker compose build $(OPTIONS)
+
 
 # Setup config.toml
 setup-config:
@@ -344,6 +378,16 @@ docker-dev:
 		./containers/dev/dev.sh $(OPTIONS); \
 	fi
 
+# Same as docker-dev but merges compose-gpu.yml (set OPENHANDS_GPU=1 for dev.sh).
+docker-dev-gpu:
+	@if [ -f /.dockerenv ]; then \
+		echo "Running inside a Docker container. Exiting..."; \
+		exit 0; \
+	else \
+		echo "$(YELLOW)Build and run in Docker with GPU $(OPTIONS)...$(RESET)"; \
+		OPENHANDS_GPU=1 ./containers/dev/dev.sh $(OPTIONS); \
+	fi
+
 # Clean up all caches
 clean:
 	@echo "$(YELLOW)Cleaning up caches...$(RESET)"
@@ -363,9 +407,12 @@ help:
 	@echo "  $(GREEN)run$(RESET)                 - Run the OpenHands application, starting both backend and frontend servers."
 	@echo "                        Backend Log file will be stored in the 'logs' directory."
 	@echo "  $(GREEN)docker-dev$(RESET)          - Build and run the OpenHands application in Docker."
+	@echo "  $(GREEN)docker-dev-gpu$(RESET)      - Same as docker-dev with NVIDIA GPU (needs Container Toolkit)."
 	@echo "  $(GREEN)docker-run$(RESET)          - Run the OpenHands application, starting both backend and frontend servers in Docker."
+	@echo "  $(GREEN)docker-run-gpu$(RESET)      - Same as docker-run with NVIDIA GPU (merges docker-compose.gpu.yml)."
+	@echo "  $(GREEN)docker-build-app$(RESET)    - docker compose build for the packaged image (openhands:latest)."
 	@echo "  $(GREEN)help$(RESET)                - Display this help message, providing information on available targets."
 
 # Phony targets
-.PHONY: build check-dependencies check-system check-python check-npm check-nodejs check-docker check-poetry install-python-dependencies install-frontend-dependencies install-pre-commit-hooks lint-backend lint-frontend lint test-frontend test build-frontend start-backend start-frontend _run_setup run run-wsl setup-config setup-config-prompts setup-config-basic openhands-cloud-run docker-dev docker-run clean help
+.PHONY: build check-dependencies check-system check-python check-npm check-nodejs check-docker check-poetry install-python-dependencies install-frontend-dependencies install-pre-commit-hooks lint-backend lint-frontend lint test-frontend test build-frontend start-backend start-frontend _run_setup run run-wsl setup-config setup-config-prompts setup-config-basic openhands-cloud-run docker-dev docker-dev-gpu docker-run docker-run-gpu docker-build-app clean help
 .PHONY: kind

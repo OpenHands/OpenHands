@@ -25,6 +25,11 @@ export const getSettingsQueryFn = async (): Promise<Settings> => {
     sandbox_grouping_strategy:
       settings.sandbox_grouping_strategy ??
       DEFAULT_SETTINGS.sandbox_grouping_strategy,
+    sandbox_enable_gpu:
+      settings.sandbox_enable_gpu ?? DEFAULT_SETTINGS.sandbox_enable_gpu,
+    sandbox_gpu_base_container_image:
+      settings.sandbox_gpu_base_container_image ??
+      DEFAULT_SETTINGS.sandbox_gpu_base_container_image,
   };
 };
 

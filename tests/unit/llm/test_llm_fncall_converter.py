@@ -17,7 +17,14 @@ from openhands.llm.fn_call_converter import (
     convert_tool_call_to_string,
     convert_tools_to_description,
     get_example_for_tools,
+    refine_prompt,
 )
+
+
+def _refined_execute_bash_example(key: str) -> str:
+    """Fragments as stitched by get_example_for_tools (refine_prompt on win32)."""
+    return refine_prompt(TOOL_EXAMPLES['execute_bash'][key])
+
 
 FNCALL_TOOLS: list[ChatCompletionToolParam] = [
     {
@@ -224,9 +231,9 @@ def test_get_example_for_tools_single_tool():
         'USER: Create a list of numbers from 1 to 10, and display them in a web page at port 5000.'
         in example
     )
-    assert TOOL_EXAMPLES['execute_bash']['check_dir'] in example
-    assert TOOL_EXAMPLES['execute_bash']['run_server'] in example
-    assert TOOL_EXAMPLES['execute_bash']['kill_server'] in example
+    assert _refined_execute_bash_example('check_dir') in example
+    assert _refined_execute_bash_example('run_server') in example
+    assert _refined_execute_bash_example('kill_server') in example
     assert TOOL_EXAMPLES['str_replace_editor']['create_file'] not in example
     assert TOOL_EXAMPLES['browser']['view_page'] not in example
     assert TOOL_EXAMPLES['finish']['example'] not in example
@@ -252,7 +259,7 @@ def test_get_example_for_tools_single_tool_is_finish():
         in example
     )
     assert TOOL_EXAMPLES['finish']['example'] in example
-    assert TOOL_EXAMPLES['execute_bash']['check_dir'] not in example
+    assert _refined_execute_bash_example('check_dir') not in example
     assert TOOL_EXAMPLES['str_replace_editor']['create_file'] not in example
     assert TOOL_EXAMPLES['browser']['view_page'] not in example
 
@@ -314,9 +321,9 @@ def test_get_example_for_tools_multiple_tools():
         'USER: Create a list of numbers from 1 to 10, and display them in a web page at port 5000.'
         in example
     )
-    assert TOOL_EXAMPLES['execute_bash']['check_dir'] in example
-    assert TOOL_EXAMPLES['execute_bash']['run_server'] in example
-    assert TOOL_EXAMPLES['execute_bash']['kill_server'] in example
+    assert _refined_execute_bash_example('check_dir') in example
+    assert _refined_execute_bash_example('run_server') in example
+    assert _refined_execute_bash_example('kill_server') in example
     assert TOOL_EXAMPLES['str_replace_editor']['create_file'] in example
     assert TOOL_EXAMPLES['str_replace_editor']['edit_file'] in example
     assert TOOL_EXAMPLES['browser']['view_page'] not in example
@@ -407,10 +414,10 @@ def test_get_example_for_tools_multiple_tools_with_finish():
     )
 
     # Check for execute_bash parts (order matters for get_example_for_tools)
-    assert TOOL_EXAMPLES['execute_bash']['check_dir'].strip() in example
-    assert TOOL_EXAMPLES['execute_bash']['run_server'].strip() in example
-    assert TOOL_EXAMPLES['execute_bash']['kill_server'].strip() in example
-    assert TOOL_EXAMPLES['execute_bash']['run_server_again'].strip() in example
+    assert _refined_execute_bash_example('check_dir').strip() in example
+    assert _refined_execute_bash_example('run_server').strip() in example
+    assert _refined_execute_bash_example('kill_server').strip() in example
+    assert _refined_execute_bash_example('run_server_again').strip() in example
 
     # Check for str_replace_editor parts
     assert TOOL_EXAMPLES['str_replace_editor']['create_file'] in example
@@ -434,9 +441,9 @@ def test_get_example_for_tools_all_tools():
         'USER: Create a list of numbers from 1 to 10, and display them in a web page at port 5000.'
         in example
     )
-    assert TOOL_EXAMPLES['execute_bash']['check_dir'] in example
-    assert TOOL_EXAMPLES['execute_bash']['run_server'] in example
-    assert TOOL_EXAMPLES['execute_bash']['kill_server'] in example
+    assert _refined_execute_bash_example('check_dir') in example
+    assert _refined_execute_bash_example('run_server') in example
+    assert _refined_execute_bash_example('kill_server') in example
     assert TOOL_EXAMPLES['str_replace_editor']['create_file'] in example
     assert TOOL_EXAMPLES['str_replace_editor']['edit_file'] in example
     assert TOOL_EXAMPLES['finish']['example'] in example

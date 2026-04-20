@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
@@ -20,8 +21,8 @@ def check_session_api_key(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
 
-def get_dependencies() -> list[Depends]:
-    result = []
+def get_dependencies() -> list[Any]:
+    result: list[Any] = []
     if _SESSION_API_KEY:
         result.append(Depends(check_session_api_key))
     elif get_global_config().app_mode == AppMode.SAAS:

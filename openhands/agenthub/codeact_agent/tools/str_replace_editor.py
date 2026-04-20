@@ -81,12 +81,15 @@ def _get_workspace_mount_path_from_env(runtime_type: str | None = None) -> str:
             # Split by commas to handle multiple mounts
             mounts = sandbox_volumes.split(',')
 
-            # Check if any mount explicitly targets /workspace
+            # Check if any mount explicitly targets /workspace.
+            # Do not split on every ':' — Windows host paths include drive prefixes (C:\...).
+            workspace_marker = ':/workspace'
             for mount in mounts:
-                parts = mount.split(':')
-                if len(parts) >= 2 and parts[1] == '/workspace':
-                    host_path = os.path.abspath(parts[0])
-                    return host_path
+                if workspace_marker not in mount:
+                    continue
+                host_path, _, _ = mount.partition(workspace_marker)
+                if host_path:
+                    return os.path.abspath(host_path)
 
         # Fallback for local/CLI runtimes when SANDBOX_VOLUMES is not set:
         # Use current working directory as it's likely the workspace root

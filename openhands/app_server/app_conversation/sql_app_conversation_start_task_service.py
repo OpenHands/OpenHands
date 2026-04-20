@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
@@ -54,7 +54,7 @@ class StoredAppConversationStartTask(Base):  # type: ignore
     __tablename__ = 'app_conversation_start_task'
     id = Column(SQLUUID, primary_key=True)
     created_by_user_id = Column(String, index=True)
-    status = Column(Enum(AppConversationStartTaskStatus), nullable=True)
+    status = Column(Enum(AppConversationStartTaskStatus), nullable=True)  # type: ignore[var-annotated]
     detail = Column(String, nullable=True)
     app_conversation_id = Column(SQLUUID, nullable=True)
     sandbox_id = Column(String, nullable=True)
@@ -192,7 +192,9 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
             )
 
         result = await self.session.execute(query)
-        tasks_by_id = {task.id: task for task in result.scalars().all()}
+        tasks_by_id: dict[UUID, StoredAppConversationStartTask] = {
+            cast(UUID, task.id): task for task in result.scalars().all()
+        }
 
         # Return tasks in the same order as requested, with None for missing ones
         return [
@@ -258,7 +260,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
         result = await self.session.execute(delete_query)
 
         # Return True if any rows were affected
-        return result.rowcount > 0
+        return (cast(Any, result).rowcount or 0) > 0
 
 
 class SQLAppConversationStartTaskServiceInjector(

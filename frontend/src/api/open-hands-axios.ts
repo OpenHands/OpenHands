@@ -1,7 +1,23 @@
 import axios, { AxiosError, AxiosResponse } from "axios";
 
+/**
+ * VITE_BACKEND_BASE_URL may be either a host:port (per .env.sample) or a full origin
+ * (some local .env files). Prepend protocol only for the host:port form; a full URL
+ * must be used as-is to avoid `http://http://...` and broken MSW/test requests.
+ */
+function resolveBackendBaseURL(): string {
+  const fromEnv = import.meta.env.VITE_BACKEND_BASE_URL?.trim();
+  if (!fromEnv) {
+    return `${window.location.protocol}//${window?.location.host}`;
+  }
+  if (fromEnv.startsWith("http://") || fromEnv.startsWith("https://")) {
+    return fromEnv.replace(/\/$/, "");
+  }
+  return `${window.location.protocol}//${fromEnv.replace(/\/$/, "")}`;
+}
+
 export const openHands = axios.create({
-  baseURL: `${window.location.protocol}//${import.meta.env.VITE_BACKEND_BASE_URL || window?.location.host}`,
+  baseURL: resolveBackendBaseURL(),
 });
 
 // Helper function to check if a response contains an email verification error

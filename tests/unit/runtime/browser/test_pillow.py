@@ -188,14 +188,15 @@ class TestScreenshotSaveWorkflow:
             with open(screenshot_path, 'wb') as f:
                 f.write(image_data)
 
-            # Verify the saved image (as done in utils.py)
-            Image.open(screenshot_path).verify()
+            # Verify the saved image (as done in utils.py); close handles for Windows temp cleanup
+            with Image.open(screenshot_path) as verified:
+                verified.verify()
 
             # Load and check content is preserved
-            loaded = Image.open(screenshot_path)
-            assert loaded.size == (800, 600)
-            assert loaded.getpixel((400, 25)) == (60, 60, 60)  # Header
-            assert loaded.getpixel((150, 165)) == (0, 120, 215)  # Button
+            with Image.open(screenshot_path) as loaded:
+                assert loaded.size == (800, 600)
+                assert loaded.getpixel((400, 25)) == (60, 60, 60)  # Header
+                assert loaded.getpixel((150, 165)) == (0, 120, 215)  # Button
 
     def test_fallback_save_with_optimize(self):
         """Test fallback save method using PIL with optimize=True."""
@@ -212,10 +213,10 @@ class TestScreenshotSaveWorkflow:
             image = png_base64_url_to_image(base64_screenshot)
             image.save(screenshot_path, format='PNG', optimize=True)
 
-            # Verify content
-            loaded = Image.open(screenshot_path)
-            assert loaded.size == (100, 100)
-            assert loaded.getpixel((50, 50)) == (50, 100, 150)
+            # Verify content (context manager avoids Windows file lock on temp dir cleanup)
+            with Image.open(screenshot_path) as loaded:
+                assert loaded.size == (100, 100)
+                assert loaded.getpixel((50, 50)) == (50, 100, 150)
 
     def test_base64_with_data_prefix_workflow(self):
         """Test handling base64 with data URL prefix (browser format)."""
@@ -236,10 +237,11 @@ class TestScreenshotSaveWorkflow:
             with open(screenshot_path, 'wb') as f:
                 f.write(image_data)
 
-            # Verify
-            Image.open(screenshot_path).verify()
-            loaded = Image.open(screenshot_path)
-            assert loaded.size == (640, 480)
+            # Verify (close handles before temp dir teardown on Windows)
+            with Image.open(screenshot_path) as verify_img:
+                verify_img.verify()
+            with Image.open(screenshot_path) as loaded:
+                assert loaded.size == (640, 480)
 
 
 class TestEdgeCases:
