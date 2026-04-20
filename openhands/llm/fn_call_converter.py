@@ -69,8 +69,6 @@ def refine_prompt(prompt: str) -> str:
     return prompt
 
 
-# NOTE: we need to make sure these examples are always in-sync with the tool interface designed in openhands/agenthub/codeact_agent/function_calling.py
-
 # Example snippets for each tool
 TOOL_EXAMPLES = {
     'execute_bash': {

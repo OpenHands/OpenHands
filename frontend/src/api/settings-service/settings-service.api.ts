@@ -1,5 +1,5 @@
 import { openHands } from "../open-hands-axios";
-import { Settings } from "#/types/settings";
+import { Settings, SettingsSchema } from "#/types/settings";
 
 /**
  * Settings service for managing application settings
@@ -14,10 +14,29 @@ class SettingsService {
   }
 
   /**
+   * Get the AgentSettings schema used to render schema-driven settings pages.
+   */
+  static async getSettingsSchema(): Promise<SettingsSchema> {
+    const { data } = await openHands.get<SettingsSchema>(
+      "/api/v1/settings/agent-schema",
+    );
+    return data;
+  }
+
+  static async getConversationSettingsSchema(): Promise<SettingsSchema> {
+    const { data } = await openHands.get<SettingsSchema>(
+      "/api/v1/settings/conversation-schema",
+    );
+    return data;
+  }
+
+  /**
    * Save the settings to the server. Only valid settings are saved.
    * @param settings - the settings to save
    */
-  static async saveSettings(settings: Partial<Settings>): Promise<boolean> {
+  static async saveSettings(
+    settings: Partial<Settings> & Record<string, unknown>,
+  ): Promise<boolean> {
     const data = await openHands.post("/api/v1/settings", settings);
     return data.status === 200;
   }

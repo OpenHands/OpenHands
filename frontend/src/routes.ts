@@ -15,6 +15,17 @@ export default [
     route("launch", "routes/launch.tsx"),
     route("settings", "routes/settings.tsx", [
       index("routes/llm-settings.tsx"),
+      route("condenser", "routes/condenser-settings.tsx"),
+      route("verification", "routes/verification-settings.tsx"),
+      route("org-defaults", "routes/org-default-llm-settings.tsx"),
+      route(
+        "org-defaults/condenser",
+        "routes/org-default-condenser-settings.tsx",
+      ),
+      route(
+        "org-defaults/verification",
+        "routes/org-default-verification-settings.tsx",
+      ),
       route("mcp", "routes/mcp-settings.tsx"),
       route("skills", "routes/skills-settings.tsx"),
       route("user", "routes/user-settings.tsx"),

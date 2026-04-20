@@ -36,6 +36,7 @@ class User(Base):  # type: ignore
     git_user_email = Column(String, nullable=True)
     sandbox_grouping_strategy = Column(String, nullable=True)
     disabled_skills = Column(JSON, nullable=True)
+    onboarding_completed = Column(Boolean, nullable=True, default=False)
 
     # Relationships
     role = relationship('Role', back_populates='users')

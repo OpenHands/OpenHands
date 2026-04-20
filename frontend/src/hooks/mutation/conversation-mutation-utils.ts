@@ -1,21 +1,8 @@
 import { QueryClient } from "@tanstack/react-query";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 import { SandboxService } from "#/api/sandbox-service/sandbox-service.api";
-
-/**
- * Gets the conversation version from the cache
- */
-export const getConversationVersionFromQueryCache = (
-  queryClient: QueryClient,
-  conversationId: string,
-): "V0" | "V1" => {
-  const conversation = queryClient.getQueryData<{
-    conversation_version?: string;
-  }>(["user", "conversation", conversationId]);
-
-  return conversation?.conversation_version === "V1" ? "V1" : "V0";
-};
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 
 /**
  * Fetches a V1 conversation's sandbox_id and conversation_url
@@ -65,10 +52,21 @@ export const pauseV1Conversation = async (conversationId: string) => {
 };
 
 /**
- * Stops a V0 conversation using the legacy API
+ * Ask the agent a side question on a V1 conversation
  */
-export const stopV0Conversation = async (conversationId: string) =>
-  ConversationService.stopConversation(conversationId);
+export const askV1Agent = async (
+  conversationId: string,
+  question: string,
+): Promise<{ response: string }> => {
+  const { conversationUrl, sessionApiKey } =
+    await fetchV1ConversationData(conversationId);
+  return V1ConversationService.askAgent(
+    conversationId,
+    conversationUrl,
+    question,
+    sessionApiKey,
+  );
+};
 
 /**
  * Resumes a V1 conversation sandbox by fetching the sandbox_id and resuming it
@@ -97,20 +95,20 @@ export const resumeV1Conversation = async (conversationId: string) => {
 export const updateConversationSandboxStatusInCache = (
   queryClient: QueryClient,
   conversationId: string,
-  sandbox_status: string,
+  sandbox_status: V1SandboxStatus,
 ): void => {
   // Update the individual conversation cache
-  queryClient.setQueryData<{ status: string }>(
+  queryClient.setQueryData<V1AppConversation | null>(
     ["user", "conversation", conversationId],
     (oldData) => {
       if (!oldData) return oldData;
-      let status = sandbox_status;
-      if (status === "PAUSED") {
-        status = "STOPPED";
-      } else if (status === "MISSING") {
-        status = "ARCHIVED";
-      }
-      return { ...oldData, status };
+
+      return {
+        ...oldData,
+        sandbox_status,
+        execution_status:
+          sandbox_status === "RUNNING" ? oldData.execution_status : null,
+      };
     },
   );
 

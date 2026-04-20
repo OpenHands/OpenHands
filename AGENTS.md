@@ -226,6 +226,7 @@ Each integration follows a consistent pattern with service classes, storage mode
 - Database changes require careful migration planning in `enterprise/migrations/`
 - Always test changes in both OpenHands and enterprise contexts
 - Use the enterprise-specific Makefile commands for development
+- When the `openhands-ai` package (root project) version has been updated, run `poetry lock` in the `enterprise/` folder to update the version in the enterprise poetry lockfile.
 
 **Enterprise Testing Best Practices:**
 

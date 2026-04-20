@@ -24,10 +24,13 @@ from storage.encrypt_utils import (
 )
 from storage.org import Org
 from storage.org_member import OrgMember
+from storage.role import Role
 from storage.role_store import RoleStore
 from storage.user import User
 from storage.user_settings import UserSettings
 from utils.identity import resolve_display_name
+
+from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
 
 # The max possible time to wait for another process to finish creating a user before retrying
 _REDIS_CREATE_TIMEOUT_SECONDS = 30
@@ -91,9 +94,6 @@ class UserStore:
             from storage.org_member_store import OrgMemberStore
 
             org_member_kwargs = OrgMemberStore.get_kwargs_from_settings(settings)
-            # avoid setting org member llm fields to use org defaults on user creation
-            del org_member_kwargs['llm_model']
-            del org_member_kwargs['llm_base_url']
             org_member = OrgMember(
                 org_id=org.id,
                 user_id=user.id,
@@ -233,10 +233,15 @@ class UserStore:
             org_kwargs = OrgStore.get_kwargs_from_user_settings(decrypted_user_settings)
             org_kwargs.pop('id', None)
 
-            # if user has custom settings, set org defaults to current version
+            # If the user has custom settings, keep the org defaults minimal.
             if custom_settings:
-                org_kwargs['default_llm_model'] = get_default_litellm_model()
-                org_kwargs['llm_base_url'] = LITE_LLM_API_URL
+                org_kwargs['agent_settings'] = {
+                    'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
+                    'llm': {
+                        'model': get_default_litellm_model(),
+                        'base_url': LITE_LLM_API_URL,
+                    },
+                }
                 org_kwargs['org_version'] = ORG_SETTINGS_VERSION
 
             for key, value in org_kwargs.items():
@@ -276,12 +281,10 @@ class UserStore:
             org_member_kwargs = OrgMemberStore.get_kwargs_from_user_settings(
                 decrypted_user_settings
             )
-
-            # if the user did not have custom settings in the old model,
-            # then use the org defaults by not setting org_member fields
             if not custom_settings:
-                del org_member_kwargs['llm_model']
-                del org_member_kwargs['llm_base_url']
+                org_member_kwargs['agent_settings_diff'] = (
+                    OrgStore.get_agent_settings_from_org(org).model_dump(mode='json')
+                )
 
             org_member = OrgMember(
                 org_id=org.id,
@@ -750,6 +753,65 @@ class UserStore:
             return user
 
     @staticmethod
+    async def mark_onboarding_completed(user_id: str) -> Optional[User]:
+        """Mark the user's onboarding as completed.
+
+        Args:
+            user_id: The user's ID (Keycloak user ID)
+
+        Returns:
+            User: The updated user object, or None if user not found
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User).filter(User.id == uuid.UUID(user_id)).with_for_update()
+            )
+            user = result.scalars().first()
+            if not user:
+                logger.warning(
+                    'mark_onboarding_completed:user_not_found',
+                    extra={'user_id': user_id},
+                )
+                return None
+
+            user.onboarding_completed = True
+            await session.commit()
+            await session.refresh(user)
+            logger.info(
+                'mark_onboarding_completed:success',
+                extra={'user_id': user_id},
+            )
+            return user
+
+    @staticmethod
+    async def get_first_owner_in_org(org_id: UUID) -> Optional[User]:
+        """Get the first owner in an organization who accepted the Terms of Service.
+
+        This user is considered the super admin for that org in self-hosted deployments.
+        The super admin is identified as the owner with the earliest accepted_tos timestamp.
+
+        Args:
+            org_id: The organization UUID
+
+        Returns:
+            User: The first owner to accept TOS in this org, or None if not found.
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .join(OrgMember, OrgMember.user_id == User.id)
+                .join(Role, Role.id == OrgMember.role_id)
+                .filter(
+                    OrgMember.org_id == org_id,
+                    Role.name == 'owner',
+                    User.accepted_tos.isnot(None),
+                )
+                .order_by(User.accepted_tos.asc())
+                .limit(1)
+            )
+            return result.scalars().first()
+
+    @staticmethod
     async def backfill_contact_name(user_id: str, user_info: dict) -> None:
         """Update contact_name on the personal org if it still has a username-style value.
 
@@ -951,44 +1013,30 @@ class UserStore:
         Returns:
             A new UserSettings object populated from the entities
         """
-        # Mapping from OrgMember fields to corresponding Org "default_" fields
-        org_member_to_org_default = {
-            'llm_model': 'default_llm_model',
-            'llm_base_url': 'default_llm_base_url',
-            'max_iterations': 'default_max_iterations',
+        from storage.org_store import OrgStore
+
+        member_agent_settings_diff = dict(org_member.agent_settings_diff)
+        org_agent_settings = OrgStore.get_agent_settings_from_org(org)
+        agent_settings = {
+            **org_agent_settings.model_dump(mode='json'),
+            **member_agent_settings_diff,
         }
 
-        def get_value_with_org_fallback(field_name: str, org_member_value):
-            """Get value from OrgMember, falling back to Org default if None."""
-            if org_member_value is not None:
-                return org_member_value
-            org_default_field = org_member_to_org_default.get(field_name)
-            if org_default_field and hasattr(org, org_default_field):
-                return getattr(org, org_default_field)
-            return None
-
-        # Get values from OrgMember with Org fallback for fields with default_ prefix
-        llm_model = get_value_with_org_fallback('llm_model', org_member.llm_model)
-        llm_base_url = get_value_with_org_fallback(
-            'llm_base_url', org_member.llm_base_url
-        )
-        max_iterations = get_value_with_org_fallback(
-            'max_iterations', org_member.max_iterations
-        )
+        member_conversation_settings_diff = dict(org_member.conversation_settings_diff)
+        org_conversation_settings = OrgStore.get_conversation_settings_from_org(org)
+        conversation_settings = {
+            **org_conversation_settings.model_dump(mode='json'),
+            **member_conversation_settings_diff,
+        }
 
         return UserSettings(
             keycloak_user_id=user_id,
-            # OrgMember fields
             llm_api_key=org_member.llm_api_key.get_secret_value()
             if org_member.llm_api_key
             else None,
             llm_api_key_for_byor=org_member.llm_api_key_for_byor.get_secret_value()
             if org_member.llm_api_key_for_byor
             else None,
-            llm_model=llm_model,
-            llm_base_url=llm_base_url,
-            max_iterations=max_iterations,
-            # User fields
             accepted_tos=user.accepted_tos,
             enable_sound_notifications=user.enable_sound_notifications,
             language=user.language,
@@ -997,18 +1045,12 @@ class UserStore:
             email_verified=user.email_verified,
             git_user_name=user.git_user_name,
             git_user_email=user.git_user_email,
-            # Org fields
-            agent=org.agent,
-            security_analyzer=org.security_analyzer,
-            confirmation_mode=org.confirmation_mode,
             remote_runtime_resource_factor=org.remote_runtime_resource_factor,
-            enable_default_condenser=org.enable_default_condenser,
             billing_margin=org.billing_margin,
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters,
             sandbox_base_container_image=org.sandbox_base_container_image,
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             user_version=org.org_version,
-            mcp_config=org.mcp_config,
             search_api_key=org.search_api_key.get_secret_value()
             if org.search_api_key
             else None,
@@ -1018,7 +1060,9 @@ class UserStore:
             max_budget_per_task=org.max_budget_per_task,
             enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
-            condenser_max_size=org.condenser_max_size,
+            sandbox_grouping_strategy=org.sandbox_grouping_strategy,
+            agent_settings=agent_settings,
+            conversation_settings=conversation_settings,
             already_migrated=False,
         )
 
@@ -1036,15 +1080,17 @@ class UserStore:
         Returns:
             True if user has custom settings, False if using old defaults
         """
-        # Normalize values
-        user_model = (
-            user_settings.llm_model.strip() or None if user_settings.llm_model else None
-        )
-        user_base_url = (
-            user_settings.llm_base_url.strip() or None
-            if user_settings.llm_base_url
-            else None
-        )
+        persisted_agent_settings = user_settings.agent_settings or {}
+        llm_settings = persisted_agent_settings.get('llm', {})
+        if isinstance(llm_settings, dict):
+            user_model = llm_settings.get('model')
+            user_base_url = llm_settings.get('base_url')
+        else:
+            user_model = None
+            user_base_url = None
+
+        user_model = user_model.strip() or None if user_model else None
+        user_base_url = user_base_url.strip() or None if user_base_url else None
 
         # Custom base_url = definitely custom settings (BYOK)
         if user_base_url and user_base_url != LITE_LLM_API_URL:

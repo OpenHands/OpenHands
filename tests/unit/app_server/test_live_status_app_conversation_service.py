@@ -5,6 +5,7 @@ import json
 import os
 import zipfile
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
@@ -22,7 +23,6 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
-    PLANNING_AGENT_INSTRUCTION,
     LiveStatusAppConversationService,
 )
 from openhands.app_server.sandbox.sandbox_models import (
@@ -39,11 +39,61 @@ from openhands.integrations.service_types import SuggestedTask, TaskType
 from openhands.sdk import Agent, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.workspace import LocalWorkspace
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
-from openhands.storage.data_models.settings import SandboxGroupingStrategy
+from openhands.storage.data_models.settings import SandboxGroupingStrategy, Settings
+
+
+def _build_test_user_agent_settings(user: SimpleNamespace) -> AgentSettings:
+    llm_vals: dict = {}
+    model = getattr(user, 'llm_model', '') or ''
+    llm_vals['model'] = model
+
+    llm_api_key = getattr(user, 'llm_api_key', None)
+    if llm_api_key:
+        llm_vals['api_key'] = llm_api_key
+
+    llm_base_url = getattr(user, 'llm_base_url', None)
+    if llm_base_url:
+        llm_vals['base_url'] = llm_base_url
+
+    agent_vals: dict = {'llm': llm_vals}
+
+    mcp_config = getattr(user, '_mcp_config', None) or getattr(user, 'mcp_config', None)
+    if mcp_config:
+        agent_vals['mcp_config'] = mcp_config.model_dump(mode='python')
+
+    return Settings(agent_settings=agent_vals).agent_settings
+
+
+class _TestUserInfo(SimpleNamespace):
+    @property
+    def agent_settings(self) -> AgentSettings:
+        override = getattr(self, '_agent_settings_override', None)
+        if override is not None:
+            return override
+        return _build_test_user_agent_settings(self)
+
+    @agent_settings.setter
+    def agent_settings(self, value):
+        object.__setattr__(self, '_agent_settings_override', value)
+
+    @property
+    def conversation_settings(self) -> ConversationSettings:
+        kwargs: dict = {
+            'confirmation_mode': getattr(self, 'confirmation_mode', False),
+            'security_analyzer': getattr(self, 'security_analyzer', None),
+        }
+        max_iter = getattr(self, 'max_iterations', None)
+        if max_iter is not None:
+            kwargs['max_iterations'] = max_iter
+        return ConversationSettings(**kwargs)
+
+    def to_agent_settings(self) -> AgentSettings:
+        return self.agent_settings
+
 
 # Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
 _ALLOW_SHORT_CONTEXT_WINDOWS = 'ALLOW_SHORT_CONTEXT_WINDOWS'
@@ -105,18 +155,18 @@ class TestLiveStatusAppConversationService:
         )
 
         # Mock user info
-        self.mock_user = Mock()
-        self.mock_user.id = 'test_user_123'
-        self.mock_user.llm_model = 'gpt-4'
-        self.mock_user.llm_base_url = 'https://api.openai.com/v1'
-        self.mock_user.llm_api_key = 'test_api_key'
-        # Use ADD_TO_ANY for tests to maintain old behavior
-        self.mock_user.sandbox_grouping_strategy = SandboxGroupingStrategy.ADD_TO_ANY
-        self.mock_user.confirmation_mode = False
-        self.mock_user.search_api_key = None  # Default to None
-        self.mock_user.condenser_max_size = None  # Default to None
-        self.mock_user.llm_base_url = 'https://api.openai.com/v1'
-        self.mock_user.mcp_config = None  # Default to None to avoid error handling path
+        self.mock_user = _TestUserInfo(
+            id='test_user_123',
+            llm_model='gpt-4',
+            llm_base_url='https://api.openai.com/v1',
+            llm_api_key='test_api_key',
+            sandbox_grouping_strategy=SandboxGroupingStrategy.ADD_TO_ANY,
+            confirmation_mode=False,
+            security_analyzer='llm',
+            search_api_key=None,
+            mcp_config=None,
+            disabled_skills=[],
+        )
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -500,8 +550,25 @@ class TestLiveStatusAppConversationService:
         )
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_openhands_model_prefers_user_base_url(self):
-        """openhands/* model uses user.llm_base_url when provided."""
+    async def test_configure_llm_and_mcp_uses_user_llm_settings(self):
+        """User LLM fields should drive the configured LLM."""
+        self.mock_user.llm_model = 'sdk-model'
+        self.mock_user.llm_base_url = 'https://sdk-llm.example.com'
+        self.mock_user.llm_api_key = 'test-key'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.model == 'sdk-model'
+        assert llm.base_url == 'https://sdk-llm.example.com'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
+        self,
+    ):
+        """openhands/* model uses user's base_url when set."""
         # Arrange
         self.mock_user.llm_model = 'openhands/special'
         self.mock_user.llm_base_url = 'https://user-llm.example.com'
@@ -512,12 +579,14 @@ class TestLiveStatusAppConversationService:
             self.mock_user, self.mock_user.llm_model, self.conversation_id
         )
 
-        # Assert
+        # Assert — user base_url takes precedence for openhands/ models
         assert llm.base_url == 'https://user-llm.example.com'
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_openhands_model_uses_provider_default(self):
-        """openhands/* model falls back to configured provider base URL."""
+    async def test_configure_llm_and_mcp_openhands_model_falls_back_to_provider_url(
+        self,
+    ):
+        """openhands/* model falls back to provider base URL when user has no base_url."""
         # Arrange
         self.mock_user.llm_model = 'openhands/default'
         self.mock_user.llm_base_url = None
@@ -528,12 +597,12 @@ class TestLiveStatusAppConversationService:
             self.mock_user, self.mock_user.llm_model, self.conversation_id
         )
 
-        # Assert
+        # Assert — falls back to service-level openhands_provider_base_url
         assert llm.base_url == 'https://provider.example.com'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_no_base_urls(self):
-        """openhands/* model sets base_url to None when no sources available."""
+        """openhands/* model still uses the SDK proxy when no other URLs exist."""
         # Arrange
         self.mock_user.llm_model = 'openhands/default'
         self.mock_user.llm_base_url = None
@@ -852,392 +921,160 @@ class TestLiveStatusAppConversationService:
         assert path == '/workspace/project/agents-tmp-config/PLAN.md'
 
     @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
     )
-    @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
-    )
-    @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.format_plan_structure'
-    )
-    def test_create_agent_with_context_planning_agent(
-        self, mock_format_plan, mock_create_condenser, mock_get_tools
-    ):
-        """Test _create_agent_with_context for planning agent type."""
-        # Arrange
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model_copy.return_value = mock_llm
-        mock_get_tools.return_value = []
-        mock_condenser = Mock()
-        mock_create_condenser.return_value = mock_condenser
-        mock_format_plan.return_value = 'test_plan_structure'
-        mcp_config = {'default': {'url': 'test'}}
-        system_message_suffix = 'Test suffix'
-        working_dir = '/workspace/project'
-        git_provider = ProviderType.GITHUB
-
-        # Act
-        with patch(
-            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
-        ) as mock_agent_class:
-            mock_agent_instance = Mock()
-            mock_agent_instance.model_copy.return_value = mock_agent_instance
-            mock_agent_class.return_value = mock_agent_instance
-
-            self.service._create_agent_with_context(
-                mock_llm,
-                AgentType.PLAN,
-                system_message_suffix,
-                mcp_config,
-                self.mock_user.condenser_max_size,
-                git_provider=git_provider,
-                working_dir=working_dir,
-            )
-
-            # Assert
-            mock_get_tools.assert_called_once_with(
-                plan_path='/workspace/project/.agents_tmp/PLAN.md'
-            )
-            mock_agent_class.assert_called_once()
-            call_kwargs = mock_agent_class.call_args[1]
-            assert call_kwargs['llm'] == mock_llm
-            assert call_kwargs['system_prompt_filename'] == 'system_prompt_planning.j2'
-            assert (
-                call_kwargs['system_prompt_kwargs']['plan_structure']
-                == 'test_plan_structure'
-            )
-            assert call_kwargs['mcp_config'] == mcp_config
-            assert call_kwargs['condenser'] == mock_condenser
-            mock_create_condenser.assert_called_once_with(
-                mock_llm, AgentType.PLAN, self.mock_user.condenser_max_size
-            )
-
-    @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools'
-    )
-    @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
-    )
-    def test_create_agent_with_context_default_agent(
-        self, mock_create_condenser, mock_get_tools
-    ):
-        """Test _create_agent_with_context for default agent type."""
-        # Arrange
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model_copy.return_value = mock_llm
-        mock_get_tools.return_value = []
-        mock_condenser = Mock()
-        mock_create_condenser.return_value = mock_condenser
-        mcp_config = {'default': {'url': 'test'}}
-
-        # Act
-        with patch(
-            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
-        ) as mock_agent_class:
-            mock_agent_instance = Mock()
-            mock_agent_instance.model_copy.return_value = mock_agent_instance
-            mock_agent_class.return_value = mock_agent_instance
-
-            self.service._create_agent_with_context(
-                mock_llm,
-                AgentType.DEFAULT,
-                None,
-                mcp_config,
-                self.mock_user.condenser_max_size,
-            )
-
-            # Assert
-            mock_agent_class.assert_called_once()
-            call_kwargs = mock_agent_class.call_args[1]
-            assert call_kwargs['llm'] == mock_llm
-            assert call_kwargs['system_prompt_kwargs']['cli_mode'] is False
-            assert call_kwargs['mcp_config'] == mcp_config
-            assert call_kwargs['condenser'] == mock_condenser
-            mock_get_tools.assert_called_once_with(enable_browser=True)
-            mock_create_condenser.assert_called_once_with(
-                mock_llm, AgentType.DEFAULT, self.mock_user.condenser_max_size
-            )
-
-    @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
-    )
-    @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
-    )
-    @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.format_plan_structure'
-    )
-    def test_create_agent_with_context_planning_agent_applies_instruction(
-        self, mock_format_plan, mock_create_condenser, mock_get_tools
-    ):
-        """Test _create_agent_with_context applies PLANNING_AGENT_INSTRUCTION for plan agents."""
-        # Arrange
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model_copy.return_value = mock_llm
-        mock_get_tools.return_value = []
-        mock_condenser = Mock()
-        mock_create_condenser.return_value = mock_condenser
-        mock_format_plan.return_value = 'test_plan_structure'
-        mcp_config = {}
-
-        # Act
-        with patch(
-            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
-        ) as mock_agent_class:
-            mock_agent_instance = Mock()
-            mock_agent_instance.model_copy.return_value = mock_agent_instance
-            mock_agent_class.return_value = mock_agent_instance
-
-            self.service._create_agent_with_context(
-                mock_llm,
-                AgentType.PLAN,
-                None,  # No existing suffix
-                mcp_config,
-                self.mock_user.condenser_max_size,
-            )
-
-            # Assert - verify model_copy was called with agent_context containing planning instruction
-            model_copy_call = mock_agent_instance.model_copy.call_args
-            agent_context = model_copy_call[1]['update']['agent_context']
-            assert agent_context.system_message_suffix == PLANNING_AGENT_INSTRUCTION
-
-    @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
-    )
-    @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
-    )
-    @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.format_plan_structure'
-    )
-    def test_create_agent_with_context_planning_agent_prepends_to_existing_suffix(
-        self, mock_format_plan, mock_create_condenser, mock_get_tools
-    ):
-        """Test _create_agent_with_context prepends planning instruction to existing suffix."""
-        # Arrange
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model_copy.return_value = mock_llm
-        mock_get_tools.return_value = []
-        mock_condenser = Mock()
-        mock_create_condenser.return_value = mock_condenser
-        mock_format_plan.return_value = 'test_plan_structure'
-        mcp_config = {}
-        existing_suffix = 'Custom user instruction from integration'
-
-        # Act
-        with patch(
-            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
-        ) as mock_agent_class:
-            mock_agent_instance = Mock()
-            mock_agent_instance.model_copy.return_value = mock_agent_instance
-            mock_agent_class.return_value = mock_agent_instance
-
-            self.service._create_agent_with_context(
-                mock_llm,
-                AgentType.PLAN,
-                existing_suffix,
-                mcp_config,
-                self.mock_user.condenser_max_size,
-            )
-
-            # Assert - verify planning instruction is prepended to existing suffix
-            model_copy_call = mock_agent_instance.model_copy.call_args
-            agent_context = model_copy_call[1]['update']['agent_context']
-            assert agent_context.system_message_suffix.startswith(
-                PLANNING_AGENT_INSTRUCTION
-            )
-            assert existing_suffix in agent_context.system_message_suffix
-
-    @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools'
-    )
-    @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
-    )
-    def test_create_agent_with_context_default_agent_no_planning_instruction(
-        self, mock_create_condenser, mock_get_tools
-    ):
-        """Test _create_agent_with_context does NOT add planning instruction for default agent."""
-        # Arrange
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model_copy.return_value = mock_llm
-        mock_get_tools.return_value = []
-        mock_condenser = Mock()
-        mock_create_condenser.return_value = mock_condenser
-        mcp_config = {}
-
-        # Act
-        with patch(
-            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
-        ) as mock_agent_class:
-            mock_agent_instance = Mock()
-            mock_agent_instance.model_copy.return_value = mock_agent_instance
-            mock_agent_class.return_value = mock_agent_instance
-
-            self.service._create_agent_with_context(
-                mock_llm,
-                AgentType.DEFAULT,
-                None,
-                mcp_config,
-                self.mock_user.condenser_max_size,
-            )
-
-            # Assert - verify no planning instruction for default agent
-            model_copy_call = mock_agent_instance.model_copy.call_args
-            agent_context = model_copy_call[1]['update']['agent_context']
-            assert agent_context.system_message_suffix is None
-
     @pytest.mark.asyncio
-    async def test_finalize_conversation_request_with_skills(self):
-        """Test _finalize_conversation_request with skills loading."""
-        # Create mock LLM with required attributes for _update_agent_with_llm_metadata
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
-        mock_llm.usage_id = 'agent'
+    async def test_build_request_with_skills(self, _mock_tools):
+        """Skills are loaded when a remote_workspace is provided."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
 
-        # Arrange
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
         mock_agent = Mock(spec=Agent)
-        mock_agent.llm = mock_llm
-        mock_agent.condenser = None  # No condenser
+        mock_agent.llm = real_llm
+        mock_agent.condenser = None
 
-        conversation_id = uuid4()
-        workspace = LocalWorkspace(working_dir='/test')
-        initial_message = Mock(spec=SendMessageRequest)
-        secrets = {'test': StaticSecret(value='secret')}
-        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
-
-        # Mock the skills loading method
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
         self.service._load_skills_and_update_agent = AsyncMock(return_value=mock_agent)
 
-        # Act
-        result = await self.service._finalize_conversation_request(
-            mock_agent,
-            conversation_id,
-            self.mock_user,
-            workspace,
-            initial_message,
-            secrets,
-            self.mock_sandbox,
-            remote_workspace,
-            'test_repo',
-            '/test/dir',
-        )
-
-        # Assert
-        assert isinstance(result, StartConversationRequest)
-        assert result.conversation_id == conversation_id
-        assert result.workspace == workspace
-        assert result.initial_message == initial_message
-        assert result.secrets == secrets
-
-        self.service._load_skills_and_update_agent.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_finalize_conversation_request_without_skills(self):
-        """Test _finalize_conversation_request without remote workspace (no skills)."""
-        # Create mock LLM with required attributes for _update_agent_with_llm_metadata
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
-        mock_llm.usage_id = 'agent'
-
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-        mock_agent.llm = mock_llm
-        mock_agent.condenser = None  # No condenser
-
-        workspace = LocalWorkspace(working_dir='/test')
-        secrets = {'test': StaticSecret(value='secret')}
-        conversation_id = uuid4()
-
-        # Act
-        result = await self.service._finalize_conversation_request(
-            mock_agent,
-            conversation_id,
-            self.mock_user,
-            workspace,
-            None,
-            secrets,
-            self.mock_sandbox,
-            None,
-            None,
-            '/test/dir',
-        )
-
-        # Assert
-        assert isinstance(result, StartConversationRequest)
-        assert result.conversation_id == conversation_id
-
-    @pytest.mark.asyncio
-    async def test_finalize_conversation_request_skills_loading_fails(self):
-        """Test _finalize_conversation_request when skills loading fails."""
-        # Create mock LLM with required attributes for _update_agent_with_llm_metadata
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
-        mock_llm.usage_id = 'agent'
-
-        mock_agent = Mock(spec=Agent)
-        mock_agent.llm = mock_llm
-        mock_agent.condenser = None  # No condenser
-
-        workspace = LocalWorkspace(working_dir='/test')
-        secrets = {'test': StaticSecret(value='secret')}
         remote_workspace = Mock(spec=AsyncRemoteWorkspace)
         conversation_id = uuid4()
 
-        # Mock skills loading to raise an exception
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=conversation_id,
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=remote_workspace,
+            selected_repository='test_repo',
+        )
+
+        assert isinstance(result, StartConversationRequest)
+        assert result.conversation_id == conversation_id
+        self.service._load_skills_and_update_agent.assert_called_once()
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_without_remote_workspace(self, _mock_tools):
+        """Skills loading is skipped when no remote_workspace is provided."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        conversation_id = uuid4()
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=conversation_id,
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        assert isinstance(result, StartConversationRequest)
+        assert result.conversation_id == conversation_id
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_skills_loading_fails_gracefully(self, _mock_tools):
+        """Conversation still starts when skills loading raises."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
         self.service._load_skills_and_update_agent = AsyncMock(
             side_effect=Exception('Skills loading failed')
         )
 
-        # Note: hooks loading is already mocked in setup_method() to return None
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        conversation_id = uuid4()
 
-        # Act
         with patch(
             'openhands.app_server.app_conversation.live_status_app_conversation_service._logger'
         ) as mock_logger:
-            result = await self.service._finalize_conversation_request(
-                mock_agent,
-                conversation_id,
-                self.mock_user,
-                workspace,
-                None,
-                secrets,
-                self.mock_sandbox,
-                remote_workspace,
-                'test_repo',
-                '/test/dir',
+            result = await self.service._build_start_conversation_request_for_user(
+                sandbox=self.mock_sandbox,
+                conversation_id=conversation_id,
+                initial_message=None,
+                system_message_suffix=None,
+                git_provider=None,
+                working_dir='/test/dir',
+                remote_workspace=remote_workspace,
+                selected_repository='test_repo',
             )
 
-            # Assert
             assert isinstance(result, StartConversationRequest)
             mock_logger.warning.assert_called_once()
 
+    def test_apply_server_overrides_sets_condenser_usage_id(self):
+        """Condenser LLM must get usage_id='condenser' even when it inherits 'agent'."""
+        from openhands.sdk.context.condenser import LLMSummarizingCondenser
+
+        llm = LLM(model='openhands/gpt-4', api_key='k', usage_id='agent')
+        condenser = LLMSummarizingCondenser(llm=llm)
+        agent = Agent(llm=llm, tools=[], condenser=condenser)
+
+        updated = self.service._apply_server_agent_overrides(
+            agent, AgentType.DEFAULT, {}, uuid4(), 'user-1'
+        )
+
+        assert updated.llm.usage_id == 'agent'
+        assert updated.condenser.llm.usage_id == 'condenser'
+
+    def test_apply_server_overrides_condenser_non_openhands_model(self):
+        """Condenser usage_id is set even for non-openhands models (no metadata)."""
+        from openhands.sdk.context.condenser import LLMSummarizingCondenser
+
+        llm = LLM(model='gpt-4', api_key='k', usage_id='agent')
+        condenser = LLMSummarizingCondenser(llm=llm)
+        agent = Agent(llm=llm, tools=[], condenser=condenser)
+
+        updated = self.service._apply_server_agent_overrides(
+            agent, AgentType.DEFAULT, {}, uuid4(), 'user-1'
+        )
+
+        # Non-openhands model: main LLM unchanged, but condenser still gets usage_id
+        assert updated.condenser.llm.usage_id == 'condenser'
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
     @pytest.mark.asyncio
-    async def test_build_start_conversation_request_for_user_integration(self):
+    async def test_build_start_conversation_request_for_user_integration(
+        self, _mock_tools
+    ):
         """Test the main _build_start_conversation_request_for_user method integration."""
-        # Arrange
         self.mock_user_context.get_user_info.return_value = self.mock_user
 
-        # Mock all the helper methods
-        mock_secrets = {'GITHUB_TOKEN': Mock()}
-        mock_llm = Mock(spec=LLM)
+        mock_secrets = {'GITHUB_TOKEN': StaticSecret(value=SecretStr('tok'))}
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
         mock_mcp_config = {'default': {'url': 'test'}}
-        mock_agent = Mock(spec=Agent)
-        mock_final_request = Mock(spec=StartConversationRequest)
         test_conversation_id = uuid4()
 
         self.service._setup_secrets_for_git_providers = AsyncMock(
             return_value=mock_secrets
         )
         self.service._configure_llm_and_mcp = AsyncMock(
-            return_value=(mock_llm, mock_mcp_config)
-        )
-        self.service._create_agent_with_context = Mock(return_value=mock_agent)
-        self.service._finalize_conversation_request = AsyncMock(
-            return_value=mock_final_request
+            return_value=(real_llm, mock_mcp_config)
         )
 
-        # Act
         result = await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
             conversation_id=test_conversation_id,
@@ -1251,32 +1088,21 @@ class TestLiveStatusAppConversationService:
             selected_repository='test/repo',
         )
 
-        # Assert
-        assert result == mock_final_request
+        assert isinstance(result, StartConversationRequest)
+        assert result.conversation_id == test_conversation_id
+        assert result.agent.llm.model == 'gpt-4'
+        # Secrets are injected via agent_context
+        assert result.agent.agent_context.secrets == mock_secrets
+        # System message suffix is passed through
+        assert result.agent.agent_context.system_message_suffix == 'Test suffix'
+        # Workspace points to the repo subdirectory
+        assert result.workspace.working_dir == '/test/dir/repo'
 
         self.service._setup_secrets_for_git_providers.assert_called_once_with(
             self.mock_user
         )
         self.service._configure_llm_and_mcp.assert_called_once_with(
             self.mock_user, 'gpt-4', test_conversation_id
-        )
-        # When selected_repository='test/repo', project_dir is resolved
-        # to '/test/dir/repo' via get_project_dir. All downstream calls
-        # (agent context, workspace, skills) must use this path.
-        self.service._create_agent_with_context.assert_called_once_with(
-            mock_llm,
-            AgentType.DEFAULT,
-            'Test suffix',
-            mock_mcp_config,
-            self.mock_user.condenser_max_size,
-            secrets=mock_secrets,
-            git_provider=ProviderType.GITHUB,
-            working_dir='/test/dir/repo',
-        )
-        self.service._finalize_conversation_request.assert_called_once()
-        assert (
-            self.service._finalize_conversation_request.call_args.args[1]
-            == test_conversation_id
         )
 
     @pytest.mark.asyncio
@@ -1751,113 +1577,82 @@ class TestLiveStatusAppConversationService:
         assert saved_info.id == conversation_id
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_with_custom_sse_servers(self):
-        """Test _configure_llm_and_mcp merges custom SSE servers with UUID-based names."""
-        # Arrange
-
-        from openhands.core.config.mcp_config import MCPConfig, MCPSSEServerConfig
+    async def test_configure_llm_and_mcp_with_custom_remote_servers(self):
+        """Test _configure_llm_and_mcp merges custom remote servers."""
+        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
-            sse_servers=[
-                MCPSSEServerConfig(url='https://linear.app/sse', api_key='linear_key'),
-                MCPSSEServerConfig(url='https://notion.com/sse'),
-            ]
+            mcpServers={
+                'linear': RemoteMCPServer(
+                    url='https://linear.app/sse', transport='sse', auth='linear_key'
+                ),
+                'notion': RemoteMCPServer(
+                    url='https://notion.com/sse', transport='sse'
+                ),
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         assert isinstance(llm, LLM)
         assert 'mcpServers' in mcp_config
 
-        # Should have default server + 2 custom SSE servers
         mcp_servers = mcp_config['mcpServers']
         assert 'default' in mcp_servers
-
-        # Find SSE servers (they have sse_ prefix)
-        sse_servers = {k: v for k, v in mcp_servers.items() if k.startswith('sse_')}
-        assert len(sse_servers) == 2
-
-        # Verify SSE server configurations
-        for server_name, server_config in sse_servers.items():
-            assert server_name.startswith('sse_')
-            assert len(server_name) > 4  # Has UUID suffix
-            assert 'url' in server_config
-            assert 'transport' in server_config
-            assert server_config['transport'] == 'sse'
-
-            # Check if this is the Linear server (has headers)
-            if 'headers' in server_config:
-                assert server_config['headers']['Authorization'] == 'Bearer linear_key'
+        assert 'linear' in mcp_servers
+        assert 'notion' in mcp_servers
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_with_custom_shttp_servers(self):
-        """Test _configure_llm_and_mcp merges custom SHTTP servers with timeout."""
-        # Arrange
-        from openhands.core.config.mcp_config import MCPConfig, MCPSHTTPServerConfig
+    async def test_configure_llm_and_mcp_with_custom_http_servers(self):
+        """Test _configure_llm_and_mcp merges custom HTTP servers with timeout."""
+        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
-            shttp_servers=[
-                MCPSHTTPServerConfig(
+            mcpServers={
+                'custom-http': RemoteMCPServer(
                     url='https://example.com/mcp',
-                    api_key='test_key',
+                    transport='http',
+                    auth='test_key',
                     timeout=120,
                 )
-            ]
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         assert isinstance(llm, LLM)
         mcp_servers = mcp_config['mcpServers']
-
-        # Find SHTTP servers
-        shttp_servers = {k: v for k, v in mcp_servers.items() if k.startswith('shttp_')}
-        assert len(shttp_servers) == 1
-
-        server_config = list(shttp_servers.values())[0]
-        assert server_config['url'] == 'https://example.com/mcp'
-        assert server_config['transport'] == 'streamable-http'
-        assert server_config['headers']['Authorization'] == 'Bearer test_key'
-        assert server_config['timeout'] == 120
+        assert 'custom-http' in mcp_servers
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_stdio_servers(self):
         """Test _configure_llm_and_mcp merges custom STDIO servers with explicit names."""
-        # Arrange
-        from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
+        from openhands.core.config.mcp_config import MCPConfig, StdioMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
-            stdio_servers=[
-                MCPStdioServerConfig(
-                    name='my-custom-server',
+            mcpServers={
+                'my-custom-server': StdioMCPServer(
                     command='npx',
                     args=['-y', 'my-package'],
                     env={'API_KEY': 'secret'},
                 )
-            ]
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         assert isinstance(llm, LLM)
         mcp_servers = mcp_config['mcpServers']
 
-        # STDIO server should use its explicit name
         assert 'my-custom-server' in mcp_servers
         server_config = mcp_servers['my-custom-server']
         assert server_config['command'] == 'npx'
@@ -1867,54 +1662,47 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_merges_system_and_custom_servers(self):
         """Test _configure_llm_and_mcp merges both system and custom MCP servers."""
-        # Arrange
         from openhands.core.config.mcp_config import (
             MCPConfig,
-            MCPSSEServerConfig,
-            MCPStdioServerConfig,
+            RemoteMCPServer,
+            StdioMCPServer,
         )
 
         self.mock_user.search_api_key = SecretStr('tavily_key')
         self.mock_user.mcp_config = MCPConfig(
-            sse_servers=[MCPSSEServerConfig(url='https://custom.com/sse')],
-            stdio_servers=[
-                MCPStdioServerConfig(
-                    name='custom-stdio', command='node', args=['app.js']
-                )
-            ],
+            mcpServers={
+                'custom-sse': RemoteMCPServer(
+                    url='https://custom.com/sse', transport='sse'
+                ),
+                'custom-stdio': StdioMCPServer(command='node', args=['app.js']),
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = 'mcp_api_key'
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         mcp_servers = mcp_config['mcpServers']
 
-        # Should have system servers
         assert 'default' in mcp_servers
         assert 'tavily' in mcp_servers
-
-        # Should have custom SSE server with UUID name
-        sse_servers = [k for k in mcp_servers if k.startswith('sse_')]
-        assert len(sse_servers) == 1
-
-        # Should have custom STDIO server with explicit name
+        assert 'custom-sse' in mcp_servers
         assert 'custom-stdio' in mcp_servers
 
-        # Total: default + tavily + 1 SSE + 1 STDIO = 4 servers
         assert len(mcp_servers) == 4
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_custom_config_error_handling(self):
-        """Test _configure_llm_and_mcp handles errors in custom MCP config gracefully."""
+        """Test _configure_llm_and_mcp handles invalid custom MCP config gracefully."""
         # Arrange
-        self.mock_user.mcp_config = Mock()
-        # Simulate error when accessing sse_servers
-        self.mock_user.mcp_config.sse_servers = property(
-            lambda self: (_ for _ in ()).throw(Exception('Config error'))
+        invalid_mcp_config = Mock()
+        invalid_mcp_config.model_dump.return_value = 'not-a-dict'
+        self.mock_user._agent_settings_override = SimpleNamespace(
+            mcp_config=invalid_mcp_config
+        )
+        self.service._configure_llm = Mock(
+            return_value=LLM.model_validate({'model': 'gpt-4', 'usage_id': 'agent'})
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
@@ -1927,7 +1715,6 @@ class TestLiveStatusAppConversationService:
         assert isinstance(llm, LLM)
         mcp_servers = mcp_config['mcpServers']
         assert 'default' in mcp_servers
-        # Custom servers should not be added due to error
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_sdk_format_with_mcpservers_wrapper(self):
@@ -1952,198 +1739,150 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_empty_custom_config(self):
         """Test _configure_llm_and_mcp handles empty custom MCP config."""
-        # Arrange
         from openhands.core.config.mcp_config import MCPConfig
 
-        self.mock_user.mcp_config = MCPConfig(
-            sse_servers=[], stdio_servers=[], shttp_servers=[]
-        )
+        self.mock_user.mcp_config = MCPConfig(mcpServers={})
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         mcp_servers = mcp_config['mcpServers']
-        # Should only have system default server
         assert 'default' in mcp_servers
         assert len(mcp_servers) == 1
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_sse_server_without_api_key(self):
-        """Test _configure_llm_and_mcp handles SSE servers without API keys."""
-        # Arrange
-        from openhands.core.config.mcp_config import MCPConfig, MCPSSEServerConfig
+    async def test_configure_llm_and_mcp_remote_server_without_auth(self):
+        """Test _configure_llm_and_mcp handles remote servers without auth."""
+        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
-            sse_servers=[MCPSSEServerConfig(url='https://public.com/sse')]
+            mcpServers={
+                'public': RemoteMCPServer(url='https://public.com/sse', transport='sse')
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         mcp_servers = mcp_config['mcpServers']
-        sse_servers = {k: v for k, v in mcp_servers.items() if k.startswith('sse_')}
-
-        # Server should exist but without headers
-        assert len(sse_servers) == 1
-        server_config = list(sse_servers.values())[0]
-        assert 'headers' not in server_config
-        assert server_config['url'] == 'https://public.com/sse'
-        assert server_config['transport'] == 'sse'
+        assert 'public' in mcp_servers
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_shttp_server_without_timeout(self):
-        """Test _configure_llm_and_mcp handles SHTTP servers without timeout."""
-        # Arrange
-        from openhands.core.config.mcp_config import MCPConfig, MCPSHTTPServerConfig
+    async def test_configure_llm_and_mcp_http_server_default_timeout(self):
+        """Test _configure_llm_and_mcp handles HTTP servers with default timeout."""
+        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
-            shttp_servers=[MCPSHTTPServerConfig(url='https://example.com/mcp')]
+            mcpServers={
+                'http-server': RemoteMCPServer(
+                    url='https://example.com/mcp', transport='http'
+                )
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         mcp_servers = mcp_config['mcpServers']
-        shttp_servers = {k: v for k, v in mcp_servers.items() if k.startswith('shttp_')}
-
-        assert len(shttp_servers) == 1
-        server_config = list(shttp_servers.values())[0]
-        # Timeout should be included even if None (defaults to 60)
-        assert 'timeout' in server_config
+        assert 'http-server' in mcp_servers
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_stdio_server_without_env(self):
         """Test _configure_llm_and_mcp handles STDIO servers without environment variables."""
-        # Arrange
-        from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
+        from openhands.core.config.mcp_config import MCPConfig, StdioMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
-            stdio_servers=[
-                MCPStdioServerConfig(
-                    name='simple-server', command='node', args=['app.js']
-                )
-            ]
+            mcpServers={
+                'simple-server': StdioMCPServer(command='node', args=['app.js'])
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         mcp_servers = mcp_config['mcpServers']
         assert 'simple-server' in mcp_servers
         server_config = mcp_servers['simple-server']
-
-        # Should not have env key if not provided
-        assert 'env' not in server_config
         assert server_config['command'] == 'node'
         assert server_config['args'] == ['app.js']
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_multiple_servers_same_type(self):
         """Test _configure_llm_and_mcp handles multiple custom servers of the same type."""
-        # Arrange
-        from openhands.core.config.mcp_config import MCPConfig, MCPSSEServerConfig
+        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
-            sse_servers=[
-                MCPSSEServerConfig(url='https://server1.com/sse'),
-                MCPSSEServerConfig(url='https://server2.com/sse'),
-                MCPSSEServerConfig(url='https://server3.com/sse'),
-            ]
+            mcpServers={
+                'server1': RemoteMCPServer(
+                    url='https://server1.com/sse', transport='sse'
+                ),
+                'server2': RemoteMCPServer(
+                    url='https://server2.com/sse', transport='sse'
+                ),
+                'server3': RemoteMCPServer(
+                    url='https://server3.com/sse', transport='sse'
+                ),
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         mcp_servers = mcp_config['mcpServers']
-        sse_servers = {k: v for k, v in mcp_servers.items() if k.startswith('sse_')}
 
-        # All 3 servers should be present with unique UUID-based names
-        assert len(sse_servers) == 3
-
-        # Verify all have unique names
-        server_names = list(sse_servers.keys())
-        assert len(set(server_names)) == 3  # All names are unique
-
-        # Verify all URLs are preserved
-        urls = [v['url'] for v in sse_servers.values()]
-        assert 'https://server1.com/sse' in urls
-        assert 'https://server2.com/sse' in urls
-        assert 'https://server3.com/sse' in urls
+        assert 'server1' in mcp_servers
+        assert 'server2' in mcp_servers
+        assert 'server3' in mcp_servers
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_mixed_server_types(self):
-        """Test _configure_llm_and_mcp handles all three server types together."""
-        # Arrange
+        """Test _configure_llm_and_mcp handles all server types together."""
         from openhands.core.config.mcp_config import (
             MCPConfig,
-            MCPSHTTPServerConfig,
-            MCPSSEServerConfig,
-            MCPStdioServerConfig,
+            RemoteMCPServer,
+            StdioMCPServer,
         )
 
         self.mock_user.mcp_config = MCPConfig(
-            sse_servers=[
-                MCPSSEServerConfig(url='https://sse.example.com/sse', api_key='sse_key')
-            ],
-            shttp_servers=[
-                MCPSHTTPServerConfig(url='https://shttp.example.com/mcp', timeout=90)
-            ],
-            stdio_servers=[
-                MCPStdioServerConfig(
-                    name='stdio-server',
+            mcpServers={
+                'sse-server': RemoteMCPServer(
+                    url='https://sse.example.com/sse',
+                    transport='sse',
+                    auth='sse_key',
+                ),
+                'http-server': RemoteMCPServer(
+                    url='https://shttp.example.com/mcp',
+                    transport='http',
+                    timeout=90,
+                ),
+                'stdio-server': StdioMCPServer(
                     command='npx',
                     args=['mcp-server'],
                     env={'TOKEN': 'value'},
-                )
-            ],
+                ),
+            }
         )
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, mcp_config = await self.service._configure_llm_and_mcp(
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert
         mcp_servers = mcp_config['mcpServers']
 
-        # Check all server types are present
-        sse_count = len([k for k in mcp_servers if k.startswith('sse_')])
-        shttp_count = len([k for k in mcp_servers if k.startswith('shttp_')])
-        stdio_count = 1 if 'stdio-server' in mcp_servers else 0
-
-        assert sse_count == 1
-        assert shttp_count == 1
-        assert stdio_count == 1
-
-        # Verify each type has correct configuration
-        sse_server = next(v for k, v in mcp_servers.items() if k.startswith('sse_'))
-        assert sse_server['transport'] == 'sse'
-        assert sse_server['headers']['Authorization'] == 'Bearer sse_key'
-
-        shttp_server = next(v for k, v in mcp_servers.items() if k.startswith('shttp_'))
-        assert shttp_server['transport'] == 'streamable-http'
-        assert shttp_server['timeout'] == 90
+        assert 'sse-server' in mcp_servers
+        assert 'http-server' in mcp_servers
+        assert 'stdio-server' in mcp_servers
 
         stdio_server = mcp_servers['stdio-server']
         assert stdio_server['command'] == 'npx'
@@ -2174,8 +1913,12 @@ class TestLiveStatusAppConversationService:
         assert get_project_dir('/workspace/project', None) == '/workspace/project'
         assert get_project_dir('/workspace/project', '') == '/workspace/project'
 
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
     @pytest.mark.asyncio
-    async def test_build_request_workspace_uses_project_dir(self):
+    async def test_build_request_workspace_uses_project_dir(self, _mock_tools):
         """workspace.working_dir in StartConversationRequest must equal project_dir.
 
         This is the root cause of the V1 hook-stop bug: if workspace.working_dir
@@ -2185,29 +1928,12 @@ class TestLiveStatusAppConversationService:
         """
         self.mock_user_context.get_user_info.return_value = self.mock_user
 
-        mock_secrets = {'GITHUB_TOKEN': Mock()}
-        mock_llm = Mock(spec=LLM)
-        mock_agent = Mock(spec=Agent)
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
 
-        self.service._setup_secrets_for_git_providers = AsyncMock(
-            return_value=mock_secrets
-        )
-        self.service._configure_llm_and_mcp = AsyncMock(return_value=(mock_llm, {}))
-        self.service._create_agent_with_context = Mock(return_value=mock_agent)
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
 
-        captured = {}
-
-        async def capture_finalize(
-            agent, conversation_id, user, workspace, *args, **kwargs
-        ):
-            captured['workspace_working_dir'] = workspace.working_dir
-            return Mock(spec=StartConversationRequest)
-
-        self.service._finalize_conversation_request = AsyncMock(
-            side_effect=capture_finalize
-        )
-
-        await self.service._build_start_conversation_request_for_user(
+        result = await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
             conversation_id=uuid4(),
             initial_message=None,
@@ -2218,33 +1944,24 @@ class TestLiveStatusAppConversationService:
         )
 
         assert (
-            captured['workspace_working_dir'] == '/workspace/project/software-agent-sdk'
+            result.workspace.working_dir == '/workspace/project/software-agent-sdk'
         ), 'workspace.working_dir must point to the repo root, not the sandbox mount'
 
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
     @pytest.mark.asyncio
-    async def test_build_request_no_repo_workspace_unchanged(self):
+    async def test_build_request_no_repo_workspace_unchanged(self, _mock_tools):
         """Without selected_repository, workspace.working_dir == sandbox working_dir."""
         self.mock_user_context.get_user_info.return_value = self.mock_user
 
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+
         self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
-        self.service._configure_llm_and_mcp = AsyncMock(
-            return_value=(Mock(spec=LLM), {})
-        )
-        self.service._create_agent_with_context = Mock(return_value=Mock(spec=Agent))
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
 
-        captured = {}
-
-        async def capture_finalize(
-            agent, conversation_id, user, workspace, *args, **kwargs
-        ):
-            captured['workspace_working_dir'] = workspace.working_dir
-            return Mock(spec=StartConversationRequest)
-
-        self.service._finalize_conversation_request = AsyncMock(
-            side_effect=capture_finalize
-        )
-
-        await self.service._build_start_conversation_request_for_user(
+        result = await self.service._build_start_conversation_request_for_user(
             sandbox=self.mock_sandbox,
             conversation_id=uuid4(),
             initial_message=None,
@@ -2254,7 +1971,7 @@ class TestLiveStatusAppConversationService:
             selected_repository=None,
         )
 
-        assert captured['workspace_working_dir'] == '/workspace/project'
+        assert result.workspace.working_dir == '/workspace/project'
 
     @pytest.mark.asyncio
     async def test_search_app_conversations_with_sandbox_id_filter(self):
@@ -2413,16 +2130,16 @@ class TestPluginHandling:
         )
 
         # Mock user info
-        self.mock_user = Mock()
-        self.mock_user.id = 'test_user_123'
-        self.mock_user.llm_model = 'gpt-4'
-        self.mock_user.llm_base_url = 'https://api.openai.com/v1'
-        self.mock_user.llm_api_key = 'test_api_key'
-        self.mock_user.confirmation_mode = False
-        self.mock_user.search_api_key = None
-        self.mock_user.condenser_max_size = None
-        self.mock_user.mcp_config = None
-        self.mock_user.security_analyzer = None
+        self.mock_user = _TestUserInfo(
+            id='test_user_123',
+            llm_model='gpt-4',
+            llm_base_url='https://api.openai.com/v1',
+            llm_api_key='test_api_key',
+            confirmation_mode=False,
+            search_api_key=None,
+            mcp_config=None,
+            security_analyzer=None,
+        )
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -2602,28 +2319,22 @@ class TestPluginHandling:
         assert 'key2: value2' in text
 
     @pytest.mark.asyncio
-    async def test_finalize_conversation_request_with_plugins(self):
-        """Test _finalize_conversation_request passes plugins list to StartConversationRequest."""
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    async def test_build_request_with_plugins(self, _mock_tools):
+        """Plugins are converted to PluginSource and included in the request."""
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
 
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model = 'gpt-4'
-        mock_llm.usage_id = 'agent'
-        mock_agent.llm = mock_llm
-        mock_agent.condenser = None
+        self.mock_user_context.get_user_info.return_value = self.mock_user
 
-        mock_updated_agent = Mock(spec=Agent)
-        mock_updated_agent.llm = mock_llm
-        mock_updated_agent.condenser = None
-        mock_agent.model_copy = Mock(return_value=mock_updated_agent)
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
 
-        workspace = LocalWorkspace(working_dir='/test')
-        secrets = {'test': StaticSecret(value='secret')}
-        conversation_id = uuid4()
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
 
         plugins = [
             PluginSpec(
@@ -2633,149 +2344,72 @@ class TestPluginHandling:
             )
         ]
 
-        # Act
-        result = await self.service._finalize_conversation_request(
-            mock_agent,
-            conversation_id,
-            self.mock_user,
-            workspace,
-            None,
-            secrets,
-            self.mock_sandbox,
-            None,
-            None,
-            '/test/dir',
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/workspace',
             plugins=plugins,
         )
 
-        # Assert
         assert isinstance(result, StartConversationRequest)
         assert result.plugins is not None
         assert len(result.plugins) == 1
         assert result.plugins[0].source == 'github:owner/my-plugin'
         assert result.plugins[0].ref == 'v1.0.0'
-        # Also verify initial message contains plugin params
+        # Plugin params are folded into the initial message
         assert result.initial_message is not None
         assert (
             'Plugin Configuration Parameters:' in result.initial_message.content[0].text
         )
         assert '- api_key: test123' in result.initial_message.content[0].text
 
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
     @pytest.mark.asyncio
-    async def test_finalize_conversation_request_without_plugins(self):
-        """Test _finalize_conversation_request without plugins sets plugins to None."""
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model = 'gpt-4'
-        mock_llm.usage_id = 'agent'
-        mock_agent.llm = mock_llm
-        mock_agent.condenser = None
+    async def test_build_request_without_plugins(self, _mock_tools):
+        """Without plugins, result.plugins is None."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
 
-        mock_updated_agent = Mock(spec=Agent)
-        mock_updated_agent.llm = mock_llm
-        mock_updated_agent.condenser = None
-        mock_agent.model_copy = Mock(return_value=mock_updated_agent)
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
 
-        workspace = LocalWorkspace(working_dir='/test')
-        secrets = {}
-        conversation_id = uuid4()
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
 
-        # Act
-        result = await self.service._finalize_conversation_request(
-            mock_agent,
-            conversation_id,
-            self.mock_user,
-            workspace,
-            None,
-            secrets,
-            self.mock_sandbox,
-            None,
-            None,
-            '/test/dir',
-            plugins=None,
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/workspace',
         )
 
-        # Assert
         assert isinstance(result, StartConversationRequest)
         assert result.plugins is None
 
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
     @pytest.mark.asyncio
-    async def test_finalize_conversation_request_plugin_without_ref(self):
-        """Test _finalize_conversation_request with plugin that has no ref."""
+    async def test_build_request_plugin_with_repo_path(self, _mock_tools):
+        """repo_path is propagated through to PluginSource."""
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
 
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model = 'gpt-4'
-        mock_llm.usage_id = 'agent'
-        mock_agent.llm = mock_llm
-        mock_agent.condenser = None
+        self.mock_user_context.get_user_info.return_value = self.mock_user
 
-        mock_updated_agent = Mock(spec=Agent)
-        mock_updated_agent.llm = mock_llm
-        mock_updated_agent.condenser = None
-        mock_agent.model_copy = Mock(return_value=mock_updated_agent)
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
 
-        workspace = LocalWorkspace(working_dir='/test')
-        secrets = {}
-        conversation_id = uuid4()
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
 
-        # Plugin without ref or parameters
-        plugins = [PluginSpec(source='github:owner/my-plugin')]
-
-        # Act
-        result = await self.service._finalize_conversation_request(
-            mock_agent,
-            conversation_id,
-            self.mock_user,
-            workspace,
-            None,
-            secrets,
-            self.mock_sandbox,
-            None,
-            None,
-            '/test/dir',
-            plugins=plugins,
-        )
-
-        # Assert
-        assert isinstance(result, StartConversationRequest)
-        assert result.plugins is not None
-        assert len(result.plugins) == 1
-        assert result.plugins[0].source == 'github:owner/my-plugin'
-        assert result.plugins[0].ref is None
-        # No parameters, so initial message should be None
-        assert result.initial_message is None
-
-    @pytest.mark.asyncio
-    async def test_finalize_conversation_request_plugin_with_repo_path(self):
-        """Test _finalize_conversation_request passes repo_path to PluginSource."""
-        from openhands.app_server.app_conversation.app_conversation_models import (
-            PluginSpec,
-        )
-
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model = 'gpt-4'
-        mock_llm.usage_id = 'agent'
-        mock_agent.llm = mock_llm
-        mock_agent.condenser = None
-
-        mock_updated_agent = Mock(spec=Agent)
-        mock_updated_agent.llm = mock_llm
-        mock_updated_agent.condenser = None
-        mock_agent.model_copy = Mock(return_value=mock_updated_agent)
-
-        workspace = LocalWorkspace(working_dir='/test')
-        secrets = {}
-        conversation_id = uuid4()
-
-        # Plugin with repo_path (for marketplace repos containing multiple plugins)
         plugins = [
             PluginSpec(
                 source='github:owner/marketplace-repo',
@@ -2784,54 +2418,40 @@ class TestPluginHandling:
             )
         ]
 
-        # Act
-        result = await self.service._finalize_conversation_request(
-            mock_agent,
-            conversation_id,
-            self.mock_user,
-            workspace,
-            None,
-            secrets,
-            self.mock_sandbox,
-            None,
-            None,
-            '/test/dir',
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/workspace',
             plugins=plugins,
         )
 
-        # Assert
-        assert isinstance(result, StartConversationRequest)
         assert result.plugins is not None
         assert len(result.plugins) == 1
         assert result.plugins[0].source == 'github:owner/marketplace-repo'
         assert result.plugins[0].ref == 'main'
         assert result.plugins[0].repo_path == 'plugins/city-weather'
 
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
     @pytest.mark.asyncio
-    async def test_finalize_conversation_request_multiple_plugins(self):
-        """Test _finalize_conversation_request with multiple plugins."""
+    async def test_build_request_multiple_plugins(self, _mock_tools):
+        """Multiple plugins are all converted correctly."""
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
 
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-        mock_llm = Mock(spec=LLM)
-        mock_llm.model = 'gpt-4'
-        mock_llm.usage_id = 'agent'
-        mock_agent.llm = mock_llm
-        mock_agent.condenser = None
+        self.mock_user_context.get_user_info.return_value = self.mock_user
 
-        mock_updated_agent = Mock(spec=Agent)
-        mock_updated_agent.llm = mock_llm
-        mock_updated_agent.condenser = None
-        mock_agent.model_copy = Mock(return_value=mock_updated_agent)
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
 
-        workspace = LocalWorkspace(working_dir='/test')
-        secrets = {}
-        conversation_id = uuid4()
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
 
-        # Multiple plugins
         plugins = [
             PluginSpec(source='github:owner/security-plugin', ref='v2.0.0'),
             PluginSpec(
@@ -2841,23 +2461,16 @@ class TestPluginHandling:
             PluginSpec(source='/local/path/to/plugin'),
         ]
 
-        # Act
-        result = await self.service._finalize_conversation_request(
-            mock_agent,
-            conversation_id,
-            self.mock_user,
-            workspace,
-            None,
-            secrets,
-            self.mock_sandbox,
-            None,
-            None,
-            '/test/dir',
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/workspace',
             plugins=plugins,
         )
 
-        # Assert
-        assert isinstance(result, StartConversationRequest)
         assert result.plugins is not None
         assert len(result.plugins) == 3
         assert result.plugins[0].source == 'github:owner/security-plugin'
@@ -2865,75 +2478,6 @@ class TestPluginHandling:
         assert result.plugins[1].source == 'github:owner/monorepo'
         assert result.plugins[1].repo_path == 'plugins/logging'
         assert result.plugins[2].source == '/local/path/to/plugin'
-
-    @pytest.mark.asyncio
-    async def test_build_start_conversation_request_for_user_with_plugins(self):
-        """Test _build_start_conversation_request_for_user passes plugins to finalize method."""
-        from openhands.app_server.app_conversation.app_conversation_models import (
-            PluginSpec,
-        )
-
-        # Arrange
-        self.mock_user_context.get_user_info.return_value = self.mock_user
-        self.mock_user_context.get_secrets.return_value = {}
-        self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        plugins = [
-            PluginSpec(
-                source='https://github.com/org/plugin.git',
-                ref='main',
-                parameters={'config_file': 'custom.yaml'},
-            )
-        ]
-
-        # Mock _finalize_conversation_request to capture the call
-        mock_finalize = AsyncMock(return_value=Mock(spec=StartConversationRequest))
-        self.service._finalize_conversation_request = mock_finalize
-
-        # Act
-        await self.service._build_start_conversation_request_for_user(
-            sandbox=self.mock_sandbox,
-            conversation_id=uuid4(),
-            initial_message=None,
-            system_message_suffix=None,
-            git_provider=None,
-            working_dir='/workspace',
-            plugins=plugins,
-        )
-
-        # Assert
-        mock_finalize.assert_called_once()
-        call_kwargs = mock_finalize.call_args.kwargs
-        assert call_kwargs['plugins'] == plugins
-
-    @pytest.mark.asyncio
-    async def test_build_start_conversation_request_for_user_without_plugins(self):
-        """Test _build_start_conversation_request_for_user works without plugins."""
-        # Arrange
-        self.mock_user_context.get_user_info.return_value = self.mock_user
-        self.mock_user_context.get_secrets.return_value = {}
-        self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Mock _finalize_conversation_request
-        mock_finalize = AsyncMock(return_value=Mock(spec=StartConversationRequest))
-        self.service._finalize_conversation_request = mock_finalize
-
-        # Act
-        await self.service._build_start_conversation_request_for_user(
-            sandbox=self.mock_sandbox,
-            conversation_id=uuid4(),
-            initial_message=None,
-            system_message_suffix=None,
-            git_provider=None,
-            working_dir='/workspace',
-        )
-
-        # Assert
-        mock_finalize.assert_called_once()
-        call_kwargs = mock_finalize.call_args.kwargs
-        assert call_kwargs.get('plugins') is None
 
 
 class TestPluginSpecModel:

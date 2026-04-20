@@ -57,9 +57,9 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.3",
-  "openhands-agent-server==1.16.1",
-  "openhands-sdk==1.16.1",
-  "openhands-tools==1.16.1",
+  "openhands-agent-server==1.17",
+  "openhands-sdk==1.17",
+  "openhands-tools==1.17",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "orjson>=3.11.6",
@@ -81,7 +81,7 @@ dependencies = [
   "python-dotenv",
   "python-frontmatter>=1.1",
   "python-json-logger>=3.2.1",
-  "python-multipart>=0.0.22",
+  "python-multipart>=0.0.26",
   "python-pptx",
   "python-socketio==5.14",
   "pythonnet; sys_platform=='win32'",
@@ -186,7 +186,7 @@ html2text = "*"
 deprecated = "*"
 pexpect = "*"
 jinja2 = "^3.1.6"
-python-multipart = ">=0.0.22"
+python-multipart = ">=0.0.26"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = ">=0.12.1,<1.1.0"
@@ -251,9 +251,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.16.1"
-openhands-agent-server = "1.16.1"
-openhands-tools = "1.16.1"
+openhands-sdk = "1.17.0"
+openhands-agent-server = "1.17.0"
+openhands-tools = "1.17.0"
 jwcrypto = ">=1.5.6"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
