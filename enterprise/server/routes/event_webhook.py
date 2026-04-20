@@ -23,8 +23,6 @@ from server.utils.conversation_callback_utils import (
 from storage.database import session_maker
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
-
-
 event_webhook_router = APIRouter(prefix='/event-webhook')
 
 

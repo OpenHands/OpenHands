@@ -11,7 +11,6 @@ from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
 
-from openhands.server.shared import ConversationStoreImpl, config
 from openhands.server.user_auth.user_auth import UserAuth
 
 integration_store = JiraDcIntegrationStore.get_instance()

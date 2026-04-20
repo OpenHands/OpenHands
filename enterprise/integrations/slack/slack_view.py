@@ -14,7 +14,6 @@ from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProces
 from integrations.utils import (
     CONVERSATION_URL,
     ENABLE_V1_SLACK_RESOLVER,
-    get_final_agent_observation,
     get_user_v1_enabled_setting,
 )
 from jinja2 import Environment
@@ -36,16 +35,11 @@ from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.core.logger import openhands_logger as logger
-from openhands.core.schema.agent import AgentState
-from openhands.events.action import MessageAction
-from openhands.events.serialization.event import event_to_dict
 from openhands.integrations.provider import ProviderHandler
 from openhands.sdk import TextContent
 from openhands.server.services.conversation_service import (
-    setup_init_conversation_settings,
     start_conversation,
 )
-from openhands.server.shared import ConversationStoreImpl, config
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationMetadata,
