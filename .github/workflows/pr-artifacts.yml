@@ -59,7 +59,7 @@ jobs:
 
             - name: Update PR comment after cleanup
               if: steps.check-fork.outputs.is_fork == 'false' && steps.remove.outputs.removed == 'true'
-              uses: actions/github-script@v7
+              uses: actions/github-script@v9
               with:
                   script: |
                       const marker = '<!-- pr-artifacts-notice -->';
@@ -107,7 +107,7 @@ jobs:
 
             - name: Post or update PR comment
               if: steps.check.outputs.exists == 'true'
-              uses: actions/github-script@v7
+              uses: actions/github-script@v9
               with:
                   script: |
                       const marker = '<!-- pr-artifacts-notice -->';
