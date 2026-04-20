@@ -29,7 +29,6 @@ from openhands.server.routes.git import app as git_api_router
 from openhands.server.routes.manage_conversations import (
     app as manage_conversation_api_router,
 )
-from openhands.server.routes.public import app as public_api_router
 from openhands.server.routes.secrets import app as secrets_router
 from openhands.server.routes.security import app as security_api_router
 from openhands.server.routes.settings import app as settings_router
@@ -47,7 +46,6 @@ def register_legacy_http_routes(app: FastAPI, *, server_config: ServerConfig) ->
     For new HTTP work, use ``openhands/app_server/`` (see ``openhands/app_server/README.md``)
     instead of adding routes here.
     """
-    app.include_router(public_api_router)
     app.include_router(files_api_router)
     app.include_router(security_api_router)
     app.include_router(feedback_api_router)

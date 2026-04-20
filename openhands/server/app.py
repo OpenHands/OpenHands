@@ -7,6 +7,7 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import contextlib
+import importlib
 import warnings
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -22,7 +23,13 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 
-import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
+# `openhands.agenthub` was historically imported here for side effects (agent registration),
+# but newer checkouts may not include that package. Keep app importable for tests/CI.
+try:
+    importlib.import_module('openhands.agenthub')
+except ModuleNotFoundError as exc:
+    if exc.name != 'openhands.agenthub':
+        raise
 from openhands.app_server import v1_router
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.integrations.service_types import AuthenticationError
@@ -79,4 +86,3 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 register_legacy_http_routes(app, server_config=server_config)
 app.include_router(security_api_router)
 app.include_router(v1_router.router)
-app.include_router(health_router)
