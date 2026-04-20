@@ -17,23 +17,23 @@ and lifespan wiring while the V0 surface remains mounted for compatibility.
 
 from __future__ import annotations
 
+from importlib import import_module
+
 from fastapi import FastAPI
 
 from openhands.app_server import v1_router
 from openhands.app_server.status.status_router import router as health_router
 from openhands.server.config.server_config import ServerConfig
-from openhands.server.routes.conversation import app as conversation_api_router
-from openhands.server.routes.feedback import app as feedback_api_router
-from openhands.server.routes.files import app as files_api_router
-from openhands.server.routes.git import app as git_api_router
-from openhands.server.routes.manage_conversations import (
-    app as manage_conversation_api_router,
-)
-from openhands.server.routes.secrets import app as secrets_router
-from openhands.server.routes.security import app as security_api_router
-from openhands.server.routes.settings import app as settings_router
-from openhands.server.routes.trajectory import app as trajectory_router
 from openhands.server.types import AppMode
+
+
+def _get_optional_router(module_path: str):
+    """Return a legacy router app if the module still exists."""
+    try:
+        module = import_module(module_path)
+    except ModuleNotFoundError:
+        return None
+    return getattr(module, 'app', None)
 
 
 def register_legacy_http_routes(app: FastAPI, *, server_config: ServerConfig) -> None:
@@ -46,16 +46,27 @@ def register_legacy_http_routes(app: FastAPI, *, server_config: ServerConfig) ->
     For new HTTP work, use ``openhands/app_server/`` (see ``openhands/app_server/README.md``)
     instead of adding routes here.
     """
-    app.include_router(files_api_router)
-    app.include_router(security_api_router)
-    app.include_router(feedback_api_router)
-    app.include_router(conversation_api_router)
-    app.include_router(manage_conversation_api_router)
-    app.include_router(settings_router)
-    app.include_router(secrets_router)
+    optional_router_modules = (
+        'openhands.server.routes.files',
+        'openhands.server.routes.security',
+        'openhands.server.routes.feedback',
+        'openhands.server.routes.conversation',
+        'openhands.server.routes.manage_conversations',
+        'openhands.server.routes.settings',
+        'openhands.server.routes.secrets',
+    )
+    for module_path in optional_router_modules:
+        router = _get_optional_router(module_path)
+        if router is not None:
+            app.include_router(router)
+
     if server_config.app_mode == AppMode.OPENHANDS:
-        app.include_router(git_api_router)
+        git_router = _get_optional_router('openhands.server.routes.git')
+        if git_router is not None:
+            app.include_router(git_router)
     if server_config.enable_v1:
         app.include_router(v1_router.router)
-    app.include_router(trajectory_router)
+    trajectory_router = _get_optional_router('openhands.server.routes.trajectory')
+    if trajectory_router is not None:
+        app.include_router(trajectory_router)
     app.include_router(health_router)
