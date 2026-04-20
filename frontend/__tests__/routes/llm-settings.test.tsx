@@ -337,24 +337,18 @@ describe("LlmSettingsScreen", () => {
     }
 
     baseUrlField.default = "https://schema.default/v1";
-    schema.sections.push({
-      key: "general",
-      label: "General",
-      fields: [
-        {
-          key: "agent",
-          label: "Agent",
-          section: "general",
-          section_label: "General",
-          value_type: "string",
-          default: "CodeActAgent",
-          choices: [],
-          depends_on: [],
-          prominence: "major",
-          secret: false,
-          required: true,
-        },
-      ],
+    llmSection?.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "major",
+      secret: false,
+      required: false,
     });
 
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
@@ -379,7 +373,7 @@ describe("LlmSettingsScreen", () => {
     );
   });
 
-  it("keeps the current agent visible in advanced view when the schema omits agent choices", async () => {
+  it("does not render the agent field even when the schema includes it", async () => {
     const schema = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
@@ -423,9 +417,7 @@ describe("LlmSettingsScreen", () => {
 
     await screen.findByTestId("llm-settings-form-advanced");
 
-    await waitFor(() => {
-      expect(screen.getByTestId("agent-input")).toHaveValue("BrowsingAgent");
-    });
+    expect(screen.queryByTestId("agent-input")).not.toBeInTheDocument();
   });
 
   it("uses the docs.openhands.dev domain for the API key help link", async () => {
@@ -793,7 +785,6 @@ describe("LlmSettingsScreen", () => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           agent_settings: expect.objectContaining({
-            agent: "CodeActAgent",
             llm: expect.objectContaining({
               api_key: "test-api-key",
               base_url: "https://schema.default/v1",
@@ -803,9 +794,136 @@ describe("LlmSettingsScreen", () => {
         }),
       );
     });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(
+      (payload.agent_settings as Record<string, unknown>) ?? {},
+    ).not.toHaveProperty("agent");
   });
 
-  it("clears hidden search API key state when saving basic view", async () => {
+  it("preserves existing MCP settings when saving the LLM page", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const existingMcpConfig = {
+      mcpServers: {
+        tavily: {
+          transport: "http",
+          url: "https://example.com/mcp",
+        },
+      },
+    };
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+        {
+          key: "mcp_config",
+          label: "MCP Config",
+          section: "general",
+          section_label: "General",
+          value_type: "object",
+          default: null,
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+      ],
+    });
+
+    let persistedSettings = buildSettingsWithAdvancedToggle({
+      llm_model: "openai/gpt-4o",
+      agent_settings_schema: schema,
+      agent_settings: {
+        agent: "BrowsingAgent",
+        llm: {
+          model: "openai/gpt-4o",
+        },
+        mcp_config: existingMcpConfig,
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation(async (payload) => {
+        const payloadAgentSettings = (payload.agent_settings ?? {}) as Record<
+          string,
+          unknown
+        >;
+
+        const nextAgentSettings: NonNullable<Settings["agent_settings"]> = {
+          ...(persistedSettings.agent_settings ?? {}),
+          ...(payloadAgentSettings as Record<string, SettingsValue>),
+          llm: {
+            ...((persistedSettings.agent_settings?.llm as Record<
+              string,
+              SettingsValue
+            >) ?? {}),
+            ...((payloadAgentSettings.llm as Record<string, SettingsValue>) ?? {}),
+          },
+        };
+
+        persistedSettings = buildSettingsWithAdvancedToggle({
+          ...persistedSettings,
+          agent_settings_schema: schema,
+          agent_settings: nextAgentSettings,
+        });
+
+        return true;
+      });
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(
+      (payload.agent_settings as Record<string, unknown>) ?? {},
+    ).not.toHaveProperty("mcp_config");
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    expect(persistedSettings.agent_settings?.mcp_config).toEqual(
+      existingMcpConfig,
+    );
+  });
+
+  it("does not include search API key updates when saving basic LLM settings", async () => {
     let persistedSettings = buildSettingsWithAdvancedToggle({
       llm_model: "openai/gpt-4o",
       search_api_key: "tavily-key",
@@ -833,15 +951,8 @@ describe("LlmSettingsScreen", () => {
           }
         });
 
-        const nextSearchApiKey =
-          typeof payload.search_api_key === "string"
-            ? payload.search_api_key
-            : (persistedSettings.search_api_key ?? "");
-
         persistedSettings = buildSettings({
           ...persistedSettings,
-          search_api_key: nextSearchApiKey,
-          search_api_key_set: nextSearchApiKey.trim().length > 0,
           agent_settings: nextAgentSettings,
         });
 
@@ -859,13 +970,18 @@ describe("LlmSettingsScreen", () => {
     await waitFor(() => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          search_api_key: "",
           agent_settings: expect.objectContaining({
             llm: expect.objectContaining({ api_key: "test-api-key" }),
           }),
         }),
       );
     });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload).not.toHaveProperty("search_api_key");
 
     await waitFor(() => {
       expect(getSettingsSpy).toHaveBeenCalledTimes(2);
@@ -1169,7 +1285,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("keeps the advanced view while typing into the search API key field", async () => {
+  it("does not render the search API key input in advanced LLM settings", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettingsWithAdvancedToggle(),
     );
@@ -1179,21 +1295,17 @@ describe("LlmSettingsScreen", () => {
     await screen.findByTestId("llm-settings-form-basic");
     await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
 
-    const searchApiKeyInput = await screen.findByTestId("search-api-key-input");
-    await userEvent.type(searchApiKeyInput, "a");
-
     await waitFor(() => {
-      expect(searchApiKeyInput).toHaveValue("a");
       expect(
         screen.getByTestId("llm-settings-form-advanced"),
       ).toBeInTheDocument();
       expect(
-        screen.queryByTestId("llm-settings-form-basic"),
+        screen.queryByTestId("search-api-key-input"),
       ).not.toBeInTheDocument();
     });
   });
 
-  it("does not reveal all-only fields after save when the search API key remains set on refetch", async () => {
+  it("does not reveal all-only fields after save when refetch includes an MCP-owned search API key", async () => {
     const schema = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
@@ -1253,15 +1365,10 @@ describe("LlmSettingsScreen", () => {
       .mockImplementation(async () => structuredClone(persistedSettings));
     vi.spyOn(SettingsService, "saveSettings").mockImplementation(
       async (payload) => {
-        const nextSearchApiKey =
-          typeof payload.search_api_key === "string"
-            ? payload.search_api_key
-            : "";
-
         persistedSettings = buildSettings({
           agent_settings_schema: schema,
-          search_api_key: nextSearchApiKey,
-          search_api_key_set: nextSearchApiKey.trim().length > 0,
+          search_api_key: "tavily-key",
+          search_api_key_set: true,
           agent_settings: {
             llm: {
               model: "openhands/claude-opus-4-5-20251101",
@@ -1269,6 +1376,7 @@ describe("LlmSettingsScreen", () => {
           },
         });
 
+        expect(payload).not.toHaveProperty("search_api_key");
         return true;
       },
     );
@@ -1276,13 +1384,11 @@ describe("LlmSettingsScreen", () => {
     renderLlmSettingsScreen({ appMode: "oss" });
 
     await screen.findByTestId("llm-settings-form-basic");
-    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
-    expect(
-      screen.queryByTestId("sdk-settings-llm.timeout"),
-    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("sdk-section-all-toggle"));
+    expect(screen.getByTestId("sdk-settings-llm.timeout")).toBeInTheDocument();
 
-    const searchApiKeyInput = await screen.findByTestId("search-api-key-input");
-    await userEvent.type(searchApiKeyInput, "tavily-key");
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
     await userEvent.click(screen.getByTestId("save-button"));
 
     await waitFor(() => {
