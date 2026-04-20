@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
 import pytest
-from fastapi import HTTPException, Request, Response, status
+from fastapi import BackgroundTasks, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
 from server.auth.auth_error import AuthError
@@ -51,6 +51,11 @@ def mock_response():
     return MagicMock(spec=Response)
 
 
+@pytest.fixture
+def mock_background_tasks():
+    return MagicMock(spec=BackgroundTasks)
+
+
 def test_set_response_cookie(mock_response, mock_request):
     """Test setting the auth cookie on a response."""
 
@@ -63,6 +68,7 @@ def test_set_response_cookie(mock_response, mock_request):
 
         set_response_cookie(
             request=mock_request,
+            background_tasks=mock_background_tasks,
             response=mock_response,
             keycloak_access_token='test_access_token',
             keycloak_refresh_token='test_refresh_token',
@@ -88,13 +94,14 @@ def test_set_response_cookie(mock_response, mock_request):
 
 
 @pytest.mark.asyncio
-async def test_keycloak_callback_missing_code(mock_request):
+async def test_keycloak_callback_missing_code(mock_request, mock_background_tasks):
     """Test keycloak_callback with missing code."""
     with pytest.raises(HTTPException) as exc_info:
         await keycloak_callback(
             code='',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -103,7 +110,9 @@ async def test_keycloak_callback_missing_code(mock_request):
 
 
 @pytest.mark.asyncio
-async def test_keycloak_callback_token_retrieval_failure(mock_request):
+async def test_keycloak_callback_token_retrieval_failure(
+    mock_request, mock_background_tasks
+):
     """Test keycloak_callback when token retrieval fails."""
     get_keycloak_tokens_mock = AsyncMock(return_value=(None, None))
     with patch(
@@ -114,6 +123,7 @@ async def test_keycloak_callback_token_retrieval_failure(mock_request):
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -129,7 +139,7 @@ async def test_keycloak_callback_token_retrieval_failure(mock_request):
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_user_not_authorized(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when user authorization fails."""
     with (
@@ -170,6 +180,7 @@ async def test_keycloak_callback_user_not_authorized(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -179,7 +190,7 @@ async def test_keycloak_callback_user_not_authorized(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_success_with_valid_offline_token(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test successful keycloak_callback with valid offline token."""
     with (
@@ -227,6 +238,7 @@ async def test_keycloak_callback_success_with_valid_offline_token(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -239,6 +251,7 @@ async def test_keycloak_callback_success_with_valid_offline_token(
         )
         mock_set_cookie.assert_called_once_with(
             request=mock_request,
+            background_tasks=mock_background_tasks,
             response=result,
             keycloak_access_token='test_access_token',
             keycloak_refresh_token='test_refresh_token',
@@ -251,7 +264,7 @@ async def test_keycloak_callback_success_with_valid_offline_token(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_email_not_verified(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when email is not verified."""
     # Arrange
@@ -290,6 +303,7 @@ async def test_keycloak_callback_email_not_verified(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -304,6 +318,7 @@ async def test_keycloak_callback_email_not_verified(
         # Verify rate limit was checked
         mock_rate_limit.assert_called_once_with(
             request=mock_request,
+            background_tasks=mock_background_tasks,
             key_prefix='auth_verify_email',
             user_id='test_user_id',
             user_rate_limit_seconds=60,
@@ -313,7 +328,7 @@ async def test_keycloak_callback_email_not_verified(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_email_not_verified_missing_field(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when email_verified field is missing (defaults to False)."""
     # Arrange
@@ -352,6 +367,7 @@ async def test_keycloak_callback_email_not_verified_missing_field(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -367,7 +383,7 @@ async def test_keycloak_callback_email_not_verified_missing_field(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_email_verification_rate_limited(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when email verification is rate limited.
 
@@ -417,6 +433,7 @@ async def test_keycloak_callback_email_verification_rate_limited(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -435,7 +452,7 @@ async def test_keycloak_callback_email_verification_rate_limited(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_success_without_offline_token(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test successful keycloak_callback without valid offline token."""
     with (
@@ -489,6 +506,7 @@ async def test_keycloak_callback_success_without_offline_token(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -505,6 +523,7 @@ async def test_keycloak_callback_success_without_offline_token(
         # So secure=False because web_url starts with 'http://'
         mock_set_cookie.assert_called_once_with(
             request=mock_request,
+            background_tasks=mock_background_tasks,
             response=result,
             keycloak_access_token='test_access_token',
             keycloak_refresh_token='test_refresh_token',
@@ -517,7 +536,7 @@ async def test_keycloak_callback_success_without_offline_token(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invalid(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test that keycloak_callback redirects to Keycloak when offline token is invalid.
 
@@ -582,6 +601,7 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
             code='test_code',
             state=encoded_state,
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -599,7 +619,9 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
 
 
 @pytest.mark.asyncio
-async def test_keycloak_callback_account_linking_error(mock_request):
+async def test_keycloak_callback_account_linking_error(
+    mock_request, mock_background_tasks
+):
     """Test keycloak_callback with account linking error."""
     # Test the case where error is 'temporarily_unavailable' and error_description is 'authentication_expired'
     result = await keycloak_callback(
@@ -608,6 +630,7 @@ async def test_keycloak_callback_account_linking_error(mock_request):
         error='temporarily_unavailable',
         error_description='authentication_expired',
         request=mock_request,
+        background_tasks=mock_background_tasks,
         user_authorizer=create_mock_user_authorizer(),
     )
 
@@ -673,7 +696,7 @@ async def test_keycloak_offline_callback_missing_user_info(mock_request):
 
 @pytest.mark.asyncio
 async def test_keycloak_offline_callback_success(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test successful keycloak_offline_callback."""
     with (
@@ -715,7 +738,7 @@ async def test_keycloak_offline_callback_success(
 
 @pytest.mark.asyncio
 async def test_keycloak_offline_callback_redirects_to_onboarding(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_offline_callback redirects to onboarding when needed."""
     with (
@@ -824,7 +847,7 @@ async def test_logout_without_refresh_token():
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_blocked_email_domain(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when user authorization fails (blocked email domain)."""
     # Arrange
@@ -864,6 +887,7 @@ async def test_keycloak_callback_blocked_email_domain(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -884,7 +908,9 @@ async def test_keycloak_callback_blocked_email_domain(
 
 
 @pytest.mark.asyncio
-async def test_keycloak_callback_missing_email(mock_request, create_keycloak_user_info):
+async def test_keycloak_callback_missing_email(
+    mock_request, mock_background_tasks, create_keycloak_user_info
+):
     """Test keycloak_callback when user info does not contain email."""
     # Arrange
     with (
@@ -935,6 +961,7 @@ async def test_keycloak_callback_missing_email(mock_request, create_keycloak_use
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -946,7 +973,7 @@ async def test_keycloak_callback_missing_email(mock_request, create_keycloak_use
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_duplicate_email_detected(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when duplicate email is detected by UserAuthorizer.
 
@@ -991,6 +1018,7 @@ async def test_keycloak_callback_duplicate_email_detected(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -1000,7 +1028,7 @@ async def test_keycloak_callback_duplicate_email_detected(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test that new Keycloak user is deleted when duplicate email is detected.
 
@@ -1040,6 +1068,7 @@ async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -1051,7 +1080,7 @@ async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_duplicate_email_preserves_existing_user(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test that existing users are not deleted when duplicate email is detected.
 
@@ -1093,6 +1122,7 @@ async def test_keycloak_callback_duplicate_email_preserves_existing_user(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -1104,7 +1134,7 @@ async def test_keycloak_callback_duplicate_email_preserves_existing_user(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_duplicate_check_exception(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when duplicate check raises exception."""
     with (
@@ -1155,6 +1185,7 @@ async def test_keycloak_callback_duplicate_check_exception(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -1166,7 +1197,7 @@ async def test_keycloak_callback_duplicate_check_exception(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_no_duplicate_email(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when authorization succeeds (no duplicate email).
 
@@ -1218,6 +1249,7 @@ async def test_keycloak_callback_no_duplicate_email(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(success=True),
         )
 
@@ -1228,7 +1260,7 @@ async def test_keycloak_callback_no_duplicate_email(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_no_email_in_user_info(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when email is not in user_info."""
     with (
@@ -1276,6 +1308,7 @@ async def test_keycloak_callback_no_email_in_user_info(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -1291,7 +1324,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_verify_recaptcha_and_allow_login_when_score_is_high(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login proceeds when reCAPTCHA score is high."""
         # Arrange
@@ -1370,6 +1403,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1380,7 +1414,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_block_login_when_recaptcha_score_is_low(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login is blocked and redirected when reCAPTCHA score is low."""
         # Arrange
@@ -1440,6 +1474,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1450,7 +1485,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_extract_ip_from_x_forwarded_for_header(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that IP is extracted from X-Forwarded-For header when present."""
         # Arrange
@@ -1531,6 +1566,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1540,7 +1576,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_use_client_host_when_x_forwarded_for_missing(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that client.host is used when X-Forwarded-For is missing."""
         # Arrange
@@ -1622,6 +1658,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1631,7 +1668,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_use_unknown_ip_when_client_is_none(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that 'unknown' IP is used when client is None."""
         # Arrange
@@ -1712,6 +1749,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1721,7 +1759,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_include_email_in_assessment_when_available(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that email is included in assessment when available."""
         # Arrange
@@ -1799,6 +1837,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1808,7 +1847,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_skip_recaptcha_when_site_key_not_configured(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that reCAPTCHA is skipped when RECAPTCHA_SITE_KEY is not configured."""
         # Arrange
@@ -1878,6 +1917,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1886,7 +1926,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_skip_recaptcha_when_token_is_missing(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that reCAPTCHA is skipped when token is missing from state."""
         # Arrange
@@ -1950,6 +1990,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1958,7 +1999,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_fail_open_when_recaptcha_service_throws_exception(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login proceeds (fail open) when reCAPTCHA service throws exception."""
         # Arrange
@@ -2032,6 +2073,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -2047,7 +2089,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_log_warning_when_recaptcha_blocks_user(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that warning is logged when reCAPTCHA blocks user."""
         # Arrange
@@ -2109,6 +2151,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -2122,7 +2165,7 @@ class TestKeycloakCallbackRecaptcha:
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """When an existing user logs in, backfill_user_email should be called."""
     user_info = create_keycloak_user_info(
@@ -2162,6 +2205,7 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 

@@ -80,6 +80,15 @@ from openhands.app_server.config import get_global_config  # noqa: E402
 _config = get_global_config()
 _config.lifespan = SaasAppLifespanService()
 
+# Safety check - fail fast if import order is wrong
+import sys  # noqa: E402
+
+if 'openhands.server.app' in sys.modules:
+    raise ImportError(
+        'openhands.server.app was imported before SaaS lifespan was configured. '
+        'Check import order in saas_server.py'
+    )
+
 from openhands.server.app import app as base_app  # noqa: E402
 from openhands.server.listen_socket import sio  # noqa: E402
 from openhands.server.middleware import (  # noqa: E402

@@ -7,7 +7,15 @@ from typing import Annotated, Optional, cast
 from urllib.parse import quote, urlencode
 from uuid import UUID as parse_uuid
 
-from fastapi import APIRouter, Header, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
 from server.auth.constants import (
@@ -152,9 +160,74 @@ async def _get_user_orgs_with_data(user_id: str, org_member_ids: list) -> list:
     return orgs
 
 
+async def _track_login_analytics_background(
+    user_id: str,
+    email: str | None,
+    idp: str,
+    current_org_id: parse_uuid | None,
+    org_member_ids: list,
+    consented: bool,
+) -> None:
+    """Track login analytics in background to avoid blocking auth response."""
+    try:
+        from storage.org_member_store import OrgMemberStore
+        from storage.org_store import OrgStore
+
+        analytics = get_analytics_service()
+        if not analytics:
+            return
+
+        org_id_str = str(current_org_id) if current_org_id else None
+
+        # Load current org
+        current_org = (
+            await OrgStore.get_org_by_id(current_org_id) if current_org_id else None
+        )
+
+        # Load org data (orgs list with member_count)
+        user_orgs = await _get_user_orgs_with_data(user_id, org_member_ids)
+
+        orgs_data = []
+        for org in user_orgs:
+            try:
+                member_count = await OrgMemberStore.get_org_members_count(org_id=org.id)
+            except Exception:
+                logger.exception(
+                    'auth:identify_user:member_count_failed',
+                    extra={'user_id': user_id, 'org_id': str(org.id)},
+                )
+                member_count = None
+            orgs_data.append(
+                {'id': str(org.id), 'name': org.name, 'member_count': member_count}
+            )
+
+        analytics.identify_user(
+            distinct_id=user_id,
+            consented=consented,
+            email=email,
+            org_id=org_id_str,
+            org_name=current_org.name if current_org else None,
+            idp=idp,
+            orgs=orgs_data,
+        )
+
+        analytics.track_user_logged_in(
+            distinct_id=user_id,
+            idp=idp,
+            org_id=org_id_str,
+            consented=consented,
+        )
+    except Exception:
+        logger.exception(
+            'auth:_track_login_analytics_background:failed',
+            extra={'user_id': user_id},
+        )
+
+
 @oauth_router.get('/keycloak/callback')
 async def keycloak_callback(
     request: Request,
+    background_tasks: BackgroundTasks,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -395,61 +468,19 @@ async def keycloak_callback(
         f'keycloakAccessToken: {keycloak_access_token}, keycloakUserId: {user_id}'
     )
 
-    # Server-side identity — full person and org group tracking via AnalyticsService
-    analytics = get_analytics_service()
-    if analytics:
-        consented = (
-            user.user_consents_to_analytics is True
-        )  # None = undecided = not consented
-        org_id_str = str(user.current_org_id) if user.current_org_id else None
+    # Server-side identity — defer to background to avoid blocking auth response
+    consented = user.user_consents_to_analytics is True
+    org_member_ids = [om.org_id for om in user.org_members] if user.org_members else []
 
-        # Load current org for identify_user
-        from storage.org_store import OrgStore
-
-        current_org = (
-            await OrgStore.get_org_by_id(user.current_org_id)
-            if user.current_org_id
-            else None
-        )
-
-        # Load org data for identify_user (orgs list with member_count)
-        org_member_ids = (
-            [om.org_id for om in user.org_members] if user.org_members else []
-        )
-        user_orgs = await _get_user_orgs_with_data(user_id, org_member_ids)
-
-        from storage.org_member_store import OrgMemberStore
-
-        orgs_data = []
-        for org in user_orgs:
-            try:
-                member_count = await OrgMemberStore.get_org_members_count(org_id=org.id)
-            except Exception:
-                logger.exception(
-                    'auth:identify_user:member_count_failed',
-                    extra={'user_id': user_id, 'org_id': str(org.id)},
-                )
-                member_count = None
-            orgs_data.append(
-                {'id': str(org.id), 'name': org.name, 'member_count': member_count}
-            )
-
-        analytics.identify_user(
-            distinct_id=user_id,
-            consented=consented,
-            email=email,
-            org_id=org_id_str,
-            org_name=current_org.name if current_org else None,
-            idp=idp,
-            orgs=orgs_data,
-        )
-
-        analytics.track_user_logged_in(
-            distinct_id=user_id,
-            idp=idp,
-            org_id=org_id_str,
-            consented=consented,
-        )
+    background_tasks.add_task(
+        _track_login_analytics_background,
+        user_id=user_id,
+        email=email,
+        idp=idp,
+        current_org_id=user.current_org_id,
+        org_member_ids=org_member_ids,
+        consented=consented,
+    )
 
     logger.info(
         'user_logged_in',
