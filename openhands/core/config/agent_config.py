@@ -25,7 +25,7 @@ class AgentConfig(BaseModel):
     llm_config: str | None = Field(default=None)
     """The name of the llm config to use. If specified, this will override global llm config."""
     classpath: str | None = Field(default=None)
-    """The classpath of the agent to use. To be used for custom agents that are not defined in the openhands.agenthub package."""
+    """The classpath of the agent to use. To be used for custom agents."""
     system_prompt_filename: str = Field(default='system_prompt.j2')
     """Filename of the system prompt template file within the agent's prompt directory. Defaults to 'system_prompt.j2'."""
     enable_browsing: bool = Field(default=True)

@@ -21,8 +21,6 @@ from server.sharing.shared_conversation_info_service import (
 )
 from server.sharing.shared_conversation_models import (
     SharedConversation,
-    SharedConversationPage,
-    SharedConversationSortOrder,
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,113 +42,6 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
 
     db_session: AsyncSession
 
-    async def search_shared_conversation_info(
-        self,
-        title__contains: str | None = None,
-        created_at__gte: datetime | None = None,
-        created_at__lt: datetime | None = None,
-        updated_at__gte: datetime | None = None,
-        updated_at__lt: datetime | None = None,
-        sort_order: SharedConversationSortOrder = SharedConversationSortOrder.CREATED_AT_DESC,
-        page_id: str | None = None,
-        limit: int = 100,
-        include_sub_conversations: bool = False,
-    ) -> SharedConversationPage:
-        """Search for shared conversations."""
-        query = self._public_select_with_saas_metadata()
-
-        # Conditionally exclude sub-conversations based on the parameter
-        if not include_sub_conversations:
-            # Exclude sub-conversations (only include top-level conversations)
-            query = query.where(
-                StoredConversationMetadata.parent_conversation_id.is_(None)
-            )
-
-        query = self._apply_filters(
-            query=query,
-            title__contains=title__contains,
-            created_at__gte=created_at__gte,
-            created_at__lt=created_at__lt,
-            updated_at__gte=updated_at__gte,
-            updated_at__lt=updated_at__lt,
-        )
-
-        # Add sort order
-        if sort_order == SharedConversationSortOrder.CREATED_AT:
-            query = query.order_by(StoredConversationMetadata.created_at)
-        elif sort_order == SharedConversationSortOrder.CREATED_AT_DESC:
-            query = query.order_by(StoredConversationMetadata.created_at.desc())
-        elif sort_order == SharedConversationSortOrder.UPDATED_AT:
-            query = query.order_by(StoredConversationMetadata.last_updated_at)
-        elif sort_order == SharedConversationSortOrder.UPDATED_AT_DESC:
-            query = query.order_by(StoredConversationMetadata.last_updated_at.desc())
-        elif sort_order == SharedConversationSortOrder.TITLE:
-            query = query.order_by(StoredConversationMetadata.title)
-        elif sort_order == SharedConversationSortOrder.TITLE_DESC:
-            query = query.order_by(StoredConversationMetadata.title.desc())
-
-        # Apply pagination
-        if page_id is not None:
-            try:
-                offset = int(page_id)
-                query = query.offset(offset)
-            except ValueError:
-                # If page_id is not a valid integer, start from beginning
-                offset = 0
-        else:
-            offset = 0
-
-        # Apply limit and get one extra to check if there are more results
-        query = query.limit(limit + 1)
-
-        result = await self.db_session.execute(query)
-        rows = result.all()
-
-        # Check if there are more results
-        has_more = len(rows) > limit
-        if has_more:
-            rows = rows[:limit]
-
-        items = [
-            self._to_shared_conversation(stored, saas_metadata=saas_metadata)
-            for stored, saas_metadata in rows
-        ]
-
-        # Calculate next page ID
-        next_page_id = None
-        if has_more:
-            next_page_id = str(offset + limit)
-
-        return SharedConversationPage(items=items, next_page_id=next_page_id)
-
-    async def count_shared_conversation_info(
-        self,
-        title__contains: str | None = None,
-        created_at__gte: datetime | None = None,
-        created_at__lt: datetime | None = None,
-        updated_at__gte: datetime | None = None,
-        updated_at__lt: datetime | None = None,
-    ) -> int:
-        """Count shared conversations matching the given filters."""
-        from sqlalchemy import func
-
-        query = select(func.count(StoredConversationMetadata.conversation_id))
-        # Only include shared conversations
-        query = query.where(StoredConversationMetadata.public == True)  # noqa: E712
-        query = query.where(StoredConversationMetadata.conversation_version == 'V1')
-
-        query = self._apply_filters(
-            query=query,
-            title__contains=title__contains,
-            created_at__gte=created_at__gte,
-            created_at__lt=created_at__lt,
-            updated_at__gte=updated_at__gte,
-            updated_at__lt=updated_at__lt,
-        )
-
-        result = await self.db_session.execute(query)
-        return result.scalar() or 0
-
     async def get_shared_conversation_info(
         self, conversation_id: UUID
     ) -> SharedConversation | None:
@@ -167,15 +58,6 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
 
         stored, saas_metadata = row
         return self._to_shared_conversation(stored, saas_metadata=saas_metadata)
-
-    def _public_select(self):
-        """Create a select query that only returns public conversations."""
-        query = select(StoredConversationMetadata).where(
-            StoredConversationMetadata.conversation_version == 'V1'
-        )
-        # Only include conversations marked as public
-        query = query.where(StoredConversationMetadata.public == True)  # noqa: E712
-        return query
 
     def _public_select_with_saas_metadata(self):
         """Create a select query that returns public conversations with SAAS metadata.
@@ -194,41 +76,6 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
             .where(StoredConversationMetadata.conversation_version == 'V1')
             .where(StoredConversationMetadata.public == True)  # noqa: E712
         )
-        return query
-
-    def _apply_filters(
-        self,
-        query,
-        title__contains: str | None = None,
-        created_at__gte: datetime | None = None,
-        created_at__lt: datetime | None = None,
-        updated_at__gte: datetime | None = None,
-        updated_at__lt: datetime | None = None,
-    ):
-        """Apply common filters to a query."""
-        if title__contains is not None:
-            query = query.where(
-                StoredConversationMetadata.title.contains(title__contains)
-            )
-
-        if created_at__gte is not None:
-            query = query.where(
-                StoredConversationMetadata.created_at >= created_at__gte
-            )
-
-        if created_at__lt is not None:
-            query = query.where(StoredConversationMetadata.created_at < created_at__lt)
-
-        if updated_at__gte is not None:
-            query = query.where(
-                StoredConversationMetadata.last_updated_at >= updated_at__gte
-            )
-
-        if updated_at__lt is not None:
-            query = query.where(
-                StoredConversationMetadata.last_updated_at < updated_at__lt
-            )
-
         return query
 
     def _to_shared_conversation(

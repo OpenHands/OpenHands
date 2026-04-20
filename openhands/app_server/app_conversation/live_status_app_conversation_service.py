@@ -52,7 +52,10 @@ from openhands.app_server.app_conversation.hook_loader import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
-from openhands.app_server.config import get_event_callback_service
+from openhands.app_server.config import (
+    get_event_callback_service,
+    resolve_provider_llm_base_url,
+)
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
@@ -890,24 +893,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             or user.agent_settings.llm.model
             or LLM.model_fields['model'].default
         )
-        base_url = user.agent_settings.llm.base_url
-        if model and (
-            model.startswith('openhands/') or model.startswith('litellm_proxy/')
-        ):
-            # The SDK auto-fills base_url with the default public proxy for
-            # openhands/ models.  We need to distinguish "user explicitly set a
-            # custom URL" from "SDK auto-filled the default".
-            #
-            # Priority: user-explicit URL > deployment provider URL > SDK default
-            _SDK_DEFAULT_PROXY = 'https://llm-proxy.app.all-hands.dev/'
-            user_set_custom = base_url and base_url.rstrip(
-                '/'
-            ) != _SDK_DEFAULT_PROXY.rstrip('/')
-            if user_set_custom:
-                pass  # keep user's explicit base_url
-            elif self.openhands_provider_base_url:
-                base_url = self.openhands_provider_base_url
-            # else: keep the SDK default
+
+        base_url = resolve_provider_llm_base_url(
+            model,
+            user.agent_settings.llm.base_url,
+            provider_base_url=self.openhands_provider_base_url,
+        )
 
         return LLM(
             model=model,
