@@ -2,7 +2,7 @@ import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { LlmSettingsScreen } from "./llm-settings";
 
 export const clientLoader = createPermissionGuard(
-  "edit_llm_settings",
+  "view_llm_settings",
   "/settings",
 );
 

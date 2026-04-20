@@ -15,7 +15,7 @@ export const useAddGitProviders = () => {
     }) => SecretsService.addGitProvider(providers),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["settings", organizationId],
+        queryKey: ["settings", "personal", organizationId],
       });
     },
     meta: {
