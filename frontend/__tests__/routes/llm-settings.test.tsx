@@ -554,7 +554,7 @@ describe("LlmSettingsScreen", () => {
       ).toBeInTheDocument();
     });
 
-    it("should not show info message for personal workspace", async () => {
+    it("shows the personal info message for personal workspace in SaaS mode", async () => {
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
         buildSettings(),
       );
@@ -566,10 +566,9 @@ describe("LlmSettingsScreen", () => {
         organizations: [buildOrganization({ id: "1", is_personal: true })],
       });
 
-      await screen.findByTestId("llm-settings-screen");
       expect(
-        screen.queryByTestId("llm-settings-info-message"),
-      ).not.toBeInTheDocument();
+        await screen.findByTestId("llm-settings-info-message"),
+      ).toBeInTheDocument();
     });
 
     it("should not show info message in OSS mode", async () => {

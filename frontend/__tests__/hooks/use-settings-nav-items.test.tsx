@@ -113,8 +113,12 @@ describe("useSettingsNavItems", () => {
       expect(findItemByPath(result.current, "/settings/billing")).toBeUndefined();
       expect(findItemByPath(result.current, "/settings/org")).toBeUndefined();
       expect(findItemByPath(result.current, "/settings/org-members")).toBeUndefined();
-      // But should see other items
-      expect(findItemByPath(result.current, "/settings")).toBeDefined();
+      // Personal LLM/Condenser/Verification routes are hidden in SaaS;
+      // members see the org-defaults equivalents (read-only on the page itself).
+      expect(findItemByPath(result.current, "/settings")).toBeUndefined();
+      expect(
+        findItemByPath(result.current, "/settings/org-defaults"),
+      ).toBeDefined();
       expect(findItemByPath(result.current, "/settings/user")).toBeDefined();
     });
   });
@@ -375,9 +379,13 @@ describe("useSettingsNavItems", () => {
         expect(
           findItemByPath(result.current, "/settings/integrations"),
         ).toBeUndefined();
-        // Non-hidden pages should still be present
+        // Personal LLM is hidden in SaaS; the org-defaults equivalent
+        // shows up instead (an org is selected in this test's setup).
         expect(
           findItemByPath(result.current, "/settings"),
+        ).toBeUndefined();
+        expect(
+          findItemByPath(result.current, "/settings/org-defaults"),
         ).toBeDefined();
         expect(
           findItemByPath(result.current, "/settings/app"),
@@ -406,8 +414,12 @@ describe("useSettingsNavItems", () => {
         expect(
           findItemByPath(result.current, "/settings/integrations"),
         ).toBeDefined();
+        // Personal LLM is hidden in SaaS; users see /settings/org-defaults instead.
         expect(
           findItemByPath(result.current, "/settings"),
+        ).toBeUndefined();
+        expect(
+          findItemByPath(result.current, "/settings/org-defaults"),
         ).toBeDefined();
         expect(
           findItemByPath(result.current, "/settings/app"),

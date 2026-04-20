@@ -867,15 +867,15 @@ describe("Settings Screen", () => {
       },
     );
 
-    it("does not render the badge on /settings/org-defaults when the active user is a non-admin member", async () => {
+    it("renders the badge on /settings/org-defaults for a non-admin member of a team org (read-only view)", async () => {
       seedSaasOrgContext(MOCK_TEAM_ORG_ACME, { role: "member" });
 
       renderSettingsScreen("/settings/org-defaults");
 
       await screen.findByTestId("org-default-llm-settings-screen");
       expect(
-        screen.queryByTestId("org-wide-settings-badge"),
-      ).not.toBeInTheDocument();
+        await screen.findByTestId("org-wide-settings-badge"),
+      ).toBeInTheDocument();
     });
 
     it("does not render the badge on /settings/org-defaults when the selected organization is a personal org", async () => {
