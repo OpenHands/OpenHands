@@ -18,7 +18,6 @@ import {
   isSettingsPageHidden,
   getFirstAvailablePath,
 } from "#/utils/settings-utils";
-import { useMe } from "#/hooks/query/use-me";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { useConfig } from "#/hooks/query/use-config";
 import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
@@ -33,7 +32,6 @@ const SAAS_ONLY_PATHS = [
 ];
 
 const ORG_WIDE_BADGE_PATHS = new Set<string>([
-  "/settings",
   "/settings/org-defaults",
   "/settings/org-defaults/condenser",
   "/settings/org-defaults/verification",
@@ -131,17 +129,14 @@ function SettingsScreen() {
   const location = useLocation();
   const matches = useMatches();
   const navItems = useSettingsNavItems();
-  const { data: me } = useMe();
   const { data: config } = useConfig();
   const { isTeamOrg } = useOrgTypeAndAccess();
 
   // Determine if we should show the org-wide settings badge
   // Only show for Admin/Owner roles on LLM/org-defaults pages in team orgs
   const isOrgWideBadgePath = ORG_WIDE_BADGE_PATHS.has(location.pathname);
-  const isAdminOrOwner = me?.role === "admin" || me?.role === "owner";
   const isSaasMode = config?.app_mode === "saas";
-  const shouldShowOrgWideBadge =
-    isOrgWideBadgePath && isAdminOrOwner && isTeamOrg && isSaasMode;
+  const shouldShowOrgWideBadge = isOrgWideBadgePath && isTeamOrg && isSaasMode;
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {

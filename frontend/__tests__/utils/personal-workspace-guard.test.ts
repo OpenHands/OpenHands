@@ -41,7 +41,7 @@ vi.mock("#/query-client-config", () => ({
 }));
 
 import { redirect } from "react-router";
-import { requirePersonalWorkspaceLoader } from "#/utils/org/personal-workspace-guard";
+import { requireOrgDefaultsRedirect as requirePersonalWorkspaceLoader } from "#/utils/org/saas-redirect-to-org-defaults-guard";
 
 const createRequest = (pathname: string) => ({
   request: new Request(`http://localhost${pathname}`),

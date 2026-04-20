@@ -25,8 +25,8 @@ const fetchOrganizations = () =>
 // Fails open (returns null, allowing access) when org context cannot be
 // resolved — config fetch, org fetch, or active-org lookup. Backend permission
 // checks remain authoritative, so an outage degrades to "show the page" rather
-// than locking every user out of personal LLM settings.
-export const requirePersonalWorkspaceLoader =
+// than locking every user out of LLM settings.
+export const requireOrgDefaultsRedirect =
   (redirectPath: string = FALLBACK_REDIRECT_PATH) =>
   async ({ request }: { request: Request }) => {
     const config = await fetchConfig();
@@ -50,8 +50,6 @@ export const requirePersonalWorkspaceLoader =
 
     const activeOrg = organizationsData?.items.find((o) => o.id === orgId);
     if (!activeOrg) return null;
-
-    if (activeOrg.is_personal === true) return null;
 
     const currentPath = new URL(request.url).pathname;
     if (currentPath === redirectPath) return null;

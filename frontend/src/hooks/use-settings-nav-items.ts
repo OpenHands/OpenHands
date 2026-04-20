@@ -71,7 +71,7 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
     items = items.filter((item) => item.to !== "/settings/org-members");
   }
 
-  if (!hasPermission("edit_llm_settings") || !organizationId || isPersonalOrg) {
+  if (!organizationId) {
     items = items.filter(
       (item) => !item.to.startsWith("/settings/org-defaults"),
     );
@@ -82,7 +82,7 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
     "/settings/condenser",
     "/settings/verification",
   ]);
-  if (isTeamOrg) {
+  if (isSaasMode) {
     items = items.filter((item) => !PERSONAL_LLM_PATHS.has(item.to));
   }
 
