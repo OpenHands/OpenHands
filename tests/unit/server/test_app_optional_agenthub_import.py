@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from openhands.server.app import _import_optional_agenthub, _load_optional_agenthub
+from openhands.server.app import _import_optional_agenthub
 
 
 def test_import_optional_agenthub_ignores_missing_agenthub():
@@ -33,7 +33,7 @@ def test_optional_agenthub_import_is_ignored_when_module_missing():
         'openhands.server.app.importlib.import_module',
         side_effect=missing_agenthub,
     ):
-        _load_optional_agenthub()
+        _import_optional_agenthub()
 
 
 def test_optional_agenthub_import_reraises_other_missing_module_errors():
@@ -44,4 +44,4 @@ def test_optional_agenthub_import_reraises_other_missing_module_errors():
         side_effect=missing_dependency,
     ):
         with pytest.raises(ModuleNotFoundError):
-            _load_optional_agenthub()
+            _import_optional_agenthub()
