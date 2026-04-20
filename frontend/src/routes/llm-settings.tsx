@@ -154,8 +154,6 @@ export function LlmSettingsScreen({
   const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
     null,
   );
-  const [searchApiKey, setSearchApiKey] = React.useState("");
-  const [searchApiKeyDirty, setSearchApiKeyDirty] = React.useState(false);
   const hasHydratedInitialPersonalSaasViewRef = React.useRef(false);
 
   const defaultModel = String(
@@ -172,11 +170,6 @@ export function LlmSettingsScreen({
       setSelectedProvider(provider || null);
     }
   }, [settings?.llm_model]);
-
-  React.useEffect(() => {
-    setSearchApiKey(settings?.search_api_key ?? "");
-    setSearchApiKeyDirty(false);
-  }, [settings?.search_api_key]);
 
   React.useEffect(() => {
     if (settings && isSaasMode && scope !== "org") {
@@ -381,54 +374,22 @@ export function LlmSettingsScreen({
                 "llm-api-key-help-anchor-advanced",
               )}
 
-              {!isSaasMode ? (
-                <>
-                  <SettingsInput
-                    testId="search-api-key-input"
-                    label={t(I18nKey.SETTINGS$SEARCH_API_KEY)}
-                    type="password"
-                    className="w-full"
-                    value={searchApiKey}
-                    placeholder={t(I18nKey.API$TVLY_KEY_EXAMPLE)}
-                    onChange={(value) => {
-                      setSearchApiKey(value);
-                      setSearchApiKeyDirty(
-                        value !== (settings?.search_api_key ?? ""),
-                      );
-                    }}
-                    startContent={
-                      settings?.search_api_key_set ? (
-                        <KeyStatusIcon isSet={settings.search_api_key_set} />
-                      ) : undefined
+              {!isSaasMode && hasAgentField ? (
+                <SettingsDropdownInput
+                  testId="agent-input"
+                  name="agent-input"
+                  label={t(I18nKey.SETTINGS$AGENT)}
+                  items={agentItems}
+                  selectedKey={agentValue}
+                  isClearable={false}
+                  onSelectionChange={(key) => {
+                    if (key) {
+                      onChange("agent", String(key));
                     }
-                    isDisabled={isDisabled}
-                  />
-
-                  <HelpLink
-                    testId="search-api-key-help-anchor"
-                    text={t(I18nKey.SETTINGS$SEARCH_API_KEY_OPTIONAL)}
-                    linkText={t(I18nKey.SETTINGS$SEARCH_API_KEY_INSTRUCTIONS)}
-                    href="https://tavily.com/"
-                  />
-
-                  {hasAgentField ? (
-                    <SettingsDropdownInput
-                      testId="agent-input"
-                      name="agent-input"
-                      label={t(I18nKey.SETTINGS$AGENT)}
-                      items={agentItems}
-                      selectedKey={agentValue}
-                      isClearable={false}
-                      onSelectionChange={(key) => {
-                        if (key) {
-                          onChange("agent", String(key));
-                        }
-                      }}
-                      isDisabled={isDisabled}
-                      wrapperClassName="w-full"
-                    />
-                  ) : null}
-                </>
+                  }}
+                  isDisabled={isDisabled}
+                  wrapperClassName="w-full"
+                />
               ) : null}
             </div>
           )}
@@ -441,11 +402,8 @@ export function LlmSettingsScreen({
       isSaasMode,
       defaultModel,
       schema,
-      searchApiKey,
       selectedProvider,
       settings?.llm_api_key_set,
-      settings?.search_api_key,
-      settings?.search_api_key_set,
       t,
     ],
   );
@@ -460,11 +418,6 @@ export function LlmSettingsScreen({
     ) => {
       // basePayload is a nested dict (e.g. {llm: {model: "gpt-4"}})
       const agentSettings = structuredClone(basePayload);
-      const topLevel: Record<string, unknown> = {};
-
-      if (!isSaasMode && searchApiKeyDirty) {
-        topLevel.search_api_key = searchApiKey.trim();
-      }
 
       const modelValue =
         typeof context.values["llm.model"] === "string"
@@ -490,25 +443,14 @@ export function LlmSettingsScreen({
         llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
         agentSettings.llm = llm;
 
-        if (!isSaasMode) {
-          topLevel.search_api_key = DEFAULT_SETTINGS.search_api_key;
-        }
-
         if (hasAgentField) {
           agentSettings.agent = getSchemaFieldDefaultValue(schema, "agent");
         }
       }
 
-      return { agent_settings: agentSettings, ...topLevel };
+      return { agent_settings: agentSettings };
     },
-    [
-      hasAgentField,
-      isSaasMode,
-      schema,
-      searchApiKey,
-      searchApiKeyDirty,
-      selectedProvider,
-    ],
+    [hasAgentField, isSaasMode, schema, selectedProvider],
   );
 
   return (
@@ -517,9 +459,7 @@ export function LlmSettingsScreen({
       sectionKeys={["llm", "general"]}
       excludeKeys={LLM_EXCLUDED_KEYS}
       header={buildHeader}
-      extraDirty={searchApiKeyDirty}
       buildPayload={buildPayload}
-      onSaveSuccess={() => setSearchApiKeyDirty(false)}
       getInitialView={getInitialView}
       testId="llm-settings-screen"
     />
