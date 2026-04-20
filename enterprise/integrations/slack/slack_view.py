@@ -45,7 +45,7 @@ from openhands.server.services.conversation_service import (
     setup_init_conversation_settings,
     start_conversation,
 )
-from openhands.server.shared import ConversationStoreImpl, config, conversation_manager
+from openhands.server.shared import ConversationStoreImpl, config
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationMetadata,
@@ -379,50 +379,15 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
         return user_message, ''
 
     async def send_message_to_v0_conversation(self, jinja: Environment):
-        user_info: SlackUser = self.slack_to_openhands_user
-        user_id = user_info.keycloak_user_id
-        saas_user_auth: UserAuth = self.saas_user_auth
-        provider_tokens = await saas_user_auth.get_provider_tokens()
+        """Send a message to a v0 conversation.
 
-        try:
-            conversation_store = await ConversationStoreImpl.get_instance(
-                config, user_id
-            )
-            await conversation_store.get_metadata(self.conversation_id)
-        except FileNotFoundError:
-            raise StartingConvoException('Conversation no longer exists.')
-
-        # Should we raise here if there are no provider tokens?
-        providers_set = list(provider_tokens.keys()) if provider_tokens else []
-
-        conversation_init_data = await setup_init_conversation_settings(
-            user_id, self.conversation_id, providers_set
-        )
-
-        # Either join ongoing conversation, or restart the conversation
-        agent_loop_info = await conversation_manager.maybe_start_agent_loop(
-            self.conversation_id, conversation_init_data, user_id
-        )
-
-        if agent_loop_info.event_store is None:
-            raise StartingConvoException('Event store not available')
-
-        final_agent_observation = get_final_agent_observation(
-            agent_loop_info.event_store
-        )
-        agent_state = (
-            None
-            if len(final_agent_observation) == 0
-            else final_agent_observation[0].agent_state
-        )
-
-        if not agent_state or agent_state == AgentState.LOADING:
-            raise StartingConvoException('Conversation is still starting')
-
-        instructions, _ = await self._get_instructions(jinja)
-        user_msg = MessageAction(content=instructions)
-        await conversation_manager.send_event_to_conversation(
-            self.conversation_id, event_to_dict(user_msg)
+        Note: This functionality has been deprecated as part of the V0 to V1 migration.
+        The conversation_manager has been removed and this method needs to be reimplemented
+        using the V1 API. Use send_message_to_v1_conversation instead.
+        """
+        raise NotImplementedError(
+            'send_message_to_v0_conversation is not supported. '
+            'The V0 conversation_manager has been removed. Use V1 API instead.'
         )
 
     async def send_message_to_v1_conversation(self, jinja: Environment):

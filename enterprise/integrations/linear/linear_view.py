@@ -22,7 +22,7 @@ from openhands.server.services.conversation_service import (
     setup_init_conversation_settings,
     start_conversation,
 )
-from openhands.server.shared import ConversationStoreImpl, config, conversation_manager
+from openhands.server.shared import ConversationStoreImpl, config
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationMetadata,
@@ -183,61 +183,16 @@ class LinearExistingConversationView(LinearViewInterface):
         return '', user_msg
 
     async def create_or_update_conversation(self, jinja_env: Environment) -> str:
-        """Update an existing Linear conversation"""
+        """Update an existing Linear conversation.
 
-        user_id = self.linear_user.keycloak_user_id
-
-        try:
-            conversation_store = await ConversationStoreImpl.get_instance(
-                config, user_id
-            )
-
-            try:
-                await conversation_store.get_metadata(self.conversation_id)
-            except FileNotFoundError:
-                raise StartingConvoException('Conversation no longer exists.')
-
-            provider_tokens = await self.saas_user_auth.get_provider_tokens()
-            if provider_tokens is None:
-                raise ValueError('Could not load provider tokens')
-            providers_set = list(provider_tokens.keys())
-
-            conversation_init_data = await setup_init_conversation_settings(
-                user_id, self.conversation_id, providers_set
-            )
-
-            # Either join ongoing conversation, or restart the conversation
-            agent_loop_info = await conversation_manager.maybe_start_agent_loop(
-                self.conversation_id, conversation_init_data, user_id
-            )
-
-            if agent_loop_info.event_store is None:
-                raise StartingConvoException('Event store not available')
-
-            final_agent_observation = get_final_agent_observation(
-                agent_loop_info.event_store
-            )
-            agent_state = (
-                None
-                if len(final_agent_observation) == 0
-                else final_agent_observation[0].agent_state
-            )
-
-            if not agent_state or agent_state == AgentState.LOADING:
-                raise StartingConvoException('Conversation is still starting')
-
-            _, user_msg = await self._get_instructions(jinja_env)
-            user_message_event = MessageAction(content=user_msg)
-            await conversation_manager.send_event_to_conversation(
-                self.conversation_id, event_to_dict(user_message_event)
-            )
-
-            return self.conversation_id
-        except Exception as e:
-            logger.error(
-                f'[Linear] Failed to create conversation: {str(e)}', exc_info=True
-            )
-            raise StartingConvoException(f'Failed to create conversation: {str(e)}')
+        Note: This functionality has been deprecated as part of the V0 to V1 migration.
+        The conversation_manager has been removed and this method needs to be reimplemented
+        using the V1 API.
+        """
+        raise NotImplementedError(
+            'LinearExistingConversationView.create_or_update_conversation is not yet '
+            'implemented in V1. The V0 conversation_manager has been removed.'
+        )
 
     def get_response_msg(self) -> str:
         """Get the response message to send back to Linear"""

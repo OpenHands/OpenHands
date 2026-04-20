@@ -23,7 +23,7 @@ from server.utils.conversation_callback_utils import (
 from storage.database import session_maker
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
-from openhands.server.shared import conversation_manager
+
 
 event_webhook_router = APIRouter(prefix='/event-webhook')
 
@@ -241,7 +241,13 @@ def _get_user_id(conversation_id: str) -> str:
 
 
 async def _get_session_api_key(user_id: str, conversation_id: str) -> str | None:
-    agent_loop_info = await conversation_manager.get_agent_loop_info(
-        user_id, filter_to_sids={conversation_id}
+    """Get the session API key for a conversation.
+
+    Note: This functionality has been deprecated as part of the V0 to V1 migration.
+    The conversation_manager has been removed and this method needs to be reimplemented
+    using the V1 API.
+    """
+    raise NotImplementedError(
+        '_get_session_api_key is not yet implemented in V1. '
+        'The V0 conversation_manager has been removed.'
     )
-    return agent_loop_info[0].session_api_key

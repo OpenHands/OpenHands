@@ -8,7 +8,6 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from fastapi import (
     APIRouter,
-    Depends,
     HTTPException,
     Request,
     Response,
@@ -16,8 +15,6 @@ from fastapi import (
 )
 
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.server.session.conversation import ServerConversation
-from openhands.server.utils import get_conversation
 
 app = APIRouter(
     prefix='/api/conversations/{conversation_id}', dependencies=get_dependencies()
@@ -26,11 +23,12 @@ app = APIRouter(
 
 @app.route('/security/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE'])
 async def security_api(
-    request: Request, conversation: ServerConversation = Depends(get_conversation)
+    request: Request,
 ) -> Response:
     """Catch-all route for security analyzer API requests.
 
-    Each request is handled directly to the security analyzer.
+    This endpoint is deprecated as part of the V0 to V1 migration.
+    The security analyzer functionality has been moved to the V1 application server.
 
     Args:
         request (Request): The incoming FastAPI request object.
@@ -39,12 +37,9 @@ async def security_api(
         Response: The response from the security analyzer.
 
     Raises:
-        HTTPException: If the security analyzer is not initialized.
+        HTTPException: Always raises 410 Gone as this endpoint is deprecated.
     """
-    if not conversation.security_analyzer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='Security analyzer not initialized',
-        )
-
-    return await conversation.security_analyzer.handle_api_request(request)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail='This endpoint is deprecated. Please use the V1 API.',
+    )
