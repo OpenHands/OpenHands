@@ -718,7 +718,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("clears hidden search API key state when saving basic view", async () => {
+  it("does not include search API key updates when saving basic LLM settings", async () => {
     let persistedSettings = buildSettingsWithAdvancedToggle({
       llm_model: "openai/gpt-4o",
       search_api_key: "tavily-key",
@@ -746,15 +746,8 @@ describe("LlmSettingsScreen", () => {
           }
         });
 
-        const nextSearchApiKey =
-          typeof payload.search_api_key === "string"
-            ? payload.search_api_key
-            : (persistedSettings.search_api_key ?? "");
-
         persistedSettings = buildSettings({
           ...persistedSettings,
-          search_api_key: nextSearchApiKey,
-          search_api_key_set: nextSearchApiKey.trim().length > 0,
           agent_settings: nextAgentSettings,
         });
 
@@ -772,13 +765,15 @@ describe("LlmSettingsScreen", () => {
     await waitFor(() => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          search_api_key: "",
           agent_settings: expect.objectContaining({
             llm: expect.objectContaining({ api_key: "test-api-key" }),
           }),
         }),
       );
     });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("search_api_key");
 
     await waitFor(() => {
       expect(getSettingsSpy).toHaveBeenCalledTimes(2);
@@ -1082,7 +1077,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("keeps the advanced view while typing into the search API key field", async () => {
+  it("does not render the search API key input in advanced LLM settings", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettingsWithAdvancedToggle(),
     );
@@ -1092,21 +1087,15 @@ describe("LlmSettingsScreen", () => {
     await screen.findByTestId("llm-settings-form-basic");
     await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
 
-    const searchApiKeyInput = await screen.findByTestId("search-api-key-input");
-    await userEvent.type(searchApiKeyInput, "a");
-
     await waitFor(() => {
-      expect(searchApiKeyInput).toHaveValue("a");
       expect(
         screen.getByTestId("llm-settings-form-advanced"),
       ).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("llm-settings-form-basic"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("search-api-key-input")).not.toBeInTheDocument();
     });
   });
 
-  it("does not reveal all-only fields after save when the search API key remains set on refetch", async () => {
+  it("does not reveal all-only fields after save when refetch includes an MCP-owned search API key", async () => {
     const schema = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
@@ -1166,15 +1155,10 @@ describe("LlmSettingsScreen", () => {
       .mockImplementation(async () => structuredClone(persistedSettings));
     vi.spyOn(SettingsService, "saveSettings").mockImplementation(
       async (payload) => {
-        const nextSearchApiKey =
-          typeof payload.search_api_key === "string"
-            ? payload.search_api_key
-            : "";
-
         persistedSettings = buildSettings({
           agent_settings_schema: schema,
-          search_api_key: nextSearchApiKey,
-          search_api_key_set: nextSearchApiKey.trim().length > 0,
+          search_api_key: "tavily-key",
+          search_api_key_set: true,
           agent_settings: {
             llm: {
               model: "openhands/claude-opus-4-5-20251101",
@@ -1182,6 +1166,7 @@ describe("LlmSettingsScreen", () => {
           },
         });
 
+        expect(payload).not.toHaveProperty("search_api_key");
         return true;
       },
     );
@@ -1194,8 +1179,8 @@ describe("LlmSettingsScreen", () => {
       screen.queryByTestId("sdk-settings-llm.timeout"),
     ).not.toBeInTheDocument();
 
-    const searchApiKeyInput = await screen.findByTestId("search-api-key-input");
-    await userEvent.type(searchApiKeyInput, "tavily-key");
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
     await userEvent.click(screen.getByTestId("save-button"));
 
     await waitFor(() => {
