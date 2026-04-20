@@ -88,7 +88,7 @@ def get_default_web_url() -> str | None:
     web_host = os.getenv('WEB_HOST')
     if not web_host:
         return None
-    return f'http://{web_host}'
+    return f'https://{web_host}'
 
 
 def get_default_permitted_cors_origins() -> list[str]:
