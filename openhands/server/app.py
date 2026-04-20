@@ -7,6 +7,7 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import contextlib
+import importlib
 import warnings
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -32,6 +33,23 @@ from openhands.server.shared import conversation_manager
 from openhands.version import get_version
 
 mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
+
+
+def _import_optional_agenthub() -> None:
+    """Load optional agenthub package if available.
+
+    `openhands.agenthub` is not always installed in local dev/test environments.
+    Keep app importable when that exact optional package is missing, but re-raise
+    all other import errors to avoid hiding real failures.
+    """
+    try:
+        importlib.import_module('openhands.agenthub')
+    except ModuleNotFoundError as exc:
+        if exc.name != 'openhands.agenthub':
+            raise
+
+
+_import_optional_agenthub()
 
 
 def combine_lifespans(*lifespans):
