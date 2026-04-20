@@ -37,9 +37,6 @@ from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
 from openhands.sdk import TextContent
-from openhands.server.services.conversation_service import (
-    start_conversation,
-)
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationMetadata,
@@ -217,68 +214,9 @@ class SlackNewConversationView(SlackViewInterface):
                 keycloak_user_id=self.slack_to_openhands_user.keycloak_user_id,
             )
 
-        # Check if V1 conversations are enabled for this user
-        self.v1_enabled = await is_v1_enabled_for_slack_resolver(
-            self.slack_to_openhands_user.keycloak_user_id
-        )
-
-        if self.v1_enabled:
-            # Use V1 app conversation service
-            await self._create_v1_conversation(jinja)
-            return self.conversation_id
-        else:
-            # Use existing V0 conversation service
-            await self._create_v0_conversation(jinja, provider_tokens, user_secrets)
-            return self.conversation_id
-
-    async def _create_v0_conversation(
-        self, jinja: Environment, provider_tokens, user_secrets
-    ) -> None:
-        """Create conversation using the legacy V0 system."""
-        user_instructions, conversation_instructions = await self._get_instructions(
-            jinja
-        )
-
-        user_id = self.slack_to_openhands_user.keycloak_user_id
-
-        # Create the conversation store with resolver org routing
-        # (bypasses initialize_conversation to avoid threading enterprise-only
-        # resolver_org_id through the generic OSS interface)
-        store = await SaasConversationStore.get_resolver_instance(
-            get_config(),
-            user_id,
-            self.resolved_org_id,
-        )
-
-        conversation_id = uuid4().hex
-        conversation_metadata = ConversationMetadata(
-            trigger=ConversationTrigger.SLACK,
-            conversation_id=conversation_id,
-            title=get_default_conversation_title(conversation_id),
-            user_id=user_id,
-            selected_repository=self.selected_repo,
-            selected_branch=None,
-            git_provider=self._resolved_git_provider,
-        )
-        await store.save_metadata(conversation_metadata)
-
-        await start_conversation(
-            user_id=user_id,
-            git_provider_tokens=provider_tokens,
-            custom_secrets=user_secrets.custom_secrets if user_secrets else None,
-            initial_user_msg=user_instructions,
-            image_urls=None,
-            replay_json=None,
-            conversation_id=conversation_id,
-            conversation_metadata=conversation_metadata,
-            conversation_instructions=(
-                conversation_instructions if conversation_instructions else None
-            ),
-        )
-
-        self.conversation_id = conversation_id
-        logger.info(f'[Slack]: Created V0 conversation: {self.conversation_id}')
-        await self.save_slack_convo(v1_enabled=False)
+        # V0 conversation path has been removed - all conversations use V1 app conversation service
+        await self._create_v1_conversation(jinja)
+        return self.conversation_id
 
     async def _create_v1_conversation(self, jinja: Environment) -> None:
         """Create conversation using the new V1 app conversation system."""
