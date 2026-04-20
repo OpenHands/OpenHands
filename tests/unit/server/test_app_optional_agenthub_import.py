@@ -2,8 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from openhands.server.app import _import_optional_agenthub
-from openhands.server.app import _load_optional_agenthub
+from openhands.server.app import _import_optional_agenthub, _load_optional_agenthub
 
 
 def test_import_optional_agenthub_ignores_missing_agenthub():
