@@ -9,7 +9,7 @@ from integrations.solvability.models.report import SolvabilityReport
 from integrations.solvability.prompts import load_prompt
 from pydantic import BaseModel, Field
 
-from openhands.llm import LLM
+from openhands.sdk.llm import LLM
 
 
 class SolvabilitySummary(BaseModel):

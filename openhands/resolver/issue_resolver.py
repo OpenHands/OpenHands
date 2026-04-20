@@ -35,7 +35,6 @@ from openhands.events.observation import (
 )
 from openhands.events.stream import EventStreamSubscriber
 from openhands.integrations.service_types import ProviderType
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.resolver.interfaces.issue import Issue
 from openhands.resolver.interfaces.issue_definitions import (
     ServiceContextIssue,
@@ -50,6 +49,7 @@ from openhands.resolver.utils import (
     reset_logger_for_multiprocessing,
 )
 from openhands.runtime.base import Runtime
+from openhands.sdk.llm import LLMRegistry
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 
 # Don't make this configurable for now, unless we have other competitive agents

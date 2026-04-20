@@ -9,8 +9,8 @@ from openhands.events.action.agent import (
 from openhands.events.action.message import MessageAction, SystemMessageAction
 from openhands.events.event import EventSource
 from openhands.events.observation import Observation
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.memory.condenser.condenser import Condensation, RollingCondenser, View
+from openhands.sdk.llm import LLMRegistry
 
 
 class ConversationWindowCondenser(RollingCondenser):

@@ -10,9 +10,9 @@ import asyncio
 
 from openhands.core.config import OpenHandsConfig
 from openhands.events.stream import EventStream
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.runtime import get_runtime_cls
 from openhands.runtime.base import Runtime
+from openhands.sdk.llm import LLMRegistry
 from openhands.storage.files import FileStore
 from openhands.utils.async_utils import call_sync_from_async
 

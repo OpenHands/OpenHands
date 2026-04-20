@@ -27,11 +27,11 @@ from openhands.integrations.provider import (
     ProviderToken,
     ProviderType,
 )
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.memory.memory import Memory
 from openhands.microagent.microagent import BaseMicroagent
 from openhands.runtime import get_runtime_cls
 from openhands.runtime.base import Runtime
+from openhands.sdk.llm import LLMRegistry
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.storage import get_file_store
 from openhands.storage.data_models.secrets import Secrets

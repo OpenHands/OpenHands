@@ -20,7 +20,7 @@ from openhands.events.event_store import EventStore
 from openhands.events.event_store_abc import EventStoreABC
 from openhands.events.observation import AgentStateChangedObservation
 from openhands.events.stream import EventStreamSubscriber
-from openhands.llm.llm_registry import LLMRegistry
+from openhands.sdk.llm import LLMRegistry
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.server.config.server_config import ServerConfig
 from openhands.server.conversation_manager.conversation_manager import (

@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 
 from openhands.events.tool import ToolCallMetadata
-from openhands.llm.metrics import Metrics
+from openhands.sdk.llm import Metrics
 
 
 class EventSource(str, Enum):

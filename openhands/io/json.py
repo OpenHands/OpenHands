@@ -9,7 +9,7 @@ from openhands.core.exceptions import LLMResponseError
 from openhands.events.event import Event
 from openhands.events.observation import CmdOutputMetadata
 from openhands.events.serialization import event_to_dict
-from openhands.llm.metrics import Metrics
+from openhands.sdk.llm import Metrics
 
 
 class OpenHandsJSONEncoder(json.JSONEncoder):

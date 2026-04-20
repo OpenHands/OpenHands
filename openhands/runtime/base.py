@@ -66,7 +66,6 @@ from openhands.integrations.provider import (
     ProviderType,
 )
 from openhands.integrations.service_types import AuthenticationError
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.microagent import (
     BaseMicroagent,
     load_microagents_from_dir,
@@ -79,6 +78,7 @@ from openhands.runtime.plugins import (
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.runtime.utils.edit import FileEditRuntimeMixin
 from openhands.runtime.utils.git_handler import CommandResult, GitHandler
+from openhands.sdk.llm import LLMRegistry
 from openhands.security import SecurityAnalyzer, options
 from openhands.storage.locations import get_conversation_dir
 from openhands.utils.async_utils import (

@@ -10,7 +10,8 @@ from openhands.events.serialization.action import action_from_dict
 from openhands.events.serialization.observation import observation_from_dict
 from openhands.events.serialization.utils import remove_fields
 from openhands.events.tool import ToolCallMetadata
-from openhands.llm.metrics import Cost, Metrics, ResponseLatency, TokenUsage
+from openhands.sdk.llm import Metrics, TokenUsage
+from openhands.sdk.llm.utils.metrics import Cost, ResponseLatency
 
 # TODO: move `content` into `extras`
 TOP_KEYS = [

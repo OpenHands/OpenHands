@@ -26,8 +26,8 @@ from openhands.core.schema.observation import ObservationType
 from openhands.events.action import FileReadAction, MessageAction
 from openhands.events.observation.commands import CmdOutputObservation
 from openhands.events.stream import EventStreamSubscriber, session_exists
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.runtime import get_runtime_cls
+from openhands.sdk.llm import LLMRegistry
 from openhands.server.config.server_config import ServerConfig
 from openhands.server.constants import ROOM_KEY
 from openhands.server.data_models.agent_loop_info import AgentLoopInfo

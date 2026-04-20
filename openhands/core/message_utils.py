@@ -6,7 +6,7 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 from openhands.events.event import Event
-from openhands.llm.metrics import Metrics, TokenUsage
+from openhands.sdk.llm import Metrics, TokenUsage
 
 
 def get_token_usage_for_event(event: Event, metrics: Metrics) -> TokenUsage | None:

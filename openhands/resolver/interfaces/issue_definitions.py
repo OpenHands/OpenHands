@@ -14,13 +14,13 @@ import jinja2
 
 from openhands.core.config import LLMConfig
 from openhands.events.event import Event
-from openhands.llm.llm import LLM
 from openhands.resolver.interfaces.issue import (
     Issue,
     IssueHandlerInterface,
     ReviewThread,
 )
 from openhands.resolver.utils import extract_image_urls
+from openhands.sdk.llm import LLM
 
 
 class ServiceContext:

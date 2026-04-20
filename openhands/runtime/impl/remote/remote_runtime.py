@@ -26,7 +26,6 @@ from openhands.core.exceptions import (
 from openhands.core.logger import openhands_logger as logger
 from openhands.events import EventStream
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.runtime.builder.remote import RemoteRuntimeBuilder
 from openhands.runtime.impl.action_execution.action_execution_client import (
     ActionExecutionClient,
@@ -39,6 +38,7 @@ from openhands.runtime.utils.command import (
 )
 from openhands.runtime.utils.request import send_request
 from openhands.runtime.utils.runtime_build import build_runtime_image
+from openhands.sdk.llm import LLMRegistry
 from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.tenacity_stop import stop_base, stop_if_should_exit
 

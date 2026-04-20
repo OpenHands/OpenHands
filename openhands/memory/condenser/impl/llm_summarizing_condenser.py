@@ -5,13 +5,12 @@ from openhands.core.message import Message, TextContent
 from openhands.events.action.agent import CondensationAction
 from openhands.events.observation.agent import AgentCondensationObservation
 from openhands.events.serialization.event import truncate_content
-from openhands.llm.llm import LLM
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.memory.condenser.condenser import (
     Condensation,
     RollingCondenser,
     View,
 )
+from openhands.sdk.llm import LLM, LLMRegistry
 
 
 class LLMSummarizingCondenser(RollingCondenser):

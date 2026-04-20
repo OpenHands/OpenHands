@@ -4,7 +4,7 @@ from copy import deepcopy
 from pydantic import SecretStr
 
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.llm.llm_registry import LLMRegistry
+from openhands.sdk.llm import LLMRegistry
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.storage import get_file_store
 from openhands.storage.data_models.settings import Settings

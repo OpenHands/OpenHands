@@ -4,8 +4,8 @@ from openhands.core.config.condenser_config import ObservationMaskingCondenserCo
 from openhands.events.event import Event
 from openhands.events.observation import Observation
 from openhands.events.observation.agent import AgentCondensationObservation
-from openhands.llm.llm_registry import LLMRegistry
 from openhands.memory.condenser.condenser import Condensation, Condenser, View
+from openhands.sdk.llm import LLMRegistry
 
 
 class ObservationMaskingCondenser(Condenser):
