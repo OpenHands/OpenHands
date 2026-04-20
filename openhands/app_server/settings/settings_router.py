@@ -125,18 +125,22 @@ async def load_settings(
             provider_tokens_set=provider_tokens_set,
         )
 
-        # Convert litellm_proxy/ back to openhands/ for the frontend
+        # Convert litellm_proxy/ back to openhands/ for the frontend, but only
+        # if the base_url is the OpenHands proxy. Custom litellm_proxy endpoints
+        # should keep their litellm_proxy/ prefix.
         resp_llm = settings_with_token_data.agent_settings.llm
+        normalized_base = (llm.base_url or '').rstrip('/')
+        normalized_proxy = LITE_LLM_API_URL.rstrip('/')
+
         if resp_llm.model and resp_llm.model.startswith('litellm_proxy/'):
-            resp_llm.model = (
-                f'openhands/{resp_llm.model.removeprefix("litellm_proxy/")}'
-            )
+            # Only convert to openhands/ if using the OpenHands proxy URL
+            if normalized_base == normalized_proxy:
+                resp_llm.model = (
+                    f'openhands/{resp_llm.model.removeprefix("litellm_proxy/")}'
+                )
 
         # If the base url matches the default for the provider, we don't send it
         # So that the frontend can display basic mode.
-        # Normalize trailing slashes for comparison since the SDK may add one.
-        normalized_base = (llm.base_url or '').rstrip('/')
-        normalized_proxy = LITE_LLM_API_URL.rstrip('/')
         if is_openhands_model(llm.model):
             if normalized_base == normalized_proxy:
                 resp_llm.base_url = None
