@@ -182,6 +182,12 @@ def get_provider_api_base(model: str) -> str | None:
     try:
         api_base = litellm.get_api_base(model, {})
         if api_base:
+            # Gemini returns a full model-specific endpoint URL (e.g.
+            # ".../models/gemini-xxx:generateContent"). Storing that as base_url
+            # causes litellm to append the model path a second time, producing a
+            # doubled URL and a 404. Let litellm resolve the Gemini URL itself.
+            if ':generateContent' in api_base or ':streamGenerateContent' in api_base:
+                return None
             return api_base
     except Exception:
         pass
