@@ -196,7 +196,7 @@ async def test_keycloak_callback_success_with_valid_offline_token(
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
         patch('server.routes.auth.UserStore') as mock_user_store,
-        patch('server.routes.auth.get_analytics_service') as mock_posthog,
+        patch('server.routes.auth.get_analytics_service'),
         patch(
             'storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock
         ) as _mock_get_org,
@@ -467,7 +467,7 @@ async def test_keycloak_callback_success_without_offline_token(
         patch('server.routes.auth.KEYCLOAK_REALM_NAME', 'test-realm'),
         patch('server.routes.auth.KEYCLOAK_CLIENT_ID', 'test-client'),
         patch('server.routes.auth.UserStore') as mock_user_store,
-        patch('server.routes.auth.get_analytics_service') as mock_posthog,
+        patch('server.routes.auth.get_analytics_service'),
         patch(
             'storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock
         ) as _mock_get_org,
