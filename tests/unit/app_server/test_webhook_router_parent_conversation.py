@@ -85,6 +85,7 @@ def mock_conversation_info() -> ConversationInfo:
     conversation_info = MagicMock(spec=ConversationInfo)
     conversation_info.id = uuid4()
     conversation_info.execution_status = ConversationExecutionStatus.RUNNING
+    conversation_info.title = None
 
     # Mock agent.llm.model structure
     conversation_info.agent = MagicMock()
@@ -215,14 +216,17 @@ class TestOnConversationUpdateParentConversationId:
         sandbox_info,
         mock_conversation_info,
     ):
-        """Test that new conversations (stubs) have parent_conversation_id as None.
+        """Webhook must not create a new row when no existing record and no
+        title is available from either side.
 
         Arrange:
-            - No existing conversation (will create stub)
+            - No existing conversation in our DB (stub returned)
+            - Incoming ConversationInfo has no title
         Act:
             - Call on_conversation_update webhook
         Assert:
-            - New conversation has parent_conversation_id as None
+            - Webhook returns Success but does NOT create a row. Titling is
+              owned by the conversation creation flow.
         """
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
@@ -230,6 +234,7 @@ class TestOnConversationUpdateParentConversationId:
 
         # Arrange
         conversation_id = mock_conversation_info.id
+        mock_conversation_info.title = None
 
         # Create stub conversation (simulating valid_conversation for new conversation)
         stub_conv = AppConversationInfo(
@@ -256,8 +261,7 @@ class TestOnConversationUpdateParentConversationId:
         saved_conv = await app_conversation_info_service.get_app_conversation_info(
             conversation_id
         )
-        assert saved_conv is not None
-        assert saved_conv.parent_conversation_id is None
+        assert saved_conv is None
 
     @pytest.mark.asyncio
     async def test_parent_conversation_id_preserved_with_other_metadata(
@@ -468,14 +472,18 @@ class TestOnConversationUpdateParentConversationId:
         sandbox_info,
         mock_conversation_info,
     ):
-        """Test that parent_conversation_id is preserved when title changes.
+        """Webhook must be a no-op when neither an existing DB row, the
+        passed-in existing stub, nor the incoming ConversationInfo have a
+        title. Titling is owned by the creation flow.
 
         Arrange:
-            - Create existing conversation with parent_conversation_id and no title
+            - Stub existing conversation (not persisted) with parent and no title
+            - Incoming ConversationInfo also has no title
+            - No row in DB yet
         Act:
-            - Call on_conversation_update webhook (which generates a title)
+            - Call on_conversation_update webhook
         Assert:
-            - Parent_conversation_id is preserved and title is generated
+            - Webhook returns Success but does NOT persist anything
         """
         from openhands.app_server.event_callback.webhook_router import (
             on_conversation_update,
@@ -484,8 +492,9 @@ class TestOnConversationUpdateParentConversationId:
         # Arrange
         parent_id = uuid4()
         conversation_id = mock_conversation_info.id
+        mock_conversation_info.title = None
 
-        # Create existing conversation without title but with parent
+        # Stub (not persisted) existing conversation without title but with parent
         existing_conv = AppConversationInfo(
             id=conversation_id,
             title=None,
@@ -494,7 +503,6 @@ class TestOnConversationUpdateParentConversationId:
             parent_conversation_id=parent_id,
         )
 
-        # Mock valid_conversation to return existing conversation
         with patch(
             'openhands.app_server.event_callback.webhook_router.valid_conversation',
             return_value=existing_conv,
@@ -512,7 +520,4 @@ class TestOnConversationUpdateParentConversationId:
         saved_conv = await app_conversation_info_service.get_app_conversation_info(
             conversation_id
         )
-        assert saved_conv is not None
-        assert saved_conv.parent_conversation_id == parent_id
-        assert saved_conv.title is not None  # Title should be generated
-        assert f'Conversation {conversation_id.hex}' in saved_conv.title
+        assert saved_conv is None

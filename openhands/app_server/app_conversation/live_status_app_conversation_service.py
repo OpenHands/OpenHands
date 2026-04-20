@@ -103,6 +103,21 @@ _logger = logging.getLogger(__name__)
 _GENERATOR_STOP = object()
 
 
+def _truncated_initial_message_title(
+    msg: SendMessageRequest | None, max_length: int = 50
+) -> str | None:
+    """Fallback title derived from the initial message text content."""
+    if not msg:
+        return None
+    parts = [c.text for c in msg.content or [] if getattr(c, 'text', None)]
+    joined = ' '.join(parts).strip()
+    if not joined:
+        return None
+    if len(joined) > max_length:
+        joined = joined[: max_length - 3] + '...'
+    return joined
+
+
 def _safe_generator_send(generator, response):
     """Send a value to a generator, converting StopIteration to a sentinel.
 
@@ -369,13 +384,61 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 f'selected_branch={request.selected_branch}, '
                 f'git_provider={request.git_provider}'
             )
+
+            # Generate the title up-front (via the agent-server's
+            # /generate_title, backed by the SDK's title_utils) so the first
+            # AppConversationInfo we save already has the real LLM title.
+            resolved_title = request.title
+            if not resolved_title and request.initial_message:
+                try:
+                    generate_title_url = replace_localhost_hostname_for_docker(
+                        f'{agent_server_url}/api/conversations/{info.id.hex}/generate_title'
+                    )
+                    title_response = await self.httpx_client.post(
+                        generate_title_url,
+                        headers={'X-Session-API-Key': sandbox.session_api_key},
+                        json={},
+                        timeout=30,
+                    )
+                    title_response.raise_for_status()
+                    resolved_title = title_response.json().get('title') or None
+                except Exception as title_exc:
+                    _logger.warning(
+                        f'Eager title generation failed for conversation '
+                        f'{info.id.hex}: {title_exc}'
+                    )
+
+            final_title = (
+                resolved_title
+                or _truncated_initial_message_title(request.initial_message)
+                or f'Conversation {info.id.hex[:5]}'
+            )
+
+            # Sync the title to the agent-server so later webhooks carry it
+            # and do not race with our save.
+            try:
+                patch_url = replace_localhost_hostname_for_docker(
+                    f'{agent_server_url}/api/conversations/{info.id.hex}'
+                )
+                patch_response = await self.httpx_client.patch(
+                    patch_url,
+                    json={'title': final_title},
+                    headers={'X-Session-API-Key': sandbox.session_api_key},
+                    timeout=30,
+                )
+                patch_response.raise_for_status()
+            except Exception as patch_exc:
+                _logger.warning(
+                    f'Syncing title to agent-server failed for conversation '
+                    f'{info.id.hex}: {patch_exc}'
+                )
+
             app_conversation_info = AppConversationInfo(
                 id=info.id,
-                title=request.title or f'Conversation {info.id.hex[:5]}',
+                title=final_title,
                 sandbox_id=sandbox.id,
                 created_by_user_id=user_id,
                 llm_model=start_conversation_request.agent.llm.model,
-                # Git parameters
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,
                 git_provider=request.git_provider,
@@ -387,16 +450,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             await self.app_conversation_info_service.save_app_conversation_info(
                 app_conversation_info
             )
-            _logger.info(
-                f'[REPO_DEBUG] AppConversationInfo saved successfully: id={info.id.hex}'
-            )
 
             # Setup default processors
             processors = request.processors or []
 
-            # Add SetTitleCallbackProcessor unless the request already provided
-            # an explicit title (in which case we keep it as-is).
-            if not request.title:
+            # Add SetTitleCallbackProcessor unless we already have a title
+            # (either supplied by the caller or generated eagerly above).
+            if not resolved_title:
                 has_set_title_processor = any(
                     isinstance(processor, SetTitleCallbackProcessor)
                     for processor in processors

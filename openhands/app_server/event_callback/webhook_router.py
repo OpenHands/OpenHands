@@ -112,22 +112,36 @@ async def on_conversation_update(
     if conversation_info.execution_status == ConversationExecutionStatus.DELETING:
         return Success()
 
+    # Refetch just before merge to capture a concurrent write from the
+    # creation flow; otherwise merge() would clobber a real title with None.
+    latest = await app_conversation_info_service.get_app_conversation_info(
+        conversation_info.id
+    )
+
+    # Titling is owned by the creation flow. If no row exists yet and no title
+    # is available from any source, skip — a None-titled row here would show
+    # as a placeholder via the /api/conversations GET fallback.
+    if latest is None and not existing.title and not conversation_info.title:
+        return Success()
+
+    latest_existing = latest or existing
+
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
-        title=existing.title or f'Conversation {conversation_info.id.hex}',
+        title=conversation_info.title or latest_existing.title,
         sandbox_id=sandbox_info.id,
         created_by_user_id=sandbox_info.created_by_user_id,
         llm_model=conversation_info.agent.llm.model,
         # Git parameters
-        selected_repository=existing.selected_repository,
-        selected_branch=existing.selected_branch,
-        git_provider=existing.git_provider,
-        trigger=existing.trigger,
-        pr_number=existing.pr_number,
+        selected_repository=latest_existing.selected_repository,
+        selected_branch=latest_existing.selected_branch,
+        git_provider=latest_existing.git_provider,
+        trigger=latest_existing.trigger,
+        pr_number=latest_existing.pr_number,
         # Preserve parent/child relationship and other metadata
-        parent_conversation_id=existing.parent_conversation_id,
-        public=existing.public,
-        environment_url=existing.environment_url,
+        parent_conversation_id=latest_existing.parent_conversation_id,
+        public=latest_existing.public,
+        environment_url=latest_existing.environment_url,
     )
     await app_conversation_info_service.save_app_conversation_info(
         app_conversation_info
