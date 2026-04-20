@@ -217,9 +217,9 @@ expect(screen.getByTestId("settings-screen")).toBeInTheDocument();
 
 ### Codebase Examples
 
-- [settings.test.tsx](__tests__/routes/settings.test.tsx) - `createRoutesStub` with nested routes and loaders
-- [home-screen.test.tsx](__tests__/routes/home-screen.test.tsx) - `createRoutesStub` with navigation testing
-- [chat-interface.test.tsx](__tests__/components/chat/chat-interface.test.tsx) - `MemoryRouter` usage
+- [settings.test.tsx](routes/settings.test.tsx) - `createRoutesStub` with nested routes and loaders
+- [home-screen.test.tsx](routes/home-screen.test.tsx) - `createRoutesStub` with navigation testing
+- [chat-interface.test.tsx](components/chat/chat-interface.test.tsx) - `MemoryRouter` usage
 
 ### Official Documentation
 
