@@ -21,7 +21,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
-import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import {
   inferInitialView,
@@ -307,8 +306,6 @@ export function LlmSettingsScreen({
 
       return (
         <div className="flex flex-col gap-6">
-          {scope === "org" ? <OrgWideSettingsBadge /> : null}
-
           {infoMessageKey ? (
             <p
               data-testid="llm-settings-info-message"

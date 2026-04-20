@@ -32,6 +32,13 @@ const SAAS_ONLY_PATHS = [
   "/settings/org",
 ];
 
+const ORG_WIDE_BADGE_PATHS = new Set<string>([
+  "/settings",
+  "/settings/org-defaults",
+  "/settings/org-defaults/condenser",
+  "/settings/org-defaults/verification",
+]);
+
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
   const { pathname } = url;
@@ -129,12 +136,12 @@ function SettingsScreen() {
   const { isTeamOrg } = useOrgTypeAndAccess();
 
   // Determine if we should show the org-wide settings badge
-  // Only show for Admin/Owner roles on the LLM settings page in team orgs
-  const isLlmSettingsPage = location.pathname === "/settings";
+  // Only show for Admin/Owner roles on LLM/org-defaults pages in team orgs
+  const isOrgWideBadgePath = ORG_WIDE_BADGE_PATHS.has(location.pathname);
   const isAdminOrOwner = me?.role === "admin" || me?.role === "owner";
   const isSaasMode = config?.app_mode === "saas";
   const shouldShowOrgWideBadge =
-    isLlmSettingsPage && isAdminOrOwner && isTeamOrg && isSaasMode;
+    isOrgWideBadgePath && isAdminOrOwner && isTeamOrg && isSaasMode;
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {

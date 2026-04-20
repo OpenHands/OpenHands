@@ -6,7 +6,6 @@ import {
   SdkSectionHeaderProps,
   SdkSectionPage,
 } from "#/components/features/settings/sdk-settings/sdk-section-page";
-import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -19,7 +18,6 @@ const VERIFICATION_SCHEMA_EXCLUDE_KEYS = new Set([
 ]);
 
 function VerificationSettingsHeader({
-  scope,
   confirmationMode,
   securityAnalyzer,
   isConversationSettingsDisabled,
@@ -27,7 +25,6 @@ function VerificationSettingsHeader({
   onSecurityAnalyzerChange,
   renderTopContent,
 }: {
-  scope: SettingsScope;
   confirmationMode: boolean;
   securityAnalyzer: string | null;
   isConversationSettingsDisabled: boolean;
@@ -56,7 +53,6 @@ function VerificationSettingsHeader({
   return (
     <div className="flex flex-col gap-6">
       {renderTopContent?.()}
-      {scope === "org" ? <OrgWideSettingsBadge /> : null}
 
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1.5">
@@ -132,7 +128,6 @@ export function VerificationSettingsScreen({
   const buildHeader = React.useCallback(
     ({ isDisabled }: SdkSectionHeaderProps) => (
       <VerificationSettingsHeader
-        scope={scope}
         confirmationMode={confirmationMode}
         securityAnalyzer={securityAnalyzer}
         isConversationSettingsDisabled={isDisabled}
@@ -147,7 +142,7 @@ export function VerificationSettingsScreen({
         renderTopContent={renderTopContent}
       />
     ),
-    [confirmationMode, renderTopContent, scope, securityAnalyzer],
+    [confirmationMode, renderTopContent, securityAnalyzer],
   );
 
   const buildPayload = React.useCallback(
