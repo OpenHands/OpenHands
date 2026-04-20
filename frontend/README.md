@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is the frontend of the OpenHands project. It is a React application that provides a web interface for the OpenHands project.
+This package is the **React** single-page application (**SPA**) for the OpenHands web UI. It consumes the OpenHands backend HTTP API in normal use. For repository layout, dependencies, and running the full stack locally, see [Development.md](../Development.md).
 
 ## Tech Stack
 
