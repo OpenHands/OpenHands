@@ -17,6 +17,28 @@ from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
 
+# Per-conversation save-order counters. Events saved within the same
+# microsecond would otherwise tie on `timestamp` and their relative order
+# would be decided by filesystem enumeration / asyncio scheduling. We prefix
+# filenames with a monotonic sequence so reads can be sorted deterministically
+# by (timestamp, seq), matching the order events were saved in.
+_conversation_save_state: dict[UUID, tuple[asyncio.Lock, list[int]]] = {}
+
+
+def _seq_from_filename(name: str) -> int:
+    """Extract the save-order sequence prefix from an event filename.
+
+    Returns 0 for legacy filenames with no sequence prefix (e.g. ``{id}.json``)
+    so they sort before any sequenced event.
+    """
+    head, sep, _ = name.partition('_')
+    if not sep:
+        return 0
+    try:
+        return int(head)
+    except ValueError:
+        return 0
+
 
 @dataclass
 class EventServiceBase(EventService, ABC):
@@ -66,8 +88,18 @@ class EventServiceBase(EventService, ABC):
     async def get_event(self, conversation_id: UUID, event_id: UUID) -> Event | None:
         """Get the event with the given id, or None if not found."""
         conversation_path = await self.get_conversation_path(conversation_id)
-        path = conversation_path / f'{event_id.hex}.json'
         loop = asyncio.get_running_loop()
+
+        # New filename format is `{seq:020d}_{id_hex}.json`. Scan the
+        # conversation directory for a file whose name ends in
+        # `_{id_hex}.json` before falling back to the legacy `{id_hex}.json`
+        # path so both formats resolve.
+        id_hex = event_id.hex
+        paths = await loop.run_in_executor(None, self._search_paths, conversation_path)
+        suffix = f'_{id_hex}.json'
+        match = next((p for p in paths if p.name.endswith(suffix)), None)
+        path = match if match is not None else conversation_path / f'{id_hex}.json'
+
         event: Event = await loop.run_in_executor(None, self._load_event, path)
         return event
 
@@ -88,8 +120,8 @@ class EventServiceBase(EventService, ABC):
         events = await asyncio.gather(
             *[loop.run_in_executor(None, self._load_event, path) for path in paths]
         )
-        items = []
-        for event in events:
+        paired = []
+        for path, event in zip(paths, events):
             if not event:
                 continue
             if kind__eq and event.kind != kind__eq:
@@ -98,13 +130,18 @@ class EventServiceBase(EventService, ABC):
                 continue
             if timestamp__lt and event.timestamp >= timestamp__lt:
                 continue
-            items.append(event)
+            paired.append((path, event))
 
         if sort_order:
-            items.sort(
-                key=lambda e: e.timestamp,
+            # Sort by (timestamp, save-order seq) so events sharing a timestamp
+            # come back in the order they were saved rather than in filesystem
+            # enumeration order.
+            paired.sort(
+                key=lambda pe: (pe[1].timestamp, _seq_from_filename(pe[0].name)),
                 reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC),
             )
+
+        items = [e for _, e in paired]
 
         start_offset = 0
         next_page_id = None
@@ -153,8 +190,29 @@ class EventServiceBase(EventService, ABC):
             id_hex = event.id.replace('-', '')
         else:
             id_hex = event.id.hex
-        path = (await self.get_conversation_path(conversation_id)) / f'{id_hex}.json'
+
+        conversation_path = await self.get_conversation_path(conversation_id)
         loop = asyncio.get_running_loop()
+
+        state = _conversation_save_state.setdefault(
+            conversation_id, (asyncio.Lock(), [0])
+        )
+        lock, counter = state
+        async with lock:
+            if counter[0] == 0:
+                # Seed the counter from any existing events so new saves don't
+                # collide with filenames written before this process started.
+                existing = await loop.run_in_executor(
+                    None, self._search_paths, conversation_path
+                )
+                counter[0] = max(
+                    (_seq_from_filename(p.name) for p in existing),
+                    default=0,
+                )
+            counter[0] += 1
+            seq = counter[0]
+
+        path = conversation_path / f'{seq:020d}_{id_hex}.json'
         await loop.run_in_executor(None, self._store_event, path, event)
 
     async def batch_get_events(

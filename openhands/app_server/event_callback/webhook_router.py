@@ -165,10 +165,14 @@ async def on_event(
     )
 
     try:
-        # Save events...
-        await asyncio.gather(
-            *[event_service.save_event(conversation_id, event) for event in events]
-        )
+        # Save events sequentially so the per-conversation save-order
+        # sequence (encoded in the filename by EventServiceBase) matches the
+        # order events were received from the agent-server. Gathering
+        # concurrently would let coroutines acquire the save lock in
+        # scheduler-dependent order, producing out-of-order reads when
+        # timestamps tie.
+        for event in events:
+            await event_service.save_event(conversation_id, event)
 
         # Process stats events for V1 conversations
         for event in events:

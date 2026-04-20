@@ -203,8 +203,13 @@ class TestFilesystemEventServiceIntegration:
 
         conversation_path = await service.get_conversation_path(conversation_id)
         event_id_hex = event.id.replace('-', '')
-        event_file = conversation_path / f'{event_id_hex}.json'
-        assert event_file.exists()
+        # Event is stored as `{seq:020d}_{id_hex}.json` so the filename ends
+        # with the id but is prefixed with a save-order sequence.
+        matches = list(conversation_path.glob(f'*_{event_id_hex}.json'))
+        assert len(matches) == 1, (
+            f'Expected exactly one file matching *_{event_id_hex}.json, '
+            f'got: {list(conversation_path.iterdir())}'
+        )
 
     @pytest.mark.asyncio
     async def test_save_multiple_events(self, service: FilesystemEventService):
