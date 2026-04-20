@@ -68,7 +68,6 @@ def test_set_response_cookie(mock_response, mock_request):
 
         set_response_cookie(
             request=mock_request,
-            background_tasks=mock_background_tasks,
             response=mock_response,
             keycloak_access_token='test_access_token',
             keycloak_refresh_token='test_refresh_token',
@@ -207,11 +206,13 @@ async def test_keycloak_callback_success_with_valid_offline_token(
             return_value=False,
         ),
     ):
-        # Mock user with accepted_tos
+        # Mock user with accepted_tos and analytics consent
         mock_user = MagicMock()
         mock_user.id = 'test_user_id'
         mock_user.current_org_id = 'test_org_id'
         mock_user.accepted_tos = '2025-01-01'
+        mock_user.user_consents_to_analytics = True
+        mock_user.org_members = []
 
         # Setup UserStore mocks
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
@@ -251,15 +252,18 @@ async def test_keycloak_callback_success_with_valid_offline_token(
         )
         mock_set_cookie.assert_called_once_with(
             request=mock_request,
-            background_tasks=mock_background_tasks,
             response=result,
             keycloak_access_token='test_access_token',
             keycloak_refresh_token='test_refresh_token',
             secure=False,
             accepted_tos=True,
         )
-        mock_posthog.return_value.identify_user.assert_called()
-        mock_posthog.return_value.track_user_logged_in.assert_called()
+        # Verify analytics tracking is scheduled as a background task
+        mock_background_tasks.add_task.assert_called_once()
+        call_args = mock_background_tasks.add_task.call_args
+        assert call_args[1]['user_id'] == 'test_user_id'
+        assert call_args[1]['idp'] == 'github'
+        assert call_args[1]['consented'] is True
 
 
 @pytest.mark.asyncio
@@ -318,7 +322,6 @@ async def test_keycloak_callback_email_not_verified(
         # Verify rate limit was checked
         mock_rate_limit.assert_called_once_with(
             request=mock_request,
-            background_tasks=mock_background_tasks,
             key_prefix='auth_verify_email',
             user_id='test_user_id',
             user_rate_limit_seconds=60,
@@ -474,11 +477,13 @@ async def test_keycloak_callback_success_without_offline_token(
             return_value=False,
         ),
     ):
-        # Mock user with accepted_tos
+        # Mock user with accepted_tos and analytics consent
         mock_user = MagicMock()
         mock_user.id = 'test_user_id'
         mock_user.current_org_id = 'test_org_id'
         mock_user.accepted_tos = '2025-01-01'
+        mock_user.user_consents_to_analytics = True
+        mock_user.org_members = []
 
         # Setup UserStore mocks
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
@@ -523,15 +528,18 @@ async def test_keycloak_callback_success_without_offline_token(
         # So secure=False because web_url starts with 'http://'
         mock_set_cookie.assert_called_once_with(
             request=mock_request,
-            background_tasks=mock_background_tasks,
             response=result,
             keycloak_access_token='test_access_token',
             keycloak_refresh_token='test_refresh_token',
             secure=False,
             accepted_tos=True,
         )
-        mock_posthog.return_value.identify_user.assert_called()
-        mock_posthog.return_value.track_user_logged_in.assert_called()
+        # Verify analytics tracking is scheduled as a background task
+        mock_background_tasks.add_task.assert_called_once()
+        call_args = mock_background_tasks.add_task.call_args
+        assert call_args[1]['user_id'] == 'test_user_id'
+        assert call_args[1]['idp'] == 'github'
+        assert call_args[1]['consented'] is True
 
 
 @pytest.mark.asyncio
