@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 import { browserTab } from "#/utils/browser-tab";
 
+// These tests exercise the browser-tab notification flasher behavior.
+// Specifically we verify that when the document title changes externally
+// while a notification is active, the flasher updates its internal
+// baseline so it restores/toggles to the new title instead of an old one.
+
 describe("browserTab notifications", () => {
   const MESSAGE = "Agent ready";
   const INITIAL = "Conversation 123 | OpenHands";
@@ -9,6 +14,7 @@ describe("browserTab notifications", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    // reset title for each test
     document.title = INITIAL;
   });
 
@@ -45,6 +51,7 @@ describe("browserTab notifications", () => {
   });
 
   it("updates baseline when title changes during an active notification and restores to the new title", () => {
+    // Start flashing
     browserTab.startNotification(MESSAGE);
 
     // Tick once: should switch to the message
