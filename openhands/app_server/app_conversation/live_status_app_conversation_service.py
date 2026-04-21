@@ -1251,11 +1251,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # --- web host context -----------------------------------------------
         # Add WEB_HOST to agent context if available
         if self.web_url:
-            web_host_context = (
-                '[BEGIN context from [web_host]]\n'
-                f'The web application is hosted at: {self.web_url}\n'
-                '[END Context]'
-            )
+            web_host_context = f'<HOST>\n{self.web_url}\n</HOST>'
             if effective_suffix:
                 effective_suffix = f'{effective_suffix}\n\n{web_host_context}'
             else:
