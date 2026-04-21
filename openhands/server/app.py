@@ -27,7 +27,6 @@ from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.status.status_router import router as health_router
 from openhands.integrations.service_types import AuthenticationError
 from openhands.server.routes.mcp import mcp_server
-from openhands.server.routes.security import app as security_api_router
 from openhands.server.shared import conversation_manager
 from openhands.version import get_version
 
@@ -75,6 +74,5 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
     )
 
 
-app.include_router(security_api_router)
 app.include_router(v1_router.router)
 app.include_router(health_router)
