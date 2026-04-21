@@ -1,0 +1,51 @@
+name: Compute Docker image tags
+description: Produce the canonical OpenHands Docker tag set (ref name, short SHA, full SHA — each in bare and `sha-` prefixed form) for a given image, with optional suffix and extra raw tags.
+
+inputs:
+  image:
+    description: Fully qualified image name (e.g. ghcr.io/owner/openhands).
+    required: true
+  ref-name:
+    description: Git ref name to emit as a tag (e.g. main, pr-123, saas-rel-1.2.3).
+    required: true
+  suffix:
+    description: Suffix appended to every tag (e.g. -amd64, -nikolaik-arm64). Leave empty for base (multi-arch manifest) tags.
+    required: false
+    default: ""
+  extra-tags:
+    description: Additional newline-separated metadata-action tag rules (e.g. extra `type=raw,value=...` lines).
+    required: false
+    default: ""
+
+outputs:
+  tags:
+    description: Newline-separated list of fully qualified image tags.
+    value: ${{ steps.meta.outputs.tags }}
+  labels:
+    description: Image labels emitted by docker/metadata-action.
+    value: ${{ steps.meta.outputs.labels }}
+  version:
+    description: Sanitized version string (ref-name with any suffix applied). Safe to use in docker tags.
+    value: ${{ steps.meta.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute tags
+      id: meta
+      uses: docker/metadata-action@v6
+      env:
+        # Use the PR head SHA (not the merge SHA) for sha-prefixed tags.
+        DOCKER_METADATA_PR_HEAD_SHA: "true"
+      with:
+        images: ${{ inputs.image }}
+        flavor: |
+          latest=false
+          suffix=${{ inputs.suffix }}
+        tags: |
+          type=raw,value=${{ inputs.ref-name }}
+          type=sha,prefix=sha-
+          type=sha,prefix=
+          type=sha,format=long,prefix=sha-
+          type=sha,format=long,prefix=
+          ${{ inputs.extra-tags }}

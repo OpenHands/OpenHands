@@ -8,11 +8,11 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Type
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import DateTime, ForeignKey, String, Text, text
 from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 from openhands.utils.import_utils import get_impl
@@ -57,31 +57,31 @@ class CallbackStatus(Enum):
     ERROR = 'ERROR'
 
 
-class ConversationCallback(Base):  # type: ignore
+class ConversationCallback(Base):
     """
     Model for storing conversation callbacks that process conversation events.
     """
 
     __tablename__ = 'conversation_callbacks'
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    conversation_id = Column(
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    conversation_id: Mapped[str] = mapped_column(
         String,
         ForeignKey('conversation_metadata.conversation_id'),
         nullable=False,
         index=True,
     )
-    status = Column(
+    status: Mapped[CallbackStatus] = mapped_column(
         SQLEnum(CallbackStatus), nullable=False, default=CallbackStatus.ACTIVE
     )
-    processor_type = Column(String, nullable=False)
-    processor_json = Column(Text, nullable=False)
-    created_at = Column(
+    processor_type: Mapped[str] = mapped_column(String, nullable=False)
+    processor_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=text('CURRENT_TIMESTAMP'),
         nullable=False,
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=text('CURRENT_TIMESTAMP'),
         onupdate=datetime.now,
@@ -96,10 +96,10 @@ class ConversationCallback(Base):  # type: ignore
             ConversationCallbackProcessor: The processor instance
         """
         # Import the processor class dynamically
-        processor_type: Type[ConversationCallbackProcessor] = get_impl(
+        processor_class: type[ConversationCallbackProcessor] = get_impl(
             ConversationCallbackProcessor, self.processor_type
         )
-        processor = processor_type.model_validate_json(self.processor_json)
+        processor = processor_class.model_validate_json(self.processor_json)
         return processor
 
     def set_processor(self, processor: ConversationCallbackProcessor) -> None:

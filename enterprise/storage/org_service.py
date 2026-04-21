@@ -549,8 +549,8 @@ class OrgService:
             return existing_org
 
         restricted_fields = {
-            'agent_settings_diff',
-            'conversation_settings_diff',
+            'agent_settings',
+            'conversation_settings',
             'search_api_key',
             'sandbox_api_key',
         }
