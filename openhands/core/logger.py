@@ -639,6 +639,7 @@ def _uvicorn_json_log_config() -> dict:
                 'class': 'logging.StreamHandler',
                 'level': 'INFO',
                 'formatter': 'json',
+                'filters': ['redact_url_params'],
                 'stream': 'ext://sys.stdout',
             },
             'access': {
@@ -712,6 +713,7 @@ def _uvicorn_default_log_config() -> dict:
             'default': {
                 'formatter': 'default',
                 'class': 'logging.StreamHandler',
+                'filters': ['redact_url_params'],
                 'stream': 'ext://sys.stderr',
             },
             'access': {

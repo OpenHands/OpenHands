@@ -1,7 +1,12 @@
 import logging
 from unittest.mock import patch
 
-from openhands.core.logger import RedactURLParamsFilter, SensitiveDataFilter
+from openhands.core.logger import (
+    RedactURLParamsFilter,
+    SensitiveDataFilter,
+    _uvicorn_default_log_config,
+    _uvicorn_json_log_config,
+)
 
 
 @patch.dict(
@@ -301,3 +306,27 @@ def test_redact_url_params_filter_msg_embedded_url():
     assert 'secret-uuid-123' not in record.msg
     assert 'resend_all=true' in record.msg
     assert '<redacted>' in record.msg or '%3Credacted%3E' in record.msg
+
+
+def test_uvicorn_default_config_default_handler_has_redact_filter():
+    """The 'default' handler (used by uvicorn.error) must have the redact filter
+    so that WebSocket [accepted] logs don't leak session_api_key."""
+    config = _uvicorn_default_log_config()
+    assert 'redact_url_params' in config['handlers']['default']['filters']
+
+
+def test_uvicorn_json_config_default_handler_has_redact_filter():
+    """The 'default' handler in JSON config must also have the redact filter."""
+    config = _uvicorn_json_log_config()
+    assert 'redact_url_params' in config['handlers']['default']['filters']
+
+
+def test_uvicorn_configs_all_handlers_have_redact_filter():
+    """Every handler in both uvicorn configs must include the redact filter."""
+    for config_fn in (_uvicorn_default_log_config, _uvicorn_json_log_config):
+        config = config_fn()
+        for handler_name, handler in config['handlers'].items():
+            assert 'redact_url_params' in handler.get('filters', []), (
+                f"Handler '{handler_name}' in {config_fn.__name__} is missing "
+                f"the 'redact_url_params' filter"
+            )

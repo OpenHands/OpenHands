@@ -122,6 +122,32 @@ describe("Settings Screen", () => {
           Component: () => <div data-testid="organization-settings-screen" />,
           path: "/settings/org",
         },
+        {
+          Component: () => <div data-testid="condenser-settings-screen" />,
+          path: "/settings/condenser",
+        },
+        {
+          Component: () => <div data-testid="verification-settings-screen" />,
+          path: "/settings/verification",
+        },
+        {
+          Component: () => (
+            <div data-testid="org-default-llm-settings-screen" />
+          ),
+          path: "/settings/org-defaults",
+        },
+        {
+          Component: () => (
+            <div data-testid="org-default-condenser-settings-screen" />
+          ),
+          path: "/settings/org-defaults/condenser",
+        },
+        {
+          Component: () => (
+            <div data-testid="org-default-verification-settings-screen" />
+          ),
+          path: "/settings/org-defaults/verification",
+        },
       ],
     },
   ]);
@@ -791,6 +817,95 @@ describe("Settings Screen", () => {
         within(navbar).getByText("Application", { exact: false }),
       ).toBeInTheDocument();
     });
+  });
+
+  describe("OrgWideSettingsBadge display", () => {
+    const seedSaasOrgContext = (
+      org: typeof MOCK_TEAM_ORG_ACME | typeof MOCK_PERSONAL_ORG,
+      user: Partial<OrganizationMember>,
+    ) => {
+      mockQueryClient.clear();
+      mockQueryClient.setQueryData(["web-client-config"], {
+        app_mode: "saas",
+      });
+      mockQueryClient.setQueryData(["organizations"], {
+        items: [org],
+        currentOrgId: org.id,
+      });
+      useSelectedOrganizationStore.setState({ organizationId: org.id });
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [org],
+        currentOrgId: org.id,
+      });
+      vi.spyOn(organizationService, "getMe").mockResolvedValue(
+        createMockUser({ ...user, org_id: org.id }),
+      );
+    };
+
+    beforeEach(() => {
+      mockQueryClient.clear();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it.each([
+      "/settings/org-defaults",
+      "/settings/org-defaults/condenser",
+      "/settings/org-defaults/verification",
+    ])(
+      "renders the org-wide settings badge beside the title on %s for an admin in a team org in SaaS mode",
+      async (path) => {
+        seedSaasOrgContext(MOCK_TEAM_ORG_ACME, { role: "admin" });
+
+        renderSettingsScreen(path);
+
+        expect(
+          await screen.findByTestId("org-wide-settings-badge"),
+        ).toBeInTheDocument();
+      },
+    );
+
+    it("renders the badge on /settings/org-defaults for a non-admin member of a team org (read-only view)", async () => {
+      seedSaasOrgContext(MOCK_TEAM_ORG_ACME, { role: "member" });
+
+      renderSettingsScreen("/settings/org-defaults");
+
+      await screen.findByTestId("org-default-llm-settings-screen");
+      expect(
+        await screen.findByTestId("org-wide-settings-badge"),
+      ).toBeInTheDocument();
+    });
+
+    it("does not render the badge on /settings/org-defaults when the selected organization is a personal org", async () => {
+      seedSaasOrgContext(MOCK_PERSONAL_ORG, { role: "admin" });
+
+      renderSettingsScreen("/settings/org-defaults");
+
+      await screen.findByTestId("org-default-llm-settings-screen");
+      expect(
+        screen.queryByTestId("org-wide-settings-badge"),
+      ).not.toBeInTheDocument();
+    });
+
+    it.each(["/settings/condenser", "/settings/verification"])(
+      "does not render the badge on %s (personal-workspace-only route)",
+      async (path) => {
+        seedSaasOrgContext(MOCK_TEAM_ORG_ACME, { role: "admin" });
+
+        renderSettingsScreen(path);
+
+        await screen.findByTestId(
+          path === "/settings/condenser"
+            ? "condenser-settings-screen"
+            : "verification-settings-screen",
+        );
+        expect(
+          screen.queryByTestId("org-wide-settings-badge"),
+        ).not.toBeInTheDocument();
+      },
+    );
   });
 });
 

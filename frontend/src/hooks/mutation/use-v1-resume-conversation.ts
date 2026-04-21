@@ -35,6 +35,10 @@ export const useV1ResumeConversation = () => {
       queryClient.invalidateQueries({
         queryKey: ["v1-batch-get-app-conversations"],
       });
+      // Invalidate sandbox data so new runtime URLs are picked up after resume
+      queryClient.invalidateQueries({ queryKey: ["sandboxes"] });
+      // Invalidate VS Code URL cache so it refetches with the new sandbox data
+      queryClient.invalidateQueries({ queryKey: ["unified", "vscode_url"] });
     },
   });
 };

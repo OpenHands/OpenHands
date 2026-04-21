@@ -106,5 +106,5 @@ async def test_openapi_schema_generation(test_client):
     assert json_str is not None
 
     # Optionally, you can check for specific endpoints if needed
-    assert '/api/settings' in schema['paths']
+    assert '/api/v1/settings' in schema['paths']
     assert '/health' in schema['paths']
