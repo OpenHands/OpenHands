@@ -198,6 +198,20 @@ class OrgLLMSettingsService:
         )
         acting_member = result.scalars().first()
         if acting_member is None:
+            # Shouldn't happen — the caller already resolved the user's
+            # current org via ``get_current_org_by_user_id`` before calling
+            # us, so the ``OrgMember`` row must exist. If it's missing
+            # anyway, the org-wide managed-key propagation skips the
+            # ``llm_api_key`` write (``effective_managed_key`` returns
+            # ``None``) and members keep whatever was in their columns.
+            # Log loudly so this data-consistency issue surfaces instead of
+            # silently leaving stale keys on member rows.
+            logger.error(
+                'Acting member row not found during managed LLM key '
+                'rotation; skipping managed-key propagation. Members may '
+                'retain stale keys until they save personal settings.',
+                extra={'user_id': user_id, 'org_id': str(updated_org.id)},
+            )
             return None
 
         existing_key = acting_member.llm_api_key
