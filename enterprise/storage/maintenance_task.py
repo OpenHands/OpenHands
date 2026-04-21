@@ -68,7 +68,7 @@ class MaintenanceTask(Base):
     )
     processor_type: Mapped[str] = mapped_column(String, nullable=False)
     processor_json: Mapped[str] = mapped_column(Text, nullable=False)
-    delay: Mapped[int | None] = mapped_column(server_default='0')
+    delay: Mapped[int] = mapped_column(server_default='0')
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     info: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
