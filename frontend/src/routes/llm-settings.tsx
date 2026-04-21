@@ -3,13 +3,13 @@ import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-defaults-guard";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { HelpLink } from "#/ui/help-link";
 import { useConfig } from "#/hooks/query/use-config";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
-import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import {
   SdkSectionHeaderProps,
   SdkSectionPage,
@@ -20,7 +20,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
-import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import {
   inferInitialView,
@@ -125,7 +124,6 @@ export function LlmSettingsScreen({
     settings?.agent_settings_schema,
   );
   const { data: config } = useConfig();
-  const { isTeamOrg } = useOrgTypeAndAccess();
 
   const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
     null,
@@ -165,11 +163,11 @@ export function LlmSettingsScreen({
   }, [searchParams, setSearchParams, t]);
 
   const infoMessageKey = React.useMemo((): I18nKey | null => {
-    if (!isSaasMode || !isTeamOrg) return null;
+    if (!isSaasMode) return null;
     return scope === "org"
       ? I18nKey.SETTINGS$ORG_DEFAULTS_INFO
       : I18nKey.SETTINGS$PERSONAL_AGENT_INFO;
-  }, [isSaasMode, isTeamOrg, scope]);
+  }, [isSaasMode, scope]);
 
   const getInitialView = React.useCallback(
     (
@@ -258,8 +256,6 @@ export function LlmSettingsScreen({
 
       return (
         <div className="flex flex-col gap-6">
-          {scope === "org" ? <OrgWideSettingsBadge /> : null}
-
           {infoMessageKey ? (
             <p
               data-testid="llm-settings-info-message"
@@ -401,6 +397,15 @@ export function LlmSettingsScreen({
   );
 }
 
-export const clientLoader = createPermissionGuard("view_llm_settings");
+const orgDefaultsRedirectGuard = requireOrgDefaultsRedirect(
+  "/settings/org-defaults",
+);
+const llmPermissionGuard = createPermissionGuard("view_llm_settings");
+
+export const clientLoader = async (args: { request: Request }) => {
+  const blocked = await orgDefaultsRedirectGuard(args);
+  if (blocked) return blocked;
+  return llmPermissionGuard(args);
+};
 
 export default LlmSettingsScreen;
