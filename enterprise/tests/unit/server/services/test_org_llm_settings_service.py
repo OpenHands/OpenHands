@@ -233,6 +233,22 @@ async def test_update_org_llm_settings_org_not_found(
     assert 'No current organization' in str(exc_info.value)
 
 
+def test_org_llm_settings_update_uses_wire_aliases_but_internal_diff_fields():
+    update_data = OrgLLMSettingsUpdate.model_validate(
+        {
+            'agent_settings': {'llm': {'model': 'new-model'}},
+            'conversation_settings': {'max_iterations': 42},
+        }
+    )
+
+    assert update_data.agent_settings_diff == {'llm': {'model': 'new-model'}}
+    assert update_data.conversation_settings_diff == {'max_iterations': 42}
+    assert update_data.model_dump(exclude_none=True) == {
+        'agent_settings_diff': {'llm': {'model': 'new-model'}},
+        'conversation_settings_diff': {'max_iterations': 42},
+    }
+
+
 @pytest.mark.asyncio
 async def test_update_org_llm_settings_accepts_wire_payload_and_propagates(
     mock_org, mock_store, mock_user_context, monkeypatch
@@ -386,7 +402,7 @@ async def test_update_org_llm_settings_lifts_nested_api_key_for_column_sync(
     # and member ``agent_settings_diff.llm`` stay consistent with the
     # encrypted column.
     assert update_data.llm_api_key == 'sk-new-raw-key'
-    assert update_data.agent_settings == {
+    assert update_data.agent_settings_diff == {
         'llm': {'api_key': MASKED_API_KEY, 'base_url': 'https://example.com'},
     }
 

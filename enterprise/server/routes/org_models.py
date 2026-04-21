@@ -2,6 +2,7 @@ from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     EmailStr,
     Field,
     SecretStr,
@@ -213,11 +214,13 @@ class OrgPage(BaseModel):
 class OrgUpdate(BaseModel):
     """Request model for updating an organization.
 
-    ``agent_settings`` and ``conversation_settings`` match the wire format
-    the frontend already uses for ``OrgLLMSettingsUpdate``; they're
-    applied to the org row as partial/diff patches via ``deep_merge`` in
-    ``OrgStore.update_org``.
+    The public wire format uses ``agent_settings`` /
+    ``conversation_settings`` to match the frontend payload, but the
+    internal field names remain ``*_diff`` because these values are merged
+    as partial patches, not stored as full SDK settings objects.
     """
+
+    model_config = ConfigDict(populate_by_name=True)
 
     name: Annotated[
         str | None,
@@ -236,8 +239,12 @@ class OrgUpdate(BaseModel):
     enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     search_api_key: str | None = None
-    agent_settings: dict[str, Any] | None = None
-    conversation_settings: dict[str, Any] | None = None
+    agent_settings_diff: dict[str, Any] | None = Field(
+        default=None, alias='agent_settings'
+    )
+    conversation_settings_diff: dict[str, Any] | None = Field(
+        default=None, alias='conversation_settings'
+    )
 
 
 class OrgLLMSettingsResponse(BaseModel):
@@ -346,14 +353,20 @@ class OrgMemberLLMSettings(BaseModel):
 class OrgLLMSettingsUpdate(BaseModel):
     """Request model for updating organization LLM settings.
 
-    ``agent_settings`` and ``conversation_settings`` are applied to the org
-    as partial/diff patches via ``deep_merge`` and are also propagated to
-    each member's stored diff so stale member overrides don't mask the new
-    org defaults.
+    The public wire format uses ``agent_settings`` /
+    ``conversation_settings`` for compatibility with the frontend, while
+    the internal ``*_diff`` fields make it explicit these are partial
+    patches that are merged onto stored settings and member diffs.
     """
 
-    agent_settings: dict[str, Any] | None = None
-    conversation_settings: dict[str, Any] | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    agent_settings_diff: dict[str, Any] | None = Field(
+        default=None, alias='agent_settings'
+    )
+    conversation_settings_diff: dict[str, Any] | None = Field(
+        default=None, alias='conversation_settings'
+    )
     search_api_key: str | None = None
     llm_api_key: str | None = None
 
@@ -388,9 +401,9 @@ class OrgLLMSettingsUpdate(BaseModel):
           managed LiteLLM proxy URL so the stored state is complete and
           self-describing.
         """
-        if self.agent_settings is None:
+        if self.agent_settings_diff is None:
             return self
-        llm = self.agent_settings.get('llm')
+        llm = self.agent_settings_diff.get('llm')
         if not isinstance(llm, dict):
             return self
 
@@ -430,9 +443,9 @@ class OrgLLMSettingsUpdate(BaseModel):
             llm['base_url'] = resolved_base_url
 
         if not llm:
-            self.agent_settings.pop('llm', None)
-        if not self.agent_settings:
-            self.agent_settings = None
+            self.agent_settings_diff.pop('llm', None)
+        if not self.agent_settings_diff:
+            self.agent_settings_diff = None
         return self
 
     def has_updates(self) -> bool:
@@ -459,8 +472,8 @@ class OrgLLMSettingsUpdate(BaseModel):
         cleared value. Coerce ``""`` to ``None`` so member rows are untouched.
         """
         member_settings = OrgMemberLLMSettings(
-            agent_settings_diff=self.agent_settings,
-            conversation_settings_diff=self.conversation_settings,
+            agent_settings_diff=self.agent_settings_diff,
+            conversation_settings_diff=self.conversation_settings_diff,
             llm_api_key=self.llm_api_key or None,
         )
         return member_settings if member_settings.has_updates() else None

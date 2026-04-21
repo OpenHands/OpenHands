@@ -1053,7 +1053,7 @@ async def test_update_org_llm_settings_async_with_llm_api_key():
     )
 
     llm_settings = OrgLLMSettingsUpdate(
-        agent_settings={'llm': {'model': 'new-model'}},
+        agent_settings_diff={'llm': {'model': 'new-model'}},
         llm_api_key='new-member-api-key',
     )
 

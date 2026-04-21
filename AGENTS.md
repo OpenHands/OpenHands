@@ -247,6 +247,12 @@ Each integration follows a consistent pattern with service classes, storage mode
 - Example: `from storage.database import a_session_maker` not `from enterprise.storage.database import a_session_maker`
 - This ensures code works in both OpenHands and enterprise contexts
 
+**Org settings patch models:**
+- For org update endpoints, keep the public wire names `agent_settings` / `conversation_settings`, but use internal `agent_settings_diff` / `conversation_settings_diff` fields on update DTOs.
+- Set Pydantic aliases so FastAPI/frontend payloads stay unchanged while `model_dump(exclude_none=True)` yields explicit diff field names for storage and `deep_merge` boundaries.
+- Avoid representing partial org update payloads as full `AgentSettings` / `ConversationSettings` objects; these endpoints are patch semantics, not full replacement semantics.
+
+
 **Test Structure:**
 - Place tests in `enterprise/tests/unit/` following the same structure as the source code
 - Use `--confcutdir=tests/unit/[module]` when testing specific modules

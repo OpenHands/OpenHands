@@ -15,12 +15,31 @@ from server.routes.org_models import (
     OrgDatabaseError,
     OrgNameExistsError,
     OrgNotFoundError,
+    OrgUpdate,
 )
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.org_service import OrgService
 from storage.role import Role
 from storage.user import User
+
+
+def test_org_update_uses_wire_aliases_but_dumps_internal_diff_fields():
+    update = OrgUpdate.model_validate(
+        {
+            'contact_name': 'Jane Doe',
+            'agent_settings': {'llm': {'model': 'claude-opus-4-5-20251101'}},
+            'conversation_settings': {'security_analyzer': 'llm'},
+        }
+    )
+
+    assert update.agent_settings_diff == {'llm': {'model': 'claude-opus-4-5-20251101'}}
+    assert update.conversation_settings_diff == {'security_analyzer': 'llm'}
+    assert update.model_dump(exclude_none=True) == {
+        'contact_name': 'Jane Doe',
+        'agent_settings_diff': {'llm': {'model': 'claude-opus-4-5-20251101'}},
+        'conversation_settings_diff': {'security_analyzer': 'llm'},
+    }
 
 
 @pytest.fixture
