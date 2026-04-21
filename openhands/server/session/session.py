@@ -47,7 +47,7 @@ from openhands.server.session.agent_session import AgentSession
 from openhands.server.session.conversation_init_data import ConversationInitData
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
-from openhands.utils._redact_compat import sanitize_dict
+from openhands.utils._redact_compat import sanitize_config
 
 
 class WebSession:
@@ -188,7 +188,7 @@ class WebSession:
 
         # NOTE: this need to happen AFTER the config is updated with the search_api_key
         self.logger.debug(
-            f'MCP configuration before setup - self.config.mcp_config: {sanitize_dict(self.config.mcp.model_dump())}'
+            f'MCP configuration before setup - self.config.mcp_config: {sanitize_config(self.config.mcp.model_dump())}'
         )
 
         # Merge user's custom MCP servers from settings
@@ -196,7 +196,7 @@ class WebSession:
         if sdk_mcp and sdk_mcp.mcpServers:
             self.config.mcp = merge_mcp_configs(self.config.mcp, sdk_mcp)
             self.logger.debug(
-                f'Merged custom MCP Config: {sanitize_dict(sdk_mcp.model_dump())}'
+                f'Merged custom MCP Config: {sanitize_config(sdk_mcp.model_dump())}'
             )
 
         # Add OpenHands' default MCP servers
@@ -210,7 +210,7 @@ class WebSession:
             self.logger.debug('Added default MCP servers to config')
 
         self.logger.debug(
-            f'MCP configuration after setup - self.config.mcp: {sanitize_dict(self.config.mcp.model_dump())}'
+            f'MCP configuration after setup - self.config.mcp: {sanitize_config(self.config.mcp.model_dump())}'
         )
 
         # TODO: override other LLM config & agent config groups (#2075)

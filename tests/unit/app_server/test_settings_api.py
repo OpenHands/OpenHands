@@ -161,14 +161,14 @@ async def test_settings_api_endpoints(test_client):
         ),
     )
 
-    # Make the POST request to store settings
-    response = test_client.post('/api/settings', json=_dump(settings))
+    # Make the POST request to store settings (V1 endpoint)
+    response = test_client.post('/api/v1/settings', json=_dump(settings))
 
     # We're not checking the exact response, just that it doesn't error
     assert response.status_code == 200
 
-    # Test the GET settings endpoint
-    response = test_client.get('/api/settings')
+    # Test the GET settings endpoint (V1 endpoint)
+    response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     response_data = response.json()
     assert 'agent_settings_schema' not in response_data
@@ -185,7 +185,9 @@ async def test_settings_api_endpoints(test_client):
     assert cs['confirmation_mode'] is True
     assert cs['security_analyzer'] == 'llm'
     assert cs['max_iterations'] == 100
-    assert vals['llm']['api_key'] == '**********'
+    # V1 API sets api_key to None for security and uses llm_api_key_set flag instead
+    assert vals['llm']['api_key'] is None
+    assert response_data['llm_api_key_set'] is True
 
     # Test updating with partial settings — legacy flat fields should preserve existing
     partial_settings = {
@@ -194,16 +196,12 @@ async def test_settings_api_endpoints(test_client):
         'llm_api_key': None,
     }
 
-    response = test_client.post('/api/settings', json=partial_settings)
+    response = test_client.post('/api/v1/settings', json=partial_settings)
     assert response.status_code == 200
 
-    response = test_client.get('/api/settings')
+    response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     assert response.json()['agent_settings']['llm']['timeout'] == 123
-
-    # Test the unset-provider-tokens endpoint
-    response = test_client.post('/api/unset-provider-tokens')
-    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -220,7 +218,7 @@ async def test_saving_settings_with_frozen_secrets_store(test_client):
     )
     # Inject an extra key the API should ignore gracefully
     payload['secrets_store'] = {'provider_tokens': {}}
-    response = test_client.post('/api/settings', json=payload)
+    response = test_client.post('/api/v1/settings', json=payload)
     assert response.status_code == 200
 
 
@@ -228,7 +226,7 @@ async def test_saving_settings_with_frozen_secrets_store(test_client):
 async def test_search_api_key_explicit_clear(test_client):
     """Explicit empty search_api_key payloads should clear the stored secret."""
     response = test_client.post(
-        '/api/settings',
+        '/api/v1/settings',
         json=_dump(
             Settings(
                 search_api_key='initial-secret-key',
@@ -238,12 +236,12 @@ async def test_search_api_key_explicit_clear(test_client):
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/settings')
+    response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     assert response.json()['search_api_key_set'] is True
 
     response = test_client.post(
-        '/api/settings',
+        '/api/v1/settings',
         json=_dump(
             Settings(
                 search_api_key='',
@@ -253,7 +251,7 @@ async def test_search_api_key_explicit_clear(test_client):
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/settings')
+    response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     assert response.json()['search_api_key_set'] is False
     assert response.json()['agent_settings']['llm']['model'] == 'claude-3-opus'
@@ -263,7 +261,7 @@ async def test_search_api_key_explicit_clear(test_client):
 async def test_disabled_skills_persistence(test_client):
     """Test that disabled_skills can be saved and retrieved via the settings API."""
     response = test_client.post(
-        '/api/settings',
+        '/api/v1/settings',
         json=_dump(
             Settings(
                 disabled_skills=['skill_a', 'skill_b'],
@@ -273,29 +271,29 @@ async def test_disabled_skills_persistence(test_client):
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/settings')
+    response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == ['skill_a', 'skill_b']
 
     response = test_client.post(
-        '/api/settings',
+        '/api/v1/settings',
         json=_dump(Settings(disabled_skills=['skill_c'])),
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/settings')
+    response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == ['skill_c']
 
     response = test_client.post(
-        '/api/settings',
+        '/api/v1/settings',
         json=_dump(Settings(disabled_skills=[])),
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/settings')
+    response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == []

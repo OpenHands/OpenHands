@@ -5,12 +5,13 @@ user endpoints with organization context (org_id, org_name, role, permissions).
 """
 
 import logging
-from typing import Any
+from types import MappingProxyType
+from typing import Any, cast
 
 from fastapi import APIRouter, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from server.auth.saas_user_auth import SaasUserAuth
-from server.models.user_models import SaasUserInfo
+from server.models.user_models import GitOrganizationsResponse, SaasUserInfo
 
 from openhands.app_server.config import (
     depends_user_context,
@@ -20,6 +21,8 @@ from openhands.app_server.sandbox.session_auth import validate_session_key_owner
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.integrations.provider import ProviderHandler
+from openhands.integrations.service_types import ProviderType
 
 _logger = logging.getLogger(__name__)
 
@@ -98,6 +101,45 @@ async def get_current_user_saas(
     content = user_info.model_dump(mode='json')
     _inject_sdk_compat_fields(content, include_api_key=False)
     return JSONResponse(content=content)  # type: ignore[return-value]
+
+
+@saas_users_v1_router.get('/git-organizations')
+async def get_current_user_git_organizations(
+    user_context: UserContext = user_dependency,
+) -> GitOrganizationsResponse:
+    """Return the Git organizations, groups, or workspaces the user belongs to
+    on their active provider.
+
+    In SAAS mode users sign in with one provider at a time, so the response
+    reflects that single provider.
+    """
+    provider_tokens = await user_context.get_provider_tokens()
+    if not provider_tokens:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Git provider token required.',
+        )
+
+    user_id = await user_context.get_user_id()
+    client = ProviderHandler(
+        provider_tokens=MappingProxyType(provider_tokens),  # type: ignore[arg-type]
+        external_auth_id=user_id,
+    )
+
+    provider = cast(ProviderType, next(iter(provider_tokens)))
+    if provider == ProviderType.GITHUB:
+        orgs = await client.get_github_organizations()
+    elif provider == ProviderType.GITLAB:
+        orgs = await client.get_gitlab_groups()
+    elif provider == ProviderType.BITBUCKET:
+        orgs = await client.get_bitbucket_workspaces()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Provider {provider.value} doesn't support git organizations",
+        )
+
+    return GitOrganizationsResponse(provider=provider, organizations=orgs)
 
 
 async def _get_org_info_from_context(user_context: UserContext) -> dict | None:
