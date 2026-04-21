@@ -772,6 +772,64 @@
       ]
     },
     {
+      "id": "e3d1cc5d-6a71-4c9b-9e0a-5b1e1a7a2c11",
+      "clientId": "plugin-directory",
+      "name": "client_plugin_directory",
+      "description": "",
+      "rootUrl": "$PLUGIN_DIRECTORY_HOST",
+      "adminUrl": "",
+      "baseUrl": "",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "$PLUGIN_DIRECTORY_CLIENT_SECRET",
+      "redirectUris": [
+        "$PLUGIN_DIRECTORY_HOST/auth/callback"
+      ],
+      "webOrigins": [
+        "$PLUGIN_DIRECTORY_HOST"
+      ],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "publicClient": false,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "attributes": {
+        "realm_client": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "backchannel.logout.session.required": "true",
+        "frontchannel.logout.session.required": "true",
+        "post.logout.redirect.uris": "+",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "display.on.consent.screen": "false",
+        "backchannel.logout.revoke.offline.tokens": "false"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "organization",
+        "microprofile-jwt"
+      ]
+    },
+    {
       "id": "8f11a72d-34bb-4708-8658-9f34737212b1",
       "clientId": "realm-management",
       "name": "${client_realm-management}",
