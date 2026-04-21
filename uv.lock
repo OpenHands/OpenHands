@@ -6,9 +6,6 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 
-[options]
-exclude-newer = "2026-04-08T00:00:00Z"
-
 [[package]]
 name = "agent-client-protocol"
 version = "0.8.1"
@@ -2890,11 +2887,12 @@ wheels = [
 
 [[package]]
 name = "lmnr"
-version = "0.7.29"
+version = "0.7.47"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "grpcio" },
     { name = "httpx" },
+    { name = "lmnr-claude-code-proxy" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -2910,9 +2908,65 @@ dependencies = [
     { name = "tenacity" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/29/e4/f99758ea319bb275acf9aea725b6a17c9cf1fe79e1c12ad7e4972c05efd8/lmnr-0.7.29.tar.gz", hash = "sha256:6df718cd81a6bde71f24ce0681147638c88b918cfacf1edff1559a5d1209e309", size = 204650, upload-time = "2026-01-14T16:55:17.98Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/ba/d30fa29fc5475f2197f5f4fce9482cad7baca7f3ee5d688c8527f25a6c94/lmnr-0.7.47.tar.gz", hash = "sha256:5b1a1549cb27a9c4dacea82b356181115ba721208c0f937f49d43269cc02bccb", size = 240684, upload-time = "2026-04-05T14:26:47.017Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e9/b9/9ffe7abb527813a7568e46dc62edc5c1df8f100690cbe7b7829d07c2201e/lmnr-0.7.29-py3-none-any.whl", hash = "sha256:b7f09e73aa6d8cdf358eac80a1edbea951e879247f6738eb6dbe1c0d239dd645", size = 266860, upload-time = "2026-01-14T16:55:15.981Z" },
+    { url = "https://files.pythonhosted.org/packages/60/f9/30a961384e43151e33838d75e9b59a2e591974cd22688d7eeaba1a6604c5/lmnr-0.7.47-py3-none-any.whl", hash = "sha256:588191f650a5817911bf10229af88e8f39df6ef6b59a14f90c68835ad55ae232", size = 315522, upload-time = "2026-04-05T14:26:45.258Z" },
+]
+
+[[package]]
+name = "lmnr-claude-code-proxy"
+version = "0.1.20"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a3/50/e91ef7a927e86ffb02252ae75e41ce762005515f32e6fc2c008d8f9686d7/lmnr_claude_code_proxy-0.1.20.tar.gz", hash = "sha256:6c4a8e8ae5d906d73aa8897011408fa907583316205f58e454a62910570d5023", size = 60727, upload-time = "2026-04-20T22:51:31.977Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/57/b7/2a692cdc1e336d0e52b79bb0cec260eab14a73acdbae007729f5cf9f6091/lmnr_claude_code_proxy-0.1.20-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:1e6afb8da80cedf952af64e51d7dacf7392180be036786ba8c7bbd2a23040010", size = 1365400, upload-time = "2026-04-20T22:51:33.415Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/1b/f5139001a0d11edce9acef867fd948a78a6dc08b2c8339bb20cba172f3aa/lmnr_claude_code_proxy-0.1.20-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:64b98230c58fe2c37d678db1f32433f7ebeb6ccfcaf7868384f15f18f11fbc43", size = 1307802, upload-time = "2026-04-20T22:52:26.831Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/1b/ebeb3279382d468ee915bd7a297b43390780dca91fe74976f29a6a06c643/lmnr_claude_code_proxy-0.1.20-cp312-cp312-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:362772c1d94c745fcd32df29694538df789aa285137dd48a607f9adb8d820875", size = 1350036, upload-time = "2026-04-20T22:52:37.535Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/e8/e483aff33a8ca8c71d8c3bef7c4a3544f28fc464184bed98d1b2fdef082e/lmnr_claude_code_proxy-0.1.20-cp312-cp312-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:b139e8530e7e0f1615356fe7f8bf6aee062d7170bcc34527c33246f0a80f0505", size = 1184268, upload-time = "2026-04-20T22:51:47.079Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/fa/fc314d1d19127cb4390618470b9b6cd5bb2d5fac3405adb8a59c65ebd0ce/lmnr_claude_code_proxy-0.1.20-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:1aa0ee0fdeb8bf95a8cb8c6e96e6c9b519b592cff3a344a9dc2503b18c8f187f", size = 1353544, upload-time = "2026-04-20T22:52:03.922Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/67/5064eb65a8ded5a200125c179815bc6a2ecbc13cbe476cd15cfe0e4aba01/lmnr_claude_code_proxy-0.1.20-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:fe7b1b5049ebfb4f7bd579638748da94fa621baf3e430c3a1587607bc8d282d7", size = 1264164, upload-time = "2026-04-20T22:53:22.183Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/bd/00e837ade31be92901515f56e26763d48acdcfc17219adfc6f481c6e8421/lmnr_claude_code_proxy-0.1.20-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:699771bd8cbf14d4e30a446fd89ebb2621ff89785a2d07e43ce8d7fc5a34bef3", size = 1495522, upload-time = "2026-04-20T22:53:31.886Z" },
+    { url = "https://files.pythonhosted.org/packages/79/4d/76c4a5ff7a3daf4ddfa900749a5c2b964479699dd2f3fb8e1e69c6c7b2f5/lmnr_claude_code_proxy-0.1.20-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:f2ac9146a7ce1c6ba2a062f456de0ded40441ab546fac6c1a19ba466c5262eec", size = 1461724, upload-time = "2026-04-20T22:51:39.23Z" },
+    { url = "https://files.pythonhosted.org/packages/71/8c/6944788617a2af6a45c86aae7f245b5a0b61edb130fdb58f14e91a4d31b1/lmnr_claude_code_proxy-0.1.20-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:72aedd7e2d5d509a2ac47880062ff0203450ba1bffaafe44fcbfe7c1bc06ed0f", size = 1637790, upload-time = "2026-04-20T22:54:11.148Z" },
+    { url = "https://files.pythonhosted.org/packages/de/0d/02f31694fb0d9c00220ca8059d65aebcc4974e5ba61af459c4ccb1566358/lmnr_claude_code_proxy-0.1.20-cp312-cp312-musllinux_1_2_armv7l.whl", hash = "sha256:2ed057cab075206e16e51b84f90236c0602d5f9ff71e387ab95a3882ca84f2d6", size = 1459678, upload-time = "2026-04-20T22:53:37.185Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/e2/ff6bb2512601a728dcfda4a50da9bd83dfe10a08a21bbd38abfc37bbea8e/lmnr_claude_code_proxy-0.1.20-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:3fc2f3ca24e5c69865cb4fa975ee99756b9f328650a957891afd4f8685e3dd38", size = 1517996, upload-time = "2026-04-20T22:53:46.05Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/39/3ea24d1ef21c2d182da40f9c06b13421026356c484168e8c84ea35534078/lmnr_claude_code_proxy-0.1.20-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:b4af9dde919d6166e8192e114aea3457e9c24ea4785bdb44de23bb67a9e7550c", size = 1710923, upload-time = "2026-04-20T22:52:05.821Z" },
+    { url = "https://files.pythonhosted.org/packages/84/73/b8fbfe18fbef428850e715ad904d2dcf9bbff7eed7a70f1575120aad37c8/lmnr_claude_code_proxy-0.1.20-cp312-cp312-win32.whl", hash = "sha256:f5876de9d1365e0e4b0c66323a2bffd3371b56193471e5688b12e05e50356648", size = 1071346, upload-time = "2026-04-20T22:52:39.124Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/4d/cb82446241a08ccaf44ca436b3a6ca858c610180a3f7bf87107f8ca9aa30/lmnr_claude_code_proxy-0.1.20-cp312-cp312-win_amd64.whl", hash = "sha256:9f374d356ebb41d59e2c6581b2698ce9d217a0c1dcb89fd0a31232e349be6cfe", size = 1314459, upload-time = "2026-04-20T22:54:14.991Z" },
+    { url = "https://files.pythonhosted.org/packages/10/05/110e2794fa225a5329a2ba1dc530244d921409387faf66e21eb26fc78eaa/lmnr_claude_code_proxy-0.1.20-cp312-cp312-win_arm64.whl", hash = "sha256:7e3cdca02e4fad18450eecd0772a67d6a9e26c218a53f18309a74855a79778b0", size = 1234714, upload-time = "2026-04-20T22:52:34.148Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/4e/1b52d4f98c3c3ae16428c70fac2be318a886872bd0fceb45190b6ea08a9b/lmnr_claude_code_proxy-0.1.20-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:e001de2164c86cc2543b94e9f04d6209b8e91318675ac53c10ff6a0b0c1c0a2c", size = 1365450, upload-time = "2026-04-20T22:53:30.302Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/a1/321f23156aaa115d14ffbbb2205dfcfbd6786d01d2c9ff38ddfb9c63f59d/lmnr_claude_code_proxy-0.1.20-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:1089bce96ac54ad8f235ac2d43f64e6ab161bb18edcac561e37498295d96b79c", size = 1307789, upload-time = "2026-04-20T22:51:52.966Z" },
+    { url = "https://files.pythonhosted.org/packages/26/3b/78c2b79d7100bde19735dbb6b3aa13ea4f5806e1740803fcd1a1d471af35/lmnr_claude_code_proxy-0.1.20-cp313-cp313-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:9f4d16d530b9dc5f93b97f44f33c71ac5491b1cf23af49ac689a229a16962998", size = 1350147, upload-time = "2026-04-20T22:52:30.651Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/ef/c8bd8c4a653ad3c9503033cb2c63146ddf80419cdbd47e57300eab321859/lmnr_claude_code_proxy-0.1.20-cp313-cp313-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:d7d5083bba0b93dfe3b206e440710129ce660d4883681edf2684ca5d507879b5", size = 1184290, upload-time = "2026-04-20T22:51:51.552Z" },
+    { url = "https://files.pythonhosted.org/packages/46/4d/5401657550c1a8c72cd9cedb40f50a6db859ff6b4de73dcd98fdae9aaf8c/lmnr_claude_code_proxy-0.1.20-cp313-cp313-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:567a7bcc30711ffad06bd461618dad23d1d3f1cb61c5e510b12add3781308bb3", size = 1353987, upload-time = "2026-04-20T22:51:45.388Z" },
+    { url = "https://files.pythonhosted.org/packages/39/79/067defb20acf4f59de81310b495813622bc8c9b8967e99d787e0abb3b69d/lmnr_claude_code_proxy-0.1.20-cp313-cp313-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:00aa000a2be1080311a1b9662e72b0719fa6f1dac19cdb804c8549adcdca3104", size = 1264367, upload-time = "2026-04-20T22:53:11.696Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/20/5149a4ea4a49a170a14a070f08d802cb6e13d3ef16d3d75eea2d665fb7c3/lmnr_claude_code_proxy-0.1.20-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cbe9a097b9d9ff0c04ef95b0330f1f1f486fe0248d6b867d8b1b5340689b0587", size = 1495566, upload-time = "2026-04-20T22:54:09.023Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/2d/85914ebda744318c9cd6e05580fee38b20bf6f40cb381a4514f4749acae4/lmnr_claude_code_proxy-0.1.20-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:7c66993c381a06bdddedeac681c23b0106f63dc1c5e46d0a3b2dcdc59514dc06", size = 1462174, upload-time = "2026-04-20T22:50:59.975Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/77/f8ce98186442d2502e8a98608d1996dfd32055e33083b6a73f36dbb5c3e4/lmnr_claude_code_proxy-0.1.20-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:b789a19bf9c0ebcf5e85160e0f87b1dd9ac3fa025143a3cd034509ee71f1b7f2", size = 1637776, upload-time = "2026-04-20T22:51:54.499Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/46/79883602d48a8fbb11bbc5ec3b2384793d8e439549aff87800d634d89d13/lmnr_claude_code_proxy-0.1.20-cp313-cp313-musllinux_1_2_armv7l.whl", hash = "sha256:d3eda9c1f945c04e478d0038167479f095172906c275d29a7fc8b8448170c0a2", size = 1459819, upload-time = "2026-04-20T22:53:33.801Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/96/3a0c0921870b3ee7432fbd9bdd742cb5900b8dec4f5a33a5878db4ee785f/lmnr_claude_code_proxy-0.1.20-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:c34ae69e2d9b30e9cc3123074d531d0bee08fb50f66a5e0eb4c5341a597c844d", size = 1518074, upload-time = "2026-04-20T22:52:45.934Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/27/462be036c18188d9f329b745b2ea802cad5b50262090bd8f4f85ee379033/lmnr_claude_code_proxy-0.1.20-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:c950c06b8244379500742da2bbef863ead55ba727eff470bd47deda9b5651e15", size = 1711165, upload-time = "2026-04-20T22:52:17.723Z" },
+    { url = "https://files.pythonhosted.org/packages/05/b2/47f3d276bbd810581ee476e8a1e4bb9b8cfa0e05ef35203842a896b9d5cd/lmnr_claude_code_proxy-0.1.20-cp313-cp313-win32.whl", hash = "sha256:7c5257bc728c291bb7ed9e4ebc66d5bf1aa2f23fd67f23f7f171c4553c816189", size = 1071473, upload-time = "2026-04-20T22:51:18.195Z" },
+    { url = "https://files.pythonhosted.org/packages/42/4c/87ff3f05a2096814f040ffaa03187ce1ceb372cc177a23dd5d5fc762364a/lmnr_claude_code_proxy-0.1.20-cp313-cp313-win_amd64.whl", hash = "sha256:c4c3f30bea69f4764dd5591b28b953f31bbd01c19a708c875cd2e61b4f95f821", size = 1314509, upload-time = "2026-04-20T22:52:57.233Z" },
+    { url = "https://files.pythonhosted.org/packages/61/53/f3cbe71dec5f8e28b8be24ed0b0e7eef2f9aec75da4a5364ee8cc7f98c0d/lmnr_claude_code_proxy-0.1.20-cp313-cp313-win_arm64.whl", hash = "sha256:ce6806397ea2cf642decfb1709a22cc42ed1e11bfcbdbcb1d9df7599ede55307", size = 1234777, upload-time = "2026-04-20T22:51:25.251Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/80/1019c226a795783920e2c7b03c86a0c4603b1b426e6d64aa835cd2712dae/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-macosx_10_12_x86_64.whl", hash = "sha256:08c52ad588347b07d58893789ae751482616a3d49267cf3f849854c86ea2f765", size = 1365654, upload-time = "2026-04-20T22:52:07.906Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/de/3399286ab254e8e7571d1dbef13264d85eeb860204f76c716140920673cd/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:0edab9782bf0935164efb75552bfdfb6072ce4d1ea117865e84142fce8ea026f", size = 1308023, upload-time = "2026-04-20T22:51:01.298Z" },
+    { url = "https://files.pythonhosted.org/packages/65/e7/593e864988a910a22bf442e41e907692eda8c25225044df268abd192bdce/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:664bfc08d27a935243c2ca880f65eeaa4a267ad4a1c635cb961d17f645797f03", size = 1350319, upload-time = "2026-04-20T22:53:57.149Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/e8/f019e8c96f782fcd59e5c0368b091abdea5976bb64acbd119c8b44d6183e/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:e48ec99e35a6c5000f5f492c25bffc827d1e3b5488b2f2531815feac24d00849", size = 1184192, upload-time = "2026-04-20T22:52:23.289Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/5e/a5a0dfebb7abaa834def1318d3d634a988e0d98faf8cf46d45aa9386ab15/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:aa47b38f109e5115bceec3bcbb8707c68509b3b5305f95354686e3c3dc9e93c0", size = 1354383, upload-time = "2026-04-20T22:53:38.842Z" },
+    { url = "https://files.pythonhosted.org/packages/40/0c/aab018c6958f4f8cc63aa700068d2185644ee96955af76bcee5933d22f34/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:92b33d266b8c4e2780fc544e43a156e2a5c509949fa0137e5eb34728425060e7", size = 1264309, upload-time = "2026-04-20T22:53:04.414Z" },
+    { url = "https://files.pythonhosted.org/packages/29/c8/19e4f9cae984fd7d0a606ad72c63a734f1ffbb86bef5bd9103110ca9d982/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b6f91dd7fb061a75505a843379ba17c086349e2a8754d628223679fbb336bd19", size = 1495730, upload-time = "2026-04-20T22:53:02.445Z" },
+    { url = "https://files.pythonhosted.org/packages/29/dd/07992b2542e90e4602187230c0504bf98d366edeb53a5f2e31ca807f07c4/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:60c43511113e692092fe3af04b51edc48d95ebe50efc9c33d9574f01543a82d5", size = 1462013, upload-time = "2026-04-20T22:54:13.084Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/83/15c04817679abc59a2cc6391465fdbd5897f22fc224eef767edd8fe44343/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:b558c478dcf1a1a5939a10c06301b1cfd6e430f8b6b32e3ed7f58fd75baee0c9", size = 1638065, upload-time = "2026-04-20T22:52:32.509Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/b3/678a52d4a2f428444b92e849df23f347c63f81efaf5c3cc3c6a4d3d0cfab/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-musllinux_1_2_armv7l.whl", hash = "sha256:2ffff00c42fdcb11bc8641adf0e3759ce4b0794a0158e3109094e428b6d2e6ae", size = 1459590, upload-time = "2026-04-20T22:53:00.866Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/58/1e2dc2609958736f0000f154fd75cacfd5ed324b9c2fb644c22739b7a00f/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-musllinux_1_2_i686.whl", hash = "sha256:c44f3af40ecf02c663d6d0414ab191a9f8ea587ee012827cc73c78169d52844a", size = 1518202, upload-time = "2026-04-20T22:51:43.267Z" },
+    { url = "https://files.pythonhosted.org/packages/73/10/4ad6534feaf1fd2b4e038e61077ccc926640383a09aa2da292d3222bf147/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:f5869abd3042b30449d6ee4bd4fc8672f1ff5bae6a076e12d9ecd514987b7fb1", size = 1711355, upload-time = "2026-04-20T22:52:42.627Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/3b/dbef5ec1ef2ca3c86c02927a2a5f2762cad92b4f378772202f06571c2394/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-win32.whl", hash = "sha256:5a5ffb9498fc5c616a15a8456a03d288fc9864bf8a2e7a204e6ced0c1e8164cf", size = 1071515, upload-time = "2026-04-20T22:54:05.509Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/da/d7d3889cafd16473ea616733f02e4aa0d273aa7d61696d130caab478c2cb/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-win_amd64.whl", hash = "sha256:e91fb69f76af75315fcfacbf2522225fb2e0c0b839e6a467ea7da17c3f0a1de8", size = 1314428, upload-time = "2026-04-20T22:50:58.334Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/96/99588cc86c8b614c805de925859a9fa35560459b7353812ea98ef4f8ffb3/lmnr_claude_code_proxy-0.1.20-cp313-cp313t-win_arm64.whl", hash = "sha256:d5a2fdbdba891d4331720190187f51fdae755dcc0617f79713a85e0c9c75887a", size = 1234711, upload-time = "2026-04-20T22:51:29.004Z" },
 ]
 
 [[package]]
@@ -3645,7 +3699,7 @@ wheels = [
 [[package]]
 name = "openhands-agent-server"
 version = "1.17.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/OpenHands/software-agent-sdk.git?subdirectory=openhands-agent-server&rev=fbe9411cbdbffb025329587ff1f9cbf0c98226fd#fbe9411cbdbffb025329587ff1f9cbf0c98226fd" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "alembic" },
@@ -3657,10 +3711,6 @@ dependencies = [
     { name = "uvicorn" },
     { name = "websockets" },
     { name = "wsproto" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/05/18c26aab8094d3a7757338586fdaa13e3c0efa7ed1fe87a349a3159a920f/openhands_agent_server-1.17.0.tar.gz", hash = "sha256:3a88449a3b9ded653dcd2a8c518810c75602873cf9f7d4e8f9b90fd8fd225652", size = 82852, upload-time = "2026-04-13T19:04:38.929Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/0e/5997c52925219e302fffdb78a981e36a572badcf936c618a8870a70e677e/openhands_agent_server-1.17.0-py3-none-any.whl", hash = "sha256:44336cad001c31caeb516481a5a7aea6dd9b5ab4798461f147b5231668d8fb74", size = 99499, upload-time = "2026-04-13T19:04:42.069Z" },
 ]
 
 [[package]]
@@ -3829,9 +3879,9 @@ requires-dist = [
     { name = "numpy" },
     { name = "openai", specifier = "==2.8" },
     { name = "openhands-aci", specifier = "==0.3.3" },
-    { name = "openhands-agent-server", specifier = "==1.17.0" },
-    { name = "openhands-sdk", specifier = "==1.17.0" },
-    { name = "openhands-tools", specifier = "==1.17.0" },
+    { name = "openhands-agent-server", git = "https://github.com/OpenHands/software-agent-sdk.git?subdirectory=openhands-agent-server&rev=fbe9411cbdbffb025329587ff1f9cbf0c98226fd" },
+    { name = "openhands-sdk", git = "https://github.com/OpenHands/software-agent-sdk.git?subdirectory=openhands-sdk&rev=fbe9411cbdbffb025329587ff1f9cbf0c98226fd" },
+    { name = "openhands-tools", git = "https://github.com/OpenHands/software-agent-sdk.git?subdirectory=openhands-tools&rev=fbe9411cbdbffb025329587ff1f9cbf0c98226fd" },
     { name = "opentelemetry-api", specifier = ">=1.33.1" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.33.1" },
     { name = "orjson", specifier = ">=3.11.6" },
@@ -3911,7 +3961,7 @@ test = [
 [[package]]
 name = "openhands-sdk"
 version = "1.17.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/OpenHands/software-agent-sdk.git?subdirectory=openhands-sdk&rev=fbe9411cbdbffb025329587ff1f9cbf0c98226fd#fbe9411cbdbffb025329587ff1f9cbf0c98226fd" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "deprecation" },
@@ -3927,15 +3977,11 @@ dependencies = [
     { name = "tenacity" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/0f/412842e12df7b061de515bddee0533fe82813023537bf2bfd3ba3cbac5e4/openhands_sdk-1.17.0.tar.gz", hash = "sha256:3c69df6590f023a514137272d413658848e0d5bc9aecf941b946c8662862779a", size = 378039, upload-time = "2026-04-13T19:04:39.792Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/78/62/308c07997cddf6b465bd0352d583232eb55922e0fde529f432ccf81d0de6/openhands_sdk-1.17.0-py3-none-any.whl", hash = "sha256:3b771e72209453871c3036a562cf33e9ad9642a54bd48edb44f89915ac54709d", size = 475771, upload-time = "2026-04-13T19:04:41.056Z" },
-]
 
 [[package]]
 name = "openhands-tools"
 version = "1.17.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/OpenHands/software-agent-sdk.git?subdirectory=openhands-tools&rev=fbe9411cbdbffb025329587ff1f9cbf0c98226fd#fbe9411cbdbffb025329587ff1f9cbf0c98226fd" }
 dependencies = [
     { name = "bashlex" },
     { name = "binaryornot" },
@@ -3946,10 +3992,6 @@ dependencies = [
     { name = "openhands-sdk" },
     { name = "pydantic" },
     { name = "tom-swe" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/be/e6/e0aab57d2d80e2c826fafc40b489c6e36e58bac4b2371ed7ade3ff2a705f/openhands_tools-1.17.0.tar.gz", hash = "sha256:4a9d6c1aec00d366d0feb1ac2e9ee9988ad9806a0ef89f7dbe4655644e639d4a", size = 125332, upload-time = "2026-04-13T19:04:36.344Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/00/900dde3fc6402a9faf63c5c219e034d3ae6fab8b8d1af96361b67e858dbb/openhands_tools-1.17.0-py3-none-any.whl", hash = "sha256:76cd30fcc153627444f18638bcd926c9190989f80a3492381e84a181c021d815", size = 168194, upload-time = "2026-04-13T19:04:38.013Z" },
 ]
 
 [[package]]
