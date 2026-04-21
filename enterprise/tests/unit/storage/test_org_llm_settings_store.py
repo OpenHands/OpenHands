@@ -105,11 +105,11 @@ async def test_update_org_llm_settings_success(async_session_maker):
         org_id = org.id
 
         update_data = OrgLLMSettingsUpdate(
-            agent_settings_diff={
+            agent_settings={
                 'llm': {'model': 'new-model'},
                 'agent': 'CodeActAgent',
             },
-            conversation_settings_diff={
+            conversation_settings={
                 'confirmation_mode': True,
             },
         )
@@ -134,9 +134,7 @@ async def test_update_org_llm_settings_org_not_found(async_session_maker):
     """
     # Arrange
     non_existent_org_id = uuid.uuid4()
-    update_data = OrgLLMSettingsUpdate(
-        agent_settings_diff={'llm': {'model': 'new-model'}}
-    )
+    update_data = OrgLLMSettingsUpdate(agent_settings={'llm': {'model': 'new-model'}})
 
     # Act
     async with async_session_maker() as session:
@@ -166,7 +164,7 @@ async def test_update_org_llm_settings_updates_org_defaults_only(async_session_m
         result = await store.update_org_llm_settings(
             org.id,
             OrgLLMSettingsUpdate(
-                agent_settings_diff={'llm': {'model': 'new-model'}},
+                agent_settings={'llm': {'model': 'new-model'}},
                 llm_api_key='new-api-key',
                 search_api_key='search-key',
             ),
