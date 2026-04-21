@@ -24,11 +24,14 @@ export function useAgentNotification(curAgentState: AgentState) {
   const { t } = useTranslation();
   const audioRef = useRef<HTMLAudioElement | undefined>(undefined);
 
-  // Initialize audio only in browser environment
-  if (typeof window !== "undefined" && !audioRef.current) {
-    audioRef.current = new Audio(notificationSound);
-    audioRef.current.volume = 0.5;
-  }
+  // Initialize audio only in browser environment, inside useEffect to
+  // avoid side effects during render (React 18 strict mode, SSR safety).
+  useEffect(() => {
+    if (typeof window !== "undefined" && !audioRef.current) {
+      audioRef.current = new Audio(notificationSound);
+      audioRef.current.volume = 0.5;
+    }
+  }, []);
 
   const playSound = useCallback(() => {
     if (!settings?.enable_sound_notifications || !audioRef.current) return;

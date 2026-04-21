@@ -4,8 +4,6 @@ let titleInterval: number | undefined;
 const isBrowser =
   typeof window !== "undefined" && typeof document !== "undefined";
 
-const NOTIFICATION_PARAM = "notification";
-
 export const browserTab = {
   startNotification(message: string) {
     if (!isBrowser) return;
@@ -26,15 +24,6 @@ export const browserTab = {
       }
       document.title = current === message ? originalTitle : message;
     }, 1000);
-
-    const favicon = document.querySelector(
-      'link[rel="icon"]',
-    ) as HTMLLinkElement;
-    if (favicon) {
-      favicon.href = favicon.href.includes(`?${NOTIFICATION_PARAM}`)
-        ? favicon.href
-        : `${favicon.href}?${NOTIFICATION_PARAM}`;
-    }
   },
 
   stopNotification() {
@@ -46,13 +35,6 @@ export const browserTab = {
     }
     if (originalTitle) {
       document.title = originalTitle;
-    }
-
-    const favicon = document.querySelector(
-      'link[rel="icon"]',
-    ) as HTMLLinkElement;
-    if (favicon) {
-      favicon.href = favicon.href.replace(`?${NOTIFICATION_PARAM}`, "");
     }
   },
 };
