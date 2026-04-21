@@ -1,31 +1,31 @@
-import React from "react";
-import { useTranslation } from "react-i18next";
-import { usePostHog } from "posthog-js/react";
+import { AppSettingsInputsSkeleton } from "#/components/features/settings/app-settings/app-settings-inputs-skeleton";
+import { LanguageInput } from "#/components/features/settings/app-settings/language-input";
+import { BrandButton } from "#/components/features/settings/brand-button";
+import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
+import { SettingsInput } from "#/components/features/settings/settings-input";
+import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
+import { useConfig } from "#/hooks/query/use-config";
 import { useSettings } from "#/hooks/query/use-settings";
 import { AvailableLanguages } from "#/i18n";
-import { DEFAULT_SETTINGS } from "#/services/settings";
-import { BrandButton } from "#/components/features/settings/brand-button";
-import { SettingsSwitch } from "#/components/features/settings/settings-switch";
-import { SettingsInput } from "#/components/features/settings/settings-input";
-import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { I18nKey } from "#/i18n/declaration";
-import { LanguageInput } from "#/components/features/settings/app-settings/language-input";
-import { handleCaptureConsent } from "#/utils/handle-capture-consent";
-import {
-  displayErrorToast,
-  displaySuccessToast,
-} from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import { AppSettingsInputsSkeleton } from "#/components/features/settings/app-settings/app-settings-inputs-skeleton";
-import { useConfig } from "#/hooks/query/use-config";
-import { parseMaxBudgetPerTask } from "#/utils/settings-utils";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 import {
   SandboxGroupingStrategy,
   SandboxGroupingStrategyOptions,
 } from "#/types/settings";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { ENABLE_SANDBOX_GROUPING } from "#/utils/feature-flags";
+import { handleCaptureConsent } from "#/utils/handle-capture-consent";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import { parseMaxBudgetPerTask } from "#/utils/settings-utils";
+import { usePostHog } from "posthog-js/react";
+import React from "react";
+import { useTranslation } from "react-i18next";
 
 export const clientLoader = createPermissionGuard(
   "manage_application_settings",
@@ -111,10 +111,10 @@ function AppSettingsScreen() {
     const isLegacyRuntime = settings?.v1_enabled === false;
     const enableSandboxGpu = isLegacyRuntime
       ? formData.get("enable-sandbox-gpu-switch")?.toString() === "on"
-      : (settings.sandbox_enable_gpu ?? DEFAULT_SETTINGS.sandbox_enable_gpu);
+      : (settings?.sandbox_enable_gpu ?? DEFAULT_SETTINGS.sandbox_enable_gpu);
     const sandboxGpuBaseImage = isLegacyRuntime
       ? (formData.get("sandbox-gpu-base-image-input")?.toString() ?? "")
-      : (settings.sandbox_gpu_base_container_image ?? "");
+      : (settings?.sandbox_gpu_base_container_image ?? "");
 
     saveSettings(
       {
