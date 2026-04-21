@@ -23,6 +23,7 @@ export function useAgentNotification(curAgentState: AgentState) {
   const { data: settings } = useSettings();
   const { t } = useTranslation();
   const audioRef = useRef<HTMLAudioElement | undefined>(undefined);
+  const prevStateRef = useRef<AgentState | undefined>(undefined);
 
   // Initialize audio only in browser environment, inside useEffect to
   // avoid side effects during render (React 18 strict mode, SSR safety).
@@ -41,8 +42,12 @@ export function useAgentNotification(curAgentState: AgentState) {
     });
   }, [settings?.enable_sound_notifications]);
 
-  // Trigger notification when agent enters a notification-worthy state
+  // Trigger notification only on actual state transitions into a
+  // notification-worthy state — not when unrelated deps (e.g. settings) change.
   useEffect(() => {
+    if (prevStateRef.current === curAgentState) return;
+    prevStateRef.current = curAgentState;
+
     if (!NOTIFICATION_STATES.includes(curAgentState)) return;
 
     playSound();

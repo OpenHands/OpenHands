@@ -125,7 +125,7 @@ describe("useAgentNotification", () => {
     ).toHaveBeenCalledTimes(1);
   });
 
-  it("does not start notification when tab is focused", () => {
+  it("does not start tab flash when focused, but still plays sound", () => {
     Object.defineProperty(document, "hasFocus", {
       value: () => true,
       configurable: true,
@@ -141,6 +141,8 @@ describe("useAgentNotification", () => {
     expect(
       browserTabModule.browserTab.startNotification,
     ).not.toHaveBeenCalled();
+    // Sound still plays when focused (completion chime UX pattern)
+    expect(mockPlay).toHaveBeenCalledTimes(1);
   });
 
   it("does not play sound when sound notifications are disabled", async () => {
