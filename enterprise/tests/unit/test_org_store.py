@@ -1102,7 +1102,9 @@ async def test_update_org_llm_settings_async_org_not_found():
 
     # Arrange
     non_existent_org_id = uuid.uuid4()
-    llm_settings = OrgLLMSettingsUpdate(agent_settings={'llm': {'model': 'new-model'}})
+    llm_settings = OrgLLMSettingsUpdate(
+        agent_settings_diff={'llm': {'model': 'new-model'}}
+    )
 
     # Mock the async session to return None for org
     mock_session = AsyncMock()

@@ -1,7 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePostHog } from "posthog-js/react";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
-import { organizationService } from "#/api/organization-service/organization-service.api";
+import {
+  organizationService,
+  type OrganizationAgentSettingsUpdate,
+} from "#/api/organization-service/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   MCPConfig,
@@ -20,6 +23,61 @@ const saveSettingsMutationFn = async (
   const settingsToSave: SettingsUpdate = { ...settings };
   delete settingsToSave.agent_settings_schema;
   delete settingsToSave.conversation_settings_schema;
+
+  if (scope === "org") {
+    const orgSettingsToSave: OrganizationAgentSettingsUpdate = {};
+    if (settingsToSave.agent_settings_diff) {
+      orgSettingsToSave.agent_settings_diff =
+        settingsToSave.agent_settings_diff as Record<string, SettingsValue>;
+    }
+    if (settingsToSave.conversation_settings_diff) {
+      orgSettingsToSave.conversation_settings_diff =
+        settingsToSave.conversation_settings_diff as Record<
+          string,
+          SettingsValue
+        >;
+    }
+    if (typeof settingsToSave.search_api_key === "string") {
+      orgSettingsToSave.search_api_key = settingsToSave.search_api_key;
+    }
+    if (
+      typeof settingsToSave.llm_api_key === "string" ||
+      settingsToSave.llm_api_key === null
+    ) {
+      orgSettingsToSave.llm_api_key = settingsToSave.llm_api_key;
+    }
+
+    const conversationSettingsDiff: Record<string, SettingsValue> = {
+      ...((orgSettingsToSave.conversation_settings_diff as Record<
+        string,
+        SettingsValue
+      >) ?? {}),
+    };
+    if (Object.keys(conversationSettingsDiff).length > 0) {
+      orgSettingsToSave.conversation_settings_diff = conversationSettingsDiff;
+    } else {
+      delete orgSettingsToSave.conversation_settings_diff;
+    }
+
+    const agentSettingsDiff = orgSettingsToSave.agent_settings_diff as
+      | Record<string, unknown>
+      | undefined;
+    const llmSettings = agentSettingsDiff?.llm as
+      | Record<string, unknown>
+      | undefined;
+    if (llmSettings && typeof llmSettings.api_key === "string") {
+      const apiKey = llmSettings.api_key.trim();
+      llmSettings.api_key = apiKey === "" ? "" : apiKey;
+    }
+
+    if (typeof orgSettingsToSave.search_api_key === "string") {
+      orgSettingsToSave.search_api_key =
+        orgSettingsToSave.search_api_key.trim();
+    }
+
+    await organizationService.saveOrganizationAgentSettings(orgSettingsToSave);
+    return;
+  }
 
   const conversationSettings: Record<string, SettingsValue> = {
     ...((settingsToSave.conversation_settings as Record<
@@ -51,11 +109,6 @@ const saveSettingsMutationFn = async (
   }
   if (typeof settingsToSave.git_user_email === "string") {
     settingsToSave.git_user_email = settingsToSave.git_user_email.trim();
-  }
-
-  if (scope === "org") {
-    await organizationService.saveOrganizationAgentSettings(settingsToSave);
-    return;
   }
 
   await SettingsService.saveSettings(settingsToSave);

@@ -214,13 +214,12 @@ class OrgPage(BaseModel):
 class OrgUpdate(BaseModel):
     """Request model for updating an organization.
 
-    The public wire format uses ``agent_settings`` /
-    ``conversation_settings`` to match the frontend payload, but the
-    internal field names remain ``*_diff`` because these values are merged
-    as partial patches, not stored as full SDK settings objects.
+    ``agent_settings_diff`` and ``conversation_settings_diff`` are partial
+    patches that are merged onto the org row; they are not full SDK
+    settings objects.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra='forbid')
 
     name: Annotated[
         str | None,
@@ -239,12 +238,8 @@ class OrgUpdate(BaseModel):
     enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     search_api_key: str | None = None
-    agent_settings_diff: dict[str, Any] | None = Field(
-        default=None, alias='agent_settings'
-    )
-    conversation_settings_diff: dict[str, Any] | None = Field(
-        default=None, alias='conversation_settings'
-    )
+    agent_settings_diff: dict[str, Any] | None = None
+    conversation_settings_diff: dict[str, Any] | None = None
 
 
 class OrgLLMSettingsResponse(BaseModel):
@@ -353,20 +348,15 @@ class OrgMemberLLMSettings(BaseModel):
 class OrgLLMSettingsUpdate(BaseModel):
     """Request model for updating organization LLM settings.
 
-    The public wire format uses ``agent_settings`` /
-    ``conversation_settings`` for compatibility with the frontend, while
-    the internal ``*_diff`` fields make it explicit these are partial
-    patches that are merged onto stored settings and member diffs.
+    ``agent_settings_diff`` and ``conversation_settings_diff`` are partial
+    patches that are merged onto stored org settings and propagated member
+    diffs.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra='forbid')
 
-    agent_settings_diff: dict[str, Any] | None = Field(
-        default=None, alias='agent_settings'
-    )
-    conversation_settings_diff: dict[str, Any] | None = Field(
-        default=None, alias='conversation_settings'
-    )
+    agent_settings_diff: dict[str, Any] | None = None
+    conversation_settings_diff: dict[str, Any] | None = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
 
@@ -379,7 +369,7 @@ class OrgLLMSettingsUpdate(BaseModel):
         Two jobs:
 
         * **Lift ``llm.api_key`` and mask it in the JSON.** The frontend
-          posts the raw key nested inside ``agent_settings``. Leaving it
+          posts the raw key nested inside ``agent_settings_diff``. Leaving it
           nested would push a raw secret into the ``org.agent_settings``
           JSON column while ``org._llm_api_key`` (the encrypted column read
           by ``_get_effective_llm_api_key`` at load time) stays stale. We

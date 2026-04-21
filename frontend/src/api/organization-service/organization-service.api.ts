@@ -5,7 +5,7 @@ import {
   OrganizationMembersPage,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
-import { Settings } from "#/types/settings";
+import { Settings, SettingsValue } from "#/types/settings";
 import { openHands } from "../open-hands-axios";
 
 type OrganizationAgentSettingsResponse = Pick<
@@ -15,6 +15,13 @@ type OrganizationAgentSettingsResponse = Pick<
   | "search_api_key"
   | "llm_api_key_set"
 >;
+
+export type OrganizationAgentSettingsUpdate = {
+  agent_settings_diff?: Record<string, SettingsValue>;
+  conversation_settings_diff?: Record<string, SettingsValue>;
+  search_api_key?: string;
+  llm_api_key?: string | null;
+};
 
 export const organizationService = {
   getMe: async ({ orgId }: { orgId: string }) => {
@@ -186,7 +193,7 @@ export const organizationService = {
   },
 
   saveOrganizationAgentSettings: async (
-    settings: Partial<Settings> & Record<string, unknown>,
+    settings: OrganizationAgentSettingsUpdate,
   ) => {
     const { data } = await openHands.post<OrganizationAgentSettingsResponse>(
       "/api/organizations/llm",

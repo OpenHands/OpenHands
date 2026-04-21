@@ -540,9 +540,8 @@ class OrgService:
                 raise OrgNameExistsError(update_data.name)
 
         # Convert to dict for OrgStore (excluding None values).
-        # ``OrgUpdate`` keeps wire compatibility via aliases, but the dumped
-        # field names stay ``*_diff`` so the persistence layer can treat them
-        # explicitly as merge patches.
+        # The request model uses explicit ``*_diff`` field names so the
+        # persistence layer can treat them as merge patches.
         update_dict = update_data.model_dump(exclude_none=True)
         if not update_dict:
             logger.info(

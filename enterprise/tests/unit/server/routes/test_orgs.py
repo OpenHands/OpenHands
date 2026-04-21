@@ -1926,6 +1926,38 @@ async def test_update_org_permission_denied_llm_settings(
 
 
 @pytest.mark.asyncio
+async def test_update_org_rejects_legacy_settings_field_names(
+    mock_update_app, mock_owner_role
+):
+    """
+    GIVEN: A PATCH payload that still uses the old full-object field names
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 422 validation is returned instead of silently ignoring the payload
+    """
+    org_id = uuid.uuid4()
+    update_data = {
+        'agent_settings': {'llm': {'model': 'claude-opus-4-5-20251101'}},
+    }
+
+    with patch(
+        'server.auth.authorization.get_user_org_role',
+        AsyncMock(return_value=mock_owner_role),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert any(
+        error['loc'][-1] == 'agent_settings'
+        for error in response.json()['detail']
+    )
+
+
+@pytest.mark.asyncio
 async def test_update_org_duplicate_name_returns_409(mock_update_app, mock_owner_role):
     """
     GIVEN: User updates organization name to one already used by another org

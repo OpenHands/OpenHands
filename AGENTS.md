@@ -248,8 +248,8 @@ Each integration follows a consistent pattern with service classes, storage mode
 - This ensures code works in both OpenHands and enterprise contexts
 
 **Org settings patch models:**
-- For org update endpoints, keep the public wire names `agent_settings` / `conversation_settings`, but use internal `agent_settings_diff` / `conversation_settings_diff` fields on update DTOs.
-- Set Pydantic aliases so FastAPI/frontend payloads stay unchanged while `model_dump(exclude_none=True)` yields explicit diff field names for storage and `deep_merge` boundaries.
+- For org settings update endpoints, requests must use explicit patch keys `agent_settings_diff` / `conversation_settings_diff`; reserve `agent_settings` / `conversation_settings` for full typed response objects.
+- Reject legacy request keys like `agent_settings` / `conversation_settings` on org patch DTOs so old clients fail loudly instead of silently no-oping.
 - Avoid representing partial org update payloads as full `AgentSettings` / `ConversationSettings` objects; these endpoints are patch semantics, not full replacement semantics.
 
 

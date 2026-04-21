@@ -226,10 +226,17 @@ export function SdkSectionPage({
         dirty,
         view,
       );
-      const defaultPayload =
-        settingsSource === "conversation_settings"
-          ? { conversation_settings: basePayload }
-          : { agent_settings: basePayload };
+      let defaultPayloadKey: string;
+      if (settingsSource === "conversation_settings") {
+        defaultPayloadKey =
+          scope === "org"
+            ? "conversation_settings_diff"
+            : "conversation_settings";
+      } else {
+        defaultPayloadKey =
+          scope === "org" ? "agent_settings_diff" : "agent_settings";
+      }
+      const defaultPayload = { [defaultPayloadKey]: basePayload };
       payload = buildPayload
         ? buildPayload(basePayload, { values, dirty, view })
         : defaultPayload;

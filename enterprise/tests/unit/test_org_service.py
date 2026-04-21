@@ -9,6 +9,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 from server.routes.org_models import (
     LiteLLMIntegrationError,
     OrgAuthorizationError,
@@ -24,12 +25,12 @@ from storage.role import Role
 from storage.user import User
 
 
-def test_org_update_uses_wire_aliases_but_dumps_internal_diff_fields():
+def test_org_update_requires_explicit_diff_fields():
     update = OrgUpdate.model_validate(
         {
             'contact_name': 'Jane Doe',
-            'agent_settings': {'llm': {'model': 'claude-opus-4-5-20251101'}},
-            'conversation_settings': {'security_analyzer': 'llm'},
+            'agent_settings_diff': {'llm': {'model': 'claude-opus-4-5-20251101'}},
+            'conversation_settings_diff': {'security_analyzer': 'llm'},
         }
     )
 
@@ -40,6 +41,13 @@ def test_org_update_uses_wire_aliases_but_dumps_internal_diff_fields():
         'agent_settings_diff': {'llm': {'model': 'claude-opus-4-5-20251101'}},
         'conversation_settings_diff': {'security_analyzer': 'llm'},
     }
+
+    with pytest.raises(ValidationError):
+        OrgUpdate.model_validate(
+            {
+                'agent_settings': {'llm': {'model': 'claude-opus-4-5-20251101'}},
+            }
+        )
 
 
 @pytest.fixture
@@ -1219,7 +1227,7 @@ async def test_update_org_with_permissions_success_llm_fields_admin(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings={
+        agent_settings_diff={
             'llm': {
                 'model': 'claude-opus-4-5-20251101',
                 'base_url': 'https://api.anthropic.com',
@@ -1285,10 +1293,10 @@ async def test_update_org_with_permissions_success_llm_fields_owner(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings={
+        agent_settings_diff={
             'llm': {'model': 'claude-opus-4-5-20251101'},
         },
-        conversation_settings={
+        conversation_settings_diff={
             'security_analyzer': 'llm',
         },
     )
@@ -1352,7 +1360,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(
 
     update_data = OrgUpdate(
         contact_name='Jane Doe',
-        agent_settings={'llm': {'model': 'claude-opus-4-5-20251101'}},
+        agent_settings_diff={'llm': {'model': 'claude-opus-4-5-20251101'}},
         conversation_expiration=30,
     )
 
@@ -1556,7 +1564,7 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings={'llm': {'model': 'claude-opus-4-5-20251101'}}
+        agent_settings_diff={'llm': {'model': 'claude-opus-4-5-20251101'}}
     )
 
     with (
@@ -1800,11 +1808,11 @@ async def test_update_org_with_permissions_only_llm_fields(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings={
+        agent_settings_diff={
             'llm': {'model': 'claude-opus-4-5-20251101'},
             'agent': 'agent-mode',
         },
-        conversation_settings={
+        conversation_settings_diff={
             'security_analyzer': 'llm',
         },
     )
