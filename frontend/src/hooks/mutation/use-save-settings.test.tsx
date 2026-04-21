@@ -1,15 +1,10 @@
 import React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import {
-  QueryClient,
-  QueryClientProvider,
-  type UseQueryResult,
-} from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePostHog } from "posthog-js/react";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { organizationService } from "#/api/organization-service/organization-service.api";
-import type { Settings } from "#/types/settings";
 import { useSettings } from "../query/use-settings";
 import { useSaveSettings } from "./use-save-settings";
 
@@ -47,7 +42,7 @@ describe("useSaveSettings", () => {
     });
     mockedUseSettings.mockReturnValue({
       data: null,
-    } as UseQueryResult<Settings, Error>);
+    } as never);
   });
 
   it("filters org saves down to explicit diff and org update keys", async () => {
@@ -57,7 +52,6 @@ describe("useSaveSettings", () => {
       .mockResolvedValue({
         agent_settings: {},
         conversation_settings: {},
-        search_api_key: null,
         llm_api_key_set: false,
       });
 
@@ -77,9 +71,9 @@ describe("useSaveSettings", () => {
           confirmation_mode: true,
         },
         search_api_key: "  search-key  ",
-        llm_api_key: null,
-        agent_settings_schema: { ignored: true },
-        conversation_settings_schema: { ignored: true },
+        llm_api_key: undefined,
+        agent_settings_schema: undefined,
+        conversation_settings_schema: undefined,
         agent_settings: { ignored: true },
         conversation_settings: { ignored: true },
         git_user_name: "ignored",
@@ -97,7 +91,6 @@ describe("useSaveSettings", () => {
         confirmation_mode: true,
       },
       search_api_key: "search-key",
-      llm_api_key: null,
     });
   });
 
@@ -110,7 +103,6 @@ describe("useSaveSettings", () => {
     ).mockResolvedValue({
       agent_settings: {},
       conversation_settings: {},
-      search_api_key: null,
       llm_api_key_set: false,
     });
 
