@@ -19,7 +19,7 @@ export const useSubmitOnboarding = () => {
   return useMutation({
     mutationFn: async ({ selections }: SubmitOnboardingArgs) => {
       const { data } = await openHands.post<OnboardingResponse>(
-        "/api/onboarding",
+        "/api/complete_onboarding",
         { selections },
       );
       return data;
