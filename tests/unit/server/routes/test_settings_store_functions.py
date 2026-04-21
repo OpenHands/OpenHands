@@ -180,9 +180,9 @@ async def test_store_llm_settings_update_existing():
 async def test_store_llm_settings_partial_update():
     """Test store_llm_settings with partial update.
 
-    Note: When llm_base_url is not provided in the update and the model is NOT an
-    openhands model, we attempt to get the URL from litellm.get_api_base().
-    For OpenAI models, this returns https://api.openai.com.
+    When llm_base_url="" (explicitly cleared), it must be stored as None
+    regardless of the model type. Auto-detection is disabled for all models
+    except openhands/ models (which use the LiteLLM proxy).
     """
     settings = Settings(
         llm_model='gpt-4',  # Only updating model (not an openhands model)
@@ -267,11 +267,12 @@ async def test_store_llm_settings_mcp_update_preserves_base_url():
 
 
 @pytest.mark.asyncio
-async def test_store_llm_settings_no_existing_base_url_uses_auto_detection():
-    """Test auto-detection kicks in only when there is no existing base URL.
+async def test_store_llm_settings_no_existing_base_url_stays_none():
+    """Test that base URL stays None when no existing base URL is present.
 
-    When neither the incoming settings nor existing settings have a base URL,
-    auto-detection from litellm should be used.
+    Auto-detection is disabled for non-openhands models to avoid setting wrong
+    URLs (e.g. litellm returns localhost:11434 for ollama, which is wrong in Docker).
+    Users must provide base_url explicitly for non-openhands models.
     """
     settings = Settings(
         llm_model='gpt-4'  # Not an openhands model
@@ -287,16 +288,17 @@ async def test_store_llm_settings_no_existing_base_url_uses_auto_detection():
 
     assert result.llm_model == 'gpt-4'
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # No existing base URL, so auto-detection should set it
-    assert result.llm_base_url == 'https://api.openai.com'
+    # No auto-detection: base_url stays None, user must provide it explicitly
+    assert result.llm_base_url is None
 
 
 @pytest.mark.asyncio
-async def test_store_llm_settings_anthropic_model_gets_api_base():
+async def test_store_llm_settings_anthropic_model_no_auto_detect():
     """Test store_llm_settings with an Anthropic model.
 
-    For Anthropic models, get_provider_api_base() returns the Anthropic API base URL
-    via ProviderConfigManager.get_provider_model_info().
+    Auto-detection is disabled for non-openhands models. Users must provide
+    base_url explicitly. Litellm handles the default endpoints without needing
+    an explicit base_url stored in settings.
     """
     settings = Settings(
         llm_model='anthropic/claude-sonnet-4-5-20250929'  # Anthropic model
@@ -311,15 +313,17 @@ async def test_store_llm_settings_anthropic_model_gets_api_base():
 
     assert result.llm_model == 'anthropic/claude-sonnet-4-5-20250929'
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # Anthropic models get https://api.anthropic.com via ProviderConfigManager
-    assert result.llm_base_url == 'https://api.anthropic.com'
+    # No auto-detection: base_url stays None, litellm uses its own defaults
+    assert result.llm_base_url is None
 
 
 @pytest.mark.asyncio
-async def test_store_llm_settings_litellm_error_logged():
-    """Test that litellm errors are logged when getting api_base fails."""
-    from unittest.mock import patch
+async def test_store_llm_settings_unknown_model_base_url_stays_none():
+    """Test that unknown models don't raise and base_url stays None.
 
+    With auto-detection disabled, unknown models simply leave base_url as None.
+    No litellm lookups are attempted, so no errors are logged.
+    """
     settings = Settings(
         llm_model='unknown-model-xyz'  # A model that litellm won't recognize
     )
@@ -329,14 +333,11 @@ async def test_store_llm_settings_litellm_error_logged():
         llm_api_key=SecretStr('existing-api-key'),
     )
 
-    # The function should not raise even if litellm fails
-    with patch('openhands.app_server.settings.settings_router.logger') as mock_logger:
-        result = await store_llm_settings(settings, existing_settings)
+    result = await store_llm_settings(settings, existing_settings)
 
-        # llm_base_url should remain None since litellm couldn't find the model
-        assert result.llm_base_url is None
-        # Either error or debug should have been logged
-        assert mock_logger.error.called or mock_logger.debug.called
+    # llm_base_url should remain None — no auto-detection, no errors
+    assert result.llm_base_url is None
+    assert result.llm_model == 'unknown-model-xyz'
 
 
 @pytest.mark.asyncio

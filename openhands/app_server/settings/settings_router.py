@@ -28,7 +28,7 @@ from openhands.server.user_auth import (
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
-from openhands.utils.llm import get_provider_api_base, is_openhands_model
+from openhands.utils.llm import is_openhands_model
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -60,20 +60,10 @@ async def store_llm_settings(
         elif is_openhands_model(settings.llm_model):
             # OpenHands models use the LiteLLM proxy
             settings.llm_base_url = LITE_LLM_API_URL
-        elif settings.llm_model:
-            # For non-openhands models, try to get URL from litellm
-            try:
-                api_base = get_provider_api_base(settings.llm_model)
-                if api_base:
-                    settings.llm_base_url = api_base
-                else:
-                    logger.debug(
-                        f'No api_base found in litellm for model: {settings.llm_model}'
-                    )
-            except Exception as e:
-                logger.error(
-                    f'Failed to get api_base from litellm for model {settings.llm_model}: {e}'
-                )
+        # For non-openhands models (e.g. ollama, custom endpoints), do NOT
+        # auto-detect from litellm — the detected URL is often wrong inside
+        # Docker (e.g. localhost:11434 instead of host.docker.internal:11434).
+        # The user must provide the base_url explicitly.
     elif settings.llm_base_url == '':
         # Explicitly cleared by the user (basic view save or advanced view clear)
         settings.llm_base_url = None
@@ -166,15 +156,13 @@ async def load_settings(
             provider_tokens_set=provider_tokens_set,
         )
 
-        # If the base url matches the default for the provider, we don't send it
-        # So that the frontend can display basic mode
+        # For openhands/ models only: omit the base_url when it equals the
+        # LiteLLM proxy default, so the frontend can display basic mode.
+        # For all other models (ollama, custom endpoints, etc.) always return
+        # the stored base_url so users can see and edit it.
         if is_openhands_model(settings.llm_model):
             if settings.llm_base_url == LITE_LLM_API_URL:
                 settings_with_token_data.llm_base_url = None
-        elif settings.llm_model and settings.llm_base_url == get_provider_api_base(
-            settings.llm_model
-        ):
-            settings_with_token_data.llm_base_url = None
 
         settings_with_token_data.llm_api_key = None
         settings_with_token_data.search_api_key = None
