@@ -5,13 +5,14 @@ for the OpenHands Enterprise Telemetry Service.
 """
 
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Any
 
-from sqlalchemy import CheckConstraint, Column, DateTime, Integer, String
+from sqlalchemy import CheckConstraint, DateTime, String
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 
-class TelemetryIdentity(Base):  # type: ignore
+class TelemetryIdentity(Base):
     """Stores persistent identity information for telemetry.
 
     This table is designed to contain exactly one row (enforced by database constraint)
@@ -25,15 +26,15 @@ class TelemetryIdentity(Base):  # type: ignore
     __tablename__ = 'telemetry_replicated_identity'
     __table_args__ = (CheckConstraint('id = 1', name='single_identity_row'),)
 
-    id = Column(Integer, primary_key=True, default=1)
-    customer_id = Column(String(255), nullable=True)
-    instance_id = Column(String(255), nullable=True)
-    created_at = Column(
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    instance_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         nullable=False,
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
@@ -42,9 +43,9 @@ class TelemetryIdentity(Base):  # type: ignore
 
     def __init__(
         self,
-        customer_id: Optional[str] = None,
-        instance_id: Optional[str] = None,
-        **kwargs,
+        customer_id: str | None = None,
+        instance_id: str | None = None,
+        **kwargs: Any,
     ):
         """Initialize telemetry identity.
 
@@ -69,8 +70,8 @@ class TelemetryIdentity(Base):  # type: ignore
 
     def set_customer_info(
         self,
-        customer_id: Optional[str] = None,
-        instance_id: Optional[str] = None,
+        customer_id: str | None = None,
+        instance_id: str | None = None,
     ) -> None:
         """Update customer and instance identification information.
 

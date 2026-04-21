@@ -24,6 +24,8 @@ class TestMaintenanceTaskRunnerStandalone:
 
         # Mock the runner class structure
         class MockMaintenanceTaskRunner:
+            """Minimal mock of MaintenanceTaskRunner to verify initialization state."""
+
             def __init__(self):
                 self._running = False
                 self._task = None
@@ -38,6 +40,8 @@ class TestMaintenanceTaskRunnerStandalone:
 
         # Mock the runner behavior
         class MockMaintenanceTaskRunner:
+            """Mock runner for verifying start/stop lifecycle behaviour."""
+
             def __init__(self):
                 self._running: bool = False
                 self._task = None
@@ -45,6 +49,7 @@ class TestMaintenanceTaskRunnerStandalone:
                 self.stop_called = False
 
             async def start(self):
+                """Start the runner."""
                 if self._running:
                     return
                 self._running = True
@@ -52,6 +57,7 @@ class TestMaintenanceTaskRunnerStandalone:
                 self.start_called = True
 
             async def stop(self):
+                """Stop the runner."""
                 if not self._running:
                     return
                 self._running = False
@@ -90,12 +96,15 @@ class TestMaintenanceTaskRunnerStandalone:
 
         # Mock the run loop logic
         class MockMaintenanceTaskRunner:
+            """Mock runner for verifying run loop iteration behaviour."""
+
             def __init__(self):
                 self._running = False
                 self.process_calls = 0
                 self.sleep_calls = 0
 
             async def _run_loop(self):
+                """Execute the main processing loop."""
                 loop_count = 0
                 while self._running and loop_count < 3:  # Limit for testing
                     try:
@@ -113,6 +122,7 @@ class TestMaintenanceTaskRunnerStandalone:
                     loop_count += 1
 
             async def _process_pending_tasks(self):
+                """Process pending tasks."""
                 # Mock processing
                 pass
 
@@ -131,6 +141,8 @@ class TestMaintenanceTaskRunnerStandalone:
         """Test error handling in the run loop."""
 
         class MockMaintenanceTaskRunner:
+            """Mock runner for verifying error handling in the run loop."""
+
             def __init__(self):
                 self._running = False
                 self.error_count = 0
@@ -138,6 +150,7 @@ class TestMaintenanceTaskRunnerStandalone:
                 self.attempt_count = 0
 
             async def _run_loop(self):
+                """Execute the main processing loop."""
                 loop_count = 0
                 while self._running and loop_count < 2:  # Limit for testing
                     try:
@@ -155,6 +168,7 @@ class TestMaintenanceTaskRunnerStandalone:
                     loop_count += 1
 
             async def _process_pending_tasks(self):
+                """Process pending tasks."""
                 self.attempt_count += 1
                 # Only fail on the first attempt
                 if self.attempt_count == 1:
@@ -231,6 +245,8 @@ class TestMaintenanceTaskRunnerStandalone:
 
         # Mock task processing logic
         class MockTask:
+            """Mock task for successful processing scenarios."""
+
             def __init__(self, task_id, processor_type):
                 self.id = task_id
                 self.processor_type = processor_type
@@ -239,17 +255,21 @@ class TestMaintenanceTaskRunnerStandalone:
                 self.updated_at = None
 
             def get_processor(self):
+                """Return a mock processor."""
                 # Mock processor
                 processor = AsyncMock()
                 processor.return_value = {'result': 'success', 'processed_items': 5}
                 return processor
 
         class MockMaintenanceTaskRunner:
+            """Mock runner for verifying task status transitions on success."""
+
             def __init__(self):
                 self.status_updates = []
                 self.commits = []
 
             async def _process_task(self, task):
+                """Process a single task."""
                 # Simulate updating status to WORKING
                 task.status = 'WORKING'
                 task.updated_at = datetime.now()
@@ -297,6 +317,8 @@ class TestMaintenanceTaskRunnerStandalone:
         """Test task processing with failure."""
 
         class MockTask:
+            """Mock task for failure processing scenarios."""
+
             def __init__(self, task_id, processor_type):
                 self.id = task_id
                 self.processor_type = processor_type
@@ -305,17 +327,21 @@ class TestMaintenanceTaskRunnerStandalone:
                 self.updated_at = None
 
             def get_processor(self):
+                """Return a mock processor."""
                 # Mock processor that fails
                 processor = AsyncMock()
                 processor.side_effect = ValueError('Processing failed')
                 return processor
 
         class MockMaintenanceTaskRunner:
+            """Mock runner for verifying task status transitions on failure."""
+
             def __init__(self):
                 self.status_updates = []
                 self.error_logged = None
 
             async def _process_task(self, task):
+                """Process a single task."""
                 # Simulate updating status to WORKING
                 task.status = 'WORKING'
                 task.updated_at = datetime.now()
@@ -368,6 +394,8 @@ class TestMaintenanceTaskRunnerStandalone:
 
         # Mock the session handling logic
         class MockSession:
+            """Mock database session for verifying session usage patterns."""
+
             def __init__(self):
                 self.queries = []
                 self.merges = []
@@ -541,6 +569,8 @@ class TestMaintenanceTaskRunnerStandalone:
         """Test handling of multiple tasks in sequence."""
 
         class MockTask:
+            """Mock task with configurable success or failure behaviour."""
+
             def __init__(self, task_id, should_fail=False):
                 self.id = task_id
                 self.processor_type = f'processor_{task_id}'
@@ -548,6 +578,7 @@ class TestMaintenanceTaskRunnerStandalone:
                 self.should_fail = should_fail
 
             def get_processor(self):
+                """Return a mock processor."""
                 processor = AsyncMock()
                 if self.should_fail:
                     processor.side_effect = Exception(f'Task {self.id} failed')
@@ -556,12 +587,15 @@ class TestMaintenanceTaskRunnerStandalone:
                 return processor
 
         class MockMaintenanceTaskRunner:
+            """Mock runner for verifying sequential processing of multiple tasks."""
+
             def __init__(self):
                 self.processed_tasks = []
                 self.successful_tasks = []
                 self.failed_tasks = []
 
             async def _process_pending_tasks(self):
+                """Process all pending tasks."""
                 # Simulate finding multiple tasks
                 tasks = [
                     MockTask(1, should_fail=False),
@@ -573,6 +607,7 @@ class TestMaintenanceTaskRunnerStandalone:
                     await self._process_task(task)
 
             async def _process_task(self, task):
+                """Process a single task."""
                 self.processed_tasks.append(task.id)
 
                 try:
@@ -610,6 +645,8 @@ class TestMaintenanceTaskRunnerStandalone:
 
         # Mock the global instance pattern
         class MockMaintenanceTaskRunner:
+            """Mock runner for verifying the global singleton instance pattern."""
+
             def __init__(self):
                 self.instance_id = id(self)
 
@@ -628,11 +665,14 @@ class TestMaintenanceTaskRunnerStandalone:
         """Test proper handling of task cancellation."""
 
         class MockMaintenanceTaskRunner:
+            """Mock runner for verifying cancellation handling in the run loop."""
+
             def __init__(self):
                 self._running = False
                 self.cancellation_handled = False
 
             async def _run_loop(self):
+                """Execute the main processing loop."""
                 try:
                     while self._running:
                         await asyncio.sleep(0.01)
