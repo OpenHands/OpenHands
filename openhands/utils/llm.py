@@ -92,6 +92,47 @@ class ModelsResponse(BaseModel):
     default_model: str
 
 
+def _is_known_litellm_provider(prefix: str) -> bool:
+    """Return True if ``prefix`` is a provider LiteLLM recognises."""
+    try:
+        return prefix in litellm.provider_list
+    except Exception:
+        return False
+
+
+def ensure_llm_provider_prefix(model: str, base_url: str | None) -> str:
+    """Ensure a custom OpenAI-compatible model carries a LiteLLM provider prefix.
+
+    When users point OpenHands at a custom OpenAI-compatible endpoint (e.g.
+    LM Studio, llama.cpp, vLLM), they often paste the raw model identifier
+    served by that endpoint — e.g. ``qwen/qwen3-coder-30b-a3b-instruct`` from
+    LM Studio. LiteLLM splits on ``/`` to find the provider and raises
+    ``BadRequestError: LLM Provider NOT provided`` when the first segment
+    isn't in its provider list.
+
+    When ``base_url`` is set and the model either has no prefix or its prefix
+    isn't a known LiteLLM provider, we prepend ``openai/`` so LiteLLM routes
+    the request through its OpenAI-compatible path. The model identifier that
+    reaches the endpoint is preserved because LiteLLM strips the ``openai/``
+    prefix before sending.
+
+    Args:
+        model: The raw model identifier provided by the user.
+        base_url: The custom endpoint URL, if any.
+
+    Returns:
+        The model string, prefixed with ``openai/`` when necessary.
+    """
+    if not model or not base_url:
+        return model
+
+    prefix = model.split('/', 1)[0]
+    if '/' in model and _is_known_litellm_provider(prefix):
+        return model
+
+    return f'openai/{model}'
+
+
 def is_openhands_model(model: str | None) -> bool:
     """Check if the model uses the OpenHands provider.
 

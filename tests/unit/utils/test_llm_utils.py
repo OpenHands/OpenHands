@@ -4,6 +4,7 @@ from openhands.utils import llm as llm_utils
 from openhands.utils.llm import (
     _assign_provider,
     _derive_verified_models,
+    ensure_llm_provider_prefix,
     get_provider_api_base,
     is_openhands_model,
 )
@@ -127,3 +128,63 @@ class TestGetProviderApiBase:
         # May return None or an API base depending on litellm behavior
         # The function should not raise an exception
         assert result is None or isinstance(result, str)
+
+
+class TestEnsureLlmProviderPrefix:
+    """Tests for ensure_llm_provider_prefix (issue #13948)."""
+
+    def test_lm_studio_slash_model_gets_openai_prefix(self):
+        """LM Studio model IDs with ``/`` must not crash litellm."""
+        assert (
+            ensure_llm_provider_prefix(
+                'qwen/qwen3.5-35b-a3b', 'http://172.27.139.1:1234/v1'
+            )
+            == 'openai/qwen/qwen3.5-35b-a3b'
+        )
+
+    def test_bare_model_with_base_url_gets_openai_prefix(self):
+        assert (
+            ensure_llm_provider_prefix('my-model', 'http://localhost:8080')
+            == 'openai/my-model'
+        )
+
+    def test_known_provider_prefix_left_alone(self):
+        assert (
+            ensure_llm_provider_prefix(
+                'anthropic/claude-3-opus', 'https://api.anthropic.com'
+            )
+            == 'anthropic/claude-3-opus'
+        )
+        assert (
+            ensure_llm_provider_prefix(
+                'lm_studio/qwen/qwen3', 'http://localhost:1234/v1'
+            )
+            == 'lm_studio/qwen/qwen3'
+        )
+        assert (
+            ensure_llm_provider_prefix(
+                'litellm_proxy/claude-opus-4-5', 'https://llm-proxy.app.all-hands.dev'
+            )
+            == 'litellm_proxy/claude-opus-4-5'
+        )
+        assert (
+            ensure_llm_provider_prefix('openai/gpt-4', 'https://api.openai.com/v1')
+            == 'openai/gpt-4'
+        )
+
+    def test_openai_prefix_preserved_even_with_slashy_model(self):
+        """Docs recommend ``openai/qwen/...``; preserve that shape."""
+        assert (
+            ensure_llm_provider_prefix(
+                'openai/qwen/qwen3-coder-30b-a3b-instruct',
+                'http://host.docker.internal:1234/v1',
+            )
+            == 'openai/qwen/qwen3-coder-30b-a3b-instruct'
+        )
+
+    def test_no_base_url_leaves_model_alone(self):
+        assert ensure_llm_provider_prefix('qwen/qwen3.5', None) == 'qwen/qwen3.5'
+        assert ensure_llm_provider_prefix('qwen/qwen3.5', '') == 'qwen/qwen3.5'
+
+    def test_empty_model_returned_unchanged(self):
+        assert ensure_llm_provider_prefix('', 'http://foo') == ''

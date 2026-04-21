@@ -30,7 +30,11 @@ from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
-from openhands.utils.llm import get_provider_api_base, is_openhands_model
+from openhands.utils.llm import (
+    ensure_llm_provider_prefix,
+    get_provider_api_base,
+    is_openhands_model,
+)
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -49,6 +53,9 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
 
     When the merged LLM base_url is empty-string, treat it as cleared.
     When it is None, try to auto-detect the provider default.
+    When the user supplied a custom base_url (e.g. LM Studio) without a
+    recognised LiteLLM provider prefix on the model, prepend ``openai/`` so
+    LiteLLM can route the OpenAI-compatible request.
     """
     llm = settings.agent_settings.llm
 
@@ -66,6 +73,8 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
                 logger.error(
                     f'Failed to get api_base from litellm for model {llm.model}: {e}'
                 )
+    elif llm.base_url and llm.model:
+        llm.model = ensure_llm_provider_prefix(llm.model, llm.base_url)
 
 
 # NOTE: We use response_model=None for endpoints that return JSONResponse directly.
