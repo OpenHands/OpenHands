@@ -114,6 +114,44 @@ from openhands.utils.git import ensure_valid_git_branch_name
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
+
+# Model name patterns (fnmatch-style, matched case-insensitively against the
+# model basename after the last '/') for models that support the reasoning-
+# related LLM options: reasoning_effort, enable_encrypted_reasoning, and
+# extended_thinking_budget. Any model not matching these patterns will have
+# those options cleared before being passed to LiteLLM, since providers like
+# Ollama reject requests with `think=true` for models that don't support
+# thinking. Keep in sync with the SDK / V0 REASONING_EFFORT_PATTERNS list.
+_REASONING_EFFORT_PATTERNS: tuple[str, ...] = (
+    'o1', 'o1-*', 'o3', 'o3-*', 'o4-mini', 'o4-mini-*',
+    'gpt-5*',
+    'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3.1-pro*',
+    'claude-sonnet-4-5*', 'claude-sonnet-4-6*', 'claude-haiku-4-5*',
+    'deepseek-r1*',
+    'kimi-k2.5',
+    'glm-4*', 'glm-5*',
+)
+
+
+def _model_supports_reasoning(model: str) -> bool:
+    """Return True if the given model name supports reasoning-effort options.
+
+    Models outside this allow-list should not receive reasoning_effort,
+    extended_thinking_budget, or encrypted_reasoning, since LiteLLM will
+    otherwise translate these to provider-specific fields (e.g. Ollama's
+    `think=true`) that many models reject.
+    """
+    from fnmatch import fnmatchcase
+
+    raw = (model or '').strip().lower()
+    if not raw:
+        return False
+    basename = raw.rsplit('/', 1)[-1]
+    # Drop Ollama-style ":tag" suffix for matching (e.g. "qwen2.5-coder:14b").
+    if ':' in basename:
+        basename = basename.split(':', 1)[0]
+    return any(fnmatchcase(basename, pat) for pat in _REASONING_EFFORT_PATTERNS)
+
 # Planning agent instruction to prevent "Ready to proceed?" behavior
 PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
 You are a Planning Agent that can ONLY create plans - you CANNOT execute code or make changes.
@@ -906,12 +944,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         ):
             base_url = user.llm_base_url or self.openhands_provider_base_url
 
-        return LLM(
-            model=model,
-            base_url=base_url,
-            api_key=user.llm_api_key,
-            usage_id='agent',
-        )
+        llm_kwargs: dict[str, Any] = {
+            'model': model,
+            'base_url': base_url,
+            'api_key': user.llm_api_key,
+            'usage_id': 'agent',
+        }
+        # The SDK's LLM defaults (reasoning_effort='high',
+        # enable_encrypted_reasoning=True, extended_thinking_budget=200000) are
+        # geared toward frontier reasoning models. For models that don't
+        # support reasoning (e.g. Ollama qwen2.5-coder), LiteLLM will still
+        # forward these options (as `think=true` for Ollama), which the
+        # provider rejects with a 400. Clear them for non-reasoning models.
+        if not _model_supports_reasoning(model):
+            llm_kwargs['reasoning_effort'] = None
+            llm_kwargs['enable_encrypted_reasoning'] = False
+            llm_kwargs['extended_thinking_budget'] = None
+
+        return LLM(**llm_kwargs)
 
     async def _get_tavily_api_key(self, user: UserInfo) -> str | None:
         """Get Tavily search API key, prioritizing user's key over service key.
