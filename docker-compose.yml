@@ -10,6 +10,8 @@ services:
       - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-1.16.1-python}
       #- SANDBOX_USER_ID=${SANDBOX_USER_ID:-1234} # enable this only if you want a specific non-root sandbox user but you will have to manually adjust permissions of ~/.openhands for this user
       - WORKSPACE_MOUNT_PATH=${WORKSPACE_BASE:-$PWD/workspace}
+      # Give the sandbox agent-server enough time to finish startup (WSL2 / slow hosts need >15s).
+      - SANDBOX_STARTUP_GRACE_SECONDS=${SANDBOX_STARTUP_GRACE_SECONDS:-120}
     ports:
       - "3000:3000"
     extra_hosts:
