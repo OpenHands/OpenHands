@@ -248,6 +248,14 @@ function LlmSettingsScreen() {
     // Use OpenHands-managed key for OpenHands provider in SaaS mode
     const finalApiKey = shouldUseOpenHandsKey ? null : apiKey;
 
+    // Preserve user's custom base_url if already configured (e.g. Ollama, LM Studio,
+    // self-hosted). Only reset it when the selected model is an OpenHands-managed
+    // model, where base_url must be cleared so the backend routes via LiteLLM.
+    const isOpenHandsModel = fullLlmModel?.startsWith("openhands/");
+    const preservedBaseUrl = isOpenHandsModel
+      ? DEFAULT_SETTINGS.llm_base_url
+      : settings?.llm_base_url || DEFAULT_SETTINGS.llm_base_url;
+
     saveSettings(
       {
         llm_model: fullLlmModel,
@@ -259,8 +267,8 @@ function LlmSettingsScreen() {
             ? null
             : securityAnalyzer || DEFAULT_SETTINGS.security_analyzer,
 
-        // reset advanced settings
-        llm_base_url: DEFAULT_SETTINGS.llm_base_url,
+        // reset advanced settings (preserve base_url for custom providers)
+        llm_base_url: preservedBaseUrl,
         agent: DEFAULT_SETTINGS.agent,
         enable_default_condenser: DEFAULT_SETTINGS.enable_default_condenser,
       },
