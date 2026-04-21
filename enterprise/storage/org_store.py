@@ -229,8 +229,8 @@ class OrgStore:
             # Pop the diff-style kwargs before the setattr loop — otherwise
             # ``hasattr(org, 'agent_settings')`` is True and the loop would
             # *overwrite* the JSON column instead of deep-merging into it.
-            agent_settings_diff = kwargs.pop('agent_settings_diff', None)
-            conversation_settings_diff = kwargs.pop('conversation_settings_diff', None)
+            agent_settings_diff = kwargs.pop('agent_settings', None)
+            conversation_settings_diff = kwargs.pop('conversation_settings', None)
             for key, value in kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
@@ -467,15 +467,17 @@ class OrgStore:
                 return None
 
             llm_settings.apply_to_org(org)
-            if llm_settings.agent_settings_diff is not None:
+            agent_settings_patch = llm_settings.agent_settings_patch()
+            if agent_settings_patch is not None:
                 org.agent_settings = deep_merge(
                     org.agent_settings,
-                    llm_settings.agent_settings_diff,
+                    agent_settings_patch,
                 )
-            if llm_settings.conversation_settings_diff is not None:
+            conversation_settings_patch = llm_settings.conversation_settings_patch()
+            if conversation_settings_patch is not None:
                 org.conversation_settings = deep_merge(
                     org.conversation_settings,
-                    llm_settings.conversation_settings_diff,
+                    conversation_settings_patch,
                 )
 
             # Propagate relevant settings to all org members

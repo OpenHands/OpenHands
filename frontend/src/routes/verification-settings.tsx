@@ -160,14 +160,11 @@ export function VerificationSettingsScreen({
         payload.security_analyzer = securityAnalyzer;
       }
 
-      return scope === "org"
-        ? { conversation_settings_diff: payload }
-        : { conversation_settings: payload };
+      return { conversation_settings: payload };
     },
     [
       confirmationMode,
       confirmationModeDirty,
-      scope,
       securityAnalyzer,
       securityAnalyzerDirty,
       settings?.security_analyzer,

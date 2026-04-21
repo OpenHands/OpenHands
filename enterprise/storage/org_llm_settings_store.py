@@ -68,15 +68,17 @@ class OrgLLMSettingsStore:
             return None
 
         update_data.apply_to_org(org)
-        if update_data.agent_settings_diff:
+        agent_settings_patch = update_data.agent_settings_patch()
+        if agent_settings_patch:
             org.agent_settings = deep_merge(
                 org.agent_settings,
-                update_data.agent_settings_diff,
+                agent_settings_patch,
             )
-        if update_data.conversation_settings_diff:
+        conversation_settings_patch = update_data.conversation_settings_patch()
+        if conversation_settings_patch:
             org.conversation_settings = deep_merge(
                 org.conversation_settings,
-                update_data.conversation_settings_diff,
+                conversation_settings_patch,
             )
 
         # flush instead of commit - DbSessionInjector auto-commits at request end

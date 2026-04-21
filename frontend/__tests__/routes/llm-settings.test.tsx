@@ -1001,8 +1001,13 @@ describe("LlmSettingsScreen", () => {
       .mockImplementation(async (payload) => {
         const nextAgentSettings = {
           ...persistedSettings.agent_settings,
-          ...(payload.agent_settings_diff as NonNullable<Settings["agent_settings"]>),
         } as NonNullable<Settings["agent_settings"]>;
+
+        Object.entries(payload).forEach(([key, value]) => {
+          if (key.includes(".") || key === "agent" || key === "mcp_config") {
+            nextAgentSettings[key] = value as SettingsValue;
+          }
+        });
 
         persistedSettings = buildSettingsWithAdvancedToggle({
           ...persistedSettings,
@@ -1026,7 +1031,7 @@ describe("LlmSettingsScreen", () => {
     await waitFor(() => {
       expect(saveOrganizationSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          agent_settings_diff: expect.objectContaining({
+          agent_settings: expect.objectContaining({
             llm: expect.objectContaining({
               api_key: "test-api-key",
               base_url: null,

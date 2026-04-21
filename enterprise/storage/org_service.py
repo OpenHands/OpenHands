@@ -539,9 +539,7 @@ class OrgService:
                 )
                 raise OrgNameExistsError(update_data.name)
 
-        # Convert to dict for OrgStore (excluding None values).
-        # The request model uses explicit ``*_diff`` field names so the
-        # persistence layer can treat them as merge patches.
+        # Convert to dict for OrgStore (excluding None values)
         update_dict = update_data.model_dump(exclude_none=True)
         if not update_dict:
             logger.info(
@@ -551,8 +549,8 @@ class OrgService:
             return existing_org
 
         restricted_fields = {
-            'agent_settings_diff',
-            'conversation_settings_diff',
+            'agent_settings',
+            'conversation_settings',
             'search_api_key',
             'sandbox_api_key',
         }

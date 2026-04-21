@@ -247,12 +247,6 @@ Each integration follows a consistent pattern with service classes, storage mode
 - Example: `from storage.database import a_session_maker` not `from enterprise.storage.database import a_session_maker`
 - This ensures code works in both OpenHands and enterprise contexts
 
-**Org settings patch models:**
-- For org settings update endpoints, requests must use explicit patch keys `agent_settings_diff` / `conversation_settings_diff`; reserve `agent_settings` / `conversation_settings` for full typed response objects.
-- Reject legacy request keys like `agent_settings` / `conversation_settings` on org patch DTOs so old clients fail loudly instead of silently no-oping.
-- Avoid representing partial org update payloads as full `AgentSettings` / `ConversationSettings` objects; these endpoints are patch semantics, not full replacement semantics.
-
-
 **Test Structure:**
 - Place tests in `enterprise/tests/unit/` following the same structure as the source code
 - Use `--confcutdir=tests/unit/[module]` when testing specific modules

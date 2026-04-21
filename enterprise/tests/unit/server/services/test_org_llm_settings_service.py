@@ -8,7 +8,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from pydantic import SecretStr, ValidationError
+from pydantic import SecretStr
 from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import (
     MASKED_API_KEY,
@@ -21,6 +21,23 @@ from server.services.org_llm_settings_service import OrgLLMSettingsService
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.org_member_store import OrgMemberStore
+
+from openhands.sdk.settings import AgentSettings, ConversationSettings
+
+
+def test_org_llm_settings_update_accepts_typed_settings_objects():
+    """Wire payloads should parse into typed settings while preserving patches."""
+    update_data = OrgLLMSettingsUpdate.model_validate(
+        {
+            'agent_settings': {'llm': {'model': 'claude-3-5-sonnet'}},
+            'conversation_settings': {'security_analyzer': 'llm'},
+        }
+    )
+
+    assert isinstance(update_data.agent_settings, AgentSettings)
+    assert update_data.agent_settings_patch() == {'llm': {'model': 'claude-3-5-sonnet'}}
+    assert isinstance(update_data.conversation_settings, ConversationSettings)
+    assert update_data.conversation_settings_patch() == {'security_analyzer': 'llm'}
 
 
 @pytest.fixture
@@ -155,10 +172,10 @@ async def test_update_org_llm_settings_success(
     updated_org.search_api_key = None
 
     update_data = OrgLLMSettingsUpdate(
-        agent_settings_diff={
+        agent_settings={
             'llm': {'model': 'new-model'},
         },
-        conversation_settings_diff={
+        conversation_settings={
             'confirmation_mode': False,
             'max_iterations': 100,
         },
@@ -221,9 +238,7 @@ async def test_update_org_llm_settings_org_not_found(
     THEN: OrgNotFoundError is raised
     """
     # Arrange
-    update_data = OrgLLMSettingsUpdate(
-        agent_settings_diff={'llm': {'model': 'new-model'}}
-    )
+    update_data = OrgLLMSettingsUpdate(agent_settings={'llm': {'model': 'new-model'}})
 
     mock_store.get_current_org_by_user_id = AsyncMock(return_value=None)
     service = OrgLLMSettingsService(store=mock_store, user_context=mock_user_context)
@@ -235,36 +250,13 @@ async def test_update_org_llm_settings_org_not_found(
     assert 'No current organization' in str(exc_info.value)
 
 
-def test_org_llm_settings_update_requires_explicit_diff_fields():
-    update_data = OrgLLMSettingsUpdate.model_validate(
-        {
-            'agent_settings_diff': {'llm': {'model': 'new-model'}},
-            'conversation_settings_diff': {'max_iterations': 42},
-        }
-    )
-
-    assert update_data.agent_settings_diff == {'llm': {'model': 'new-model'}}
-    assert update_data.conversation_settings_diff == {'max_iterations': 42}
-    assert update_data.model_dump(exclude_none=True) == {
-        'agent_settings_diff': {'llm': {'model': 'new-model'}},
-        'conversation_settings_diff': {'max_iterations': 42},
-    }
-
-    with pytest.raises(ValidationError):
-        OrgLLMSettingsUpdate.model_validate(
-            {
-                'agent_settings': {'llm': {'model': 'new-model'}},
-            }
-        )
-
-
 @pytest.mark.asyncio
-async def test_update_org_llm_settings_accepts_explicit_diff_payload_and_propagates(
+async def test_update_org_llm_settings_accepts_wire_payload_and_propagates(
     mock_org, mock_store, mock_user_context, monkeypatch
 ):
     """
     GIVEN: The exact wire payload the frontend posts to /api/organizations/llm
-           ({"agent_settings_diff": {...}}) and an org with members carrying stale
+           ({"agent_settings": {...}}) and an org with members carrying stale
            agent_settings_diff overrides
     WHEN:  update_org_llm_settings is called
     THEN:  1) the org is actually updated (was a silent no-op before the
@@ -289,7 +281,7 @@ async def test_update_org_llm_settings_accepts_explicit_diff_payload_and_propaga
 
     update_data = OrgLLMSettingsUpdate.model_validate(
         {
-            'agent_settings_diff': {
+            'agent_settings': {
                 'llm': {'base_url': 'https://llm-proxy.staging.all-hands.dev'},
             },
         }
@@ -396,7 +388,7 @@ async def test_update_org_llm_settings_lifts_nested_api_key_for_column_sync(
 
     update_data = OrgLLMSettingsUpdate.model_validate(
         {
-            'agent_settings_diff': {
+            'agent_settings': {
                 'llm': {
                     'api_key': 'sk-new-raw-key',
                     'base_url': 'https://example.com',
@@ -405,13 +397,13 @@ async def test_update_org_llm_settings_lifts_nested_api_key_for_column_sync(
         }
     )
 
-    # The validator must move the raw key out of agent_settings_diff and into the
+    # The validator must move the raw key out of agent_settings and into the
     # top-level field the rest of the pipeline actually wires to the column,
     # AND leave a masked marker in the JSON so ``org.agent_settings.llm``
     # and member ``agent_settings_diff.llm`` stay consistent with the
     # encrypted column.
     assert update_data.llm_api_key == 'sk-new-raw-key'
-    assert update_data.agent_settings_diff == {
+    assert update_data.agent_settings == {
         'llm': {'api_key': MASKED_API_KEY, 'base_url': 'https://example.com'},
     }
 
@@ -458,7 +450,7 @@ def test_get_member_updates_treats_empty_llm_api_key_as_none():
     """
     # Arrange
     update = OrgLLMSettingsUpdate(
-        agent_settings_diff={'llm': {'model': 'openhands/x'}}, llm_api_key=''
+        agent_settings={'llm': {'model': 'openhands/x'}}, llm_api_key=''
     )
 
     # Act
@@ -469,9 +461,11 @@ def test_get_member_updates_treats_empty_llm_api_key_as_none():
     # the stored state is self-describing.
     assert member_updates is not None
     assert member_updates.llm_api_key is None
-    assert member_updates.agent_settings_diff == {
-        'llm': {'model': 'openhands/x', 'base_url': LITE_LLM_API_URL},
-    }
+    assert member_updates.agent_settings_diff is not None
+    assert member_updates.agent_settings_diff['llm']['model'] == 'litellm_proxy/x'
+    assert member_updates.agent_settings_diff['llm']['base_url'].rstrip(
+        '/'
+    ) == LITE_LLM_API_URL.rstrip('/')
 
 
 @pytest.mark.asyncio
@@ -504,7 +498,7 @@ async def test_update_org_llm_settings_generates_managed_key_for_openhands(
 
     update_data = OrgLLMSettingsUpdate.model_validate(
         {
-            'agent_settings_diff': {
+            'agent_settings': {
                 'llm': {
                     'model': 'openhands/claude-3',
                     'api_key': '',
@@ -568,13 +562,12 @@ async def test_update_org_llm_settings_generates_managed_key_for_openhands(
     assert isinstance(member_settings.llm_api_key, SecretStr)
     assert member_settings.llm_api_key.get_secret_value() == 'litellm-new-key'
     assert member_settings.has_custom_llm_api_key is False
-    assert member_settings.agent_settings_diff == {
-        'llm': {
-            'model': 'openhands/claude-3',
-            'api_key': MASKED_API_KEY,
-            'base_url': LITE_LLM_API_URL,
-        },
-    }
+    assert member_settings.agent_settings_diff is not None
+    assert member_settings.agent_settings_diff['llm']['model'] == 'openhands/claude-3'
+    assert member_settings.agent_settings_diff['llm']['api_key'] == MASKED_API_KEY
+    assert member_settings.agent_settings_diff['llm']['base_url'].rstrip(
+        '/'
+    ) == LITE_LLM_API_URL.rstrip('/')
 
 
 @pytest.mark.asyncio
@@ -606,7 +599,7 @@ async def test_update_org_llm_settings_does_not_generate_key_for_non_managed_mod
 
     update_data = OrgLLMSettingsUpdate.model_validate(
         {
-            'agent_settings_diff': {
+            'agent_settings': {
                 'llm': {
                     'model': 'anthropic/claude-3',
                     'base_url': 'https://example.com',
@@ -651,18 +644,18 @@ def test_normalize_agent_settings_masks_api_key_in_json_on_empty_and_real_keys()
     WHEN:  OrgLLMSettingsUpdate's model validator runs
     THEN:  both shapes lift the raw value to ``llm_api_key`` for encrypted
            column sync AND leave the universal ``MASKED_API_KEY`` marker in
-           ``agent_settings_diff.llm.api_key``, so the three storage locations
+           ``agent_settings.llm.api_key``, so the three storage locations
            (``org._llm_api_key``, ``org.agent_settings.llm.api_key``,
            ``org_member.agent_settings_diff.llm.api_key``) stay in sync once
            the update is applied + propagated.
     """
     # Arrange + Act
     real_key = OrgLLMSettingsUpdate.model_validate(
-        {'agent_settings_diff': {'llm': {'model': 'anthropic/x', 'api_key': 'sk-raw'}}}
+        {'agent_settings': {'llm': {'model': 'anthropic/x', 'api_key': 'sk-raw'}}}
     )
     empty_key = OrgLLMSettingsUpdate.model_validate(
         {
-            'agent_settings_diff': {
+            'agent_settings': {
                 'llm': {'model': 'openhands/x', 'api_key': '', 'base_url': None},
             },
         }
@@ -670,11 +663,11 @@ def test_normalize_agent_settings_masks_api_key_in_json_on_empty_and_real_keys()
 
     # Assert — masked in JSON in both cases; lifted raw value on top-level.
     assert real_key.llm_api_key == 'sk-raw'
-    assert real_key.agent_settings_diff is not None
-    assert real_key.agent_settings_diff['llm']['api_key'] == MASKED_API_KEY
+    assert real_key.agent_settings_patch() is not None
+    assert real_key.agent_settings_patch()['llm']['api_key'] == MASKED_API_KEY
     assert empty_key.llm_api_key == ''
-    assert empty_key.agent_settings_diff is not None
-    assert empty_key.agent_settings_diff['llm']['api_key'] == MASKED_API_KEY
+    assert empty_key.agent_settings_patch() is not None
+    assert empty_key.agent_settings_patch()['llm']['api_key'] == MASKED_API_KEY
 
 
 def test_normalize_agent_settings_fills_base_url_for_all_providers():
@@ -696,17 +689,17 @@ def test_normalize_agent_settings_fills_base_url_for_all_providers():
     # BYOR provider explicit null (base_url auto-filled to provider default).
     openhands_null = OrgLLMSettingsUpdate.model_validate(
         {
-            'agent_settings_diff': {
+            'agent_settings': {
                 'llm': {'model': 'openhands/claude-3', 'base_url': None},
             },
         }
     )
     openhands_missing = OrgLLMSettingsUpdate.model_validate(
-        {'agent_settings_diff': {'llm': {'model': 'openhands/claude-3'}}}
+        {'agent_settings': {'llm': {'model': 'openhands/claude-3'}}}
     )
     anthropic_null = OrgLLMSettingsUpdate.model_validate(
         {
-            'agent_settings_diff': {
+            'agent_settings': {
                 'llm': {'model': 'anthropic/claude-3-opus-20240229', 'base_url': None},
             },
         }
@@ -714,15 +707,23 @@ def test_normalize_agent_settings_fills_base_url_for_all_providers():
 
     # Assert — OpenHands gets the proxy URL; non-OpenHands provider gets the
     # provider default that ``litellm.get_api_base`` reports.
-    assert openhands_null.agent_settings_diff is not None
-    assert openhands_null.agent_settings_diff['llm']['base_url'] == LITE_LLM_API_URL
-    assert openhands_missing.agent_settings_diff is not None
-    assert openhands_missing.agent_settings_diff['llm']['base_url'] == LITE_LLM_API_URL
-    assert anthropic_null.agent_settings_diff is not None
-    # get_provider_api_base('anthropic/claude-3-opus-20240229') returns the
-    # Anthropic public API. Be lenient about the exact suffix litellm returns
-    # across versions — only require that it got filled with Anthropic's host.
-    anthropic_base = anthropic_null.agent_settings_diff['llm']['base_url']
+    openhands_null_patch = openhands_null.agent_settings_patch()
+    assert openhands_null_patch is not None
+    assert openhands_null_patch['llm']['model'] == 'litellm_proxy/claude-3'
+    assert openhands_null_patch['llm']['base_url'].rstrip(
+        '/'
+    ) == LITE_LLM_API_URL.rstrip('/')
+
+    openhands_missing_patch = openhands_missing.agent_settings_patch()
+    assert openhands_missing_patch is not None
+    assert openhands_missing_patch['llm']['model'] == 'litellm_proxy/claude-3'
+    assert openhands_missing_patch['llm']['base_url'].rstrip(
+        '/'
+    ) == LITE_LLM_API_URL.rstrip('/')
+
+    anthropic_patch = anthropic_null.agent_settings_patch()
+    assert anthropic_patch is not None
+    anthropic_base = anthropic_patch['llm']['base_url']
     assert isinstance(anthropic_base, str)
     assert 'anthropic.com' in anthropic_base
 

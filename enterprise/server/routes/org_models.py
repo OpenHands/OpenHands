@@ -2,11 +2,12 @@ from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
-    ConfigDict,
     EmailStr,
     Field,
     SecretStr,
+    SkipValidation,
     StringConstraints,
+    ValidationError,
     field_validator,
     model_validator,
 )
@@ -214,12 +215,11 @@ class OrgPage(BaseModel):
 class OrgUpdate(BaseModel):
     """Request model for updating an organization.
 
-    ``agent_settings_diff`` and ``conversation_settings_diff`` are partial
-    patches that are merged onto the org row; they are not full SDK
-    settings objects.
+    ``agent_settings`` and ``conversation_settings`` match the wire format
+    the frontend already uses for ``OrgLLMSettingsUpdate``; they're
+    applied to the org row as partial/diff patches via ``deep_merge`` in
+    ``OrgStore.update_org``.
     """
-
-    model_config = ConfigDict(extra='forbid')
 
     name: Annotated[
         str | None,
@@ -238,8 +238,8 @@ class OrgUpdate(BaseModel):
     enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     search_api_key: str | None = None
-    agent_settings_diff: dict[str, Any] | None = None
-    conversation_settings_diff: dict[str, Any] | None = None
+    agent_settings: dict[str, Any] | None = None
+    conversation_settings: dict[str, Any] | None = None
 
 
 class OrgLLMSettingsResponse(BaseModel):
@@ -348,17 +348,63 @@ class OrgMemberLLMSettings(BaseModel):
 class OrgLLMSettingsUpdate(BaseModel):
     """Request model for updating organization LLM settings.
 
-    ``agent_settings_diff`` and ``conversation_settings_diff`` are partial
-    patches that are merged onto stored org settings and propagated member
-    diffs.
+    ``agent_settings`` and ``conversation_settings`` accept the same typed
+    SDK objects as personal settings requests, but are still applied as
+    partial/diff patches via ``deep_merge`` and propagated to each member's
+    stored diff.
     """
 
-    model_config = ConfigDict(extra='forbid')
-
-    agent_settings_diff: dict[str, Any] | None = None
-    conversation_settings_diff: dict[str, Any] | None = None
+    agent_settings: SkipValidation[dict[str, Any]] | AgentSettings | None = None
+    conversation_settings: (
+        SkipValidation[dict[str, Any]] | ConversationSettings | None
+    ) = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
+
+    @field_validator('agent_settings', mode='before')
+    @classmethod
+    def _coerce_agent_settings(
+        cls, value: AgentSettings | dict[str, Any] | None
+    ) -> AgentSettings | dict[str, Any] | None:
+        if value is None or isinstance(value, AgentSettings):
+            return value
+        if isinstance(value, dict):
+            llm = value.get('llm')
+            if isinstance(llm, dict) and 'api_key' in llm:
+                return value
+        try:
+            return AgentSettings.model_validate(value)
+        except ValidationError:
+            return value
+
+    @field_validator('conversation_settings', mode='before')
+    @classmethod
+    def _coerce_conversation_settings(
+        cls, value: ConversationSettings | dict[str, Any] | None
+    ) -> ConversationSettings | dict[str, Any] | None:
+        if value is None or isinstance(value, ConversationSettings):
+            return value
+        try:
+            return ConversationSettings.model_validate(value)
+        except ValidationError:
+            return value
+
+    @staticmethod
+    def _dump_settings_patch(
+        settings: AgentSettings | ConversationSettings | dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if settings is None:
+            return None
+        if isinstance(settings, dict):
+            return settings or None
+        patch = settings.model_dump(mode='json', exclude_unset=True)
+        return patch or None
+
+    def agent_settings_patch(self) -> dict[str, Any] | None:
+        return self._dump_settings_patch(self.agent_settings)
+
+    def conversation_settings_patch(self) -> dict[str, Any] | None:
+        return self._dump_settings_patch(self.conversation_settings)
 
     @model_validator(mode='after')
     def _normalize_agent_settings(self) -> 'OrgLLMSettingsUpdate':
@@ -369,7 +415,7 @@ class OrgLLMSettingsUpdate(BaseModel):
         Two jobs:
 
         * **Lift ``llm.api_key`` and mask it in the JSON.** The frontend
-          posts the raw key nested inside ``agent_settings_diff``. Leaving it
+          posts the raw key nested inside ``agent_settings``. Leaving it
           nested would push a raw secret into the ``org.agent_settings``
           JSON column while ``org._llm_api_key`` (the encrypted column read
           by ``_get_effective_llm_api_key`` at load time) stays stale. We
@@ -391,18 +437,16 @@ class OrgLLMSettingsUpdate(BaseModel):
           managed LiteLLM proxy URL so the stored state is complete and
           self-describing.
         """
-        if self.agent_settings_diff is None:
+        agent_settings_patch = self.agent_settings_patch()
+        if agent_settings_patch is None:
             return self
-        llm = self.agent_settings_diff.get('llm')
+        llm = agent_settings_patch.get('llm')
         if not isinstance(llm, dict):
             return self
 
+        nested_key = None
         if 'api_key' in llm:
             nested_key = llm.pop('api_key')
-            # Don't re-lift the masked placeholder — the frontend echoes
-            # it back when the user saves without editing the api_key
-            # field. Treating it as a raw key would encrypt ``**********``
-            # into the column and nuke the real key.
             if (
                 self.llm_api_key is None
                 and nested_key is not None
@@ -410,20 +454,8 @@ class OrgLLMSettingsUpdate(BaseModel):
             ):
                 self.llm_api_key = nested_key
             if nested_key is not None:
-                # Keep the JSON in sync with the encrypted column — both
-                # ``org.agent_settings.llm.api_key`` and every member's
-                # ``agent_settings_diff.llm.api_key`` will carry this marker
-                # after ``deep_merge`` / propagation. An empty string still
-                # gets the marker: the rotation step that runs after the
-                # store update will write a freshly generated managed key
-                # into the column, so "masked" in the JSON still reflects
-                # reality by end of transaction.
                 llm['api_key'] = MASKED_API_KEY
 
-        # Auto-fill ``base_url`` when the wire payload sends ``null``
-        # (basic-view pattern). ``resolve_llm_base_url`` is shared with
-        # ``_post_merge_llm_fixups`` in the personal-settings router so
-        # both save paths agree on "this provider uses this base URL."
         resolved_base_url = resolve_llm_base_url(
             model=llm.get('model'),
             base_url=llm.get('base_url'),
@@ -433,9 +465,19 @@ class OrgLLMSettingsUpdate(BaseModel):
             llm['base_url'] = resolved_base_url
 
         if not llm:
-            self.agent_settings_diff.pop('llm', None)
-        if not self.agent_settings_diff:
-            self.agent_settings_diff = None
+            agent_settings_patch.pop('llm', None)
+        if not agent_settings_patch:
+            self.agent_settings = None
+            return self
+
+        if nested_key is not None:
+            self.agent_settings = agent_settings_patch
+            return self
+
+        try:
+            self.agent_settings = AgentSettings.model_validate(agent_settings_patch)
+        except ValidationError:
+            self.agent_settings = agent_settings_patch
         return self
 
     def has_updates(self) -> bool:
@@ -462,8 +504,8 @@ class OrgLLMSettingsUpdate(BaseModel):
         cleared value. Coerce ``""`` to ``None`` so member rows are untouched.
         """
         member_settings = OrgMemberLLMSettings(
-            agent_settings_diff=self.agent_settings_diff,
-            conversation_settings_diff=self.conversation_settings_diff,
+            agent_settings_diff=self.agent_settings_patch(),
+            conversation_settings_diff=self.conversation_settings_patch(),
             llm_api_key=self.llm_api_key or None,
         )
         return member_settings if member_settings.has_updates() else None

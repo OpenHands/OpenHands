@@ -23,7 +23,6 @@ from server.routes.org_models import (
     OrgAppSettingsUpdate,
     OrgAuthorizationError,
     OrgDatabaseError,
-    OrgLLMSettingsResponse,
     OrgMemberNotFoundError,
     OrgMemberPage,
     OrgMemberResponse,
@@ -1927,37 +1926,6 @@ async def test_update_org_permission_denied_llm_settings(
 
 
 @pytest.mark.asyncio
-async def test_update_org_rejects_legacy_settings_field_names(
-    mock_update_app, mock_owner_role
-):
-    """
-    GIVEN: A PATCH payload that still uses the old full-object field names
-    WHEN: PATCH /api/organizations/{org_id} is called
-    THEN: 422 validation is returned instead of silently ignoring the payload
-    """
-    org_id = uuid.uuid4()
-    update_data = {
-        'agent_settings': {'llm': {'model': 'claude-opus-4-5-20251101'}},
-    }
-
-    with patch(
-        'server.auth.authorization.get_user_org_role',
-        AsyncMock(return_value=mock_owner_role),
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
-        ) as client:
-            response = await client.patch(
-                f'/api/organizations/{org_id}', json=update_data
-            )
-
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert any(
-        error['loc'][-1] == 'agent_settings' for error in response.json()['detail']
-    )
-
-
-@pytest.mark.asyncio
 async def test_update_org_duplicate_name_returns_409(mock_update_app, mock_owner_role):
     """
     GIVEN: User updates organization name to one already used by another org
@@ -3461,96 +3429,6 @@ async def test_switch_org_database_error(mock_app_with_get_user_id):
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert 'Failed to switch organization' in response.json()['detail']
-
-
-# =============================================================================
-# Tests for LLM Settings Endpoints
-# =============================================================================
-
-
-@pytest.mark.asyncio
-async def test_update_org_llm_settings_accepts_explicit_diff_payload(
-    mock_app_with_get_user_id, mock_owner_role
-):
-    """
-    GIVEN: A valid org-defaults LLM update payload using explicit diff keys
-    WHEN: POST /api/organizations/llm is called
-    THEN: The request is accepted and forwarded as an OrgLLMSettingsUpdate model
-    """
-    mock_response = OrgLLMSettingsResponse(
-        agent_settings={
-            'schema_version': 1,
-            'llm': {'model': 'claude-opus-4-5-20251101'},
-        },
-        conversation_settings={'security_analyzer': 'llm'},
-        llm_api_key_set=True,
-    )
-    expected_agent_diff = {
-        'llm': {
-            'model': 'claude-opus-4-5-20251101',
-            'base_url': 'https://api.anthropic.com',
-        },
-    }
-    expected_conversation_diff = {'security_analyzer': 'llm'}
-
-    with (
-        patch(
-            'server.auth.authorization.get_user_org_role',
-            AsyncMock(return_value=mock_owner_role),
-        ),
-        patch(
-            'server.routes.orgs.OrgLLMSettingsService.update_org_llm_settings',
-            AsyncMock(return_value=mock_response),
-        ) as mock_update,
-    ):
-        client = TestClient(mock_app_with_get_user_id)
-
-        response = client.post(
-            '/api/organizations/llm',
-            json={
-                'agent_settings_diff': expected_agent_diff,
-                'conversation_settings_diff': expected_conversation_diff,
-            },
-        )
-
-    assert response.status_code == status.HTTP_200_OK
-    response_data = response.json()
-    assert response_data['agent_settings']['llm']['model'] == 'claude-opus-4-5-20251101'
-    assert response_data['conversation_settings']['security_analyzer'] == 'llm'
-
-    mock_update.assert_called_once()
-    update_data = mock_update.call_args[0][0]
-    assert update_data.agent_settings_diff == expected_agent_diff
-    assert update_data.conversation_settings_diff == expected_conversation_diff
-
-
-@pytest.mark.asyncio
-async def test_update_org_llm_settings_rejects_legacy_settings_field_names(
-    mock_app_with_get_user_id, mock_owner_role
-):
-    """
-    GIVEN: A POST payload that still uses the old full-object field names
-    WHEN: POST /api/organizations/llm is called
-    THEN: 422 validation is returned instead of silently ignoring the payload
-    """
-    with patch(
-        'server.auth.authorization.get_user_org_role',
-        AsyncMock(return_value=mock_owner_role),
-    ):
-        client = TestClient(mock_app_with_get_user_id)
-        response = client.post(
-            '/api/organizations/llm',
-            json={
-                'agent_settings': {
-                    'llm': {'model': 'claude-opus-4-5-20251101'},
-                }
-            },
-        )
-
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
-    assert any(
-        error['loc'][-1] == 'agent_settings' for error in response.json()['detail']
-    )
 
 
 # =============================================================================
