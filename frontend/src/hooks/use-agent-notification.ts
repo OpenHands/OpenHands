@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentState } from "#/types/agent-state";
 import { browserTab } from "#/utils/browser-tab";
@@ -34,13 +34,7 @@ export function useAgentNotification(curAgentState: AgentState) {
     }
   }, []);
 
-  const playSound = useCallback(() => {
-    if (!settings?.enable_sound_notifications || !audioRef.current) return;
-    audioRef.current.currentTime = 0;
-    audioRef.current.play().catch(() => {
-      // Ignore autoplay errors (browsers may block autoplay)
-    });
-  }, [settings?.enable_sound_notifications]);
+  const isSoundEnabled = settings?.enable_sound_notifications ?? false;
 
   // Trigger notification only on actual state transitions into a
   // notification-worthy state — not when unrelated deps (e.g. settings) change.
@@ -50,13 +44,18 @@ export function useAgentNotification(curAgentState: AgentState) {
 
     if (!NOTIFICATION_STATES.includes(curAgentState)) return;
 
-    playSound();
+    if (isSoundEnabled && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {
+        // Ignore autoplay errors (browsers may block autoplay)
+      });
+    }
 
     if (typeof document !== "undefined" && !document.hasFocus()) {
       const message = t(`STATUS$${curAgentState.toUpperCase()}`);
       browserTab.startNotification(message);
     }
-  }, [curAgentState, playSound, t]);
+  }, [curAgentState, isSoundEnabled, t]);
 
   // Stop tab notification when window gains focus
   useEffect(() => {
