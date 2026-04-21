@@ -4,6 +4,7 @@ Receives user onboarding selections and fires analytics event.
 """
 
 from datetime import datetime, timezone
+from typing import Union
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -14,9 +15,9 @@ onboarding_router = APIRouter(prefix='/api', tags=['Onboarding'])
 
 
 class OnboardingSubmission(BaseModel):
-    selections: dict[
-        str, str
-    ]  # step_id -> option_id (e.g., {"step1": "software_engineer", "step2": "solo", "step3": "new_features"})
+    selections: dict[str, Union[str, list[str]]]
+    # question_id -> selected option(s)
+    # e.g., {"role": "software_engineer", "org_size": "solo", "use_case": ["new_features", "fixing_bugs"]}
 
 
 class OnboardingResponse(BaseModel):
@@ -40,9 +41,7 @@ async def submit_onboarding(
 
             analytics.track_onboarding_completed(
                 distinct_id=user_id,
-                role=body.selections.get('step1'),
-                org_size=body.selections.get('step2'),
-                use_case=body.selections.get('step3'),
+                selections=body.selections,
                 org_id=ctx.org_id,
                 consented=ctx.consented,
             )

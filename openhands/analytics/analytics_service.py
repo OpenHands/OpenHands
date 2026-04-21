@@ -19,12 +19,13 @@ from posthog import Posthog
 
 from openhands.analytics.analytics_constants import (
     CONVERSATION_CREATED,
+    CONVERSATION_DELETED,
     CONVERSATION_ERRORED,
     CONVERSATION_FINISHED,
+    CONVERSATION_RESUMED,
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
     ENTERPRISE_LEAD_FORM_SUBMITTED,
-    ERROR_CAPTURED,
     GIT_PROVIDER_CONNECTED,
     MCP_CONFIG_UPDATED,
     ONBOARDING_COMPLETED,
@@ -99,7 +100,7 @@ class AnalyticsService:
                 properties=merged,
             )
         except Exception:
-            logger.exception('AnalyticsService.capture failed')
+            logger.exception('AnalyticsService.capture failed for event=%s', event)
 
     def set_person_properties(
         self,
@@ -313,6 +314,54 @@ class AnalyticsService:
             consented=consented,
         )
 
+    def track_conversation_deleted(
+        self,
+        distinct_id: str,
+        *,
+        conversation_id: str,
+        org_id: str | None = None,
+        session_id: str | None = None,
+        consented: bool = True,
+    ) -> None:
+        """Track 'conversation deleted' event.
+
+        Fired when a user deletes a conversation.
+        """
+        self.capture(
+            distinct_id=distinct_id,
+            event=CONVERSATION_DELETED,
+            properties={
+                'conversation_id': conversation_id,
+            },
+            org_id=org_id,
+            session_id=session_id,
+            consented=consented,
+        )
+
+    def track_conversation_resumed(
+        self,
+        distinct_id: str,
+        *,
+        sandbox_id: str,
+        org_id: str | None = None,
+        session_id: str | None = None,
+        consented: bool = True,
+    ) -> None:
+        """Track 'conversation resumed' event.
+
+        Fired when a user resumes a paused sandbox.
+        """
+        self.capture(
+            distinct_id=distinct_id,
+            event=CONVERSATION_RESUMED,
+            properties={
+                'sandbox_id': sandbox_id,
+            },
+            org_id=org_id,
+            session_id=session_id,
+            consented=consented,
+        )
+
     def track_credit_purchased(
         self,
         distinct_id: str,
@@ -363,57 +412,6 @@ class AnalyticsService:
                 'conversation_id': conversation_id,
                 'credit_balance': credit_balance,
                 'llm_model': llm_model,
-            },
-            org_id=org_id,
-            session_id=session_id,
-            consented=consented,
-        )
-
-    def track_error_captured(
-        self,
-        distinct_id: str,
-        *,
-        conversation_id: str,
-        error_type: str,
-        error_message: str | None = None,
-        error_source: str,
-        event_id: str | None = None,
-        tool_name: str | None = None,
-        tool_call_id: str | None = None,
-        org_id: str | None = None,
-        session_id: str | None = None,
-        consented: bool = True,
-    ) -> None:
-        """Track 'error captured' event.
-
-        Replaces frontend posthog.captureException() for server-side error tracking.
-        Fired when ConversationErrorEvent, ServerErrorEvent, or AgentErrorEvent
-        is received via webhook.
-
-        Args:
-            distinct_id: User identifier
-            conversation_id: The conversation where the error occurred
-            error_type: Error code/type (e.g., 'MaxIterationsReached', 'ACPPromptError')
-            error_message: Human-readable error detail (truncated to 500 chars)
-            error_source: Origin of error ('conversation', 'server', or 'agent')
-            event_id: Unique event identifier
-            tool_name: For agent errors, the tool that failed
-            tool_call_id: For agent errors, the tool call ID
-            org_id: Organization identifier
-            session_id: PostHog session ID
-            consented: Whether user consented to analytics
-        """
-        self.capture(
-            distinct_id=distinct_id,
-            event=ERROR_CAPTURED,
-            properties={
-                'conversation_id': conversation_id,
-                'error_type': error_type,
-                'error_message': error_message,
-                'error_source': error_source,
-                'event_id': event_id,
-                'tool_name': tool_name,
-                'tool_call_id': tool_call_id,
             },
             org_id=org_id,
             session_id=session_id,
@@ -478,9 +476,7 @@ class AnalyticsService:
         self,
         distinct_id: str,
         *,
-        role: str | None = None,
-        org_size: str | None = None,
-        use_case: str | None = None,
+        selections: dict[str, str | list[str]] | None = None,
         org_id: str | None = None,
         session_id: str | None = None,
         consented: bool = True,
@@ -488,15 +484,17 @@ class AnalyticsService:
         """Track 'onboarding completed' event.
 
         Fired when a user finishes the onboarding flow.
+
+        Args:
+            selections: Dynamic key-value pairs from the onboarding form.
+                Keys are question IDs (e.g., 'role', 'org_size', 'use_case',
+                'org_name', 'org_domain'). Values are the selected option IDs
+                or arrays for multi-select questions.
         """
         self.capture(
             distinct_id=distinct_id,
             event=ONBOARDING_COMPLETED,
-            properties={
-                'role': role,
-                'org_size': org_size,
-                'use_case': use_case,
-            },
+            properties=selections or {},
             org_id=org_id,
             session_id=session_id,
             consented=consented,

@@ -12,8 +12,8 @@ from jwt import InvalidTokenError
 from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
-from openhands.agent_server.models import ConversationInfo, ServerErrorEvent, Success
-from openhands.analytics import analytics_constants, get_analytics_service
+from openhands.agent_server.models import ConversationInfo, Success
+from openhands.analytics import get_analytics_service, resolve_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -41,8 +41,7 @@ from openhands.app_server.user.specifiy_user_context import (
 )
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationExecutionStatus, Event
-from openhands.sdk.event import AgentErrorEvent, ConversationStateUpdateEvent
-from openhands.sdk.event.conversation_error import ConversationErrorEvent
+from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.server.types import AppMode
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
@@ -141,78 +140,6 @@ def detect_automation_trigger(
         return ConversationTrigger.AUTOMATION
 
     return None
-
-
-async def _track_error_events(
-    events: list[Event],
-    conversation_id: UUID,
-    app_conversation_info: AppConversationInfo,
-) -> None:
-    """Track error events to analytics (replaces frontend captureException).
-
-    Processes ConversationErrorEvent, ServerErrorEvent, and AgentErrorEvent
-    from the event stream and sends them to PostHog analytics.
-    """
-    analytics = get_analytics_service()
-    if not analytics or not app_conversation_info.created_by_user_id:
-        return
-
-    for event in events:
-        error_data: dict | None = None
-
-        if isinstance(event, ConversationErrorEvent):
-            error_data = {
-                'error_type': event.code,
-                'error_message': event.detail[:500] if event.detail else None,
-                'error_source': 'conversation',
-                'event_id': str(event.id) if event.id else None,
-            }
-        elif isinstance(event, ServerErrorEvent):
-            error_data = {
-                'error_type': event.code,
-                'error_message': event.detail[:500] if event.detail else None,
-                'error_source': 'server',
-                'event_id': str(event.id) if event.id else None,
-            }
-        elif isinstance(event, AgentErrorEvent):
-            error_data = {
-                'error_type': 'AgentError',
-                'error_message': event.error[:500] if event.error else None,
-                'error_source': 'agent',
-                'event_id': str(event.id) if event.id else None,
-                'tool_name': event.tool_name,
-                'tool_call_id': event.tool_call_id,
-            }
-
-        if error_data:
-            try:
-                from storage.user_store import UserStore
-
-                user_obj = await UserStore.get_user_by_id(
-                    app_conversation_info.created_by_user_id
-                )
-                if user_obj:
-                    consented = user_obj.user_consents_to_analytics is True
-                    org_id = (
-                        str(user_obj.current_org_id)
-                        if user_obj.current_org_id
-                        else None
-                    )
-
-                    analytics.track_error_captured(
-                        distinct_id=app_conversation_info.created_by_user_id,
-                        conversation_id=str(conversation_id),
-                        error_type=error_data['error_type'],
-                        error_message=error_data.get('error_message'),
-                        error_source=error_data['error_source'],
-                        event_id=error_data.get('event_id'),
-                        tool_name=error_data.get('tool_name'),
-                        tool_call_id=error_data.get('tool_call_id'),
-                        org_id=org_id,
-                        consented=consented,
-                    )
-            except Exception:
-                _logger.exception('analytics:error_captured:failed')
 
 
 async def valid_sandbox(
@@ -335,36 +262,23 @@ async def on_conversation_update(
     )
 
     # Analytics: conversation created
-    try:
-        analytics = get_analytics_service()
-        if analytics and sandbox_info.created_by_user_id:
-            from storage.user_store import UserStore
-
-            user_obj = await UserStore.get_user_by_id(sandbox_info.created_by_user_id)
-            if user_obj:
-                consented = user_obj.user_consents_to_analytics is True
-                org_id = (
-                    str(user_obj.current_org_id) if user_obj.current_org_id else None
-                )
-                analytics.capture(
-                    distinct_id=sandbox_info.created_by_user_id,
-                    event=analytics_constants.CONVERSATION_CREATED,
-                    properties={
-                        'conversation_id': str(conversation_info.id),
-                        'trigger': existing.trigger.value if existing.trigger else None,
-                        'llm_model': (
-                            conversation_info.agent.llm.model
-                            if conversation_info.agent and conversation_info.agent.llm
-                            else None
-                        ),
-                        'agent_type': 'default',
-                        'has_repository': existing.selected_repository is not None,
-                    },
-                    org_id=org_id,
-                    consented=consented,
-                )
-    except Exception:
-        _logger.exception('analytics:conversation_created:failed')
+    analytics = get_analytics_service()
+    if analytics and sandbox_info.created_by_user_id:
+        ctx = await resolve_context(sandbox_info.created_by_user_id)
+        analytics.track_conversation_created(
+            distinct_id=sandbox_info.created_by_user_id,
+            conversation_id=str(conversation_info.id),
+            trigger=existing.trigger.value if existing.trigger else None,
+            llm_model=(
+                conversation_info.agent.llm.model
+                if conversation_info.agent and conversation_info.agent.llm
+                else None
+            ),
+            agent_type='default',
+            has_repository=existing.selected_repository is not None,
+            org_id=ctx.org_id,
+            consented=ctx.consented,
+        )
 
     return Success()
 
@@ -384,9 +298,6 @@ async def on_event(
             *[event_service.save_event(conversation_id, event) for event in events]
         )
 
-        # Track error events (replaces frontend captureException)
-        await _track_error_events(events, conversation_id, app_conversation_info)
-
         # Process stats events for V1 conversations
         for event in events:
             if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
@@ -405,172 +316,157 @@ async def on_event(
                     if exec_status.is_terminal():
                         analytics = get_analytics_service()
                         if analytics and app_conversation_info.created_by_user_id:
-                            from storage.user_store import UserStore
-
-                            user_obj = await UserStore.get_user_by_id(
+                            ctx = await resolve_context(
                                 app_conversation_info.created_by_user_id
                             )
-                            if user_obj:
-                                consented = user_obj.user_consents_to_analytics is True
-                                org_id = (
-                                    str(user_obj.current_org_id)
-                                    if user_obj.current_org_id
-                                    else None
+
+                            # Extract metrics from stored conversation info (updated by process_stats_event above)
+                            metrics = app_conversation_info.metrics
+                            accumulated_cost = (
+                                metrics.accumulated_cost if metrics else None
+                            )
+                            prompt_tokens = (
+                                metrics.accumulated_token_usage.prompt_tokens
+                                if metrics and metrics.accumulated_token_usage
+                                else None
+                            )
+                            completion_tokens = (
+                                metrics.accumulated_token_usage.completion_tokens
+                                if metrics and metrics.accumulated_token_usage
+                                else None
+                            )
+
+                            is_error = exec_status in (
+                                ConversationExecutionStatus.ERROR,
+                                ConversationExecutionStatus.STUCK,
+                            )
+
+                            if is_error:
+                                # Look for the last error info in events batch
+                                error_message = None
+                                for ev in events:
+                                    if (
+                                        isinstance(ev, ConversationStateUpdateEvent)
+                                        and ev.key == 'last_error'
+                                    ):
+                                        error_message = (
+                                            str(ev.value)[:500]
+                                            if ev.value
+                                            else None
+                                        )
+
+                                error_type = _classify_error_type(error_message)
+
+                                # BIZZ-06: conversation errored
+                                analytics.track_conversation_errored(
+                                    distinct_id=app_conversation_info.created_by_user_id,
+                                    conversation_id=str(conversation_id),
+                                    error_type=error_type,
+                                    error_message=error_message,
+                                    llm_model=app_conversation_info.llm_model,
+                                    turn_count=None,
+                                    terminal_state=exec_status.value,
+                                    org_id=ctx.org_id,
+                                    consented=ctx.consented,
                                 )
 
-                                # Extract metrics from stored conversation info (updated by process_stats_event above)
-                                metrics = app_conversation_info.metrics
-                                accumulated_cost = (
-                                    metrics.accumulated_cost if metrics else None
-                                )
-                                prompt_tokens = (
-                                    metrics.accumulated_token_usage.prompt_tokens
-                                    if metrics and metrics.accumulated_token_usage
-                                    else None
-                                )
-                                completion_tokens = (
-                                    metrics.accumulated_token_usage.completion_tokens
-                                    if metrics and metrics.accumulated_token_usage
-                                    else None
+                                # BIZZ-03: credit limit reached (fires alongside conversation errored)
+                                if error_type == 'budget_exceeded':
+                                    analytics.track_credit_limit_reached(
+                                        distinct_id=app_conversation_info.created_by_user_id,
+                                        conversation_id=str(conversation_id),
+                                        credit_balance=None,
+                                        llm_model=app_conversation_info.llm_model,
+                                        org_id=ctx.org_id,
+                                        consented=ctx.consented,
+                                    )
+                            else:
+                                # BIZZ-05: conversation finished (includes FINISHED, STOPPED, etc.)
+                                analytics.track_conversation_finished(
+                                    distinct_id=app_conversation_info.created_by_user_id,
+                                    conversation_id=str(conversation_id),
+                                    terminal_state=exec_status.value,
+                                    turn_count=None,
+                                    accumulated_cost_usd=accumulated_cost,
+                                    prompt_tokens=prompt_tokens,
+                                    completion_tokens=completion_tokens,
+                                    llm_model=app_conversation_info.llm_model,
+                                    trigger=(
+                                        app_conversation_info.trigger.value
+                                        if app_conversation_info.trigger
+                                        else None
+                                    ),
+                                    org_id=ctx.org_id,
+                                    consented=ctx.consented,
                                 )
 
-                                is_error = exec_status in (
-                                    ConversationExecutionStatus.ERROR,
-                                    ConversationExecutionStatus.STUCK,
-                                )
+                                # ACTV-01: user activated (first finished conversation only)
+                                if (
+                                    exec_status
+                                    == ConversationExecutionStatus.FINISHED
+                                ):
+                                    try:
+                                        import uuid as _uuid
+                                        from datetime import datetime, timezone
 
-                                if is_error:
-                                    # Look for the last error info in events batch
-                                    error_message = None
-                                    for ev in events:
-                                        if (
-                                            isinstance(ev, ConversationStateUpdateEvent)
-                                            and ev.key == 'last_error'
-                                        ):
-                                            error_message = (
-                                                str(ev.value)[:500]
-                                                if ev.value
+                                        from sqlalchemy import func
+                                        from sqlalchemy import select as sa_select
+                                        from storage.database import (
+                                            a_session_maker,
+                                        )
+                                        from storage.stored_conversation_metadata_saas import (
+                                            StoredConversationMetadataSaas,
+                                        )
+
+                                        user_uuid = _uuid.UUID(
+                                            app_conversation_info.created_by_user_id
+                                        )
+                                        async with a_session_maker() as act_session:
+                                            count_result = await act_session.execute(
+                                                sa_select(func.count()).where(
+                                                    StoredConversationMetadataSaas.user_id
+                                                    == user_uuid,
+                                                    StoredConversationMetadataSaas.conversation_id
+                                                    != str(conversation_id),
+                                                )
+                                            )
+                                            prior_count = count_result.scalar()
+
+                                        if prior_count == 0:
+                                            tos_ts = (
+                                                ctx.user.accepted_tos
+                                                if ctx.user
                                                 else None
                                             )
-
-                                    error_type = _classify_error_type(error_message)
-
-                                    # BIZZ-06: conversation errored
-                                    analytics.capture(
-                                        distinct_id=app_conversation_info.created_by_user_id,
-                                        event=analytics_constants.CONVERSATION_ERRORED,
-                                        properties={
-                                            'conversation_id': str(conversation_id),
-                                            'error_type': error_type,
-                                            'error_message': error_message,
-                                            'llm_model': app_conversation_info.llm_model,
-                                            'turn_count': None,  # Not derivable from MetricsSnapshot alone
-                                            'terminal_state': exec_status.value,
-                                        },
-                                        org_id=org_id,
-                                        consented=consented,
-                                    )
-
-                                    # BIZZ-03: credit limit reached (fires alongside conversation errored)
-                                    if error_type == 'budget_exceeded':
-                                        analytics.capture(
-                                            distinct_id=app_conversation_info.created_by_user_id,
-                                            event=analytics_constants.CREDIT_LIMIT_REACHED,
-                                            properties={
-                                                'conversation_id': str(conversation_id),
-                                                'credit_balance': None,  # Not available in webhook context
-                                                'llm_model': app_conversation_info.llm_model,
-                                            },
-                                            org_id=org_id,
-                                            consented=consented,
-                                        )
-                                else:
-                                    # BIZZ-05: conversation finished (includes FINISHED, STOPPED, etc.)
-                                    analytics.capture(
-                                        distinct_id=app_conversation_info.created_by_user_id,
-                                        event=analytics_constants.CONVERSATION_FINISHED,
-                                        properties={
-                                            'conversation_id': str(conversation_id),
-                                            'terminal_state': exec_status.value,
-                                            'turn_count': None,  # Not derivable from MetricsSnapshot alone
-                                            'accumulated_cost_usd': accumulated_cost,
-                                            'prompt_tokens': prompt_tokens,
-                                            'completion_tokens': completion_tokens,
-                                            'llm_model': app_conversation_info.llm_model,
-                                            'trigger': app_conversation_info.trigger.value
-                                            if app_conversation_info.trigger
-                                            else None,
-                                        },
-                                        org_id=org_id,
-                                        consented=consented,
-                                    )
-
-                                    # ACTV-01: user activated (first finished conversation only)
-                                    if (
-                                        exec_status
-                                        == ConversationExecutionStatus.FINISHED
-                                    ):
-                                        try:
-                                            import uuid as _uuid
-                                            from datetime import datetime, timezone
-
-                                            from sqlalchemy import func
-                                            from sqlalchemy import select as sa_select
-                                            from storage.database import (
-                                                a_session_maker,
-                                            )
-                                            from storage.stored_conversation_metadata_saas import (
-                                                StoredConversationMetadataSaas,
-                                            )
-
-                                            user_uuid = _uuid.UUID(
-                                                app_conversation_info.created_by_user_id
-                                            )
-                                            async with a_session_maker() as act_session:
-                                                count_result = await act_session.execute(
-                                                    sa_select(func.count()).where(
-                                                        StoredConversationMetadataSaas.user_id
-                                                        == user_uuid,
-                                                        StoredConversationMetadataSaas.conversation_id
-                                                        != str(conversation_id),
+                                            if tos_ts is not None:
+                                                if tos_ts.tzinfo is None:
+                                                    tos_ts = tos_ts.replace(
+                                                        tzinfo=timezone.utc
                                                     )
-                                                )
-                                                prior_count = count_result.scalar()
+                                                time_to_activate_seconds = (
+                                                    datetime.now(timezone.utc)
+                                                    - tos_ts
+                                                ).total_seconds()
+                                            else:
+                                                time_to_activate_seconds = None
 
-                                            if prior_count == 0:
-                                                tos_ts = user_obj.accepted_tos
-                                                if tos_ts is not None:
-                                                    if tos_ts.tzinfo is None:
-                                                        tos_ts = tos_ts.replace(
-                                                            tzinfo=timezone.utc
-                                                        )
-                                                    time_to_activate_seconds = (
-                                                        datetime.now(timezone.utc)
-                                                        - tos_ts
-                                                    ).total_seconds()
-                                                else:
-                                                    time_to_activate_seconds = None
-
-                                                analytics.capture(
-                                                    distinct_id=app_conversation_info.created_by_user_id,
-                                                    event=analytics_constants.USER_ACTIVATED,
-                                                    properties={
-                                                        'conversation_id': str(
-                                                            conversation_id
-                                                        ),
-                                                        'time_to_activate_seconds': time_to_activate_seconds,
-                                                        'llm_model': app_conversation_info.llm_model,
-                                                        'trigger': app_conversation_info.trigger.value
-                                                        if app_conversation_info.trigger
-                                                        else None,
-                                                    },
-                                                    org_id=org_id,
-                                                    consented=consented,
-                                                )
-                                        except Exception:
-                                            _logger.exception(
-                                                'analytics:user_activated:failed'
+                                            analytics.track_user_activated(
+                                                distinct_id=app_conversation_info.created_by_user_id,
+                                                conversation_id=str(conversation_id),
+                                                time_to_activate_seconds=time_to_activate_seconds,
+                                                llm_model=app_conversation_info.llm_model,
+                                                trigger=(
+                                                    app_conversation_info.trigger.value
+                                                    if app_conversation_info.trigger
+                                                    else None
+                                                ),
+                                                org_id=ctx.org_id,
+                                                consented=ctx.consented,
                                             )
+                                    except Exception:
+                                        _logger.exception(
+                                            'analytics:user_activated:failed'
+                                        )
                 except Exception:
                     _logger.exception('analytics:conversation_terminal:failed')
 

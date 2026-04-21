@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.models import Success
-from openhands.analytics import get_analytics_service
+from openhands.analytics import get_analytics_service, resolve_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -351,6 +351,7 @@ async def batch_get_app_conversations(
 async def start_app_conversation(
     request: Request,
     start_request: AppConversationStartRequest,
+    user_context: UserContext = user_context_dependency,
     db_session: AsyncSession = db_session_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
     app_conversation_service: AppConversationService = (
@@ -365,6 +366,31 @@ async def start_app_conversation(
         """Start an app conversation start task and return it."""
         async_iter = app_conversation_service.start_app_conversation(start_request)
         result = await anext(async_iter)
+
+        # Analytics: conversation created (V1)
+        try:
+            analytics = get_analytics_service()
+            if analytics:
+                user_id = await user_context.get_user_id()
+                if user_id:
+                    ctx = await resolve_context(user_id)
+                    analytics.track_conversation_created(
+                        distinct_id=user_id,
+                        conversation_id=str(result.app_conversation_id)
+                        if result.app_conversation_id
+                        else result.id,
+                        trigger=start_request.trigger.value
+                        if start_request.trigger
+                        else None,
+                        llm_model=None,  # Not available at start time
+                        agent_type='default',
+                        has_repository=start_request.selected_repository is not None,
+                        org_id=ctx.org_id,
+                        consented=ctx.consented,
+                    )
+        except Exception:
+            logger.exception('analytics:conversation_created:failed')
+
         asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
         return result
     except Exception:
@@ -465,6 +491,20 @@ async def delete_app_conversation(
     )
     if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, 'Failed to delete conversation')
+
+    # Analytics: conversation deleted (V1)
+    try:
+        analytics = get_analytics_service()
+        if analytics and app_conversation_info.created_by_user_id:
+            ctx = await resolve_context(app_conversation_info.created_by_user_id)
+            analytics.track_conversation_deleted(
+                distinct_id=app_conversation_info.created_by_user_id,
+                conversation_id=conversation_id,
+                org_id=ctx.org_id,
+                consented=ctx.consented,
+            )
+    except Exception:
+        logger.exception('analytics:conversation_deleted:failed')
 
     # Commit the deletion
     await db_session.commit()

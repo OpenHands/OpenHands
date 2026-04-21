@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Dispatch, SetStateAction } from "react";
-import { trackEvent } from "#/api/analytics-service";
+import { useClientAnalytics } from "#/hooks/use-client-analytics";
 import { Card } from "#/ui/card";
 import { CardTitle } from "#/ui/card-title";
 import { Typography } from "#/ui/typography";
@@ -15,12 +15,10 @@ interface HomepageCTAProps {
 
 export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
   const { t } = useTranslation();
+  const { trackSaasSelfhostedInquiry } = useClientAnalytics();
 
   const handleLearnMoreClick = () => {
-    trackEvent({
-      event: "saas_selfhosted_inquiry",
-      properties: { location: "home_page" },
-    });
+    trackSaasSelfhostedInquiry({ location: "home_page" });
   };
 
   const handleClose = () => {

@@ -137,33 +137,20 @@ async def store_provider_tokens(
     await secrets_store.store(updated_secrets)
 
     # ACTV-02: git provider connected analytics
-    try:
-        from openhands.analytics import analytics_constants, get_analytics_service
+    from openhands.analytics import get_analytics_service, resolve_context
 
-        analytics = get_analytics_service()
-        if analytics and user_id and provider_info.provider_tokens:
-            from storage.user_store import UserStore
-
-            user_obj = await UserStore.get_user_by_id(user_id)
-            if user_obj:
-                consented = user_obj.user_consents_to_analytics is True
-                org_id_str = (
-                    str(user_obj.current_org_id) if user_obj.current_org_id else None
+    analytics = get_analytics_service()
+    if analytics and user_id and provider_info.provider_tokens:
+        ctx = await resolve_context(user_id)
+        for provider_type, token_value in provider_info.provider_tokens.items():
+            # Only fire for providers with actual token, not host-only updates
+            if token_value.token:
+                analytics.track_git_provider_connected(
+                    distinct_id=user_id,
+                    provider_type=provider_type.value,
+                    org_id=ctx.org_id,
+                    consented=ctx.consented,
                 )
-                for provider_type, token_value in provider_info.provider_tokens.items():
-                    # Only fire for providers with actual token, not host-only updates
-                    if token_value.token:
-                        analytics.capture(
-                            distinct_id=user_id,
-                            event=analytics_constants.GIT_PROVIDER_CONNECTED,
-                            properties={
-                                'provider_type': provider_type.value,
-                            },
-                            org_id=org_id_str,
-                            consented=consented,
-                        )
-    except Exception:
-        logger.exception('analytics:git_provider_connected:failed')
 
     return EditResponse(
         message='Git providers stored',

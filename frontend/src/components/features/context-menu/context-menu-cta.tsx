@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { trackEvent } from "#/api/analytics-service";
+import { useClientAnalytics } from "#/hooks/use-client-analytics";
 import { cn } from "#/utils/utils";
 import { Card } from "#/ui/card";
 import { CardTitle } from "#/ui/card-title";
@@ -9,12 +9,10 @@ import StackedIcon from "#/icons/stacked.svg?react";
 
 export function ContextMenuCTA() {
   const { t } = useTranslation();
+  const { trackSaasSelfhostedInquiry } = useClientAnalytics();
 
   const handleLearnMoreClick = () => {
-    trackEvent({
-      event: "saas_selfhosted_inquiry",
-      properties: { location: "context_menu" },
-    });
+    trackSaasSelfhostedInquiry({ location: "context_menu" });
   };
 
   return (
