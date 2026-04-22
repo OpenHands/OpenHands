@@ -133,7 +133,7 @@ class OrgStore:
     async def _validate_org_version(org: Org | None) -> Org | None:
         """Check if we need to update org version."""
         if org and org.org_version < ORG_SETTINGS_VERSION:
-            org = await OrgStore.update_org(
+            org = await OrgStore._update_org_kwargs(
                 org.id,
                 {
                     'org_version': ORG_SETTINGS_VERSION,
@@ -227,24 +227,34 @@ class OrgStore:
     @staticmethod
     async def update_org(
         org_id: UUID,
-        kwargs: dict[str, Any] | OrgUpdate,
+        update_data: OrgUpdate,
         user_id: str | None = None,
     ) -> Optional[Org]:
-        """Update organization details."""
+        """Update organization details from a validated OrgUpdate payload."""
+        return await OrgStore._update_org_kwargs(
+            org_id,
+            update_data.model_update_dict(),
+            user_id=user_id,
+            update_data=update_data,
+        )
+
+    @staticmethod
+    async def _update_org_kwargs(
+        org_id: UUID,
+        org_kwargs: dict[str, Any],
+        user_id: str | None = None,
+        update_data: OrgUpdate | None = None,
+    ) -> Optional[Org]:
+        """Internal helper for updating organization fields from raw kwargs."""
         from storage.org_member_store import OrgMemberStore
+
+        org_kwargs = dict(org_kwargs)
 
         async with a_session_maker() as session:
             result = await session.execute(select(Org).filter(Org.id == org_id))
             org = result.scalars().first()
             if not org:
                 return None
-
-            update_data = kwargs if isinstance(kwargs, OrgUpdate) else None
-            org_kwargs = (
-                update_data.model_update_dict()
-                if update_data is not None
-                else dict(kwargs)
-            )
 
             if 'id' in org_kwargs:
                 org_kwargs.pop('id')

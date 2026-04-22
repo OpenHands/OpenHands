@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from server.routes.org_models import OrgUpdate
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from storage.org import Org
@@ -109,13 +110,22 @@ async def test_update_org(async_session_maker, mock_litellm_api):
     # Test update
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._maybe_get_managed_llm_key_for_user',
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
+            new=AsyncMock(),
+        ),
     ):
         updated_org = await OrgStore.update_org(
             org_id=org_id,
-            kwargs={
-                'name': 'updated-org',
-                'agent_settings_diff': {'llm': {'model': 'openhands/claude-3'}},
-            },
+            update_data=OrgUpdate(
+                name='updated-org',
+                agent_settings_diff={'llm': {'model': 'openhands/claude-3'}},
+            ),
+            user_id=str(uuid.uuid4()),
         )
 
         assert updated_org is not None
@@ -130,7 +140,7 @@ async def test_update_org_not_found(async_session_maker):
         from uuid import uuid4
 
         updated_org = await OrgStore.update_org(
-            org_id=uuid4(), kwargs={'name': 'updated-org'}
+            org_id=uuid4(), update_data=OrgUpdate(name='updated-org')
         )
         assert updated_org is None
 
