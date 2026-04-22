@@ -68,7 +68,9 @@ class SaasConversationStore(ConversationStore):
 
         return query
 
-    def _to_external_model(self, conversation_metadata: StoredConversationMetadata):
+    def _to_external_model(
+        self, conversation_metadata: StoredConversationMetadata
+    ) -> ConversationMetadata:
         kwargs = {
             c.name: getattr(conversation_metadata, c.name)
             for c in StoredConversationMetadata.__table__.columns
@@ -219,7 +221,7 @@ class SaasConversationStore(ConversationStore):
 
         def _search():
             with self.session_maker() as session:
-                conversations = (
+                stored_conversations = (
                     session.query(StoredConversationMetadata)
                     .join(
                         StoredConversationMetadataSaas,
@@ -236,13 +238,16 @@ class SaasConversationStore(ConversationStore):
                     .limit(limit + 1)
                     .all()
                 )
-                conversations = [self._to_external_model(c) for c in conversations]
+                conversations = [
+                    self._to_external_model(c) for c in stored_conversations
+                ]
                 current_page_size = len(conversations)
                 next_page_id = offset_to_page_id(
                     offset + limit, current_page_size > limit
                 )
-                conversations = conversations[:limit]
-                return ConversationMetadataResultSet(conversations, next_page_id)
+                return ConversationMetadataResultSet(
+                    conversations[:limit], next_page_id
+                )
 
         return await call_sync_from_async(_search)
 
