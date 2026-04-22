@@ -1,0 +1,116 @@
+# Reusable workflow: build a multi-arch Docker image and publish a merged manifest.
+# Called per image from .github/workflows/ghcr-build.yml.
+name: Build and push multi-arch image
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Fully-qualified image name (e.g. "ghcr.io/all-hands-ai/openhands").
+        required: true
+        type: string
+      context:
+        description: Docker build context.
+        required: false
+        type: string
+        default: "."
+      dockerfile:
+        description: Path to the Dockerfile.
+        required: true
+        type: string
+      extra-build-args:
+        description: Additional build-args (newline-separated). OPENHANDS_BUILD_VERSION is added automatically.
+        required: false
+        type: string
+        default: ""
+      provenance:
+        description: Value passed to docker/build-push-action provenance.
+        required: false
+        type: boolean
+        default: false
+      sbom:
+        description: Value passed to docker/build-push-action sbom.
+        required: false
+        type: boolean
+        default: false
+      buildx-driver-opts:
+        description: Extra buildx driver-opts (e.g. "network=host" for enterprise).
+        required: false
+        type: string
+        default: ""
+
+env:
+  RELEVANT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  RELEVANT_REF_NAME: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
+
+jobs:
+  build:
+    name: Build ${{ inputs.image }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-22.04' }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: ${{ inputs.buildx-driver-opts }}
+      - name: Compute per-arch tags
+        id: meta
+        uses: ./.github/actions/docker-image-tags
+        with:
+          image: ${{ inputs.image }}
+          ref-name: ${{ env.RELEVANT_REF_NAME }}
+          suffix: -${{ matrix.arch }}
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            OPENHANDS_BUILD_VERSION=${{ env.RELEVANT_REF_NAME }}
+            ${{ inputs.extra-build-args }}
+          cache-from: |
+            type=registry,ref=${{ inputs.image }}:buildcache-${{ steps.meta.outputs.version }}
+            type=registry,ref=${{ inputs.image }}:buildcache-main-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ inputs.image }}:buildcache-${{ steps.meta.outputs.version }},mode=max
+          provenance: ${{ inputs.provenance }}
+          sbom: ${{ inputs.sbom }}
+
+  merge:
+    name: Merge ${{ inputs.image }} manifest
+    runs-on: ubuntu-22.04
+    needs: build
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Compute base tags
+        id: meta_base
+        uses: ./.github/actions/docker-image-tags
+        with:
+          image: ${{ inputs.image }}
+          ref-name: ${{ env.RELEVANT_REF_NAME }}
+      - name: Merge manifests
+        uses: ./.github/actions/docker-merge-manifest
+        with:
+          base-tags: ${{ steps.meta_base.outputs.tags }}
+          archs: "amd64 arm64"

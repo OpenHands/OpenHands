@@ -1,0 +1,43 @@
+name: Merge multi-arch Docker manifest
+description: Build a multi-arch manifest from per-arch image tags pushed by an earlier build step.
+
+inputs:
+  base-tags:
+    description: Newline-separated list of base tags (without architecture suffix).
+    required: true
+  archs:
+    description: Space-separated list of architectures (e.g. "amd64 arm64").
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Login to GHCR
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ github.token }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Create multi-arch manifests
+      shell: bash
+      env:
+        BASE_TAGS: ${{ inputs.base-tags }}
+        ARCHS: ${{ inputs.archs }}
+      run: |
+        while IFS= read -r tag; do
+          [[ -z "$tag" ]] && continue
+          sources=""
+          for arch in $ARCHS; do
+            if ! docker buildx imagetools inspect "${tag}-${arch}" > /dev/null 2>&1; then
+              echo "::error::Missing image ${tag}-${arch}"
+              exit 1
+            fi
+            sources+=" ${tag}-${arch}"
+          done
+          echo "Creating manifest for $tag from:$sources"
+          docker buildx imagetools create -t "$tag" $sources
+        done <<< "$BASE_TAGS"

@@ -8,8 +8,6 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import contextlib
 import warnings
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi.routing import Mount
 
@@ -22,26 +20,11 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 
-import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
 from openhands.app_server import v1_router
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.status.status_router import router as health_router
 from openhands.integrations.service_types import AuthenticationError
-from openhands.server.routes.conversation import app as conversation_api_router
-from openhands.server.routes.feedback import app as feedback_api_router
-from openhands.server.routes.files import app as files_api_router
-from openhands.server.routes.git import app as git_api_router
-from openhands.server.routes.manage_conversations import (
-    app as manage_conversation_api_router,
-)
 from openhands.server.routes.mcp import mcp_server
-from openhands.server.routes.public import app as public_api_router
-from openhands.server.routes.secrets import app as secrets_router
-from openhands.server.routes.security import app as security_api_router
-from openhands.server.routes.settings import app as settings_router
-from openhands.server.routes.trajectory import app as trajectory_router
-from openhands.server.shared import conversation_manager, server_config
-from openhands.server.types import AppMode
 from openhands.version import get_version
 
 mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
@@ -59,13 +42,7 @@ def combine_lifespans(*lifespans):
     return combined_lifespan
 
 
-@asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    async with conversation_manager:
-        yield
-
-
-lifespans = [_lifespan, mcp_app.lifespan]
+lifespans = [mcp_app.lifespan]
 app_lifespan_ = get_app_lifespan_service()
 if app_lifespan_:
     lifespans.append(app_lifespan_.lifespan)
@@ -88,17 +65,5 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
     )
 
 
-app.include_router(public_api_router)
-app.include_router(files_api_router)
-app.include_router(security_api_router)
-app.include_router(feedback_api_router)
-app.include_router(conversation_api_router)
-app.include_router(manage_conversation_api_router)
-app.include_router(settings_router)
-app.include_router(secrets_router)
-if server_config.app_mode == AppMode.OPENHANDS:
-    app.include_router(git_api_router)
-if server_config.enable_v1:
-    app.include_router(v1_router.router)
-app.include_router(trajectory_router)
+app.include_router(v1_router.router)
 app.include_router(health_router)

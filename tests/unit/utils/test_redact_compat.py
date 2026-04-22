@@ -7,6 +7,7 @@ from openhands.utils._redact_compat import (
     redact_api_key_literals,
     redact_text_secrets,
     redact_url_params,
+    sanitize_config,
 )
 
 # The redaction placeholder
@@ -118,3 +119,59 @@ class TestMCPConfigLoggingIntegration:
         assert 'sk-oh-realSessionKey456' not in log_output
         assert REDACTED in log_output
         assert 'http://localhost:8000/mcp/sse' in log_output  # URL should be visible
+
+
+class TestSanitizeConfig:
+    """Tests for sanitize_config (dict-based redaction with URL param handling)."""
+
+    def test_redacts_url_query_params_in_mcp_config(self):
+        """Reproduce the exact Datadog leak: tavilyApiKey in URL query params."""
+        config = {
+            'mcpServers': {
+                'tavily': {
+                    'url': 'https://mcp.tavily.com/mcp/?tavilyApiKey=tvly-realkey123',
+                    'transport': 'http',
+                }
+            }
+        }
+        sanitized = sanitize_config(config)
+        assert 'tvly-realkey123' not in str(sanitized)
+        assert 'mcp.tavily.com' in str(sanitized)
+
+    def test_redacts_header_api_keys_in_mcp_config(self):
+        """Reproduce the Datadog leak: X-Session-API-Key in headers."""
+        config = {
+            'mcpServers': {
+                'myserver': {
+                    'url': 'https://example.com/mcp',
+                    'headers': {
+                        'X-Session-API-Key': 'sk-oh-realsessionkey456',
+                    },
+                }
+            }
+        }
+        sanitized = sanitize_config(config)
+        assert 'sk-oh-realsessionkey456' not in str(sanitized)
+
+    def test_combined_url_and_header_secrets(self):
+        """Full scenario matching the production Datadog log pattern."""
+        config = {
+            'mcpServers': {
+                'tavily': {
+                    'url': 'https://mcp.tavily.com/mcp/?tavilyApiKey=tvly-realkey123',
+                    'transport': 'http',
+                },
+                'internal': {
+                    'url': 'https://internal.example.com/mcp',
+                    'headers': {
+                        'X-Session-API-Key': 'sk-oh-realsessionkey456',
+                    },
+                },
+            }
+        }
+        sanitized = sanitize_config(config)
+        output = str(sanitized)
+        assert 'tvly-realkey123' not in output
+        assert 'sk-oh-realsessionkey456' not in output
+        assert 'tavily' in output
+        assert 'internal' in output
