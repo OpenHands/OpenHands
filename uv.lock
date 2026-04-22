@@ -6,6 +6,9 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 
+[options]
+exclude-newer = "2026-04-08T00:00:00Z"
+
 [[package]]
 name = "agent-client-protocol"
 version = "0.8.1"
@@ -3826,9 +3829,9 @@ requires-dist = [
     { name = "numpy" },
     { name = "openai", specifier = "==2.8" },
     { name = "openhands-aci", specifier = "==0.3.3" },
-    { name = "openhands-agent-server", specifier = "==1.17" },
-    { name = "openhands-sdk", specifier = "==1.17" },
-    { name = "openhands-tools", specifier = "==1.17" },
+    { name = "openhands-agent-server", specifier = "==1.17.0" },
+    { name = "openhands-sdk", specifier = "==1.17.0" },
+    { name = "openhands-tools", specifier = "==1.17.0" },
     { name = "opentelemetry-api", specifier = ">=1.33.1" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.33.1" },
     { name = "orjson", specifier = ">=3.11.6" },
