@@ -15,7 +15,6 @@ from openhands.app_server.secrets.secrets_models import (
 )
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.models import EditResponse
-from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     CustomSecret,

@@ -2479,9 +2479,7 @@ async def test_track_login_analytics_background_calls_identify_and_track():
     mock_org.name = 'Test Org'
 
     with (
-        patch(
-            'server.routes.auth.get_analytics_service', return_value=mock_analytics
-        ),
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
             'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
@@ -2598,9 +2596,7 @@ async def test_track_login_analytics_background_builds_orgs_data_with_member_cou
     mock_org.name = 'Test Org'
 
     with (
-        patch(
-            'server.routes.auth.get_analytics_service', return_value=mock_analytics
-        ),
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
             'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
@@ -2647,9 +2643,7 @@ async def test_track_login_analytics_background_handles_member_count_error():
     mock_org.name = 'Test Org'
 
     with (
-        patch(
-            'server.routes.auth.get_analytics_service', return_value=mock_analytics
-        ),
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
             'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,

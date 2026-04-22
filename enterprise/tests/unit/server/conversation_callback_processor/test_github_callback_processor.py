@@ -85,9 +85,7 @@ async def test_call_ignores_paused_state(processor, callback):
 @pytest.mark.asyncio
 async def test_call_ignores_error_state(processor, callback):
     """Processor should ignore ERROR state."""
-    observation = AgentStateChangedObservation(
-        agent_state=AgentState.ERROR, content=''
-    )
+    observation = AgentStateChangedObservation(agent_state=AgentState.ERROR, content='')
 
     with patch(
         'server.conversation_callback_processor.github_callback_processor.conversation_manager'

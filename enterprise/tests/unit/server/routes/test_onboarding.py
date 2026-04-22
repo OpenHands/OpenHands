@@ -65,9 +65,7 @@ def mock_analytics_context_no_consent():
 @pytest.mark.asyncio
 async def test_submit_onboarding_returns_ok_response():
     """submit_onboarding returns OnboardingResponse with status ok and redirect_url /."""
-    body = OnboardingSubmission(
-        selections={'role': 'developer', 'org_size': '11-50'}
-    )
+    body = OnboardingSubmission(selections={'role': 'developer', 'org_size': '11-50'})
 
     with patch('server.routes.onboarding.get_analytics_service', return_value=None):
         result = await submit_onboarding(body=body, user_id='test-user')

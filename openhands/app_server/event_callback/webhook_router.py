@@ -350,9 +350,7 @@ async def on_event(
                                         and ev.key == 'last_error'
                                     ):
                                         error_message = (
-                                            str(ev.value)[:500]
-                                            if ev.value
-                                            else None
+                                            str(ev.value)[:500] if ev.value else None
                                         )
 
                                 error_type = _classify_error_type(error_message)
@@ -401,10 +399,7 @@ async def on_event(
                                 )
 
                                 # ACTV-01: user activated (first finished conversation only)
-                                if (
-                                    exec_status
-                                    == ConversationExecutionStatus.FINISHED
-                                ):
+                                if exec_status == ConversationExecutionStatus.FINISHED:
                                     try:
                                         import uuid as _uuid
                                         from datetime import datetime, timezone
@@ -444,8 +439,7 @@ async def on_event(
                                                         tzinfo=timezone.utc
                                                     )
                                                 time_to_activate_seconds = (
-                                                    datetime.now(timezone.utc)
-                                                    - tos_ts
+                                                    datetime.now(timezone.utc) - tos_ts
                                                 ).total_seconds()
                                             else:
                                                 time_to_activate_seconds = None
