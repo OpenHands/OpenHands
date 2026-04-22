@@ -21,7 +21,6 @@ from server.routes.org_models import (
     OrgAppSettingsResponse,
     OrgAppSettingsUpdate,
     OrgAuthorizationError,
-    OrgUpdate,
     OrgDatabaseError,
     OrgMemberNotFoundError,
     OrgMemberPage,
@@ -29,6 +28,7 @@ from server.routes.org_models import (
     OrgMemberUpdate,
     OrgNameExistsError,
     OrgNotFoundError,
+    OrgUpdate,
     OrphanedUserError,
     RoleNotFoundError,
 )
@@ -1171,7 +1171,6 @@ async def test_get_org_unexpected_error(mock_app_with_get_user_id, mock_owner_ro
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert 'unexpected error' in response.json()['detail'].lower()
-
 
 
 @pytest.mark.asyncio
