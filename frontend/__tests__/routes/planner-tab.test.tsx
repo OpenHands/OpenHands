@@ -3,11 +3,20 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import PlannerTab from "#/routes/planner-tab";
 import { renderWithProviders } from "../../test-utils";
 import { useConversationStore } from "#/stores/conversation-store";
+import { AgentState } from "#/types/agent-state";
 
 // Mock the handle plan click hook
 vi.mock("#/hooks/use-handle-plan-click", () => ({
   useHandlePlanClick: () => ({
     handlePlanClick: vi.fn(),
+  }),
+}));
+
+// Mock the agent state hook
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({
+    curAgentState: AgentState.AWAITING_USER_INPUT,
+    isArchived: false,
   }),
 }));
 
