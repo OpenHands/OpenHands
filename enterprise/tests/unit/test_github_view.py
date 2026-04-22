@@ -1,5 +1,5 @@
 from unittest import TestCase, mock
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest

@@ -31,7 +31,6 @@ from server.constants import (
     DEPLOYMENT_MODE,
     IS_FEATURE_ENV,
 )
-from server.utils.conversation_utils import get_session_api_key, get_user_id
 from server.services.org_invitation_service import (
     EmailMismatchError,
     InvitationExpiredError,
@@ -39,6 +38,7 @@ from server.services.org_invitation_service import (
     OrgInvitationService,
     UserAlreadyMemberError,
 )
+from server.utils.conversation_utils import get_session_api_key, get_user_id
 from server.utils.rate_limit_utils import check_rate_limit_by_user_id
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
 from sqlalchemy import select

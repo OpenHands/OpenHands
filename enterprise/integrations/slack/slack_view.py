@@ -17,9 +17,7 @@ from integrations.utils import (
     get_user_v1_enabled_setting,
 )
 from jinja2 import Environment
-from server.config import get_config
 from slack_sdk import WebClient
-from storage.saas_conversation_store import SaasConversationStore
 from storage.slack_conversation import SlackConversation
 from storage.slack_conversation_store import SlackConversationStore
 from storage.slack_team_store import SlackTeamStore
@@ -39,11 +37,9 @@ from openhands.integrations.provider import ProviderHandler
 from openhands.sdk import TextContent
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
-    ConversationMetadata,
     ConversationTrigger,
 )
 from openhands.utils.async_utils import GENERAL_TIMEOUT
-from openhands.utils.conversation_summary import get_default_conversation_title
 
 # =================================================
 # SECTION: Slack view types
@@ -196,7 +192,6 @@ class SlackNewConversationView(SlackViewInterface):
         self._verify_necessary_values_are_set()
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        user_secrets = await self.saas_user_auth.get_secrets()
 
         # Determine git provider from repository (needed for both org routing and conversation creation)
         self._resolved_git_provider = None

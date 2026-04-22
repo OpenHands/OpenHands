@@ -265,7 +265,6 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
             ADMIN,
             USER_CONTEXT_ATTR,
         )
-        from openhands.utils.http_session import httpx_verify_option
 
         _, user_msg = await self._get_instructions(jinja_env)
 
