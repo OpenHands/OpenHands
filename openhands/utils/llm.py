@@ -111,6 +111,59 @@ def is_openhands_model(model: str | None) -> bool:
     )
 
 
+# Canonical masked placeholder for LLM API keys. Matches pydantic's
+# ``SecretStr`` default representation so request/response payloads that pass
+# through ``model_dump(mode='json')`` stay consistent with payloads that the
+# enterprise org-settings validator constructs by hand. Importers should treat
+# this as the single source of truth for "a key exists but its value is
+# intentionally hidden."
+MASKED_API_KEY = '**********'
+
+
+def resolve_llm_base_url(
+    model: str | None,
+    base_url: str | None,
+    *,
+    managed_proxy_url: str,
+) -> str | None:
+    """Resolve the ``base_url`` to persist for an LLM configuration.
+
+    Single source of truth for two code paths that otherwise duplicated the
+    same logic:
+
+    * ``openhands/app_server/settings/settings_router._post_merge_llm_fixups``
+      (personal-settings save path).
+    * ``enterprise/server/routes/org_models.OrgLLMSettingsUpdate._normalize_agent_settings``
+      (org-defaults save path).
+
+    Semantics:
+
+    * ``base_url == ''`` → ``None`` (explicit "clear" signal from the UI;
+      don't auto-infer on top of it).
+    * ``base_url`` non-empty → returned unchanged.
+    * ``base_url is None`` + known OpenHands / managed model → ``managed_proxy_url``.
+    * ``base_url is None`` + known BYOR provider → default from
+      :func:`get_provider_api_base`.
+    * Any other combination → ``None``.
+
+    Exceptions from ``litellm`` are logged and swallowed so a flaky provider
+    lookup can never break a settings save.
+    """
+    if base_url == '':
+        return None
+    if base_url is not None:
+        return base_url
+    if not model:
+        return None
+    if is_openhands_model(model):
+        return managed_proxy_url
+    try:
+        return get_provider_api_base(model)
+    except Exception as e:
+        logger.error(f'Failed to get api_base from litellm for model {model}: {e}')
+        return None
+
+
 def get_provider_api_base(model: str) -> str | None:
     """Get the API base URL for a model using litellm.
 

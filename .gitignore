@@ -254,10 +254,6 @@ run_instance_logs
 
 runtime_*.tar
 
-# docker build
-containers/runtime/Dockerfile
-containers/runtime/project.tar.gz
-containers/runtime/code
 **/node_modules/
 
 # test results

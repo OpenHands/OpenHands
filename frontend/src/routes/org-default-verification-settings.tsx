@@ -14,9 +14,6 @@ function OrgDefaultVerificationSettingsScreen() {
   );
 }
 
-export const clientLoader = createPermissionGuard(
-  "view_llm_settings",
-  "/settings/verification",
-);
+export const clientLoader = createPermissionGuard("view_llm_settings");
 
 export default OrgDefaultVerificationSettingsScreen;

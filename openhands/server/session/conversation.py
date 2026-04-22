@@ -57,11 +57,6 @@ class ServerConversation:
             )
         self.runtime = runtime
 
-    @property
-    def security_analyzer(self):
-        """Access security analyzer through runtime."""
-        return self.runtime.security_analyzer
-
     async def connect(self) -> None:
         if not self._attach_to_existing:
             await self.runtime.connect()

@@ -1200,7 +1200,7 @@ async def test_update_org_with_permissions_success_llm_fields_admin(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings_diff={
+        agent_settings={
             'llm': {
                 'model': 'claude-opus-4-5-20251101',
                 'base_url': 'https://api.anthropic.com',
@@ -1266,10 +1266,10 @@ async def test_update_org_with_permissions_success_llm_fields_owner(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings_diff={
+        agent_settings={
             'llm': {'model': 'claude-opus-4-5-20251101'},
         },
-        conversation_settings_diff={
+        conversation_settings={
             'security_analyzer': 'llm',
         },
     )
@@ -1333,7 +1333,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(
 
     update_data = OrgUpdate(
         contact_name='Jane Doe',
-        agent_settings_diff={'llm': {'model': 'claude-opus-4-5-20251101'}},
+        agent_settings={'llm': {'model': 'claude-opus-4-5-20251101'}},
         conversation_expiration=30,
     )
 
@@ -1537,7 +1537,7 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings_diff={'llm': {'model': 'claude-opus-4-5-20251101'}}
+        agent_settings={'llm': {'model': 'claude-opus-4-5-20251101'}}
     )
 
     with (
@@ -1781,11 +1781,11 @@ async def test_update_org_with_permissions_only_llm_fields(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings_diff={
+        agent_settings={
             'llm': {'model': 'claude-opus-4-5-20251101'},
             'agent': 'agent-mode',
         },
-        conversation_settings_diff={
+        conversation_settings={
             'security_analyzer': 'llm',
         },
     )
