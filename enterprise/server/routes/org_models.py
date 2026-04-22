@@ -376,8 +376,8 @@ class OrgUpdate(BaseModel):
         """Check if any public update field is set (not None)."""
         return bool(self.updated_fields())
 
-    def touches_llm_settings(self) -> bool:
-        """Whether this update uses the shared LLM/org-defaults write path."""
+    def touches_org_defaults(self) -> bool:
+        """Whether this update touches shared organization defaults."""
         return bool(
             self.updated_fields()
             & {
@@ -430,8 +430,8 @@ class OrgUpdate(BaseModel):
         return member_settings if member_settings.has_updates() else None
 
 
-class OrgLLMSettingsResponse(BaseModel):
-    """Response model for organization default LLM settings."""
+class OrgDefaultsSettingsResponse(BaseModel):
+    """Response model for organization default settings."""
 
     agent_settings: AgentSettings = Field(default_factory=AgentSettings)
     conversation_settings: ConversationSettings = Field(
@@ -453,7 +453,7 @@ class OrgLLMSettingsResponse(BaseModel):
         return '****' + raw[-4:]
 
     @classmethod
-    def from_org(cls, org: Org) -> 'OrgLLMSettingsResponse':
+    def from_org(cls, org: Org) -> 'OrgDefaultsSettingsResponse':
         """Create response from Org entity.
 
         Denormalizes the SDK's ``litellm_proxy/`` prefix back to
@@ -531,10 +531,6 @@ class OrgMemberLLMSettings(BaseModel):
         return any(
             getattr(self, field) is not None for field in type(self).model_fields
         )
-
-
-class OrgLLMSettingsUpdate(OrgUpdate):
-    """Deprecated alias for the legacy ``/api/organizations/llm`` write model."""
 
 
 class OrgMemberResponse(BaseModel):

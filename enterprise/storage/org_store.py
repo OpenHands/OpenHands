@@ -513,12 +513,12 @@ class OrgStore:
         )
 
     @staticmethod
-    async def update_org_llm_settings_async(
+    async def update_org_defaults_async(
         org_id: UUID,
         update_data: OrgUpdate,
         user_id: str,
     ) -> Org | None:
-        """Update organization data and propagate shared LLM settings."""
+        """Update organization defaults and propagate shared member settings."""
         from storage.org_member_store import OrgMemberStore
 
         async with a_session_maker() as session:

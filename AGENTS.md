@@ -183,6 +183,11 @@ The `enterprise/` directory contains additional functionality that extends the o
 2. Then install enterprise dependencies: `cd enterprise && poetry install --with dev,test` (This can take a very long time. Be patient.)
 3. Set up enterprise pre-commit hooks: `poetry run pre-commit install --config ./dev_config/python/.pre-commit-config.yaml`
 
+### Organization settings write path
+- For enterprise org-defaults writes, keep `OrgUpdate` as the single typed update model.
+- The deprecated `/api/organizations/llm` endpoints should stay thin compatibility wrappers instead of introducing separate `OrgLLM*` route/service/store classes.
+- Shared org-defaults serialization for that wrapper currently lives in `OrgDefaultsSettingsResponse` in `enterprise/server/routes/org_models.py`.
+
 **Running Enterprise Tests:**
 ```bash
 # Enterprise unit tests (full suite)

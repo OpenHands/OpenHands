@@ -1158,7 +1158,7 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
 
 
 # =============================================================================
-# OrgMemberLLMSettings and OrgLLMSettingsUpdate Model Unit Tests
+# OrgMemberLLMSettings and OrgUpdate Model Unit Tests
 # =============================================================================
 
 
@@ -1198,18 +1198,18 @@ def test_org_member_llm_settings_has_updates_empty():
     assert result is False
 
 
-def test_org_llm_settings_update_apply_to_org_updates_secret_fields():
+def test_org_update_apply_to_org_updates_secret_fields():
     """
-    GIVEN: OrgLLMSettingsUpdate with search_api_key and llm_api_key set
+    GIVEN: OrgUpdate with search_api_key and llm_api_key set
     WHEN: apply_to_org() is called
     THEN: both org-managed secret fields are applied to the org
     """
     from unittest.mock import MagicMock
 
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    from server.routes.org_models import OrgUpdate
 
     # Arrange
-    settings = OrgLLMSettingsUpdate(
+    settings = OrgUpdate(
         search_api_key='applied-to-org',
         llm_api_key='applied-to-org-llm-key',
     )
@@ -1225,16 +1225,16 @@ def test_org_llm_settings_update_apply_to_org_updates_secret_fields():
     assert mock_org.llm_api_key == 'applied-to-org-llm-key'
 
 
-def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
+def test_org_update_get_member_updates_includes_llm_api_key():
     """
-    GIVEN: OrgLLMSettingsUpdate with agent_settings and llm_api_key set
+    GIVEN: OrgUpdate with agent_settings and llm_api_key set
     WHEN: get_member_updates() is called
     THEN: Returns OrgMemberLLMSettings including both the diff and llm_api_key
     """
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    from server.routes.org_models import OrgUpdate
 
     # Arrange
-    settings = OrgLLMSettingsUpdate(
+    settings = OrgUpdate(
         agent_settings={'llm': {'model': 'claude-3'}},
         llm_api_key='new-member-key',
     )
@@ -1248,16 +1248,16 @@ def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
     assert member_updates.agent_settings_diff == {'llm': {'model': 'claude-3'}}
 
 
-def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
+def test_org_update_get_member_updates_only_llm_api_key():
     """
-    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
+    GIVEN: OrgUpdate with only llm_api_key set
     WHEN: get_member_updates() is called
     THEN: Returns OrgMemberLLMSettings with llm_api_key (not None)
     """
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    from server.routes.org_models import OrgUpdate
 
     # Arrange
-    settings = OrgLLMSettingsUpdate(llm_api_key='member-key-only')
+    settings = OrgUpdate(llm_api_key='member-key-only')
 
     # Act
     member_updates = settings.get_member_updates()
@@ -1268,16 +1268,16 @@ def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
     assert member_updates.agent_settings_diff is None
 
 
-def test_org_llm_settings_update_has_updates_with_llm_api_key():
+def test_org_update_has_updates_with_llm_api_key():
     """
-    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
+    GIVEN: OrgUpdate with only llm_api_key set
     WHEN: has_updates() is called
     THEN: Returns True
     """
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    from server.routes.org_models import OrgUpdate
 
     # Arrange
-    settings = OrgLLMSettingsUpdate(llm_api_key='test-key')
+    settings = OrgUpdate(llm_api_key='test-key')
 
     # Act
     result = settings.has_updates()

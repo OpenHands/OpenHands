@@ -545,12 +545,12 @@ class OrgService:
                 },
             )
             raise PermissionError(
-                'Admin or owner role required to update organization agent settings'
+                'Admin or owner role required to update organization default settings'
             )
 
         try:
-            if update_data.touches_llm_settings():
-                updated_org = await OrgStore.update_org_llm_settings_async(
+            if update_data.touches_org_defaults():
+                updated_org = await OrgStore.update_org_defaults_async(
                     org_id,
                     update_data,
                     user_id,
