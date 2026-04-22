@@ -51,13 +51,31 @@ const getLessDetailedView = (
 
 const normalizeView = (
   view: SettingsView,
-  allowAllView: boolean,
+  {
+    showAdvanced,
+    showAll,
+  }: {
+    showAdvanced: boolean;
+    showAll: boolean;
+  },
 ): SettingsView => {
-  if (allowAllView || view !== "all") {
-    return view;
+  if (view === "all") {
+    if (showAll) {
+      return "all";
+    }
+
+    return showAdvanced ? "advanced" : "basic";
   }
 
-  return "advanced";
+  if (view === "advanced") {
+    if (showAdvanced) {
+      return "advanced";
+    }
+
+    return showAll ? "all" : "basic";
+  }
+
+  return "basic";
 };
 
 export interface SdkSectionHeaderProps {
@@ -86,6 +104,7 @@ export function SdkSectionPage({
   buildPayload,
   onSaveSuccess,
   getInitialView,
+  forceShowAdvancedView = false,
   allowAllView = true,
   testId = "sdk-section-settings-screen",
 }: {
@@ -109,6 +128,7 @@ export function SdkSectionPage({
     settings: Settings,
     filteredSchema: SettingsSchema,
   ) => SettingsView;
+  forceShowAdvancedView?: boolean;
   allowAllView?: boolean;
   testId?: string;
 }) {
@@ -161,7 +181,8 @@ export function SdkSectionPage({
     };
   }, [schema, stableSectionKeys]);
 
-  const showAdvanced = hasAdvancedSettings(filteredSchema);
+  const showAdvanced =
+    forceShowAdvancedView || hasAdvancedSettings(filteredSchema);
   const showAll = allowAllView && hasMinorSettings(filteredSchema);
 
   const initialValues = React.useMemo(() => {
@@ -180,8 +201,15 @@ export function SdkSectionPage({
       ? getInitialView(settings, filteredSchema)
       : inferInitialView(settings, filteredSchema, settingsSource);
 
-    return normalizeView(resolvedInitialView, allowAllView);
-  }, [settings, filteredSchema, getInitialView, settingsSource, allowAllView]);
+    return normalizeView(resolvedInitialView, { showAdvanced, showAll });
+  }, [
+    settings,
+    filteredSchema,
+    getInitialView,
+    settingsSource,
+    showAdvanced,
+    showAll,
+  ]);
 
   React.useEffect(() => {
     hasHydratedViewRef.current = false;

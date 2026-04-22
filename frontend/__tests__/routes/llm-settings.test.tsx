@@ -275,10 +275,8 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
   });
 
-  it("shows Advanced and All toggles in OSS mode when the LLM schema has major and minor settings", async () => {
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettingsWithAdvancedAndAllToggles(),
-    );
+  it("shows Advanced and All toggles in OSS mode for the default LLM route schema", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
 
     renderLlmSettingsScreen({ appMode: "oss" });
 
@@ -289,17 +287,15 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("sdk-section-all-toggle")).toBeInTheDocument();
   });
 
-  it("keeps Advanced visible but hides All in SaaS mode when minor LLM settings are configured", async () => {
+  it("keeps Advanced visible but hides All in SaaS mode for the default LLM route schema", async () => {
     vi.spyOn(
       organizationService,
       "getOrganizationAgentSettings",
     ).mockResolvedValue(
-      buildSettingsWithAdvancedAndAllToggles({
+      buildSettings({
         agent_settings: {
           llm: {
             model: "openai/gpt-4o",
-            timeout: 30,
-            temperature: 0.2,
           },
         },
       }),
@@ -317,10 +313,9 @@ describe("LlmSettingsScreen", () => {
 
     await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
 
-    expect(screen.getByTestId("sdk-settings-llm.timeout")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("sdk-settings-llm.temperature"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("llm-settings-form-advanced")).toBeInTheDocument();
+    expect(screen.getByTestId("llm-custom-model-input")).toBeInTheDocument();
+    expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
   });
 
   it("uses schema defaults for custom-rendered advanced fields", async () => {

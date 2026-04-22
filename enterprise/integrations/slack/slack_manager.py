@@ -24,7 +24,6 @@ from integrations.utils import (
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from server.constants import SLACK_CLIENT_ID
-from server.utils.conversation_callback_utils import register_callback_processor
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import select
@@ -698,11 +697,7 @@ class SlackManager(Manager[SlackViewInterface]):
         return False
 
     async def start_job(self, slack_view: SlackViewInterface) -> None:
-        # Importing here prevents circular import
-        from server.conversation_callback_processor.slack_callback_processor import (
-            SlackCallbackProcessor,
-        )
-
+        """Start a Slack job using V1 app conversation system."""
         try:
             msg_info = None
             user_info = slack_view.slack_to_openhands_user
@@ -719,37 +714,7 @@ class SlackManager(Manager[SlackViewInterface]):
                     f'[Slack] Created conversation {conversation_id} for user {user_info.slack_display_name}'
                 )
 
-                # Only add SlackCallbackProcessor for new conversations (not updates) and non-v1 conversations
-                if (
-                    not isinstance(slack_view, SlackUpdateExistingConversationView)
-                    and not slack_view.v1_enabled
-                ):
-                    # We don't re-subscribe for follow up messages from slack.
-                    # Summaries are generated for every messages anyways, we only need to do
-                    # this subscription once for the event which kicked off the job.
-
-                    processor = SlackCallbackProcessor(
-                        slack_user_id=slack_view.slack_user_id,
-                        channel_id=slack_view.channel_id,
-                        message_ts=slack_view.message_ts,
-                        thread_ts=slack_view.thread_ts,
-                        team_id=slack_view.team_id,
-                    )
-
-                    # Register the callback processor
-                    register_callback_processor(conversation_id, processor)
-
-                    logger.info(
-                        f'[Slack] Created callback processor for conversation {conversation_id}'
-                    )
-                elif isinstance(slack_view, SlackUpdateExistingConversationView):
-                    logger.info(
-                        f'[Slack] Skipping callback processor for existing conversation update {conversation_id}'
-                    )
-                elif slack_view.v1_enabled:
-                    logger.info(
-                        f'[Slack] Skipping callback processor for v1 conversation {conversation_id}'
-                    )
+                # V1 callback processors are registered by the view during conversation creation
 
                 msg_info = slack_view.get_response_msg()
 

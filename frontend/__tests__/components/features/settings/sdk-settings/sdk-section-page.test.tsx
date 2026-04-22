@@ -435,6 +435,20 @@ describe("SdkSectionPage", () => {
 
 
 
+  it("shows the advanced toggle when it is forced for a critical-only schema", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSavableSettings());
+
+    renderSdkSectionPage({
+      sectionKeys: ["llm"],
+      forceShowAdvancedView: true,
+    });
+
+    await screen.findByTestId("sdk-section-basic-toggle");
+    expect(screen.getByTestId("sdk-section-advanced-toggle")).toBeInTheDocument();
+    expect(screen.queryByTestId("sdk-section-all-toggle")).not.toBeInTheDocument();
+  });
+
+
   it("shows the all toggle instead of an empty advanced tier for minor-only schemas", async () => {
     const schema: NonNullable<Settings["agent_settings_schema"]> = {
       model_name: "AgentSettings",

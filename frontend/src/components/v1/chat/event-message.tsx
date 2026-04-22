@@ -1,6 +1,6 @@
 import React from "react";
 import { OpenHandsEvent, MessageEvent, ActionEvent } from "#/types/v1/core";
-import { FinishAction } from "#/types/v1/core/base/action";
+import { FinishAction, ThinkAction } from "#/types/v1/core/base/action";
 import {
   isActionEvent,
   isObservationEvent,
@@ -13,6 +13,8 @@ import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
+import { ChatMessage } from "../../features/chat/chat-message";
+import { PlanPreview } from "../../features/chat/plan-preview";
 import {
   ErrorEventMessage,
   UserAssistantEventMessage,
@@ -22,7 +24,6 @@ import {
   HookExecutionEventMessage,
 } from "./event-message-components";
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
-import { PlanPreview } from "../../features/chat/plan-preview";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 
 interface EventMessageProps {
@@ -161,6 +162,20 @@ export function EventMessage({
     );
   }
 
+  // ThinkAction - render the thought as a normal chat message (not a collapsible block)
+  // The thought content IS the action, so we use event.action.thought directly
+  // instead of event.thought (which contains the raw tool call text).
+  if (isActionEvent(event) && event.action.kind === "ThinkAction") {
+    const thinkAction = event as ActionEvent<ThinkAction>;
+    return (
+      <ChatMessage
+        type="agent"
+        message={thinkAction.action.thought}
+        isFromPlanningAgent={isFromPlanningAgent}
+      />
+    );
+  }
+
   // Action events - render thought + action (will be replaced by thought + observation)
   if (isActionEvent(event)) {
     return (
@@ -208,9 +223,15 @@ export function EventMessage({
       (msg) => isActionEvent(msg) && msg.id === event.action_id,
     );
 
+    // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
+    const shouldShowThought =
+      correspondingAction &&
+      isActionEvent(correspondingAction) &&
+      correspondingAction.action.kind !== "ThinkAction";
+
     return (
       <>
-        {correspondingAction && isActionEvent(correspondingAction) && (
+        {shouldShowThought && (
           <ThoughtEventMessage
             event={correspondingAction}
             isFromPlanningAgent={isFromPlanningAgent}

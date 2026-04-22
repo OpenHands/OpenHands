@@ -133,7 +133,7 @@ class OrgStore:
                 org.id,
                 {
                     'org_version': ORG_SETTINGS_VERSION,
-                    'agent_settings_diff': {
+                    'agent_settings': {
                         'llm': {
                             'model': get_default_litellm_model(),
                             'base_url': LITE_LLM_API_URL,
@@ -226,8 +226,11 @@ class OrgStore:
             if 'id' in kwargs:
                 kwargs.pop('id')
 
-            agent_settings_diff = kwargs.pop('agent_settings_diff', None)
-            conversation_settings_diff = kwargs.pop('conversation_settings_diff', None)
+            # Pop the diff-style kwargs before the setattr loop — otherwise
+            # ``hasattr(org, 'agent_settings')`` is True and the loop would
+            # *overwrite* the JSON column instead of deep-merging into it.
+            agent_settings_diff = kwargs.pop('agent_settings', None)
+            conversation_settings_diff = kwargs.pop('conversation_settings', None)
             for key, value in kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
@@ -464,15 +467,15 @@ class OrgStore:
                 return None
 
             llm_settings.apply_to_org(org)
-            if llm_settings.agent_settings_diff is not None:
+            if llm_settings.agent_settings is not None:
                 org.agent_settings = deep_merge(
                     org.agent_settings,
-                    llm_settings.agent_settings_diff,
+                    llm_settings.agent_settings,
                 )
-            if llm_settings.conversation_settings_diff is not None:
+            if llm_settings.conversation_settings is not None:
                 org.conversation_settings = deep_merge(
                     org.conversation_settings,
-                    llm_settings.conversation_settings_diff,
+                    llm_settings.conversation_settings,
                 )
 
             # Propagate relevant settings to all org members

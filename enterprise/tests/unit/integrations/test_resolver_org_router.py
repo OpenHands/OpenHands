@@ -109,3 +109,43 @@ async def test_extracts_git_org_lowercase_from_repo_name(mock_stores):
     mock_claim_store.get_claim_by_provider_and_git_org.assert_called_once_with(
         'github', 'myorg'
     )
+
+
+@pytest.mark.asyncio
+async def test_returns_org_id_without_membership_check_when_no_user_id(mock_stores):
+    """When user_id is None, skip membership check and return org_id if claim exists."""
+    from enterprise.integrations.resolver_org_router import resolve_org_for_repo
+
+    mock_claim_store, mock_member_store = mock_stores
+
+    # Arrange
+    claim = MagicMock()
+    claim.org_id = CLAIMING_ORG_ID
+    mock_claim_store.get_claim_by_provider_and_git_org.return_value = claim
+
+    # Act - no user_id provided
+    result = await resolve_org_for_repo('github', 'OpenHands/foo')
+
+    # Assert
+    assert result == CLAIMING_ORG_ID
+    mock_claim_store.get_claim_by_provider_and_git_org.assert_called_once_with(
+        'github', 'openhands'
+    )
+    # Membership check should NOT be called
+    mock_member_store.get_org_member.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_returns_none_when_no_claim_and_no_user_id(mock_stores):
+    """When no claim exists and no user_id, return None."""
+    from enterprise.integrations.resolver_org_router import resolve_org_for_repo
+
+    mock_claim_store, mock_member_store = mock_stores
+    mock_claim_store.get_claim_by_provider_and_git_org.return_value = None
+
+    # Act - no user_id provided
+    result = await resolve_org_for_repo('github', 'UnclaimedOrg/repo')
+
+    # Assert
+    assert result is None
+    mock_member_store.get_org_member.assert_not_called()

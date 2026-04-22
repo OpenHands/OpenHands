@@ -18,6 +18,8 @@ Local run troubleshooting notes:
 - If local runtime startup fails with `duplicate session: test-session`, clear the stale tmux session on the default socket: `tmux -S /tmp/tmux-$(id -u)/default kill-session -t test-session`.
 - Local runtime browser startup expects Playwright browsers under `~/.cache/playwright`; if needed run `PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/playwright poetry run playwright install chromium`.
 - In this sandbox environment, an inherited `SESSION_API_KEY` can make `/api/v1/settings` return 401 in the browser. Unset it before `make run` when you want to use the local web UI directly.
+- In this sandbox, `frontend`'s `npm run dev:mock` / `dev:mock:saas` can start but still be awkward to browse through the work-host proxy. For PR QA screenshots, a reliable fallback is to `npm run build` with the desired `VITE_MOCK_*` env, then serve `build/` with a tiny custom HTTP server that returns the minimal mock JSON endpoints needed by the settings page.
+
 
 IMPORTANT: Before making any changes to the codebase, ALWAYS run `make install-pre-commit-hooks` to ensure pre-commit hooks are properly installed.
 

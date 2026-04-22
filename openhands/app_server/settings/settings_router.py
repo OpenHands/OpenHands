@@ -30,7 +30,11 @@ from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
-from openhands.utils.llm import get_provider_api_base, is_openhands_model
+from openhands.utils.llm import (
+    get_provider_api_base,
+    is_openhands_model,
+    resolve_llm_base_url,
+)
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -47,25 +51,16 @@ router = APIRouter(
 def _post_merge_llm_fixups(settings: Settings) -> None:
     """Apply LLM-specific fixups after merging settings.
 
-    When the merged LLM base_url is empty-string, treat it as cleared.
-    When it is None, try to auto-detect the provider default.
+    Delegates the empty-string → cleared and provider-default inference
+    rules to :func:`openhands.utils.llm.resolve_llm_base_url` so the
+    personal-save and enterprise org-defaults paths stay in lockstep.
     """
     llm = settings.agent_settings.llm
-
-    if llm.base_url == '':
-        llm.base_url = None
-    elif llm.base_url is None and llm.model:
-        if is_openhands_model(llm.model):
-            llm.base_url = LITE_LLM_API_URL
-        else:
-            try:
-                api_base = get_provider_api_base(llm.model)
-                if api_base:
-                    llm.base_url = api_base
-            except Exception as e:
-                logger.error(
-                    f'Failed to get api_base from litellm for model {llm.model}: {e}'
-                )
+    llm.base_url = resolve_llm_base_url(
+        model=llm.model,
+        base_url=llm.base_url,
+        managed_proxy_url=LITE_LLM_API_URL,
+    )
 
 
 # NOTE: We use response_model=None for endpoints that return JSONResponse directly.
