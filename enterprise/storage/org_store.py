@@ -221,7 +221,7 @@ class OrgStore:
         settings_type: type[AgentSettings] | type[ConversationSettings],
     ) -> AgentSettings | ConversationSettings:
         """Deep-merge a sparse settings diff and validate the merged result."""
-        merged_settings = deep_merge(dict(current_settings or {}), settings_diff)
+        merged_settings = deep_merge(current_settings or {}, settings_diff)
         return settings_type.model_validate(merged_settings)
 
     @staticmethod

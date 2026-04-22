@@ -246,48 +246,6 @@ async def get_org_defaults_settings(
         )
 
 
-@org_router.get(
-    '/{org_id}',
-    response_model=OrgResponse,
-    status_code=status.HTTP_200_OK,
-    deprecated=True,
-)
-async def get_org(
-    org_id: UUID,
-    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
-) -> OrgResponse:
-    """Get organization details by ID through the deprecated detail route."""
-    logger.info(
-        'Retrieving organization details',
-        extra={
-            'user_id': user_id,
-            'org_id': str(org_id),
-        },
-    )
-
-    try:
-        org = await OrgService.get_org_by_id(
-            org_id=org_id,
-            user_id=user_id,
-        )
-        credits = await OrgService.get_org_credits(user_id, org.id)
-        return OrgResponse.from_org(org, credits=credits, user_id=user_id)
-    except OrgNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-    except Exception as e:
-        logger.exception(
-            'Unexpected error retrieving organization',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='An unexpected error occurred',
-        )
-
-
 @org_router.patch('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
 async def update_org_defaults_settings(
     org_id: UUID,
@@ -499,6 +457,48 @@ async def update_org_app_settings(
         logger.exception(
             'Unexpected error updating organization app settings',
             extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.get(
+    '/{org_id}',
+    response_model=OrgResponse,
+    status_code=status.HTTP_200_OK,
+    deprecated=True,
+)
+async def get_org(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
+) -> OrgResponse:
+    """Get organization details by ID through the deprecated detail route."""
+    logger.info(
+        'Retrieving organization details',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+        },
+    )
+
+    try:
+        org = await OrgService.get_org_by_id(
+            org_id=org_id,
+            user_id=user_id,
+        )
+        credits = await OrgService.get_org_credits(user_id, org.id)
+        return OrgResponse.from_org(org, credits=credits, user_id=user_id)
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error retrieving organization',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

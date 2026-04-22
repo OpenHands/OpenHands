@@ -242,38 +242,68 @@ class OrgUpdate(BaseModel):
     @model_validator(mode='after')
     def _normalize_settings_diffs(self) -> 'OrgUpdate':
         """Normalize sparse settings diffs before merge/persistence."""
-        if self.agent_settings_diff is not None:
-            llm = self.agent_settings_diff.get('llm')
-            if isinstance(llm, dict):
-                if 'api_key' in llm:
-                    nested_key = llm.pop('api_key')
-                    if (
-                        self.llm_api_key is None
-                        and nested_key is not None
-                        and nested_key != MASKED_API_KEY
-                    ):
-                        self.llm_api_key = nested_key
-                    if nested_key is not None:
-                        llm['api_key'] = MASKED_API_KEY
-
-                resolved_base_url = resolve_llm_base_url(
-                    model=llm.get('model'),
-                    base_url=llm.get('base_url'),
-                    managed_proxy_url=LITE_LLM_API_URL,
-                )
-                if resolved_base_url is not None:
-                    llm['base_url'] = resolved_base_url
-
-                if not llm:
-                    self.agent_settings_diff.pop('llm', None)
-
-            if not self.agent_settings_diff:
-                self.agent_settings_diff = None
-
-        if not self.conversation_settings_diff:
-            self.conversation_settings_diff = None
-
+        self._normalize_agent_settings_diff()
+        self._cleanup_empty_diff('agent_settings_diff', nested_key='llm')
+        self._cleanup_empty_diff('conversation_settings_diff')
         return self
+
+    def _normalize_agent_settings_diff(self) -> None:
+        """Normalize nested LLM settings inside ``agent_settings_diff``."""
+        llm_diff = self._get_agent_llm_diff()
+        if llm_diff is None:
+            return
+
+        self._lift_and_mask_llm_api_key(llm_diff)
+        self._resolve_agent_llm_base_url(llm_diff)
+
+    def _get_agent_llm_diff(self) -> dict[str, Any] | None:
+        """Return the nested ``llm`` diff when present and dictionary-shaped."""
+        if self.agent_settings_diff is None:
+            return None
+        llm_diff = self.agent_settings_diff.get('llm')
+        return llm_diff if isinstance(llm_diff, dict) else None
+
+    def _lift_and_mask_llm_api_key(self, llm_diff: dict[str, Any]) -> None:
+        """Lift nested api keys to ``llm_api_key`` and mask the JSON diff."""
+        if 'api_key' not in llm_diff:
+            return
+
+        nested_key = llm_diff.pop('api_key')
+        if (
+            self.llm_api_key is None
+            and nested_key is not None
+            and nested_key != MASKED_API_KEY
+        ):
+            self.llm_api_key = nested_key
+        if nested_key is not None:
+            llm_diff['api_key'] = MASKED_API_KEY
+
+    def _resolve_agent_llm_base_url(self, llm_diff: dict[str, Any]) -> None:
+        """Fill provider-default base URLs for sparse LLM diffs when needed."""
+        resolved_base_url = resolve_llm_base_url(
+            model=llm_diff.get('model'),
+            base_url=llm_diff.get('base_url'),
+            managed_proxy_url=LITE_LLM_API_URL,
+        )
+        if resolved_base_url is not None:
+            llm_diff['base_url'] = resolved_base_url
+
+    def _cleanup_empty_diff(
+        self,
+        field_name: str,
+        nested_key: str | None = None,
+    ) -> None:
+        """Drop empty nested diffs and collapse empty diff payloads to ``None``."""
+        settings_diff = getattr(self, field_name)
+        if not isinstance(settings_diff, dict):
+            if not settings_diff:
+                setattr(self, field_name, None)
+            return
+
+        if nested_key is not None and not settings_diff.get(nested_key):
+            settings_diff.pop(nested_key, None)
+        if not settings_diff:
+            setattr(self, field_name, None)
 
     def updated_fields(self) -> set[str]:
         """Return the public field names explicitly present on the update."""
