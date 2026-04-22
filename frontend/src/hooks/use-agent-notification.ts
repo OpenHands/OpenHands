@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { AgentState } from "#/types/agent-state";
 import { browserTab } from "#/utils/browser-tab";
 import { useSettings } from "#/hooks/query/use-settings";
+import { AGENT_STATUS_MAP } from "#/utils/status";
 import notificationSound from "#/assets/notification.mp3";
 
 const NOTIFICATION_STATES: AgentState[] = [
@@ -52,7 +53,8 @@ export function useAgentNotification(curAgentState: AgentState) {
     }
 
     if (typeof document !== "undefined" && !document.hasFocus()) {
-      const message = t(`STATUS$${curAgentState.toUpperCase()}`);
+      const i18nKey = AGENT_STATUS_MAP[curAgentState];
+      const message = i18nKey ? t(i18nKey) : curAgentState;
       browserTab.startNotification(message);
     }
   }, [curAgentState, isSoundEnabled, t]);
