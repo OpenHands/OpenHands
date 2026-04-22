@@ -284,6 +284,32 @@ If you are starting a pull request (PR), please follow the template in `.github/
 
 These details may or may not be useful for your current task.
 
+### Conversation State Management
+
+#### Agent State and Sandbox Status:
+The frontend uses `useAgentState` hook (`frontend/src/hooks/use-agent-state.ts`) to determine the current conversation state. This hook:
+- Returns `curAgentState` (AgentState enum) for UI state determination
+- Returns `isArchived` flag when `sandbox_status === "MISSING"` (archived conversations)
+- Prioritizes live WebSocket execution status over cached API data
+
+#### Archived Conversations (sandbox_status === "MISSING"):
+When a conversation's sandbox is no longer available (archived):
+- `useAgentState` returns `AgentState.STOPPED` and `isArchived: true`
+- Chat input is replaced with an archived banner (`ArchivedBanner` component)
+- VS Code tab, Terminal, and Planner show read-only messages instead of loading states
+- All interactive elements that require a running sandbox are disabled
+
+#### Testing useAgentState:
+When mocking `useAgentState` in tests, always include the `isArchived` property:
+```typescript
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({
+    curAgentState: AgentState.AWAITING_USER_INPUT,
+    isArchived: false,
+  }),
+}));
+```
+
 ### Microagents
 
 Microagents are specialized prompts that enhance OpenHands with domain-specific knowledge and task-specific workflows. They are Markdown files that can include frontmatter for configuration.
