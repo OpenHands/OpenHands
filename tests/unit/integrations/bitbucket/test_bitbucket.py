@@ -17,6 +17,7 @@ from openhands.runtime.base import Runtime
 from openhands.server.settings import POSTProviderModel
 from openhands.server.types import AppMode
 
+
 # Bitbucket Provider Domain Tests
 class TestBitbucketProviderDomain(unittest.TestCase):
     """Test that Bitbucket provider domain is properly handled in Runtime.clone_or_init_repo."""
