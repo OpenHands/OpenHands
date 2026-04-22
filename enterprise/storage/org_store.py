@@ -137,7 +137,7 @@ class OrgStore:
                 org.id,
                 {
                     'org_version': ORG_SETTINGS_VERSION,
-                    'agent_settings': {
+                    'agent_settings_diff': {
                         'llm': {
                             'model': get_default_litellm_model(),
                             'base_url': LITE_LLM_API_URL,
@@ -232,8 +232,13 @@ class OrgStore:
             # Pop the diff-style kwargs before the setattr loop — otherwise
             # ``hasattr(org, 'agent_settings')`` is True and the loop would
             # *overwrite* the JSON column instead of deep-merging into it.
-            agent_settings_diff = kwargs.pop('agent_settings', None)
-            conversation_settings_diff = kwargs.pop('conversation_settings', None)
+            agent_settings_diff = kwargs.pop(
+                'agent_settings_diff', kwargs.pop('agent_settings', None)
+            )
+            conversation_settings_diff = kwargs.pop(
+                'conversation_settings_diff',
+                kwargs.pop('conversation_settings', None),
+            )
             for key, value in kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)

@@ -18,25 +18,25 @@ def test_org_update_accepts_typed_settings_objects():
     """OrgUpdate should parse wire payloads into typed settings objects."""
     update_data = OrgUpdate.model_validate(
         {
-            'agent_settings': {'llm': {'model': 'claude-3-5-sonnet'}},
-            'conversation_settings': {'security_analyzer': 'llm'},
+            'agent_settings_diff': {'llm': {'model': 'claude-3-5-sonnet'}},
+            'conversation_settings_diff': {'security_analyzer': 'llm'},
         }
     )
 
-    assert isinstance(update_data.agent_settings, AgentSettings)
+    assert isinstance(update_data.agent_settings_diff, AgentSettings)
     assert update_data.agent_settings_patch() == {'llm': {'model': 'claude-3-5-sonnet'}}
-    assert isinstance(update_data.conversation_settings, ConversationSettings)
+    assert isinstance(update_data.conversation_settings_diff, ConversationSettings)
     assert update_data.conversation_settings_patch() == {'security_analyzer': 'llm'}
 
 
 def test_normalize_agent_settings_masks_api_key_in_json_on_empty_and_real_keys():
     """Nested api_key values are lifted and masked in the JSON patch."""
     real_key = OrgUpdate.model_validate(
-        {'agent_settings': {'llm': {'model': 'anthropic/x', 'api_key': 'sk-raw'}}}
+        {'agent_settings_diff': {'llm': {'model': 'anthropic/x', 'api_key': 'sk-raw'}}}
     )
     empty_key = OrgUpdate.model_validate(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'llm': {'model': 'openhands/x', 'api_key': '', 'base_url': None},
             },
         }
@@ -54,17 +54,17 @@ def test_normalize_agent_settings_fills_base_url_for_all_providers():
     """Managed and BYOR providers should keep usable base URLs in patches."""
     openhands_null = OrgUpdate.model_validate(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'llm': {'model': 'openhands/claude-3', 'base_url': None},
             },
         }
     )
     openhands_missing = OrgUpdate.model_validate(
-        {'agent_settings': {'llm': {'model': 'openhands/claude-3'}}}
+        {'agent_settings_diff': {'llm': {'model': 'openhands/claude-3'}}}
     )
     anthropic_null = OrgUpdate.model_validate(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'llm': {'model': 'anthropic/claude-3-opus-20240229', 'base_url': None},
             },
         }

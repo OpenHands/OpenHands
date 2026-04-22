@@ -21,20 +21,40 @@ const saveSettingsMutationFn = async (
   delete settingsToSave.agent_settings_schema;
   delete settingsToSave.conversation_settings_schema;
 
-  const conversationSettings: Record<string, SettingsValue> = {
-    ...((settingsToSave.conversation_settings as Record<
-      string,
-      SettingsValue
-    >) ?? {}),
-  };
-
-  if (Object.keys(conversationSettings).length > 0) {
-    settingsToSave.conversation_settings = conversationSettings;
-  } else {
+  if (scope === "org") {
+    if (
+      settingsToSave.agent_settings_diff === undefined &&
+      settingsToSave.agent_settings !== undefined
+    ) {
+      settingsToSave.agent_settings_diff = settingsToSave.agent_settings;
+    }
+    if (
+      settingsToSave.conversation_settings_diff === undefined &&
+      settingsToSave.conversation_settings !== undefined
+    ) {
+      settingsToSave.conversation_settings_diff =
+        settingsToSave.conversation_settings;
+    }
+    delete settingsToSave.agent_settings;
     delete settingsToSave.conversation_settings;
   }
 
-  const agentSettings = settingsToSave.agent_settings as
+  const conversationSettingsKey =
+    scope === "org" ? "conversation_settings_diff" : "conversation_settings";
+  const conversationSettings = {
+    ...((settingsToSave[conversationSettingsKey] as Record<string, SettingsValue>) ??
+      {}),
+  };
+
+  if (Object.keys(conversationSettings).length > 0) {
+    settingsToSave[conversationSettingsKey] = conversationSettings;
+  } else {
+    delete settingsToSave[conversationSettingsKey];
+  }
+
+  const agentSettingsKey =
+    scope === "org" ? "agent_settings_diff" : "agent_settings";
+  const agentSettings = settingsToSave[agentSettingsKey] as
     | Record<string, unknown>
     | undefined;
   const llmSettings = agentSettings?.llm as Record<string, unknown> | undefined;

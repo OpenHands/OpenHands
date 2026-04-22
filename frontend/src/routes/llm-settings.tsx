@@ -378,9 +378,11 @@ export function LlmSettingsScreen({
         agentSettings.llm = llm;
       }
 
-      return { agent_settings: agentSettings };
+      return scope === "org"
+        ? { agent_settings_diff: agentSettings }
+        : { agent_settings: agentSettings };
     },
-    [isSaasMode, schema, selectedProvider],
+    [isSaasMode, schema, scope, selectedProvider],
   );
 
   return (

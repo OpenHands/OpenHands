@@ -1266,10 +1266,10 @@ async def test_update_legacy_org_defaults_settings_forwards_through_org_service(
     updated_org.search_api_key = None
 
     update_data = OrgUpdate(
-        agent_settings={
+        agent_settings_diff={
             'llm': {'model': 'openhands/claude-3.5-sonnet'},
         },
-        conversation_settings={'confirmation_mode': False},
+        conversation_settings_diff={'confirmation_mode': False},
     )
 
     with (
@@ -1970,7 +1970,7 @@ async def test_update_org_permission_denied_llm_settings(
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {'agent_settings': {'llm': {'model': 'claude-opus-4-5-20251101'}}}
+    update_data = {'agent_settings_diff': {'llm': {'model': 'claude-opus-4-5-20251101'}}}
 
     with (
         patch(

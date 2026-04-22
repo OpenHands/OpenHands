@@ -1333,7 +1333,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(
 
     update_data = OrgUpdate(
         contact_name='Jane Doe',
-        agent_settings={'llm': {'model': 'claude-opus-4-5-20251101'}},
+        agent_settings_diff={'llm': {'model': 'claude-opus-4-5-20251101'}},
         conversation_expiration=30,
     )
 
@@ -1537,7 +1537,7 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
     from server.routes.org_models import OrgUpdate
 
     update_data = OrgUpdate(
-        agent_settings={'llm': {'model': 'claude-opus-4-5-20251101'}}
+        agent_settings_diff={'llm': {'model': 'claude-opus-4-5-20251101'}}
     )
 
     with (

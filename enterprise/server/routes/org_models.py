@@ -213,9 +213,9 @@ class OrgPage(BaseModel):
 class OrgUpdate(BaseModel):
     """Request model for updating an organization.
 
-    ``agent_settings`` and ``conversation_settings`` stay typed so both the
-    generic org update endpoint and the deprecated ``/llm`` wrappers share the
-    same validation, normalization, and partial-patch behavior.
+    ``agent_settings_diff`` and ``conversation_settings_diff`` stay typed so both
+    the generic org update endpoint and the deprecated ``/llm`` wrappers share
+    the same validation, normalization, and partial-patch behavior.
     """
 
     name: Annotated[
@@ -236,8 +236,8 @@ class OrgUpdate(BaseModel):
     v1_enabled: bool | None = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
-    agent_settings: AgentSettings | None = None
-    conversation_settings: ConversationSettings | None = None
+    agent_settings_diff: AgentSettings | None = None
+    conversation_settings_diff: ConversationSettings | None = None
 
     @staticmethod
     def _copy_patch(
@@ -267,7 +267,7 @@ class OrgUpdate(BaseModel):
         if not isinstance(data, dict) or data.get('llm_api_key') is not None:
             return data
 
-        agent_settings = data.get('agent_settings')
+        agent_settings = data.get('agent_settings_diff')
         llm_patch = (
             agent_settings.get('llm') if isinstance(agent_settings, dict) else None
         )
@@ -280,12 +280,12 @@ class OrgUpdate(BaseModel):
 
     def _has_nested_llm_update(self) -> bool:
         return (
-            self.agent_settings is not None
-            and 'llm' in self.agent_settings.model_fields_set
+            self.agent_settings_diff is not None
+            and 'llm' in self.agent_settings_diff.model_fields_set
         )
 
     def _has_nested_llm_api_key_update(self) -> bool:
-        agent_settings = self.agent_settings
+        agent_settings = self.agent_settings_diff
         return bool(
             agent_settings is not None
             and self._has_nested_llm_update()
@@ -293,7 +293,7 @@ class OrgUpdate(BaseModel):
         )
 
     def agent_settings_patch(self) -> dict[str, Any] | None:
-        agent_settings = self.agent_settings
+        agent_settings = self.agent_settings_diff
         patch = self._copy_patch(agent_settings)
         if patch is None or agent_settings is None:
             return None
@@ -313,11 +313,11 @@ class OrgUpdate(BaseModel):
         return patch or None
 
     def conversation_settings_patch(self) -> dict[str, Any] | None:
-        return self._copy_patch(self.conversation_settings)
+        return self._copy_patch(self.conversation_settings_diff)
 
     @model_validator(mode='after')
     def _normalize_agent_settings(self) -> 'OrgUpdate':
-        """Normalize ``agent_settings`` so post-save stored state stays.
+        """Normalize ``agent_settings_diff`` so post-save stored state stays.
 
         Keep the org row, every member row, and the encrypted
         ``_llm_api_key`` column in sync.
@@ -325,7 +325,7 @@ class OrgUpdate(BaseModel):
         Two jobs:
 
         * **Lift ``llm.api_key`` and mask it in the JSON.** The frontend
-          posts the raw key nested inside ``agent_settings``. Leaving it
+          posts the raw key nested inside ``agent_settings_diff``. Leaving it
           nested would push a raw secret into the ``org.agent_settings``
           JSON column while ``org._llm_api_key`` (the encrypted column read
           by ``_get_effective_llm_api_key`` at load time) stays stale. We
@@ -347,10 +347,10 @@ class OrgUpdate(BaseModel):
           managed LiteLLM proxy URL so the stored state is complete and
           self-describing.
         """
-        if self.agent_settings is None or not self._has_nested_llm_update():
+        if self.agent_settings_diff is None or not self._has_nested_llm_update():
             return self
 
-        llm_settings = self.agent_settings.llm
+        llm_settings = self.agent_settings_diff.llm
         resolved_base_url = resolve_llm_base_url(
             model=llm_settings.model,
             base_url=llm_settings.base_url,
@@ -381,8 +381,8 @@ class OrgUpdate(BaseModel):
         return bool(
             self.updated_fields()
             & {
-                'agent_settings',
-                'conversation_settings',
+                'agent_settings_diff',
+                'conversation_settings_diff',
                 'search_api_key',
                 'llm_api_key',
             }
@@ -391,8 +391,8 @@ class OrgUpdate(BaseModel):
     def restricted_fields(self) -> set[str]:
         """Return fields that require elevated org settings permissions."""
         return self.updated_fields() & {
-            'agent_settings',
-            'conversation_settings',
+            'agent_settings_diff',
+            'conversation_settings_diff',
             'search_api_key',
             'sandbox_api_key',
             'llm_api_key',
@@ -403,7 +403,7 @@ class OrgUpdate(BaseModel):
         return self.model_dump(
             mode='json',
             exclude_none=True,
-            exclude={'agent_settings', 'conversation_settings'},
+            exclude={'agent_settings_diff', 'conversation_settings_diff'},
         )
 
     def apply_to_org(self, org: Org) -> None:

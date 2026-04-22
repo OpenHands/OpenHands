@@ -1227,7 +1227,7 @@ def test_org_update_apply_to_org_updates_secret_fields():
 
 def test_org_update_get_member_updates_includes_llm_api_key():
     """
-    GIVEN: OrgUpdate with agent_settings and llm_api_key set
+    GIVEN: OrgUpdate with agent_settings_diff and llm_api_key set
     WHEN: get_member_updates() is called
     THEN: Returns OrgMemberSettingsUpdate including both the diff and llm_api_key
     """
@@ -1235,7 +1235,7 @@ def test_org_update_get_member_updates_includes_llm_api_key():
 
     # Arrange
     settings = OrgUpdate(
-        agent_settings={'llm': {'model': 'claude-3'}},
+        agent_settings_diff={'llm': {'model': 'claude-3'}},
         llm_api_key='new-member-key',
     )
 

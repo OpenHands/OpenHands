@@ -1033,7 +1033,7 @@ async def test_update_org_defaults_async_with_llm_api_key():
     )
 
     llm_settings = OrgUpdate(
-        agent_settings={'llm': {'model': 'new-model'}},
+        agent_settings_diff={'llm': {'model': 'new-model'}},
         llm_api_key='new-member-api-key',
     )
 
@@ -1090,7 +1090,7 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
         name='Test Organization',
         agent_settings=AgentSettings(llm={'model': 'openhands/claude-3'}),
     )
-    update_data = OrgUpdate(agent_settings={'llm': {'model': 'openhands/claude-3'}})
+    update_data = OrgUpdate(agent_settings_diff={'llm': {'model': 'openhands/claude-3'}})
 
     mock_session = AsyncMock()
     mock_result = MagicMock()
@@ -1138,7 +1138,7 @@ async def test_update_org_defaults_async_non_key_changes_keep_custom_key_flags()
         agent_settings=AgentSettings(llm={'model': 'openhands/claude-3'}),
         conversation_settings=ConversationSettings(),
     )
-    update_data = OrgUpdate(conversation_settings={'max_iterations': 42})
+    update_data = OrgUpdate(conversation_settings_diff={'max_iterations': 42})
 
     mock_session = AsyncMock()
     mock_result = MagicMock()
@@ -1180,7 +1180,7 @@ async def test_update_org_defaults_async_org_not_found():
 
     # Arrange
     non_existent_org_id = uuid.uuid4()
-    llm_settings = OrgUpdate(agent_settings={'llm': {'model': 'new-model'}})
+    llm_settings = OrgUpdate(agent_settings_diff={'llm': {'model': 'new-model'}})
 
     # Mock the async session to return None for org
     mock_session = AsyncMock()
