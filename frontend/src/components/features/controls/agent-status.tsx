@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
-import { useStatusStore } from "#/stores/status-store";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { getStatusCode } from "#/utils/status";
 import { ChatStopButton } from "../chat/chat-stop-button";
@@ -15,6 +14,7 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
+import { useAgentNotification } from "#/hooks/use-agent-notification";
 
 export interface AgentStatusProps {
   className?: string;
@@ -33,8 +33,10 @@ export function AgentStatus({
 }: AgentStatusProps) {
   const { t } = useTranslation();
   const { setShouldShownAgentLoading } = useConversationStore();
-  const { curAgentState } = useAgentState();
-  const { curStatusMessage } = useStatusStore();
+  const { curAgentState, executionStatus } = useAgentState();
+
+  // Trigger browser tab flash and notification sound on state changes
+  useAgentNotification(curAgentState);
   const webSocketStatus = useUnifiedWebSocketStatus();
   const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
@@ -45,15 +47,13 @@ export function AgentStatus({
   const { taskStatus: subConversationTaskStatus } =
     useSubConversationTaskPolling(
       subConversationTaskId,
-      conversation?.conversation_id || null,
+      conversation?.id || null,
     );
 
   const statusCode = getStatusCode(
-    curStatusMessage,
     webSocketStatus,
-    conversation?.status || null,
-    conversation?.runtime_status || null,
-    curAgentState,
+    executionStatus ?? null,
+    conversation?.sandbox_status || null,
     taskStatus,
     subConversationTaskStatus,
   );
@@ -71,7 +71,7 @@ export function AgentStatus({
   const shouldShownAgentError =
     curAgentState === AgentState.ERROR ||
     curAgentState === AgentState.RATE_LIMITED ||
-    webSocketStatus === "DISCONNECTED" ||
+    webSocketStatus === "CLOSED" ||
     taskStatus === "ERROR";
 
   const shouldShownAgentStop = curAgentState === AgentState.RUNNING;

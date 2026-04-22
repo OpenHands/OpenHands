@@ -6,13 +6,14 @@ and retry logic for the OpenHands Enterprise Telemetry Service.
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
+from sqlalchemy import JSON, DateTime, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 
-class TelemetryMetrics(Base):  # type: ignore
+class TelemetryMetrics(Base):
     """Stores collected telemetry metrics with upload tracking.
 
     Each record represents a single metrics collection event with associated
@@ -21,23 +22,27 @@ class TelemetryMetrics(Base):  # type: ignore
 
     __tablename__ = 'telemetry_metrics'
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    collected_at = Column(
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    collected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
         index=True,
     )
-    metrics_data = Column(JSON, nullable=False)
-    uploaded_at = Column(DateTime(timezone=True), nullable=True, index=True)
-    upload_attempts = Column(Integer, nullable=False, default=0)
-    last_upload_error = Column(Text, nullable=True)
-    created_at = Column(
+    metrics_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    uploaded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    upload_attempts: Mapped[int] = mapped_column(nullable=False, default=0)
+    last_upload_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         nullable=False,
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
@@ -46,9 +51,9 @@ class TelemetryMetrics(Base):  # type: ignore
 
     def __init__(
         self,
-        metrics_data: Dict[str, Any],
-        collected_at: Optional[datetime] = None,
-        **kwargs,
+        metrics_data: dict[str, Any],
+        collected_at: datetime | None = None,
+        **kwargs: Any,
     ):
         """Initialize a new telemetry metrics record.
 

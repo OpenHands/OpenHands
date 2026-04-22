@@ -12,12 +12,12 @@ interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
   isDragOver: boolean;
   disabled: boolean;
+  isNewConversationPending?: boolean;
   showButton: boolean;
   buttonClassName: string;
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   handleFileIconClick: (isDisabled: boolean) => void;
   handleSubmit: () => void;
-  handleResumeAgent: () => void;
   onDragOver: (e: React.DragEvent, isDisabled: boolean) => void;
   onDragLeave: (e: React.DragEvent, isDisabled: boolean) => void;
   onDrop: (e: React.DragEvent, isDisabled: boolean) => void;
@@ -36,12 +36,12 @@ export function ChatInputContainer({
   chatContainerRef,
   isDragOver,
   disabled,
+  isNewConversationPending = false,
   showButton,
   buttonClassName,
   chatInputRef,
   handleFileIconClick,
   handleSubmit,
-  handleResumeAgent,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -89,6 +89,7 @@ export function ChatInputContainer({
         <ChatInputRow
           chatInputRef={chatInputRef}
           disabled={disabled}
+          isNewConversationPending={isNewConversationPending}
           showButton={showButton}
           buttonClassName={buttonClassName}
           handleFileIconClick={handleFileIconClick}
@@ -101,10 +102,7 @@ export function ChatInputContainer({
         />
       </div>
 
-      <ChatInputActions
-        disabled={disabled}
-        handleResumeAgent={handleResumeAgent}
-      />
+      <ChatInputActions disabled={disabled} />
     </div>
   );
 }

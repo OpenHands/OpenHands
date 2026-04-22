@@ -5,9 +5,14 @@ from io import StringIO
 from unittest.mock import patch
 
 import pytest
+from freezegun import freeze_time
 from server.logger import format_stack, setup_json_logger
 
 from openhands.core.logger import openhands_logger
+
+FROZEN_TIMESTAMP = '2024-01-15T10:30:00+00:00'
+# datetime.now().isoformat() doesn't include timezone info
+FROZEN_TIMESTAMP_NO_TZ = '2024-01-15T10:30:00'
 
 
 @pytest.fixture
@@ -21,30 +26,45 @@ def log_output():
 
 
 class TestLogOutput:
+    @freeze_time(FROZEN_TIMESTAMP)
     def test_info(self, log_output):
         logger, string_io = log_output
 
         logger.info('Test message')
         output = json.loads(string_io.getvalue())
-        assert output == {'message': 'Test message', 'severity': 'INFO'}
+        assert output['message'] == 'Test message'
+        assert output['severity'] == 'INFO'
+        assert output['ts'] == FROZEN_TIMESTAMP
+        assert output['module'] == 'test_logger'
+        assert output['funcName'] == 'test_info'
+        assert 'lineno' in output
 
+    @freeze_time(FROZEN_TIMESTAMP)
     def test_error(self, log_output):
         logger, string_io = log_output
 
         logger.error('Test message')
         output = json.loads(string_io.getvalue())
-        assert output == {'message': 'Test message', 'severity': 'ERROR'}
+        assert output['message'] == 'Test message'
+        assert output['severity'] == 'ERROR'
+        assert output['ts'] == FROZEN_TIMESTAMP
+        assert output['module'] == 'test_logger'
+        assert output['funcName'] == 'test_error'
+        assert 'lineno' in output
 
+    @freeze_time(FROZEN_TIMESTAMP)
     def test_extra_fields(self, log_output):
         logger, string_io = log_output
 
         logger.info('Test message', extra={'key': '..val..'})
         output = json.loads(string_io.getvalue())
-        assert output == {
-            'key': '..val..',
-            'message': 'Test message',
-            'severity': 'INFO',
-        }
+        assert output['key'] == '..val..'
+        assert output['message'] == 'Test message'
+        assert output['severity'] == 'INFO'
+        assert output['ts'] == FROZEN_TIMESTAMP
+        assert output['module'] == 'test_logger'
+        assert output['funcName'] == 'test_extra_fields'
+        assert 'lineno' in output
 
     def test_format_stack(self):
         stack = (
@@ -257,6 +277,7 @@ class TestLogOutput:
             ]
             assert formatted == expected
 
+    @freeze_time(FROZEN_TIMESTAMP)
     def test_filtering(self):
         # Ensure that secret values are still filtered
         string_io = StringIO()
@@ -266,4 +287,63 @@ class TestLogOutput:
         ):
             openhands_logger.info('The secret key was supersecretvalue')
         output = json.loads(string_io.getvalue())
-        assert output == {'message': 'The secret key was ******', 'severity': 'INFO'}
+        assert output['message'] == 'The secret key was ******'
+        assert output['severity'] == 'INFO'
+        assert output['ts'] == FROZEN_TIMESTAMP
+        assert 'module' in output
+        assert 'funcName' in output
+        assert 'lineno' in output
+
+    @freeze_time(FROZEN_TIMESTAMP)
+    def test_console_serializer_uses_ts_not_timestamp(self):
+        """When LOG_JSON_FOR_CONSOLE=1, use 'ts' from custom_json_serializer, not 'timestamp'."""
+        import server.logger as logger_module
+
+        string_io = StringIO()
+        logger = logging.Logger('test_console')
+
+        # Patch LOG_JSON_FOR_CONSOLE to 1 for both setup_json_logger and custom_json_serializer
+        with patch.object(logger_module, 'LOG_JSON_FOR_CONSOLE', 1):
+            setup_json_logger(logger, 'INFO', _out=string_io)
+            logger.info('Test console message')
+
+        # Parse output - LOG_JSON_FOR_CONSOLE pretty-prints JSON across multiple lines
+        output = json.loads(string_io.getvalue())
+
+        # Should have 'ts' from custom_json_serializer but NOT 'timestamp'
+        assert 'ts' in output
+        assert 'timestamp' not in output
+        assert output['message'] == 'Test console message'
+        assert output['severity'] == 'INFO'
+
+    @freeze_time(FROZEN_TIMESTAMP)
+    def test_ts_not_duplicated_when_both_json_modes_enabled(self):
+        """When both LOG_JSON=1 and LOG_JSON_FOR_CONSOLE=1, 'ts' should appear only once."""
+        import server.logger as logger_module
+
+        string_io = StringIO()
+        logger = logging.Logger('test_both_modes')
+
+        # Patch both LOG_JSON and LOG_JSON_FOR_CONSOLE to 1
+        with (
+            patch.object(logger_module, 'LOG_JSON', True),
+            patch.object(logger_module, 'LOG_JSON_FOR_CONSOLE', 1),
+        ):
+            setup_json_logger(logger, 'INFO', _out=string_io)
+            logger.info('Test both modes message')
+
+        raw_output = string_io.getvalue()
+        output = json.loads(raw_output)
+
+        # Should have exactly one 'ts' field (not duplicated)
+        assert 'ts' in output
+        assert 'timestamp' not in output
+        # Verify 'ts' appears only once in the raw output (not duplicated as key)
+        assert (
+            raw_output.count('"ts"') == 1
+        ), f"'ts' should appear exactly once, found in: {raw_output}"
+        assert output['message'] == 'Test both modes message'
+        assert output['severity'] == 'INFO'
+        # When LOG_JSON_FOR_CONSOLE=1, custom_json_serializer uses datetime.now().isoformat()
+        # which doesn't include timezone info
+        assert output['ts'] == FROZEN_TIMESTAMP_NO_TZ

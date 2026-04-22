@@ -17,7 +17,6 @@ from server.auth.constants import (  # noqa: E402
     BITBUCKET_DATA_CENTER_HOST,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
-    ENABLE_LINEAR,
     GITHUB_APP_CLIENT_ID,
     GITLAB_APP_CLIENT_ID,
 )
@@ -29,12 +28,10 @@ from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
-from server.routes.event_webhook import event_webhook_router  # noqa: E402
 from server.routes.feedback import router as feedback_router  # noqa: E402
 from server.routes.github_proxy import add_github_proxy_routes  # noqa: E402
 from server.routes.integration.jira import jira_integration_router  # noqa: E402
 from server.routes.integration.jira_dc import jira_dc_integration_router  # noqa: E402
-from server.routes.integration.linear import linear_integration_router  # noqa: E402
 from server.routes.integration.slack import slack_router  # noqa: E402
 from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
@@ -46,8 +43,11 @@ from server.routes.org_invitations import (  # noqa: E402
 )
 from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
-from server.routes.user import saas_user_router  # noqa: E402
+from server.routes.service import service_router  # noqa: E402
 from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
+from server.routes.users_v1 import (  # noqa: E402
+    override_users_me_endpoint,
+)
 from server.sharing.shared_conversation_router import (  # noqa: E402
     router as shared_conversation_router,
 )
@@ -82,7 +82,6 @@ base_app.include_router(readiness_router)  # Add routes for readiness checks
 base_app.include_router(api_router)  # Add additional route for github auth
 base_app.include_router(oauth_router)  # Add additional route for oauth callback
 base_app.include_router(oauth_device_router)  # Add OAuth 2.0 Device Flow routes
-base_app.include_router(saas_user_router)  # Add additional route SAAS user calls
 base_app.include_router(user_app_settings_router)  # Add routes for user app settings
 base_app.include_router(
     billing_router
@@ -112,6 +111,7 @@ if GITLAB_APP_CLIENT_ID:
     base_app.include_router(gitlab_integration_router)
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
+base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
 base_app.include_router(
     verified_models_router
@@ -121,6 +121,10 @@ base_app.include_router(
 # This must happen after all routers are included
 override_llm_models_dependency(base_app)
 
+# Override the /api/v1/users/me endpoint to include organization info
+# This replaces the OSS endpoint with a SAAS version that adds org_id, org_name, role, permissions
+override_users_me_endpoint(base_app)
+
 base_app.include_router(invitation_router)  # Add routes for org invitation management
 base_app.include_router(invitation_accept_router)  # Add route for accepting invitations
 add_github_proxy_routes(base_app)
@@ -129,8 +133,6 @@ if ENABLE_JIRA:
     base_app.include_router(jira_integration_router)
 if ENABLE_JIRA_DC:
     base_app.include_router(jira_dc_integration_router)
-if ENABLE_LINEAR:
-    base_app.include_router(linear_integration_router)
 if BITBUCKET_DATA_CENTER_HOST:
     from server.routes.bitbucket_dc_proxy import (
         router as bitbucket_dc_proxy_router,  # noqa: E402
@@ -139,9 +141,6 @@ if BITBUCKET_DATA_CENTER_HOST:
     base_app.include_router(bitbucket_dc_proxy_router)
 base_app.include_router(email_router)  # Add routes for email management
 base_app.include_router(feedback_router)  # Add routes for conversation feedback
-base_app.include_router(
-    event_webhook_router
-)  # Add routes for Events in nested runtimes
 
 
 base_app.add_middleware(

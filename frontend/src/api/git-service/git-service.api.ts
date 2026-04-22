@@ -1,13 +1,6 @@
 import { openHands } from "../open-hands-axios";
-import { Provider } from "#/types/settings";
-import { GitRepository, PaginatedBranchesResponse, Branch } from "#/types/git";
-import { extractNextPageFromLink } from "#/utils/extract-next-page-from-link";
-import { RepositoryMicroagent } from "#/types/microagent-management";
-import {
-  MicroagentContentResponse,
-  GitChange,
-  GitChangeDiff,
-} from "../open-hands.types";
+import { RepositoryPage, BranchPage, InstallationPage } from "#/types/git";
+import { GitChange, GitChangeDiff } from "../open-hands.types";
 import ConversationService from "../conversation-service/conversation-service.api";
 
 /**
@@ -17,130 +10,122 @@ class GitService {
   /**
    * Search for Git repositories
    * @param query Search query
-   * @param per_page Number of results per page
-   * @param selected_provider Git provider to search in
-   * @returns List of matching repositories
+   * @param provider Git provider to search in (required)
+   * @param limit Number of results per page
+   * @param pageId Cursor for pagination
+   * @param installationId Filter by installation ID
+   * @param sortOrder Sort order (asc or desc)
+   * @returns Paginated repository response
    */
   static async searchGitRepositories(
     query: string,
-    per_page = 100,
-    selected_provider?: Provider,
-  ): Promise<GitRepository[]> {
-    const response = await openHands.get<GitRepository[]>(
-      "/api/user/search/repositories",
+    provider: string,
+    limit = 100,
+    pageId?: string,
+    installationId?: string,
+  ): Promise<RepositoryPage> {
+    const { data } = await openHands.get<RepositoryPage>(
+      "/api/v1/git/repositories/search",
       {
         params: {
+          provider,
           query,
-          per_page,
-          selected_provider,
-        },
-      },
-    );
-
-    return response.data;
-  }
-
-  /**
-   * Retrieve user's Git repositories
-   * @param selected_provider Git provider
-   * @param page Page number
-   * @param per_page Number of results per page
-   * @returns User's repositories with pagination info
-   */
-  static async retrieveUserGitRepositories(
-    selected_provider: Provider,
-    page = 1,
-    per_page = 30,
-  ) {
-    const { data } = await openHands.get<GitRepository[]>(
-      "/api/user/repositories",
-      {
-        params: {
-          selected_provider,
-          sort: "pushed",
-          page,
-          per_page,
-        },
-      },
-    );
-
-    const link =
-      data.length > 0 && data[0].link_header ? data[0].link_header : "";
-    const nextPage = extractNextPageFromLink(link);
-
-    return { data, nextPage };
-  }
-
-  /**
-   * Retrieve repositories from a specific installation
-   * @param selected_provider Git provider
-   * @param installationIndex Current installation index
-   * @param installations List of installation IDs
-   * @param page Page number
-   * @param per_page Number of results per page
-   * @returns Installation repositories with pagination info
-   */
-  static async retrieveInstallationRepositories(
-    selected_provider: Provider,
-    installationIndex: number,
-    installations: string[],
-    page = 1,
-    per_page = 30,
-  ) {
-    const installationId = installations[installationIndex];
-    const response = await openHands.get<GitRepository[]>(
-      "/api/user/repositories",
-      {
-        params: {
-          selected_provider,
-          sort: "pushed",
-          page,
-          per_page,
+          limit,
+          page_id: pageId,
           installation_id: installationId,
         },
       },
     );
-    const link =
-      response.data.length > 0 && response.data[0].link_header
-        ? response.data[0].link_header
-        : "";
-    const nextPage = extractNextPageFromLink(link);
-    let nextInstallation: number | null;
-    if (nextPage) {
-      nextInstallation = installationIndex;
-    } else if (installationIndex + 1 < installations.length) {
-      nextInstallation = installationIndex + 1;
-    } else {
-      nextInstallation = null;
-    }
-    return {
-      data: response.data,
-      nextPage,
-      installationIndex: nextInstallation,
-    };
+
+    return data;
+  }
+
+  /**
+   * Retrieve user's Git repositories
+   * @param provider Git provider
+   * @param pageId Cursor for pagination
+   * @param limit Number of results per page
+   * @param installationId Filter by installation ID
+   * @param sortOrder Sort order (asc or desc)
+   * @returns User's repositories with pagination info
+   */
+  static async retrieveUserGitRepositories(
+    provider: string,
+    pageId?: string,
+    limit = 30,
+    installationId?: string,
+  ): Promise<RepositoryPage> {
+    const { data } = await openHands.get<RepositoryPage>(
+      "/api/v1/git/repositories/search",
+      {
+        params: {
+          provider,
+          limit,
+          page_id: pageId,
+          installation_id: installationId,
+        },
+      },
+    );
+
+    return data;
+  }
+
+  /**
+   * Retrieve repositories from a specific installation
+   * @param provider Git provider
+   * @param installationIndex Current installation index
+   * @param installations List of installation IDs
+   * @param pageId Cursor for pagination
+   * @param limit Number of results per page
+   * @returns Installation repositories with pagination info
+   */
+  static async retrieveInstallationRepositories(
+    provider: string,
+    installationIndex: number,
+    installations: string[],
+    pageId?: string,
+    limit = 30,
+  ): Promise<RepositoryPage> {
+    const installationId = installations[installationIndex];
+    const { data } = await openHands.get<RepositoryPage>(
+      "/api/v1/git/repositories/search",
+      {
+        params: {
+          provider,
+          limit,
+          page_id: pageId,
+          installation_id: installationId,
+        },
+      },
+    );
+    return data;
   }
 
   /**
    * Get repository branches
    * @param repository Repository name
-   * @param page Page number
-   * @param perPage Number of results per page
+   * @param provider Git provider (required)
+   * @param query Search query (required - can be empty string)
+   * @param pageId Cursor for pagination
+   * @param limit Number of results per page
    * @returns Paginated branches response
    */
   static async getRepositoryBranches(
     repository: string,
-    page: number = 1,
-    perPage: number = 30,
-    selectedProvider?: Provider,
-  ): Promise<PaginatedBranchesResponse> {
-    const { data } = await openHands.get<PaginatedBranchesResponse>(
-      `/api/user/repository/branches`,
+    provider: string,
+    query: string = "",
+    pageId?: string,
+    limit = 30,
+  ): Promise<BranchPage> {
+    const { data } = await openHands.get<BranchPage>(
+      "/api/v1/git/branches/search",
       {
         params: {
+          provider,
           repository,
-          page,
-          per_page: perPage,
-          selected_provider: selectedProvider,
+          query,
+          page_id: pageId,
+          limit,
         },
       },
     );
@@ -150,77 +135,51 @@ class GitService {
 
   /**
    * Search repository branches
+   * @deprecated Use getRepositoryBranches instead - this method is identical
    * @param repository Repository name
+   * @param provider Git provider (required)
    * @param query Search query
-   * @param perPage Number of results per page
-   * @param selectedProvider Git provider
+   * @param pageId Cursor for pagination
+   * @param limit Number of results per page
    * @returns List of matching branches
    */
   static async searchRepositoryBranches(
     repository: string,
+    provider: string,
     query: string,
-    perPage: number = 30,
-    selectedProvider?: Provider,
-  ): Promise<Branch[]> {
-    const { data } = await openHands.get<Branch[]>(
-      `/api/user/search/branches`,
-      {
-        params: {
-          repository,
-          query,
-          per_page: perPage,
-          selected_provider: selectedProvider,
-        },
-      },
+    pageId?: string,
+    limit = 30,
+  ): Promise<BranchPage> {
+    return this.getRepositoryBranches(
+      repository,
+      provider,
+      query,
+      pageId,
+      limit,
     );
-    return data;
-  }
-
-  /**
-   * Get the available microagents for a repository
-   * @param owner The repository owner
-   * @param repo The repository name
-   * @returns The available microagents for the repository
-   */
-  static async getRepositoryMicroagents(
-    owner: string,
-    repo: string,
-  ): Promise<RepositoryMicroagent[]> {
-    const { data } = await openHands.get<RepositoryMicroagent[]>(
-      `/api/user/repository/${owner}/${repo}/microagents`,
-    );
-    return data;
-  }
-
-  /**
-   * Get the content of a specific microagent from a repository
-   * @param owner The repository owner
-   * @param repo The repository name
-   * @param filePath The path to the microagent file within the repository
-   * @returns The microagent content and metadata
-   */
-  static async getRepositoryMicroagentContent(
-    owner: string,
-    repo: string,
-    filePath: string,
-  ): Promise<MicroagentContentResponse> {
-    const { data } = await openHands.get<MicroagentContentResponse>(
-      `/api/user/repository/${owner}/${repo}/microagents/content`,
-      {
-        params: { file_path: filePath },
-      },
-    );
-    return data;
   }
 
   /**
    * Get the user installation IDs
    * @param provider The provider to get installation IDs for (github, bitbucket, etc.)
-   * @returns List of installation IDs
+   * @param pageId Cursor for pagination
+   * @param limit Max number of results
+   * @returns Paginated installation response
    */
-  static async getUserInstallationIds(provider: Provider): Promise<string[]> {
-    const { data } = await openHands.get<string[]>(
-      `/api/user/installations?provider=${provider}`,
+  static async getUserInstallations(
+    provider: string,
+    pageId?: string,
+    limit = 100,
+  ): Promise<InstallationPage> {
+    const { data } = await openHands.get<InstallationPage>(
+      "/api/v1/git/installations/search",
+      {
+        params: {
+          provider,
+          page_id: pageId,
+          limit,
+        },
+      },
     );
     return data;
   }

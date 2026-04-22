@@ -4,9 +4,9 @@ if TYPE_CHECKING:
     from openhands.core.config.openhands_config import OpenHandsConfig
 
 from openhands.core.config.mcp_config import (
-    MCPSHTTPServerConfig,
-    MCPStdioServerConfig,
     OpenHandsMCPConfig,
+    RemoteMCPServer,
+    StdioMCPServer,
 )
 from openhands.core.logger import openhands_logger as logger
 
@@ -24,16 +24,8 @@ class SaaSOpenHandsMCPConfig(OpenHandsMCPConfig):
     @staticmethod
     async def create_default_mcp_server_config(
         host: str, config: 'OpenHandsConfig', user_id: str | None = None
-    ) -> tuple[MCPSHTTPServerConfig | None, list[MCPStdioServerConfig]]:
-        """
-        Create a default MCP server configuration.
-
-        Args:
-            host: Host string
-            config: OpenHandsConfig
-        Returns:
-            A tuple containing the default SSE server configuration and a list of MCP stdio server configurations
-        """
+    ) -> dict[str, RemoteMCPServer | StdioMCPServer]:
+        """Return a dict of default MCP server entries for SaaS mode."""
         from storage.api_key_store import ApiKeyStore
 
         api_key_store = ApiKeyStore.get_instance()
@@ -47,9 +39,14 @@ class SaaSOpenHandsMCPConfig(OpenHandsMCPConfig):
 
             if not api_key:
                 logger.error(f'Could not provision MCP API Key for user: {user_id}')
-                return None, []
+                return {}
 
-            return MCPSHTTPServerConfig(
-                url=f'https://{host}/mcp/mcp', api_key=api_key
-            ), []
-        return None, []
+            return {
+                'openhands': RemoteMCPServer(
+                    url=f'https://{host}/mcp/mcp',
+                    transport='http',
+                    auth=api_key,
+                    timeout=60,
+                )
+            }
+        return {}

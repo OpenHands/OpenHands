@@ -95,13 +95,13 @@ git tag X.Y.Z
 
 Create a `saas-rel-X.Y.Z` branch from the tagged commit for the SaaS deployment pipeline.
 
-#### Step 3: CI builds Docker images automatically
+#### Step 3: Images get tagged automatically
 
-The `ghcr-build.yml` workflow triggers on tag pushes and produces:
-- `ghcr.io/openhands/openhands:X.Y.Z`, `X.Y`, `X`, `latest`
-- `ghcr.io/openhands/runtime:X.Y.Z-nikolaik`, `X.Y-nikolaik`
+Every push to `main` / `saas-rel-*` / `oss-rel-*` builds and publishes `ghcr.io/openhands/openhands` and `ghcr.io/openhands/enterprise-server` images for that commit (tagged by SHA, short SHA, and branch name).
 
-The tagging logic lives in `containers/build.sh` — when `GITHUB_REF_NAME` matches a semver pattern (`^[0-9]+\.[0-9]+\.[0-9]+$`), it auto-generates major, major.minor, and `latest` tags.
+Pushing a git tag `X.Y.Z` then tags the images for that commit with `X.Y.Z`, `X.Y`, `X`, and `latest`. Non-semver tags just get their literal name applied.
+
+Requires the commit to already be built. If you push the tag too early, the retag CI job fails loudly — re-run it from the Actions UI once the build completes.
 
 ## Development: Pin SDK to an Unreleased Commit
 

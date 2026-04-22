@@ -1,3 +1,4 @@
+from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.gitlab.service.base import GitLabMixinBase
 from openhands.integrations.service_types import OwnerType, ProviderType, Repository
 from openhands.server.types import AppMode
@@ -165,6 +166,18 @@ class GitLabReposMixin(GitLabMixinBase):
         # Trim to MAX_REPOS if needed and convert to Repository objects
         all_repos = all_repos[:MAX_REPOS]
         return [self._parse_repository(repo) for repo in all_repos]
+
+    async def get_user_groups(self) -> list[str]:
+        """Get list of GitLab group paths that the user is a member of."""
+        url = f'{self.BASE_URL}/groups'
+        try:
+            # min_access_level 10 = Guest (includes all membership levels)
+            params = {'min_access_level': '10', 'per_page': '100'}
+            response, _ = await self._make_request(url, params)
+            return [group['path'] for group in response]
+        except Exception as e:
+            logger.warning(f'Failed to get user groups: {e}')
+            return []
 
     async def get_repository_details_from_repo_name(
         self, repository: str

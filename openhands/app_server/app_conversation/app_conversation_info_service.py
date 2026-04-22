@@ -84,6 +84,14 @@ class AppConversationInfoService(ABC):
             List of sub-conversation IDs
         """
 
+    @abstractmethod
+    async def count_conversations_by_sandbox_id(self, sandbox_id: str) -> int:
+        """Count V1 conversations that reference the given sandbox.
+
+        Used to decide whether a sandbox can be safely deleted when a
+        conversation is removed (only delete if count is 0).
+        """
+
     # Mutators
 
     @abstractmethod

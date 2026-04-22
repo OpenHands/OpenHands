@@ -27,7 +27,7 @@ export function DropdownMenu({
     <div
       className={cn(
         "absolute z-10 w-full mt-1",
-        "bg-[#454545] border border-[#727987] rounded-lg",
+        "bg-[#1F1F1F] border border-[#242424] rounded-lg",
         "max-h-60 overflow-auto",
         !isOpen && "hidden",
       )}

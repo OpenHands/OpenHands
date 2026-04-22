@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
+from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.slack.slack_types import (
     SlackMessageView,
     SlackViewInterface,
@@ -13,7 +14,6 @@ from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProces
 from integrations.utils import (
     CONVERSATION_URL,
     ENABLE_V1_SLACK_RESOLVER,
-    get_final_agent_observation,
     get_user_v1_enabled_setting,
 )
 from jinja2 import Environment
@@ -33,16 +33,8 @@ from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.core.logger import openhands_logger as logger
-from openhands.core.schema.agent import AgentState
-from openhands.events.action import MessageAction
-from openhands.events.serialization.event import event_to_dict
-from openhands.integrations.provider import ProviderHandler, ProviderType
+from openhands.integrations.provider import ProviderHandler
 from openhands.sdk import TextContent
-from openhands.server.services.conversation_service import (
-    create_new_conversation,
-    setup_init_conversation_settings,
-)
-from openhands.server.shared import ConversationStoreImpl, config, conversation_manager
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationTrigger,
@@ -200,56 +192,26 @@ class SlackNewConversationView(SlackViewInterface):
         self._verify_necessary_values_are_set()
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        user_secrets = await self.saas_user_auth.get_secrets()
 
-        # Check if V1 conversations are enabled for this user
-        self.v1_enabled = await is_v1_enabled_for_slack_resolver(
-            self.slack_to_openhands_user.keycloak_user_id
-        )
-
-        if self.v1_enabled:
-            # Use V1 app conversation service
-            await self._create_v1_conversation(jinja)
-            return self.conversation_id
-        else:
-            # Use existing V0 conversation service
-            await self._create_v0_conversation(jinja, provider_tokens, user_secrets)
-            return self.conversation_id
-
-    async def _create_v0_conversation(
-        self, jinja: Environment, provider_tokens, user_secrets
-    ) -> None:
-        """Create conversation using the legacy V0 system."""
-        user_instructions, conversation_instructions = await self._get_instructions(
-            jinja
-        )
-
-        # Determine git provider from repository
-        git_provider = None
+        # Determine git provider from repository (needed for both org routing and conversation creation)
+        self._resolved_git_provider = None
         if self.selected_repo and provider_tokens:
             provider_handler = ProviderHandler(provider_tokens)
             repository = await provider_handler.verify_repo_provider(self.selected_repo)
-            git_provider = repository.git_provider
+            self._resolved_git_provider = repository.git_provider
 
-        agent_loop_info = await create_new_conversation(
-            user_id=self.slack_to_openhands_user.keycloak_user_id,
-            git_provider_tokens=provider_tokens,
-            selected_repository=self.selected_repo,
-            selected_branch=None,
-            initial_user_msg=user_instructions,
-            conversation_instructions=(
-                conversation_instructions if conversation_instructions else None
-            ),
-            image_urls=None,
-            replay_json=None,
-            conversation_trigger=ConversationTrigger.SLACK,
-            custom_secrets=user_secrets.custom_secrets if user_secrets else None,
-            git_provider=git_provider,
-        )
+        # Resolve target org based on claimed git organizations
+        self.resolved_org_id = None
+        if self._resolved_git_provider and self.selected_repo:
+            self.resolved_org_id = await resolve_org_for_repo(
+                provider=self._resolved_git_provider.value,
+                full_repo_name=self.selected_repo,
+                keycloak_user_id=self.slack_to_openhands_user.keycloak_user_id,
+            )
 
-        self.conversation_id = agent_loop_info.conversation_id
-        logger.info(f'[Slack]: Created V0 conversation: {self.conversation_id}')
-        await self.save_slack_convo(v1_enabled=False)
+        # V0 conversation path has been removed - all conversations use V1 app conversation service
+        await self._create_v1_conversation(jinja)
+        return self.conversation_id
 
     async def _create_v1_conversation(self, jinja: Environment) -> None:
         """Create conversation using the new V1 app conversation system."""
@@ -265,13 +227,8 @@ class SlackNewConversationView(SlackViewInterface):
         # Create the Slack V1 callback processor
         slack_callback_processor = self._create_slack_v1_callback_processor()
 
-        # Determine git provider from repository
-        git_provider = None
-        provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        if self.selected_repo and provider_tokens:
-            provider_handler = ProviderHandler(provider_tokens)
-            repository = await provider_handler.verify_repo_provider(self.selected_repo)
-            git_provider = ProviderType(repository.git_provider.value)
+        # Use git provider resolved in create_or_update_conversation
+        git_provider = self._resolved_git_provider
 
         # Get the app conversation service and start the conversation
         injector_state = InjectorState()
@@ -292,7 +249,10 @@ class SlackNewConversationView(SlackViewInterface):
         )
 
         # Set up the Slack user context for the V1 system
-        slack_user_context = ResolverUserContext(saas_user_auth=self.saas_user_auth)
+        slack_user_context = ResolverUserContext(
+            saas_user_auth=self.saas_user_auth,
+            resolver_org_id=self.resolved_org_id,
+        )
         setattr(injector_state, USER_CONTEXT_ATTR, slack_user_context)
 
         async with get_app_conversation_service(
@@ -344,53 +304,6 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
         )
 
         return user_message, ''
-
-    async def send_message_to_v0_conversation(self, jinja: Environment):
-        user_info: SlackUser = self.slack_to_openhands_user
-        user_id = user_info.keycloak_user_id
-        saas_user_auth: UserAuth = self.saas_user_auth
-        provider_tokens = await saas_user_auth.get_provider_tokens()
-
-        try:
-            conversation_store = await ConversationStoreImpl.get_instance(
-                config, user_id
-            )
-            await conversation_store.get_metadata(self.conversation_id)
-        except FileNotFoundError:
-            raise StartingConvoException('Conversation no longer exists.')
-
-        # Should we raise here if there are no provider tokens?
-        providers_set = list(provider_tokens.keys()) if provider_tokens else []
-
-        conversation_init_data = await setup_init_conversation_settings(
-            user_id, self.conversation_id, providers_set
-        )
-
-        # Either join ongoing conversation, or restart the conversation
-        agent_loop_info = await conversation_manager.maybe_start_agent_loop(
-            self.conversation_id, conversation_init_data, user_id
-        )
-
-        if agent_loop_info.event_store is None:
-            raise StartingConvoException('Event store not available')
-
-        final_agent_observation = get_final_agent_observation(
-            agent_loop_info.event_store
-        )
-        agent_state = (
-            None
-            if len(final_agent_observation) == 0
-            else final_agent_observation[0].agent_state
-        )
-
-        if not agent_state or agent_state == AgentState.LOADING:
-            raise StartingConvoException('Conversation is still starting')
-
-        instructions, _ = await self._get_instructions(jinja)
-        user_msg = MessageAction(content=instructions)
-        await conversation_manager.send_event_to_conversation(
-            self.conversation_id, event_to_dict(user_msg)
-        )
 
     async def send_message_to_v1_conversation(self, jinja: Environment):
         """Send a message to a v1 conversation using the agent server API."""
@@ -486,7 +399,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 raise Exception(f'Failed to send message to v1 conversation: {str(e)}')
 
     async def create_or_update_conversation(self, jinja: Environment) -> str:
-        """Send new user message to converation"""
+        """Send new user message to conversation."""
         user_info: SlackUser = self.slack_to_openhands_user
 
         user_id = user_info.keycloak_user_id
@@ -498,10 +411,8 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 f'{user_info.slack_display_name} is not authorized to send messages to this conversation.'
             )
 
-        if self.slack_conversation.v1_enabled:
-            await self.send_message_to_v1_conversation(jinja)
-        else:
-            await self.send_message_to_v0_conversation(jinja)
+        # All conversations use V1 app conversation system
+        await self.send_message_to_v1_conversation(jinja)
 
         return self.conversation_id
 

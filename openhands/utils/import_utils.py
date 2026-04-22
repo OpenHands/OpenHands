@@ -52,20 +52,20 @@ def get_impl(cls: type[T], impl_name: str | None) -> type[T]:
     Args:
         cls: The base class that defines the interface
         impl_name: Fully qualified name of the implementation class, or None to use the base class
-                  e.g. 'openhands.server.conversation_manager.StandaloneConversationManager'
+                  e.g. 'openhands.storage.settings.file_settings_store.FileSettingsStore'
 
     Returns:
         The implementation class, which is guaranteed to be a subclass of cls
 
     Example:
         >>> # Get default implementation
-        >>> ConversationManager = get_impl(ConversationManager, None)
+        >>> SettingsStore = get_impl(SettingsStore, None)
         >>> # Get custom implementation
-        >>> CustomManager = get_impl(ConversationManager, 'myapp.CustomConversationManager')
+        >>> CustomStore = get_impl(SettingsStore, 'myapp.CustomSettingsStore')
 
     Common Use Cases:
-        - Server components (ConversationManager, UserAuth, etc.)
-        - Storage implementations (ConversationStore, SettingsStore, etc.)
+        - Server components (UserAuth, MonitoringListener, etc.)
+        - Storage implementations (ConversationStore, SettingsStore, SecretsStore, etc.)
         - Service integrations (GitHub, GitLab, Bitbucket, Azure DevOps services)
 
     The implementation is cached to avoid repeated imports of the same class.

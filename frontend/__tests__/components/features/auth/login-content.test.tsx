@@ -49,9 +49,34 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+const mockUseAppMode = vi.fn(() => ({
+  isOss: false,
+  isSaas: true,
+  isCloud: true,
+  isSelfHosted: false,
+  isEnterpriseSelfHosted: false,
+  isEnterpriseCloud: true,
+  appMode: "saas" as string | undefined,
+  deploymentMode: "cloud" as string | undefined,
+}));
+vi.mock("#/hooks/use-app-mode", () => ({
+  useAppMode: () => mockUseAppMode(),
+}));
+
 describe("LoginContent", () => {
   beforeEach(() => {
     vi.stubGlobal("location", { href: "" });
+    // Reset mock to return SaaS Cloud (CTA enabled) by default
+    mockUseAppMode.mockReturnValue({
+      isOss: false,
+      isSaas: true,
+      isCloud: true,
+      isSelfHosted: false,
+      isEnterpriseSelfHosted: false,
+      isEnterpriseCloud: true,
+      appMode: "saas",
+      deploymentMode: "cloud",
+    });
   });
 
   afterEach(() => {
@@ -272,6 +297,81 @@ describe("LoginContent", () => {
     );
 
     expect(screen.getByTestId("terms-and-privacy-notice")).toBeInTheDocument();
+  });
+
+  it("should display the enterprise LoginCTA component when in SaaS Cloud mode", () => {
+    mockUseAppMode.mockReturnValue({
+      isOss: false,
+      isSaas: true,
+      isCloud: true,
+      isSelfHosted: false,
+      isEnterpriseSelfHosted: false,
+      isEnterpriseCloud: true,
+      appMode: "saas",
+      deploymentMode: "cloud",
+    });
+
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("login-cta")).toBeInTheDocument();
+  });
+
+  it("should not display the enterprise LoginCTA component when in OSS mode", () => {
+    mockUseAppMode.mockReturnValue({
+      isOss: true,
+      isSaas: false,
+      isCloud: false,
+      isSelfHosted: false,
+      isEnterpriseSelfHosted: false,
+      isEnterpriseCloud: false,
+      appMode: "oss",
+      deploymentMode: undefined,
+    });
+
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="oss"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
+  });
+
+  it("should not display the enterprise LoginCTA component when in SaaS Self-hosted mode", () => {
+    mockUseAppMode.mockReturnValue({
+      isOss: false,
+      isSaas: true,
+      isCloud: false,
+      isSelfHosted: true,
+      isEnterpriseSelfHosted: true,
+      isEnterpriseCloud: false,
+      appMode: "saas",
+      deploymentMode: "self_hosted",
+    });
+
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("login-cta")).not.toBeInTheDocument();
   });
 
   it("should display invitation pending message when hasInvitation is true", () => {

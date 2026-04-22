@@ -376,3 +376,9 @@
   animation: shine 2s linear infinite;
   background: radial-gradient(circle at center, rgb(24 24 27 / 85%), transparent) -200% 50% / 200% 100% no-repeat, #f4f4f5;
 }
+
+/* CTA card gradient and shadow */
+.cta-card-gradient {
+  background: radial-gradient(85.36% 123.38% at 50% 0%, rgba(255, 255, 255, 0.14) 0%, rgba(0, 0, 0, 0) 100%), #000000;
+  box-shadow: 0px 4px 6px -4px rgba(0, 0, 0, 0.1), 0px 10px 15px -3px rgba(0, 0, 0, 0.1);
+}

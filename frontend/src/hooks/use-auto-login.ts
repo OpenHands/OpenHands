@@ -3,6 +3,7 @@ import { useConfig } from "./query/use-config";
 import { useIsAuthed } from "./query/use-is-authed";
 import { getLoginMethod, LoginMethod } from "#/utils/local-storage";
 import { useAuthUrl } from "./use-auth-url";
+import { useIsOnIntermediatePage } from "./use-is-on-intermediate-page";
 
 /**
  * Hook to automatically log in the user if they have a login method stored in local storage
@@ -11,6 +12,7 @@ import { useAuthUrl } from "./use-auth-url";
 export const useAutoLogin = () => {
   const { data: config, isLoading: isConfigLoading } = useConfig();
   const { data: isAuthed, isLoading: isAuthLoading } = useIsAuthed();
+  const isOnIntermediatePage = useIsOnIntermediatePage();
 
   // Get the stored login method
   const loginMethod = getLoginMethod();
@@ -57,6 +59,11 @@ export const useAutoLogin = () => {
       return;
     }
 
+    // Don't auto-login from intermediate steps in the auth flow
+    if (isOnIntermediatePage) {
+      return;
+    }
+
     // Don't auto-login if already authenticated
     if (isAuthed) {
       return;
@@ -95,10 +102,12 @@ export const useAutoLogin = () => {
     isAuthed,
     isConfigLoading,
     isAuthLoading,
+    isOnIntermediatePage,
     loginMethod,
     githubAuthUrl,
     gitlabAuthUrl,
     bitbucketAuthUrl,
+    bitbucketDataCenterUrl,
     enterpriseSsoUrl,
   ]);
 };

@@ -1,7 +1,12 @@
 import logging
 from unittest.mock import patch
 
-from openhands.core.logger import SensitiveDataFilter
+from openhands.core.logger import (
+    RedactURLParamsFilter,
+    SensitiveDataFilter,
+    _uvicorn_default_log_config,
+    _uvicorn_json_log_config,
+)
 
 
 @patch.dict(
@@ -115,3 +120,213 @@ def test_sensitive_data_filter_case_sensitivity():
     assert 'secret-value-2' not in record.msg
     assert 'secret-value-3' not in record.msg
     assert record.msg.count('******') == 3
+
+
+# --------------------------------------------------------------------------
+# RedactURLParamsFilter tests
+# --------------------------------------------------------------------------
+
+
+def test_redact_url_params_filter_websocket_log():
+    """Test that session_api_key is redacted from WebSocket access logs."""
+    log_filter = RedactURLParamsFilter()
+
+    # Simulate uvicorn WebSocket access log format
+    record = logging.LogRecord(
+        name='uvicorn.access',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='%s - "%s" [%s]',
+        args=(
+            '127.0.0.1:8000',
+            'GET /ws/abc123?resend_all=true&session_api_key=secret-token-12345',
+            'accepted',
+        ),
+        exc_info=None,
+    )
+
+    # Apply the filter
+    result = log_filter.filter(record)
+
+    # Filter should always return True (never drop records)
+    assert result is True
+
+    # Check that secret is redacted but other params preserved
+    args_str = str(record.args)
+    assert 'secret-token-12345' not in args_str
+    # URL-encoded <redacted> is %3Credacted%3E
+    assert '<redacted>' in args_str or '%3Credacted%3E' in args_str
+    assert 'resend_all=true' in args_str
+
+
+def test_redact_url_params_filter_multiple_sensitive_params():
+    """Test that multiple sensitive parameters are redacted."""
+    log_filter = RedactURLParamsFilter()
+
+    record = logging.LogRecord(
+        name='uvicorn.access',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='Request: %s',
+        args=('GET /api?api_key=secret1&token=secret2&user_id=123',),
+        exc_info=None,
+    )
+
+    log_filter.filter(record)
+
+    args_str = str(record.args)
+    assert 'secret1' not in args_str
+    assert 'secret2' not in args_str
+    assert 'user_id=123' in args_str
+
+
+def test_redact_url_params_filter_non_url_passthrough():
+    """Test that messages without URLs pass through unchanged."""
+    log_filter = RedactURLParamsFilter()
+
+    record = logging.LogRecord(
+        name='test',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='Normal log: %s %s',
+        args=('hello', 'world'),
+        exc_info=None,
+    )
+
+    log_filter.filter(record)
+
+    # Message should remain unchanged
+    assert record.args == ('hello', 'world')
+
+
+def test_redact_url_params_filter_no_query_string():
+    """Test that URLs without query strings pass through unchanged."""
+    log_filter = RedactURLParamsFilter()
+
+    record = logging.LogRecord(
+        name='test',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='Request: %s',
+        args=('GET /api/v1/users',),
+        exc_info=None,
+    )
+
+    log_filter.filter(record)
+
+    # URL without query string should remain unchanged
+    assert record.args == ('GET /api/v1/users',)
+
+
+def test_redact_url_params_filter_empty_args():
+    """Test that records with no args are handled gracefully."""
+    log_filter = RedactURLParamsFilter()
+
+    record = logging.LogRecord(
+        name='test',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='Simple message',
+        args=(),
+        exc_info=None,
+    )
+
+    result = log_filter.filter(record)
+
+    assert result is True
+    assert record.args == ()
+
+
+def test_redact_url_params_filter_none_args():
+    """Test that records with None args are handled gracefully."""
+    log_filter = RedactURLParamsFilter()
+
+    record = logging.LogRecord(
+        name='test',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='Simple message',
+        args=None,
+        exc_info=None,
+    )
+
+    result = log_filter.filter(record)
+
+    assert result is True
+    assert record.args is None
+
+
+def test_redact_url_params_filter_dict_args():
+    """Test that records with dict args have URL params redacted."""
+    log_filter = RedactURLParamsFilter()
+
+    record = logging.LogRecord(
+        name='test',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='%(method)s %(path)s',
+        args={'method': 'GET', 'path': '/api?secret=test'},
+        exc_info=None,
+    )
+
+    result = log_filter.filter(record)
+
+    assert result is True
+    assert record.args['method'] == 'GET'
+    assert 'test' not in record.args['path']
+    assert (
+        '<redacted>' in record.args['path'] or '%3Credacted%3E' in record.args['path']
+    )
+
+
+def test_redact_url_params_filter_msg_embedded_url():
+    """Test that URLs with query params embedded in record.msg are redacted."""
+    log_filter = RedactURLParamsFilter()
+
+    record = logging.LogRecord(
+        name='uvicorn.access',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='10.0.0.1 - "GET /ws/abc?resend_all=true&session_api_key=secret-uuid-123" [accepted]',
+        args=None,
+        exc_info=None,
+    )
+
+    result = log_filter.filter(record)
+
+    assert result is True
+    assert 'secret-uuid-123' not in record.msg
+    assert 'resend_all=true' in record.msg
+    assert '<redacted>' in record.msg or '%3Credacted%3E' in record.msg
+
+
+def test_uvicorn_default_config_default_handler_has_redact_filter():
+    """The 'default' handler (used by uvicorn.error) must have the redact filter
+    so that WebSocket [accepted] logs don't leak session_api_key."""
+    config = _uvicorn_default_log_config()
+    assert 'redact_url_params' in config['handlers']['default']['filters']
+
+
+def test_uvicorn_json_config_default_handler_has_redact_filter():
+    """The 'default' handler in JSON config must also have the redact filter."""
+    config = _uvicorn_json_log_config()
+    assert 'redact_url_params' in config['handlers']['default']['filters']
+
+
+def test_uvicorn_configs_all_handlers_have_redact_filter():
+    """Every handler in both uvicorn configs must include the redact filter."""
+    for config_fn in (_uvicorn_default_log_config, _uvicorn_json_log_config):
+        config = config_fn()
+        for handler_name, handler in config['handlers'].items():
+            assert 'redact_url_params' in handler.get('filters', []), (
+                f"Handler '{handler_name}' in {config_fn.__name__} is missing "
+                f"the 'redact_url_params' filter"
+            )

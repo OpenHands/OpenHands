@@ -58,4 +58,9 @@ export interface ActionEvent<T extends Action = Action> extends BaseEvent {
    * The LLM's assessment of the safety risk of this action
    */
   security_risk: SecurityRisk;
+
+  /**
+   * Optional LLM-generated summary used to label the tool call in the UI.
+   */
+  summary?: string | null;
 }

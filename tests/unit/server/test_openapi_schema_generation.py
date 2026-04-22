@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from openhands.integrations.provider import ProviderToken, ProviderType
+from openhands.integrations.service_types import UserGitInfo
 from openhands.server.app import app
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.secrets import Secrets
@@ -47,6 +48,9 @@ class MockUserAuth(UserAuth):
         return None
 
     async def get_mcp_api_key(self) -> str | None:
+        return None
+
+    async def get_user_git_info(self) -> UserGitInfo | None:
         return None
 
     @classmethod
@@ -102,5 +106,5 @@ async def test_openapi_schema_generation(test_client):
     assert json_str is not None
 
     # Optionally, you can check for specific endpoints if needed
-    assert '/api/settings' in schema['paths']
+    assert '/api/v1/settings' in schema['paths']
     assert '/health' in schema['paths']

@@ -1,17 +1,15 @@
 """Store for managing verified LLM models in the database."""
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from server.verified_models.verified_model_models import (
     VerifiedModel,
     VerifiedModelPage,
 )
 from sqlalchemy import (
-    Boolean,
-    Column,
     DateTime,
     Identity,
-    Integer,
     String,
     UniqueConstraint,
     and_,
@@ -20,13 +18,14 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 from openhands.app_server.config import depends_db_session
 from openhands.core.logger import openhands_logger as logger
 
 
-class StoredVerifiedModel(Base):  # type: ignore
+class StoredVerifiedModel(Base):
     """A verified LLM model available in the model selector.
 
     The composite unique constraint on (model_name, provider) allows the same
@@ -39,14 +38,16 @@ class StoredVerifiedModel(Base):  # type: ignore
         UniqueConstraint('model_name', 'provider', name='uq_verified_model_provider'),
     )
 
-    id = Column(Integer, Identity(), primary_key=True)
-    model_name = Column(String(255), nullable=False)
-    provider = Column(String(100), nullable=False, index=True)
-    is_enabled = Column(
-        Boolean, nullable=False, default=True, server_default=text('true')
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    is_enabled: Mapped[bool] = mapped_column(
+        nullable=False, default=True, server_default=text('true')
     )
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
-    updated_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
     )
 

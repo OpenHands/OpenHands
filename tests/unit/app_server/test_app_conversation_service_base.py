@@ -5,6 +5,7 @@ and the recent bug fixes for git checkout operations.
 """
 
 import subprocess
+from pathlib import Path
 from types import MethodType
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
@@ -17,7 +18,7 @@ from openhands.app_server.app_conversation.app_conversation_service_base import 
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk.context.skills import Skill
+from openhands.sdk.skills import Skill
 
 
 class MockUserInfo:
@@ -470,7 +471,7 @@ def test_create_security_analyzer_returns_llm_analyzer():
     result = service._create_security_analyzer_from_string(security_analyzer_str)
 
     # Assert
-    from openhands.sdk.security.llm_analyzer import LLMSecurityAnalyzer
+    from openhands.sdk.security import LLMSecurityAnalyzer
 
     assert isinstance(result, LLMSecurityAnalyzer)
 
@@ -507,7 +508,7 @@ def test_select_confirmation_policy_when_disabled_returns_never_confirm():
     policy = service._select_confirmation_policy(confirmation_mode, security_analyzer)
 
     # Assert
-    from openhands.sdk.security.confirmation_policy import NeverConfirm
+    from openhands.sdk.security import NeverConfirm
 
     assert isinstance(policy, NeverConfirm)
 
@@ -525,7 +526,7 @@ def test_select_confirmation_policy_llm_returns_confirm_risky():
     policy = service._select_confirmation_policy(confirmation_mode, security_analyzer)
 
     # Assert
-    from openhands.sdk.security.confirmation_policy import ConfirmRisky
+    from openhands.sdk.security import ConfirmRisky
 
     assert isinstance(policy, ConfirmRisky)
 
@@ -545,7 +546,7 @@ def test_select_confirmation_policy_non_llm_returns_always_confirm(
     policy = service._select_confirmation_policy(confirmation_mode, security_analyzer)
 
     # Assert
-    from openhands.sdk.security.confirmation_policy import AlwaysConfirm
+    from openhands.sdk.security import AlwaysConfirm
 
     assert isinstance(policy, AlwaysConfirm)
 
@@ -759,6 +760,33 @@ def _create_service_with_mock_user_context(
 def mock_workspace():
     """Create a mock workspace instance for testing."""
     return MockWorkspace(working_dir='/workspace/project')
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_git_repo_quotes_selected_branch_before_checkout(
+    mock_workspace,
+):
+    user_info = MockUserInfo()
+    service, mock_user_context = _create_service_with_mock_user_context(
+        user_info, bind_methods=('clone_or_init_git_repo',)
+    )
+    service.init_git_in_empty_workspace = True
+    mock_user_context.get_authenticated_git_url = AsyncMock(
+        return_value='https://github.com/owner/repo.git'
+    )
+
+    task = Mock()
+    task.request = Mock(
+        selected_repository='owner/repo',
+        selected_branch='feature>tmp',
+    )
+
+    await service.clone_or_init_git_repo(task, mock_workspace)
+
+    mock_workspace.execute_command.assert_any_call(
+        "git checkout 'feature>tmp'",
+        Path(mock_workspace.working_dir) / 'repo',
+    )
 
 
 @pytest.mark.asyncio

@@ -28,7 +28,7 @@ from openhands.runtime.utils.runtime_build import (
 )
 
 OH_VERSION = f'oh_v{oh_version}'
-DEFAULT_BASE_IMAGE = 'nikolaik/python-nodejs:python3.12-nodejs22'
+DEFAULT_BASE_IMAGE = 'nikolaik/python-nodejs:python3.12-nodejs22-slim'
 
 
 @pytest.fixture
@@ -266,7 +266,7 @@ def test_get_runtime_image_repo_and_tag_eventstream():
     assert (
         img_repo == f'{get_runtime_image_repo()}'
         and img_tag
-        == f'{OH_VERSION}_image_nikolaik_s_python-nodejs_tag_python3.12-nodejs22'
+        == f'{OH_VERSION}_image_nikolaik_s_python-nodejs_tag_python3.12-nodejs22-slim'
     )
 
     base_image = 'ubuntu'
@@ -299,7 +299,7 @@ def test_generate_dockerfile_channel_alias_not_in_non_scratch(monkeypatch):
     assert (
         img_repo == f'{get_runtime_image_repo()}'
         and img_tag
-        == f'{OH_VERSION}_image_nikolaik_s_python-nodejs_tag_python3.12-nodejs22'
+        == f'{OH_VERSION}_image_nikolaik_s_python-nodejs_tag_python3.12-nodejs22-slim'
     )
 
     base_image = 'ubuntu'

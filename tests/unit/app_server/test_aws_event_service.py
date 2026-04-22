@@ -4,6 +4,7 @@ This module tests the AWS S3-based implementation of EventService,
 focusing on search functionality and S3 operations.
 """
 
+import importlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -12,6 +13,7 @@ from uuid import uuid4
 import botocore.exceptions
 import pytest
 
+from openhands.app_server.event import aws_event_service
 from openhands.app_server.event.aws_event_service import (
     AwsEventService,
     AwsEventServiceInjector,
@@ -211,3 +213,124 @@ class TestAwsEventServiceInjector:
         """Test that injector has default prefix."""
         injector = AwsEventServiceInjector(bucket_name='my-bucket')
         assert injector.prefix == Path('users')
+
+
+class TestGetDefaultAwsEndpointUrl:
+    """Test cases for _get_default_aws_endpoint_url function."""
+
+    def test_no_env_vars_returns_none(self, monkeypatch):
+        """Test that function returns None when no env vars are set."""
+        monkeypatch.delenv('AWS_S3_ENDPOINT', raising=False)
+        monkeypatch.delenv('AWS_S3_SECURE', raising=False)
+
+        # Need to reload to get fresh default factory
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result is None
+
+    def test_endpoint_with_https_prefix_secure(self, monkeypatch):
+        """Test endpoint with https:// prefix when secure=true."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'https://minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', 'true')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'https://minio.example.com:9000'
+
+    def test_endpoint_without_https_prefix_secure(self, monkeypatch):
+        """Test endpoint without https:// prefix when secure=true adds it."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', 'true')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'https://minio.example.com:9000'
+
+    def test_endpoint_with_http_prefix_insecure(self, monkeypatch):
+        """Test endpoint with http:// prefix when secure=false."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'http://minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', 'false')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'http://minio.example.com:9000'
+
+    def test_endpoint_without_http_prefix_insecure(self, monkeypatch):
+        """Test endpoint without http:// prefix when secure=false adds it."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', 'false')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'http://minio.example.com:9000'
+
+    def test_endpoint_with_http_converted_to_https(self, monkeypatch):
+        """Test http:// is converted to https:// when secure=true."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'http://minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', 'true')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'https://minio.example.com:9000'
+
+    def test_endpoint_with_https_converted_to_http(self, monkeypatch):
+        """Test https:// is converted to http:// when secure=false."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'https://minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', 'false')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'http://minio.example.com:9000'
+
+    def test_secure_default_is_true(self, monkeypatch):
+        """Test that secure defaults to true when not set."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
+        monkeypatch.delenv('AWS_S3_SECURE', raising=False)
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'https://minio.example.com:9000'
+
+
+class TestAwsEventServiceInjectorEndpointUrl:
+    """Test cases for AwsEventServiceInjector endpoint_url field."""
+
+    def test_injector_endpoint_url_from_env(self, monkeypatch):
+        """Test that endpoint_url is populated from environment variables."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', 'false')
+
+        importlib.reload(aws_event_service)
+
+        injector = aws_event_service.AwsEventServiceInjector(bucket_name='my-bucket')
+        assert injector.endpoint_url == 'http://minio.example.com:9000'
+
+    def test_injector_accepts_custom_endpoint_url(self, monkeypatch):
+        """Test that injector accepts custom endpoint_url parameter."""
+        monkeypatch.delenv('AWS_S3_ENDPOINT', raising=False)
+        monkeypatch.delenv('AWS_S3_SECURE', raising=False)
+
+        importlib.reload(aws_event_service)
+
+        injector = aws_event_service.AwsEventServiceInjector(
+            bucket_name='my-bucket', endpoint_url='https://custom.example.com:9000'
+        )
+        assert injector.endpoint_url == 'https://custom.example.com:9000'
+
+    def test_injector_endpoint_url_none_when_no_env(self, monkeypatch):
+        """Test that endpoint_url is None when no env vars set."""
+        monkeypatch.delenv('AWS_S3_ENDPOINT', raising=False)
+        monkeypatch.delenv('AWS_S3_SECURE', raising=False)
+
+        importlib.reload(aws_event_service)
+
+        injector = aws_event_service.AwsEventServiceInjector(bucket_name='my-bucket')
+        assert injector.endpoint_url is None

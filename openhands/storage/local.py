@@ -1,5 +1,6 @@
 import os
 import shutil
+import threading
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.storage.files import FileStore
@@ -23,8 +24,20 @@ class LocalFileStore(FileStore):
         full_path = self.get_full_path(path)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         mode = 'w' if isinstance(contents, str) else 'wb'
-        with open(full_path, mode) as f:
-            f.write(contents)
+
+        # Use atomic write: write to temp file, then rename
+        # This prevents race conditions where concurrent writes could corrupt the file
+        temp_path = f'{full_path}.tmp.{os.getpid()}.{threading.get_ident()}'
+        try:
+            with open(temp_path, mode) as f:
+                f.write(contents)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, full_path)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
 
     def read(self, path: str) -> str:
         full_path = self.get_full_path(path)

@@ -1,11 +1,11 @@
-import { V0_WebSocketStatus } from "#/context/ws-client-provider";
 import { I18nKey } from "#/i18n/declaration";
 import { AgentState } from "#/types/agent-state";
 import { ConversationStatus } from "#/types/conversation-status";
-import { StatusMessage } from "#/types/message";
 import { RuntimeStatus } from "#/types/runtime-status";
 import { V1AppConversationStartTaskStatus } from "#/api/conversation-service/v1-conversation-service.types";
-import { isTaskPolling } from "./utils";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
+import { V1ExecutionStatus } from "#/types/v1/core/base/common";
+import { V1_WebSocketConnectionState } from "#/contexts/conversation-websocket-context";
 
 export enum IndicatorColor {
   BLUE = "bg-blue-500",
@@ -45,13 +45,13 @@ export const AGENT_STATUS_MAP: {
 };
 
 export function getIndicatorColor(
-  webSocketStatus: V0_WebSocketStatus,
+  webSocketStatus: V1_WebSocketConnectionState,
   conversationStatus: ConversationStatus | null,
   runtimeStatus: RuntimeStatus | null,
   agentState: AgentState | null,
 ) {
   if (
-    webSocketStatus === "DISCONNECTED" ||
+    webSocketStatus === "CLOSED" ||
     conversationStatus === "STOPPED" ||
     runtimeStatus === "STATUS$STOPPED" ||
     agentState === AgentState.STOPPED ||
@@ -100,71 +100,92 @@ export function getIndicatorColor(
 }
 
 export function getStatusCode(
-  statusMessage: StatusMessage,
-  webSocketStatus: V0_WebSocketStatus,
-  conversationStatus: ConversationStatus | null,
-  runtimeStatus: RuntimeStatus | null,
-  agentState: AgentState | null,
+  webSocketConnectionState: V1_WebSocketConnectionState,
+  executionStatus: V1ExecutionStatus | null,
+  sandboxStatus: V1SandboxStatus | null,
   taskStatus?: V1AppConversationStartTaskStatus | null,
   subConversationTaskStatus?: V1AppConversationStartTaskStatus | null,
 ) {
+  // TODO: The i18n keys in this method are scattered due to multiple iterations.
+  // They should be unified under a single category
+
   // PRIORITY 1: Handle task error state (when start-tasks API returns ERROR)
   // This must come first to prevent "Connecting..." from showing when task has errored
-  if (taskStatus === "ERROR" || subConversationTaskStatus === "ERROR") {
+  if (
+    taskStatus === "ERROR" ||
+    subConversationTaskStatus === "ERROR" ||
+    sandboxStatus === "ERROR" ||
+    executionStatus === "error"
+  ) {
     return I18nKey.AGENT_STATUS$ERROR_OCCURRED;
   }
 
-  // PRIORITY 2: Handle conversation and runtime stopped states
-  if (conversationStatus === "STOPPED" || runtimeStatus === "STATUS$STOPPED") {
-    return I18nKey.CHAT_INTERFACE$STOPPED;
-  }
-
-  // Prioritize agent state when it indicates readiness, even if runtime status is stale
-  const agentIsReady =
-    agentState &&
-    [
-      AgentState.AWAITING_USER_INPUT,
-      AgentState.RUNNING,
-      AgentState.FINISHED,
-      AgentState.PAUSED,
-      AgentState.AWAITING_USER_CONFIRMATION,
-      AgentState.USER_CONFIRMED,
-      AgentState.USER_REJECTED,
-    ].includes(agentState);
-
-  if (
-    runtimeStatus &&
-    !["STATUS$READY", "STATUS$RUNTIME_STARTED"].includes(runtimeStatus) &&
-    !agentIsReady // Skip runtime status check if agent is ready
-  ) {
-    const result = (I18nKey as { [key: string]: string })[runtimeStatus];
-    if (result) {
-      return result;
+  // Priority 2 : Startup task.
+  if (taskStatus && taskStatus !== "READY") {
+    switch (taskStatus) {
+      case "WAITING_FOR_SANDBOX":
+        return I18nKey.COMMON$WAITING_FOR_SANDBOX;
+      case "SETTING_UP_GIT_HOOKS":
+        return I18nKey.STATUS$SETTING_UP_GIT_HOOKS;
+      case "SETTING_UP_SKILLS":
+        return I18nKey.STATUS$SETTING_UP_SKILLS;
+      case "STARTING_CONVERSATION":
+        return I18nKey.CONVERSATION$STARTING_CONVERSATION;
+      case "WORKING":
+      case "PREPARING_REPOSITORY":
+      case "RUNNING_SETUP_SCRIPT":
+        // TODO: These don't have In8n labels.
+        return I18nKey.CONVERSATION$STARTING_CONVERSATION;
+      default:
+        throw new Error(`Unknown taskStatus: ${taskStatus}`);
     }
-    return runtimeStatus;
   }
 
-  // PRIORITY 3: Handle WebSocket connection states
-  // Note: WebSocket may be stuck in CONNECTING when task errors, so we check taskStatus first
-  if (webSocketStatus === "DISCONNECTED") {
-    return I18nKey.CHAT_INTERFACE$DISCONNECTED;
-  }
-  if (
-    webSocketStatus === "CONNECTING" ||
-    isTaskPolling(subConversationTaskStatus)
-  ) {
-    return I18nKey.CHAT_INTERFACE$CONNECTING;
-  }
-
-  // Handle agent states with simplified status messages
-  if (agentState) {
-    return AGENT_STATUS_MAP[agentState];
+  // Priority 3: SandboxStatus
+  if (sandboxStatus && sandboxStatus !== "RUNNING") {
+    switch (sandboxStatus) {
+      case "STARTING":
+        return I18nKey.CONVERSATION$STARTING_CONVERSATION;
+      case "PAUSED":
+      case "MISSING":
+        return I18nKey.CHAT_INTERFACE$STOPPED;
+      default:
+        throw new Error(`Unknown sandboxStatus: ${sandboxStatus}`);
+    }
   }
 
-  // Handle runtime status when no agent state
-  if (runtimeStatus && runtimeStatus !== "STATUS$READY" && !agentState) {
-    return runtimeStatus;
+  // Websocket has disconnected...
+  if (webSocketConnectionState && webSocketConnectionState !== "OPEN") {
+    switch (webSocketConnectionState) {
+      case "CLOSED":
+      case "CLOSING":
+        return I18nKey.CHAT_INTERFACE$DISCONNECTED;
+      case "CONNECTING":
+        return I18nKey.CHAT_INTERFACE$CONNECTING;
+      default:
+        throw new Error(
+          `Unknown WebsocketConnectionState: ${webSocketConnectionState}`,
+        );
+    }
   }
 
+  if (executionStatus && executionStatus !== V1ExecutionStatus.STUCK) {
+    switch (executionStatus) {
+      case V1ExecutionStatus.IDLE:
+        return I18nKey.AGENT_STATUS$WAITING_FOR_TASK;
+      case V1ExecutionStatus.RUNNING:
+        return I18nKey.AGENT_STATUS$RUNNING_TASK;
+      case V1ExecutionStatus.WAITING_FOR_CONFIRMATION:
+        return I18nKey.AGENT_STATUS$WAITING_FOR_USER_CONFIRMATION;
+      case V1ExecutionStatus.PAUSED:
+        return I18nKey.CHAT_INTERFACE$AGENT_PAUSED_MESSAGE;
+      case V1ExecutionStatus.FINISHED:
+        return I18nKey.CHAT_INTERFACE$AGENT_FINISHED_MESSAGE;
+      default:
+        throw new Error(`Unknown executionStatus: ${executionStatus}`);
+    }
+  }
+
+  // Some unknown state...
   return I18nKey.CHAT_INTERFACE$AGENT_ERROR_MESSAGE;
 }

@@ -15,24 +15,26 @@ class SaasConversationValidator(ConversationValidator):
 
     async def _validate_api_key(self, api_key: str) -> str | None:
         """
-        Validate an API key and return the user_id and github_user_id if valid.
+        Validate an API key and return the user_id if valid.
 
         Args:
             api_key: The API key to validate
 
         Returns:
-            A tuple of (user_id, github_user_id) if the API key is valid, None otherwise
+            The user_id if the API key is valid, None otherwise
         """
         try:
             token_manager = TokenManager()
 
             # Validate the API key and get the user_id
             api_key_store = ApiKeyStore.get_instance()
-            user_id = await api_key_store.validate_api_key(api_key)
+            validation_result = await api_key_store.validate_api_key(api_key)
 
-            if not user_id:
+            if not validation_result:
                 logger.warning('Invalid API key')
                 return None
+
+            user_id = validation_result.user_id
 
             # Get the offline token for the user
             offline_token = await token_manager.load_offline_token(user_id)

@@ -27,7 +27,7 @@ from openhands.app_server.sandbox.sandbox_models import (
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk.context.skills import KeywordTrigger, Skill, TaskTrigger
+from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 
 def _make_service_mock(
@@ -38,7 +38,6 @@ def _make_service_mock(
     raise_on_load: bool = False,
 ):
     """Create a mock service that passes the isinstance check and returns the desired values."""
-
     mock_cls = type('AppConversationServiceMock', (MagicMock,), {})
     AppConversationServiceBase.register(mock_cls)
 
@@ -203,7 +202,7 @@ class TestGetConversationSkills:
 
         Arrange: Setup conversation but no sandbox
         Act: Call get_conversation_skills endpoint
-        Assert: Response is 404 with sandbox error message
+        Assert: Response is 404
         """
         # Arrange
         conversation_id = uuid4()
@@ -237,19 +236,13 @@ class TestGetConversationSkills:
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        content = response.body.decode('utf-8')
-        import json
 
-        data = json.loads(content)
-        assert 'error' in data
-        assert 'Sandbox not found' in data['error']
+    async def test_get_skills_returns_empty_list_when_sandbox_paused(self):
+        """Test endpoint returns empty skills when sandbox is PAUSED (closed conversation).
 
-    async def test_get_skills_returns_404_when_sandbox_not_running(self):
-        """Test endpoint returns 404 when sandbox is not in RUNNING state.
-
-        Arrange: Setup conversation with stopped sandbox
+        Arrange: Setup conversation with paused sandbox
         Act: Call get_conversation_skills endpoint
-        Assert: Response is 404 with sandbox not running message
+        Assert: Response is 200 with empty skills list
         """
         # Arrange
         conversation_id = uuid4()
@@ -290,13 +283,12 @@ class TestGetConversationSkills:
         )
 
         # Assert
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_200_OK
         content = response.body.decode('utf-8')
         import json
 
         data = json.loads(content)
-        assert 'error' in data
-        assert 'not running' in data['error']
+        assert data == {'skills': []}
 
     async def test_get_skills_handles_task_trigger_skills(self):
         """Test endpoint correctly handles skills with TaskTrigger.

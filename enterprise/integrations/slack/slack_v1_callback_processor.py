@@ -40,15 +40,19 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         event: Event,
     ) -> EventCallbackResult | None:
         """Process events for Slack V1 integration."""
-        # Only handle ConversationStateUpdateEvent
+        # Only handle ConversationStateUpdateEvent for execution_status
         if not isinstance(event, ConversationStateUpdateEvent):
             return None
 
-        # Only act when execution has finished
-        if not (event.key == 'execution_status' and event.value == 'finished'):
+        if event.key != 'execution_status':
             return None
 
+        # Log ALL terminal states for monitoring (finished, error, stuck)
         _logger.info('[Slack V1] Callback agent state was %s', event)
+
+        # Only request summary when execution has finished successfully
+        if event.value != 'finished':
+            return None
 
         try:
             summary = await self._request_summary(conversation_id)
@@ -107,9 +111,11 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
         try:
             # Post the summary as a threaded reply
+            # Use markdown_text instead of text to properly render standard Markdown
+            # (e.g., **bold**, [link](url)) which is used throughout the codebase
             response = client.chat_postMessage(
                 channel=channel_id,
-                text=summary,
+                markdown_text=summary,
                 thread_ts=thread_ts,
                 unfurl_links=False,
                 unfurl_media=False,

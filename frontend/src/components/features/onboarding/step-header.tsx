@@ -3,11 +3,17 @@ import { cn } from "#/utils/utils";
 
 interface StepHeaderProps {
   title: string;
+  subtitle?: string;
   currentStep: number;
   totalSteps: number;
 }
 
-function StepHeader({ title, currentStep, totalSteps }: StepHeaderProps) {
+function StepHeader({
+  title,
+  subtitle,
+  currentStep,
+  totalSteps,
+}: StepHeaderProps) {
   return (
     <div data-testid="step-header" className="flex flex-col items-center gap-2">
       <div className="flex justify-center gap-2 mb-2">
@@ -24,6 +30,11 @@ function StepHeader({ title, currentStep, totalSteps }: StepHeaderProps) {
       <Typography.Text className="text-2xl font-semibold text-content text-center">
         {title}
       </Typography.Text>
+      {subtitle && (
+        <Typography.Text className="text-sm text-neutral-400 text-center">
+          {subtitle}
+        </Typography.Text>
+      )}
     </div>
   );
 }

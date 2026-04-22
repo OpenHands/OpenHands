@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 from typing import Callable, Protocol
 
-import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
 from openhands.controller.replay import ReplayManager
 from openhands.controller.state.state import State
 from openhands.core.config import (
@@ -21,7 +20,7 @@ from openhands.core.config import (
     parse_arguments,
     setup_config_from_args,
 )
-from openhands.core.config.mcp_config import OpenHandsMCPConfigImpl
+from openhands.core.config.mcp_config import MCPConfig, OpenHandsMCPConfigImpl
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.loop import run_agent_until_done
 from openhands.core.schema import AgentState
@@ -153,13 +152,12 @@ async def run_controller(
     # Add MCP tools to the agent
     if agent.config.enable_mcp:
         # Add OpenHands' MCP server by default
-        (
-            _,
-            openhands_mcp_stdio_servers,
-        ) = await OpenHandsMCPConfigImpl.create_default_mcp_server_config(
+        default_servers = await OpenHandsMCPConfigImpl.create_default_mcp_server_config(
             config.mcp_host, config, None
         )
-        runtime.config.mcp.stdio_servers.extend(openhands_mcp_stdio_servers)
+        runtime.config.mcp = MCPConfig(
+            mcpServers={**runtime.config.mcp.mcpServers, **default_servers}
+        )
 
         await add_mcp_tools_to_agent(agent, runtime, memory)
 

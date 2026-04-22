@@ -13,7 +13,7 @@ from conftest import (
 
 import openhands
 from openhands.core.config import MCPConfig
-from openhands.core.config.mcp_config import MCPSSEServerConfig, MCPStdioServerConfig
+from openhands.core.config.mcp_config import RemoteMCPServer, StdioMCPServer
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import CmdRunAction, MCPAction
 from openhands.events.observation import CmdOutputObservation, MCPObservation
@@ -143,7 +143,7 @@ def test_default_activated_tools():
 async def test_fetch_mcp_via_stdio(
     temp_dir, runtime_cls, run_as_openhands, dynamic_port
 ):
-    mcp_stdio_server_config = MCPStdioServerConfig(
+    mcp_stdio_server_config = StdioMCPServer(
         name='fetch', command='uvx', args=['mcp-server-fetch']
     )
     override_mcp_config = MCPConfig(stdio_servers=[mcp_stdio_server_config])
@@ -203,8 +203,9 @@ async def test_filesystem_mcp_via_sse(
     sse_url = sse_server_info['url']
     runtime = None
     try:
-        mcp_sse_server_config = MCPSSEServerConfig(url=sse_url)
-        override_mcp_config = MCPConfig(sse_servers=[mcp_sse_server_config])
+        override_mcp_config = MCPConfig(
+            mcpServers={'fs': RemoteMCPServer(url=sse_url, transport='sse')}
+        )
         runtime, config = _load_runtime(
             temp_dir,
             runtime_cls,
@@ -235,15 +236,11 @@ async def test_both_stdio_and_sse_mcp(
     sse_url = sse_server_info['url']
     runtime = None
     try:
-        mcp_sse_server_config = MCPSSEServerConfig(url=sse_url)
-
-        # Also add stdio server
-        mcp_stdio_server_config = MCPStdioServerConfig(
-            name='fetch', command='uvx', args=['mcp-server-fetch']
-        )
-
         override_mcp_config = MCPConfig(
-            sse_servers=[mcp_sse_server_config], stdio_servers=[mcp_stdio_server_config]
+            mcpServers={
+                'fs': RemoteMCPServer(url=sse_url, transport='sse'),
+                'fetch': StdioMCPServer(command='uvx', args=['mcp-server-fetch']),
+            }
         )
         runtime, config = _load_runtime(
             temp_dir,
@@ -315,7 +312,7 @@ async def test_microagent_and_one_stdio_mcp_in_config(
 ):
     runtime = None
     try:
-        filesystem_config = MCPStdioServerConfig(
+        filesystem_config = StdioMCPServer(
             name='filesystem',
             command='npx',
             args=[
@@ -336,7 +333,7 @@ async def test_microagent_and_one_stdio_mcp_in_config(
         # but that stdio server is not in the initial config
         # Actual invocation of the microagent involves `add_mcp_tools_to_agent`
         # which will call `get_mcp_config` with the stdio server from microagent's config
-        fetch_config = MCPStdioServerConfig(
+        fetch_config = StdioMCPServer(
             name='fetch', command='uvx', args=['mcp-server-fetch']
         )
         updated_config = runtime.get_mcp_config([fetch_config])

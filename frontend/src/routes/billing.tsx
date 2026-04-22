@@ -16,14 +16,15 @@ import { isBillingHidden } from "#/utils/org/billing-visibility";
 import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
 import { WebClientConfig } from "#/api/option-service/option.types";
+import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
 import { getFirstAvailablePath } from "#/utils/settings-utils";
 
 export const clientLoader = async () => {
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
-  if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
-  }
+  const config = await queryClient.fetchQuery<WebClientConfig>({
+    queryKey: QUERY_KEYS.WEB_CLIENT_CONFIG,
+    queryFn: OptionService.getConfig,
+    ...CONFIG_CACHE_OPTIONS,
+  });
 
   const isSaas = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;
@@ -56,13 +57,11 @@ function BillingSettingsScreen() {
   const { hasPermission } = usePermission(me?.role ?? "member");
   const canAddCredits = !!me && hasPermission("add_credits");
   const checkoutStatus = searchParams.get("checkout");
+  const amount = searchParams.get("amount");
+  const sessionId = searchParams.get("session_id");
 
   React.useEffect(() => {
     if (checkoutStatus === "success") {
-      // Get purchase details from URL params
-      const amount = searchParams.get("amount");
-      const sessionId = searchParams.get("session_id");
-
       // Track credits purchased if we have the necessary data
       if (amount && sessionId) {
         trackCreditsPurchased({
@@ -78,7 +77,14 @@ function BillingSettingsScreen() {
       displayErrorToast(t(I18nKey.PAYMENT$CANCELLED));
       setSearchParams({});
     }
-  }, [checkoutStatus, searchParams, setSearchParams, t, trackCreditsPurchased]);
+  }, [
+    checkoutStatus,
+    amount,
+    sessionId,
+    setSearchParams,
+    t,
+    trackCreditsPurchased,
+  ]);
 
   return <PaymentForm isDisabled={!canAddCredits} />;
 }

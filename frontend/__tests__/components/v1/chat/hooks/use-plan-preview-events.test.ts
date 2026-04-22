@@ -28,6 +28,7 @@ const createUserMessageEvent = (id: string): MessageEvent => ({
 const createPlanningObservationEvent = (
   id: string,
   actionId: string = "action-1",
+  path: string = "/workspace/PLAN.md",
 ): ObservationEvent<PlanningFileEditorObservation> => ({
   id,
   timestamp: new Date().toISOString(),
@@ -40,7 +41,7 @@ const createPlanningObservationEvent = (
     content: [{ type: "text", text: "Plan content" }],
     is_error: false,
     command: "create",
-    path: "/workspace/PLAN.md",
+    path,
     prev_exist: false,
     old_content: null,
     new_content: "Plan content",
@@ -171,6 +172,31 @@ describe("usePlanPreviewEvents", () => {
     // Events before first user message should be in first phase
     expect(result.current.size).toBe(1);
     expect(result.current.has("plan-obs-1")).toBe(true);
+  });
+
+  it("should exclude PlanningFileEditorObservation for non-Plan.md paths", () => {
+    const events: OpenHandsEvent[] = [
+      createUserMessageEvent("user-1"),
+      createPlanningObservationEvent("plan-obs-1", "action-1", "settings.py"),
+      createPlanningObservationEvent("plan-obs-2", "action-2", "use-add-mcp.ts"),
+    ];
+
+    const { result } = renderHook(() => usePlanPreviewEvents(events));
+
+    expect(result.current.size).toBe(0);
+  });
+
+  it("should include only Plan.md observations when mixed with other file edits", () => {
+    const events: OpenHandsEvent[] = [
+      createUserMessageEvent("user-1"),
+      createPlanningObservationEvent("plan-obs-1", "action-1", "settings.py"),
+      createPlanningObservationEvent("plan-obs-2", "action-2", "/workspace/PLAN.md"),
+    ];
+
+    const { result } = renderHook(() => usePlanPreviewEvents(events));
+
+    expect(result.current.size).toBe(1);
+    expect(result.current.has("plan-obs-2")).toBe(true);
   });
 });
 

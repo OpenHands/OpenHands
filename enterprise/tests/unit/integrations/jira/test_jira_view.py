@@ -86,31 +86,6 @@ class TestJiraNewConversationView:
         assert 'Test Issue' in user_msg
 
     @pytest.mark.asyncio
-    @patch('integrations.jira.jira_view.create_new_conversation')
-    @patch('integrations.jira.jira_view.integration_store')
-    async def test_create_or_update_conversation_success(
-        self,
-        mock_store,
-        mock_create_conversation,
-        new_conversation_view,
-        mock_jinja_env,
-        mock_agent_loop_info,
-    ):
-        """Test successful conversation creation"""
-        new_conversation_view._issue_title = 'Test Issue'
-        new_conversation_view._issue_description = 'Test description'
-        mock_create_conversation.return_value = mock_agent_loop_info
-        mock_store.create_conversation = AsyncMock()
-
-        result = await new_conversation_view.create_or_update_conversation(
-            mock_jinja_env
-        )
-
-        assert result == 'conv-123'
-        mock_create_conversation.assert_called_once()
-        mock_store.create_conversation.assert_called_once()
-
-    @pytest.mark.asyncio
     async def test_create_or_update_conversation_no_repo(
         self, new_conversation_view, mock_jinja_env
     ):
@@ -463,3 +438,164 @@ class TestJiraPayloadParserStagingLabels:
         result = staging_parser.parse(payload)
 
         assert isinstance(result, JiraPayloadSkipped)
+
+
+class TestJiraV1Conversation:
+    """Tests for V1 conversation creation and callback processor registration."""
+
+    @pytest.mark.asyncio
+    async def test_create_v1_metadata_generates_conversation_id(
+        self, new_conversation_view
+    ):
+        """Test that _create_v1_metadata generates a new conversation ID."""
+        new_conversation_view.conversation_id = ''
+
+        with patch.object(
+            new_conversation_view, '_get_resolved_org_id', new_callable=AsyncMock
+        ) as mock_get_org:
+            mock_get_org.return_value = None
+
+            metadata = await new_conversation_view._create_v1_metadata()
+
+            # Conversation ID should be generated
+            assert new_conversation_view.conversation_id != ''
+            assert len(new_conversation_view.conversation_id) == 32  # UUID hex format
+            assert metadata.conversation_id == new_conversation_view.conversation_id
+            mock_get_org.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_create_v1_metadata_sets_resolved_org(self, new_conversation_view):
+        """Test that _create_v1_metadata sets resolved_org_id."""
+        from uuid import UUID
+
+        test_org_id = UUID('12345678-1234-5678-1234-567812345678')
+
+        with patch.object(
+            new_conversation_view, '_get_resolved_org_id', new_callable=AsyncMock
+        ) as mock_get_org:
+            mock_get_org.return_value = test_org_id
+
+            await new_conversation_view._create_v1_metadata()
+
+            assert new_conversation_view.resolved_org_id == test_org_id
+
+    def test_create_jira_v1_callback_processor(
+        self, new_conversation_view, sample_jira_workspace
+    ):
+        """Test that _create_jira_v1_callback_processor creates correctly configured processor."""
+        from integrations.jira.jira_v1_callback_processor import JiraV1CallbackProcessor
+
+        processor = new_conversation_view._create_jira_v1_callback_processor()
+
+        assert isinstance(processor, JiraV1CallbackProcessor)
+        assert processor.svc_acc_email == sample_jira_workspace.svc_acc_email
+        assert processor.decrypted_api_key == 'decrypted_key'
+        assert processor.issue_key == 'TEST-123'
+        assert processor.jira_cloud_id == sample_jira_workspace.jira_cloud_id
+
+    @pytest.mark.asyncio
+    async def test_get_v1_initial_user_message(
+        self, new_conversation_view, mock_jinja_env
+    ):
+        """Test _get_v1_initial_user_message renders the template correctly."""
+        new_conversation_view._issue_title = 'Test Bug'
+        new_conversation_view._issue_description = 'Description of the bug'
+
+        message = await new_conversation_view._get_v1_initial_user_message(
+            mock_jinja_env
+        )
+
+        assert 'TEST-123' in message
+        assert 'Test Bug' in message
+
+    @pytest.mark.asyncio
+    @patch('integrations.jira.jira_view.get_app_conversation_service')
+    @patch('integrations.jira.jira_view.integration_store')
+    async def test_create_or_update_conversation_v1_flow(
+        self,
+        mock_store,
+        mock_get_service,
+        new_conversation_view,
+        mock_jinja_env,
+    ):
+        """Test create_or_update_conversation creates V1 conversation correctly."""
+        from unittest.mock import AsyncMock, MagicMock
+        from uuid import UUID
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationStartTaskStatus,
+        )
+
+        # Setup mocks
+        mock_store.create_conversation = AsyncMock()
+
+        # Mock the app conversation service
+        mock_service = AsyncMock()
+
+        async def mock_start_generator(*args, **kwargs):
+            yield MagicMock(status=AppConversationStartTaskStatus.WORKING)
+            yield MagicMock(status=AppConversationStartTaskStatus.READY)
+
+        mock_service.start_app_conversation = mock_start_generator
+        mock_get_service.return_value.__aenter__.return_value = mock_service
+
+        # Set issue details to avoid fetch
+        new_conversation_view._issue_title = 'Test Issue'
+        new_conversation_view._issue_description = 'Test description'
+
+        with patch.object(
+            new_conversation_view, '_get_resolved_org_id', new_callable=AsyncMock
+        ) as mock_get_org:
+            mock_get_org.return_value = UUID('12345678-1234-5678-1234-567812345678')
+
+            result = await new_conversation_view.create_or_update_conversation(
+                mock_jinja_env
+            )
+
+            # Verify conversation was created
+            assert result is not None
+            mock_store.create_conversation.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('integrations.jira.jira_view.get_app_conversation_service')
+    @patch('integrations.jira.jira_view.integration_store')
+    async def test_create_or_update_conversation_handles_error(
+        self,
+        mock_store,
+        mock_get_service,
+        new_conversation_view,
+        mock_jinja_env,
+    ):
+        """Test create_or_update_conversation handles V1 errors correctly."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationStartTaskStatus,
+        )
+
+        mock_store.create_conversation = AsyncMock()
+
+        # Mock the app conversation service to return error
+        mock_service = AsyncMock()
+
+        async def mock_error_generator(*args, **kwargs):
+            yield MagicMock(
+                status=AppConversationStartTaskStatus.ERROR,
+                detail='Sandbox allocation failed',
+            )
+
+        mock_service.start_app_conversation = mock_error_generator
+        mock_get_service.return_value.__aenter__.return_value = mock_service
+
+        new_conversation_view._issue_title = 'Test Issue'
+        new_conversation_view._issue_description = 'Test description'
+
+        with patch.object(
+            new_conversation_view, '_get_resolved_org_id', new_callable=AsyncMock
+        ) as mock_get_org:
+            mock_get_org.return_value = None
+
+            with pytest.raises(RuntimeError, match='Failed to start V1 conversation'):
+                await new_conversation_view.create_or_update_conversation(
+                    mock_jinja_env
+                )

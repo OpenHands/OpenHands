@@ -2,10 +2,11 @@
 
 This module tests the environment variable override functionality that allows
 users to inject custom environment variables into sandbox environments via
-OH_AGENT_SERVER_ENV_* environment variables.
+OH_AGENT_SERVER_ENV environment variable and auto-forwarding of LLM_* variables.
 
 The functionality includes:
-- Parsing OH_AGENT_SERVER_ENV_* environment variables
+- Auto-forwarding of LLM_* environment variables to agent-server containers
+- Explicit overrides via OH_AGENT_SERVER_ENV JSON
 - Merging them into sandbox specifications
 - Integration across different sandbox types (Docker, Process, Remote)
 """
@@ -25,6 +26,7 @@ from openhands.app_server.sandbox.remote_sandbox_spec_service import (
     get_default_sandbox_specs as get_default_remote_sandbox_specs,
 )
 from openhands.app_server.sandbox.sandbox_spec_service import (
+    AUTO_FORWARD_PREFIXES,
     get_agent_server_env,
 )
 
@@ -183,6 +185,114 @@ class TestGetAgentServerEnv:
                 'CUSTOM_VAR': 'value',
             }
             assert result == expected
+
+
+class TestLLMAutoForwarding:
+    """Test cases for automatic forwarding of LLM_* environment variables."""
+
+    def test_auto_forward_prefixes_contains_llm(self):
+        """Test that LLM_ is in the auto-forward prefixes."""
+        assert 'LLM_' in AUTO_FORWARD_PREFIXES
+
+    def test_llm_timeout_auto_forwarded(self):
+        """Test that LLM_TIMEOUT is automatically forwarded."""
+        env_vars = {
+            'LLM_TIMEOUT': '3600',
+            'OTHER_VAR': 'should_not_be_included',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert 'LLM_TIMEOUT' in result
+            assert result['LLM_TIMEOUT'] == '3600'
+            assert 'OTHER_VAR' not in result
+
+    def test_llm_num_retries_auto_forwarded(self):
+        """Test that LLM_NUM_RETRIES is automatically forwarded."""
+        env_vars = {
+            'LLM_NUM_RETRIES': '10',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert 'LLM_NUM_RETRIES' in result
+            assert result['LLM_NUM_RETRIES'] == '10'
+
+    def test_multiple_llm_vars_auto_forwarded(self):
+        """Test that multiple LLM_* variables are automatically forwarded."""
+        env_vars = {
+            'LLM_TIMEOUT': '3600',
+            'LLM_NUM_RETRIES': '10',
+            'LLM_MODEL': 'gpt-4',
+            'LLM_BASE_URL': 'https://api.example.com',
+            'LLM_API_KEY': 'secret-key',
+            'NON_LLM_VAR': 'should_not_be_included',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert result['LLM_TIMEOUT'] == '3600'
+            assert result['LLM_NUM_RETRIES'] == '10'
+            assert result['LLM_MODEL'] == 'gpt-4'
+            assert result['LLM_BASE_URL'] == 'https://api.example.com'
+            assert result['LLM_API_KEY'] == 'secret-key'
+            assert 'NON_LLM_VAR' not in result
+
+    def test_explicit_override_takes_precedence(self):
+        """Test that OH_AGENT_SERVER_ENV overrides auto-forwarded variables."""
+        env_vars = {
+            'LLM_TIMEOUT': '3600',  # Auto-forwarded value
+            'OH_AGENT_SERVER_ENV': '{"LLM_TIMEOUT": "7200"}',  # Explicit override
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            # Explicit override should win
+            assert result['LLM_TIMEOUT'] == '7200'
+
+    def test_combined_auto_forward_and_explicit(self):
+        """Test combining auto-forwarded and explicit variables."""
+        env_vars = {
+            'LLM_TIMEOUT': '3600',  # Auto-forwarded
+            'LLM_NUM_RETRIES': '10',  # Auto-forwarded
+            'OH_AGENT_SERVER_ENV': '{"DEBUG": "true", "CUSTOM_VAR": "value"}',  # Explicit
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            # Auto-forwarded
+            assert result['LLM_TIMEOUT'] == '3600'
+            assert result['LLM_NUM_RETRIES'] == '10'
+            # Explicit
+            assert result['DEBUG'] == 'true'
+            assert result['CUSTOM_VAR'] == 'value'
+
+    def test_no_llm_vars_returns_empty_without_explicit(self):
+        """Test that no LLM_* vars and no explicit env returns empty dict."""
+        env_vars = {
+            'SOME_OTHER_VAR': 'value',
+            'ANOTHER_VAR': 'another_value',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert result == {}
+
+    def test_llm_prefix_is_case_sensitive(self):
+        """Test that LLM_ prefix matching is case-sensitive."""
+        env_vars = {
+            'LLM_TIMEOUT': '3600',  # Should be included
+            'llm_timeout': 'lowercase',  # Should NOT be included (wrong case)
+            'Llm_Timeout': 'mixed',  # Should NOT be included (wrong case)
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert 'LLM_TIMEOUT' in result
+            assert result['LLM_TIMEOUT'] == '3600'
+            # Lowercase variants should not be included
+            assert 'llm_timeout' not in result
+            assert 'Llm_Timeout' not in result
 
 
 class TestDockerSandboxSpecEnvironmentOverride:
@@ -476,3 +586,311 @@ class TestEnvironmentOverrideIntegration:
             # Should not have the old variables
             assert 'VAR1' not in spec_2.initial_env
             assert 'VAR2' not in spec_2.initial_env
+
+
+class TestDockerSandboxServiceEnvIntegration:
+    """Integration tests for environment variable propagation to Docker sandbox containers.
+
+    These tests verify that environment variables are correctly propagated through
+    the entire flow from the app-server environment to the agent-server container.
+    """
+
+    def test_llm_env_vars_propagated_to_container_run(self):
+        """Test that LLM_* env vars are included in docker container.run() environment argument."""
+        from unittest.mock import patch
+
+        # Set up environment with LLM_* variables
+        env_vars = {
+            'LLM_TIMEOUT': '3600',
+            'LLM_NUM_RETRIES': '10',
+            'LLM_MODEL': 'gpt-4',
+            'OTHER_VAR': 'should_not_be_forwarded',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            # Create a sandbox spec using the actual factory to get LLM_* vars
+            specs = get_default_docker_sandbox_specs()
+            sandbox_spec = specs[0]
+
+            # Verify the sandbox spec has the LLM_* variables
+            assert 'LLM_TIMEOUT' in sandbox_spec.initial_env
+            assert sandbox_spec.initial_env['LLM_TIMEOUT'] == '3600'
+            assert 'LLM_NUM_RETRIES' in sandbox_spec.initial_env
+            assert sandbox_spec.initial_env['LLM_NUM_RETRIES'] == '10'
+            assert 'LLM_MODEL' in sandbox_spec.initial_env
+            assert sandbox_spec.initial_env['LLM_MODEL'] == 'gpt-4'
+            # Non-LLM_* variables should not be included
+            assert 'OTHER_VAR' not in sandbox_spec.initial_env
+
+    def test_explicit_oh_agent_server_env_overrides_llm_vars(self):
+        """Test that OH_AGENT_SERVER_ENV can override auto-forwarded LLM_* variables."""
+        env_vars = {
+            'LLM_TIMEOUT': '3600',  # Auto-forwarded value
+            'OH_AGENT_SERVER_ENV': '{"LLM_TIMEOUT": "7200"}',  # Override value
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            specs = get_default_docker_sandbox_specs()
+            sandbox_spec = specs[0]
+
+            # OH_AGENT_SERVER_ENV should take precedence
+            assert sandbox_spec.initial_env['LLM_TIMEOUT'] == '7200'
+
+    def test_multiple_llm_vars_combined_with_explicit_overrides(self):
+        """Test complex scenario with multiple LLM_* vars and explicit overrides."""
+        env_vars = {
+            'LLM_TIMEOUT': '3600',
+            'LLM_NUM_RETRIES': '10',
+            'LLM_MODEL': 'gpt-4',
+            'LLM_TEMPERATURE': '0.7',
+            'OH_AGENT_SERVER_ENV': '{"LLM_MODEL": "gpt-3.5-turbo", "CUSTOM_VAR": "custom_value"}',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            specs = get_default_docker_sandbox_specs()
+            sandbox_spec = specs[0]
+
+            # Auto-forwarded LLM_* vars that weren't overridden
+            assert sandbox_spec.initial_env['LLM_TIMEOUT'] == '3600'
+            assert sandbox_spec.initial_env['LLM_NUM_RETRIES'] == '10'
+            assert sandbox_spec.initial_env['LLM_TEMPERATURE'] == '0.7'
+
+            # LLM_MODEL should be overridden by OH_AGENT_SERVER_ENV
+            assert sandbox_spec.initial_env['LLM_MODEL'] == 'gpt-3.5-turbo'
+
+            # Custom variable from OH_AGENT_SERVER_ENV
+            assert sandbox_spec.initial_env['CUSTOM_VAR'] == 'custom_value'
+
+    def test_sandbox_spec_env_passed_to_docker_container_run(self):
+        """Test that sandbox spec's initial_env is passed to docker container run."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        import httpx
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxService,
+            ExposedPort,
+        )
+
+        # Create mock docker client
+        mock_docker_client = MagicMock()
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-abc123'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-01T00:00:00Z',
+            'Config': {
+                'Env': ['SESSION_API_KEY=test-key'],
+                'WorkingDir': '/workspace',
+            },
+            'NetworkSettings': {'Ports': {'8000/tcp': [{'HostPort': '32768'}]}},
+            'HostConfig': {'NetworkMode': 'bridge'},
+        }
+        mock_container.status = 'running'
+        mock_docker_client.containers.run.return_value = mock_container
+        mock_docker_client.containers.list.return_value = []
+
+        # Create mock sandbox spec service
+        mock_spec_service = MagicMock()
+
+        # Create sandbox spec with LLM_* environment variables
+        env_vars = {
+            'LLM_TIMEOUT': '3600',
+            'LLM_NUM_RETRIES': '10',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            specs = get_default_docker_sandbox_specs()
+            sandbox_spec = specs[0]
+
+            mock_spec_service.get_default_sandbox_spec = AsyncMock(
+                return_value=sandbox_spec
+            )
+
+            # Create service
+            service = DockerSandboxService(
+                sandbox_spec_service=mock_spec_service,
+                container_name_prefix='oh-test-',
+                host_port=3000,
+                container_url_pattern='http://localhost:{port}',
+                mounts=[],
+                exposed_ports=[
+                    ExposedPort(
+                        name='AGENT_SERVER',
+                        description='Agent server',
+                        container_port=8000,
+                    )
+                ],
+                health_check_path='/health',
+                httpx_client=MagicMock(spec=httpx.AsyncClient),
+                max_num_sandboxes=5,
+                docker_client=mock_docker_client,
+            )
+
+            # Start sandbox
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(service.start_sandbox())
+
+            # Verify docker was called with environment variables including LLM_*
+            call_kwargs = mock_docker_client.containers.run.call_args[1]
+            container_env = call_kwargs['environment']
+
+            # LLM_* variables should be in the container environment
+            assert 'LLM_TIMEOUT' in container_env
+            assert container_env['LLM_TIMEOUT'] == '3600'
+            assert 'LLM_NUM_RETRIES' in container_env
+            assert container_env['LLM_NUM_RETRIES'] == '10'
+
+            # Default variables should also be present
+            assert 'OPENVSCODE_SERVER_ROOT' in container_env
+            assert 'LOG_JSON' in container_env
+
+    def test_host_network_mode_with_env_var(self):
+        """Test that AGENT_SERVER_USE_HOST_NETWORK affects container network mode."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        import httpx
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxService,
+            ExposedPort,
+            _get_use_host_network_default,
+        )
+
+        # Test with environment variable set
+        with patch.dict(
+            os.environ, {'AGENT_SERVER_USE_HOST_NETWORK': 'true'}, clear=True
+        ):
+            assert _get_use_host_network_default() is True
+
+            # Create mock docker client
+            mock_docker_client = MagicMock()
+            mock_container = MagicMock()
+            mock_container.name = 'oh-test-abc123'
+            mock_container.image.tags = ['test-image:latest']
+            mock_container.attrs = {
+                'Created': '2024-01-01T00:00:00Z',
+                'Config': {
+                    'Env': ['SESSION_API_KEY=test-key'],
+                    'WorkingDir': '/workspace',
+                },
+                'NetworkSettings': {'Ports': {}},
+                'HostConfig': {'NetworkMode': 'host'},
+            }
+            mock_container.status = 'running'
+            mock_docker_client.containers.run.return_value = mock_container
+            mock_docker_client.containers.list.return_value = []
+
+            # Create mock sandbox spec service
+            mock_spec_service = MagicMock()
+            specs = get_default_docker_sandbox_specs()
+            mock_spec_service.get_default_sandbox_spec = AsyncMock(
+                return_value=specs[0]
+            )
+
+            # Create service with host network enabled
+            service = DockerSandboxService(
+                sandbox_spec_service=mock_spec_service,
+                container_name_prefix='oh-test-',
+                host_port=3000,
+                container_url_pattern='http://localhost:{port}',
+                mounts=[],
+                exposed_ports=[
+                    ExposedPort(
+                        name='AGENT_SERVER',
+                        description='Agent server',
+                        container_port=8000,
+                    )
+                ],
+                health_check_path='/health',
+                httpx_client=MagicMock(spec=httpx.AsyncClient),
+                max_num_sandboxes=5,
+                docker_client=mock_docker_client,
+                use_host_network=True,
+            )
+
+            # Start sandbox
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(service.start_sandbox())
+
+            # Verify docker was called with host network mode
+            call_kwargs = mock_docker_client.containers.run.call_args[1]
+            assert call_kwargs['network_mode'] == 'host'
+            # Port mappings should be None in host network mode
+            assert call_kwargs['ports'] is None
+
+    def test_bridge_network_mode_without_env_var(self):
+        """Test that default (bridge) network mode is used when env var is not set."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        import httpx
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxService,
+            ExposedPort,
+            _get_use_host_network_default,
+        )
+
+        # Test without environment variable
+        with patch.dict(os.environ, {}, clear=True):
+            assert _get_use_host_network_default() is False
+
+            # Create mock docker client
+            mock_docker_client = MagicMock()
+            mock_container = MagicMock()
+            mock_container.name = 'oh-test-abc123'
+            mock_container.image.tags = ['test-image:latest']
+            mock_container.attrs = {
+                'Created': '2024-01-01T00:00:00Z',
+                'Config': {
+                    'Env': ['SESSION_API_KEY=test-key'],
+                    'WorkingDir': '/workspace',
+                },
+                'NetworkSettings': {'Ports': {'8000/tcp': [{'HostPort': '32768'}]}},
+                'HostConfig': {'NetworkMode': 'bridge'},
+            }
+            mock_container.status = 'running'
+            mock_docker_client.containers.run.return_value = mock_container
+            mock_docker_client.containers.list.return_value = []
+
+            # Create mock sandbox spec service
+            mock_spec_service = MagicMock()
+            specs = get_default_docker_sandbox_specs()
+            mock_spec_service.get_default_sandbox_spec = AsyncMock(
+                return_value=specs[0]
+            )
+
+            # Create service with bridge network (default)
+            service = DockerSandboxService(
+                sandbox_spec_service=mock_spec_service,
+                container_name_prefix='oh-test-',
+                host_port=3000,
+                container_url_pattern='http://localhost:{port}',
+                mounts=[],
+                exposed_ports=[
+                    ExposedPort(
+                        name='AGENT_SERVER',
+                        description='Agent server',
+                        container_port=8000,
+                    )
+                ],
+                health_check_path='/health',
+                httpx_client=MagicMock(spec=httpx.AsyncClient),
+                max_num_sandboxes=5,
+                docker_client=mock_docker_client,
+                use_host_network=False,
+            )
+
+            # Start sandbox
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(service.start_sandbox())
+
+            # Verify docker was called with bridge network mode (network_mode=None)
+            call_kwargs = mock_docker_client.containers.run.call_args[1]
+            assert call_kwargs['network_mode'] is None
+            # Port mappings should be present in bridge mode
+            assert call_kwargs['ports'] is not None
+            assert 8000 in call_kwargs['ports']

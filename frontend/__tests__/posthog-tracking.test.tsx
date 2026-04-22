@@ -99,71 +99,6 @@ function renderWithProviders(
 
 describe("PostHog Analytics Tracking", () => {
   describe("Credit Limit Tracking", () => {
-    it("should track credit_limit_reached when AgentErrorEvent contains budget error", async () => {
-      // Create a mock AgentErrorEvent with budget-related error message
-      const mockBudgetErrorEvent = createMockAgentErrorEvent({
-        error: "ExceededBudget: Task exceeded maximum budget of $10.00",
-      });
-
-      // Set up MSW to send the budget error event when connection is established
-      mswServer.use(
-        wsLink.addEventListener("connection", ({ client, server }) => {
-          server.connect();
-          // Send the mock budget error event after connection
-          client.send(JSON.stringify(mockBudgetErrorEvent));
-        }),
-      );
-
-      // Render with all providers
-      renderWithProviders(<ConnectionStatusComponent />);
-
-      // Wait for connection to be established
-      await waitFor(() => {
-        expect(screen.getByTestId("connection-state")).toHaveTextContent(
-          "OPEN",
-        );
-      });
-
-      // Wait for the tracking event to be captured
-      await waitFor(() => {
-        expect(mockTrackCreditLimitReached).toHaveBeenCalledWith(
-          expect.objectContaining({
-            conversationId: "test-conversation-123",
-          }),
-        );
-      });
-    });
-
-    it("should track credit_limit_reached when AgentErrorEvent contains 'credit' keyword", async () => {
-      // Create error with "credit" keyword (case-insensitive)
-      const mockCreditErrorEvent = createMockAgentErrorEvent({
-        error: "Insufficient CREDIT to complete this operation",
-      });
-
-      mswServer.use(
-        wsLink.addEventListener("connection", ({ client, server }) => {
-          server.connect();
-          client.send(JSON.stringify(mockCreditErrorEvent));
-        }),
-      );
-
-      renderWithProviders(<ConnectionStatusComponent />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId("connection-state")).toHaveTextContent(
-          "OPEN",
-        );
-      });
-
-      await waitFor(() => {
-        expect(mockTrackCreditLimitReached).toHaveBeenCalledWith(
-          expect.objectContaining({
-            conversationId: "test-conversation-123",
-          }),
-        );
-      });
-    });
-
     it("should NOT track credit_limit_reached for non-budget errors", async () => {
       // Create a regular error without budget/credit keywords
       const mockRegularErrorEvent = createMockAgentErrorEvent({
@@ -188,49 +123,6 @@ describe("PostHog Analytics Tracking", () => {
 
       // Verify that credit_limit_reached was NOT tracked
       expect(mockTrackCreditLimitReached).not.toHaveBeenCalled();
-    });
-
-    it("should only track credit_limit_reached once per error event", async () => {
-      const mockBudgetErrorEvent = createMockAgentErrorEvent({
-        error: "Budget exceeded: $10.00 limit reached",
-      });
-
-      mswServer.use(
-        wsLink.addEventListener("connection", ({ client, server }) => {
-          server.connect();
-          // Send the same error event twice
-          client.send(JSON.stringify(mockBudgetErrorEvent));
-          client.send(
-            JSON.stringify({ ...mockBudgetErrorEvent, id: "different-id" }),
-          );
-        }),
-      );
-
-      renderWithProviders(<ConnectionStatusComponent />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId("connection-state")).toHaveTextContent(
-          "OPEN",
-        );
-      });
-
-      await waitFor(() => {
-        expect(mockTrackCreditLimitReached).toHaveBeenCalledTimes(2);
-      });
-
-      // Both calls should be for credit_limit_reached (once per event)
-      expect(mockTrackCreditLimitReached).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({
-          conversationId: "test-conversation-123",
-        }),
-      );
-      expect(mockTrackCreditLimitReached).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          conversationId: "test-conversation-123",
-        }),
-      );
     });
 
     it("should track credit_limit_reached when ConversationErrorEvent contains budget error", async () => {

@@ -1,16 +1,12 @@
 import { extractModelAndProvider } from "./extract-model-and-provider";
 
 /**
- * Given a list of models, organize them by provider
+ * Given a list of models, organize them by provider.
  * @param models The list of models
  * @returns An object containing the provider and models
  *
  * @example
- * const models = [
- *  "azure/ada",
- *  "azure/gpt-35-turbo",
- *  "cohere.command-r-v1:0",
- * ];
+ * const models = ["azure/ada", "azure/gpt-35-turbo", "gpt-4o"];
  *
  * organizeModelsAndProviders(models);
  * // returns {
@@ -18,9 +14,9 @@ import { extractModelAndProvider } from "./extract-model-and-provider";
  * //     separator: "/",
  * //     models: ["ada", "gpt-35-turbo"],
  * //   },
- * //   cohere: {
- * //     separator: ".",
- * //     models: ["command-r-v1:0"],
+ * //   other: {
+ * //     separator: "",
+ * //     models: ["gpt-4o"],
  * //   },
  * // }
  */
@@ -33,12 +29,6 @@ export const organizeModelsAndProviders = (models: string[]) => {
       provider,
       model: modelId,
     } = extractModelAndProvider(model);
-
-    // Ignore "anthropic" providers with a separator of "."
-    // These are outdated and incompatible providers.
-    if (provider === "anthropic" && separator === ".") {
-      return;
-    }
 
     const key = provider || "other";
     if (!object[key]) {

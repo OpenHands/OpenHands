@@ -20,7 +20,7 @@ export function ConversationTabTitle({
   conversationKey,
 }: ConversationTabTitleProps) {
   const { t } = useTranslation();
-  const { refetch } = useUnifiedGetGitChanges();
+  const { refetch, isFetching } = useUnifiedGetGitChanges();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
   const { curAgentState } = useAgentState();
   const { planContent } = useConversationStore();
@@ -41,10 +41,16 @@ export function ConversationTabTitle({
       {conversationKey === "editor" && (
         <button
           type="button"
-          className="flex w-[26px] py-1 justify-center items-center gap-[10px] rounded-[7px] hover:bg-[#474A54] cursor-pointer"
+          className="flex w-[26px] py-1 justify-center items-center gap-[10px] rounded-[7px] hover:enabled:bg-[#474A54] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleRefresh}
+          disabled={isFetching}
         >
-          <RefreshIcon width={12.75} height={15} color="#ffffff" />
+          <RefreshIcon
+            width={12.75}
+            height={15}
+            color="#ffffff"
+            className={isFetching ? "animate-spin" : ""}
+          />
         </button>
       )}
       {conversationKey === "planner" && (

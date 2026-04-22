@@ -26,8 +26,6 @@ Note:
 
 import os
 
-from openhands.linter import DefaultLinter, LintResult
-
 CURRENT_FILE: str | None = None
 CURRENT_LINE = 1
 WINDOW = 100
@@ -90,32 +88,6 @@ def _check_current_file(file_path: str | None = None) -> bool:
 
 def _clamp(value: int, min_value: int, max_value: int) -> int:
     return max(min_value, min(value, max_value))
-
-
-def _lint_file(file_path: str) -> tuple[str | None, int | None]:
-    """Perform linting on a file and identify the first error location.
-
-    Lint the file at the given path and return a tuple with a boolean indicating if there are errors,
-    and the line number of the first error, if any.
-
-    Args:
-        file_path: str: The path to the file to lint.
-
-    Returns:
-    A tuple containing:
-        - The lint error message if found, None otherwise
-        - The line number of the first error, None if no errors
-    """
-    linter = DefaultLinter()
-    lint_error: list[LintResult] = linter.lint(file_path)
-    if not lint_error:
-        # Linting successful. No issues found.
-        return None, None
-    first_error_line = lint_error[0].line if len(lint_error) > 0 else None
-    error_text = 'ERRORS:\n' + '\n'.join(
-        [f'{file_path}:{err.line}:{err.column}: {err.message}' for err in lint_error]
-    )
-    return error_text, first_error_line
 
 
 def _print_window(

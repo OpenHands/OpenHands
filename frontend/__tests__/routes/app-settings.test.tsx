@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import AppSettingsScreen, { clientLoader } from "#/routes/app-settings";
@@ -8,6 +8,11 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { AvailableLanguages } from "#/i18n";
 import * as CaptureConsent from "#/utils/handle-capture-consent";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+
+beforeEach(() => {
+  useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
+});
 
 const renderAppSettingsScreen = () =>
   render(<AppSettingsScreen />, {

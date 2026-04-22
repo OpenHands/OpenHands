@@ -5,6 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from server.routes.org_invitation_models import (
+    AcceptInvitationRequest,
+    AcceptInvitationResponse,
     BatchInvitationResponse,
     EmailMismatchError,
     InsufficientPermissionError,
@@ -17,10 +19,11 @@ from server.routes.org_invitation_models import (
 )
 from server.services.org_invitation_service import OrgInvitationService
 from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from storage.org_store import OrgStore
+from storage.role_store import RoleStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
-from openhands.server.user_auth.user_auth import get_user_auth
 
 # Router for invitation operations on an organization (requires org_id)
 invitation_router = APIRouter(prefix='/api/organizations/{org_id}/members')
@@ -123,70 +126,93 @@ async def create_invitation(
 
 
 @accept_router.get('/accept')
-async def accept_invitation(
+async def accept_invitation_redirect(
     token: str,
     request: Request,
 ):
-    """Accept an organization invitation via token.
+    """Redirect invitation acceptance to frontend.
 
     This endpoint is accessed via the link in the invitation email.
+    It always redirects to the home page with the invitation token,
+    allowing the frontend to handle the acceptance flow via a modal.
 
-    Flow:
-    1. If user is authenticated: Accept invitation directly and redirect to home
-    2. If user is not authenticated: Redirect to login page with invitation token
-       - Frontend stores token and includes it in OAuth state during login
-       - After authentication, keycloak_callback processes the invitation
+    This approach works with SameSite='strict' cookies because:
+    - Cross-site navigation (clicking email link) doesn't send cookies
+    - But same-origin POST requests (from frontend) DO send cookies
 
     Args:
         token: The invitation token from the email link
         request: FastAPI request
 
     Returns:
-        RedirectResponse: Redirect to home page on success, or login page if not authenticated,
-                         or home page with error query params on failure
+        RedirectResponse: Redirect to home page with invitation_token query param
     """
     base_url = str(request.base_url).rstrip('/')
 
-    # Try to get user_id from auth (may not be authenticated)
-    user_id = None
+    logger.info(
+        'Invitation accept: redirecting to frontend for acceptance',
+        extra={'token_prefix': token[:10] + '...'},
+    )
+
+    return RedirectResponse(f'{base_url}/?invitation_token={token}', status_code=302)
+
+
+@accept_router.post('/accept', response_model=AcceptInvitationResponse)
+async def accept_invitation(
+    request_data: AcceptInvitationRequest,
+    user_id: str = Depends(get_user_id),
+):
+    """Accept an organization invitation via authenticated POST request.
+
+    This endpoint is called by the frontend after displaying the acceptance modal.
+    Requires authentication - cookies are sent because this is a same-origin request.
+
+    Args:
+        request_data: Contains the invitation token
+        user_id: Authenticated user ID (from dependency)
+
+    Returns:
+        AcceptInvitationResponse: Success response with organization details
+
+    Raises:
+        HTTPException 400: Invalid or expired token
+        HTTPException 403: Email mismatch
+        HTTPException 409: User already a member
+    """
+    token = request_data.token
+
     try:
-        user_auth = await get_user_auth(request)
-        if user_auth:
-            user_id = await user_auth.get_user_id()
-    except Exception:
-        pass
+        invitation = await OrgInvitationService.accept_invitation(token, UUID(user_id))
 
-    if not user_id:
-        # User not authenticated - redirect to login page with invitation token
-        # Frontend will store the token and include it in OAuth state during login
-        logger.info(
-            'Invitation accept: redirecting unauthenticated user to login',
-            extra={'token_prefix': token[:10] + '...'},
-        )
-        login_url = f'{base_url}/login?invitation_token={token}'
-        return RedirectResponse(login_url, status_code=302)
-
-    # User is authenticated - process the invitation directly
-    try:
-        await OrgInvitationService.accept_invitation(token, UUID(user_id))
+        # Get organization and role details for response
+        org = await OrgStore.get_org_by_id(invitation.org_id)
+        role = await RoleStore.get_role_by_id(invitation.role_id)
 
         logger.info(
-            'Invitation accepted successfully',
+            'Invitation accepted via API',
             extra={
                 'token_prefix': token[:10] + '...',
                 'user_id': user_id,
+                'org_id': str(invitation.org_id),
             },
         )
 
-        # Redirect to home page on success
-        return RedirectResponse(f'{base_url}/', status_code=302)
+        return AcceptInvitationResponse(
+            success=True,
+            org_id=str(invitation.org_id),
+            org_name=org.name if org else '',
+            role=role.name if role else '',
+        )
 
     except InvitationExpiredError:
         logger.warning(
             'Invitation accept failed: expired',
             extra={'token_prefix': token[:10] + '...', 'user_id': user_id},
         )
-        return RedirectResponse(f'{base_url}/?invitation_expired=true', status_code=302)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='invitation_expired',
+        )
 
     except InvitationInvalidError as e:
         logger.warning(
@@ -197,14 +223,20 @@ async def accept_invitation(
                 'error': str(e),
             },
         )
-        return RedirectResponse(f'{base_url}/?invitation_invalid=true', status_code=302)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='invitation_invalid',
+        )
 
     except UserAlreadyMemberError:
         logger.info(
             'Invitation accept: user already member',
             extra={'token_prefix': token[:10] + '...', 'user_id': user_id},
         )
-        return RedirectResponse(f'{base_url}/?already_member=true', status_code=302)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='already_member',
+        )
 
     except EmailMismatchError as e:
         logger.warning(
@@ -215,15 +247,21 @@ async def accept_invitation(
                 'error': str(e),
             },
         )
-        return RedirectResponse(f'{base_url}/?email_mismatch=true', status_code=302)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='email_mismatch',
+        )
 
     except Exception as e:
         logger.exception(
-            'Unexpected error accepting invitation',
+            'Unexpected error accepting invitation via API',
             extra={
                 'token_prefix': token[:10] + '...',
                 'user_id': user_id,
                 'error': str(e),
             },
         )
-        return RedirectResponse(f'{base_url}/?invitation_error=true', status_code=302)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )

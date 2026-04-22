@@ -8,7 +8,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class ReviewThread(BaseModel):
@@ -21,7 +21,13 @@ class Issue(BaseModel):
     repo: str
     number: int
     title: str
-    body: str
+    body: str = ''
+
+    @field_validator('body', mode='before')
+    @classmethod
+    def body_must_not_be_none(cls, v: str | None) -> str:
+        return v if v is not None else ''
+
     thread_comments: list[str] | None = None  # Added field for issue thread comments
     closing_issues: list[str] | None = None
     review_comments: list[str] | None = None
