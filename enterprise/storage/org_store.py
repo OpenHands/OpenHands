@@ -552,13 +552,17 @@ class OrgStore:
                 org,
                 user_id,
             )
+            should_reset_custom_key_flag = (
+                update_data.llm_api_key is not None or effective_managed_key is not None
+            )
             if effective_managed_key is not None:
                 if member_updates is None:
                     member_updates = OrgMemberSettingsUpdate()
                 member_updates.llm_api_key = SecretStr(effective_managed_key)
 
             if member_updates is not None:
-                member_updates.has_custom_llm_api_key = False
+                if should_reset_custom_key_flag:
+                    member_updates.has_custom_llm_api_key = False
                 await OrgMemberStore.update_all_members_settings_async(
                     session, org_id, member_updates
                 )

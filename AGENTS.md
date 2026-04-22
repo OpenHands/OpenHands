@@ -188,6 +188,8 @@ The `enterprise/` directory contains additional functionality that extends the o
 - The deprecated `/api/organizations/llm` endpoints should stay thin compatibility wrappers instead of introducing separate `OrgLLM*` route/service/store classes.
 - Shared org-defaults serialization for that wrapper currently lives in `OrgDefaultsSettingsResponse` in `enterprise/server/routes/org_models.py`.
 - Member-level propagation on that path now uses neutral `OrgMemberSettingsUpdate` / `update_all_members_settings_async` naming instead of legacy `OrgMemberLLM*` names.
+- When propagating org-defaults saves to members, only reset `has_custom_llm_api_key` on key-related updates (explicit org key changes or managed/OpenHands key rotation); non-key org-default edits like condenser/verification should not clear member BYOR flags.
+
 
 **Running Enterprise Tests:**
 ```bash

@@ -12,7 +12,7 @@ from storage.org_store import OrgStore
 from storage.role import Role
 from storage.user import User
 
-from openhands.sdk.settings import AgentSettings
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.storage.data_models.settings import Settings
 
 
@@ -1120,6 +1120,54 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
     member_settings = mock_member_update.call_args[0][2]
     assert member_settings.llm_api_key.get_secret_value() == 'managed-key'
     assert member_settings.has_custom_llm_api_key is False
+
+
+@pytest.mark.asyncio
+async def test_update_org_defaults_async_non_key_changes_keep_custom_key_flags():
+    """GIVEN: An org-defaults save that only updates shared settings
+    WHEN: update_org_defaults_async is called
+    THEN: member propagation keeps personal custom-key flags untouched
+    """
+    from server.routes.org_models import OrgUpdate
+
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        agent_settings=AgentSettings(llm={'model': 'openhands/claude-3'}),
+        conversation_settings=ConversationSettings(),
+    )
+    update_data = OrgUpdate(conversation_settings={'max_iterations': 42})
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_org
+    mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    with (
+        patch('storage.org_store.a_session_maker', mock_a_session_maker),
+        patch(
+            'storage.org_store.OrgStore._maybe_get_managed_llm_key_for_user',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
+            AsyncMock(),
+        ) as mock_member_update,
+    ):
+        await OrgStore.update_org_defaults_async(org_id, update_data, user_id)
+
+    mock_member_update.assert_called_once()
+    member_settings = mock_member_update.call_args[0][2]
+    assert member_settings.conversation_settings_diff == {'max_iterations': 42}
+    assert member_settings.has_custom_llm_api_key is None
 
 
 @pytest.mark.asyncio
