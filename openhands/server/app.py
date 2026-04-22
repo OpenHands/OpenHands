@@ -33,11 +33,24 @@ from openhands.app_server.config import get_app_lifespan_service
 from openhands.integrations.service_types import AuthenticationError
 from openhands.server.legacy_http_routes import register_legacy_http_routes
 from openhands.server.routes.mcp import mcp_server
-from openhands.server.routes.security import app as security_api_router
-from openhands.server.shared import conversation_manager, server_config
+from openhands.server.shared import server_config
 from openhands.version import get_version
 
 mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
+
+
+def _load_optional_security_api_router():
+    """Load legacy security catch-all router when ``routes.security`` is present."""
+    try:
+        mod = importlib.import_module('openhands.server.routes.security')
+    except ModuleNotFoundError as exc:
+        if exc.name != 'openhands.server.routes.security':
+            raise
+        return None
+    return mod.app
+
+
+security_api_router = _load_optional_security_api_router()
 
 
 def combine_lifespans(*lifespans):
@@ -76,5 +89,6 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 
 register_legacy_http_routes(app, server_config=server_config)
-app.include_router(security_api_router)
+if security_api_router is not None:
+    app.include_router(security_api_router)
 app.include_router(v1_router.router)

@@ -1,0 +1,80 @@
+### version information
+
+```
+pre-commit version: 3.6.2
+git --version: git version 2.43.0
+sys.version:
+    3.12.3 (main, Mar  3 2026, 12:15:18) [GCC 13.3.0]
+sys.executable: /usr/bin/python3
+os.name: posix
+sys.platform: linux
+```
+
+### error information
+
+```
+An unexpected error has occurred: CalledProcessError: command: ('/usr/bin/git', 'fetch', 'origin', '--tags')
+return code: 128
+stdout: (none)
+stderr:
+    fatal: unable to access 'https://github.com/pre-commit/pre-commit-hooks/': Could not resolve host: github.com
+```
+
+```
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/pre_commit/store.py", line 202, in clone_strategy
+    self._shallow_clone(ref, _git_cmd)
+  File "/usr/lib/python3/dist-packages/pre_commit/store.py", line 184, in _shallow_clone
+    git_cmd('-c', git_config, 'fetch', 'origin', ref, '--depth=1')
+  File "/usr/lib/python3/dist-packages/pre_commit/store.py", line 199, in _git_cmd
+    cmd_output_b('git', *args, cwd=directory, env=env)
+  File "/usr/lib/python3/dist-packages/pre_commit/util.py", line 111, in cmd_output_b
+    raise CalledProcessError(returncode, cmd, stdout_b, stderr_b)
+pre_commit.util.CalledProcessError: command: ('/usr/bin/git', '-c', 'protocol.version=2', 'fetch', 'origin', 'v5.0.0', '--depth=1')
+return code: 128
+stdout: (none)
+stderr:
+    fatal: unable to access 'https://github.com/pre-commit/pre-commit-hooks/': Could not resolve host: github.com
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/pre_commit/error_handler.py", line 73, in error_handler
+    yield
+  File "/usr/lib/python3/dist-packages/pre_commit/main.py", line 417, in main
+    return run(args.config, store, args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/pre_commit/commands/run.py", line 425, in run
+    for hook in all_hooks(config, store)
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/pre_commit/repository.py", line 242, in all_hooks
+    return tuple(
+           ^^^^^^
+  File "/usr/lib/python3/dist-packages/pre_commit/repository.py", line 245, in <genexpr>
+    for hook in _repository_hooks(repo, store, root_config)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/pre_commit/repository.py", line 220, in _repository_hooks
+    return _cloned_repository_hooks(repo_config, store, root_config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/pre_commit/repository.py", line 186, in _cloned_repository_hooks
+    manifest_path = os.path.join(store.clone(repo, rev), C.MANIFEST_FILE)
+                                 ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/pre_commit/store.py", line 206, in clone
+    return self._new_repo(repo, ref, deps, clone_strategy)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/pre_commit/store.py", line 163, in _new_repo
+    make_strategy(directory)
+  File "/usr/lib/python3/dist-packages/pre_commit/store.py", line 204, in clone_strategy
+    self._complete_clone(ref, _git_cmd)
+  File "/usr/lib/python3/dist-packages/pre_commit/store.py", line 176, in _complete_clone
+    git_cmd('fetch', 'origin', '--tags')
+  File "/usr/lib/python3/dist-packages/pre_commit/store.py", line 199, in _git_cmd
+    cmd_output_b('git', *args, cwd=directory, env=env)
+  File "/usr/lib/python3/dist-packages/pre_commit/util.py", line 111, in cmd_output_b
+    raise CalledProcessError(returncode, cmd, stdout_b, stderr_b)
+pre_commit.util.CalledProcessError: command: ('/usr/bin/git', 'fetch', 'origin', '--tags')
+return code: 128
+stdout: (none)
+stderr:
+    fatal: unable to access 'https://github.com/pre-commit/pre-commit-hooks/': Could not resolve host: github.com
+```
