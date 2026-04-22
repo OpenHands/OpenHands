@@ -16,6 +16,7 @@ type SettingsUpdate = Partial<Settings> & Record<string, unknown>;
 const saveSettingsMutationFn = async (
   scope: SettingsScope,
   settings: SettingsUpdate,
+  organizationId?: string | null,
 ) => {
   const settingsToSave: SettingsUpdate = { ...settings };
   delete settingsToSave.agent_settings_schema;
@@ -58,7 +59,14 @@ const saveSettingsMutationFn = async (
   }
 
   if (scope === "org") {
-    await organizationService.saveOrganizationAgentSettings(settingsToSave);
+    if (!organizationId) {
+      throw new Error("Organization ID is required for org settings saves");
+    }
+
+    await organizationService.saveOrganizationSettings({
+      orgId: organizationId,
+      settings: settingsToSave,
+    });
     return;
   }
 
@@ -86,7 +94,7 @@ export const useSaveSettings = (scope: SettingsScope = "personal") => {
         });
       }
 
-      await saveSettingsMutationFn(scope, settings);
+      await saveSettingsMutationFn(scope, settings, organizationId);
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({

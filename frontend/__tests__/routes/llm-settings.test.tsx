@@ -405,7 +405,7 @@ describe("LlmSettingsScreen", () => {
 
     vi.spyOn(
       organizationService,
-      "getOrganizationAgentSettings",
+      "getOrganizationSettings",
     ).mockResolvedValue(
       buildSettings({
         llm_model: "gpt-4",
@@ -994,23 +994,23 @@ describe("LlmSettingsScreen", () => {
     });
 
     const getOrganizationSettingsSpy = vi
-      .spyOn(organizationService, "getOrganizationAgentSettings")
+      .spyOn(organizationService, "getOrganizationSettings")
       .mockImplementation(async () => structuredClone(persistedSettings));
     const saveOrganizationSettingsSpy = vi
-      .spyOn(organizationService, "saveOrganizationAgentSettings")
-      .mockImplementation(async (payload) => {
+      .spyOn(organizationService, "saveOrganizationSettings")
+      .mockImplementation(async ({ settings }) => {
         const nextAgentSettings = {
           ...persistedSettings.agent_settings,
         } as NonNullable<Settings["agent_settings"]>;
 
-        const agentSettingsDiff = payload.agent_settings_diff as
+        const agentSettingsDiff = settings.agent_settings_diff as
           | Settings["agent_settings"]
           | undefined;
         if (agentSettingsDiff) {
           Object.assign(nextAgentSettings, agentSettingsDiff);
         }
 
-        Object.entries(payload).forEach(([key, value]) => {
+        Object.entries(settings).forEach(([key, value]) => {
           if (key.includes(".") || key === "agent" || key === "mcp_config") {
             nextAgentSettings[key] = value as SettingsValue;
           }
@@ -1038,21 +1038,22 @@ describe("LlmSettingsScreen", () => {
     await waitFor(() => {
       expect(saveOrganizationSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          agent_settings_diff: expect.objectContaining({
-            llm: expect.objectContaining({
-              api_key: "test-api-key",
-              base_url: null,
+          settings: expect.objectContaining({
+            agent_settings_diff: expect.objectContaining({
+              llm: expect.objectContaining({
+                api_key: "test-api-key",
+                base_url: null,
+              }),
             }),
           }),
         }),
       );
     });
 
-    const payload = saveOrganizationSettingsSpy.mock.calls[0]?.at(0) as Record<
-      string,
-      unknown
-    >;
-    expect(payload).not.toHaveProperty("search_api_key");
+    const payload = saveOrganizationSettingsSpy.mock.calls[0]?.at(0) as {
+      settings: Record<string, unknown>;
+    };
+    expect(payload.settings).not.toHaveProperty("search_api_key");
 
     await waitFor(() => {
       expect(getOrganizationSettingsSpy).toHaveBeenCalledTimes(2);

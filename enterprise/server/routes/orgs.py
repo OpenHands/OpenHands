@@ -221,6 +221,88 @@ async def create_org(
         )
 
 
+@org_router.get('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+async def get_org_defaults_settings(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Get org-default settings for a specific organization."""
+    try:
+        org = await OrgService.get_org_by_id(org_id=org_id, user_id=user_id)
+        return OrgDefaultsSettingsResponse.from_org(org)
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.exception(
+            'Error getting organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization defaults settings',
+        )
+
+
+@org_router.patch('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+async def update_org_defaults_settings(
+    org_id: UUID,
+    settings: OrgUpdate,
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Update org-default settings for a specific organization."""
+    try:
+        allowed_fields = {
+            'agent_settings_diff',
+            'conversation_settings_diff',
+            'search_api_key',
+            'llm_api_key',
+        }
+        invalid_fields = settings.updated_fields() - allowed_fields
+        if invalid_fields:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    'Only organization default settings fields are supported on '
+                    '/api/organizations/{org_id}/settings'
+                ),
+            )
+
+        updated_org = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=settings,
+            user_id=user_id,
+        )
+        return OrgDefaultsSettingsResponse.from_org(updated_org)
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except OrgDatabaseError as e:
+        logger.error(
+            'Database error updating organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update organization defaults settings',
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            'Error updating organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update organization defaults settings',
+        )
+
+
 @org_router.get(
     '/llm',
     response_model=OrgDefaultsSettingsResponse,
@@ -267,27 +349,18 @@ async def update_legacy_org_defaults_settings(
             raise OrgNotFoundError('current')
         if not settings.has_updates():
             return OrgDefaultsSettingsResponse.from_org(org)
-
-        updated_org = await OrgService.update_org_with_permissions(
+        return await update_org_defaults_settings(
             org_id=org.id,
-            update_data=settings,
+            settings=settings,
             user_id=user_id,
         )
-        return OrgDefaultsSettingsResponse.from_org(updated_org)
     except OrgNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
-    except OrgDatabaseError as e:
-        logger.error(
-            'Database error updating legacy organization defaults settings',
-            extra={'user_id': user_id, 'error': str(e)},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to update organization defaults settings',
-        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(
             'Error updating legacy organization defaults settings',

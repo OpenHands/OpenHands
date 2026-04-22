@@ -36,10 +36,12 @@ from server.routes.org_models import (
 from server.routes.orgs import (
     get_legacy_org_defaults_settings,
     get_me,
+    get_org_defaults_settings,
     get_org_members,
     org_router,
     remove_org_member,
     update_legacy_org_defaults_settings,
+    update_org_defaults_settings,
     update_org_member,
 )
 from storage.org import Org
@@ -1201,6 +1203,98 @@ async def test_get_org_unexpected_error(mock_app_with_get_user_id, mock_owner_ro
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert 'unexpected error' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_get_org_defaults_settings_success():
+    """GIVEN: A user can view a specific organization's defaults
+    WHEN: the org-id settings route is invoked
+    THEN: it loads the org through OrgService and serializes the defaults response
+    """
+    org_id = uuid.uuid4()
+    mock_org = MagicMock(spec=Org)
+    mock_org.agent_settings = {
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'llm': {'model': 'litellm_proxy/claude-3', 'base_url': 'https://proxy.example'},
+    }
+    mock_org.conversation_settings = {'security_analyzer': 'llm'}
+    mock_org.llm_api_key = None
+    mock_org.search_api_key = None
+
+    with patch(
+        'server.routes.orgs.OrgService.get_org_by_id',
+        AsyncMock(return_value=mock_org),
+    ) as mock_get_org:
+        response = await get_org_defaults_settings(org_id=org_id, user_id=TEST_USER_ID)
+
+    assert response.agent_settings.llm.model == 'openhands/claude-3'
+    assert response.agent_settings.llm.base_url == 'https://proxy.example'
+    assert response.conversation_settings.security_analyzer == 'llm'
+    mock_get_org.assert_awaited_once_with(org_id=org_id, user_id=TEST_USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_update_org_defaults_settings_forwards_through_org_service():
+    """GIVEN: An org-scoped defaults update payload
+    WHEN: the org-id settings write route is invoked
+    THEN: it forwards the update through OrgService.update_org_with_permissions
+    """
+    org_id = uuid.uuid4()
+    updated_org = MagicMock(spec=Org)
+    updated_org.agent_settings = {
+        'schema_version': 1,
+        'llm': {
+            'model': 'litellm_proxy/claude-3.5-sonnet',
+            'base_url': 'https://proxy.example',
+        },
+    }
+    updated_org.conversation_settings = {'confirmation_mode': False}
+    updated_org.llm_api_key = 'secret'
+    updated_org.search_api_key = None
+
+    update_data = OrgUpdate(
+        agent_settings_diff={
+            'llm': {'model': 'openhands/claude-3.5-sonnet'},
+        },
+        conversation_settings_diff={'confirmation_mode': False},
+    )
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(return_value=updated_org),
+    ) as mock_update:
+        response = await update_org_defaults_settings(
+            org_id=org_id,
+            settings=update_data,
+            user_id=TEST_USER_ID,
+        )
+
+    mock_update.assert_awaited_once_with(
+        org_id=org_id,
+        update_data=update_data,
+        user_id=TEST_USER_ID,
+    )
+    assert response.agent_settings.llm.model == 'openhands/claude-3.5-sonnet'
+
+
+@pytest.mark.asyncio
+async def test_update_org_defaults_settings_rejects_non_default_fields():
+    """GIVEN: A non-default org field is sent to the settings-only route
+    WHEN: the route is invoked
+    THEN: it rejects the payload instead of forwarding a broader org update
+    """
+    org_id = uuid.uuid4()
+    update_data = OrgUpdate(name='Renamed Org')
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_org_defaults_settings(
+            org_id=org_id,
+            settings=update_data,
+            user_id=TEST_USER_ID,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 @pytest.mark.asyncio
