@@ -100,48 +100,48 @@ async def test_create_org_success(mock_app):
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
-        name="Test Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
         agent_settings={
-            "llm": {"model": "claude-opus-4-5-20251101"},
+            'llm': {'model': 'claude-opus-4-5-20251101'},
         },
         enable_proactive_conversation_starters=True,
     )
 
     request_data = {
-        "name": "Test Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     with (
         patch(
-            "server.routes.orgs.OrgService.create_org_with_owner",
+            'server.routes.orgs.OrgService.create_org_with_owner',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=100.0),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.post("/api/organizations", json=request_data)
+        response = client.post('/api/organizations', json=request_data)
 
         # Assert
         assert response.status_code == status.HTTP_201_CREATED
         response_data = response.json()
-        assert response_data["name"] == "Test Organization"
-        assert response_data["contact_name"] == "John Doe"
-        assert response_data["contact_email"] == "john@example.com"
-        assert response_data["credits"] == 100.0
-        assert response_data["org_version"] == 5
+        assert response_data['name'] == 'Test Organization'
+        assert response_data['contact_name'] == 'John Doe'
+        assert response_data['contact_email'] == 'john@example.com'
+        assert response_data['credits'] == 100.0
+        assert response_data['org_version'] == 5
         assert (
-            response_data["agent_settings"]["llm"]["model"]
-            == "claude-opus-4-5-20251101"
+            response_data['agent_settings']['llm']['model']
+            == 'claude-opus-4-5-20251101'
         )
 
 
@@ -153,15 +153,15 @@ async def test_create_org_invalid_email(mock_app):
     """
     # Arrange
     request_data = {
-        "name": "Test Organization",
-        "contact_name": "John Doe",
-        "contact_email": "invalid-email",  # Missing @
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'invalid-email',  # Missing @
     }
 
     client = TestClient(mock_app)
 
     # Act
-    response = client.post("/api/organizations", json=request_data)
+    response = client.post('/api/organizations', json=request_data)
 
     # Assert
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -175,15 +175,15 @@ async def test_create_org_empty_name(mock_app):
     """
     # Arrange
     request_data = {
-        "name": "",  # Empty string (after whitespace stripping)
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': '',  # Empty string (after whitespace stripping)
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     client = TestClient(mock_app)
 
     # Act
-    response = client.post("/api/organizations", json=request_data)
+    response = client.post('/api/organizations', json=request_data)
 
     # Assert
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -197,23 +197,23 @@ async def test_create_org_duplicate_name(mock_app):
     """
     # Arrange
     request_data = {
-        "name": "Existing Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'Existing Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     with patch(
-        "server.routes.orgs.OrgService.create_org_with_owner",
-        AsyncMock(side_effect=OrgNameExistsError("Existing Organization")),
+        'server.routes.orgs.OrgService.create_org_with_owner',
+        AsyncMock(side_effect=OrgNameExistsError('Existing Organization')),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.post("/api/organizations", json=request_data)
+        response = client.post('/api/organizations', json=request_data)
 
         # Assert
         assert response.status_code == status.HTTP_409_CONFLICT
-        assert "already exists" in response.json()["detail"].lower()
+        assert 'already exists' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -224,23 +224,23 @@ async def test_create_org_litellm_failure(mock_app):
     """
     # Arrange
     request_data = {
-        "name": "Test Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     with patch(
-        "server.routes.orgs.OrgService.create_org_with_owner",
-        AsyncMock(side_effect=LiteLLMIntegrationError("LiteLLM API unavailable")),
+        'server.routes.orgs.OrgService.create_org_with_owner',
+        AsyncMock(side_effect=LiteLLMIntegrationError('LiteLLM API unavailable')),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.post("/api/organizations", json=request_data)
+        response = client.post('/api/organizations', json=request_data)
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "LiteLLM integration" in response.json()["detail"]
+        assert 'LiteLLM integration' in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -251,23 +251,23 @@ async def test_create_org_database_failure(mock_app):
     """
     # Arrange
     request_data = {
-        "name": "Test Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     with patch(
-        "server.routes.orgs.OrgService.create_org_with_owner",
-        AsyncMock(side_effect=OrgDatabaseError("Database connection failed")),
+        'server.routes.orgs.OrgService.create_org_with_owner',
+        AsyncMock(side_effect=OrgDatabaseError('Database connection failed')),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.post("/api/organizations", json=request_data)
+        response = client.post('/api/organizations', json=request_data)
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Failed to create organization" in response.json()["detail"]
+        assert 'Failed to create organization' in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -278,23 +278,23 @@ async def test_create_org_unexpected_error(mock_app):
     """
     # Arrange
     request_data = {
-        "name": "Test Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     with patch(
-        "server.routes.orgs.OrgService.create_org_with_owner",
-        AsyncMock(side_effect=RuntimeError("Unexpected system error")),
+        'server.routes.orgs.OrgService.create_org_with_owner',
+        AsyncMock(side_effect=RuntimeError('Unexpected system error')),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.post("/api/organizations", json=request_data)
+        response = client.post('/api/organizations', json=request_data)
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "unexpected error" in response.json()["detail"].lower()
+        assert 'unexpected error' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -309,20 +309,20 @@ async def test_create_org_unauthorized():
 
     # Override to simulate unauthenticated user
     async def mock_unauthenticated():
-        raise HTTPException(status_code=401, detail="User not authenticated")
+        raise HTTPException(status_code=401, detail='User not authenticated')
 
     app.dependency_overrides[get_admin_user_id] = mock_unauthenticated
 
     request_data = {
-        "name": "Test Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     client = TestClient(app)
 
     # Act
-    response = client.post("/api/organizations", json=request_data)
+    response = client.post('/api/organizations', json=request_data)
 
     # Assert
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -341,25 +341,25 @@ async def test_create_org_forbidden_non_openhands_email():
     # Override to simulate non-@openhands.dev user
     async def mock_forbidden():
         raise HTTPException(
-            status_code=403, detail="Access restricted to @openhands.dev users"
+            status_code=403, detail='Access restricted to @openhands.dev users'
         )
 
     app.dependency_overrides[get_admin_user_id] = mock_forbidden
 
     request_data = {
-        "name": "Test Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     client = TestClient(app)
 
     # Act
-    response = client.post("/api/organizations", json=request_data)
+    response = client.post('/api/organizations', json=request_data)
 
     # Assert
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert "openhands.dev" in response.json()["detail"].lower()
+    assert 'openhands.dev' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -372,37 +372,37 @@ async def test_create_org_is_not_personal(mock_app):
     org_id = uuid.uuid4()  # Different from user_id
     mock_org = Org(
         id=org_id,
-        name="New Team Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='New Team Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
     )
 
     request_data = {
-        "name": "New Team Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'New Team Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     with (
         patch(
-            "server.routes.orgs.OrgService.create_org_with_owner",
+            'server.routes.orgs.OrgService.create_org_with_owner',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=100.0),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.post("/api/organizations", json=request_data)
+        response = client.post('/api/organizations', json=request_data)
 
         # Assert
         assert response.status_code == status.HTTP_201_CREATED
         response_data = response.json()
-        assert response_data["is_personal"] is False
+        assert response_data['is_personal'] is False
 
 
 @pytest.mark.asyncio
@@ -415,37 +415,37 @@ async def test_create_org_sensitive_fields_not_exposed(mock_app):
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
-        name="Test Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
         agent_settings={
-            "llm": {"model": "claude-opus-4-5-20251101"},
-            "condenser": {"enabled": True},
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
         },
         enable_proactive_conversation_starters=True,
     )
 
     request_data = {
-        "name": "Test Organization",
-        "contact_name": "John Doe",
-        "contact_email": "john@example.com",
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
     }
 
     with (
         patch(
-            "server.routes.orgs.OrgService.create_org_with_owner",
+            'server.routes.orgs.OrgService.create_org_with_owner',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=100.0),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.post("/api/organizations", json=request_data)
+        response = client.post('/api/organizations', json=request_data)
 
         # Assert
         assert response.status_code == status.HTTP_201_CREATED
@@ -453,16 +453,16 @@ async def test_create_org_sensitive_fields_not_exposed(mock_app):
 
         # Verify sensitive fields are not in response or are None
         assert (
-            "default_llm_api_key_for_byor" not in response_data
-            or response_data.get("default_llm_api_key_for_byor") is None
+            'default_llm_api_key_for_byor' not in response_data
+            or response_data.get('default_llm_api_key_for_byor') is None
         )
         assert (
-            "search_api_key" not in response_data
-            or response_data.get("search_api_key") is None
+            'search_api_key' not in response_data
+            or response_data.get('search_api_key') is None
         )
         assert (
-            "sandbox_api_key" not in response_data
-            or response_data.get("sandbox_api_key") is None
+            'sandbox_api_key' not in response_data
+            or response_data.get('sandbox_api_key') is None
         )
 
 
@@ -496,12 +496,12 @@ async def test_list_user_orgs_success(mock_app_list):
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
-        name="Test Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
         agent_settings={
-            "llm": {"model": "claude-opus-4-5-20251101"},
+            'llm': {'model': 'claude-opus-4-5-20251101'},
         },
     )
     mock_user = MagicMock()
@@ -509,30 +509,30 @@ async def test_list_user_orgs_success(mock_app_list):
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
             AsyncMock(return_value=([mock_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations")
+        response = client.get('/api/organizations')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert "items" in response_data
-        assert "next_page_id" in response_data
-        assert len(response_data["items"]) == 1
-        assert response_data["items"][0]["name"] == "Test Organization"
-        assert response_data["items"][0]["id"] == str(org_id)
-        assert response_data["next_page_id"] is None
+        assert 'items' in response_data
+        assert 'next_page_id' in response_data
+        assert len(response_data['items']) == 1
+        assert response_data['items'][0]['name'] == 'Test Organization'
+        assert response_data['items'][0]['id'] == str(org_id)
+        assert response_data['next_page_id'] is None
         # Credits should be None in list view
-        assert response_data["items"][0]["credits"] is None
+        assert response_data['items'][0]['credits'] is None
 
 
 @pytest.mark.asyncio
@@ -547,39 +547,39 @@ async def test_list_user_orgs_returns_current_org_id(mock_app_list):
 
     current_org = Org(
         id=current_org_id,
-        name="Current Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Current Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
     )
     other_org = Org(
         id=other_org_id,
-        name="Other Organization",
-        contact_name="Jane Doe",
-        contact_email="jane@example.com",
+        name='Other Organization',
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
     )
     mock_user = MagicMock()
     mock_user.current_org_id = current_org_id
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
             AsyncMock(return_value=([current_org, other_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations")
+        response = client.get('/api/organizations')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert "current_org_id" in response_data
-        assert response_data["current_org_id"] == str(current_org_id)
+        assert 'current_org_id' in response_data
+        assert response_data['current_org_id'] == str(current_org_id)
 
 
 @pytest.mark.asyncio
@@ -591,41 +591,41 @@ async def test_list_user_orgs_with_pagination(mock_app_list):
     # Arrange
     org1 = Org(
         id=uuid.uuid4(),
-        name="Alpha Org",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Alpha Org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
     )
     org2 = Org(
         id=uuid.uuid4(),
-        name="Beta Org",
-        contact_name="Jane Doe",
-        contact_email="jane@example.com",
+        name='Beta Org',
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
     )
     mock_user = MagicMock()
     mock_user.current_org_id = org1.id
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
-            AsyncMock(return_value=([org1, org2], "2")),
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
+            AsyncMock(return_value=([org1, org2], '2')),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations?page_id=0&limit=2")
+        response = client.get('/api/organizations?page_id=0&limit=2')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert len(response_data["items"]) == 2
-        assert response_data["next_page_id"] == "2"
-        assert response_data["items"][0]["name"] == "Alpha Org"
-        assert response_data["items"][1]["name"] == "Beta Org"
+        assert len(response_data['items']) == 2
+        assert response_data['next_page_id'] == '2'
+        assert response_data['items'][0]['name'] == 'Alpha Org'
+        assert response_data['items'][1]['name'] == 'Beta Org'
 
 
 @pytest.mark.asyncio
@@ -640,24 +640,24 @@ async def test_list_user_orgs_empty(mock_app_list):
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
             AsyncMock(return_value=([], None)),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations")
+        response = client.get('/api/organizations')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["items"] == []
-        assert response_data["next_page_id"] is None
+        assert response_data['items'] == []
+        assert response_data['next_page_id'] is None
 
 
 @pytest.mark.asyncio
@@ -670,7 +670,7 @@ async def test_list_user_orgs_invalid_limit_negative(mock_app_list):
     client = TestClient(mock_app_list)
 
     # Act - FastAPI should validate and reject limit <= 0
-    response = client.get("/api/organizations?limit=-1")
+    response = client.get('/api/organizations?limit=-1')
 
     # Assert - FastAPI should return 422 for validation error
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -686,7 +686,7 @@ async def test_list_user_orgs_invalid_limit_zero(mock_app_list):
     client = TestClient(mock_app_list)
 
     # Act
-    response = client.get("/api/organizations?limit=0")
+    response = client.get('/api/organizations?limit=0')
 
     # Assert
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -704,22 +704,22 @@ async def test_list_user_orgs_service_error(mock_app_list):
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
-            AsyncMock(side_effect=Exception("Database error")),
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
+            AsyncMock(side_effect=Exception('Database error')),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations")
+        response = client.get('/api/organizations')
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Failed to retrieve organizations" in response.json()["detail"]
+        assert 'Failed to retrieve organizations' in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -734,14 +734,14 @@ async def test_list_user_orgs_unauthorized():
 
     # Override to simulate unauthenticated user
     async def mock_unauthenticated():
-        raise HTTPException(status_code=401, detail="User not authenticated")
+        raise HTTPException(status_code=401, detail='User not authenticated')
 
     app.dependency_overrides[get_user_id] = mock_unauthenticated
 
     client = TestClient(app)
 
     # Act
-    response = client.get("/api/organizations")
+    response = client.get('/api/organizations')
 
     # Assert
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -759,33 +759,33 @@ async def test_list_user_orgs_personal_org_identified(mock_app_list):
 
     personal_org = Org(
         id=personal_org_id,
-        name=f"user_{user_id}_org",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name=f'user_{user_id}_org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
     )
     mock_user = MagicMock()
     mock_user.current_org_id = personal_org_id
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
             AsyncMock(return_value=([personal_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations")
+        response = client.get('/api/organizations')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert len(response_data["items"]) == 1
-        assert response_data["items"][0]["is_personal"] is True
+        assert len(response_data['items']) == 1
+        assert response_data['items'][0]['is_personal'] is True
 
 
 @pytest.mark.asyncio
@@ -797,33 +797,33 @@ async def test_list_user_orgs_team_org_identified(mock_app_list):
     # Arrange
     team_org = Org(
         id=uuid.uuid4(),  # Different from user_id
-        name="Team Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Team Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
     )
     mock_user = MagicMock()
     mock_user.current_org_id = team_org.id
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
             AsyncMock(return_value=([team_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations")
+        response = client.get('/api/organizations')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert len(response_data["items"]) == 1
-        assert response_data["items"][0]["is_personal"] is False
+        assert len(response_data['items']) == 1
+        assert response_data['items'][0]['is_personal'] is False
 
 
 @pytest.mark.asyncio
@@ -838,54 +838,54 @@ async def test_list_user_orgs_mixed_personal_and_team(mock_app_list):
 
     personal_org = Org(
         id=personal_org_id,
-        name=f"user_{user_id}_org",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name=f'user_{user_id}_org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
     )
 
     team_org = Org(
         id=uuid.uuid4(),
-        name="Team Organization",
-        contact_name="Jane Doe",
-        contact_email="jane@example.com",
+        name='Team Organization',
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
     )
     mock_user = MagicMock()
     mock_user.current_org_id = personal_org_id
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
             AsyncMock(return_value=([personal_org, team_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations")
+        response = client.get('/api/organizations')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert len(response_data["items"]) == 2
+        assert len(response_data['items']) == 2
 
         # Find personal and team orgs in response
         personal_org_response = next(
             item
-            for item in response_data["items"]
-            if item["id"] == str(personal_org_id)
+            for item in response_data['items']
+            if item['id'] == str(personal_org_id)
         )
         team_org_response = next(
             item
-            for item in response_data["items"]
-            if item["id"] != str(personal_org_id)
+            for item in response_data['items']
+            if item['id'] != str(personal_org_id)
         )
 
-        assert personal_org_response["is_personal"] is True
-        assert team_org_response["is_personal"] is False
+        assert personal_org_response['is_personal'] is True
+        assert team_org_response['is_personal'] is False
 
 
 @pytest.mark.asyncio
@@ -898,28 +898,28 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
-        name="Complete Org",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Complete Org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         conversation_expiration=3600,
         agent_settings={
-            "agent": "CodeActAgent",
-            "llm": {
-                "model": "claude-opus-4-5-20251101",
-                "base_url": "https://api.example.com",
+            'agent': 'CodeActAgent',
+            'llm': {
+                'model': 'claude-opus-4-5-20251101',
+                'base_url': 'https://api.example.com',
             },
-            "condenser": {"enabled": True},
+            'condenser': {'enabled': True},
         },
         conversation_settings={
-            "max_iterations": 50,
-            "security_analyzer": "llm",
-            "confirmation_mode": True,
+            'max_iterations': 50,
+            'security_analyzer': 'llm',
+            'confirmation_mode': True,
         },
         remote_runtime_resource_factor=2,
         billing_margin=0.15,
         enable_proactive_conversation_starters=True,
-        sandbox_base_container_image="test-image",
-        sandbox_runtime_container_image="test-runtime",
+        sandbox_base_container_image='test-image',
+        sandbox_runtime_container_image='test-runtime',
         org_version=5,
         max_budget_per_task=1000.0,
         enable_solvability_analysis=True,
@@ -930,45 +930,45 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
 
     with (
         patch(
-            "server.routes.orgs.UserStore.get_user_by_id",
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_user_orgs_paginated",
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
             AsyncMock(return_value=([mock_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
 
         # Act
-        response = client.get("/api/organizations")
+        response = client.get('/api/organizations')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        org_data = response_data["items"][0]
-        assert org_data["name"] == "Complete Org"
-        assert org_data["contact_name"] == "John Doe"
-        assert org_data["contact_email"] == "john@example.com"
-        assert org_data["conversation_expiration"] == 3600
-        assert org_data["agent_settings"]["agent"] == "CodeActAgent"
-        assert org_data["agent_settings"]["llm"]["model"] == "claude-opus-4-5-20251101"
+        org_data = response_data['items'][0]
+        assert org_data['name'] == 'Complete Org'
+        assert org_data['contact_name'] == 'John Doe'
+        assert org_data['contact_email'] == 'john@example.com'
+        assert org_data['conversation_expiration'] == 3600
+        assert org_data['agent_settings']['agent'] == 'CodeActAgent'
+        assert org_data['agent_settings']['llm']['model'] == 'claude-opus-4-5-20251101'
         assert (
-            org_data["agent_settings"]["llm"]["base_url"] == "https://api.example.com"
+            org_data['agent_settings']['llm']['base_url'] == 'https://api.example.com'
         )
-        assert org_data["conversation_settings"]["max_iterations"] == 50
-        assert org_data["conversation_settings"]["security_analyzer"] == "llm"
-        assert org_data["conversation_settings"]["confirmation_mode"] is True
-        assert org_data["remote_runtime_resource_factor"] == 2
-        assert org_data["billing_margin"] == 0.15
-        assert org_data["enable_proactive_conversation_starters"] is True
-        assert org_data["sandbox_base_container_image"] == "test-image"
-        assert org_data["sandbox_runtime_container_image"] == "test-runtime"
-        assert org_data["org_version"] == 5
-        assert org_data["max_budget_per_task"] == 1000.0
-        assert org_data["enable_solvability_analysis"] is True
-        assert org_data["v1_enabled"] is True
-        assert org_data["credits"] is None
+        assert org_data['conversation_settings']['max_iterations'] == 50
+        assert org_data['conversation_settings']['security_analyzer'] == 'llm'
+        assert org_data['conversation_settings']['confirmation_mode'] is True
+        assert org_data['remote_runtime_resource_factor'] == 2
+        assert org_data['billing_margin'] == 0.15
+        assert org_data['enable_proactive_conversation_starters'] is True
+        assert org_data['sandbox_base_container_image'] == 'test-image'
+        assert org_data['sandbox_runtime_container_image'] == 'test-runtime'
+        assert org_data['org_version'] == 5
+        assert org_data['max_budget_per_task'] == 1000.0
+        assert org_data['enable_solvability_analysis'] is True
+        assert org_data['v1_enabled'] is True
+        assert org_data['credits'] is None
 
 
 @pytest.fixture
@@ -990,7 +990,7 @@ def mock_app_with_get_user_id():
 def mock_owner_role():
     """Create a mock owner role for authorization tests."""
     mock_role = MagicMock()
-    mock_role.name = "owner"
+    mock_role.name = 'owner'
     return mock_role
 
 
@@ -1004,45 +1004,45 @@ async def test_get_org_success(mock_app_with_get_user_id, mock_owner_role):
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
-        name="Test Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
         agent_settings={
-            "llm": {"model": "claude-opus-4-5-20251101"},
-            "condenser": {"enabled": True},
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
         },
         enable_proactive_conversation_starters=True,
     )
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_by_id",
+            'server.routes.orgs.OrgService.get_org_by_id',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=75.5),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f"/api/organizations/{org_id}")
+        response = client.get(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["id"] == str(org_id)
-        assert response_data["name"] == "Test Organization"
-        assert response_data["contact_name"] == "John Doe"
-        assert response_data["contact_email"] == "john@example.com"
-        assert response_data["credits"] == 75.5
-        assert response_data["org_version"] == 5
+        assert response_data['id'] == str(org_id)
+        assert response_data['name'] == 'Test Organization'
+        assert response_data['contact_name'] == 'John Doe'
+        assert response_data['contact_email'] == 'john@example.com'
+        assert response_data['credits'] == 75.5
+        assert response_data['org_version'] == 5
 
 
 @pytest.mark.asyncio
@@ -1056,17 +1056,17 @@ async def test_get_org_user_not_member(mock_app_with_get_user_id):
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f"/api/organizations/{org_id}")
+        response = client.get(f'/api/organizations/{org_id}')
 
         # Assert - Permission check now returns 403 before org lookup
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "not a member" in response.json()["detail"].lower()
+        assert 'not a member' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -1080,18 +1080,18 @@ async def test_get_org_not_found(mock_app_with_get_user_id, mock_owner_role):
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_by_id",
+            'server.routes.orgs.OrgService.get_org_by_id',
             AsyncMock(side_effect=OrgNotFoundError(str(org_id))),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f"/api/organizations/{org_id}")
+        response = client.get(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -1104,12 +1104,12 @@ async def test_get_org_invalid_uuid(mock_app_with_get_user_id):
     THEN: 422 Unprocessable Entity error is returned
     """
     # Arrange
-    invalid_org_id = "not-a-valid-uuid"
+    invalid_org_id = 'not-a-valid-uuid'
 
     client = TestClient(mock_app_with_get_user_id)
 
     # Act
-    response = client.get(f"/api/organizations/{invalid_org_id}")
+    response = client.get(f'/api/organizations/{invalid_org_id}')
 
     # Assert
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -1127,7 +1127,7 @@ async def test_get_org_unauthorized():
 
     # Override to simulate unauthenticated user
     async def mock_unauthenticated():
-        raise HTTPException(status_code=401, detail="User not authenticated")
+        raise HTTPException(status_code=401, detail='User not authenticated')
 
     app.dependency_overrides[get_user_id] = mock_unauthenticated
 
@@ -1135,7 +1135,7 @@ async def test_get_org_unauthorized():
     client = TestClient(app)
 
     # Act
-    response = client.get(f"/api/organizations/{org_id}")
+    response = client.get(f'/api/organizations/{org_id}')
 
     # Assert
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -1152,22 +1152,22 @@ async def test_get_org_unexpected_error(mock_app_with_get_user_id, mock_owner_ro
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_by_id",
-            AsyncMock(side_effect=RuntimeError("Unexpected database error")),
+            'server.routes.orgs.OrgService.get_org_by_id',
+            AsyncMock(side_effect=RuntimeError('Unexpected database error')),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f"/api/organizations/{org_id}")
+        response = client.get(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "unexpected error" in response.json()["detail"].lower()
+        assert 'unexpected error' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -1191,38 +1191,38 @@ async def test_get_org_personal_workspace():
 
     mock_org = Org(
         id=org_id,
-        name=f"user_{user_id}_org",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name=f'user_{user_id}_org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
     )
 
     mock_role = MagicMock()
-    mock_role.name = "owner"
+    mock_role.name = 'owner'
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_by_id",
+            'server.routes.orgs.OrgService.get_org_by_id',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=50.0),
         ),
     ):
         client = TestClient(app)
 
         # Act
-        response = client.get(f"/api/organizations/{org_id}")
+        response = client.get(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["is_personal"] is True
+        assert response_data['is_personal'] is True
 
 
 @pytest.mark.asyncio
@@ -1235,35 +1235,35 @@ async def test_get_org_team_workspace(mock_app_with_get_user_id, mock_owner_role
     org_id = uuid.uuid4()  # Different from user_id
     mock_org = Org(
         id=org_id,
-        name="Team Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Team Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
     )
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_by_id",
+            'server.routes.orgs.OrgService.get_org_by_id',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=100.0),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f"/api/organizations/{org_id}")
+        response = client.get(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["is_personal"] is False
+        assert response_data['is_personal'] is False
 
 
 @pytest.mark.asyncio
@@ -1276,40 +1276,40 @@ async def test_get_org_with_credits_none(mock_app_with_get_user_id, mock_owner_r
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
-        name="Test Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
         agent_settings={
-            "llm": {"model": "claude-opus-4-5-20251101"},
-            "condenser": {"enabled": True},
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
         },
         enable_proactive_conversation_starters=True,
     )
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_by_id",
+            'server.routes.orgs.OrgService.get_org_by_id',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=None),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f"/api/organizations/{org_id}")
+        response = client.get(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["credits"] is None
+        assert response_data['credits'] is None
 
 
 @pytest.mark.asyncio
@@ -1324,37 +1324,37 @@ async def test_get_org_sensitive_fields_not_exposed(
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
-        name="Test Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
         agent_settings={
-            "llm": {"model": "claude-opus-4-5-20251101"},
-            "condenser": {"enabled": True},
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
         },
-        search_api_key="secret-search-key-123",  # Should not be exposed
-        sandbox_api_key="secret-sandbox-key-123",  # Should not be exposed
+        search_api_key='secret-search-key-123',  # Should not be exposed
+        sandbox_api_key='secret-sandbox-key-123',  # Should not be exposed
         enable_proactive_conversation_starters=True,
     )
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_by_id",
+            'server.routes.orgs.OrgService.get_org_by_id',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=100.0),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f"/api/organizations/{org_id}")
+        response = client.get(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -1362,12 +1362,12 @@ async def test_get_org_sensitive_fields_not_exposed(
 
         # Verify sensitive fields are not in response or are None
         assert (
-            "search_api_key" not in response_data
-            or response_data.get("search_api_key") is None
+            'search_api_key' not in response_data
+            or response_data.get('search_api_key') is None
         )
         assert (
-            "sandbox_api_key" not in response_data
-            or response_data.get("sandbox_api_key") is None
+            'sandbox_api_key' not in response_data
+            or response_data.get('sandbox_api_key') is None
         )
 
 
@@ -1381,34 +1381,34 @@ async def test_delete_org_success(mock_app, mock_owner_role):
     org_id = uuid.uuid4()
     mock_deleted_org = Org(
         id=org_id,
-        name="Deleted Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Deleted Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
     )
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.delete_org_with_cleanup",
+            'server.routes.orgs.OrgService.delete_org_with_cleanup',
             AsyncMock(return_value=mock_deleted_org),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.delete(f"/api/organizations/{org_id}")
+        response = client.delete(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["message"] == "Organization deleted successfully"
-        assert response_data["organization"]["id"] == str(org_id)
-        assert response_data["organization"]["name"] == "Deleted Organization"
-        assert response_data["organization"]["contact_name"] == "John Doe"
-        assert response_data["organization"]["contact_email"] == "john@example.com"
+        assert response_data['message'] == 'Organization deleted successfully'
+        assert response_data['organization']['id'] == str(org_id)
+        assert response_data['organization']['name'] == 'Deleted Organization'
+        assert response_data['organization']['contact_name'] == 'John Doe'
+        assert response_data['organization']['contact_email'] == 'john@example.com'
 
 
 @pytest.mark.asyncio
@@ -1422,22 +1422,22 @@ async def test_delete_org_not_found(mock_app, mock_owner_role):
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.delete_org_with_cleanup",
+            'server.routes.orgs.OrgService.delete_org_with_cleanup',
             AsyncMock(side_effect=OrgNotFoundError(str(org_id))),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.delete(f"/api/organizations/{org_id}")
+        response = client.delete(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert str(org_id) in response.json()["detail"]
+        assert str(org_id) in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -1451,14 +1451,14 @@ async def test_delete_org_not_owner(mock_app, mock_owner_role):
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.delete_org_with_cleanup",
+            'server.routes.orgs.OrgService.delete_org_with_cleanup',
             AsyncMock(
                 side_effect=OrgAuthorizationError(
-                    "Only organization owners can delete organizations"
+                    'Only organization owners can delete organizations'
                 )
             ),
         ),
@@ -1466,11 +1466,11 @@ async def test_delete_org_not_owner(mock_app, mock_owner_role):
         client = TestClient(mock_app)
 
         # Act
-        response = client.delete(f"/api/organizations/{org_id}")
+        response = client.delete(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "organization owners" in response.json()["detail"]
+        assert 'organization owners' in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -1484,17 +1484,17 @@ async def test_delete_org_not_member(mock_app):
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.delete(f"/api/organizations/{org_id}")
+        response = client.delete(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "not a member" in response.json()["detail"]
+        assert 'not a member' in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -1508,22 +1508,22 @@ async def test_delete_org_database_failure(mock_app, mock_owner_role):
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.delete_org_with_cleanup",
-            AsyncMock(side_effect=OrgDatabaseError("Database connection failed")),
+            'server.routes.orgs.OrgService.delete_org_with_cleanup',
+            AsyncMock(side_effect=OrgDatabaseError('Database connection failed')),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.delete(f"/api/organizations/{org_id}")
+        response = client.delete(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert response.json()["detail"] == "Failed to delete organization"
+        assert response.json()['detail'] == 'Failed to delete organization'
 
 
 @pytest.mark.asyncio
@@ -1537,22 +1537,22 @@ async def test_delete_org_unexpected_error(mock_app, mock_owner_role):
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.delete_org_with_cleanup",
-            AsyncMock(side_effect=RuntimeError("Unexpected system error")),
+            'server.routes.orgs.OrgService.delete_org_with_cleanup',
+            AsyncMock(side_effect=RuntimeError('Unexpected system error')),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.delete(f"/api/organizations/{org_id}")
+        response = client.delete(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "unexpected error" in response.json()["detail"].lower()
+        assert 'unexpected error' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -1562,11 +1562,11 @@ async def test_delete_org_invalid_uuid(mock_app):
     THEN: 422 validation error is returned
     """
     # Arrange
-    invalid_uuid = "not-a-valid-uuid"
+    invalid_uuid = 'not-a-valid-uuid'
     client = TestClient(mock_app)
 
     # Act
-    response = client.delete(f"/api/organizations/{invalid_uuid}")
+    response = client.delete(f'/api/organizations/{invalid_uuid}')
 
     # Assert
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -1583,18 +1583,18 @@ async def test_delete_org_unauthorized(mock_app, mock_owner_role):
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.delete_org_with_cleanup",
-            AsyncMock(side_effect=OrgAuthorizationError("User not authorized")),
+            'server.routes.orgs.OrgService.delete_org_with_cleanup',
+            AsyncMock(side_effect=OrgAuthorizationError('User not authorized')),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.delete(f"/api/organizations/{org_id}")
+        response = client.delete(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -1612,23 +1612,23 @@ async def test_delete_org_orphaned_users(mock_app, mock_owner_role):
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.delete_org_with_cleanup",
+            'server.routes.orgs.OrgService.delete_org_with_cleanup',
             AsyncMock(side_effect=OrphanedUserError(orphaned_user_ids)),
         ),
     ):
         client = TestClient(mock_app)
 
         # Act
-        response = client.delete(f"/api/organizations/{org_id}")
+        response = client.delete(f'/api/organizations/{org_id}')
 
         # Assert
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "2 user(s)" in response.json()["detail"]
-        assert "no remaining organization" in response.json()["detail"]
+        assert '2 user(s)' in response.json()['detail']
+        assert 'no remaining organization' in response.json()['detail']
 
 
 @pytest.fixture
@@ -1670,44 +1670,44 @@ async def test_update_org_personal_workspace_preserved():
 
     updated_org = Org(
         id=org_id,
-        name=f"user_{user_id}_org",
-        contact_name="Updated Name",
-        contact_email="john@example.com",
+        name=f'user_{user_id}_org',
+        contact_name='Updated Name',
+        contact_email='john@example.com',
         org_version=5,
     )
 
-    update_data = {"contact_name": "Updated Name"}
+    update_data = {'contact_name': 'Updated Name'}
 
     mock_role = MagicMock()
-    mock_role.name = "owner"
+    mock_role.name = 'owner'
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.update_org_with_permissions",
+            'server.routes.orgs.OrgService.update_org_with_permissions',
             AsyncMock(return_value=updated_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=75.0),
         ),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
+            transport=httpx.ASGITransport(app=app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
             assert response.status_code == status.HTTP_200_OK
             response_data = response.json()
-            assert response_data["is_personal"] is True
-            assert response_data["contact_name"] == "Updated Name"
+            assert response_data['is_personal'] is True
+            assert response_data['contact_name'] == 'Updated Name'
 
 
 @pytest.mark.asyncio
@@ -1730,44 +1730,44 @@ async def test_update_org_team_workspace_preserved():
 
     updated_org = Org(
         id=org_id,
-        name="Updated Team Org",
-        contact_name="Jane Doe",
-        contact_email="jane@example.com",
+        name='Updated Team Org',
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
         org_version=5,
     )
 
-    update_data = {"name": "Updated Team Org"}
+    update_data = {'name': 'Updated Team Org'}
 
     mock_role = MagicMock()
-    mock_role.name = "owner"
+    mock_role.name = 'owner'
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.update_org_with_permissions",
+            'server.routes.orgs.OrgService.update_org_with_permissions',
             AsyncMock(return_value=updated_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=150.0),
         ),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
+            transport=httpx.ASGITransport(app=app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
             assert response.status_code == status.HTTP_200_OK
             response_data = response.json()
-            assert response_data["is_personal"] is False
-            assert response_data["name"] == "Updated Team Org"
+            assert response_data['is_personal'] is False
+            assert response_data['name'] == 'Updated Team Org'
 
 
 @pytest.mark.asyncio
@@ -1778,31 +1778,31 @@ async def test_update_org_not_found(mock_update_app, mock_owner_role):
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"contact_name": "Jane Doe"}
+    update_data = {'contact_name': 'Jane Doe'}
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.update_org_with_permissions",
+            'server.routes.orgs.OrgService.update_org_with_permissions',
             AsyncMock(
-                side_effect=ValueError(f"Organization with ID {org_id} not found")
+                side_effect=ValueError(f'Organization with ID {org_id} not found')
             ),
         ),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
             assert response.status_code == status.HTTP_404_NOT_FOUND
-            assert "not found" in response.json()["detail"].lower()
+            assert 'not found' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -1813,24 +1813,24 @@ async def test_update_org_permission_denied_non_member(mock_update_app):
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"contact_name": "Jane Doe"}
+    update_data = {'contact_name': 'Jane Doe'}
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
             assert response.status_code == status.HTTP_403_FORBIDDEN
-            assert "member" in response.json()["detail"].lower()
+            assert 'member' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -1843,35 +1843,35 @@ async def test_update_org_permission_denied_llm_settings(
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"agent_settings": {"llm": {"model": "claude-opus-4-5-20251101"}}}
+    update_data = {'agent_settings': {'llm': {'model': 'claude-opus-4-5-20251101'}}}
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.update_org_with_permissions",
+            'server.routes.orgs.OrgService.update_org_with_permissions',
             AsyncMock(
                 side_effect=PermissionError(
-                    "Admin or owner role required to update LLM settings"
+                    'Admin or owner role required to update LLM settings'
                 )
             ),
         ),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
             assert response.status_code == status.HTTP_403_FORBIDDEN
             assert (
-                "admin" in response.json()["detail"].lower()
-                or "owner" in response.json()["detail"].lower()
+                'admin' in response.json()['detail'].lower()
+                or 'owner' in response.json()['detail'].lower()
             )
 
 
@@ -1883,29 +1883,29 @@ async def test_update_org_duplicate_name_returns_409(mock_update_app, mock_owner
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"name": "Existing Organization"}
+    update_data = {'name': 'Existing Organization'}
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.update_org_with_permissions",
-            AsyncMock(side_effect=OrgNameExistsError("Existing Organization")),
+            'server.routes.orgs.OrgService.update_org_with_permissions',
+            AsyncMock(side_effect=OrgNameExistsError('Existing Organization')),
         ),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
             assert response.status_code == status.HTTP_409_CONFLICT
-            assert "already exists" in response.json()["detail"].lower()
+            assert 'already exists' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -1916,29 +1916,29 @@ async def test_update_org_database_error(mock_update_app, mock_owner_role):
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"contact_name": "Jane Doe"}
+    update_data = {'contact_name': 'Jane Doe'}
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.update_org_with_permissions",
-            AsyncMock(side_effect=OrgDatabaseError("Database connection failed")),
+            'server.routes.orgs.OrgService.update_org_with_permissions',
+            AsyncMock(side_effect=OrgDatabaseError('Database connection failed')),
         ),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "Failed to update organization" in response.json()["detail"]
+            assert 'Failed to update organization' in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -1949,29 +1949,29 @@ async def test_update_org_unexpected_error(mock_update_app, mock_owner_role):
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"contact_name": "Jane Doe"}
+    update_data = {'contact_name': 'Jane Doe'}
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
-            "server.routes.orgs.OrgService.update_org_with_permissions",
-            AsyncMock(side_effect=RuntimeError("Unexpected system error")),
+            'server.routes.orgs.OrgService.update_org_with_permissions',
+            AsyncMock(side_effect=RuntimeError('Unexpected system error')),
         ),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "unexpected error" in response.json()["detail"].lower()
+            assert 'unexpected error' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -1981,15 +1981,15 @@ async def test_update_org_invalid_uuid_format(mock_update_app):
     THEN: 422 validation error is returned (handled by FastAPI)
     """
     # Arrange
-    invalid_org_id = "not-a-valid-uuid"
-    update_data = {"contact_name": "Jane Doe"}
+    invalid_org_id = 'not-a-valid-uuid'
+    update_data = {'contact_name': 'Jane Doe'}
 
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+        transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
     ) as client:
         # Act
         response = await client.patch(
-            f"/api/organizations/{invalid_org_id}", json=update_data
+            f'/api/organizations/{invalid_org_id}', json=update_data
         )
 
         # Assert
@@ -2004,18 +2004,18 @@ async def test_update_org_invalid_field_values(mock_update_app, mock_owner_role)
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"billing_margin": -1}  # Invalid: must be >= 0
+    update_data = {'billing_margin': -1}  # Invalid: must be >= 0
 
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
@@ -2030,18 +2030,18 @@ async def test_update_org_empty_name_returns_422(mock_update_app, mock_owner_rol
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"name": "   "}
+    update_data = {'name': '   '}
 
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
@@ -2056,18 +2056,18 @@ async def test_update_org_invalid_email_format(mock_update_app, mock_owner_role)
     """
     # Arrange
     org_id = uuid.uuid4()
-    update_data = {"contact_email": "invalid-email"}  # Missing @
+    update_data = {'contact_email': 'invalid-email'}  # Missing @
 
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=mock_update_app), base_url="http://test"
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
         ) as client:
             # Act
             response = await client.patch(
-                f"/api/organizations/{org_id}", json=update_data
+                f'/api/organizations/{org_id}', json=update_data
             )
 
             # Assert
@@ -2085,11 +2085,11 @@ class TestGetOrgMembersEndpoint:
             items=[
                 OrgMemberResponse(
                     user_id=str(uuid.uuid4()),
-                    email="user1@example.com",
+                    email='user1@example.com',
                     role_id=1,
-                    role="owner",
+                    role='owner',
                     role_rank=10,
-                    status="active",
+                    status='active',
                 )
             ],
             current_page=1,
@@ -2097,7 +2097,7 @@ class TestGetOrgMembersEndpoint:
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members",
+            'server.routes.orgs.OrgMemberService.get_org_members',
             AsyncMock(return_value=(True, None, mock_page)),
         ) as mock_get:
             # Act
@@ -2119,8 +2119,8 @@ class TestGetOrgMembersEndpoint:
         """Test that not being a member returns 403 Forbidden."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members",
-            AsyncMock(return_value=(False, "not_a_member", None)),
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(False, 'not_a_member', None)),
         ):
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2132,27 +2132,27 @@ class TestGetOrgMembersEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "not a member of this organization" in exc_info.value.detail
+            assert 'not a member of this organization' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_page_id_returns_400(self, org_id, current_user_id):
         """Test that invalid page_id format returns 400 Bad Request."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members",
-            AsyncMock(return_value=(False, "invalid_page_id", None)),
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(False, 'invalid_page_id', None)),
         ):
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_org_members(
                     org_id=uuid.UUID(org_id),
-                    page_id="invalid",
+                    page_id='invalid',
                     limit=100,
                     user_id=current_user_id,
                 )
 
             assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-            assert "Invalid page_id format" in exc_info.value.detail
+            assert 'Invalid page_id format' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_org_id_format_returns_422(self, mock_app, current_user_id):
@@ -2162,18 +2162,18 @@ class TestGetOrgMembersEndpoint:
         so this test uses the HTTP test client to verify the validation.
         """
         # Arrange
-        invalid_org_id = "not-a-uuid"
+        invalid_org_id = 'not-a-uuid'
 
         # Act & Assert - Use test client to test route-level validation
         with TestClient(mock_app) as client:
-            response = client.get(f"/api/organizations/{invalid_org_id}/members")
+            response = client.get(f'/api/organizations/{invalid_org_id}/members')
             assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
     async def test_invalid_current_user_id_format_returns_400(self, org_id):
         """Test that invalid current_user_id UUID format returns 400 Bad Request."""
         # Arrange
-        invalid_current_user_id = "not-a-uuid"
+        invalid_current_user_id = 'not-a-uuid'
 
         # Act & Assert - endpoint now expects UUID type for org_id
         with pytest.raises(HTTPException) as exc_info:
@@ -2185,14 +2185,14 @@ class TestGetOrgMembersEndpoint:
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Invalid organization ID format" in exc_info.value.detail
+        assert 'Invalid organization ID format' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_data_is_none_returns_500(self, org_id, current_user_id):
         """Test that None data returns 500 Internal Server Error."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members",
+            'server.routes.orgs.OrgMemberService.get_org_members',
             AsyncMock(return_value=(True, None, None)),
         ):
             # Act & Assert
@@ -2205,15 +2205,15 @@ class TestGetOrgMembersEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "Failed to retrieve members" in exc_info.value.detail
+            assert 'Failed to retrieve members' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_unknown_error_returns_500(self, org_id, current_user_id):
         """Test that unknown error returns 500 Internal Server Error."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members",
-            AsyncMock(return_value=(False, "unknown_error", None)),
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(False, 'unknown_error', None)),
         ):
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2225,15 +2225,15 @@ class TestGetOrgMembersEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "An error occurred" in exc_info.value.detail
+            assert 'An error occurred' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_service_exception_returns_500(self, org_id, current_user_id):
         """Test that service exception returns 500 Internal Server Error."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members",
-            AsyncMock(side_effect=Exception("Database connection failed")),
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(side_effect=Exception('Database connection failed')),
         ):
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2245,7 +2245,7 @@ class TestGetOrgMembersEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "Failed to retrieve members" in exc_info.value.detail
+            assert 'Failed to retrieve members' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_http_exception_is_re_raised(self, org_id, current_user_id):
@@ -2253,11 +2253,11 @@ class TestGetOrgMembersEndpoint:
         # Arrange
         original_exception = HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service temporarily unavailable",
+            detail='Service temporarily unavailable',
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members",
+            'server.routes.orgs.OrgMemberService.get_org_members',
             AsyncMock(side_effect=original_exception),
         ):
             # Act & Assert
@@ -2270,7 +2270,7 @@ class TestGetOrgMembersEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-            assert exc_info.value.detail == "Service temporarily unavailable"
+            assert exc_info.value.detail == 'Service temporarily unavailable'
 
     @pytest.mark.asyncio
     async def test_pagination_with_page_id(self, org_id, current_user_id):
@@ -2280,11 +2280,11 @@ class TestGetOrgMembersEndpoint:
             items=[
                 OrgMemberResponse(
                     user_id=str(uuid.uuid4()),
-                    email="user2@example.com",
+                    email='user2@example.com',
                     role_id=2,
-                    role="admin",
+                    role='admin',
                     role_rank=20,
-                    status="active",
+                    status='active',
                 )
             ],
             current_page=2,
@@ -2292,13 +2292,13 @@ class TestGetOrgMembersEndpoint:
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members",
+            'server.routes.orgs.OrgMemberService.get_org_members',
             AsyncMock(return_value=(True, None, mock_page)),
         ) as mock_get:
             # Act - endpoint now expects UUID type for org_id
             result = await get_org_members(
                 org_id=uuid.UUID(org_id),
-                page_id="100",
+                page_id='100',
                 limit=100,
                 user_id=current_user_id,
             )
@@ -2309,7 +2309,7 @@ class TestGetOrgMembersEndpoint:
             mock_get.assert_called_once_with(
                 org_id=uuid.UUID(org_id),
                 current_user_id=uuid.UUID(current_user_id),
-                page_id="100",
+                page_id='100',
                 limit=100,
                 email_filter=None,
             )
@@ -2323,7 +2323,7 @@ class TestGetOrgMembersCountEndpoint:
         """Test that successful count returns an integer."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members_count",
+            'server.routes.orgs.OrgMemberService.get_org_members_count',
             AsyncMock(return_value=42),
         ) as mock_get_count:
             # Import here to avoid circular import issues
@@ -2349,7 +2349,7 @@ class TestGetOrgMembersCountEndpoint:
         """Test that email filter is passed to service."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members_count",
+            'server.routes.orgs.OrgMemberService.get_org_members_count',
             AsyncMock(return_value=5),
         ) as mock_get_count:
             from server.routes.orgs import get_org_members_count
@@ -2357,7 +2357,7 @@ class TestGetOrgMembersCountEndpoint:
             # Act
             result = await get_org_members_count(
                 org_id=uuid.UUID(org_id),
-                email="alice",
+                email='alice',
                 user_id=current_user_id,
             )
 
@@ -2366,7 +2366,7 @@ class TestGetOrgMembersCountEndpoint:
             mock_get_count.assert_called_once_with(
                 org_id=uuid.UUID(org_id),
                 current_user_id=uuid.UUID(current_user_id),
-                email_filter="alice",
+                email_filter='alice',
             )
 
     @pytest.mark.asyncio
@@ -2374,7 +2374,7 @@ class TestGetOrgMembersCountEndpoint:
         """Test that OrgMemberNotFoundError returns 403 Forbidden."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members_count",
+            'server.routes.orgs.OrgMemberService.get_org_members_count',
             AsyncMock(side_effect=OrgMemberNotFoundError(org_id, current_user_id)),
         ):
             from server.routes.orgs import get_org_members_count
@@ -2388,13 +2388,13 @@ class TestGetOrgMembersCountEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "not a member of this organization" in exc_info.value.detail
+            assert 'not a member of this organization' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_uuid_returns_400(self, org_id):
         """Test that invalid user_id UUID format returns 400 Bad Request."""
         # Arrange
-        invalid_user_id = "not-a-uuid"
+        invalid_user_id = 'not-a-uuid'
 
         from server.routes.orgs import get_org_members_count
 
@@ -2407,15 +2407,15 @@ class TestGetOrgMembersCountEndpoint:
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Invalid organization ID format" in exc_info.value.detail
+        assert 'Invalid organization ID format' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_service_exception_returns_500(self, org_id, current_user_id):
         """Test that generic exception returns 500 Internal Server Error."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.get_org_members_count",
-            AsyncMock(side_effect=Exception("Database error")),
+            'server.routes.orgs.OrgMemberService.get_org_members_count',
+            AsyncMock(side_effect=Exception('Database error')),
         ):
             from server.routes.orgs import get_org_members_count
 
@@ -2428,7 +2428,7 @@ class TestGetOrgMembersCountEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "Failed to retrieve member count" in exc_info.value.detail
+            assert 'Failed to retrieve member count' in exc_info.value.detail
 
 
 class TestRemoveOrgMemberEndpoint:
@@ -2442,10 +2442,10 @@ class TestRemoveOrgMemberEndpoint:
         # Arrange
         with (
             patch(
-                "server.routes.orgs.get_user_id", return_value=current_user_id
+                'server.routes.orgs.get_user_id', return_value=current_user_id
             ) as mock_get_user_id,
             patch(
-                "server.routes.orgs.OrgMemberService.remove_org_member"
+                'server.routes.orgs.OrgMemberService.remove_org_member'
             ) as mock_remove,
         ):
             mock_remove.return_value = (True, None)
@@ -2458,7 +2458,7 @@ class TestRemoveOrgMemberEndpoint:
             )
 
             # Assert
-            assert result == {"message": "Member removed successfully"}
+            assert result == {'message': 'Member removed successfully'}
             mock_get_user_id.assert_not_called()  # current_user_id is passed directly
             mock_remove.assert_called_once()
 
@@ -2469,9 +2469,9 @@ class TestRemoveOrgMemberEndpoint:
         """Test that not being a member returns 403 Forbidden."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
-            mock_remove.return_value = (False, "not_a_member")
+            mock_remove.return_value = (False, 'not_a_member')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2482,7 +2482,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "not a member of this organization" in exc_info.value.detail
+            assert 'not a member of this organization' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_cannot_remove_self_returns_403(
@@ -2491,9 +2491,9 @@ class TestRemoveOrgMemberEndpoint:
         """Test that trying to remove oneself returns 403 Forbidden."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
-            mock_remove.return_value = (False, "cannot_remove_self")
+            mock_remove.return_value = (False, 'cannot_remove_self')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2504,7 +2504,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "Cannot remove yourself" in exc_info.value.detail
+            assert 'Cannot remove yourself' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_member_not_found_returns_404(
@@ -2513,9 +2513,9 @@ class TestRemoveOrgMemberEndpoint:
         """Test that member not found returns 404 Not Found."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
-            mock_remove.return_value = (False, "member_not_found")
+            mock_remove.return_value = (False, 'member_not_found')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2526,7 +2526,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
-            assert "Member not found" in exc_info.value.detail
+            assert 'Member not found' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_insufficient_permission_returns_403(
@@ -2535,9 +2535,9 @@ class TestRemoveOrgMemberEndpoint:
         """Test that insufficient permission returns 403 Forbidden."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
-            mock_remove.return_value = (False, "insufficient_permission")
+            mock_remove.return_value = (False, 'insufficient_permission')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2548,7 +2548,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "do not have permission" in exc_info.value.detail
+            assert 'do not have permission' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_cannot_remove_last_owner_returns_400(
@@ -2557,9 +2557,9 @@ class TestRemoveOrgMemberEndpoint:
         """Test that removing last owner returns 400 Bad Request."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
-            mock_remove.return_value = (False, "cannot_remove_last_owner")
+            mock_remove.return_value = (False, 'cannot_remove_last_owner')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2570,7 +2570,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-            assert "Cannot remove the last owner" in exc_info.value.detail
+            assert 'Cannot remove the last owner' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_removal_failed_returns_500(
@@ -2579,9 +2579,9 @@ class TestRemoveOrgMemberEndpoint:
         """Test that removal failure returns 500 Internal Server Error."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
-            mock_remove.return_value = (False, "removal_failed")
+            mock_remove.return_value = (False, 'removal_failed')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2592,7 +2592,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "Failed to remove member" in exc_info.value.detail
+            assert 'Failed to remove member' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_unknown_error_returns_500(
@@ -2601,9 +2601,9 @@ class TestRemoveOrgMemberEndpoint:
         """Test that unknown error returns 500 Internal Server Error."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
-            mock_remove.return_value = (False, "unknown_error")
+            mock_remove.return_value = (False, 'unknown_error')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2614,7 +2614,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "An error occurred" in exc_info.value.detail
+            assert 'An error occurred' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_org_id_format_returns_422(
@@ -2626,12 +2626,12 @@ class TestRemoveOrgMemberEndpoint:
         so this test uses the HTTP test client to verify the validation.
         """
         # Arrange
-        invalid_org_id = "not-a-uuid"
+        invalid_org_id = 'not-a-uuid'
 
         # Act & Assert - Use test client to test route-level validation
         with TestClient(mock_app) as client:
             response = client.delete(
-                f"/api/organizations/{invalid_org_id}/members/{target_user_id}"
+                f'/api/organizations/{invalid_org_id}/members/{target_user_id}'
             )
             assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
@@ -2641,7 +2641,7 @@ class TestRemoveOrgMemberEndpoint:
     ):
         """Test that invalid user_id UUID format returns 400 Bad Request."""
         # Arrange
-        invalid_user_id = "not-a-uuid"
+        invalid_user_id = 'not-a-uuid'
 
         # Act & Assert - endpoint now expects UUID type for org_id
         with pytest.raises(HTTPException) as exc_info:
@@ -2652,7 +2652,7 @@ class TestRemoveOrgMemberEndpoint:
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Invalid organization or user ID format" in exc_info.value.detail
+        assert 'Invalid organization or user ID format' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_current_user_id_format_returns_400(
@@ -2660,7 +2660,7 @@ class TestRemoveOrgMemberEndpoint:
     ):
         """Test that invalid current_user_id UUID format returns 400 Bad Request."""
         # Arrange
-        invalid_current_user_id = "not-a-uuid"
+        invalid_current_user_id = 'not-a-uuid'
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
@@ -2671,7 +2671,7 @@ class TestRemoveOrgMemberEndpoint:
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Invalid organization or user ID format" in exc_info.value.detail
+        assert 'Invalid organization or user ID format' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_service_exception_returns_500(
@@ -2680,9 +2680,9 @@ class TestRemoveOrgMemberEndpoint:
         """Test that service exception returns 500 Internal Server Error."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
-            mock_remove.side_effect = Exception("Database connection failed")
+            mock_remove.side_effect = Exception('Database connection failed')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2693,7 +2693,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "Failed to remove member" in exc_info.value.detail
+            assert 'Failed to remove member' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_http_exception_is_re_raised(
@@ -2703,11 +2703,11 @@ class TestRemoveOrgMemberEndpoint:
         # Arrange
         original_exception = HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service temporarily unavailable",
+            detail='Service temporarily unavailable',
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.remove_org_member"
+            'server.routes.orgs.OrgMemberService.remove_org_member'
         ) as mock_remove:
             mock_remove.side_effect = original_exception
 
@@ -2720,7 +2720,7 @@ class TestRemoveOrgMemberEndpoint:
                 )
 
             assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-            assert exc_info.value.detail == "Service temporarily unavailable"
+            assert exc_info.value.detail == 'Service temporarily unavailable'
 
 
 class TestUpdateOrgMemberEndpoint:
@@ -2734,14 +2734,14 @@ class TestUpdateOrgMemberEndpoint:
         # Arrange
         updated = OrgMemberResponse(
             user_id=target_user_id,
-            email="user@example.com",
+            email='user@example.com',
             role_id=2,
-            role="admin",
+            role='admin',
             role_rank=20,
-            status="active",
+            status='active',
         )
         with patch(
-            "server.routes.orgs.OrgMemberService.update_org_member"
+            'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
             mock_update.return_value = updated
 
@@ -2749,7 +2749,7 @@ class TestUpdateOrgMemberEndpoint:
             result = await update_org_member(
                 org_id=uuid.UUID(org_id),
                 user_id=target_user_id,
-                update_data=OrgMemberUpdate(role="admin"),
+                update_data=OrgMemberUpdate(role='admin'),
                 current_user_id=current_user_id,
             )
 
@@ -2759,7 +2759,7 @@ class TestUpdateOrgMemberEndpoint:
                 org_id=uuid.UUID(org_id),
                 target_user_id=uuid.UUID(target_user_id),
                 current_user_id=uuid.UUID(current_user_id),
-                update_data=OrgMemberUpdate(role="admin"),
+                update_data=OrgMemberUpdate(role='admin'),
             )
 
     @pytest.mark.asyncio
@@ -2769,7 +2769,7 @@ class TestUpdateOrgMemberEndpoint:
         """GIVEN requester is not a member WHEN PATCH is called THEN returns 403."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.update_org_member"
+            'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
             mock_update.side_effect = OrgMemberNotFoundError(org_id, current_user_id)
 
@@ -2778,31 +2778,31 @@ class TestUpdateOrgMemberEndpoint:
                 await update_org_member(
                     org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
-                    update_data=OrgMemberUpdate(role="user"),
+                    update_data=OrgMemberUpdate(role='user'),
                     current_user_id=current_user_id,
                 )
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "not a member" in exc_info.value.detail
+            assert 'not a member' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_cannot_modify_self_returns_403(self, org_id, current_user_id):
         """GIVEN target user is self WHEN PATCH is called THEN returns 403."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.update_org_member"
+            'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.side_effect = CannotModifySelfError("modify")
+            mock_update.side_effect = CannotModifySelfError('modify')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
                     org_id=uuid.UUID(org_id),
                     user_id=current_user_id,
-                    update_data=OrgMemberUpdate(role="admin"),
+                    update_data=OrgMemberUpdate(role='admin'),
                     current_user_id=current_user_id,
                 )
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "Cannot modify your own role" in exc_info.value.detail
+            assert 'Cannot modify your own role' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_member_not_found_returns_404(
@@ -2811,7 +2811,7 @@ class TestUpdateOrgMemberEndpoint:
         """GIVEN target member does not exist WHEN PATCH is called THEN returns 404."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.update_org_member"
+            'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
             mock_update.side_effect = OrgMemberNotFoundError(org_id, target_user_id)
 
@@ -2820,11 +2820,11 @@ class TestUpdateOrgMemberEndpoint:
                 await update_org_member(
                     org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
-                    update_data=OrgMemberUpdate(role="user"),
+                    update_data=OrgMemberUpdate(role='user'),
                     current_user_id=current_user_id,
                 )
             assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
-            assert "Member not found" in exc_info.value.detail
+            assert 'Member not found' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_role_returns_400(
@@ -2833,20 +2833,20 @@ class TestUpdateOrgMemberEndpoint:
         """GIVEN invalid role name WHEN PATCH is called THEN returns 400."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.update_org_member"
+            'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.side_effect = InvalidRoleError("superuser")
+            mock_update.side_effect = InvalidRoleError('superuser')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
                     org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
-                    update_data=OrgMemberUpdate(role="superuser"),
+                    update_data=OrgMemberUpdate(role='superuser'),
                     current_user_id=current_user_id,
                 )
             assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-            assert "Invalid role" in exc_info.value.detail
+            assert 'Invalid role' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_insufficient_permission_returns_403(
@@ -2855,10 +2855,10 @@ class TestUpdateOrgMemberEndpoint:
         """GIVEN requester lacks permission to change target WHEN PATCH is called THEN returns 403."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.update_org_member"
+            'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
             mock_update.side_effect = InsufficientPermissionError(
-                "You do not have permission to modify this member"
+                'You do not have permission to modify this member'
             )
 
             # Act & Assert
@@ -2866,11 +2866,11 @@ class TestUpdateOrgMemberEndpoint:
                 await update_org_member(
                     org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
-                    update_data=OrgMemberUpdate(role="admin"),
+                    update_data=OrgMemberUpdate(role='admin'),
                     current_user_id=current_user_id,
                 )
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "do not have permission" in exc_info.value.detail
+            assert 'do not have permission' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_cannot_demote_last_owner_returns_400(
@@ -2879,20 +2879,20 @@ class TestUpdateOrgMemberEndpoint:
         """GIVEN demoting last owner WHEN PATCH is called THEN returns 400."""
         # Arrange
         with patch(
-            "server.routes.orgs.OrgMemberService.update_org_member"
+            'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.side_effect = LastOwnerError("demote")
+            mock_update.side_effect = LastOwnerError('demote')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
                     org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
-                    update_data=OrgMemberUpdate(role="admin"),
+                    update_data=OrgMemberUpdate(role='admin'),
                     current_user_id=current_user_id,
                 )
             assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-            assert "Cannot demote the last owner" in exc_info.value.detail
+            assert 'Cannot demote the last owner' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_org_id_returns_422(
@@ -2904,13 +2904,13 @@ class TestUpdateOrgMemberEndpoint:
         so this test uses the HTTP test client to verify the validation.
         """
         # Arrange
-        invalid_org_id = "not-a-uuid"
+        invalid_org_id = 'not-a-uuid'
 
         # Act & Assert - Use test client to test route-level validation
         with TestClient(mock_app) as client:
             response = client.patch(
-                f"/api/organizations/{invalid_org_id}/members/{target_user_id}",
-                json={"role": "user"},
+                f'/api/organizations/{invalid_org_id}/members/{target_user_id}',
+                json={'role': 'user'},
             )
             assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
@@ -2953,22 +2953,22 @@ class TestGetMeEndpoint:
         self,
         org_id,
         user_id,
-        email="test@example.com",
-        role="owner",
-        llm_api_key="****2345",
-        llm_model="gpt-4",
-        llm_base_url="https://api.example.com",
+        email='test@example.com',
+        role='owner',
+        llm_api_key='****2345',
+        llm_model='gpt-4',
+        llm_base_url='https://api.example.com',
         max_iterations=50,
-        status_val="active",
+        status_val='active',
     ):
         """Create a MeResponse for testing."""
-        agent_settings = {"schema_version": 1}
+        agent_settings = {'schema_version': 1}
         if llm_model is not None:
-            agent_settings.setdefault("llm", {})["model"] = llm_model
+            agent_settings.setdefault('llm', {})['model'] = llm_model
         if llm_base_url is not None:
-            agent_settings.setdefault("llm", {})["base_url"] = llm_base_url
+            agent_settings.setdefault('llm', {})['base_url'] = llm_base_url
         if max_iterations is not None:
-            agent_settings["max_iterations"] = max_iterations
+            agent_settings['max_iterations'] = max_iterations
 
         return MeResponse(
             org_id=str(org_id),
@@ -2989,34 +2989,34 @@ class TestGetMeEndpoint:
         me_response = self._make_me_response(
             org_id=test_org_id,
             user_id=test_user_id,
-            email="owner@example.com",
-            role="owner",
-            llm_model="gpt-4",
-            llm_base_url="https://api.example.com",
+            email='owner@example.com',
+            role='owner',
+            llm_model='gpt-4',
+            llm_base_url='https://api.example.com',
             max_iterations=50,
-            status_val="active",
+            status_val='active',
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
-            response = client.get(f"/api/organizations/{test_org_id}/me")
+            response = client.get(f'/api/organizations/{test_org_id}/me')
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["org_id"] == str(test_org_id)
-        assert data["user_id"] == test_user_id
-        assert data["email"] == "owner@example.com"
-        assert data["role"] == "owner"
-        assert data["agent_settings_diff"]["llm"]["model"] == "gpt-4"
+        assert data['org_id'] == str(test_org_id)
+        assert data['user_id'] == test_user_id
+        assert data['email'] == 'owner@example.com'
+        assert data['role'] == 'owner'
+        assert data['agent_settings_diff']['llm']['model'] == 'gpt-4'
         assert (
-            data["agent_settings_diff"]["llm"]["base_url"] == "https://api.example.com"
+            data['agent_settings_diff']['llm']['base_url'] == 'https://api.example.com'
         )
-        assert data["agent_settings_diff"]["max_iterations"] == 50
-        assert data["status"] == "active"
+        assert data['agent_settings_diff']['max_iterations'] == 50
+        assert data['status'] == 'active'
 
     @pytest.mark.asyncio
     async def test_get_me_masks_llm_api_key(
@@ -3032,23 +3032,23 @@ class TestGetMeEndpoint:
         me_response = self._make_me_response(
             org_id=test_org_id,
             user_id=test_user_id,
-            llm_api_key="****cdef",  # Masked key
+            llm_api_key='****cdef',  # Masked key
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
-            response = client.get(f"/api/organizations/{test_org_id}/me")
+            response = client.get(f'/api/organizations/{test_org_id}/me')
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         # The raw key must NOT appear in the response
-        assert data["llm_api_key"] != "sk-secret-real-key-abcdef"
+        assert data['llm_api_key'] != 'sk-secret-real-key-abcdef'
         # Should be masked with stars
-        assert "**" in data["llm_api_key"]
+        assert '**' in data['llm_api_key']
 
     @pytest.mark.asyncio
     async def test_get_me_not_a_member(self, mock_me_app, test_org_id):
@@ -3057,12 +3057,12 @@ class TestGetMeEndpoint:
         THEN: Returns 404 (to avoid leaking org existence per spec)
         """
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
-            side_effect=OrgMemberNotFoundError(str(test_org_id), "user-id"),
+            side_effect=OrgMemberNotFoundError(str(test_org_id), 'user-id'),
         ):
             client = TestClient(mock_me_app)
-            response = client.get(f"/api/organizations/{test_org_id}/me")
+            response = client.get(f'/api/organizations/{test_org_id}/me')
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -3073,7 +3073,7 @@ class TestGetMeEndpoint:
         THEN: Returns 422 (FastAPI validates UUID path parameter)
         """
         client = TestClient(mock_me_app)
-        response = client.get("/api/organizations/not-a-valid-uuid/me")
+        response = client.get('/api/organizations/not-a-valid-uuid/me')
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
@@ -3087,12 +3087,12 @@ class TestGetMeEndpoint:
         app.include_router(org_router)
 
         async def mock_unauthenticated():
-            raise HTTPException(status_code=401, detail="User not authenticated")
+            raise HTTPException(status_code=401, detail='User not authenticated')
 
         app.dependency_overrides[get_user_id] = mock_unauthenticated
 
         client = TestClient(app)
-        response = client.get(f"/api/organizations/{test_org_id}/me")
+        response = client.get(f'/api/organizations/{test_org_id}/me')
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -3103,12 +3103,12 @@ class TestGetMeEndpoint:
         THEN: Returns 500
         """
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
-            side_effect=RuntimeError("Database connection failed"),
+            side_effect=RuntimeError('Database connection failed'),
         ):
             client = TestClient(mock_me_app)
-            response = client.get(f"/api/organizations/{test_org_id}/me")
+            response = client.get(f'/api/organizations/{test_org_id}/me')
 
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
@@ -3126,20 +3126,20 @@ class TestGetMeEndpoint:
             llm_model=None,
             llm_base_url=None,
             max_iterations=None,
-            llm_api_key="",
+            llm_api_key='',
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
-            response = client.get(f"/api/organizations/{test_org_id}/me")
+            response = client.get(f'/api/organizations/{test_org_id}/me')
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["agent_settings_diff"] == {"schema_version": 1}
+        assert data['agent_settings_diff'] == {'schema_version': 1}
 
     @pytest.mark.asyncio
     async def test_get_me_with_admin_role(self, mock_me_app, test_user_id, test_org_id):
@@ -3153,20 +3153,20 @@ class TestGetMeEndpoint:
         me_response = self._make_me_response(
             org_id=test_org_id,
             user_id=test_user_id,
-            role="admin",
+            role='admin',
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
-            response = client.get(f"/api/organizations/{test_org_id}/me")
+            response = client.get(f'/api/organizations/{test_org_id}/me')
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["role"] == "admin"
+        assert data['role'] == 'admin'
 
     @pytest.mark.asyncio
     async def test_get_me_role_not_found_returns_500(self, mock_me_app, test_org_id):
@@ -3175,15 +3175,15 @@ class TestGetMeEndpoint:
         THEN: Returns 500 Internal Server Error
         """
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
             side_effect=RoleNotFoundError(role_id=999),
         ):
             client = TestClient(mock_me_app)
-            response = client.get(f"/api/organizations/{test_org_id}/me")
+            response = client.get(f'/api/organizations/{test_org_id}/me')
 
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "unexpected error" in response.json()["detail"].lower()
+        assert 'unexpected error' in response.json()['detail'].lower()
 
     @pytest.mark.asyncio
     async def test_get_me_direct_function_call_success(self, test_user_id, test_org_id):
@@ -3191,12 +3191,12 @@ class TestGetMeEndpoint:
         me_response = self._make_me_response(
             org_id=test_org_id,
             user_id=test_user_id,
-            email="test@example.com",
-            role="owner",
+            email='test@example.com',
+            role='owner',
         )
 
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
             return_value=me_response,
         ):
@@ -3205,7 +3205,7 @@ class TestGetMeEndpoint:
         assert isinstance(result, MeResponse)
         assert result.org_id == str(test_org_id)
         assert result.user_id == test_user_id
-        assert result.role == "owner"
+        assert result.role == 'owner'
 
     @pytest.mark.asyncio
     async def test_get_me_direct_function_call_member_not_found(
@@ -3213,7 +3213,7 @@ class TestGetMeEndpoint:
     ):
         """Test direct function call to get_me raises HTTPException on member not found."""
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
             side_effect=OrgMemberNotFoundError(str(test_org_id), test_user_id),
         ):
@@ -3229,7 +3229,7 @@ class TestGetMeEndpoint:
     ):
         """Test direct function call to get_me raises HTTPException on role not found."""
         with patch(
-            "server.routes.orgs.OrgMemberService.get_me",
+            'server.routes.orgs.OrgMemberService.get_me',
             new_callable=AsyncMock,
             side_effect=RoleNotFoundError(role_id=999),
         ):
@@ -3249,36 +3249,36 @@ async def test_switch_org_success(mock_app_with_get_user_id):
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
-        name="Target Organization",
-        contact_name="John Doe",
-        contact_email="john@example.com",
+        name='Target Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
         org_version=5,
         agent_settings={
-            "llm": {"model": "claude-opus-4-5-20251101"},
+            'llm': {'model': 'claude-opus-4-5-20251101'},
         },
     )
 
     with (
         patch(
-            "server.routes.orgs.OrgService.switch_org",
+            'server.routes.orgs.OrgService.switch_org',
             AsyncMock(return_value=mock_org),
         ),
         patch(
-            "server.routes.orgs.OrgService.get_org_credits",
+            'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=100.0),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.post(f"/api/organizations/{org_id}/switch")
+        response = client.post(f'/api/organizations/{org_id}/switch')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["id"] == str(org_id)
-        assert response_data["name"] == "Target Organization"
-        assert response_data["credits"] == 100.0
+        assert response_data['id'] == str(org_id)
+        assert response_data['name'] == 'Target Organization'
+        assert response_data['credits'] == 100.0
 
 
 @pytest.mark.asyncio
@@ -3291,21 +3291,21 @@ async def test_switch_org_not_member(mock_app_with_get_user_id):
     org_id = uuid.uuid4()
 
     with patch(
-        "server.routes.orgs.OrgService.switch_org",
+        'server.routes.orgs.OrgService.switch_org',
         AsyncMock(
             side_effect=OrgAuthorizationError(
-                "User must be a member of the organization to switch to it"
+                'User must be a member of the organization to switch to it'
             )
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.post(f"/api/organizations/{org_id}/switch")
+        response = client.post(f'/api/organizations/{org_id}/switch')
 
         # Assert
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "member" in response.json()["detail"].lower()
+        assert 'member' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -3318,13 +3318,13 @@ async def test_switch_org_not_found(mock_app_with_get_user_id):
     org_id = uuid.uuid4()
 
     with patch(
-        "server.routes.orgs.OrgService.switch_org",
+        'server.routes.orgs.OrgService.switch_org',
         AsyncMock(side_effect=OrgNotFoundError(str(org_id))),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.post(f"/api/organizations/{org_id}/switch")
+        response = client.post(f'/api/organizations/{org_id}/switch')
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -3340,7 +3340,7 @@ async def test_switch_org_invalid_uuid(mock_app_with_get_user_id):
     client = TestClient(mock_app_with_get_user_id)
 
     # Act
-    response = client.post("/api/organizations/not-a-valid-uuid/switch")
+    response = client.post('/api/organizations/not-a-valid-uuid/switch')
 
     # Assert
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -3356,17 +3356,17 @@ async def test_switch_org_database_error(mock_app_with_get_user_id):
     org_id = uuid.uuid4()
 
     with patch(
-        "server.routes.orgs.OrgService.switch_org",
-        AsyncMock(side_effect=OrgDatabaseError("Database connection failed")),
+        'server.routes.orgs.OrgService.switch_org',
+        AsyncMock(side_effect=OrgDatabaseError('Database connection failed')),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.post(f"/api/organizations/{org_id}/switch")
+        response = client.post(f'/api/organizations/{org_id}/switch')
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Failed to switch organization" in response.json()["detail"]
+        assert 'Failed to switch organization' in response.json()['detail']
 
 
 # =============================================================================
@@ -3378,7 +3378,7 @@ async def test_switch_org_database_error(mock_app_with_get_user_id):
 def mock_member_role():
     """Create a mock member role for authorization tests."""
     mock_role = MagicMock()
-    mock_role.name = "member"
+    mock_role.name = 'member'
     return mock_role
 
 
@@ -3399,25 +3399,25 @@ async def test_get_org_app_settings_success(
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
-            "server.routes.orgs.OrgAppSettingsService.get_org_app_settings",
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
             AsyncMock(return_value=mock_response),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get("/api/organizations/app")
+        response = client.get('/api/organizations/app')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["enable_proactive_conversation_starters"] is True
-        assert response_data["enable_solvability_analysis"] is False
-        assert response_data["max_budget_per_task"] == 10.0
+        assert response_data['enable_proactive_conversation_starters'] is True
+        assert response_data['enable_solvability_analysis'] is False
+        assert response_data['max_budget_per_task'] == 10.0
 
 
 @pytest.mark.asyncio
@@ -3438,26 +3438,26 @@ async def test_get_org_app_settings_with_null_values(
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
-            "server.routes.orgs.OrgAppSettingsService.get_org_app_settings",
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
             AsyncMock(return_value=mock_response),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get("/api/organizations/app")
+        response = client.get('/api/organizations/app')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
         # enable_proactive_conversation_starters defaults to True when None
-        assert response_data["enable_proactive_conversation_starters"] is True
-        assert response_data["enable_solvability_analysis"] is None
-        assert response_data["max_budget_per_task"] is None
+        assert response_data['enable_proactive_conversation_starters'] is True
+        assert response_data['enable_solvability_analysis'] is None
+        assert response_data['max_budget_per_task'] is None
 
 
 @pytest.mark.asyncio
@@ -3471,22 +3471,22 @@ async def test_get_org_app_settings_not_found(
     # Arrange
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
-            "server.routes.orgs.OrgAppSettingsService.get_org_app_settings",
-            AsyncMock(side_effect=OrgNotFoundError("current")),
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
+            AsyncMock(side_effect=OrgNotFoundError('current')),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get("/api/organizations/app")
+        response = client.get('/api/organizations/app')
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "not found" in response.json()["detail"].lower()
+        assert 'not found' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -3497,17 +3497,17 @@ async def test_get_org_app_settings_user_not_member(mock_app_with_get_user_id):
     """
     # Arrange - user has no role (not a member)
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get("/api/organizations/app")
+        response = client.get('/api/organizations/app')
 
         # Assert
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "not a member" in response.json()["detail"].lower()
+        assert 'not a member' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -3527,11 +3527,11 @@ async def test_update_org_app_settings_success(
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
-            "server.routes.orgs.OrgAppSettingsService.update_org_app_settings",
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
             AsyncMock(return_value=mock_response),
         ) as mock_update,
     ):
@@ -3539,20 +3539,20 @@ async def test_update_org_app_settings_success(
 
         # Act
         response = client.post(
-            "/api/organizations/app",
+            '/api/organizations/app',
             json={
-                "enable_proactive_conversation_starters": False,
-                "enable_solvability_analysis": True,
-                "max_budget_per_task": 25.0,
+                'enable_proactive_conversation_starters': False,
+                'enable_solvability_analysis': True,
+                'max_budget_per_task': 25.0,
             },
         )
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["enable_proactive_conversation_starters"] is False
-        assert response_data["enable_solvability_analysis"] is True
-        assert response_data["max_budget_per_task"] == 25.0
+        assert response_data['enable_proactive_conversation_starters'] is False
+        assert response_data['enable_solvability_analysis'] is True
+        assert response_data['max_budget_per_task'] == 25.0
         mock_update.assert_called_once()
 
 
@@ -3573,11 +3573,11 @@ async def test_update_org_app_settings_partial_update(
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
-            "server.routes.orgs.OrgAppSettingsService.update_org_app_settings",
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
             AsyncMock(return_value=mock_response),
         ) as mock_update,
     ):
@@ -3585,8 +3585,8 @@ async def test_update_org_app_settings_partial_update(
 
         # Act - only updating one field
         response = client.post(
-            "/api/organizations/app",
-            json={"enable_proactive_conversation_starters": False},
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
         )
 
         # Assert
@@ -3615,11 +3615,11 @@ async def test_update_org_app_settings_set_null(
 
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
-            "server.routes.orgs.OrgAppSettingsService.update_org_app_settings",
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
             AsyncMock(return_value=mock_response),
         ),
     ):
@@ -3627,14 +3627,14 @@ async def test_update_org_app_settings_set_null(
 
         # Act - explicitly setting max_budget_per_task to null
         response = client.post(
-            "/api/organizations/app",
-            json={"max_budget_per_task": None},
+            '/api/organizations/app',
+            json={'max_budget_per_task': None},
         )
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["max_budget_per_task"] is None
+        assert response_data['max_budget_per_task'] is None
 
 
 @pytest.mark.asyncio
@@ -3647,15 +3647,15 @@ async def test_update_org_app_settings_invalid_max_budget(
     """
     # Arrange
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_member_role),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act - negative value
         response = client.post(
-            "/api/organizations/app",
-            json={"max_budget_per_task": -5.0},
+            '/api/organizations/app',
+            json={'max_budget_per_task': -5.0},
         )
 
         # Assert
@@ -3672,15 +3672,15 @@ async def test_update_org_app_settings_zero_max_budget(
     """
     # Arrange
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_member_role),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act - zero value
         response = client.post(
-            "/api/organizations/app",
-            json={"max_budget_per_task": 0},
+            '/api/organizations/app',
+            json={'max_budget_per_task': 0},
         )
 
         # Assert
@@ -3698,25 +3698,25 @@ async def test_update_org_app_settings_not_found(
     # Arrange
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
-            "server.routes.orgs.OrgAppSettingsService.update_org_app_settings",
-            AsyncMock(side_effect=OrgNotFoundError("current")),
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(side_effect=OrgNotFoundError('current')),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
         response = client.post(
-            "/api/organizations/app",
-            json={"enable_proactive_conversation_starters": False},
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
         )
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "not found" in response.json()["detail"].lower()
+        assert 'not found' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -3730,25 +3730,25 @@ async def test_update_org_app_settings_database_error(
     # Arrange
     with (
         patch(
-            "server.auth.authorization.get_user_org_role",
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
-            "server.routes.orgs.OrgAppSettingsService.update_org_app_settings",
-            AsyncMock(side_effect=Exception("Database connection failed")),
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(side_effect=Exception('Database connection failed')),
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
         response = client.post(
-            "/api/organizations/app",
-            json={"enable_proactive_conversation_starters": False},
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
         )
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "unexpected error" in response.json()["detail"].lower()
+        assert 'unexpected error' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -3759,17 +3759,17 @@ async def test_update_org_app_settings_user_not_member(mock_app_with_get_user_id
     """
     # Arrange - user has no role (not a member)
     with patch(
-        "server.auth.authorization.get_user_org_role",
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
         response = client.post(
-            "/api/organizations/app",
-            json={"enable_proactive_conversation_starters": False},
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
         )
 
         # Assert
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "not a member" in response.json()["detail"].lower()
+        assert 'not a member' in response.json()['detail'].lower()

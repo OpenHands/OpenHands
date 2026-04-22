@@ -40,17 +40,17 @@ class OrgLLMSettingsService:
         """
         user_id = await self.user_context.get_user_id()
         if not user_id:
-            raise ValueError("User is not authenticated")
+            raise ValueError('User is not authenticated')
 
         logger.info(
-            "Getting organization LLM settings",
-            extra={"user_id": user_id},
+            'Getting organization LLM settings',
+            extra={'user_id': user_id},
         )
 
         org = await self.store.get_current_org_by_user_id(user_id)
 
         if not org:
-            raise OrgNotFoundError("No current organization")
+            raise OrgNotFoundError('No current organization')
 
         return OrgLLMSettingsResponse.from_org(org)
 
@@ -61,11 +61,11 @@ class OrgLLMSettingsService:
         """Forward deprecated org-LLM writes through the unified org update path."""
         user_id = await self.user_context.get_user_id()
         if not user_id:
-            raise ValueError("User is not authenticated")
+            raise ValueError('User is not authenticated')
 
         logger.info(
-            "Updating organization LLM settings through deprecated wrapper",
-            extra={"user_id": user_id},
+            'Updating organization LLM settings through deprecated wrapper',
+            extra={'user_id': user_id},
         )
 
         if not update_data.has_updates():
@@ -73,7 +73,7 @@ class OrgLLMSettingsService:
 
         org = await self.store.get_current_org_by_user_id(user_id)
         if not org:
-            raise OrgNotFoundError("No current organization")
+            raise OrgNotFoundError('No current organization')
 
         updated_org = await OrgService.update_org_with_permissions(
             org_id=org.id,

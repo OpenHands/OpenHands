@@ -26,15 +26,15 @@ def test_org_update_accepts_typed_settings_objects():
     """OrgUpdate should parse wire payloads into typed settings objects."""
     update_data = OrgUpdate.model_validate(
         {
-            "agent_settings": {"llm": {"model": "claude-3-5-sonnet"}},
-            "conversation_settings": {"security_analyzer": "llm"},
+            'agent_settings': {'llm': {'model': 'claude-3-5-sonnet'}},
+            'conversation_settings': {'security_analyzer': 'llm'},
         }
     )
 
     assert isinstance(update_data.agent_settings, AgentSettings)
-    assert update_data.agent_settings_patch() == {"llm": {"model": "claude-3-5-sonnet"}}
+    assert update_data.agent_settings_patch() == {'llm': {'model': 'claude-3-5-sonnet'}}
     assert isinstance(update_data.conversation_settings, ConversationSettings)
-    assert update_data.conversation_settings_patch() == {"security_analyzer": "llm"}
+    assert update_data.conversation_settings_patch() == {'security_analyzer': 'llm'}
 
 
 @pytest.fixture
@@ -55,11 +55,11 @@ def mock_org(org_id):
     org = MagicMock(spec=Org)
     org.id = org_id
     org.agent_settings = {
-        "schema_version": 1,
-        "agent": "CodeActAgent",
-        "llm": {
-            "model": "claude-3",
-            "base_url": "https://api.anthropic.com",
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'llm': {
+            'model': 'claude-3',
+            'base_url': 'https://api.anthropic.com',
         },
     }
     org.conversation_settings = {}
@@ -99,8 +99,8 @@ async def test_get_org_llm_settings_success(
 
     # Assert
     assert isinstance(result, OrgLLMSettingsResponse)
-    assert result.agent_settings.llm.model == "claude-3"
-    assert result.agent_settings.agent == "CodeActAgent"
+    assert result.agent_settings.llm.model == 'claude-3'
+    assert result.agent_settings.agent == 'CodeActAgent'
     mock_store.get_current_org_by_user_id.assert_called_once_with(user_id)
 
 
@@ -119,7 +119,7 @@ async def test_get_org_llm_settings_user_not_authenticated(mock_store):
     with pytest.raises(ValueError) as exc_info:
         await service.get_org_llm_settings()
 
-    assert "not authenticated" in str(exc_info.value)
+    assert 'not authenticated' in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -138,7 +138,7 @@ async def test_get_org_llm_settings_org_not_found(
     with pytest.raises(OrgNotFoundError) as exc_info:
         await service.get_org_llm_settings()
 
-    assert "No current organization" in str(exc_info.value)
+    assert 'No current organization' in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -149,22 +149,22 @@ async def test_update_org_llm_settings_success(
     updated_org = MagicMock(spec=Org)
     updated_org.id = mock_org.id
     updated_org.agent_settings = {
-        "schema_version": 1,
-        "agent": "CodeActAgent",
-        "llm": {"model": "new-model"},
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'llm': {'model': 'new-model'},
     }
     updated_org.conversation_settings = {
-        "confirmation_mode": False,
-        "max_iterations": 100,
+        'confirmation_mode': False,
+        'max_iterations': 100,
     }
     updated_org.llm_api_key = None
     updated_org.search_api_key = None
 
     update_data = OrgUpdate(
-        agent_settings={"llm": {"model": "new-model"}},
+        agent_settings={'llm': {'model': 'new-model'}},
         conversation_settings={
-            "confirmation_mode": False,
-            "max_iterations": 100,
+            'confirmation_mode': False,
+            'max_iterations': 100,
         },
     )
 
@@ -172,7 +172,7 @@ async def test_update_org_llm_settings_success(
     update_org_with_permissions = AsyncMock(return_value=updated_org)
     monkeypatch.setattr(
         service_module.OrgService,
-        "update_org_with_permissions",
+        'update_org_with_permissions',
         update_org_with_permissions,
     )
     service = OrgLLMSettingsService(store=mock_store, user_context=mock_user_context)
@@ -180,7 +180,7 @@ async def test_update_org_llm_settings_success(
     result = await service.update_org_llm_settings(update_data)
 
     assert isinstance(result, OrgLLMSettingsResponse)
-    assert result.agent_settings.llm.model == "new-model"
+    assert result.agent_settings.llm.model == 'new-model'
     assert result.conversation_settings.confirmation_mode is False
     assert result.conversation_settings.max_iterations == 100
     update_org_with_permissions.assert_awaited_once_with(
@@ -199,7 +199,7 @@ async def test_update_org_llm_settings_no_changes(
     update_org_with_permissions = AsyncMock()
     monkeypatch.setattr(
         service_module.OrgService,
-        "update_org_with_permissions",
+        'update_org_with_permissions',
         update_org_with_permissions,
     )
     service = OrgLLMSettingsService(store=mock_store, user_context=mock_user_context)
@@ -207,7 +207,7 @@ async def test_update_org_llm_settings_no_changes(
     result = await service.update_org_llm_settings(OrgUpdate())
 
     assert isinstance(result, OrgLLMSettingsResponse)
-    assert result.agent_settings.llm.model == "claude-3"
+    assert result.agent_settings.llm.model == 'claude-3'
     update_org_with_permissions.assert_not_called()
 
 
@@ -220,7 +220,7 @@ async def test_update_org_llm_settings_org_not_found(
     THEN: OrgNotFoundError is raised
     """
     # Arrange
-    update_data = OrgLLMSettingsUpdate(agent_settings={"llm": {"model": "new-model"}})
+    update_data = OrgLLMSettingsUpdate(agent_settings={'llm': {'model': 'new-model'}})
 
     mock_store.get_current_org_by_user_id = AsyncMock(return_value=None)
     service = OrgLLMSettingsService(store=mock_store, user_context=mock_user_context)
@@ -229,7 +229,7 @@ async def test_update_org_llm_settings_org_not_found(
     with pytest.raises(OrgNotFoundError) as exc_info:
         await service.update_org_llm_settings(update_data)
 
-    assert "No current organization" in str(exc_info.value)
+    assert 'No current organization' in str(exc_info.value)
 
 
 def test_normalize_agent_settings_masks_api_key_in_json_on_empty_and_real_keys():
@@ -245,23 +245,23 @@ def test_normalize_agent_settings_masks_api_key_in_json_on_empty_and_real_keys()
     """
     # Arrange + Act
     real_key = OrgLLMSettingsUpdate.model_validate(
-        {"agent_settings": {"llm": {"model": "anthropic/x", "api_key": "sk-raw"}}}
+        {'agent_settings': {'llm': {'model': 'anthropic/x', 'api_key': 'sk-raw'}}}
     )
     empty_key = OrgLLMSettingsUpdate.model_validate(
         {
-            "agent_settings": {
-                "llm": {"model": "openhands/x", "api_key": "", "base_url": None},
+            'agent_settings': {
+                'llm': {'model': 'openhands/x', 'api_key': '', 'base_url': None},
             },
         }
     )
 
     # Assert — masked in JSON in both cases; lifted raw value on top-level.
-    assert real_key.llm_api_key == "sk-raw"
+    assert real_key.llm_api_key == 'sk-raw'
     assert real_key.agent_settings_patch() is not None
-    assert real_key.agent_settings_patch()["llm"]["api_key"] == MASKED_API_KEY
-    assert empty_key.llm_api_key == ""
+    assert real_key.agent_settings_patch()['llm']['api_key'] == MASKED_API_KEY
+    assert empty_key.llm_api_key == ''
     assert empty_key.agent_settings_patch() is not None
-    assert empty_key.agent_settings_patch()["llm"]["api_key"] == MASKED_API_KEY
+    assert empty_key.agent_settings_patch()['llm']['api_key'] == MASKED_API_KEY
 
 
 def test_normalize_agent_settings_fills_base_url_for_all_providers():
@@ -282,18 +282,18 @@ def test_normalize_agent_settings_fills_base_url_for_all_providers():
     # BYOR provider explicit null (base_url auto-filled to provider default).
     openhands_null = OrgLLMSettingsUpdate.model_validate(
         {
-            "agent_settings": {
-                "llm": {"model": "openhands/claude-3", "base_url": None},
+            'agent_settings': {
+                'llm': {'model': 'openhands/claude-3', 'base_url': None},
             },
         }
     )
     openhands_missing = OrgLLMSettingsUpdate.model_validate(
-        {"agent_settings": {"llm": {"model": "openhands/claude-3"}}}
+        {'agent_settings': {'llm': {'model': 'openhands/claude-3'}}}
     )
     anthropic_null = OrgLLMSettingsUpdate.model_validate(
         {
-            "agent_settings": {
-                "llm": {"model": "anthropic/claude-3-opus-20240229", "base_url": None},
+            'agent_settings': {
+                'llm': {'model': 'anthropic/claude-3-opus-20240229', 'base_url': None},
             },
         }
     )
@@ -302,23 +302,23 @@ def test_normalize_agent_settings_fills_base_url_for_all_providers():
     # provider default that ``litellm.get_api_base`` reports.
     openhands_null_patch = openhands_null.agent_settings_patch()
     assert openhands_null_patch is not None
-    assert openhands_null_patch["llm"]["model"] == "litellm_proxy/claude-3"
-    assert openhands_null_patch["llm"]["base_url"].rstrip(
-        "/"
-    ) == LITE_LLM_API_URL.rstrip("/")
+    assert openhands_null_patch['llm']['model'] == 'litellm_proxy/claude-3'
+    assert openhands_null_patch['llm']['base_url'].rstrip(
+        '/'
+    ) == LITE_LLM_API_URL.rstrip('/')
 
     openhands_missing_patch = openhands_missing.agent_settings_patch()
     assert openhands_missing_patch is not None
-    assert openhands_missing_patch["llm"]["model"] == "litellm_proxy/claude-3"
-    assert openhands_missing_patch["llm"]["base_url"].rstrip(
-        "/"
-    ) == LITE_LLM_API_URL.rstrip("/")
+    assert openhands_missing_patch['llm']['model'] == 'litellm_proxy/claude-3'
+    assert openhands_missing_patch['llm']['base_url'].rstrip(
+        '/'
+    ) == LITE_LLM_API_URL.rstrip('/')
 
     anthropic_patch = anthropic_null.agent_settings_patch()
     assert anthropic_patch is not None
-    anthropic_base = anthropic_patch["llm"]["base_url"]
+    anthropic_base = anthropic_patch['llm']['base_url']
     assert isinstance(anthropic_base, str)
-    assert "anthropic.com" in anthropic_base
+    assert 'anthropic.com' in anthropic_base
 
 
 def test_from_org_denormalizes_litellm_proxy_prefix_and_returns_base_url_as_stored():
@@ -337,12 +337,12 @@ def test_from_org_denormalizes_litellm_proxy_prefix_and_returns_base_url_as_stor
     # Arrange
     org = MagicMock(spec=Org)
     org.agent_settings = {
-        "schema_version": 1,
-        "agent": "CodeActAgent",
-        "llm": {
-            "model": "litellm_proxy/minimax-m2.5",
-            "base_url": LITE_LLM_API_URL,
-            "api_key": MASKED_API_KEY,
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'llm': {
+            'model': 'litellm_proxy/minimax-m2.5',
+            'base_url': LITE_LLM_API_URL,
+            'api_key': MASKED_API_KEY,
         },
     }
     org.conversation_settings = {}
@@ -353,7 +353,7 @@ def test_from_org_denormalizes_litellm_proxy_prefix_and_returns_base_url_as_stor
     response = OrgLLMSettingsResponse.from_org(org)
 
     # Assert
-    assert response.agent_settings.llm.model == "openhands/minimax-m2.5"
+    assert response.agent_settings.llm.model == 'openhands/minimax-m2.5'
     assert response.agent_settings.llm.base_url == LITE_LLM_API_URL
     assert response.agent_settings.llm.api_key is None
 
@@ -373,16 +373,16 @@ def test_from_org_returns_provider_default_base_url_as_stored_for_non_managed_mo
     # validator does so the test stays in sync with whatever litellm reports.
     from openhands.utils.llm import get_provider_api_base as _provider_base
 
-    anthropic_default = _provider_base("anthropic/claude-3-opus-20240229")
+    anthropic_default = _provider_base('anthropic/claude-3-opus-20240229')
     assert anthropic_default is not None
 
     org = MagicMock(spec=Org)
     org.agent_settings = {
-        "schema_version": 1,
-        "agent": "CodeActAgent",
-        "llm": {
-            "model": "anthropic/claude-3-opus-20240229",
-            "base_url": anthropic_default,
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'llm': {
+            'model': 'anthropic/claude-3-opus-20240229',
+            'base_url': anthropic_default,
         },
     }
     org.conversation_settings = {}
@@ -394,7 +394,7 @@ def test_from_org_returns_provider_default_base_url_as_stored_for_non_managed_mo
 
     # Assert — model is unchanged (no litellm_proxy/ prefix), base_url is
     # returned as stored so stored state and response agree.
-    assert response.agent_settings.llm.model == "anthropic/claude-3-opus-20240229"
+    assert response.agent_settings.llm.model == 'anthropic/claude-3-opus-20240229'
     assert response.agent_settings.llm.base_url == anthropic_default
 
 
@@ -408,11 +408,11 @@ def test_from_org_keeps_custom_base_url_that_is_not_provider_default():
     # Arrange
     org = MagicMock(spec=Org)
     org.agent_settings = {
-        "schema_version": 1,
-        "agent": "CodeActAgent",
-        "llm": {
-            "model": "anthropic/claude-3-opus-20240229",
-            "base_url": "https://company-proxy.internal/anthropic",
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'llm': {
+            'model': 'anthropic/claude-3-opus-20240229',
+            'base_url': 'https://company-proxy.internal/anthropic',
         },
     }
     org.conversation_settings = {}
@@ -425,5 +425,5 @@ def test_from_org_keeps_custom_base_url_that_is_not_provider_default():
     # Assert
     assert (
         response.agent_settings.llm.base_url
-        == "https://company-proxy.internal/anthropic"
+        == 'https://company-proxy.internal/anthropic'
     )

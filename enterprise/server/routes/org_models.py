@@ -53,7 +53,7 @@ class OrgDeletionError(Exception):
 class OrgAuthorizationError(OrgDeletionError):
     """Raised when user is not authorized to delete organization."""
 
-    def __init__(self, message: str = "Not authorized to delete organization"):
+    def __init__(self, message: str = 'Not authorized to delete organization'):
         super().__init__(message)
 
 
@@ -63,7 +63,7 @@ class OrphanedUserError(OrgDeletionError):
     def __init__(self, user_ids: list[str]):
         self.user_ids = user_ids
         super().__init__(
-            f"Cannot delete organization: {len(user_ids)} user(s) would have no remaining organization"
+            f'Cannot delete organization: {len(user_ids)} user(s) would have no remaining organization'
         )
 
 
@@ -103,30 +103,30 @@ class InvalidRoleError(Exception):
 class InsufficientPermissionError(Exception):
     """Raised when user lacks permission to perform an operation."""
 
-    def __init__(self, message: str = "Insufficient permission"):
+    def __init__(self, message: str = 'Insufficient permission'):
         super().__init__(message)
 
 
 class CannotModifySelfError(Exception):
     """Raised when user attempts to modify their own membership."""
 
-    def __init__(self, action: str = "modify"):
+    def __init__(self, action: str = 'modify'):
         self.action = action
-        super().__init__(f"Cannot {action} your own membership")
+        super().__init__(f'Cannot {action} your own membership')
 
 
 class LastOwnerError(Exception):
     """Raised when attempting to remove or demote the last owner."""
 
-    def __init__(self, action: str = "remove"):
+    def __init__(self, action: str = 'remove'):
         self.action = action
-        super().__init__(f"Cannot {action} the last owner of an organization")
+        super().__init__(f'Cannot {action} the last owner of an organization')
 
 
 class MemberUpdateError(Exception):
     """Raised when member update operation fails."""
 
-    def __init__(self, message: str = "Failed to update member"):
+    def __init__(self, message: str = 'Failed to update member'):
         super().__init__(message)
 
 
@@ -170,7 +170,7 @@ class OrgResponse(BaseModel):
     @classmethod
     def from_org(
         cls, org: Org, credits: float | None = None, user_id: str | None = None
-    ) -> "OrgResponse":
+    ) -> 'OrgResponse':
         """Create an OrgResponse from an Org entity."""
         return cls(
             id=str(org.id),
@@ -245,7 +245,7 @@ class OrgUpdate(BaseModel):
     ) -> dict[str, Any] | None:
         if settings is None:
             return None
-        patch = settings.model_dump(mode="json", exclude_unset=True)
+        patch = settings.model_dump(mode='json', exclude_unset=True)
         return patch or None
 
     @staticmethod
@@ -254,66 +254,69 @@ class OrgUpdate(BaseModel):
         llm_settings: Any,
     ) -> None:
         for field in tuple(llm_patch):
-            if field in {"model", "base_url", "api_key"}:
+            if field in {'model', 'base_url', 'api_key'}:
                 continue
             candidate_patch = {k: v for k, v in llm_patch.items() if k != field}
             rebuilt = type(llm_settings).model_validate(candidate_patch)
             if getattr(rebuilt, field) == getattr(llm_settings, field):
                 llm_patch.pop(field, None)
 
-    @model_validator(mode="before")
+    @model_validator(mode='before')
     @classmethod
     def _lift_nested_llm_api_key(cls, data: Any) -> Any:
-        if not isinstance(data, dict) or data.get("llm_api_key") is not None:
+        if not isinstance(data, dict) or data.get('llm_api_key') is not None:
             return data
 
-        agent_settings = data.get("agent_settings")
+        agent_settings = data.get('agent_settings')
         llm_patch = (
-            agent_settings.get("llm") if isinstance(agent_settings, dict) else None
+            agent_settings.get('llm') if isinstance(agent_settings, dict) else None
         )
-        if isinstance(llm_patch, dict) and "api_key" in llm_patch:
-            nested_api_key = llm_patch.get("api_key")
+        if isinstance(llm_patch, dict) and 'api_key' in llm_patch:
+            nested_api_key = llm_patch.get('api_key')
             if nested_api_key != MASKED_API_KEY:
                 data = data.copy()
-                data["llm_api_key"] = nested_api_key
+                data['llm_api_key'] = nested_api_key
         return data
 
     def _has_nested_llm_update(self) -> bool:
         return (
             self.agent_settings is not None
-            and "llm" in self.agent_settings.model_fields_set
+            and 'llm' in self.agent_settings.model_fields_set
         )
 
     def _has_nested_llm_api_key_update(self) -> bool:
-        return (
-            self._has_nested_llm_update()
-            and "api_key" in self.agent_settings.llm.model_fields_set
+        agent_settings = self.agent_settings
+        return bool(
+            agent_settings is not None
+            and self._has_nested_llm_update()
+            and 'api_key' in agent_settings.llm.model_fields_set
         )
 
     def agent_settings_patch(self) -> dict[str, Any] | None:
-        patch = self._copy_patch(self.agent_settings)
-        if patch is None:
+        agent_settings = self.agent_settings
+        patch = self._copy_patch(agent_settings)
+        if patch is None or agent_settings is None:
             return None
 
-        llm_patch = patch.get("llm")
+        llm_patch = patch.get('llm')
         if isinstance(llm_patch, dict):
-            self._trim_derived_llm_fields(llm_patch, self.agent_settings.llm)
+            self._trim_derived_llm_fields(llm_patch, agent_settings.llm)
 
-            resolved_base_url = self.agent_settings.llm.base_url
+            resolved_base_url = agent_settings.llm.base_url
             if resolved_base_url is not None:
-                llm_patch["base_url"] = resolved_base_url
+                llm_patch['base_url'] = resolved_base_url
             if self._has_nested_llm_api_key_update():
-                llm_patch["api_key"] = MASKED_API_KEY
+                llm_patch['api_key'] = MASKED_API_KEY
             if not llm_patch:
-                patch.pop("llm", None)
+                patch.pop('llm', None)
 
         return patch or None
 
     def conversation_settings_patch(self) -> dict[str, Any] | None:
         return self._copy_patch(self.conversation_settings)
 
-    @model_validator(mode="after")
-    def _normalize_agent_settings(self) -> "OrgUpdate":
+    @model_validator(mode='after')
+    def _normalize_agent_settings(self) -> 'OrgUpdate':
         """Normalize ``agent_settings`` so post-save stored state stays.
 
         Keep the org row, every member row, and the encrypted
@@ -378,29 +381,29 @@ class OrgUpdate(BaseModel):
         return bool(
             self.updated_fields()
             & {
-                "agent_settings",
-                "conversation_settings",
-                "search_api_key",
-                "llm_api_key",
+                'agent_settings',
+                'conversation_settings',
+                'search_api_key',
+                'llm_api_key',
             }
         )
 
     def restricted_fields(self) -> set[str]:
         """Return fields that require elevated org settings permissions."""
         return self.updated_fields() & {
-            "agent_settings",
-            "conversation_settings",
-            "search_api_key",
-            "sandbox_api_key",
-            "llm_api_key",
+            'agent_settings',
+            'conversation_settings',
+            'search_api_key',
+            'sandbox_api_key',
+            'llm_api_key',
         }
 
     def model_update_dict(self) -> dict[str, Any]:
         """Return JSON-serializable scalar fields for persistence."""
         return self.model_dump(
-            mode="json",
+            mode='json',
             exclude_none=True,
-            exclude={"agent_settings", "conversation_settings"},
+            exclude={'agent_settings', 'conversation_settings'},
         )
 
     def apply_to_org(self, org: Org) -> None:
@@ -409,7 +412,7 @@ class OrgUpdate(BaseModel):
             if hasattr(org, key):
                 setattr(org, key, value)
 
-    def get_member_updates(self) -> "OrgMemberLLMSettings | None":
+    def get_member_updates(self) -> 'OrgMemberLLMSettings | None':
         """Get updates that need to be propagated to org members.
 
         An empty ``llm_api_key`` means the org-wide custom key is being cleared
@@ -446,11 +449,11 @@ class OrgLLMSettingsResponse(BaseModel):
         if not raw:
             return None
         if len(raw) <= 4:
-            return "****"
-        return "****" + raw[-4:]
+            return '****'
+        return '****' + raw[-4:]
 
     @classmethod
-    def from_org(cls, org: Org) -> "OrgLLMSettingsResponse":
+    def from_org(cls, org: Org) -> 'OrgLLMSettingsResponse':
         """Create response from Org entity.
 
         Denormalizes the SDK's ``litellm_proxy/`` prefix back to
@@ -498,7 +501,7 @@ class OrgLLMSettingsResponse(BaseModel):
         re-normalized back to ``litellm_proxy/``.
         """
         llm = agent_settings.llm
-        if llm.model and llm.model.startswith("litellm_proxy/"):
+        if llm.model and llm.model.startswith('litellm_proxy/'):
             llm.model = f"openhands/{llm.model.removeprefix('litellm_proxy/')}"
         llm.api_key = None
 
@@ -580,13 +583,13 @@ class MeResponse(BaseModel):
     def _mask_key(secret: str | SecretStr | None) -> str:
         """Mask an API key, showing only last 4 characters."""
         if secret is None:
-            return ""
+            return ''
         raw = secret.get_secret_value() if isinstance(secret, SecretStr) else secret
         if not raw:
-            return ""
+            return ''
         if len(raw) <= 4:
-            return "****"
-        return "****" + raw[-4:]
+            return '****'
+        return '****' + raw[-4:]
 
     @classmethod
     def from_org_member(
@@ -594,7 +597,7 @@ class MeResponse(BaseModel):
         member: OrgMember,
         role: Role,
         email: str,
-    ) -> "MeResponse":
+    ) -> 'MeResponse':
         """Create a MeResponse from an OrgMember, Role, and user email."""
         return cls(
             org_id=str(member.org_id),
@@ -617,7 +620,7 @@ class OrgAppSettingsResponse(BaseModel):
     max_budget_per_task: float | None = None
 
     @classmethod
-    def from_org(cls, org: Org) -> "OrgAppSettingsResponse":
+    def from_org(cls, org: Org) -> 'OrgAppSettingsResponse':
         """Create an OrgAppSettingsResponse from an Org entity.
 
         Args:
@@ -642,15 +645,15 @@ class OrgAppSettingsUpdate(BaseModel):
     enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
-    @field_validator("max_budget_per_task")
+    @field_validator('max_budget_per_task')
     @classmethod
     def validate_max_budget_per_task(cls, v: float | None) -> float | None:
         if v is not None and v <= 0:
-            raise ValueError("max_budget_per_task must be greater than 0")
+            raise ValueError('max_budget_per_task must be greater than 0')
         return v
 
 
-VALID_GIT_PROVIDERS = {"github", "gitlab", "bitbucket"}
+VALID_GIT_PROVIDERS = {'github', 'gitlab', 'bitbucket'}
 
 
 class GitOrgClaimRequest(BaseModel):
@@ -659,7 +662,7 @@ class GitOrgClaimRequest(BaseModel):
     provider: str
     git_organization: str
 
-    @field_validator("provider")
+    @field_validator('provider')
     @classmethod
     def validate_provider(cls, v: str) -> str:
         v = v.lower().strip()
@@ -669,12 +672,12 @@ class GitOrgClaimRequest(BaseModel):
             )
         return v
 
-    @field_validator("git_organization")
+    @field_validator('git_organization')
     @classmethod
     def validate_git_organization(cls, v: str) -> str:
         v = v.strip().lower()
         if not v:
-            raise ValueError("git_organization must not be empty")
+            raise ValueError('git_organization must not be empty')
         return v
 
 
