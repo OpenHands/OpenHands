@@ -663,7 +663,7 @@ class TestStartJob:
     async def test_start_job_success_new_conversation(
         self, jira_dc_manager, sample_jira_dc_workspace
     ):
-        """Test successful job start for new conversation."""
+        """Test successful job start for new conversation using V1 app conversation system."""
         mock_view = MagicMock(spec=JiraDcNewConversationView)
         mock_view.jira_dc_user = MagicMock()
         mock_view.jira_dc_user.keycloak_user_id = 'test_user'
@@ -676,17 +676,11 @@ class TestStartJob:
         jira_dc_manager.send_message = AsyncMock()
         jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        with patch(
-            'integrations.jira_dc.jira_dc_manager.register_callback_processor'
-        ) as mock_register:
-            with patch(
-                'server.conversation_callback_processor.jira_dc_callback_processor.JiraDcCallbackProcessor'
-            ):
-                await jira_dc_manager.start_job(mock_view)
+        await jira_dc_manager.start_job(mock_view)
 
-                mock_view.create_or_update_conversation.assert_called_once()
-                mock_register.assert_called_once()
-                jira_dc_manager.send_message.assert_called_once()
+        # V1 callback processors are registered by the view during conversation creation
+        mock_view.create_or_update_conversation.assert_called_once()
+        jira_dc_manager.send_message.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_job_success_existing_conversation(
@@ -705,15 +699,10 @@ class TestStartJob:
         jira_dc_manager.send_message = AsyncMock()
         jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        with patch(
-            'integrations.jira_dc.jira_dc_manager.register_callback_processor'
-        ) as mock_register:
-            await jira_dc_manager.start_job(mock_view)
+        await jira_dc_manager.start_job(mock_view)
 
-            mock_view.create_or_update_conversation.assert_called_once()
-            # Should not register callback for existing conversation
-            mock_register.assert_not_called()
-            jira_dc_manager.send_message.assert_called_once()
+        mock_view.create_or_update_conversation.assert_called_once()
+        jira_dc_manager.send_message.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_job_missing_settings_error(
@@ -833,9 +822,8 @@ class TestStartJob:
         jira_dc_manager.send_message = AsyncMock(side_effect=Exception('Send failed'))
         jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        with patch('integrations.jira_dc.jira_dc_manager.register_callback_processor'):
-            # Should not raise exception even if send_message fails
-            await jira_dc_manager.start_job(mock_view)
+        # Should not raise exception even if send_message fails
+        await jira_dc_manager.start_job(mock_view)
 
 
 class TestGetIssueDetails:

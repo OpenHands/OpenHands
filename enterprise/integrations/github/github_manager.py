@@ -32,7 +32,6 @@ from pydantic import SecretStr
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
-from server.utils.conversation_callback_utils import register_callback_processor
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderToken, ProviderType
@@ -318,17 +317,12 @@ class GithubManager(Manager[GithubViewType]):
             return
 
     async def start_job(self, github_view: GithubViewType) -> None:
-        """Kick off a job with openhands agent.
+        """Kick off a job with openhands agent using V1 app conversation system.
 
         1. Get user credential
         2. Initialize new conversation with repo
         3. Save interaction data
         """
-        # Importing here prevents circular import
-        from server.conversation_callback_processor.github_callback_processor import (
-            GithubCallbackProcessor,
-        )
-
         try:
             msg_info: str = ''
 
@@ -402,19 +396,7 @@ class GithubManager(Manager[GithubViewType]):
                     f'[GitHub] Created conversation {conversation_id} for user {user_info.username}'
                 )
 
-                if not github_view.v1_enabled:
-                    # Create a GithubCallbackProcessor
-                    processor = GithubCallbackProcessor(
-                        github_view=github_view,
-                        send_summary_instruction=True,
-                    )
-
-                    # Register the callback processor
-                    register_callback_processor(conversation_id, processor)
-
-                    logger.info(
-                        f'[Github] Registered callback processor for conversation {conversation_id}'
-                    )
+                # V1 callback processors are registered by the view during conversation creation
 
                 # Send message with conversation link
                 conversation_link = CONVERSATION_URL.format(conversation_id)
