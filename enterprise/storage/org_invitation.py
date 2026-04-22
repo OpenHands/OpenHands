@@ -2,12 +2,21 @@
 SQLAlchemy model for Organization Invitation.
 """
 
-from sqlalchemy import UUID, Column, DateTime, ForeignKey, Integer, String, text
-from sqlalchemy.orm import relationship
+from datetime import datetime
+from typing import TYPE_CHECKING
+from uuid import UUID
+
+from sqlalchemy import DateTime, ForeignKey, String, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
 
+if TYPE_CHECKING:
+    from storage.org import Org
+    from storage.role import Role
+    from storage.user import User
 
-class OrgInvitation(Base):  # type: ignore
+
+class OrgInvitation(Base):
     """Organization invitation model.
 
     Represents an invitation for a user to join an organization.
@@ -17,40 +26,42 @@ class OrgInvitation(Base):  # type: ignore
 
     __tablename__ = 'org_invitation'
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    token = Column(String(64), nullable=False, unique=True, index=True)
-    org_id = Column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    org_id: Mapped[UUID] = mapped_column(
         ForeignKey('org.id', ondelete='CASCADE'),
         nullable=False,
         index=True,
     )
-    email = Column(String(255), nullable=False, index=True)
-    role_id = Column(Integer, ForeignKey('role.id'), nullable=False)
-    inviter_id = Column(UUID(as_uuid=True), ForeignKey('user.id'), nullable=False)
-    status = Column(
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    role_id: Mapped[int] = mapped_column(ForeignKey('role.id'), nullable=False)
+    inviter_id: Mapped[UUID] = mapped_column(ForeignKey('user.id'), nullable=False)
+    status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
         server_default=text("'pending'"),
     )
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
         server_default=text('CURRENT_TIMESTAMP'),
     )
-    expires_at = Column(DateTime, nullable=False)
-    accepted_at = Column(DateTime, nullable=True)
-    accepted_by_user_id = Column(
-        UUID(as_uuid=True),
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    accepted_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey('user.id'),
         nullable=True,
     )
 
     # Relationships
-    org = relationship('Org', back_populates='invitations')
-    role = relationship('Role')
-    inviter = relationship('User', foreign_keys=[inviter_id])
-    accepted_by_user = relationship('User', foreign_keys=[accepted_by_user_id])
+    org: Mapped['Org'] = relationship('Org', back_populates='invitations')
+    role: Mapped['Role'] = relationship('Role')
+    inviter: Mapped['User'] = relationship('User', foreign_keys=[inviter_id])
+    accepted_by_user: Mapped['User | None'] = relationship(
+        'User', foreign_keys=[accepted_by_user_id]
+    )
 
     # Status constants
     STATUS_PENDING = 'pending'
