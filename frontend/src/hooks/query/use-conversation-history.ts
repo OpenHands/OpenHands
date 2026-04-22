@@ -6,7 +6,13 @@ export const useConversationHistory = (conversationId?: string) => {
   const { data: conversation, isFetched: isConversationFetched } =
     useUserConversation(conversationId ?? null);
 
-  const query = useQuery({
+  const {
+    data,
+    isFetched: isQueryFetched,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ["conversation-history", conversationId],
     enabled: !!conversationId && !!conversation,
     queryFn: async () => {
@@ -19,10 +25,13 @@ export const useConversationHistory = (conversationId?: string) => {
   });
 
   return {
-    ...query,
+    data,
+    isLoading,
+    isError,
+    error,
     // Query is considered fetched when:
     // 1. Conversation data is fetched AND history query has run, OR
     // 2. Conversation doesn't exist (isConversationFetched && !conversation)
-    isFetched: query.isFetched || (isConversationFetched && !conversation),
+    isFetched: isQueryFetched || (isConversationFetched && !conversation),
   };
 };

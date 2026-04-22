@@ -7,7 +7,6 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { OpenHandsEvent } from "#/types/v1/core";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import { ArchivedBanner } from "#/components/features/chat/archived-banner";
 import { ConversationNameWithStatus } from "./conversation-name-with-status";
@@ -19,7 +18,6 @@ import { ConversationNameWithStatus } from "./conversation-name-with-status";
  */
 export function ArchivedConversationView() {
   const { t } = useTranslation();
-  const { data: conversation } = useActiveConversation();
   const conversationWebSocket = useConversationWebSocket();
   const { v1FullEvents } = useFilteredEvents();
 
@@ -28,10 +26,9 @@ export function ArchivedConversationView() {
   const renderableEvents = React.useMemo(
     () =>
       v1FullEvents
-        .reduce<OpenHandsEvent[]>(
-          (uiEvents, event) => handleEventForUI(event, uiEvents),
-          [],
-        )
+        .reduce<
+          OpenHandsEvent[]
+        >((uiEvents, event) => handleEventForUI(event, uiEvents), [])
         .filter(shouldRenderEvent),
     [v1FullEvents],
   );
