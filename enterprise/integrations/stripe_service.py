@@ -61,7 +61,7 @@ async def find_or_create_customer_by_user_id(user_id: str) -> dict | None:
 
     # Create the customer in stripe
     customer = await stripe.Customer.create_async(
-        email=org.contact_email,
+        email=org.contact_email or '',
         metadata={'org_id': str(org.id)},
     )
 
@@ -110,7 +110,7 @@ async def migrate_customer(session, user_id: str, org: Org):
     stripe_customer.org_id = org.id
     customer = await stripe.Customer.modify_async(
         id=stripe_customer.stripe_customer_id,
-        email=org.contact_email,
+        email=org.contact_email or '',
         metadata={'user_id': '', 'org_id': str(org.id)},
     )
 
