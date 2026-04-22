@@ -316,12 +316,14 @@ async def get_legacy_org_defaults_settings(
         org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
         if not org:
             raise OrgNotFoundError('current')
-        return OrgDefaultsSettingsResponse.from_org(org)
+        return await get_org_defaults_settings(org_id=org.id, user_id=user_id)
     except OrgNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(
             'Error getting legacy organization defaults settings',

@@ -20,6 +20,7 @@ from server.routes.org_models import (
     LiteLLMIntegrationError,
     MeResponse,
     OrgAppSettingsResponse,
+    OrgDefaultsSettingsResponse,
     OrgAppSettingsUpdate,
     OrgAuthorizationError,
     OrgDatabaseError,
@@ -1301,28 +1302,35 @@ async def test_update_org_defaults_settings_rejects_non_default_fields():
 async def test_get_legacy_org_defaults_settings_success():
     """GIVEN: A user has a current organization
     WHEN: the deprecated /llm wrapper is invoked
-    THEN: it serializes current org defaults directly from OrgStore + OrgUpdate helpers
+    THEN: it resolves the current org and delegates to the org-id settings route
     """
-    mock_org = MagicMock(spec=Org)
-    mock_org.agent_settings = {
-        'schema_version': 1,
-        'agent': 'CodeActAgent',
-        'llm': {'model': 'litellm_proxy/claude-3', 'base_url': 'https://proxy.example'},
-    }
-    mock_org.conversation_settings = {'security_analyzer': 'llm'}
-    mock_org.llm_api_key = None
-    mock_org.search_api_key = None
+    current_org = MagicMock(spec=Org)
+    current_org.id = uuid.uuid4()
+    expected_response = OrgDefaultsSettingsResponse(
+        agent_settings={'llm': {'model': 'openhands/claude-3'}},
+        conversation_settings={'security_analyzer': 'llm'},
+        llm_api_key_set=False,
+        search_api_key=None,
+    )
 
-    with patch(
-        'server.routes.orgs.OrgStore.get_current_org_from_keycloak_user_id',
-        AsyncMock(return_value=mock_org),
-    ) as mock_get_current_org:
+    with (
+        patch(
+            'server.routes.orgs.OrgStore.get_current_org_from_keycloak_user_id',
+            AsyncMock(return_value=current_org),
+        ) as mock_get_current_org,
+        patch(
+            'server.routes.orgs.get_org_defaults_settings',
+            AsyncMock(return_value=expected_response),
+        ) as mock_get_org_defaults,
+    ):
         response = await get_legacy_org_defaults_settings(user_id=TEST_USER_ID)
 
-    assert response.agent_settings.llm.model == 'openhands/claude-3'
-    assert response.agent_settings.llm.base_url == 'https://proxy.example'
-    assert response.conversation_settings.security_analyzer == 'llm'
+    assert response == expected_response
     mock_get_current_org.assert_awaited_once_with(TEST_USER_ID)
+    mock_get_org_defaults.assert_awaited_once_with(
+        org_id=current_org.id,
+        user_id=TEST_USER_ID,
+    )
 
 
 @pytest.mark.asyncio
