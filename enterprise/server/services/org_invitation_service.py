@@ -319,15 +319,16 @@ class OrgInvitationService:
         if not user_email:
             token_manager = TokenManager()
             user_info = await token_manager.get_user_info_from_user_id(str(user_id))
-            user_email = user_info.get('email') if user_info else None
-            if user_email and user_info is not None:
-                await UserStore.backfill_user_email(
-                    str(user_id),
-                    {
-                        'email': user_email,
-                        'email_verified': user_info.get('emailVerified', False),
-                    },
-                )
+            if user_info:
+                user_email = user_info.get('email')
+                if user_email:
+                    await UserStore.backfill_user_email(
+                        str(user_id),
+                        {
+                            'email': user_email,
+                            'email_verified': user_info.get('emailVerified', False),
+                        },
+                    )
 
         if not user_email:
             raise EmailMismatchError('Your account does not have an email address')
