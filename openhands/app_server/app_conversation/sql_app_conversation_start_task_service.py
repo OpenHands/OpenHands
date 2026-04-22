@@ -19,11 +19,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import Enum, String, func, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -264,7 +265,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
                 StoredAppConversationStartTask.created_by_user_id == self.user_id
             )
 
-        result = await self.session.execute(delete_query)
+        result = cast(CursorResult, await self.session.execute(delete_query))
 
         # Return True if any rows were affected
         return result.rowcount > 0

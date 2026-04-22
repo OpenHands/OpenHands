@@ -21,7 +21,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
@@ -33,6 +33,7 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -599,7 +600,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         )
 
         # Execute the secure delete query
-        result = await self.db_session.execute(delete_query)
+        result = cast(CursorResult, await self.db_session.execute(delete_query))
 
         return result.rowcount > 0
 
