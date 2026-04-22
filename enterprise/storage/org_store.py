@@ -1,6 +1,6 @@
 """Store class for managing organizations."""
 
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import SecretStr
@@ -215,6 +215,17 @@ class OrgStore:
             return validated_orgs, next_page_id
 
     @staticmethod
+    def _merge_and_validate_settings(
+        current_settings: dict[str, Any],
+        settings_diff: dict[str, Any],
+        settings_type: type[AgentSettings] | type[ConversationSettings],
+    ) -> dict[str, Any]:
+        """Deep-merge a sparse settings diff and validate the merged result."""
+        merged_settings = deep_merge(dict(current_settings or {}), settings_diff)
+        validated_settings = settings_type.model_validate(merged_settings)
+        return validated_settings.model_dump(mode='json', exclude_unset=True) or {}
+
+    @staticmethod
     async def update_org(
         org_id: UUID,
         kwargs: dict,
@@ -232,27 +243,26 @@ class OrgStore:
             # Pop the diff-style kwargs before the setattr loop — otherwise
             # ``hasattr(org, 'agent_settings')`` is True and the loop would
             # *overwrite* the JSON column instead of deep-merging into it.
-            agent_settings_diff = kwargs.pop(
-                'agent_settings_diff', kwargs.pop('agent_settings', None)
-            )
+            agent_settings_diff = kwargs.pop('agent_settings_diff', None)
             conversation_settings_diff = kwargs.pop(
-                'conversation_settings_diff',
-                kwargs.pop('conversation_settings', None),
+                'conversation_settings_diff', None
             )
             for key, value in kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
 
             if agent_settings_diff is not None:
-                org.agent_settings = deep_merge(
+                org.agent_settings = OrgStore._merge_and_validate_settings(
                     org.agent_settings,
                     agent_settings_diff,
+                    AgentSettings,
                 )
 
             if conversation_settings_diff is not None:
-                org.conversation_settings = deep_merge(
+                org.conversation_settings = OrgStore._merge_and_validate_settings(
                     org.conversation_settings,
                     conversation_settings_diff,
+                    ConversationSettings,
                 )
 
             await session.commit()
@@ -538,17 +548,17 @@ class OrgStore:
 
             update_data.apply_to_org(org)
 
-            agent_settings_patch = update_data.agent_settings_patch()
-            if agent_settings_patch is not None:
-                org.agent_settings = deep_merge(
+            if update_data.agent_settings_diff is not None:
+                org.agent_settings = OrgStore._merge_and_validate_settings(
                     org.agent_settings,
-                    agent_settings_patch,
+                    update_data.agent_settings_diff,
+                    AgentSettings,
                 )
-            conversation_settings_patch = update_data.conversation_settings_patch()
-            if conversation_settings_patch is not None:
-                org.conversation_settings = deep_merge(
+            if update_data.conversation_settings_diff is not None:
+                org.conversation_settings = OrgStore._merge_and_validate_settings(
                     org.conversation_settings,
-                    conversation_settings_patch,
+                    update_data.conversation_settings_diff,
+                    ConversationSettings,
                 )
 
             member_updates = update_data.get_member_updates()

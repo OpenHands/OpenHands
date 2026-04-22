@@ -11,11 +11,10 @@ from server.routes.org_models import (
 )
 from storage.org import Org
 
-from openhands.sdk.settings import AgentSettings, ConversationSettings
 
 
-def test_org_update_accepts_typed_settings_objects():
-    """OrgUpdate should parse wire payloads into typed settings objects."""
+def test_org_update_keeps_sparse_diff_dicts():
+    """OrgUpdate should preserve sparse org-default diffs as dictionaries."""
     update_data = OrgUpdate.model_validate(
         {
             'agent_settings_diff': {'llm': {'model': 'claude-3-5-sonnet'}},
@@ -23,10 +22,8 @@ def test_org_update_accepts_typed_settings_objects():
         }
     )
 
-    assert isinstance(update_data.agent_settings_diff, AgentSettings)
-    assert update_data.agent_settings_patch() == {'llm': {'model': 'claude-3-5-sonnet'}}
-    assert isinstance(update_data.conversation_settings_diff, ConversationSettings)
-    assert update_data.conversation_settings_patch() == {'security_analyzer': 'llm'}
+    assert update_data.agent_settings_diff == {'llm': {'model': 'claude-3-5-sonnet'}}
+    assert update_data.conversation_settings_diff == {'security_analyzer': 'llm'}
 
 
 def test_normalize_agent_settings_masks_api_key_in_json_on_empty_and_real_keys():
@@ -43,15 +40,15 @@ def test_normalize_agent_settings_masks_api_key_in_json_on_empty_and_real_keys()
     )
 
     assert real_key.llm_api_key == 'sk-raw'
-    assert real_key.agent_settings_patch() is not None
-    assert real_key.agent_settings_patch()['llm']['api_key'] == MASKED_API_KEY
+    assert real_key.agent_settings_diff is not None
+    assert real_key.agent_settings_diff['llm']['api_key'] == MASKED_API_KEY
     assert empty_key.llm_api_key == ''
-    assert empty_key.agent_settings_patch() is not None
-    assert empty_key.agent_settings_patch()['llm']['api_key'] == MASKED_API_KEY
+    assert empty_key.agent_settings_diff is not None
+    assert empty_key.agent_settings_diff['llm']['api_key'] == MASKED_API_KEY
 
 
 def test_normalize_agent_settings_fills_base_url_for_all_providers():
-    """Managed and BYOR providers should keep usable base URLs in patches."""
+    """Managed and BYOR providers should keep usable base URLs in diffs."""
     openhands_null = OrgUpdate.model_validate(
         {
             'agent_settings_diff': {
@@ -70,23 +67,23 @@ def test_normalize_agent_settings_fills_base_url_for_all_providers():
         }
     )
 
-    openhands_null_patch = openhands_null.agent_settings_patch()
-    assert openhands_null_patch is not None
-    assert openhands_null_patch['llm']['model'] == 'litellm_proxy/claude-3'
-    assert openhands_null_patch['llm']['base_url'].rstrip('/') == (
+    openhands_null_diff = openhands_null.agent_settings_diff
+    assert openhands_null_diff is not None
+    assert openhands_null_diff['llm']['model'] == 'openhands/claude-3'
+    assert openhands_null_diff['llm']['base_url'].rstrip('/') == (
         LITE_LLM_API_URL.rstrip('/')
     )
 
-    openhands_missing_patch = openhands_missing.agent_settings_patch()
-    assert openhands_missing_patch is not None
-    assert openhands_missing_patch['llm']['model'] == 'litellm_proxy/claude-3'
-    assert openhands_missing_patch['llm']['base_url'].rstrip('/') == (
+    openhands_missing_diff = openhands_missing.agent_settings_diff
+    assert openhands_missing_diff is not None
+    assert openhands_missing_diff['llm']['model'] == 'openhands/claude-3'
+    assert openhands_missing_diff['llm']['base_url'].rstrip('/') == (
         LITE_LLM_API_URL.rstrip('/')
     )
 
-    anthropic_patch = anthropic_null.agent_settings_patch()
-    assert anthropic_patch is not None
-    anthropic_base = anthropic_patch['llm']['base_url']
+    anthropic_diff = anthropic_null.agent_settings_diff
+    assert anthropic_diff is not None
+    anthropic_base = anthropic_diff['llm']['base_url']
     assert isinstance(anthropic_base, str)
     assert 'anthropic.com' in anthropic_base
 

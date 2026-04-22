@@ -213,9 +213,9 @@ class OrgPage(BaseModel):
 class OrgUpdate(BaseModel):
     """Request model for updating an organization.
 
-    ``agent_settings_diff`` and ``conversation_settings_diff`` stay typed so both
-    the generic org update endpoint and the deprecated ``/llm`` wrappers share
-    the same validation, normalization, and partial-patch behavior.
+    ``agent_settings_diff`` and ``conversation_settings_diff`` are sparse diffs
+    that are deep-merged into the org row and then validated as full settings
+    before persistence.
     """
 
     name: Annotated[
@@ -236,131 +236,42 @@ class OrgUpdate(BaseModel):
     v1_enabled: bool | None = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
-    agent_settings_diff: AgentSettings | None = None
-    conversation_settings_diff: ConversationSettings | None = None
-
-    @staticmethod
-    def _copy_patch(
-        settings: AgentSettings | ConversationSettings | None,
-    ) -> dict[str, Any] | None:
-        if settings is None:
-            return None
-        patch = settings.model_dump(mode='json', exclude_unset=True)
-        return patch or None
-
-    @staticmethod
-    def _trim_derived_llm_fields(
-        llm_patch: dict[str, Any],
-        llm_settings: Any,
-    ) -> None:
-        for field in tuple(llm_patch):
-            if field in {'model', 'base_url', 'api_key'}:
-                continue
-            candidate_patch = {k: v for k, v in llm_patch.items() if k != field}
-            rebuilt = type(llm_settings).model_validate(candidate_patch)
-            if getattr(rebuilt, field) == getattr(llm_settings, field):
-                llm_patch.pop(field, None)
-
-    @model_validator(mode='before')
-    @classmethod
-    def _lift_nested_llm_api_key(cls, data: Any) -> Any:
-        if not isinstance(data, dict) or data.get('llm_api_key') is not None:
-            return data
-
-        agent_settings = data.get('agent_settings_diff')
-        llm_patch = (
-            agent_settings.get('llm') if isinstance(agent_settings, dict) else None
-        )
-        if isinstance(llm_patch, dict) and 'api_key' in llm_patch:
-            nested_api_key = llm_patch.get('api_key')
-            if nested_api_key != MASKED_API_KEY:
-                data = data.copy()
-                data['llm_api_key'] = nested_api_key
-        return data
-
-    def _has_nested_llm_update(self) -> bool:
-        return (
-            self.agent_settings_diff is not None
-            and 'llm' in self.agent_settings_diff.model_fields_set
-        )
-
-    def _has_nested_llm_api_key_update(self) -> bool:
-        agent_settings = self.agent_settings_diff
-        return bool(
-            agent_settings is not None
-            and self._has_nested_llm_update()
-            and 'api_key' in agent_settings.llm.model_fields_set
-        )
-
-    def agent_settings_patch(self) -> dict[str, Any] | None:
-        agent_settings = self.agent_settings_diff
-        patch = self._copy_patch(agent_settings)
-        if patch is None or agent_settings is None:
-            return None
-
-        llm_patch = patch.get('llm')
-        if isinstance(llm_patch, dict):
-            self._trim_derived_llm_fields(llm_patch, agent_settings.llm)
-
-            resolved_base_url = agent_settings.llm.base_url
-            if resolved_base_url is not None:
-                llm_patch['base_url'] = resolved_base_url
-            if self._has_nested_llm_api_key_update():
-                llm_patch['api_key'] = MASKED_API_KEY
-            if not llm_patch:
-                patch.pop('llm', None)
-
-        return patch or None
-
-    def conversation_settings_patch(self) -> dict[str, Any] | None:
-        return self._copy_patch(self.conversation_settings_diff)
+    agent_settings_diff: dict[str, Any] | None = None
+    conversation_settings_diff: dict[str, Any] | None = None
 
     @model_validator(mode='after')
-    def _normalize_agent_settings(self) -> 'OrgUpdate':
-        """Normalize ``agent_settings_diff`` so post-save stored state stays.
+    def _normalize_settings_diffs(self) -> 'OrgUpdate':
+        """Normalize sparse settings diffs before merge/persistence."""
+        if self.agent_settings_diff is not None:
+            llm = self.agent_settings_diff.get('llm')
+            if isinstance(llm, dict):
+                if 'api_key' in llm:
+                    nested_key = llm.pop('api_key')
+                    if (
+                        self.llm_api_key is None
+                        and nested_key is not None
+                        and nested_key != MASKED_API_KEY
+                    ):
+                        self.llm_api_key = nested_key
+                    if nested_key is not None:
+                        llm['api_key'] = MASKED_API_KEY
 
-        Keep the org row, every member row, and the encrypted
-        ``_llm_api_key`` column in sync.
+                resolved_base_url = resolve_llm_base_url(
+                    model=llm.get('model'),
+                    base_url=llm.get('base_url'),
+                    managed_proxy_url=LITE_LLM_API_URL,
+                )
+                if resolved_base_url is not None:
+                    llm['base_url'] = resolved_base_url
 
-        Two jobs:
+                if not llm:
+                    self.agent_settings_diff.pop('llm', None)
 
-        * **Lift ``llm.api_key`` and mask it in the JSON.** The frontend
-          posts the raw key nested inside ``agent_settings_diff``. Leaving it
-          nested would push a raw secret into the ``org.agent_settings``
-          JSON column while ``org._llm_api_key`` (the encrypted column read
-          by ``_get_effective_llm_api_key`` at load time) stays stale. We
-          move the raw value up to ``self.llm_api_key`` (for the encrypted
-          column) and leave a universal ``MASKED_API_KEY`` marker in the
-          JSON. That marker then propagates through ``deep_merge`` into
-          ``org.agent_settings.llm.api_key`` and through
-          ``get_member_updates`` into every member's
-          ``agent_settings_diff.llm.api_key`` — matching the convention
-          ``SaasSettingsStore.store`` already follows via
-          ``model_dump(mode='json')``.
+            if not self.agent_settings_diff:
+                self.agent_settings_diff = None
 
-        * **Fill ``llm.base_url`` for OpenHands / managed models.** The
-          basic-view payload sends ``base_url: null`` when the user picks
-          the OpenHands provider. ``deep_merge`` treats ``None`` as "delete
-          this key," which would leave ``org.agent_settings.llm`` without a
-          ``base_url`` (and the frontend then can't tell which provider is
-          configured — see the empty basic-view dropdowns). Substitute the
-          managed LiteLLM proxy URL so the stored state is complete and
-          self-describing.
-        """
-        if self.agent_settings_diff is None or not self._has_nested_llm_update():
-            return self
-
-        llm_settings = self.agent_settings_diff.llm
-        resolved_base_url = resolve_llm_base_url(
-            model=llm_settings.model,
-            base_url=llm_settings.base_url,
-            managed_proxy_url=LITE_LLM_API_URL,
-        )
-        if resolved_base_url is not None:
-            llm_settings.base_url = resolved_base_url
-
-        if self._has_nested_llm_api_key_update():
-            llm_settings.api_key = None
+        if not self.conversation_settings_diff:
+            self.conversation_settings_diff = None
 
         return self
 
@@ -423,8 +334,8 @@ class OrgUpdate(BaseModel):
         cleared value. Coerce ``""`` to ``None`` so member rows are untouched.
         """
         member_settings = OrgMemberSettingsUpdate(
-            agent_settings_diff=self.agent_settings_patch(),
-            conversation_settings_diff=self.conversation_settings_patch(),
+            agent_settings_diff=self.agent_settings_diff,
+            conversation_settings_diff=self.conversation_settings_diff,
             llm_api_key=self.llm_api_key or None,
         )
         return member_settings if member_settings.has_updates() else None

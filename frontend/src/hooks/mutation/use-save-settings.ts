@@ -21,24 +21,6 @@ const saveSettingsMutationFn = async (
   delete settingsToSave.agent_settings_schema;
   delete settingsToSave.conversation_settings_schema;
 
-  if (scope === "org") {
-    if (
-      settingsToSave.agent_settings_diff === undefined &&
-      settingsToSave.agent_settings !== undefined
-    ) {
-      settingsToSave.agent_settings_diff = settingsToSave.agent_settings;
-    }
-    if (
-      settingsToSave.conversation_settings_diff === undefined &&
-      settingsToSave.conversation_settings !== undefined
-    ) {
-      settingsToSave.conversation_settings_diff =
-        settingsToSave.conversation_settings;
-    }
-    delete settingsToSave.agent_settings;
-    delete settingsToSave.conversation_settings;
-  }
-
   const conversationSettingsKey =
     scope === "org" ? "conversation_settings_diff" : "conversation_settings";
   const conversationSettings = {
