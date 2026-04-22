@@ -26,17 +26,14 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import (
-    Boolean,
-    Column,
     DateTime,
-    Float,
-    Integer,
     Select,
     String,
     func,
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_info_service import (
@@ -63,45 +60,58 @@ from openhands.storage.data_models.conversation_metadata import ConversationTrig
 logger = logging.getLogger(__name__)
 
 
-class StoredConversationMetadata(Base):  # type: ignore
+class StoredConversationMetadata(Base):
     __tablename__ = 'conversation_metadata'
-    conversation_id = Column(
+
+    conversation_id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    selected_repository = Column(String, nullable=True)
-    selected_branch = Column(String, nullable=True)
-    git_provider = Column(
+    selected_repository: Mapped[str | None] = mapped_column(String, nullable=True)
+    selected_branch: Mapped[str | None] = mapped_column(String, nullable=True)
+    git_provider: Mapped[str | None] = mapped_column(
         String, nullable=True
     )  # The git provider (GitHub, GitLab, etc.)
-    title = Column(String, nullable=True)
-    last_updated_at = Column(DateTime(timezone=True), default=utc_now)  # type: ignore[attr-defined]
-    created_at = Column(DateTime(timezone=True), default=utc_now)  # type: ignore[attr-defined]
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
 
-    trigger = Column(String, nullable=True)
-    pr_number = Column(create_json_type_decorator(list[int]))
+    trigger: Mapped[str | None] = mapped_column(String, nullable=True)
+    pr_number: Mapped[list[int] | None] = mapped_column(
+        create_json_type_decorator(list[int])
+    )
 
     # Cost and token metrics
-    accumulated_cost = Column(Float, default=0.0)
-    prompt_tokens = Column(Integer, default=0)
-    completion_tokens = Column(Integer, default=0)
-    total_tokens = Column(Integer, default=0)
-    max_budget_per_task = Column(Float, nullable=True)
-    cache_read_tokens = Column(Integer, default=0)
-    cache_write_tokens = Column(Integer, default=0)
-    reasoning_tokens = Column(Integer, default=0)
-    context_window = Column(Integer, default=0)
-    per_turn_token = Column(Integer, default=0)
+    accumulated_cost: Mapped[float | None] = mapped_column(default=0.0)
+    prompt_tokens: Mapped[int | None] = mapped_column(default=0)
+    completion_tokens: Mapped[int | None] = mapped_column(default=0)
+    total_tokens: Mapped[int | None] = mapped_column(default=0)
+    max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
+    cache_read_tokens: Mapped[int | None] = mapped_column(default=0)
+    cache_write_tokens: Mapped[int | None] = mapped_column(default=0)
+    reasoning_tokens: Mapped[int | None] = mapped_column(default=0)
+    context_window: Mapped[int | None] = mapped_column(default=0)
+    per_turn_token: Mapped[int | None] = mapped_column(default=0)
 
     # LLM model used for the conversation
-    llm_model = Column(String, nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    conversation_version = Column(String, nullable=False, default='V0', index=True)
-    sandbox_id = Column(String, nullable=True, index=True)
-    parent_conversation_id = Column(String, nullable=True, index=True)
-    public = Column(Boolean, nullable=True, index=True)
+    conversation_version: Mapped[str] = mapped_column(
+        String, nullable=False, default='V0', index=True
+    )
+    sandbox_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    parent_conversation_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    public: Mapped[bool | None] = mapped_column(nullable=True, index=True)
 
     # Tags for conversation metadata (e.g., automation context, skills used)
-    tags = Column(create_json_type_decorator(dict[str, str]), nullable=True)
+    tags: Mapped[dict[str, str] | None] = mapped_column(
+        create_json_type_decorator(dict[str, str]), nullable=True
+    )
 
 
 @dataclass
