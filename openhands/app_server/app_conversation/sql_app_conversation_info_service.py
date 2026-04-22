@@ -21,7 +21,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
@@ -33,6 +33,7 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -570,10 +571,15 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             updated_at=updated_at,
         )
 
-    def _fix_timezone(self, value: datetime) -> datetime:
-        """Sqlite does not stpre timezones - and since we can't update the existing models
-        we assume UTC if the timezone is missing.
+    def _fix_timezone(self, value: datetime | None) -> datetime:
+        """Sqlite does not store timezones - and since we can't update the existing models
+        we assume UTC if the timezone is missing. Returns current UTC time if value is None.
         """
+        if value is None:
+            # Fallback for legacy data: use current time to match model defaults.
+            # The DB columns have default=utc_now, so None only occurs in legacy records.
+            # Using utc_now() keeps the API model non-nullable and matches new record behavior.
+            return utc_now()
         if not value.tzinfo:
             value = value.replace(tzinfo=UTC)
         return value
@@ -594,7 +600,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         )
 
         # Execute the secure delete query
-        result = await self.db_session.execute(delete_query)
+        result = cast(CursorResult, await self.db_session.execute(delete_query))
 
         return result.rowcount > 0
 
