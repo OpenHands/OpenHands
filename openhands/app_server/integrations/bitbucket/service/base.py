@@ -189,10 +189,20 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
                 exc_info=True,
             )
 
+        # Bitbucket's /user response can carry `"links": null` or `"avatar": null`
+        # (suspended accounts, deleted avatar, custom proxies modifying the shape);
+        # the `(x or {})` idiom mirrors the defensive pattern used by the sibling
+        # GitHub / GitLab / Forgejo / Bitbucket Data Center `get_user` implementations.
+        links = data.get('links') or {}
+        avatar_link = links.get('avatar') if isinstance(links, dict) else None
+        avatar_url = (
+            avatar_link.get('href') or '' if isinstance(avatar_link, dict) else ''
+        )
+
         return User(
             id=account_id,
             login=data.get('username', ''),
-            avatar_url=data.get('links', {}).get('avatar', {}).get('href', ''),
+            avatar_url=avatar_url,
             name=data.get('display_name'),
             email=email,
         )

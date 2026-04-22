@@ -522,3 +522,66 @@ async def test_get_user_handles_user_emails_api_failure():
         assert user.email is None
         assert user.login == 'testuser'
         assert user.name == 'Test User'
+
+
+@pytest.mark.parametrize(
+    'links_value',
+    [
+        None,
+        {},
+        {'avatar': None},
+        {'avatar': {}},
+        {'avatar': {'href': None}},
+    ],
+    ids=[
+        'links_is_null',
+        'links_missing_avatar_key',
+        'avatar_is_null',
+        'avatar_missing_href_key',
+        'avatar_href_is_null',
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_user_handles_null_avatar_fields(links_value):
+    """get_user must not crash when Bitbucket returns a null or missing nested
+    avatar field — matches the defensive pattern used by the sibling GitHub /
+    GitLab / Forgejo / Bitbucket Data Center get_user implementations."""
+    service = BitBucketService(token=SecretStr('test-token'))
+
+    mock_user_response = {
+        'account_id': '123',
+        'username': 'testuser',
+        'display_name': 'Test User',
+        'links': links_value,
+    }
+
+    with (
+        patch.object(service, '_make_request', return_value=(mock_user_response, {})),
+        patch.object(service, 'get_user_emails', return_value=[]),
+    ):
+        user = await service.get_user()
+
+    assert user.avatar_url == ''
+    assert user.login == 'testuser'
+    assert user.name == 'Test User'
+
+
+@pytest.mark.asyncio
+async def test_get_user_returns_avatar_url_on_happy_path():
+    """get_user returns the nested links.avatar.href string on a well-formed response."""
+    service = BitBucketService(token=SecretStr('test-token'))
+
+    mock_user_response = {
+        'account_id': '123',
+        'username': 'testuser',
+        'display_name': 'Test User',
+        'links': {'avatar': {'href': 'https://example.com/avatar.jpg'}},
+    }
+
+    with (
+        patch.object(service, '_make_request', return_value=(mock_user_response, {})),
+        patch.object(service, 'get_user_emails', return_value=[]),
+    ):
+        user = await service.get_user()
+
+    assert user.avatar_url == 'https://example.com/avatar.jpg'
