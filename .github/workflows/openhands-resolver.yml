@@ -131,7 +131,7 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_API_VERSION: ${{ inputs.LLM_API_VERSION }}
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          PAT_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
           PAT_USERNAME: ${{ secrets.PAT_USERNAME }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -185,7 +185,7 @@ jobs:
           fi
 
           echo "MAX_ITERATIONS=${{ inputs.max_iterations || 50 }}" >> $GITHUB_ENV
-          echo "SANDBOX_ENV_GITHUB_TOKEN=${{ secrets.PAT_TOKEN || github.token }}" >> $GITHUB_ENV
+          echo "SANDBOX_ENV_GITHUB_TOKEN=${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}" >> $GITHUB_ENV
           echo "SANDBOX_BASE_CONTAINER_IMAGE=${{ inputs.base_container_image }}" >> $GITHUB_ENV
 
           # Set branch variables
@@ -194,7 +194,7 @@ jobs:
       - name: Comment on issue with start message
         uses: actions/github-script@v9
         with:
-          github-token: ${{ secrets.PAT_TOKEN || github.token }}
+          github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
           script: |
             const issueType = process.env.ISSUE_TYPE;
             github.rest.issues.createComment({
@@ -242,7 +242,7 @@ jobs:
 
       - name: Attempt to resolve issue
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
           GITHUB_USERNAME: ${{ secrets.PAT_USERNAME || 'openhands-agent' }}
           GIT_USERNAME: ${{ secrets.PAT_USERNAME || 'openhands-agent' }}
           LLM_MODEL: ${{ secrets.LLM_MODEL || inputs.LLM_MODEL }}
@@ -279,7 +279,7 @@ jobs:
       - name: Create draft PR or push branch
         if: always() # Create PR or branch even if the previous steps fail
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
           GITHUB_USERNAME: ${{ secrets.PAT_USERNAME || 'openhands-agent' }}
           GIT_USERNAME: ${{ secrets.PAT_USERNAME || 'openhands-agent' }}
           LLM_MODEL: ${{ secrets.LLM_MODEL || inputs.LLM_MODEL }}
@@ -311,7 +311,7 @@ jobs:
           AGENT_RESPONDED: ${{ env.AGENT_RESPONDED || 'false' }}
           ISSUE_NUMBER: ${{ env.ISSUE_NUMBER }}
         with:
-          github-token: ${{ secrets.PAT_TOKEN || github.token }}
+          github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
           script: |
             const fs = require('fs');
             const issueNumber = process.env.ISSUE_NUMBER;
@@ -348,7 +348,7 @@ jobs:
           ISSUE_NUMBER: ${{ env.ISSUE_NUMBER }}
           RESOLUTION_SUCCESS: ${{ steps.check_result.outputs.RESOLUTION_SUCCESS }}
         with:
-          github-token: ${{ secrets.PAT_TOKEN || github.token }}
+          github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
           script: |
             const fs = require('fs');
             const path = require('path');
@@ -421,7 +421,7 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ env.ISSUE_NUMBER }}
         with:
-          github-token: ${{ secrets.PAT_TOKEN || github.token }}
+          github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
           script: |
             const issueNumber = process.env.ISSUE_NUMBER;
 

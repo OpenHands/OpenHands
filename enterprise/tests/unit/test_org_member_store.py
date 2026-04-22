@@ -1227,15 +1227,15 @@ def test_org_llm_settings_update_apply_to_org_updates_secret_fields():
 
 def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
     """
-    GIVEN: OrgLLMSettingsUpdate with llm_api_key set
+    GIVEN: OrgLLMSettingsUpdate with agent_settings and llm_api_key set
     WHEN: get_member_updates() is called
-    THEN: Returns OrgMemberLLMSettings with llm_api_key included
+    THEN: Returns OrgMemberLLMSettings including both the diff and llm_api_key
     """
     from server.routes.org_models import OrgLLMSettingsUpdate
 
     # Arrange
     settings = OrgLLMSettingsUpdate(
-        agent_settings_diff={'llm': {'model': 'claude-3'}},
+        agent_settings={'llm': {'model': 'claude-3'}},
         llm_api_key='new-member-key',
     )
 
@@ -1244,8 +1244,8 @@ def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
 
     # Assert
     assert member_updates is not None
-    assert member_updates.llm_api_key == 'new-member-key'
-    assert member_updates.agent_settings_diff is None
+    assert member_updates.llm_api_key.get_secret_value() == 'new-member-key'
+    assert member_updates.agent_settings_diff == {'llm': {'model': 'claude-3'}}
 
 
 def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
@@ -1264,7 +1264,7 @@ def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
 
     # Assert
     assert member_updates is not None
-    assert member_updates.llm_api_key == 'member-key-only'
+    assert member_updates.llm_api_key.get_secret_value() == 'member-key-only'
     assert member_updates.agent_settings_diff is None
 
 
