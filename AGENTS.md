@@ -144,6 +144,8 @@ Frontend:
   - Query hooks should follow the pattern use[Resource] (e.g., `useConversationSkills`)
   - Mutation hooks should follow the pattern use[Action] (e.g., `useDeleteConversation`)
   - Architecture rule: UI components → TanStack Query hooks → Data Access Layer (`frontend/src/api`) → API endpoints
+  - For SaaS organization management screens, prefer deriving the selected organization from `useOrganizations()` plus the selected org ID store instead of adding a dedicated single-org fetch when only list-level fields (for example `name`) are needed.
+
 
 VSCode Extension:
 - Located in the `openhands/integrations/vscode` directory
