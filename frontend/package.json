@@ -24,7 +24,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.4.0",
-    "axios": "^1.13.5",
+    "axios": "^1.15.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
