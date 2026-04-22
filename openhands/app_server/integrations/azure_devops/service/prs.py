@@ -309,9 +309,11 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
             return status == 'active'
         except Exception as e:
             logger.warning(
-                f'Failed to check PR status for {repository}#{pr_number}: {e}'
+                f'Could not determine Azure DevOps PR status for {repository}#{pr_number}: {e}. '
+                f'Including conversation to be safe.'
             )
-            return False
+            # If we can't determine the PR status, include the conversation to be safe
+            return True
 
     async def add_pr_reaction(
         self, repository: str, pr_number: int, reaction_type: str = ':thumbsup:'

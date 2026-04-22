@@ -125,3 +125,70 @@ async def test_azure_devops_get_repository_details():
         assert repo.id == 'repo1'
         assert repo.full_name == 'myorg/Project1/Repo1'
         assert repo.git_provider == ProviderType.AZURE_DEVOPS
+
+
+def _make_pr_service() -> AzureDevOpsService:
+    return AzureDevOpsService(
+        user_id='test_user',
+        token=None,
+        base_domain='myorg',
+    )
+
+
+@pytest.mark.asyncio
+async def test_is_pr_open_returns_true_for_active():
+    svc = _make_pr_service()
+
+    with patch.object(
+        svc, 'get_pr_details', new=AsyncMock(return_value={'status': 'active'})
+    ):
+        assert await svc.is_pr_open('myorg/Project1/Repo1', 1) is True
+
+
+@pytest.mark.asyncio
+async def test_is_pr_open_returns_false_for_completed():
+    svc = _make_pr_service()
+
+    with patch.object(
+        svc, 'get_pr_details', new=AsyncMock(return_value={'status': 'completed'})
+    ):
+        assert await svc.is_pr_open('myorg/Project1/Repo1', 1) is False
+
+
+@pytest.mark.asyncio
+async def test_is_pr_open_returns_false_for_abandoned():
+    svc = _make_pr_service()
+
+    with patch.object(
+        svc, 'get_pr_details', new=AsyncMock(return_value={'status': 'abandoned'})
+    ):
+        assert await svc.is_pr_open('myorg/Project1/Repo1', 1) is False
+
+
+@pytest.mark.asyncio
+async def test_is_pr_open_returns_true_on_exception():
+    """On transient API failure, fall back to True so the conversation is still
+    included — matching the behaviour of the GitHub / GitLab / Bitbucket /
+    Bitbucket Data Center siblings ('Including conversation to be safe')."""
+    svc = _make_pr_service()
+
+    with patch.object(
+        svc,
+        'get_pr_details',
+        new=AsyncMock(side_effect=Exception('network error')),
+    ):
+        result = await svc.is_pr_open('myorg/Project1/Repo1', 999)
+
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_is_pr_open_missing_status_field_returns_false():
+    """If the API response omits the status field, .get('status', '') yields ''
+    which is not 'active' — consistent with treating unknown-shape responses
+    from get_pr_details as non-open (whereas an exception falls through to the
+    safer True default)."""
+    svc = _make_pr_service()
+
+    with patch.object(svc, 'get_pr_details', new=AsyncMock(return_value={})):
+        assert await svc.is_pr_open('myorg/Project1/Repo1', 1) is False
