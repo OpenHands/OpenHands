@@ -1093,8 +1093,13 @@ class TestLiveStatusAppConversationService:
         assert result.agent.llm.model == 'gpt-4'
         # Secrets are injected via agent_context
         assert result.agent.agent_context.secrets == mock_secrets
-        # System message suffix is passed through
-        assert result.agent.agent_context.system_message_suffix == 'Test suffix'
+        # System message suffix includes the original suffix and web host context
+        assert 'Test suffix' in result.agent.agent_context.system_message_suffix
+        assert '<HOST>' in result.agent.agent_context.system_message_suffix
+        assert (
+            'https://test.example.com'
+            in result.agent.agent_context.system_message_suffix
+        )
         # Workspace points to the repo subdirectory
         assert result.workspace.working_dir == '/test/dir/repo'
 
