@@ -2,32 +2,44 @@
 SQLAlchemy model for Organization-Member relationship.
 """
 
+from typing import TYPE_CHECKING, Any
+from uuid import UUID
+
 from pydantic import SecretStr
-from sqlalchemy import JSON, UUID, Boolean, Column, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import JSON, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
 from storage.encrypt_utils import decrypt_value, encrypt_value
 
+if TYPE_CHECKING:
+    from storage.org import Org
+    from storage.role import Role
+    from storage.user import User
 
-class OrgMember(Base):  # type: ignore
+
+class OrgMember(Base):
     """Junction table for organization-member relationships with roles."""
 
     __tablename__ = 'org_member'
 
-    org_id = Column(UUID(as_uuid=True), ForeignKey('org.id'), primary_key=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('user.id'), primary_key=True)
-    role_id = Column(Integer, ForeignKey('role.id'), nullable=False)
-    _llm_api_key = Column(String, nullable=False)
-    _llm_api_key_for_byor = Column(String, nullable=True)
-    has_custom_llm_api_key = Column(Boolean, nullable=False, default=False)
-    agent_settings_diff = Column(JSON, nullable=False, default=dict)
-    conversation_settings_diff = Column(JSON, nullable=False, default=dict)
-    status = Column(String, nullable=True)
+    org_id: Mapped[UUID] = mapped_column(ForeignKey('org.id'), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey('user.id'), primary_key=True)
+    role_id: Mapped[int] = mapped_column(ForeignKey('role.id'), nullable=False)
+    _llm_api_key: Mapped[str] = mapped_column(String, nullable=False)
+    _llm_api_key_for_byor: Mapped[str | None] = mapped_column(String, nullable=True)
+    has_custom_llm_api_key: Mapped[bool] = mapped_column(nullable=False, default=False)
+    agent_settings_diff: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    conversation_settings_diff: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    status: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
-    org = relationship('Org', back_populates='org_members')
-    user = relationship('User', back_populates='org_members')
-    role = relationship('Role', back_populates='org_members')
+    org: Mapped['Org'] = relationship('Org', back_populates='org_members')
+    user: Mapped['User'] = relationship('User', back_populates='org_members')
+    role: Mapped['Role'] = relationship('Role', back_populates='org_members')
 
     def __init__(self, **kwargs):
         # Handle known SQLAlchemy columns directly

@@ -21,7 +21,7 @@ class UserService {
    */
   static async getGitOrganizations(): Promise<UserGitOrganizationsResponse> {
     const { data } = await openHands.get<UserGitOrganizationsResponse>(
-      "/api/user/git-organizations",
+      "/api/v1/users/git-organizations",
     );
     return data;
   }
