@@ -2341,3 +2341,336 @@ async def test_accept_tos_preserves_offline_flow_redirect(mock_request):
 
         response_body = json.loads(result.body.decode())
         assert response_body['redirect_url'] == offline_redirect_url
+
+
+# ---------------------------------------------------------------------------
+# Tests for _get_user_orgs_with_data helper function
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_user_orgs_with_data_returns_orgs():
+    """_get_user_orgs_with_data returns list of Org objects for given org_member_ids."""
+    from uuid import uuid4
+
+    from server.routes.auth import _get_user_orgs_with_data
+
+    org_id_1 = uuid4()
+    org_id_2 = uuid4()
+
+    mock_org_1 = MagicMock()
+    mock_org_1.id = org_id_1
+    mock_org_1.name = 'Org 1'
+
+    mock_org_2 = MagicMock()
+    mock_org_2.id = org_id_2
+    mock_org_2.name = 'Org 2'
+
+    async def mock_get_org_by_id(org_id):
+        if org_id == org_id_1:
+            return mock_org_1
+        elif org_id == org_id_2:
+            return mock_org_2
+        return None
+
+    with patch(
+        'storage.org_store.OrgStore.get_org_by_id',
+        new_callable=AsyncMock,
+        side_effect=mock_get_org_by_id,
+    ):
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
+
+    assert len(result) == 2
+    assert result[0].name == 'Org 1'
+    assert result[1].name == 'Org 2'
+
+
+@pytest.mark.asyncio
+async def test_get_user_orgs_with_data_skips_none_orgs():
+    """_get_user_orgs_with_data skips orgs that return None."""
+    from uuid import uuid4
+
+    from server.routes.auth import _get_user_orgs_with_data
+
+    org_id_1 = uuid4()
+    org_id_2 = uuid4()
+
+    mock_org_1 = MagicMock()
+    mock_org_1.id = org_id_1
+    mock_org_1.name = 'Org 1'
+
+    async def mock_get_org_by_id(org_id):
+        if org_id == org_id_1:
+            return mock_org_1
+        return None  # org_id_2 returns None
+
+    with patch(
+        'storage.org_store.OrgStore.get_org_by_id',
+        new_callable=AsyncMock,
+        side_effect=mock_get_org_by_id,
+    ):
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
+
+    assert len(result) == 1
+    assert result[0].name == 'Org 1'
+
+
+@pytest.mark.asyncio
+async def test_get_user_orgs_with_data_handles_exception_gracefully():
+    """_get_user_orgs_with_data catches exceptions and continues processing."""
+    from uuid import uuid4
+
+    from server.routes.auth import _get_user_orgs_with_data
+
+    org_id_1 = uuid4()
+    org_id_2 = uuid4()
+
+    mock_org_2 = MagicMock()
+    mock_org_2.id = org_id_2
+    mock_org_2.name = 'Org 2'
+
+    async def mock_get_org_by_id(org_id):
+        if org_id == org_id_1:
+            raise RuntimeError('Database error')
+        return mock_org_2
+
+    with patch(
+        'storage.org_store.OrgStore.get_org_by_id',
+        new_callable=AsyncMock,
+        side_effect=mock_get_org_by_id,
+    ):
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
+
+    # Should still return org_2 despite error with org_1
+    assert len(result) == 1
+    assert result[0].name == 'Org 2'
+
+
+@pytest.mark.asyncio
+async def test_get_user_orgs_with_data_returns_empty_list_for_empty_input():
+    """_get_user_orgs_with_data returns empty list when no org_member_ids provided."""
+    from server.routes.auth import _get_user_orgs_with_data
+
+    result = await _get_user_orgs_with_data('user-123', [])
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Tests for _track_login_analytics_background helper function
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_calls_identify_and_track():
+    """_track_login_analytics_background calls identify_user and track_user_logged_in."""
+    from uuid import uuid4
+
+    from server.routes.auth import _track_login_analytics_background
+
+    current_org_id = uuid4()
+    org_member_id = uuid4()
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user = MagicMock()
+    mock_analytics.track_user_logged_in = MagicMock()
+
+    mock_org = MagicMock()
+    mock_org.id = org_member_id
+    mock_org.name = 'Test Org'
+
+    with (
+        patch(
+            'server.routes.auth.get_analytics_service', return_value=mock_analytics
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            return_value=5,
+        ),
+    ):
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=current_org_id,
+            org_member_ids=[org_member_id],
+            consented=True,
+        )
+
+    mock_analytics.identify_user.assert_called_once()
+    mock_analytics.track_user_logged_in.assert_called_once()
+
+    # Verify identify_user call
+    identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+    assert identify_kwargs['distinct_id'] == 'user-123'
+    assert identify_kwargs['email'] == 'user@example.com'
+    assert identify_kwargs['idp'] == 'github'
+    assert identify_kwargs['consented'] is True
+
+    # Verify track_user_logged_in call
+    track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
+    assert track_kwargs['distinct_id'] == 'user-123'
+    assert track_kwargs['idp'] == 'github'
+    assert track_kwargs['consented'] is True
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_skips_when_no_analytics_service():
+    """_track_login_analytics_background returns early when analytics service is None."""
+    from server.routes.auth import _track_login_analytics_background
+
+    with patch('server.routes.auth.get_analytics_service', return_value=None):
+        # Should not raise
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[],
+            consented=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_handles_org_id_none():
+    """_track_login_analytics_background handles None current_org_id."""
+    from server.routes.auth import _track_login_analytics_background
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user = MagicMock()
+    mock_analytics.track_user_logged_in = MagicMock()
+
+    with patch('server.routes.auth.get_analytics_service', return_value=mock_analytics):
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[],
+            consented=True,
+        )
+
+    identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+    assert identify_kwargs['org_id'] is None
+    assert identify_kwargs['org_name'] is None
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_handles_exception_gracefully():
+    """_track_login_analytics_background catches exceptions and does not raise."""
+    from server.routes.auth import _track_login_analytics_background
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user.side_effect = RuntimeError('PostHog error')
+
+    with patch('server.routes.auth.get_analytics_service', return_value=mock_analytics):
+        # Should not raise
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[],
+            consented=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_builds_orgs_data_with_member_count():
+    """_track_login_analytics_background builds orgs_data list with member counts."""
+    from uuid import uuid4
+
+    from server.routes.auth import _track_login_analytics_background
+
+    org_id = uuid4()
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user = MagicMock()
+    mock_analytics.track_user_logged_in = MagicMock()
+
+    mock_org = MagicMock()
+    mock_org.id = org_id
+    mock_org.name = 'Test Org'
+
+    with (
+        patch(
+            'server.routes.auth.get_analytics_service', return_value=mock_analytics
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            return_value=10,
+        ),
+    ):
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[org_id],
+            consented=True,
+        )
+
+    identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+    orgs = identify_kwargs['orgs']
+    assert len(orgs) == 1
+    assert orgs[0]['id'] == str(org_id)
+    assert orgs[0]['name'] == 'Test Org'
+    assert orgs[0]['member_count'] == 10
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_handles_member_count_error():
+    """_track_login_analytics_background sets member_count to None on error."""
+    from uuid import uuid4
+
+    from server.routes.auth import _track_login_analytics_background
+
+    org_id = uuid4()
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user = MagicMock()
+    mock_analytics.track_user_logged_in = MagicMock()
+
+    mock_org = MagicMock()
+    mock_org.id = org_id
+    mock_org.name = 'Test Org'
+
+    with (
+        patch(
+            'server.routes.auth.get_analytics_service', return_value=mock_analytics
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            side_effect=RuntimeError('DB error'),
+        ),
+    ):
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[org_id],
+            consented=True,
+        )
+
+    identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+    orgs = identify_kwargs['orgs']
+    assert len(orgs) == 1
+    assert orgs[0]['member_count'] is None

@@ -12,12 +12,17 @@ from openhands.analytics import (
 )
 from openhands.analytics.analytics_constants import (
     CONVERSATION_CREATED,
+    CONVERSATION_DELETED,
     CONVERSATION_ERRORED,
     CONVERSATION_FINISHED,
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
     GIT_PROVIDER_CONNECTED,
+    MCP_CONFIG_UPDATED,
     ONBOARDING_COMPLETED,
+    SETTINGS_SAVED,
+    TEAM_MEMBERS_INVITED,
+    TRAJECTORY_DOWNLOADED,
     USER_ACTIVATED,
     USER_LOGGED_IN,
     USER_SIGNED_UP,
@@ -764,9 +769,11 @@ class TestTypedEventMethods:
         service, mock_client = saas_service
         service.track_onboarding_completed(
             distinct_id='user-1',
-            role='developer',
-            org_size='11-50',
-            use_case='code_review',
+            selections={
+                'role': 'developer',
+                'org_size': '11-50',
+                'use_case': 'code_review',
+            },
         )
         mock_client.capture.assert_called_once()
         _, kwargs = mock_client.capture.call_args
@@ -775,6 +782,82 @@ class TestTypedEventMethods:
         assert props['role'] == 'developer'
         assert props['org_size'] == '11-50'
         assert props['use_case'] == 'code_review'
+
+    def test_track_conversation_deleted(self, saas_service):
+        """track_conversation_deleted calls capture with CONVERSATION_DELETED and correct properties."""
+        service, mock_client = saas_service
+        service.track_conversation_deleted(
+            distinct_id='user-1',
+            conversation_id='conv-xyz',
+        )
+        mock_client.capture.assert_called_once()
+        _, kwargs = mock_client.capture.call_args
+        assert kwargs['event'] == CONVERSATION_DELETED
+        props = kwargs['properties']
+        assert props['conversation_id'] == 'conv-xyz'
+
+    def test_track_settings_saved(self, saas_service):
+        """track_settings_saved calls capture with SETTINGS_SAVED and correct properties."""
+        service, mock_client = saas_service
+        service.track_settings_saved(
+            distinct_id='user-1',
+            settings_changed=['llm_model', 'agent_type'],
+        )
+        mock_client.capture.assert_called_once()
+        _, kwargs = mock_client.capture.call_args
+        assert kwargs['event'] == SETTINGS_SAVED
+        props = kwargs['properties']
+        assert props['settings_changed'] == ['llm_model', 'agent_type']
+
+    def test_track_mcp_config_updated(self, saas_service):
+        """track_mcp_config_updated calls capture with MCP_CONFIG_UPDATED and correct properties."""
+        service, mock_client = saas_service
+        service.track_mcp_config_updated(
+            distinct_id='user-1',
+            has_mcp_config=True,
+            sse_servers_count=2,
+            stdio_servers_count=1,
+        )
+        mock_client.capture.assert_called_once()
+        _, kwargs = mock_client.capture.call_args
+        assert kwargs['event'] == MCP_CONFIG_UPDATED
+        props = kwargs['properties']
+        assert props['has_mcp_config'] is True
+        assert props['sse_servers_count'] == 2
+        assert props['stdio_servers_count'] == 1
+
+    def test_track_trajectory_downloaded(self, saas_service):
+        """track_trajectory_downloaded calls capture with TRAJECTORY_DOWNLOADED and correct properties."""
+        service, mock_client = saas_service
+        service.track_trajectory_downloaded(
+            distinct_id='user-1',
+            conversation_id='conv-download-123',
+        )
+        mock_client.capture.assert_called_once()
+        _, kwargs = mock_client.capture.call_args
+        assert kwargs['event'] == TRAJECTORY_DOWNLOADED
+        props = kwargs['properties']
+        assert props['conversation_id'] == 'conv-download-123'
+
+    def test_track_team_members_invited(self, saas_service):
+        """track_team_members_invited calls capture with TEAM_MEMBERS_INVITED and correct properties."""
+        service, mock_client = saas_service
+        service.track_team_members_invited(
+            distinct_id='user-1',
+            org_id='org-123',
+            invited_count=5,
+            successful_count=4,
+            failed_count=1,
+            role='member',
+        )
+        mock_client.capture.assert_called_once()
+        _, kwargs = mock_client.capture.call_args
+        assert kwargs['event'] == TEAM_MEMBERS_INVITED
+        props = kwargs['properties']
+        assert props['invited_count'] == 5
+        assert props['successful_count'] == 4
+        assert props['failed_count'] == 1
+        assert props['role'] == 'member'
 
     def test_typed_method_consent_false_is_noop(self, saas_service):
         """A typed method with consented=False results in no capture call."""

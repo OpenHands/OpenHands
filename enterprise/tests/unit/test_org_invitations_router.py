@@ -352,3 +352,279 @@ class TestCreateInvitationBatchEndpoint:
 
             assert response.status_code == 400
             assert 'Invalid role' in response.json()['detail']
+
+
+# ---------------------------------------------------------------------------
+# Tests for analytics tracking in create_invitation
+# ---------------------------------------------------------------------------
+
+
+class TestCreateInvitationAnalytics:
+    """Test cases for analytics tracking in the create_invitation endpoint."""
+
+    @pytest.fixture
+    def batch_analytics_client(self, app):
+        """Create a client with mocked auth dependencies for testing analytics."""
+
+        # Override auth dependencies
+        async def mock_get_user_id():
+            return 'test-user-123'
+
+        async def mock_verify_org_admin():
+            return True
+
+        from server.routes.org_invitations import (
+            get_user_id,
+            verify_current_user_is_org_admin,
+        )
+
+        app.dependency_overrides[get_user_id] = mock_get_user_id
+        app.dependency_overrides[verify_current_user_is_org_admin] = (
+            mock_verify_org_admin
+        )
+
+        return TestClient(app)
+
+    def test_create_invitation_tracks_team_members_invited_analytics(
+        self, batch_analytics_client
+    ):
+        """Test that create_invitation calls track_team_members_invited on analytics service."""
+        mock_invitation = MagicMock()
+        mock_invitation.id = 'inv-123'
+        mock_invitation.org_id = '12345678-1234-5678-1234-567812345678'
+        mock_invitation.email = 'alice@example.com'
+        mock_invitation.role_name = 'member'
+        mock_invitation.expires_at = None
+        mock_invitation.status = 'pending'
+
+        mock_analytics = MagicMock()
+        mock_analytics.track_team_members_invited = MagicMock()
+
+        mock_user = MagicMock()
+        mock_user.user_consents_to_analytics = True
+
+        with (
+            patch(
+                'server.routes.org_invitations.check_rate_limit_by_user_id',
+                new_callable=AsyncMock,
+            ),
+            patch(
+                'server.routes.org_invitations.OrgInvitationService.create_invitations_batch',
+                new_callable=AsyncMock,
+                return_value=([mock_invitation], []),
+            ),
+            patch(
+                'server.routes.org_invitations.get_analytics_service',
+                return_value=mock_analytics,
+            ),
+            patch(
+                'storage.user_store.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+        ):
+            response = batch_analytics_client.post(
+                '/api/organizations/12345678-1234-5678-1234-567812345678/members/invite',
+                json={'emails': ['alice@example.com'], 'role': 'member'},
+            )
+
+            assert response.status_code == 200
+
+        mock_analytics.track_team_members_invited.assert_called_once()
+        call_kwargs = mock_analytics.track_team_members_invited.call_args.kwargs
+        assert call_kwargs['distinct_id'] == 'test-user-123'
+        assert call_kwargs['org_id'] == '12345678-1234-5678-1234-567812345678'
+        assert call_kwargs['invited_count'] == 1
+        assert call_kwargs['successful_count'] == 1
+        assert call_kwargs['failed_count'] == 0
+        assert call_kwargs['role'] == 'member'
+        assert call_kwargs['consented'] is True
+
+    def test_create_invitation_analytics_tracks_mixed_results(
+        self, batch_analytics_client
+    ):
+        """Test that create_invitation tracks correct counts for mixed success/failure."""
+        mock_invitation = MagicMock()
+        mock_invitation.id = 'inv-123'
+        mock_invitation.org_id = '12345678-1234-5678-1234-567812345678'
+        mock_invitation.email = 'alice@example.com'
+        mock_invitation.role_name = 'member'
+        mock_invitation.expires_at = None
+        mock_invitation.status = 'pending'
+
+        mock_failed = MagicMock()
+        mock_failed.email = 'bob@example.com'
+        mock_failed.reason = 'User already member'
+
+        mock_analytics = MagicMock()
+        mock_analytics.track_team_members_invited = MagicMock()
+
+        mock_user = MagicMock()
+        mock_user.user_consents_to_analytics = True
+
+        with (
+            patch(
+                'server.routes.org_invitations.check_rate_limit_by_user_id',
+                new_callable=AsyncMock,
+            ),
+            patch(
+                'server.routes.org_invitations.OrgInvitationService.create_invitations_batch',
+                new_callable=AsyncMock,
+                return_value=([mock_invitation], [mock_failed]),
+            ),
+            patch(
+                'server.routes.org_invitations.get_analytics_service',
+                return_value=mock_analytics,
+            ),
+            patch(
+                'storage.user_store.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+        ):
+            response = batch_analytics_client.post(
+                '/api/organizations/12345678-1234-5678-1234-567812345678/members/invite',
+                json={
+                    'emails': ['alice@example.com', 'bob@example.com'],
+                    'role': 'member',
+                },
+            )
+
+            assert response.status_code == 200
+
+        call_kwargs = mock_analytics.track_team_members_invited.call_args.kwargs
+        assert call_kwargs['invited_count'] == 2
+        assert call_kwargs['successful_count'] == 1
+        assert call_kwargs['failed_count'] == 1
+
+    def test_create_invitation_skips_analytics_when_service_is_none(
+        self, batch_analytics_client
+    ):
+        """Test that create_invitation doesn't fail when analytics service is None."""
+        mock_invitation = MagicMock()
+        mock_invitation.id = 'inv-123'
+        mock_invitation.org_id = '12345678-1234-5678-1234-567812345678'
+        mock_invitation.email = 'alice@example.com'
+        mock_invitation.role_name = 'member'
+        mock_invitation.expires_at = None
+        mock_invitation.status = 'pending'
+
+        with (
+            patch(
+                'server.routes.org_invitations.check_rate_limit_by_user_id',
+                new_callable=AsyncMock,
+            ),
+            patch(
+                'server.routes.org_invitations.OrgInvitationService.create_invitations_batch',
+                new_callable=AsyncMock,
+                return_value=([mock_invitation], []),
+            ),
+            patch(
+                'server.routes.org_invitations.get_analytics_service',
+                return_value=None,
+            ),
+        ):
+            # Should not raise even without analytics service
+            response = batch_analytics_client.post(
+                '/api/organizations/12345678-1234-5678-1234-567812345678/members/invite',
+                json={'emails': ['alice@example.com'], 'role': 'member'},
+            )
+
+            assert response.status_code == 200
+
+    def test_create_invitation_analytics_respects_consent_false(
+        self, batch_analytics_client
+    ):
+        """Test that create_invitation passes consented=False when user has not consented."""
+        mock_invitation = MagicMock()
+        mock_invitation.id = 'inv-123'
+        mock_invitation.org_id = '12345678-1234-5678-1234-567812345678'
+        mock_invitation.email = 'alice@example.com'
+        mock_invitation.role_name = 'member'
+        mock_invitation.expires_at = None
+        mock_invitation.status = 'pending'
+
+        mock_analytics = MagicMock()
+        mock_analytics.track_team_members_invited = MagicMock()
+
+        mock_user = MagicMock()
+        mock_user.user_consents_to_analytics = False  # User has NOT consented
+
+        with (
+            patch(
+                'server.routes.org_invitations.check_rate_limit_by_user_id',
+                new_callable=AsyncMock,
+            ),
+            patch(
+                'server.routes.org_invitations.OrgInvitationService.create_invitations_batch',
+                new_callable=AsyncMock,
+                return_value=([mock_invitation], []),
+            ),
+            patch(
+                'server.routes.org_invitations.get_analytics_service',
+                return_value=mock_analytics,
+            ),
+            patch(
+                'storage.user_store.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+        ):
+            response = batch_analytics_client.post(
+                '/api/organizations/12345678-1234-5678-1234-567812345678/members/invite',
+                json={'emails': ['alice@example.com'], 'role': 'member'},
+            )
+
+            assert response.status_code == 200
+
+        call_kwargs = mock_analytics.track_team_members_invited.call_args.kwargs
+        assert call_kwargs['consented'] is False
+
+    def test_create_invitation_analytics_exception_does_not_fail_invitation(
+        self, batch_analytics_client
+    ):
+        """Test that analytics exception doesn't prevent successful invitation creation."""
+        mock_invitation = MagicMock()
+        mock_invitation.id = 'inv-123'
+        mock_invitation.org_id = '12345678-1234-5678-1234-567812345678'
+        mock_invitation.email = 'alice@example.com'
+        mock_invitation.role_name = 'member'
+        mock_invitation.expires_at = None
+        mock_invitation.status = 'pending'
+
+        mock_analytics = MagicMock()
+        mock_analytics.track_team_members_invited.side_effect = RuntimeError(
+            'PostHog error'
+        )
+
+        mock_user = MagicMock()
+        mock_user.user_consents_to_analytics = True
+
+        with (
+            patch(
+                'server.routes.org_invitations.check_rate_limit_by_user_id',
+                new_callable=AsyncMock,
+            ),
+            patch(
+                'server.routes.org_invitations.OrgInvitationService.create_invitations_batch',
+                new_callable=AsyncMock,
+                return_value=([mock_invitation], []),
+            ),
+            patch(
+                'server.routes.org_invitations.get_analytics_service',
+                return_value=mock_analytics,
+            ),
+            patch(
+                'storage.user_store.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+        ):
+            # Should not raise even when analytics fails
+            response = batch_analytics_client.post(
+                '/api/organizations/12345678-1234-5678-1234-567812345678/members/invite',
+                json={'emails': ['alice@example.com'], 'role': 'member'},
+            )
+
+            # The invitation should still be created successfully
+            assert response.status_code == 200
