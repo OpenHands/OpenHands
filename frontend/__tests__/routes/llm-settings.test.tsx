@@ -124,45 +124,6 @@ function buildSettingsWithAdvancedToggle(
   return buildSettings({ ...overrides, agent_settings_schema: schema });
 }
 
-function buildSettingsWithAllToggle(
-  overrides: Partial<Settings> = {},
-): Settings {
-  const schema = structuredClone(
-    overrides.agent_settings_schema ??
-      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
-  );
-  const llmSection = schema.sections.find((section) => section.key === "llm");
-
-  if (
-    llmSection &&
-    !llmSection.fields.some((field) => field.key === "llm.temperature")
-  ) {
-    llmSection.fields.push({
-      key: "llm.temperature",
-      label: "Temperature",
-      section: "llm",
-      section_label: "LLM",
-      value_type: "number",
-      default: null,
-      choices: [],
-      depends_on: [],
-      prominence: "minor",
-      secret: false,
-      required: false,
-    });
-  }
-
-  return buildSettings({ ...overrides, agent_settings_schema: schema });
-}
-
-function buildSettingsWithAdvancedAndAllToggles(
-  overrides: Partial<Settings> = {},
-): Settings {
-  return buildSettingsWithAllToggle(
-    buildSettingsWithAdvancedToggle(overrides) as Partial<Settings>,
-  );
-}
-
 async function selectProvider(providerLabel: "OpenHands" | "OpenAI") {
   const providerInput = screen.getByTestId("llm-provider-input");
   await userEvent.click(providerInput);
