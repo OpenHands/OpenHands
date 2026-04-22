@@ -158,7 +158,8 @@ async def test_create_org(async_session_maker, mock_litellm_api):
 async def test_create_org_v1_enabled_defaults_to_true_when_default_is_true(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: DEFAULT_V1_ENABLED is True and org.v1_enabled is not specified (None)
+    """
+    GIVEN: DEFAULT_V1_ENABLED is True and org.v1_enabled is not specified (None)
     WHEN: create_org is called
     THEN: org.v1_enabled should be set to True
     """
@@ -176,7 +177,8 @@ async def test_create_org_v1_enabled_defaults_to_true_when_default_is_true(
 async def test_create_org_v1_enabled_defaults_to_false_when_default_is_false(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: DEFAULT_V1_ENABLED is False and org.v1_enabled is not specified (None)
+    """
+    GIVEN: DEFAULT_V1_ENABLED is False and org.v1_enabled is not specified (None)
     WHEN: create_org is called
     THEN: org.v1_enabled should be set to False
     """
@@ -194,7 +196,8 @@ async def test_create_org_v1_enabled_defaults_to_false_when_default_is_false(
 async def test_create_org_v1_enabled_explicit_false_overrides_default_true(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: DEFAULT_V1_ENABLED is True but org.v1_enabled is explicitly set to False
+    """
+    GIVEN: DEFAULT_V1_ENABLED is True but org.v1_enabled is explicitly set to False
     WHEN: create_org is called
     THEN: org.v1_enabled should stay False (explicit value wins over default)
     """
@@ -214,7 +217,8 @@ async def test_create_org_v1_enabled_explicit_false_overrides_default_true(
 async def test_create_org_v1_enabled_explicit_true_overrides_default_false(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: DEFAULT_V1_ENABLED is False but org.v1_enabled is explicitly set to True
+    """
+    GIVEN: DEFAULT_V1_ENABLED is False but org.v1_enabled is explicitly set to True
     WHEN: create_org is called
     THEN: org.v1_enabled should stay True (explicit value wins over default)
     """
@@ -285,7 +289,7 @@ def test_get_kwargs_from_settings():
         {
             'language': 'es',
             'enable_sound_notifications': True,
-            'agent_settings': {
+            'agent_settings_diff': {
                 'agent': 'CodeActAgent',
                 'llm': {
                     'model': 'anthropic/claude-sonnet-4-5-20250929',
@@ -315,7 +319,8 @@ def test_get_kwargs_from_settings():
 
 @pytest.mark.asyncio
 async def test_persist_org_with_owner_success(async_session_maker, mock_litellm_api):
-    """GIVEN: Valid org and org_member entities
+    """
+    GIVEN: Valid org and org_member entities
     WHEN: persist_org_with_owner is called
     THEN: Both entities are persisted in a single transaction and org is returned
     """
@@ -374,7 +379,8 @@ async def test_persist_org_with_owner_success(async_session_maker, mock_litellm_
 async def test_persist_org_with_owner_returns_refreshed_org(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: Valid org and org_member entities
+    """
+    GIVEN: Valid org and org_member entities
     WHEN: persist_org_with_owner is called
     THEN: The returned org is refreshed from database with all fields populated
     """
@@ -421,7 +427,8 @@ async def test_persist_org_with_owner_returns_refreshed_org(
 async def test_persist_org_with_owner_transaction_atomicity(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: Valid org but invalid org_member (missing required field)
+    """
+    GIVEN: Valid org but invalid org_member (missing required field)
     WHEN: persist_org_with_owner is called
     THEN: Transaction fails and neither entity is persisted
     """
@@ -473,7 +480,8 @@ async def test_persist_org_with_owner_transaction_atomicity(
 async def test_persist_org_with_owner_with_multiple_fields(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: Org with multiple optional fields populated
+    """
+    GIVEN: Org with multiple optional fields populated
     WHEN: persist_org_with_owner is called
     THEN: All fields are persisted correctly
     """
@@ -539,7 +547,8 @@ async def test_persist_org_with_owner_with_multiple_fields(
     reason='Uses PostgreSQL-specific ::uuid cast syntax not supported by SQLite'
 )
 async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api):
-    """GIVEN: Valid organization with associated data
+    """
+    GIVEN: Valid organization with associated data
     WHEN: delete_org_cascade is called
     THEN: Organization and all associated data are deleted and org object is returned
     """
@@ -571,7 +580,8 @@ async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api)
 
 @pytest.mark.asyncio
 async def test_delete_org_cascade_not_found(async_session_maker):
-    """GIVEN: Organization ID that doesn't exist
+    """
+    GIVEN: Organization ID that doesn't exist
     WHEN: delete_org_cascade is called
     THEN: None is returned
     """
@@ -590,7 +600,8 @@ async def test_delete_org_cascade_not_found(async_session_maker):
 async def test_delete_org_cascade_litellm_failure_causes_rollback(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: Organization exists but LiteLLM cleanup fails
+    """
+    GIVEN: Organization exists but LiteLLM cleanup fails
     WHEN: delete_org_cascade is called
     THEN: Transaction is rolled back and organization still exists
     """
@@ -655,7 +666,8 @@ async def test_delete_org_cascade_litellm_failure_causes_rollback(
 async def test_get_user_orgs_paginated_first_page(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: User is member of multiple organizations
+    """
+    GIVEN: User is member of multiple organizations
     WHEN: get_user_orgs_paginated is called without page_id
     THEN: First page of organizations is returned in alphabetical order
     """
@@ -716,7 +728,8 @@ async def test_get_user_orgs_paginated_first_page(
 async def test_get_user_orgs_paginated_with_page_id(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: User has multiple organizations and page_id is provided
+    """
+    GIVEN: User has multiple organizations and page_id is provided
     WHEN: get_user_orgs_paginated is called with page_id
     THEN: Organizations starting from offset are returned
     """
@@ -763,7 +776,8 @@ async def test_get_user_orgs_paginated_with_page_id(
 async def test_get_user_orgs_paginated_no_more_results(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: User has organizations but fewer than limit
+    """
+    GIVEN: User has organizations but fewer than limit
     WHEN: get_user_orgs_paginated is called
     THEN: All organizations are returned and next_page_id is None
     """
@@ -805,7 +819,8 @@ async def test_get_user_orgs_paginated_no_more_results(
 async def test_get_user_orgs_paginated_invalid_page_id(
     async_session_maker, mock_litellm_api
 ):
-    """GIVEN: Invalid page_id (non-numeric string)
+    """
+    GIVEN: Invalid page_id (non-numeric string)
     WHEN: get_user_orgs_paginated is called
     THEN: Results start from beginning (offset 0)
     """
@@ -842,7 +857,8 @@ async def test_get_user_orgs_paginated_invalid_page_id(
 
 @pytest.mark.asyncio
 async def test_get_user_orgs_paginated_empty_results(async_session_maker):
-    """GIVEN: User has no organizations
+    """
+    GIVEN: User has no organizations
     WHEN: get_user_orgs_paginated is called
     THEN: Empty list and None next_page_id are returned
     """
@@ -862,7 +878,8 @@ async def test_get_user_orgs_paginated_empty_results(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_get_user_orgs_paginated_ordering(async_session_maker, mock_litellm_api):
-    """GIVEN: User has organizations with different names
+    """
+    GIVEN: User has organizations with different names
     WHEN: get_user_orgs_paginated is called
     THEN: Organizations are returned in alphabetical order by name
     """
@@ -908,7 +925,8 @@ async def test_get_user_orgs_paginated_ordering(async_session_maker, mock_litell
 
 
 def test_orphaned_user_error_contains_user_ids():
-    """GIVEN: OrphanedUserError is created with a list of user IDs
+    """
+    GIVEN: OrphanedUserError is created with a list of user IDs
     WHEN: The error message is accessed
     THEN: Message includes the count and stores user IDs
     """
@@ -929,7 +947,8 @@ def test_orphaned_user_error_contains_user_ids():
 def test_org_deletion_with_invitations_uses_passive_deletes(
     session_maker, mock_litellm_api
 ):
-    """GIVEN: Organization has associated invitations with non-nullable org_id foreign key
+    """
+    GIVEN: Organization has associated invitations with non-nullable org_id foreign key
     WHEN: Organization is deleted via SQLAlchemy session.delete()
     THEN: Deletion succeeds without NOT NULL constraint violation
           (passive_deletes=True defers to database CASCADE instead of setting org_id to NULL)

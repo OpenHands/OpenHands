@@ -22,24 +22,21 @@ const saveSettingsMutationFn = async (
   delete settingsToSave.agent_settings_schema;
   delete settingsToSave.conversation_settings_schema;
 
-  const conversationSettingsKey =
-    scope === "org" ? "conversation_settings_diff" : "conversation_settings";
   const conversationSettings = {
-    ...((settingsToSave[conversationSettingsKey] as Record<
+    ...((settingsToSave.conversation_settings_diff as Record<
       string,
       SettingsValue
     >) ?? {}),
   };
 
   if (Object.keys(conversationSettings).length > 0) {
-    settingsToSave[conversationSettingsKey] = conversationSettings;
+    settingsToSave.conversation_settings_diff = conversationSettings;
   } else {
-    delete settingsToSave[conversationSettingsKey];
+    delete settingsToSave.conversation_settings_diff;
   }
+  delete settingsToSave.conversation_settings;
 
-  const agentSettingsKey =
-    scope === "org" ? "agent_settings_diff" : "agent_settings";
-  const agentSettings = settingsToSave[agentSettingsKey] as
+  const agentSettings = settingsToSave.agent_settings_diff as
     | Record<string, unknown>
     | undefined;
   const llmSettings = agentSettings?.llm as Record<string, unknown> | undefined;
@@ -47,6 +44,12 @@ const saveSettingsMutationFn = async (
     const apiKey = llmSettings.api_key.trim();
     llmSettings.api_key = apiKey === "" ? "" : apiKey;
   }
+  if (agentSettings && Object.keys(agentSettings).length > 0) {
+    settingsToSave.agent_settings_diff = agentSettings;
+  } else {
+    delete settingsToSave.agent_settings_diff;
+  }
+  delete settingsToSave.agent_settings;
 
   if (typeof settingsToSave.search_api_key === "string") {
     settingsToSave.search_api_key = settingsToSave.search_api_key.trim();

@@ -20,7 +20,6 @@ from server.routes.org_models import (
     LiteLLMIntegrationError,
     MeResponse,
     OrgAppSettingsResponse,
-    OrgDefaultsSettingsResponse,
     OrgAppSettingsUpdate,
     OrgAuthorizationError,
     OrgDatabaseError,
@@ -35,13 +34,11 @@ from server.routes.org_models import (
     RoleNotFoundError,
 )
 from server.routes.orgs import (
-    get_legacy_org_defaults_settings,
     get_me,
     get_org_defaults_settings,
     get_org_members,
     org_router,
     remove_org_member,
-    update_legacy_org_defaults_settings,
     update_org_defaults_settings,
     update_org_member,
 )
@@ -1114,135 +1111,6 @@ async def test_update_org_defaults_settings_rejects_non_default_fields():
         )
 
     assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-@pytest.mark.asyncio
-async def test_get_legacy_org_defaults_settings_success():
-    """GIVEN: A user has a current organization
-    WHEN: the deprecated /llm wrapper is invoked
-    THEN: it resolves the current org and delegates to the org-id settings route
-    """
-    current_org = MagicMock(spec=Org)
-    current_org.id = uuid.uuid4()
-    expected_response = OrgDefaultsSettingsResponse(
-        agent_settings={'llm': {'model': 'openhands/claude-3'}},
-        conversation_settings={'security_analyzer': 'llm'},
-        llm_api_key_set=False,
-        search_api_key=None,
-    )
-
-    with (
-        patch(
-            'server.routes.orgs.OrgStore.get_current_org_from_keycloak_user_id',
-            AsyncMock(return_value=current_org),
-        ) as mock_get_current_org,
-        patch(
-            'server.routes.orgs.get_org_defaults_settings',
-            AsyncMock(return_value=expected_response),
-        ) as mock_get_org_defaults,
-    ):
-        response = await get_legacy_org_defaults_settings(user_id=TEST_USER_ID)
-
-    assert response == expected_response
-    mock_get_current_org.assert_awaited_once_with(TEST_USER_ID)
-    mock_get_org_defaults.assert_awaited_once_with(
-        org_id=current_org.id,
-        user_id=TEST_USER_ID,
-    )
-
-
-@pytest.mark.asyncio
-async def test_update_legacy_org_defaults_settings_no_changes_returns_current_org():
-    """GIVEN: the deprecated /llm wrapper receives an empty OrgUpdate
-    WHEN: the wrapper is invoked
-    THEN: it returns current defaults without calling
-          OrgService.update_org_with_permissions
-    """
-    mock_org = MagicMock(spec=Org)
-    mock_org.agent_settings = {
-        'schema_version': 1,
-        'llm': {'model': 'anthropic/claude-3'},
-    }
-    mock_org.conversation_settings = {}
-    mock_org.llm_api_key = None
-    mock_org.search_api_key = None
-
-    with (
-        patch(
-            'server.routes.orgs.OrgStore.get_current_org_from_keycloak_user_id',
-            AsyncMock(return_value=mock_org),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.update_org_with_permissions',
-            AsyncMock(),
-        ) as mock_update,
-    ):
-        response = await update_legacy_org_defaults_settings(
-            settings=OrgUpdate(),
-            user_id=TEST_USER_ID,
-        )
-
-    assert response.agent_settings.llm.model == 'anthropic/claude-3'
-    mock_update.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_update_legacy_org_defaults_settings_forwards_through_org_service():
-    """GIVEN: the deprecated /llm wrapper receives an OrgUpdate payload
-    WHEN: the wrapper is invoked
-    THEN: it resolves the current org and forwards the write through
-          OrgService.update_org_with_permissions
-    """
-    current_org = MagicMock(spec=Org)
-    current_org.id = uuid.uuid4()
-    current_org.agent_settings = {
-        'schema_version': 1,
-        'llm': {'model': 'anthropic/claude-3'},
-    }
-    current_org.conversation_settings = {}
-    current_org.llm_api_key = None
-    current_org.search_api_key = None
-
-    updated_org = MagicMock(spec=Org)
-    updated_org.agent_settings = {
-        'schema_version': 1,
-        'llm': {
-            'model': 'litellm_proxy/claude-3.5-sonnet',
-            'base_url': 'https://proxy.example',
-        },
-    }
-    updated_org.conversation_settings = {'confirmation_mode': False}
-    updated_org.llm_api_key = 'secret'
-    updated_org.search_api_key = None
-
-    update_data = OrgUpdate(
-        agent_settings_diff={
-            'llm': {'model': 'openhands/claude-3.5-sonnet'},
-        },
-        conversation_settings_diff={'confirmation_mode': False},
-    )
-
-    with (
-        patch(
-            'server.routes.orgs.OrgStore.get_current_org_from_keycloak_user_id',
-            AsyncMock(return_value=current_org),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.update_org_with_permissions',
-            AsyncMock(return_value=updated_org),
-        ) as mock_update,
-    ):
-        response = await update_legacy_org_defaults_settings(
-            settings=update_data,
-            user_id=TEST_USER_ID,
-        )
-
-    mock_update.assert_awaited_once_with(
-        org_id=current_org.id,
-        update_data=update_data,
-        user_id=TEST_USER_ID,
-    )
-    assert response.agent_settings.llm.model == 'openhands/claude-3.5-sonnet'
 
 
 @pytest.mark.asyncio

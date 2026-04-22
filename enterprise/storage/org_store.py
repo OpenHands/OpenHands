@@ -219,33 +219,50 @@ class OrgStore:
         current_settings: dict[str, Any],
         settings_diff: dict[str, Any],
         settings_type: type[AgentSettings] | type[ConversationSettings],
-    ) -> dict[str, Any]:
+    ) -> AgentSettings | ConversationSettings:
         """Deep-merge a sparse settings diff and validate the merged result."""
         merged_settings = deep_merge(dict(current_settings or {}), settings_diff)
-        validated_settings = settings_type.model_validate(merged_settings)
-        return validated_settings.model_dump(mode='json', exclude_unset=True) or {}
+        return settings_type.model_validate(merged_settings)
 
     @staticmethod
     async def update_org(
         org_id: UUID,
-        kwargs: dict,
+        kwargs: dict[str, Any] | OrgUpdate,
+        user_id: str | None = None,
     ) -> Optional[Org]:
         """Update organization details."""
+        from storage.org_member_store import OrgMemberStore
+
         async with a_session_maker() as session:
             result = await session.execute(select(Org).filter(Org.id == org_id))
             org = result.scalars().first()
             if not org:
                 return None
 
-            if 'id' in kwargs:
-                kwargs.pop('id')
+            update_data = kwargs if isinstance(kwargs, OrgUpdate) else None
+            org_kwargs = (
+                update_data.model_update_dict()
+                if update_data is not None
+                else dict(kwargs)
+            )
+
+            if 'id' in org_kwargs:
+                org_kwargs.pop('id')
 
             # Pop the diff-style kwargs before the setattr loop — otherwise
             # ``hasattr(org, 'agent_settings')`` is True and the loop would
             # *overwrite* the JSON column instead of deep-merging into it.
-            agent_settings_diff = kwargs.pop('agent_settings_diff', None)
-            conversation_settings_diff = kwargs.pop('conversation_settings_diff', None)
-            for key, value in kwargs.items():
+            agent_settings_diff = (
+                update_data.agent_settings_diff
+                if update_data is not None
+                else org_kwargs.pop('agent_settings_diff', None)
+            )
+            conversation_settings_diff = (
+                update_data.conversation_settings_diff
+                if update_data is not None
+                else org_kwargs.pop('conversation_settings_diff', None)
+            )
+            for key, value in org_kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
 
@@ -254,14 +271,44 @@ class OrgStore:
                     org.agent_settings,
                     agent_settings_diff,
                     AgentSettings,
-                )
+                ).model_dump(mode='json', exclude_unset=True)
 
             if conversation_settings_diff is not None:
                 org.conversation_settings = OrgStore._merge_and_validate_settings(
                     org.conversation_settings,
                     conversation_settings_diff,
                     ConversationSettings,
+                ).model_dump(mode='json', exclude_unset=True)
+
+            if update_data is not None and update_data.touches_org_defaults():
+                if user_id is None:
+                    raise ValueError(
+                        'user_id is required when updating organization defaults'
+                    )
+
+                member_updates = update_data.get_member_updates()
+                effective_managed_key = (
+                    await OrgStore._maybe_get_managed_llm_key_for_user(
+                        session,
+                        org,
+                        user_id,
+                    )
                 )
+                should_reset_custom_key_flag = (
+                    update_data.llm_api_key is not None
+                    or effective_managed_key is not None
+                )
+                if effective_managed_key is not None:
+                    if member_updates is None:
+                        member_updates = OrgMemberSettingsUpdate()
+                    member_updates.llm_api_key = SecretStr(effective_managed_key)
+
+                if member_updates is not None:
+                    if should_reset_custom_key_flag:
+                        member_updates.has_custom_llm_api_key = False
+                    await OrgMemberStore.update_all_members_settings_async(
+                        session, org_id, member_updates
+                    )
 
             await session.commit()
             await session.refresh(org)
@@ -465,9 +512,9 @@ class OrgStore:
         user_id: str,
     ) -> str | None:
         """Return the managed LLM key every member row should carry, if any."""
-        llm = (updated_org.agent_settings or {}).get('llm') or {}
-        llm_model = llm.get('model')
-        llm_base_url = llm.get('base_url')
+        llm_settings = OrgStore.get_agent_settings_from_org(updated_org).llm
+        llm_model = llm_settings.model
+        llm_base_url = llm_settings.base_url
         normalized_llm_base_url = llm_base_url.rstrip('/') if llm_base_url else None
         normalized_managed_base_url = LITE_LLM_API_URL.rstrip('/')
         openhands_type = is_openhands_model(llm_model)
@@ -535,51 +582,5 @@ class OrgStore:
         update_data: OrgUpdate,
         user_id: str,
     ) -> Org | None:
-        """Update organization defaults and propagate shared member settings."""
-        from storage.org_member_store import OrgMemberStore
-
-        async with a_session_maker() as session:
-            result = await session.execute(select(Org).filter(Org.id == org_id))
-            org = result.scalars().first()
-            if not org:
-                return None
-
-            update_data.apply_to_org(org)
-
-            if update_data.agent_settings_diff is not None:
-                org.agent_settings = OrgStore._merge_and_validate_settings(
-                    org.agent_settings,
-                    update_data.agent_settings_diff,
-                    AgentSettings,
-                )
-            if update_data.conversation_settings_diff is not None:
-                org.conversation_settings = OrgStore._merge_and_validate_settings(
-                    org.conversation_settings,
-                    update_data.conversation_settings_diff,
-                    ConversationSettings,
-                )
-
-            member_updates = update_data.get_member_updates()
-            effective_managed_key = await OrgStore._maybe_get_managed_llm_key_for_user(
-                session,
-                org,
-                user_id,
-            )
-            should_reset_custom_key_flag = (
-                update_data.llm_api_key is not None or effective_managed_key is not None
-            )
-            if effective_managed_key is not None:
-                if member_updates is None:
-                    member_updates = OrgMemberSettingsUpdate()
-                member_updates.llm_api_key = SecretStr(effective_managed_key)
-
-            if member_updates is not None:
-                if should_reset_custom_key_flag:
-                    member_updates.has_custom_llm_api_key = False
-                await OrgMemberStore.update_all_members_settings_async(
-                    session, org_id, member_updates
-                )
-
-            await session.commit()
-            await session.refresh(org)
-            return org
+        """Backward-compatible wrapper for org-defaults updates."""
+        return await OrgStore.update_org(org_id, update_data, user_id)

@@ -563,17 +563,7 @@ class OrgService:
             )
 
         try:
-            if update_data.touches_org_defaults():
-                updated_org = await OrgStore.update_org_defaults_async(
-                    org_id,
-                    update_data,
-                    user_id,
-                )
-            else:
-                updated_org = await OrgStore.update_org(
-                    org_id,
-                    update_data.model_update_dict(),
-                )
+            updated_org = await OrgStore.update_org(org_id, update_data, user_id)
             if not updated_org:
                 raise OrgDatabaseError('Failed to update organization in database')
 

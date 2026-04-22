@@ -303,7 +303,7 @@ describe("SdkSectionPage", () => {
       .spyOn(SettingsService, "getSettings")
       .mockImplementation(async () => structuredClone(persistedSettings));
     vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
-      const agentSettings = (payload.agent_settings ?? {}) as Record<string, unknown>;
+      const agentSettings = payload.agent_settings_diff as Record<string, unknown>;
       const llmSettings = (agentSettings.llm ?? {}) as Record<string, unknown>;
 
       persistedSettings = buildSettings({
@@ -395,7 +395,7 @@ describe("SdkSectionPage", () => {
       .spyOn(SettingsService, "getSettings")
       .mockImplementation(async () => structuredClone(persistedSettings));
     vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
-      const agentSettings = (payload.agent_settings ?? {}) as Record<string, unknown>;
+      const agentSettings = payload.agent_settings_diff as Record<string, unknown>;
       const llmSettings = (agentSettings.llm ?? {}) as Record<string, unknown>;
 
       persistedSettings = buildSettings({
