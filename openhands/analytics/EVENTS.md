@@ -1,12 +1,12 @@
 # PostHog Analytics — Event Catalog
 
-*Last updated: 2026-03-27*
+*Last updated: 2026-04-21*
 
 ## Architecture Overview
 
 Analytics is split into three lanes:
 
-1. **Server-side business events** (SaaS only) — captured through a centralized `AnalyticsService`. Covers the core product lifecycle: signups, logins, conversations, credits, activation, onboarding.
+1. **Server-side business events** (SaaS only) — captured through a centralized `AnalyticsService`. Covers the core product lifecycle: signups, logins, conversations, credits, activation, onboarding, settings, and team management.
 2. **Client-side UI events** (SaaS only) — captured via `useClientAnalytics` hook for UI-only interactions that have no natural server round-trip (e.g. enterprise CTA clicks, lead form submissions).
 3. **Frontend automatic instrumentation** (SaaS and OSS) — web vitals, error tracking, network timing, pageviews. No explicit event code required.
 
@@ -21,15 +21,18 @@ Every event respects user consent.
 | 1 | **user signed up** | New user completes OAuth registration (once per user) | `idp`, `email_domain`, `invitation_source` |
 | 2 | **user logged in** | Every successful authentication (Keycloak or device auth) | `idp` |
 | 3 | **conversation created** | A new conversation is initialized | `conversation_id`, `trigger`, `llm_model`, `agent_type`, `has_repository` |
-| 4 | **conversation finished** | Conversation reaches a successful or stopped terminal state | `conversation_id`, `terminal_state`, `accumulated_cost_usd`, `prompt_tokens`, `completion_tokens`, `llm_model`, `trigger` |
-| 5 | **conversation errored** | Conversation reaches an error or stuck state | `conversation_id`, `error_type`\*, `error_message`, `llm_model`, `terminal_state` |
-| 6 | **credit purchased** | Stripe checkout completes successfully | `amount_usd`, `credit_balance_before`, `credit_balance_after` |
-| 7 | **credit limit reached** | Conversation fails due to insufficient credits (fires alongside #5) | `conversation_id`, `credit_balance`, `llm_model` |
-| 8 | **user activated** | User's first conversation finishes successfully (once per user) | `conversation_id`, `time_to_activate_seconds`, `llm_model`, `trigger` |
-| 9 | **git provider connected** | User connects a git provider (GitHub, GitLab, etc.) | `provider_type` |
-| 10 | **onboarding completed** | User submits the onboarding form | `role`, `org_size`, `use_case` |
-| 11 | **saas selfhosted inquiry** | User clicks "Learn More" on an enterprise CTA | `location` |
-| 12 | **enterprise lead form submitted** | User submits the enterprise contact form | `request_type`, `name`, `company`, `email`, `message` |
+| 4 | **conversation finished** | Conversation reaches a successful or stopped terminal state | `conversation_id`, `terminal_state`, `turn_count`, `accumulated_cost_usd`, `prompt_tokens`, `completion_tokens`, `llm_model`, `trigger` |
+| 5 | **conversation errored** | Conversation reaches an error or stuck state | `conversation_id`, `error_type`\*, `error_message`, `llm_model`, `turn_count`, `terminal_state` |
+| 6 | **conversation deleted** | User deletes a conversation | `conversation_id` |
+| 7 | **credit purchased** | Stripe checkout completes successfully | `amount_usd`, `credit_balance_before`, `credit_balance_after` |
+| 8 | **credit limit reached** | Conversation fails due to insufficient credits (fires alongside #5) | `conversation_id`, `credit_balance`, `llm_model` |
+| 9 | **user activated** | User's first conversation finishes successfully (once per user) | `conversation_id`, `time_to_activate_seconds`, `llm_model`, `trigger` |
+| 10 | **git provider connected** | User connects a git provider (GitHub, GitLab, etc.) | `provider_type` |
+| 11 | **onboarding completed** | User submits the onboarding form | (form selections passed as properties) |
+| 12 | **settings saved** | User saves their settings | `settings_changed` |
+| 13 | **mcp config updated** | User updates their MCP server configuration | `has_mcp_config`, `sse_servers_count`, `stdio_servers_count` |
+| 14 | **trajectory downloaded** | User downloads a conversation trajectory | `conversation_id` |
+| 15 | **team members invited** | User invites team members to their organization | `invited_count`, `successful_count`, `failed_count`, `role` |
 
 \*Error types: `budget_exceeded`, `model_error`, `runtime_error`, `timeout`, `user_cancelled`, `unknown`
 
@@ -55,7 +58,7 @@ A small set of explicit frontend events captured via the `useClientAnalytics` ho
 
 | # | Event | When It Fires | Key Properties |
 |---|---|---|---|
-| 1 | **saas selfhosted inquiry** | User clicks "Learn More" on an enterprise CTA (login page, homepage, context menu, device verify) | `location` |
+| 1 | **enterprise cta clicked** | User clicks "Learn More" on an enterprise CTA (login page, homepage, context menu, device verify) | `location` |
 | 2 | **enterprise lead form submitted** | User submits the enterprise contact form | `request_type`, `name`, `company`, `email`, `message` |
 
 ---
@@ -83,13 +86,17 @@ User signs up       →  user signed up  +  identify
 User logs in        →  user logged in  +  identify
 Onboarding          →  onboarding completed
 Git connect         →  git provider connected
+Settings change     →  settings saved / mcp config updated
 
 Conversation starts →  conversation created
   ├─ Finishes OK    →  conversation finished  (+ user activated if first ever)
   ├─ Errors         →  conversation errored   (+ credit limit reached if budget)
-  └─ Stopped        →  conversation finished
+  ├─ Stopped        →  conversation finished
+  └─ Deleted        →  conversation deleted
 
 Credit purchase     →  credit purchased
+Team invite         →  team members invited
+Trajectory export   →  trajectory downloaded
 Org switch          →  person properties updated (no event)
 ```
 

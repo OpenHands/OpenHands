@@ -21,7 +21,7 @@ export function LoginCTA({
   source = "login_page",
 }: LoginCTAProps = {}) {
   const { t } = useTranslation();
-  const { trackSaasSelfhostedInquiry } = useClientAnalytics();
+  const { trackEnterpriseCTAClicked } = useClientAnalytics();
   const isDeviceVerifySource = source === "device_verify";
   const learnMoreButtonClassName = cn(
     "inline-flex items-center justify-center",
@@ -33,7 +33,7 @@ export function LoginCTA({
   );
 
   const handleLearnMoreClick = () => {
-    trackSaasSelfhostedInquiry({ location: source });
+    trackEnterpriseCTAClicked({ location: source });
   };
 
   return (

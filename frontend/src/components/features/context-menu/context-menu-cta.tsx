@@ -9,10 +9,10 @@ import StackedIcon from "#/icons/stacked.svg?react";
 
 export function ContextMenuCTA() {
   const { t } = useTranslation();
-  const { trackSaasSelfhostedInquiry } = useClientAnalytics();
+  const { trackEnterpriseCTAClicked } = useClientAnalytics();
 
   const handleLearnMoreClick = () => {
-    trackSaasSelfhostedInquiry({ location: "context_menu" });
+    trackEnterpriseCTAClicked({ location: "context_menu" });
   };
 
   return (

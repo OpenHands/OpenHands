@@ -16,10 +16,8 @@ from openhands.analytics.analytics_constants import (
     CONVERSATION_FINISHED,
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
-    ENTERPRISE_LEAD_FORM_SUBMITTED,
     GIT_PROVIDER_CONNECTED,
     ONBOARDING_COMPLETED,
-    SAAS_SELFHOSTED_INQUIRY,
     USER_ACTIVATED,
     USER_LOGGED_IN,
     USER_SIGNED_UP,
@@ -777,40 +775,6 @@ class TestTypedEventMethods:
         assert props['role'] == 'developer'
         assert props['org_size'] == '11-50'
         assert props['use_case'] == 'code_review'
-
-    def test_track_saas_selfhosted_inquiry(self, saas_service):
-        """track_saas_selfhosted_inquiry calls capture with SAAS_SELFHOSTED_INQUIRY and correct properties."""
-        service, mock_client = saas_service
-        service.track_saas_selfhosted_inquiry(
-            distinct_id='user-1',
-            location='home_page',
-        )
-        mock_client.capture.assert_called_once()
-        _, kwargs = mock_client.capture.call_args
-        assert kwargs['event'] == SAAS_SELFHOSTED_INQUIRY
-        props = kwargs['properties']
-        assert props['location'] == 'home_page'
-
-    def test_track_enterprise_lead_form_submitted(self, saas_service):
-        """track_enterprise_lead_form_submitted calls capture with ENTERPRISE_LEAD_FORM_SUBMITTED and correct properties."""
-        service, mock_client = saas_service
-        service.track_enterprise_lead_form_submitted(
-            distinct_id='user-1',
-            request_type='self-hosted',
-            name='Jane Doe',
-            company='Acme Corp',
-            email='jane@acme.com',
-            message='Interested in on-prem deployment',
-        )
-        mock_client.capture.assert_called_once()
-        _, kwargs = mock_client.capture.call_args
-        assert kwargs['event'] == ENTERPRISE_LEAD_FORM_SUBMITTED
-        props = kwargs['properties']
-        assert props['request_type'] == 'self-hosted'
-        assert props['name'] == 'Jane Doe'
-        assert props['company'] == 'Acme Corp'
-        assert props['email'] == 'jane@acme.com'
-        assert props['message'] == 'Interested in on-prem deployment'
 
     def test_typed_method_consent_false_is_noop(self, saas_service):
         """A typed method with consented=False results in no capture call."""

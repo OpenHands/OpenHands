@@ -22,14 +22,11 @@ from openhands.analytics.analytics_constants import (
     CONVERSATION_DELETED,
     CONVERSATION_ERRORED,
     CONVERSATION_FINISHED,
-    CONVERSATION_RESUMED,
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
-    ENTERPRISE_LEAD_FORM_SUBMITTED,
     GIT_PROVIDER_CONNECTED,
     MCP_CONFIG_UPDATED,
     ONBOARDING_COMPLETED,
-    SAAS_SELFHOSTED_INQUIRY,
     SETTINGS_SAVED,
     TEAM_MEMBERS_INVITED,
     TRAJECTORY_DOWNLOADED,
@@ -338,30 +335,6 @@ class AnalyticsService:
             consented=consented,
         )
 
-    def track_conversation_resumed(
-        self,
-        distinct_id: str,
-        *,
-        sandbox_id: str,
-        org_id: str | None = None,
-        session_id: str | None = None,
-        consented: bool = True,
-    ) -> None:
-        """Track 'conversation resumed' event.
-
-        Fired when a user resumes a paused sandbox.
-        """
-        self.capture(
-            distinct_id=distinct_id,
-            event=CONVERSATION_RESUMED,
-            properties={
-                'sandbox_id': sandbox_id,
-            },
-            org_id=org_id,
-            session_id=session_id,
-            consented=consented,
-        )
-
     def track_credit_purchased(
         self,
         distinct_id: str,
@@ -495,62 +468,6 @@ class AnalyticsService:
             distinct_id=distinct_id,
             event=ONBOARDING_COMPLETED,
             properties=selections or {},
-            org_id=org_id,
-            session_id=session_id,
-            consented=consented,
-        )
-
-    def track_saas_selfhosted_inquiry(
-        self,
-        distinct_id: str,
-        *,
-        location: str,
-        org_id: str | None = None,
-        session_id: str | None = None,
-        consented: bool = True,
-    ) -> None:
-        """Track 'saas selfhosted inquiry' event.
-
-        Fired when a user clicks 'Learn More' on an enterprise CTA.
-        """
-        self.capture(
-            distinct_id=distinct_id,
-            event=SAAS_SELFHOSTED_INQUIRY,
-            properties={
-                'location': location,
-            },
-            org_id=org_id,
-            session_id=session_id,
-            consented=consented,
-        )
-
-    def track_enterprise_lead_form_submitted(
-        self,
-        distinct_id: str,
-        *,
-        request_type: str,
-        name: str,
-        company: str,
-        email: str,
-        message: str,
-        org_id: str | None = None,
-        session_id: str | None = None,
-        consented: bool = True,
-    ) -> None:
-        """Track 'enterprise lead form submitted' event.
-
-        Fired when a user submits the enterprise contact form.
-        """
-        self.capture(
-            distinct_id=distinct_id,
-            event=ENTERPRISE_LEAD_FORM_SUBMITTED,
-            properties={
-                'request_type': request_type,
-                'name': name,
-                'company': company,
-                'email': email,
-                'message': message,
-            },
             org_id=org_id,
             session_id=session_id,
             consented=consented,

@@ -15,10 +15,10 @@ interface HomepageCTAProps {
 
 export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
   const { t } = useTranslation();
-  const { trackSaasSelfhostedInquiry } = useClientAnalytics();
+  const { trackEnterpriseCTAClicked } = useClientAnalytics();
 
   const handleLearnMoreClick = () => {
-    trackSaasSelfhostedInquiry({ location: "home_page" });
+    trackEnterpriseCTAClicked({ location: "home_page" });
   };
 
   const handleClose = () => {

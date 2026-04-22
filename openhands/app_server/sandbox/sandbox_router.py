@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.security import APIKeyHeader
 
 from openhands.agent_server.models import Success
-from openhands.analytics import get_analytics_service, resolve_context
 from openhands.app_server.config import depends_sandbox_service, depends_user_context
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
@@ -102,22 +101,6 @@ async def resume_sandbox(
     exists = await sandbox_service.resume_sandbox(sandbox_id)
     if not exists:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-
-    # Analytics: conversation resumed (V1)
-    try:
-        analytics = get_analytics_service()
-        if analytics:
-            user_id = await user_context.get_user_id()
-            if user_id:
-                ctx = await resolve_context(user_id)
-                analytics.track_conversation_resumed(
-                    distinct_id=user_id,
-                    sandbox_id=sandbox_id,
-                    org_id=ctx.org_id,
-                    consented=ctx.consented,
-                )
-    except Exception:
-        _logger.exception('analytics:conversation_resumed:failed')
 
     return Success()
 

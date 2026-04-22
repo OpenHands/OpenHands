@@ -12,8 +12,8 @@ import { usePostHog } from "posthog-js/react";
 export const useClientAnalytics = () => {
   const posthog = usePostHog();
 
-  const trackSaasSelfhostedInquiry = ({ location }: { location: string }) => {
-    posthog?.capture("saas_selfhosted_inquiry", {
+  const trackEnterpriseCTAClicked = ({ location }: { location: string }) => {
+    posthog?.capture("enterprise cta clicked", {
       location,
     });
   };
@@ -31,7 +31,7 @@ export const useClientAnalytics = () => {
     email: string;
     message: string;
   }) => {
-    posthog?.capture("enterprise_lead_form_submitted", {
+    posthog?.capture("enterprise lead form submitted", {
       request_type: requestType,
       name,
       company,
@@ -41,7 +41,7 @@ export const useClientAnalytics = () => {
   };
 
   return {
-    trackSaasSelfhostedInquiry,
+    trackEnterpriseCTAClicked,
     trackEnterpriseLeadFormSubmitted,
   };
 };
