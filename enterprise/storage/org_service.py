@@ -1,5 +1,4 @@
-"""
-Service class for managing organization operations.
+"""Service class for managing organization operations.
 Separates business logic from route handlers.
 """
 
@@ -34,8 +33,7 @@ class OrgService:
 
     @staticmethod
     async def validate_name_uniqueness(name: str) -> None:
-        """
-        Validate that organization name is unique.
+        """Validate that organization name is unique.
 
         Args:
             name: Organization name to validate
@@ -49,8 +47,7 @@ class OrgService:
 
     @staticmethod
     async def create_litellm_integration(org_id: UUID, user_id: str) -> Settings:
-        """
-        Create LiteLLM team integration for the organization.
+        """Create LiteLLM team integration for the organization.
 
         Args:
             org_id: Organization ID
@@ -69,14 +66,14 @@ class OrgService:
 
             if not settings:
                 logger.error(
-                    'Failed to create LiteLLM settings',
-                    extra={'org_id': str(org_id), 'user_id': user_id},
+                    "Failed to create LiteLLM settings",
+                    extra={"org_id": str(org_id), "user_id": user_id},
                 )
-                raise LiteLLMIntegrationError('Failed to create LiteLLM settings')
+                raise LiteLLMIntegrationError("Failed to create LiteLLM settings")
 
             logger.debug(
-                'LiteLLM integration created',
-                extra={'org_id': str(org_id), 'user_id': user_id},
+                "LiteLLM integration created",
+                extra={"org_id": str(org_id), "user_id": user_id},
             )
             return settings
 
@@ -84,10 +81,10 @@ class OrgService:
             raise
         except Exception as e:
             logger.exception(
-                'Error creating LiteLLM integration',
-                extra={'org_id': str(org_id), 'user_id': user_id, 'error': str(e)},
+                "Error creating LiteLLM integration",
+                extra={"org_id": str(org_id), "user_id": user_id, "error": str(e)},
             )
-            raise LiteLLMIntegrationError(f'LiteLLM integration failed: {str(e)}')
+            raise LiteLLMIntegrationError(f"LiteLLM integration failed: {str(e)}")
 
     @staticmethod
     def create_org_entity(
@@ -96,8 +93,7 @@ class OrgService:
         contact_name: str,
         contact_email: str,
     ) -> Org:
-        """
-        Create an organization entity with basic information.
+        """Create an organization entity with basic information.
 
         Args:
             org_id: Organization UUID
@@ -122,8 +118,7 @@ class OrgService:
 
     @staticmethod
     def apply_litellm_settings_to_org(org: Org, settings: Settings) -> None:
-        """
-        Apply LiteLLM settings to organization entity.
+        """Apply LiteLLM settings to organization entity.
 
         Args:
             org: Organization entity to update
@@ -136,8 +131,7 @@ class OrgService:
 
     @staticmethod
     async def get_owner_role():
-        """
-        Get the owner role from the database.
+        """Get the owner role from the database.
 
         Returns:
             Role: The owner role object
@@ -145,9 +139,9 @@ class OrgService:
         Raises:
             Exception: If owner role not found
         """
-        owner_role = await RoleStore.get_role_by_name('owner')
+        owner_role = await RoleStore.get_role_by_name("owner")
         if not owner_role:
-            raise Exception('Owner role not found in database')
+            raise Exception("Owner role not found in database")
         return owner_role
 
     @staticmethod
@@ -157,8 +151,7 @@ class OrgService:
         role_id: int,
         settings: Settings,
     ) -> OrgMember:
-        """
-        Create an organization member entity.
+        """Create an organization member entity.
 
         Args:
             org_id: Organization UUID
@@ -174,7 +167,7 @@ class OrgService:
             org_id=org_id,
             user_id=parse_uuid(user_id),
             role_id=role_id,
-            status='active',
+            status="active",
             **org_member_kwargs,
         )
 
@@ -185,8 +178,7 @@ class OrgService:
         contact_email: str,
         user_id: str,
     ) -> Org:
-        """
-        Create a new organization with the specified user as owner.
+        """Create a new organization with the specified user as owner.
 
         This method orchestrates the complete organization creation workflow:
         1. Validates that the organization name doesn't already exist
@@ -214,8 +206,8 @@ class OrgService:
             OrgDatabaseError: If database operations fail
         """
         logger.info(
-            'Starting organization creation',
-            extra={'user_id': user_id, 'org_name': name},
+            "Starting organization creation",
+            extra={"user_id": user_id, "org_name": name},
         )
 
         # Step 1: Validate name uniqueness (fails early, no cleanup needed)
@@ -256,12 +248,12 @@ class OrgService:
             )
 
             logger.info(
-                'Successfully created organization',
+                "Successfully created organization",
                 extra={
-                    'org_id': str(persisted_org.id),
-                    'org_name': persisted_org.name,
-                    'user_id': user_id,
-                    'role': 'owner',
+                    "org_id": str(persisted_org.id),
+                    "org_name": persisted_org.name,
+                    "user_id": user_id,
+                    "role": "owner",
                 },
             )
 
@@ -273,15 +265,15 @@ class OrgService:
         except Exception as e:
             # Unexpected error in steps 4-6, need to clean up LiteLLM
             logger.error(
-                'Unexpected error during organization creation, initiating cleanup',
+                "Unexpected error during organization creation, initiating cleanup",
                 extra={
-                    'org_id': str(org_id),
-                    'user_id': user_id,
-                    'error': str(e),
+                    "org_id": str(org_id),
+                    "user_id": user_id,
+                    "error": str(e),
                 },
             )
             await OrgService._handle_failure_with_cleanup(
-                org_id, user_id, e, 'Failed to create organization'
+                org_id, user_id, e, "Failed to create organization"
             )
 
     @staticmethod
@@ -291,8 +283,7 @@ class OrgService:
         org_id: UUID,
         user_id: str,
     ) -> Org:
-        """
-        Persist organization with compensation on failure.
+        """Persist organization with compensation on failure.
 
         If database persistence fails, cleans up LiteLLM resources.
 
@@ -314,15 +305,15 @@ class OrgService:
 
         except Exception as e:
             logger.error(
-                'Database persistence failed, initiating LiteLLM cleanup',
+                "Database persistence failed, initiating LiteLLM cleanup",
                 extra={
-                    'org_id': str(org_id),
-                    'user_id': user_id,
-                    'error': str(e),
+                    "org_id": str(org_id),
+                    "user_id": user_id,
+                    "error": str(e),
                 },
             )
             await OrgService._handle_failure_with_cleanup(
-                org_id, user_id, e, 'Failed to create organization'
+                org_id, user_id, e, "Failed to create organization"
             )
 
     @staticmethod
@@ -332,8 +323,7 @@ class OrgService:
         original_error: Exception,
         error_message: str,
     ) -> NoReturn:
-        """
-        Handle failure by cleaning up LiteLLM resources and raising appropriate error.
+        """Handle failure by cleaning up LiteLLM resources and raising appropriate error.
 
         This method performs compensating transaction and raises OrgDatabaseError.
 
@@ -350,27 +340,26 @@ class OrgService:
 
         if cleanup_error:
             logger.error(
-                'Both operation and cleanup failed',
+                "Both operation and cleanup failed",
                 extra={
-                    'org_id': str(org_id),
-                    'user_id': user_id,
-                    'original_error': str(original_error),
-                    'cleanup_error': str(cleanup_error),
+                    "org_id": str(org_id),
+                    "user_id": user_id,
+                    "original_error": str(original_error),
+                    "cleanup_error": str(cleanup_error),
                 },
             )
             raise OrgDatabaseError(
-                f'{error_message}: {str(original_error)}. '
-                f'Cleanup also failed: {str(cleanup_error)}'
+                f"{error_message}: {str(original_error)}. "
+                f"Cleanup also failed: {str(cleanup_error)}"
             )
 
-        raise OrgDatabaseError(f'{error_message}: {str(original_error)}')
+        raise OrgDatabaseError(f"{error_message}: {str(original_error)}")
 
     @staticmethod
     async def _cleanup_litellm_resources(
         org_id: UUID, user_id: str
     ) -> Exception | None:
-        """
-        Compensating transaction: Clean up LiteLLM resources.
+        """Compensating transaction: Clean up LiteLLM resources.
 
         Deletes the team which should cascade to remove keys and memberships.
         This is a best-effort operation - errors are logged but not raised.
@@ -386,26 +375,25 @@ class OrgService:
             await LiteLlmManager.delete_team(str(org_id))
 
             logger.info(
-                'Successfully cleaned up LiteLLM team',
-                extra={'org_id': str(org_id), 'user_id': user_id},
+                "Successfully cleaned up LiteLLM team",
+                extra={"org_id": str(org_id), "user_id": user_id},
             )
             return None
 
         except Exception as e:
             logger.error(
-                'Failed to cleanup LiteLLM team (resources may be orphaned)',
+                "Failed to cleanup LiteLLM team (resources may be orphaned)",
                 extra={
-                    'org_id': str(org_id),
-                    'user_id': user_id,
-                    'error': str(e),
+                    "org_id": str(org_id),
+                    "user_id": user_id,
+                    "error": str(e),
                 },
             )
             return e
 
     @staticmethod
     async def has_admin_or_owner_role(user_id: str, org_id: UUID) -> bool:
-        """
-        Check if user has admin or owner role in the specified organization.
+        """Check if user has admin or owner role in the specified organization.
 
         Args:
             user_id: User ID to check
@@ -431,23 +419,22 @@ class OrgService:
 
             # Admin and owner roles have elevated permissions
             # Based on test files, both admin and owner have rank 1
-            return role.name in ['admin', 'owner']
+            return role.name in ["admin", "owner"]
 
         except Exception as e:
             logger.warning(
-                'Error checking user role in organization',
+                "Error checking user role in organization",
                 extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'error': str(e),
+                    "user_id": user_id,
+                    "org_id": str(org_id),
+                    "error": str(e),
                 },
             )
             return False
 
     @staticmethod
     async def is_org_member(user_id: str, org_id: UUID) -> bool:
-        """
-        Check if user is a member of the specified organization.
+        """Check if user is a member of the specified organization.
 
         Args:
             user_id: User ID to check
@@ -462,11 +449,11 @@ class OrgService:
             return org_member is not None
         except Exception as e:
             logger.warning(
-                'Error checking user membership in organization',
+                "Error checking user membership in organization",
                 extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'error': str(e),
+                    "user_id": user_id,
+                    "org_id": str(org_id),
+                    "error": str(e),
                 },
             )
             return False
@@ -477,8 +464,7 @@ class OrgService:
         update_data: OrgUpdate,
         user_id: str,
     ) -> Org:
-        """
-        Update organization with permission checks for LLM settings.
+        """Update organization with permission checks for LLM settings.
 
         Args:
             org_id: Organization UUID to update
@@ -495,30 +481,30 @@ class OrgService:
             OrgDatabaseError: If database update fails
         """
         logger.info(
-            'Updating organization with permission checks',
+            "Updating organization with permission checks",
             extra={
-                'org_id': str(org_id),
-                'user_id': user_id,
-                'has_update_data': update_data is not None,
+                "org_id": str(org_id),
+                "user_id": user_id,
+                "has_update_data": update_data is not None,
             },
         )
 
         # Validate organization exists
         existing_org = await OrgStore.get_org_by_id(org_id)
         if not existing_org:
-            raise ValueError(f'Organization with ID {org_id} not found')
+            raise ValueError(f"Organization with ID {org_id} not found")
 
         # Check if user is a member of this organization
         if not await OrgService.is_org_member(user_id, org_id):
             logger.warning(
-                'Non-member attempted to update organization',
+                "Non-member attempted to update organization",
                 extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
+                    "user_id": user_id,
+                    "org_id": str(org_id),
                 },
             )
             raise PermissionError(
-                'User must be a member of the organization to update it'
+                "User must be a member of the organization to update it"
             )
 
         # Check if name is being updated and validate uniqueness
@@ -530,59 +516,60 @@ class OrgService:
                 and existing_org_with_name.id != org_id
             ):
                 logger.warning(
-                    'Attempted to update organization with duplicate name',
+                    "Attempted to update organization with duplicate name",
                     extra={
-                        'user_id': user_id,
-                        'org_id': str(org_id),
-                        'attempted_name': update_data.name,
+                        "user_id": user_id,
+                        "org_id": str(org_id),
+                        "attempted_name": update_data.name,
                     },
                 )
                 raise OrgNameExistsError(update_data.name)
 
-        # Convert to dict for OrgStore (excluding None values)
-        update_dict = update_data.model_dump(exclude_none=True)
-        if not update_dict:
+        if not update_data.has_updates():
             logger.info(
-                'No fields to update',
-                extra={'org_id': str(org_id), 'user_id': user_id},
+                "No fields to update",
+                extra={"org_id": str(org_id), "user_id": user_id},
             )
             return existing_org
 
-        restricted_fields = {
-            'agent_settings',
-            'conversation_settings',
-            'search_api_key',
-            'sandbox_api_key',
-        }
-        if restricted_fields.intersection(
-            update_dict
-        ) and not await OrgService.has_admin_or_owner_role(user_id, org_id):
+        restricted_fields = update_data.restricted_fields()
+        if restricted_fields and not await OrgService.has_admin_or_owner_role(
+            user_id, org_id
+        ):
             logger.warning(
-                'Insufficient role for restricted organization settings update',
+                "Insufficient role for restricted organization settings update",
                 extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'restricted_fields': sorted(
-                        restricted_fields.intersection(update_dict)
-                    ),
+                    "user_id": user_id,
+                    "org_id": str(org_id),
+                    "restricted_fields": sorted(restricted_fields),
                 },
             )
             raise PermissionError(
-                'Admin or owner role required to update organization agent settings'
+                "Admin or owner role required to update organization agent settings"
             )
 
-        # Perform the update
         try:
-            updated_org = await OrgStore.update_org(org_id, update_dict)
+            if update_data.touches_llm_settings():
+                updated_org = await OrgStore.update_org_llm_settings_async(
+                    org_id,
+                    update_data,
+                    user_id,
+                )
+            else:
+                updated_org = await OrgStore.update_org(
+                    org_id,
+                    update_data.model_update_dict(),
+                )
+
             if not updated_org:
-                raise OrgDatabaseError('Failed to update organization in database')
+                raise OrgDatabaseError("Failed to update organization in database")
 
             logger.info(
-                'Organization updated successfully',
+                "Organization updated successfully",
                 extra={
-                    'org_id': str(org_id),
-                    'user_id': user_id,
-                    'updated_fields': list(update_dict.keys()),
+                    "org_id": str(org_id),
+                    "user_id": user_id,
+                    "updated_fields": sorted(update_data.updated_fields()),
                 },
             )
 
@@ -590,19 +577,18 @@ class OrgService:
 
         except Exception as e:
             logger.error(
-                'Failed to update organization',
+                "Failed to update organization",
                 extra={
-                    'org_id': str(org_id),
-                    'user_id': user_id,
-                    'error': str(e),
+                    "org_id": str(org_id),
+                    "user_id": user_id,
+                    "error": str(e),
                 },
             )
-            raise OrgDatabaseError(f'Failed to update organization: {str(e)}')
+            raise OrgDatabaseError(f"Failed to update organization: {str(e)}")
 
     @staticmethod
     async def get_org_credits(user_id: str, org_id: UUID) -> float | None:
-        """
-        Get organization credits from LiteLLM team.
+        """Get organization credits from LiteLLM team.
 
         Args:
             user_id: User ID
@@ -617,8 +603,8 @@ class OrgService:
             )
             if not user_team_info:
                 logger.warning(
-                    'No team info available from LiteLLM',
-                    extra={'user_id': user_id, 'org_id': str(org_id)},
+                    "No team info available from LiteLLM",
+                    extra={"user_id": user_id, "org_id": str(org_id)},
                 )
                 return None
 
@@ -628,13 +614,13 @@ class OrgService:
             credits = max(max_budget - spend, 0)
 
             logger.debug(
-                'Retrieved organization credits',
+                "Retrieved organization credits",
                 extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'credits': credits,
-                    'max_budget': max_budget,
-                    'spend': spend,
+                    "user_id": user_id,
+                    "org_id": str(org_id),
+                    "credits": credits,
+                    "max_budget": max_budget,
+                    "spend": spend,
                 },
             )
 
@@ -642,8 +628,8 @@ class OrgService:
 
         except Exception as e:
             logger.warning(
-                'Failed to retrieve organization credits',
-                extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+                "Failed to retrieve organization credits",
+                extra={"user_id": user_id, "org_id": str(org_id), "error": str(e)},
             )
             return None
 
@@ -651,8 +637,7 @@ class OrgService:
     async def get_user_orgs_paginated(
         user_id: str, page_id: str | None = None, limit: int = 100
     ):
-        """
-        Get paginated list of organizations for a user.
+        """Get paginated list of organizations for a user.
 
         Args:
             user_id: User ID (string that will be converted to UUID)
@@ -663,8 +648,8 @@ class OrgService:
             Tuple of (list of Org objects, next_page_id or None)
         """
         logger.debug(
-            'Fetching paginated organizations for user',
-            extra={'user_id': user_id, 'page_id': page_id, 'limit': limit},
+            "Fetching paginated organizations for user",
+            extra={"user_id": user_id, "page_id": page_id, "limit": limit},
         )
 
         # Convert user_id string to UUID
@@ -676,11 +661,11 @@ class OrgService:
         )
 
         logger.debug(
-            'Retrieved organizations for user',
+            "Retrieved organizations for user",
             extra={
-                'user_id': user_id,
-                'org_count': len(orgs),
-                'has_more': next_page_id is not None,
+                "user_id": user_id,
+                "org_count": len(orgs),
+                "has_more": next_page_id is not None,
             },
         )
 
@@ -688,8 +673,7 @@ class OrgService:
 
     @staticmethod
     async def get_org_by_id(org_id: UUID, user_id: str) -> Org:
-        """
-        Get organization by ID with membership validation.
+        """Get organization by ID with membership validation.
 
         This method verifies that the user is a member of the organization
         before returning the organization details.
@@ -705,16 +689,16 @@ class OrgService:
             OrgNotFoundError: If organization not found or user is not a member
         """
         logger.info(
-            'Retrieving organization',
-            extra={'user_id': user_id, 'org_id': str(org_id)},
+            "Retrieving organization",
+            extra={"user_id": user_id, "org_id": str(org_id)},
         )
 
         # Verify user is a member of the organization
         org_member = await OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
         if not org_member:
             logger.warning(
-                'User is not a member of organization or organization does not exist',
-                extra={'user_id': user_id, 'org_id': str(org_id)},
+                "User is not a member of organization or organization does not exist",
+                extra={"user_id": user_id, "org_id": str(org_id)},
             )
             raise OrgNotFoundError(str(org_id))
 
@@ -722,17 +706,17 @@ class OrgService:
         org = await OrgStore.get_org_by_id(org_id)
         if not org:
             logger.error(
-                'Organization not found despite valid membership',
-                extra={'user_id': user_id, 'org_id': str(org_id)},
+                "Organization not found despite valid membership",
+                extra={"user_id": user_id, "org_id": str(org_id)},
             )
             raise OrgNotFoundError(str(org_id))
 
         logger.info(
-            'Successfully retrieved organization',
+            "Successfully retrieved organization",
             extra={
-                'org_id': str(org.id),
-                'org_name': org.name,
-                'user_id': user_id,
+                "org_id": str(org.id),
+                "org_name": org.name,
+                "user_id": user_id,
             },
         )
 
@@ -740,8 +724,7 @@ class OrgService:
 
     @staticmethod
     async def verify_owner_authorization(user_id: str, org_id: UUID) -> None:
-        """
-        Verify that the user is the owner of the organization.
+        """Verify that the user is the owner of the organization.
 
         Args:
             user_id: User ID to check
@@ -759,24 +742,23 @@ class OrgService:
         # Check if user is a member of the organization
         org_member = await OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
         if not org_member:
-            raise OrgAuthorizationError('User is not a member of this organization')
+            raise OrgAuthorizationError("User is not a member of this organization")
 
         # Check if user has owner role
         role = await RoleStore.get_role_by_id(org_member.role_id)
-        if not role or role.name != 'owner':
+        if not role or role.name != "owner":
             raise OrgAuthorizationError(
-                'Only organization owners can delete organizations'
+                "Only organization owners can delete organizations"
             )
 
         logger.debug(
-            'User authorization verified for organization deletion',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'role': role.name},
+            "User authorization verified for organization deletion",
+            extra={"user_id": user_id, "org_id": str(org_id), "role": role.name},
         )
 
     @staticmethod
     async def delete_org_with_cleanup(user_id: str, org_id: UUID) -> Org:
-        """
-        Delete organization with complete cleanup of all associated data.
+        """Delete organization with complete cleanup of all associated data.
 
         This method performs the complete organization deletion workflow:
         1. Verifies user authorization (owner only)
@@ -795,8 +777,8 @@ class OrgService:
             OrgDatabaseError: If database operations or LiteLLM cleanup fail
         """
         logger.info(
-            'Starting organization deletion',
-            extra={'user_id': user_id, 'org_id': str(org_id)},
+            "Starting organization deletion",
+            extra={"user_id": user_id, "org_id": str(org_id)},
         )
 
         # Step 1: Verify user authorization
@@ -807,14 +789,14 @@ class OrgService:
             deleted_org = await OrgStore.delete_org_cascade(org_id)
             if not deleted_org:
                 # This shouldn't happen since we verified existence above
-                raise OrgDatabaseError('Organization not found during deletion')
+                raise OrgDatabaseError("Organization not found during deletion")
 
             logger.info(
-                'Organization deletion completed successfully',
+                "Organization deletion completed successfully",
                 extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'org_name': deleted_org.name,
+                    "user_id": user_id,
+                    "org_id": str(org_id),
+                    "org_name": deleted_org.name,
                 },
             )
 
@@ -822,10 +804,10 @@ class OrgService:
 
         except Exception as e:
             logger.error(
-                'Organization deletion failed',
-                extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+                "Organization deletion failed",
+                extra={"user_id": user_id, "org_id": str(org_id), "error": str(e)},
             )
-            raise OrgDatabaseError(f'Failed to delete organization: {str(e)}')
+            raise OrgDatabaseError(f"Failed to delete organization: {str(e)}")
 
     @staticmethod
     async def check_byor_export_enabled(user_id: str) -> bool:
@@ -852,8 +834,7 @@ class OrgService:
 
     @staticmethod
     async def switch_org(user_id: str, org_id: UUID) -> Org:
-        """
-        Switch user's current organization to the specified organization.
+        """Switch user's current organization to the specified organization.
 
         This method:
         1. Validates that the organization exists
@@ -873,8 +854,8 @@ class OrgService:
             OrgDatabaseError: If database update fails
         """
         logger.info(
-            'Switching user organization',
-            extra={'user_id': user_id, 'org_id': str(org_id)},
+            "Switching user organization",
+            extra={"user_id": user_id, "org_id": str(org_id)},
         )
 
         # Step 1: Check if organization exists
@@ -885,25 +866,25 @@ class OrgService:
         # Step 2: Validate user is a member of the organization
         if not await OrgService.is_org_member(user_id, org_id):
             logger.warning(
-                'User attempted to switch to organization they are not a member of',
-                extra={'user_id': user_id, 'org_id': str(org_id)},
+                "User attempted to switch to organization they are not a member of",
+                extra={"user_id": user_id, "org_id": str(org_id)},
             )
             raise OrgAuthorizationError(
-                'User must be a member of the organization to switch to it'
+                "User must be a member of the organization to switch to it"
             )
 
         # Step 3: Update user's current_org_id
         try:
             updated_user = await UserStore.update_current_org(user_id, org_id)
             if not updated_user:
-                raise OrgDatabaseError('User not found')
+                raise OrgDatabaseError("User not found")
 
             logger.info(
-                'Successfully switched user organization',
+                "Successfully switched user organization",
                 extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'org_name': org.name,
+                    "user_id": user_id,
+                    "org_id": str(org_id),
+                    "org_name": org.name,
                 },
             )
 
@@ -913,7 +894,7 @@ class OrgService:
             raise
         except Exception as e:
             logger.error(
-                'Failed to switch user organization',
-                extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+                "Failed to switch user organization",
+                extra={"user_id": user_id, "org_id": str(org_id), "error": str(e)},
             )
-            raise OrgDatabaseError(f'Failed to switch organization: {str(e)}')
+            raise OrgDatabaseError(f"Failed to switch organization: {str(e)}")

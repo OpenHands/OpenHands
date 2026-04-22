@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from uuid import UUID
 
-from server.routes.org_models import OrgLLMSettingsUpdate
+from server.routes.org_models import OrgUpdate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.org import Org
@@ -46,7 +46,7 @@ class OrgLLMSettingsStore:
         return result.scalars().first()
 
     async def update_org_llm_settings(
-        self, org_id: UUID, update_data: OrgLLMSettingsUpdate
+        self, org_id: UUID, update_data: OrgUpdate
     ) -> Org | None:
         """Update organization LLM settings.
 
