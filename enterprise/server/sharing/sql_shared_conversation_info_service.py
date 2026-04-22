@@ -152,6 +152,9 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
         we assume UTC if the timezone is missing. Returns current UTC time if value is None.
         """
         if value is None:
+            # Fallback for legacy data: use current time to match model defaults.
+            # The DB columns have default=utc_now, so None only occurs in legacy records.
+            # Using utc_now() keeps the API model non-nullable and matches new record behavior.
             return utc_now()
         if not value.tzinfo:
             value = value.replace(tzinfo=UTC)
