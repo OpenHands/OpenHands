@@ -522,12 +522,18 @@ class RemoteSandboxService(SandboxService):
             raise SandboxError(f'Failed to start sandbox: {e}')
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
-        """Resume a paused sandbox."""
+        """Resume a paused sandbox.
+
+        Security: When a sandbox is resumed, the runtime-api generates a new
+        session_api_key and returns it. This invalidates any previously leaked
+        keys and ensures that only the new key can be used to access secrets.
+        """
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
         try:
-            if not await self._get_stored_sandbox(sandbox_id):
+            stored_sandbox = await self._get_stored_sandbox(sandbox_id)
+            if not stored_sandbox:
                 return False
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
@@ -538,16 +544,39 @@ class RemoteSandboxService(SandboxService):
             if response.status_code == 404:
                 return False
             response.raise_for_status()
+
+            # Security: Update stored session_api_key with the new key returned
+            # by the runtime-api. The old key was invalidated on resume.
+            response_data = response.json()
+            new_session_api_key = response_data.get('session_api_key')
+            if new_session_api_key:
+                stored_sandbox.session_api_key_hash = _hash_session_api_key(
+                    new_session_api_key
+                )
+                _logger.info(
+                    f'Updated session_api_key_hash for sandbox {sandbox_id} after resume'
+                )
+
             return True
         except httpx.HTTPError as e:
             _logger.error(f'Error resuming sandbox {sandbox_id}: {e}')
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
-        """Pause a running sandbox."""
+        """Pause a running sandbox.
+
+        Security: Clears the session_api_key_hash to invalidate any existing
+        session keys, preventing leaked keys from being used while paused.
+        """
         try:
-            if not await self._get_stored_sandbox(sandbox_id):
+            stored_sandbox = await self._get_stored_sandbox(sandbox_id)
+            if not stored_sandbox:
                 return False
+
+            # Security: Invalidate the session API key hash to prevent
+            # leaked keys from being used while the sandbox is paused.
+            stored_sandbox.session_api_key_hash = None
+
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
                 'POST',
@@ -564,11 +593,17 @@ class RemoteSandboxService(SandboxService):
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
-        """Delete a sandbox by stopping its runtime."""
+        """Delete a sandbox by stopping its runtime.
+
+        Security: Deleting the stored_sandbox record also removes the
+        session_api_key_hash, invalidating any leaked session keys.
+        """
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
+            # Deleting the record also removes the session_api_key_hash,
+            # which invalidates any leaked session keys.
             await self.db_session.delete(stored_sandbox)
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
