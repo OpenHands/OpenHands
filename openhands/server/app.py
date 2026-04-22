@@ -28,7 +28,6 @@ from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.status.status_router import router as health_router
 from openhands.integrations.service_types import AuthenticationError
 from openhands.server.routes.mcp import mcp_server
-from openhands.server.routes.security import app as security_api_router
 from openhands.server.shared import conversation_manager
 from openhands.version import get_version
 
@@ -50,6 +49,24 @@ def _import_optional_agenthub() -> None:
 
 
 _import_optional_agenthub()
+
+
+def _load_optional_security_api_router():
+    """Load legacy security catch-all router when ``routes.security`` is present.
+
+    Keeps ``openhands.server.app`` importable if that module is missing (e.g. partial
+    tree or a bad merge) while still surfacing unrelated import errors.
+    """
+    try:
+        mod = importlib.import_module('openhands.server.routes.security')
+    except ModuleNotFoundError as exc:
+        if exc.name != 'openhands.server.routes.security':
+            raise
+        return None
+    return mod.app
+
+
+security_api_router = _load_optional_security_api_router()
 
 
 def combine_lifespans(*lifespans):
@@ -93,6 +110,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
     )
 
 
-app.include_router(security_api_router)
+if security_api_router is not None:
+    app.include_router(security_api_router)
 app.include_router(v1_router.router)
 app.include_router(health_router)
