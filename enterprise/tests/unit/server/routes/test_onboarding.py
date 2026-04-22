@@ -67,7 +67,7 @@ async def test_submit_onboarding_returns_ok_response():
     """submit_onboarding returns OnboardingResponse with status ok and redirect_url /."""
     body = OnboardingSubmission(selections={'role': 'developer', 'org_size': '11-50'})
 
-    with patch('server.routes.onboarding.get_analytics_service', return_value=None):
+    with patch('openhands.analytics.get_analytics_service', return_value=None):
         result = await submit_onboarding(body=body, user_id='test-user')
 
     assert isinstance(result, OnboardingResponse)
@@ -90,11 +90,11 @@ async def test_submit_onboarding_tracks_analytics_event(
 
     with (
         patch(
-            'server.routes.onboarding.get_analytics_service',
+            'openhands.analytics.get_analytics_service',
             return_value=mock_analytics_service,
         ),
         patch(
-            'server.routes.onboarding.resolve_context',
+            'openhands.analytics.resolve_context',
             new_callable=AsyncMock,
             return_value=mock_analytics_context,
         ),
@@ -122,11 +122,11 @@ async def test_submit_onboarding_calls_group_identify_when_org_id_present(
 
     with (
         patch(
-            'server.routes.onboarding.get_analytics_service',
+            'openhands.analytics.get_analytics_service',
             return_value=mock_analytics_service,
         ),
         patch(
-            'server.routes.onboarding.resolve_context',
+            'openhands.analytics.resolve_context',
             new_callable=AsyncMock,
             return_value=mock_analytics_context,
         ),
@@ -151,11 +151,11 @@ async def test_submit_onboarding_skips_group_identify_when_no_org_id(
 
     with (
         patch(
-            'server.routes.onboarding.get_analytics_service',
+            'openhands.analytics.get_analytics_service',
             return_value=mock_analytics_service,
         ),
         patch(
-            'server.routes.onboarding.resolve_context',
+            'openhands.analytics.resolve_context',
             new_callable=AsyncMock,
             return_value=mock_analytics_context_no_org,
         ),
@@ -171,7 +171,7 @@ async def test_submit_onboarding_skips_analytics_when_service_is_none():
     """submit_onboarding skips analytics when get_analytics_service returns None."""
     body = OnboardingSubmission(selections={'role': 'developer'})
 
-    with patch('server.routes.onboarding.get_analytics_service', return_value=None):
+    with patch('openhands.analytics.get_analytics_service', return_value=None):
         result = await submit_onboarding(body=body, user_id='test-user-123')
 
     # Should still return success even without analytics
@@ -186,7 +186,7 @@ async def test_submit_onboarding_skips_analytics_when_user_id_is_none(
     body = OnboardingSubmission(selections={'role': 'developer'})
 
     with patch(
-        'server.routes.onboarding.get_analytics_service',
+        'openhands.analytics.get_analytics_service',
         return_value=mock_analytics_service,
     ):
         result = await submit_onboarding(body=body, user_id=None)
@@ -216,11 +216,11 @@ async def test_submit_onboarding_handles_analytics_exception_gracefully(
 
     with (
         patch(
-            'server.routes.onboarding.get_analytics_service',
+            'openhands.analytics.get_analytics_service',
             return_value=mock_analytics_service,
         ),
         patch(
-            'server.routes.onboarding.resolve_context',
+            'openhands.analytics.resolve_context',
             new_callable=AsyncMock,
             return_value=mock_context,
         ),
@@ -240,11 +240,11 @@ async def test_submit_onboarding_passes_consent_false_to_analytics(
 
     with (
         patch(
-            'server.routes.onboarding.get_analytics_service',
+            'openhands.analytics.get_analytics_service',
             return_value=mock_analytics_service,
         ),
         patch(
-            'server.routes.onboarding.resolve_context',
+            'openhands.analytics.resolve_context',
             new_callable=AsyncMock,
             return_value=mock_analytics_context_no_consent,
         ),

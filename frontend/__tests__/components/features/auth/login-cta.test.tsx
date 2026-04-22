@@ -6,7 +6,7 @@ import { LoginCTA } from "#/components/features/auth/login-cta";
 
 vi.mock("#/hooks/use-client-analytics", () => ({
   useClientAnalytics: () => ({
-    trackSaasSelfhostedInquiry: vi.fn(),
+    trackEnterpriseCTAClicked: vi.fn(),
     trackEnterpriseLeadFormSubmitted: vi.fn(),
   }),
 }));
