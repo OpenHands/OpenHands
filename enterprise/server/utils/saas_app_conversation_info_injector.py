@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
@@ -242,7 +242,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
     ):
         """Apply filters to query that includes SAAS metadata."""
         # Apply the same filters as the base class
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
                 StoredConversationMetadata.title.like(f'%{title__contains}%')

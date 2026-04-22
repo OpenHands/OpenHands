@@ -26,6 +26,7 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import (
+    ColumnElement,
     DateTime,
     Select,
     String,
@@ -241,7 +242,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         sandbox_id__eq: str | None = None,
     ) -> Select:
         # Apply the same filters as search_app_conversations
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
                 StoredConversationMetadata.title.like(f'%{title__contains}%')
