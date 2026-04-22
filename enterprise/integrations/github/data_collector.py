@@ -429,6 +429,11 @@ class GitHubDataCollector:
         - Num openhands review comments
         """
         pr_number = openhands_pr.pr_number
+        if openhands_pr.installation_id is None:
+            logger.warning(
+                f'Skipping PR {openhands_pr.repo_name}#{pr_number}: missing installation_id'
+            )
+            return
         installation_id = int(openhands_pr.installation_id)
         repo_id = openhands_pr.repo_id
 
