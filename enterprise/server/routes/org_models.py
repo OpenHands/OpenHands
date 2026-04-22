@@ -413,7 +413,7 @@ class OrgDefaultsSettingsResponse(BaseModel):
         """
         llm = agent_settings.llm
         if llm.model and llm.model.startswith('litellm_proxy/'):
-            llm.model = f"openhands/{llm.model.removeprefix('litellm_proxy/')}"
+            llm.model = f'openhands/{llm.model.removeprefix("litellm_proxy/")}'
         llm.api_key = None
 
 

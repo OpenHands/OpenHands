@@ -1,4 +1,5 @@
-"""Service class for managing organization operations.
+"""
+Service class for managing organization operations.
 Separates business logic from route handlers.
 """
 
@@ -33,7 +34,8 @@ class OrgService:
 
     @staticmethod
     async def validate_name_uniqueness(name: str) -> None:
-        """Validate that organization name is unique.
+        """
+        Validate that organization name is unique.
 
         Args:
             name: Organization name to validate
@@ -47,7 +49,8 @@ class OrgService:
 
     @staticmethod
     async def create_litellm_integration(org_id: UUID, user_id: str) -> Settings:
-        """Create LiteLLM team integration for the organization.
+        """
+        Create LiteLLM team integration for the organization.
 
         Args:
             org_id: Organization ID
@@ -93,7 +96,8 @@ class OrgService:
         contact_name: str,
         contact_email: str,
     ) -> Org:
-        """Create an organization entity with basic information.
+        """
+        Create an organization entity with basic information.
 
         Args:
             org_id: Organization UUID
@@ -118,7 +122,8 @@ class OrgService:
 
     @staticmethod
     def apply_litellm_settings_to_org(org: Org, settings: Settings) -> None:
-        """Apply LiteLLM settings to organization entity.
+        """
+        Apply LiteLLM settings to organization entity.
 
         Args:
             org: Organization entity to update
@@ -131,7 +136,8 @@ class OrgService:
 
     @staticmethod
     async def get_owner_role():
-        """Get the owner role from the database.
+        """
+        Get the owner role from the database.
 
         Returns:
             Role: The owner role object
@@ -151,7 +157,8 @@ class OrgService:
         role_id: int,
         settings: Settings,
     ) -> OrgMember:
-        """Create an organization member entity.
+        """
+        Create an organization member entity.
 
         Args:
             org_id: Organization UUID
@@ -178,7 +185,8 @@ class OrgService:
         contact_email: str,
         user_id: str,
     ) -> Org:
-        """Create a new organization with the specified user as owner.
+        """
+        Create a new organization with the specified user as owner.
 
         This method orchestrates the complete organization creation workflow:
         1. Validates that the organization name doesn't already exist
@@ -283,7 +291,8 @@ class OrgService:
         org_id: UUID,
         user_id: str,
     ) -> Org:
-        """Persist organization with compensation on failure.
+        """
+        Persist organization with compensation on failure.
 
         If database persistence fails, cleans up LiteLLM resources.
 
@@ -323,7 +332,8 @@ class OrgService:
         original_error: Exception,
         error_message: str,
     ) -> NoReturn:
-        """Handle failure by cleaning up LiteLLM resources and raising appropriate error.
+        """
+        Handle failure by cleaning up LiteLLM resources and raising appropriate error.
 
         This method performs compensating transaction and raises OrgDatabaseError.
 
@@ -359,7 +369,8 @@ class OrgService:
     async def _cleanup_litellm_resources(
         org_id: UUID, user_id: str
     ) -> Exception | None:
-        """Compensating transaction: Clean up LiteLLM resources.
+        """
+        Compensating transaction: Clean up LiteLLM resources.
 
         Deletes the team which should cascade to remove keys and memberships.
         This is a best-effort operation - errors are logged but not raised.
@@ -393,7 +404,8 @@ class OrgService:
 
     @staticmethod
     async def has_admin_or_owner_role(user_id: str, org_id: UUID) -> bool:
-        """Check if user has admin or owner role in the specified organization.
+        """
+        Check if user has admin or owner role in the specified organization.
 
         Args:
             user_id: User ID to check
@@ -434,7 +446,8 @@ class OrgService:
 
     @staticmethod
     async def is_org_member(user_id: str, org_id: UUID) -> bool:
-        """Check if user is a member of the specified organization.
+        """
+        Check if user is a member of the specified organization.
 
         Args:
             user_id: User ID to check
@@ -464,7 +477,8 @@ class OrgService:
         update_data: OrgUpdate,
         user_id: str,
     ) -> Org:
-        """Update organization with permission checks for LLM settings.
+        """
+        Update organization with permission checks for LLM settings.
 
         Args:
             org_id: Organization UUID to update
@@ -560,7 +574,6 @@ class OrgService:
                     org_id,
                     update_data.model_update_dict(),
                 )
-
             if not updated_org:
                 raise OrgDatabaseError('Failed to update organization in database')
 
@@ -588,7 +601,8 @@ class OrgService:
 
     @staticmethod
     async def get_org_credits(user_id: str, org_id: UUID) -> float | None:
-        """Get organization credits from LiteLLM team.
+        """
+        Get organization credits from LiteLLM team.
 
         Args:
             user_id: User ID
@@ -637,7 +651,8 @@ class OrgService:
     async def get_user_orgs_paginated(
         user_id: str, page_id: str | None = None, limit: int = 100
     ):
-        """Get paginated list of organizations for a user.
+        """
+        Get paginated list of organizations for a user.
 
         Args:
             user_id: User ID (string that will be converted to UUID)
@@ -673,7 +688,8 @@ class OrgService:
 
     @staticmethod
     async def get_org_by_id(org_id: UUID, user_id: str) -> Org:
-        """Get organization by ID with membership validation.
+        """
+        Get organization by ID with membership validation.
 
         This method verifies that the user is a member of the organization
         before returning the organization details.
@@ -724,7 +740,8 @@ class OrgService:
 
     @staticmethod
     async def verify_owner_authorization(user_id: str, org_id: UUID) -> None:
-        """Verify that the user is the owner of the organization.
+        """
+        Verify that the user is the owner of the organization.
 
         Args:
             user_id: User ID to check
@@ -758,7 +775,8 @@ class OrgService:
 
     @staticmethod
     async def delete_org_with_cleanup(user_id: str, org_id: UUID) -> Org:
-        """Delete organization with complete cleanup of all associated data.
+        """
+        Delete organization with complete cleanup of all associated data.
 
         This method performs the complete organization deletion workflow:
         1. Verifies user authorization (owner only)
@@ -834,7 +852,8 @@ class OrgService:
 
     @staticmethod
     async def switch_org(user_id: str, org_id: UUID) -> Org:
-        """Switch user's current organization to the specified organization.
+        """
+        Switch user's current organization to the specified organization.
 
         This method:
         1. Validates that the organization exists
