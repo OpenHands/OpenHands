@@ -258,7 +258,7 @@ describe("LlmSettingsScreen", () => {
   it("keeps Advanced visible but hides All in SaaS mode for the default LLM route schema", async () => {
     vi.spyOn(
       organizationService,
-      "getOrganizationAgentSettings",
+      "getOrganizationSettings",
     ).mockResolvedValue(
       buildSettings({
         agent_settings: {
