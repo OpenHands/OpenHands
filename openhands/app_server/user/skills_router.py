@@ -1,19 +1,23 @@
+import os
 from pathlib import Path
 from typing import Annotated
 
 import yaml
 from fastapi import APIRouter, Query
+import openhands
 from pydantic import BaseModel
 
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
-from openhands.memory.memory import GLOBAL_MICROAGENTS_DIR, USER_MICROAGENTS_DIR
 
 router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
 
 # Re-use V0 path constants (single source of truth)
-GLOBAL_SKILLS_DIR = Path(GLOBAL_MICROAGENTS_DIR)
-USER_SKILLS_DIR = Path(USER_MICROAGENTS_DIR)
+GLOBAL_SKILLS_DIR = Path(os.path.join(
+    os.path.dirname(os.path.dirname(openhands.__file__)),
+    'skills',
+))
+USER_SKILLS_DIR = Path(Path.home() / '.openhands' / 'microagents')
 
 
 class SkillInfo(BaseModel):
