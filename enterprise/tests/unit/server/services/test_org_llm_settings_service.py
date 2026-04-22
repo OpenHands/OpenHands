@@ -271,8 +271,8 @@ async def test_update_org_llm_settings_accepts_wire_payload_and_propagates(
         'schema_version': 1,
         'agent': 'CodeActAgent',
         'llm': {
-            'model': 'claude-3',
-            'base_url': 'https://llm-proxy.staging.all-hands.dev',
+            'model': 'anthropic/claude-3-opus-20240229',
+            'base_url': 'https://api.anthropic.com',
         },
     }
     updated_org.conversation_settings = {}
@@ -282,7 +282,10 @@ async def test_update_org_llm_settings_accepts_wire_payload_and_propagates(
     update_data = OrgLLMSettingsUpdate.model_validate(
         {
             'agent_settings': {
-                'llm': {'base_url': 'https://llm-proxy.staging.all-hands.dev'},
+                'llm': {
+                    'model': 'anthropic/claude-3-opus-20240229',
+                    'base_url': 'https://api.anthropic.com',
+                },
             },
         }
     )
@@ -314,7 +317,10 @@ async def test_update_org_llm_settings_accepts_wire_payload_and_propagates(
     assert call_args.args[1] == mock_org.id
     member_settings = call_args.args[2]
     assert member_settings.agent_settings_diff == {
-        'llm': {'base_url': 'https://llm-proxy.staging.all-hands.dev'},
+        'llm': {
+            'model': 'anthropic/claude-3-opus-20240229',
+            'base_url': 'https://api.anthropic.com',
+        },
     }
     assert member_settings.conversation_settings_diff is None
     assert member_settings.llm_api_key is None
@@ -390,6 +396,7 @@ async def test_update_org_llm_settings_lifts_nested_api_key_for_column_sync(
         {
             'agent_settings': {
                 'llm': {
+                    'model': 'anthropic/claude-3-opus-20240229',
                     'api_key': 'sk-new-raw-key',
                     'base_url': 'https://example.com',
                 },
@@ -403,8 +410,14 @@ async def test_update_org_llm_settings_lifts_nested_api_key_for_column_sync(
     # and member ``agent_settings_diff.llm`` stay consistent with the
     # encrypted column.
     assert update_data.llm_api_key == 'sk-new-raw-key'
-    assert update_data.agent_settings == {
-        'llm': {'api_key': MASKED_API_KEY, 'base_url': 'https://example.com'},
+    assert isinstance(update_data.agent_settings, AgentSettings)
+    assert update_data.agent_settings.llm.api_key is None
+    assert update_data.agent_settings_patch() == {
+        'llm': {
+            'model': 'anthropic/claude-3-opus-20240229',
+            'api_key': MASKED_API_KEY,
+            'base_url': 'https://example.com',
+        },
     }
 
     mock_store.db_session = MagicMock()
@@ -429,7 +442,11 @@ async def test_update_org_llm_settings_lifts_nested_api_key_for_column_sync(
     assert isinstance(member_settings.llm_api_key, SecretStr)
     assert member_settings.llm_api_key.get_secret_value() == 'sk-new-raw-key'
     assert member_settings.agent_settings_diff == {
-        'llm': {'api_key': MASKED_API_KEY, 'base_url': 'https://example.com'},
+        'llm': {
+            'model': 'anthropic/claude-3-opus-20240229',
+            'api_key': MASKED_API_KEY,
+            'base_url': 'https://example.com',
+        },
     }
     # org-defaults saves are org-wide: always reset members' personal
     # BYOR flag so load-time fallthrough won't return a stale custom key.
@@ -563,7 +580,9 @@ async def test_update_org_llm_settings_generates_managed_key_for_openhands(
     assert member_settings.llm_api_key.get_secret_value() == 'litellm-new-key'
     assert member_settings.has_custom_llm_api_key is False
     assert member_settings.agent_settings_diff is not None
-    assert member_settings.agent_settings_diff['llm']['model'] == 'openhands/claude-3'
+    assert (
+        member_settings.agent_settings_diff['llm']['model'] == 'litellm_proxy/claude-3'
+    )
     assert member_settings.agent_settings_diff['llm']['api_key'] == MASKED_API_KEY
     assert member_settings.agent_settings_diff['llm']['base_url'].rstrip(
         '/'

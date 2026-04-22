@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Annotated, Any
 
 from pydantic import (
@@ -5,9 +6,7 @@ from pydantic import (
     EmailStr,
     Field,
     SecretStr,
-    SkipValidation,
     StringConstraints,
-    ValidationError,
     field_validator,
     model_validator,
 )
@@ -348,63 +347,92 @@ class OrgMemberLLMSettings(BaseModel):
 class OrgLLMSettingsUpdate(BaseModel):
     """Request model for updating organization LLM settings.
 
-    ``agent_settings`` and ``conversation_settings`` accept the same typed
-    SDK objects as personal settings requests, but are still applied as
+    ``agent_settings`` and ``conversation_settings`` remain typed
+    ``AgentSettings`` / ``ConversationSettings`` objects, but are applied as
     partial/diff patches via ``deep_merge`` and propagated to each member's
     stored diff.
     """
 
-    agent_settings: SkipValidation[dict[str, Any]] | AgentSettings | None = None
-    conversation_settings: (
-        SkipValidation[dict[str, Any]] | ConversationSettings | None
-    ) = None
+    agent_settings: AgentSettings | None = None
+    conversation_settings: ConversationSettings | None = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
-
-    @field_validator('agent_settings', mode='before')
-    @classmethod
-    def _coerce_agent_settings(
-        cls, value: AgentSettings | dict[str, Any] | None
-    ) -> AgentSettings | dict[str, Any] | None:
-        if value is None or isinstance(value, AgentSettings):
-            return value
-        if isinstance(value, dict):
-            llm = value.get('llm')
-            if isinstance(llm, dict) and 'api_key' in llm:
-                return value
-        try:
-            return AgentSettings.model_validate(value)
-        except ValidationError:
-            return value
-
-    @field_validator('conversation_settings', mode='before')
-    @classmethod
-    def _coerce_conversation_settings(
-        cls, value: ConversationSettings | dict[str, Any] | None
-    ) -> ConversationSettings | dict[str, Any] | None:
-        if value is None or isinstance(value, ConversationSettings):
-            return value
-        try:
-            return ConversationSettings.model_validate(value)
-        except ValidationError:
-            return value
+    agent_settings_patch_data: dict[str, Any] | None = Field(
+        default=None, exclude=True, repr=False
+    )
+    conversation_settings_patch_data: dict[str, Any] | None = Field(
+        default=None, exclude=True, repr=False
+    )
+    nested_llm_api_key_input: str | None = Field(default=None, exclude=True, repr=False)
+    nested_llm_api_key_provided: bool = Field(default=False, exclude=True, repr=False)
 
     @staticmethod
-    def _dump_settings_patch(
+    def _copy_patch(
         settings: AgentSettings | ConversationSettings | dict[str, Any] | None,
     ) -> dict[str, Any] | None:
         if settings is None:
             return None
         if isinstance(settings, dict):
-            return settings or None
+            return deepcopy(settings) or None
         patch = settings.model_dump(mode='json', exclude_unset=True)
         return patch or None
 
+    @staticmethod
+    def _project_patch_shape(
+        raw_patch: dict[str, Any], normalized_patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        projected: dict[str, Any] = {}
+        for key, raw_value in raw_patch.items():
+            normalized_value = normalized_patch.get(key)
+            if isinstance(raw_value, dict) and isinstance(normalized_value, dict):
+                nested = OrgLLMSettingsUpdate._project_patch_shape(
+                    raw_value, normalized_value
+                )
+                if nested:
+                    projected[key] = nested
+            elif key in normalized_patch:
+                projected[key] = normalized_value
+            else:
+                projected[key] = raw_value
+        return projected
+
+    @model_validator(mode='before')
+    @classmethod
+    def _capture_patch_inputs(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        update_data = data.copy()
+        raw_agent_settings = update_data.get('agent_settings')
+        raw_conversation_settings = update_data.get('conversation_settings')
+        update_data['agent_settings_patch_data'] = cls._copy_patch(raw_agent_settings)
+        update_data['conversation_settings_patch_data'] = cls._copy_patch(
+            raw_conversation_settings
+        )
+
+        if isinstance(raw_agent_settings, AgentSettings):
+            llm_settings = raw_agent_settings.llm
+            update_data['nested_llm_api_key_provided'] = (
+                'api_key' in llm_settings.model_fields_set
+            )
+            if llm_settings.api_key is not None:
+                update_data['nested_llm_api_key_input'] = (
+                    llm_settings.api_key.get_secret_value()
+                )
+            elif update_data['nested_llm_api_key_provided']:
+                update_data['nested_llm_api_key_input'] = ''
+        elif isinstance(raw_agent_settings, dict):
+            llm_patch = raw_agent_settings.get('llm')
+            if isinstance(llm_patch, dict) and 'api_key' in llm_patch:
+                update_data['nested_llm_api_key_provided'] = True
+                update_data['nested_llm_api_key_input'] = llm_patch.get('api_key')
+        return update_data
+
     def agent_settings_patch(self) -> dict[str, Any] | None:
-        return self._dump_settings_patch(self.agent_settings)
+        return deepcopy(self.agent_settings_patch_data)
 
     def conversation_settings_patch(self) -> dict[str, Any] | None:
-        return self._dump_settings_patch(self.conversation_settings)
+        return deepcopy(self.conversation_settings_patch_data)
 
     @model_validator(mode='after')
     def _normalize_agent_settings(self) -> 'OrgLLMSettingsUpdate':
@@ -437,53 +465,78 @@ class OrgLLMSettingsUpdate(BaseModel):
           managed LiteLLM proxy URL so the stored state is complete and
           self-describing.
         """
-        agent_settings_patch = self.agent_settings_patch()
-        if agent_settings_patch is None:
-            return self
-        llm = agent_settings_patch.get('llm')
-        if not isinstance(llm, dict):
-            return self
-
-        nested_key = None
-        if 'api_key' in llm:
-            nested_key = llm.pop('api_key')
+        if self.conversation_settings is not None:
+            normalized_conversation_patch = self._copy_patch(self.conversation_settings)
             if (
-                self.llm_api_key is None
-                and nested_key is not None
-                and nested_key != MASKED_API_KEY
+                self.conversation_settings_patch_data is not None
+                and normalized_conversation_patch is not None
             ):
-                self.llm_api_key = nested_key
-            if nested_key is not None:
-                llm['api_key'] = MASKED_API_KEY
+                self.conversation_settings_patch_data = self._project_patch_shape(
+                    self.conversation_settings_patch_data,
+                    normalized_conversation_patch,
+                )
+            else:
+                self.conversation_settings_patch_data = normalized_conversation_patch
 
-        resolved_base_url = resolve_llm_base_url(
-            model=llm.get('model'),
-            base_url=llm.get('base_url'),
-            managed_proxy_url=LITE_LLM_API_URL,
+        if self.agent_settings is None:
+            return self
+
+        llm_settings = self.agent_settings.llm
+        normalized_agent_patch = self._copy_patch(self.agent_settings)
+        if (
+            self.agent_settings_patch_data is not None
+            and normalized_agent_patch is not None
+        ):
+            self.agent_settings_patch_data = self._project_patch_shape(
+                self.agent_settings_patch_data,
+                normalized_agent_patch,
+            )
+        else:
+            self.agent_settings_patch_data = normalized_agent_patch
+
+        llm_patch = (
+            self.agent_settings_patch_data.get('llm')
+            if self.agent_settings_patch_data is not None
+            else None
         )
-        if resolved_base_url is not None:
-            llm['base_url'] = resolved_base_url
+        if isinstance(llm_patch, dict):
+            resolved_base_url = resolve_llm_base_url(
+                model=llm_settings.model,
+                base_url=llm_settings.base_url,
+                managed_proxy_url=LITE_LLM_API_URL,
+            )
+            llm_settings.base_url = resolved_base_url
+            if resolved_base_url is not None:
+                llm_patch['base_url'] = resolved_base_url
 
-        if not llm:
-            agent_settings_patch.pop('llm', None)
-        if not agent_settings_patch:
-            self.agent_settings = None
-            return self
+            if self.nested_llm_api_key_provided:
+                raw_api_key = self.nested_llm_api_key_input
+                if (
+                    self.llm_api_key is None
+                    and raw_api_key is not None
+                    and raw_api_key != MASKED_API_KEY
+                ):
+                    self.llm_api_key = raw_api_key
+                llm_patch['api_key'] = MASKED_API_KEY
+                llm_settings.api_key = None
 
-        if nested_key is not None:
-            self.agent_settings = agent_settings_patch
-            return self
+            if not llm_patch and self.agent_settings_patch_data is not None:
+                self.agent_settings_patch_data.pop('llm', None)
 
-        try:
-            self.agent_settings = AgentSettings.model_validate(agent_settings_patch)
-        except ValidationError:
-            self.agent_settings = agent_settings_patch
+        if not self.agent_settings_patch_data:
+            self.agent_settings_patch_data = None
         return self
 
     def has_updates(self) -> bool:
-        """Check if any field is set (not None)."""
+        """Check if any public update field is set (not None)."""
         return any(
-            getattr(self, field) is not None for field in type(self).model_fields
+            getattr(self, field) is not None
+            for field in (
+                'agent_settings',
+                'conversation_settings',
+                'search_api_key',
+                'llm_api_key',
+            )
         )
 
     def apply_to_org(self, org: Org) -> None:
