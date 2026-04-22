@@ -310,18 +310,6 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
 
         return user_message, ''
 
-    async def send_message_to_v0_conversation(self, jinja: Environment):
-        """Send a message to a v0 conversation.
-
-        Note: This functionality has been deprecated as part of the V0 to V1 migration.
-        The conversation_manager has been removed and this method needs to be reimplemented
-        using the V1 API. Use send_message_to_v1_conversation instead.
-        """
-        raise NotImplementedError(
-            'send_message_to_v0_conversation is not supported. '
-            'The V0 conversation_manager has been removed. Use V1 API instead.'
-        )
-
     async def send_message_to_v1_conversation(self, jinja: Environment):
         """Send a message to a v1 conversation using the agent server API."""
         # Import services within the method to avoid circular imports
@@ -416,7 +404,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 raise Exception(f'Failed to send message to v1 conversation: {str(e)}')
 
     async def create_or_update_conversation(self, jinja: Environment) -> str:
-        """Send new user message to converation"""
+        """Send new user message to conversation."""
         user_info: SlackUser = self.slack_to_openhands_user
 
         user_id = user_info.keycloak_user_id
@@ -428,10 +416,8 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 f'{user_info.slack_display_name} is not authorized to send messages to this conversation.'
             )
 
-        if self.slack_conversation.v1_enabled:
-            await self.send_message_to_v1_conversation(jinja)
-        else:
-            await self.send_message_to_v0_conversation(jinja)
+        # All conversations use V1 app conversation system
+        await self.send_message_to_v1_conversation(jinja)
 
         return self.conversation_id
 
