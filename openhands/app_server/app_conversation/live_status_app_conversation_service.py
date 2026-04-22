@@ -152,6 +152,25 @@ def _model_supports_reasoning(model: str) -> bool:
         basename = basename.split(':', 1)[0]
     return any(fnmatchcase(basename, pat) for pat in _REASONING_EFFORT_PATTERNS)
 
+
+def _model_native_tool_calling_reliable(model: str) -> bool:
+    """Return True if the model reliably supports native tool calling.
+
+    For providers/models where native tool calling is known to be unreliable
+    (e.g. Ollama's small code models often emit tool_calls as inline JSON in
+    the assistant message instead of the structured tool_calls field), we
+    disable native tool calling and let the SDK use prompted function
+    calling, which is more robust.
+    """
+    raw = (model or '').strip().lower()
+    if not raw:
+        return True
+    # Ollama's tool-calling API is inconsistent across local models.
+    # Prompted function calling yields far better reliability there.
+    if raw.startswith('ollama/'):
+        return False
+    return True
+
 # Planning agent instruction to prevent "Ready to proceed?" behavior
 PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
 You are a Planning Agent that can ONLY create plans - you CANNOT execute code or make changes.
@@ -165,6 +184,52 @@ After you finalize the plan in PLAN.md:
 
 Your role ends when the plan is finalized. Implementation is handled by the code agent.
 </IMPORTANT_PLANNING_BOUNDARIES>"""
+
+# Default agent instruction for autonomous, thorough agentic behavior.
+# Optimized for smaller/local models (Ollama, open-weight) that tend to finish
+# prematurely after a single tool call. Competitive-grade agentic defaults.
+AGENTIC_CODING_INSTRUCTION = """<AGENTIC_BEHAVIOR_CONTRACT>
+You are an autonomous coding agent. The user expects you to complete the task
+end-to-end without asking for confirmation between steps. Follow these rules:
+
+1. INVESTIGATE BEFORE YOU ACT. For any ambiguous or open-ended request
+   (debug, analyze, check, review, inspect, fix, improve), run at least 3
+   distinct exploration actions (read files, run commands, search code)
+   before drawing conclusions. Never stop after a single observation.
+
+2. DO NOT FINISH EARLY. Only call `finish` when ALL of the following are true:
+   - The user's goal is fully addressed (or genuinely blocked and the blocker
+     is documented).
+   - You verified your work (tests pass, output matches expectation, errors
+     handled).
+   - You produced a concrete summary of what was done and what was found.
+   If in doubt, do ONE more useful action instead of finishing.
+
+3. PREFER DECISIVE ACTION OVER QUESTIONS. Do not ask the user clarifying
+   questions unless you are truly blocked. Make the most reasonable
+   assumption, state it briefly, and proceed. The user can correct you.
+
+4. EXECUTE, DO NOT PROPOSE. If asked to fix, implement, build, or change
+   something, make the change directly with the available tools. Do not
+   output code as a suggestion and stop.
+
+5. BE THOROUGH IN DIAGNOSTICS. When asked to "check X" or "debug X":
+   - Gather multiple signals (logs, config, runtime state, network, fs).
+   - Cross-reference them. Single-point "looks fine" is not acceptable.
+   - Report concrete findings with file paths, line numbers, command output.
+
+6. USE YOUR FULL TOOLBOX. The sandbox has git, docker CLI, kubectl, helm,
+   gh, uv, poetry, pipx, Node 22, Go, standard UNIX tools. Reach for the
+   right tool; do not limit yourself to `cat`/`ls`.
+
+7. RECOVER FROM FAILURES. If a command fails, diagnose the root cause and
+   retry with a corrected approach. Do not surface the failure to the user
+   and stop unless you have exhausted reasonable alternatives.
+
+8. CONCISE, HIGH-SIGNAL OUTPUT. Summaries to the user should be short,
+   structured, and include the evidence (commands, outputs, file links)
+   that back your conclusions.
+</AGENTIC_BEHAVIOR_CONTRACT>"""
 
 
 @dataclass
@@ -346,6 +411,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     working_dir,
                     request.agent_type,
                     request.llm_model,
+                    llm_base_url=request.llm_base_url,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
                     plugins=request.plugins,
@@ -390,6 +456,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 sandbox_id=sandbox.id,
                 created_by_user_id=user_id,
                 llm_model=start_conversation_request.agent.llm.model,
+                llm_base_url=start_conversation_request.agent.llm.base_url,
                 # Git parameters
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,
@@ -821,9 +888,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not request.git_provider:
             request.git_provider = parent_info.git_provider
 
-        # Inherit LLM model from parent if not provided
+        # Inherit LLM model and base URL from parent if not provided
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
+        if not request.llm_base_url and parent_info.llm_base_url:
+            request.llm_base_url = parent_info.llm_base_url
 
     def _apply_suggested_task(self, request: AppConversationStartRequest) -> None:
         """Apply suggested task defaults to the start request."""
@@ -927,18 +996,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return secrets
 
-    def _configure_llm(self, user: UserInfo, llm_model: str | None) -> LLM:
+    def _configure_llm(
+        self,
+        user: UserInfo,
+        llm_model: str | None,
+        llm_base_url: str | None = None,
+    ) -> LLM:
         """Configure LLM settings.
 
         Args:
             user: User information containing LLM preferences
             llm_model: Optional specific model to use, falls back to user default
+            llm_base_url: Optional base URL override for the LLM provider
 
         Returns:
             Configured LLM instance
         """
         model: str = llm_model or user.llm_model or LLM.model_fields['model'].default
-        base_url = user.llm_base_url
+        base_url = llm_base_url or user.llm_base_url
         if model and (
             model.startswith('openhands/') or model.startswith('litellm_proxy/')
         ):
@@ -960,6 +1035,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             llm_kwargs['reasoning_effort'] = None
             llm_kwargs['enable_encrypted_reasoning'] = False
             llm_kwargs['extended_thinking_budget'] = None
+
+        # For providers with flaky native tool-calling (e.g. Ollama local
+        # models), disable native_tool_calling so the SDK uses prompted
+        # function calling. Otherwise the LLM may emit tool calls as raw
+        # JSON inside the assistant message and they will never execute.
+        if not _model_native_tool_calling_reliable(model):
+            llm_kwargs['native_tool_calling'] = False
 
         return LLM(**llm_kwargs)
 
@@ -1142,7 +1224,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
     async def _configure_llm_and_mcp(
-        self, user: UserInfo, llm_model: str | None, conversation_id: UUID
+        self,
+        user: UserInfo,
+        llm_model: str | None,
+        conversation_id: UUID,
+        llm_base_url: str | None = None,
     ) -> tuple[LLM, dict]:
         """Configure LLM and MCP (Model Context Protocol) settings.
 
@@ -1150,12 +1236,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user: User information containing LLM preferences
             llm_model: Optional specific model to use, falls back to user default
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
+            llm_base_url: Optional base URL override for the LLM provider
 
         Returns:
             Tuple of (configured LLM instance, MCP config dictionary)
         """
         # Configure LLM
-        llm = self._configure_llm(user, llm_model)
+        llm = self._configure_llm(user, llm_model, llm_base_url)
 
         # Configure MCP - SDK expects format: {'mcpServers': {'server_name': {...}}}
         mcp_servers: dict[str, Any] = {}
@@ -1235,6 +1322,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
             else:
                 effective_system_message_suffix = PLANNING_AGENT_INSTRUCTION
+        else:
+            # Prepend agentic-behavior contract for the default (coding) agent.
+            # This nudges smaller/local models to investigate thoroughly and
+            # avoid finishing after a single tool call.
+            if system_message_suffix:
+                effective_system_message_suffix = (
+                    f'{AGENTIC_CODING_INSTRUCTION}\n\n{system_message_suffix}'
+                )
+            else:
+                effective_system_message_suffix = AGENTIC_CODING_INSTRUCTION
 
         # Add agent context
         agent_context = AgentContext(
@@ -1527,6 +1624,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         working_dir: str,
         agent_type: AgentType = AgentType.DEFAULT,
         llm_model: str | None = None,
+        llm_base_url: str | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
@@ -1553,7 +1651,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Configure LLM and MCP
         llm, mcp_config = await self._configure_llm_and_mcp(
-            user, llm_model, conversation_id
+            user, llm_model, conversation_id, llm_base_url
         )
 
         # Create agent with context

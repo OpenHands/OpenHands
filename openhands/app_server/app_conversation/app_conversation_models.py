@@ -83,6 +83,7 @@ class AppConversationInfo(BaseModel):
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
     llm_model: str | None = None
+    llm_base_url: str | None = None
 
     metrics: MetricsSnapshot | None = None
 
@@ -152,6 +153,7 @@ class AppConversationStartRequest(OpenHandsModel):
     system_message_suffix: str | None = None
     processors: list[EventCallbackProcessor] | None = Field(default=None)
     llm_model: str | None = None
+    llm_base_url: str | None = None
 
     # Git parameters
     selected_repository: str | None = None
