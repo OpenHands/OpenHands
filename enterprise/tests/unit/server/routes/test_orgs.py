@@ -1023,6 +1023,88 @@ def mock_owner_role():
 
 
 @pytest.mark.asyncio
+async def test_get_org_success(mock_app_with_get_user_id, mock_owner_role):
+    """GIVEN: Valid org_id and authenticated member
+    WHEN: GET /api/organizations/{org_id} is called
+    THEN: the deprecated detail route still returns the organization response
+    """
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+        agent_settings={
+            'llm': {'model': 'claude-opus-4-5-20251101'},
+            'condenser': {'enabled': True},
+        },
+        enable_proactive_conversation_starters=True,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_owner_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_by_id',
+            AsyncMock(return_value=mock_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=75.5),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+        response = client.get(f'/api/organizations/{org_id}')
+
+    assert response.status_code == status.HTTP_200_OK
+    response_data = response.json()
+    assert response_data['id'] == str(org_id)
+    assert response_data['name'] == 'Test Organization'
+    assert response_data['contact_name'] == 'John Doe'
+    assert response_data['contact_email'] == 'john@example.com'
+    assert response_data['credits'] == 75.5
+    assert response_data['org_version'] == 5
+
+
+@pytest.mark.asyncio
+async def test_get_org_not_found(mock_app_with_get_user_id, mock_owner_role):
+    """GIVEN: Unknown org id
+    WHEN: GET /api/organizations/{org_id} is called
+    THEN: the deprecated detail route returns 404
+    """
+    org_id = uuid.uuid4()
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_owner_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_by_id',
+            AsyncMock(side_effect=OrgNotFoundError(str(org_id))),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+        response = client.get(f'/api/organizations/{org_id}')
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_get_org_invalid_uuid(mock_app_with_get_user_id):
+    """GIVEN: Invalid UUID format
+    WHEN: GET /api/organizations/{org_id} is called
+    THEN: FastAPI returns 422
+    """
+    client = TestClient(mock_app_with_get_user_id)
+    response = client.get('/api/organizations/not-a-valid-uuid')
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
 async def test_get_org_defaults_settings_success():
     """GIVEN: A user can view a specific organization's defaults
     WHEN: the org-id settings route is invoked
