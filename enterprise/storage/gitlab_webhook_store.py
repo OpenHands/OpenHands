@@ -25,6 +25,8 @@ class GitlabWebhookStore:
 
         if webhook.group_id:
             return (GitLabResourceType.GROUP, webhook.group_id)
+        # At this point, project_id must be set (we checked at least one is set above)
+        assert webhook.project_id is not None
         return (GitLabResourceType.PROJECT, webhook.project_id)
 
     async def store_webhooks(self, project_details: list[GitlabWebhook]) -> None:
