@@ -412,8 +412,8 @@ class OrgUpdate(BaseModel):
             if hasattr(org, key):
                 setattr(org, key, value)
 
-    def get_member_updates(self) -> 'OrgMemberLLMSettings | None':
-        """Get updates that need to be propagated to org members.
+    def get_member_updates(self) -> 'OrgMemberSettingsUpdate | None':
+        """Get shared updates that need to be propagated to org members.
 
         An empty ``llm_api_key`` means the org-wide custom key is being cleared
         (e.g. owner switching to a managed/OpenHands provider). It must not
@@ -422,7 +422,7 @@ class OrgUpdate(BaseModel):
         so an empty string would become an encrypted empty blob rather than a
         cleared value. Coerce ``""`` to ``None`` so member rows are untouched.
         """
-        member_settings = OrgMemberLLMSettings(
+        member_settings = OrgMemberSettingsUpdate(
             agent_settings_diff=self.agent_settings_patch(),
             conversation_settings_diff=self.conversation_settings_patch(),
             llm_api_key=self.llm_api_key or None,
@@ -506,8 +506,8 @@ class OrgDefaultsSettingsResponse(BaseModel):
         llm.api_key = None
 
 
-class OrgMemberLLMSettings(BaseModel):
-    """Shared LLM settings that may be propagated to organization members.
+class OrgMemberSettingsUpdate(BaseModel):
+    """Shared settings updates that may be propagated to organization members.
 
     ``llm_api_key`` is typed as ``SecretStr`` so the raw value never ends up
     in logs or ``model_dump(mode='json')`` output by accident — the
@@ -515,7 +515,7 @@ class OrgMemberLLMSettings(BaseModel):
     directly and unwraps via ``get_secret_value()``.
 
     ``has_custom_llm_api_key`` propagates through
-    ``update_all_members_llm_settings_async`` so an org-defaults save can
+    ``update_all_members_settings_async`` so an org-defaults save can
     reset every member's "I have a personal BYOR key" flag in one pass —
     managed-mode switches rely on this to stop load-time fallthrough from
     returning stale custom markers.

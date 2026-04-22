@@ -951,15 +951,15 @@ async def test_get_org_members_paginated_email_filter_case_insensitive(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_llm_api_key(
+async def test_update_all_members_settings_async_with_llm_api_key(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members and llm_api_key in member settings
-    WHEN: update_all_members_llm_settings_async is called with llm_api_key
+    WHEN: update_all_members_settings_async is called with llm_api_key
     THEN: The llm_api_key is encrypted and stored in _llm_api_key column for all members
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
     from storage.encrypt_utils import decrypt_value
 
     # Arrange
@@ -995,10 +995,10 @@ async def test_update_all_members_llm_settings_async_with_llm_api_key(
 
     # Act
     new_api_key = 'new-test-api-key-12345'
-    member_settings = OrgMemberLLMSettings(llm_api_key=new_api_key)
+    member_settings = OrgMemberSettingsUpdate(llm_api_key=new_api_key)
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -1020,15 +1020,15 @@ async def test_update_all_members_llm_settings_async_with_llm_api_key(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
+async def test_update_all_members_settings_async_with_non_encrypted_fields(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members
-    WHEN: update_all_members_llm_settings_async is called with non-encrypted fields
+    WHEN: update_all_members_settings_async is called with non-encrypted fields
     THEN: The fields are updated directly without encryption
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
     async with async_session_maker() as session:
@@ -1061,7 +1061,7 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
         org_id = org.id
 
     # Act
-    member_settings = OrgMemberLLMSettings(
+    member_settings = OrgMemberSettingsUpdate(
         agent_settings_diff={
             'llm': {
                 'model': 'new-model',
@@ -1072,7 +1072,7 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
     )
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -1095,15 +1095,15 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_empty_settings(
+async def test_update_all_members_settings_async_with_empty_settings(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members and empty member settings
-    WHEN: update_all_members_llm_settings_async is called with no fields set
+    WHEN: update_all_members_settings_async is called with no fields set
     THEN: No database update is performed
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
     async with async_session_maker() as session:
@@ -1135,10 +1135,10 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
         org_id = org.id
 
     # Act - Empty settings (all None)
-    member_settings = OrgMemberLLMSettings()
+    member_settings = OrgMemberSettingsUpdate()
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -1158,20 +1158,20 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
 
 
 # =============================================================================
-# OrgMemberLLMSettings and OrgUpdate Model Unit Tests
+# OrgMemberSettingsUpdate and OrgUpdate Model Unit Tests
 # =============================================================================
 
 
-def test_org_member_llm_settings_has_updates_with_llm_api_key():
+def test_org_member_settings_update_has_updates_with_llm_api_key():
     """
-    GIVEN: OrgMemberLLMSettings with only llm_api_key set
+    GIVEN: OrgMemberSettingsUpdate with only llm_api_key set
     WHEN: has_updates() is called
     THEN: Returns True
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
-    settings = OrgMemberLLMSettings(llm_api_key='test-key')
+    settings = OrgMemberSettingsUpdate(llm_api_key='test-key')
 
     # Act
     result = settings.has_updates()
@@ -1180,16 +1180,16 @@ def test_org_member_llm_settings_has_updates_with_llm_api_key():
     assert result is True
 
 
-def test_org_member_llm_settings_has_updates_empty():
+def test_org_member_settings_update_has_updates_empty():
     """
-    GIVEN: OrgMemberLLMSettings with no fields set
+    GIVEN: OrgMemberSettingsUpdate with no fields set
     WHEN: has_updates() is called
     THEN: Returns False
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
-    settings = OrgMemberLLMSettings()
+    settings = OrgMemberSettingsUpdate()
 
     # Act
     result = settings.has_updates()
@@ -1229,7 +1229,7 @@ def test_org_update_get_member_updates_includes_llm_api_key():
     """
     GIVEN: OrgUpdate with agent_settings and llm_api_key set
     WHEN: get_member_updates() is called
-    THEN: Returns OrgMemberLLMSettings including both the diff and llm_api_key
+    THEN: Returns OrgMemberSettingsUpdate including both the diff and llm_api_key
     """
     from server.routes.org_models import OrgUpdate
 
@@ -1252,7 +1252,7 @@ def test_org_update_get_member_updates_only_llm_api_key():
     """
     GIVEN: OrgUpdate with only llm_api_key set
     WHEN: get_member_updates() is called
-    THEN: Returns OrgMemberLLMSettings with llm_api_key (not None)
+    THEN: Returns OrgMemberSettingsUpdate with llm_api_key (not None)
     """
     from server.routes.org_models import OrgUpdate
 

@@ -1052,7 +1052,7 @@ async def test_update_org_defaults_async_with_llm_api_key():
     with (
         patch('storage.org_store.a_session_maker', mock_a_session_maker),
         patch(
-            'storage.org_member_store.OrgMemberStore.update_all_members_llm_settings_async',
+            'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
             AsyncMock(),
         ) as mock_member_update,
     ):
@@ -1110,7 +1110,7 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
             AsyncMock(return_value='managed-key'),
         ),
         patch(
-            'storage.org_member_store.OrgMemberStore.update_all_members_llm_settings_async',
+            'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
             AsyncMock(),
         ) as mock_member_update,
     ):

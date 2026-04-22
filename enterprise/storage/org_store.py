@@ -10,7 +10,11 @@ from server.constants import (
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
 )
-from server.routes.org_models import OrgMemberLLMSettings, OrgUpdate, OrphanedUserError
+from server.routes.org_models import (
+    OrgMemberSettingsUpdate,
+    OrgUpdate,
+    OrphanedUserError,
+)
 from sqlalchemy import select, text
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
@@ -550,12 +554,12 @@ class OrgStore:
             )
             if effective_managed_key is not None:
                 if member_updates is None:
-                    member_updates = OrgMemberLLMSettings()
+                    member_updates = OrgMemberSettingsUpdate()
                 member_updates.llm_api_key = SecretStr(effective_managed_key)
 
             if member_updates is not None:
                 member_updates.has_custom_llm_api_key = False
-                await OrgMemberStore.update_all_members_llm_settings_async(
+                await OrgMemberStore.update_all_members_settings_async(
                     session, org_id, member_updates
                 )
 

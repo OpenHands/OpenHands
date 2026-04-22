@@ -187,6 +187,7 @@ The `enterprise/` directory contains additional functionality that extends the o
 - For enterprise org-defaults writes, keep `OrgUpdate` as the single typed update model.
 - The deprecated `/api/organizations/llm` endpoints should stay thin compatibility wrappers instead of introducing separate `OrgLLM*` route/service/store classes.
 - Shared org-defaults serialization for that wrapper currently lives in `OrgDefaultsSettingsResponse` in `enterprise/server/routes/org_models.py`.
+- Member-level propagation on that path now uses neutral `OrgMemberSettingsUpdate` / `update_all_members_settings_async` naming instead of legacy `OrgMemberLLM*` names.
 
 **Running Enterprise Tests:**
 ```bash
