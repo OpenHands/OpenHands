@@ -1003,6 +1003,13 @@ describe("LlmSettingsScreen", () => {
           ...persistedSettings.agent_settings,
         } as NonNullable<Settings["agent_settings"]>;
 
+        const agentSettingsDiff = payload.agent_settings_diff as
+          | Settings["agent_settings"]
+          | undefined;
+        if (agentSettingsDiff) {
+          Object.assign(nextAgentSettings, agentSettingsDiff);
+        }
+
         Object.entries(payload).forEach(([key, value]) => {
           if (key.includes(".") || key === "agent" || key === "mcp_config") {
             nextAgentSettings[key] = value as SettingsValue;
@@ -1031,7 +1038,7 @@ describe("LlmSettingsScreen", () => {
     await waitFor(() => {
       expect(saveOrganizationSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          agent_settings: expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
             llm: expect.objectContaining({
               api_key: "test-api-key",
               base_url: null,

@@ -24,8 +24,10 @@ const saveSettingsMutationFn = async (
   const conversationSettingsKey =
     scope === "org" ? "conversation_settings_diff" : "conversation_settings";
   const conversationSettings = {
-    ...((settingsToSave[conversationSettingsKey] as Record<string, SettingsValue>) ??
-      {}),
+    ...((settingsToSave[conversationSettingsKey] as Record<
+      string,
+      SettingsValue
+    >) ?? {}),
   };
 
   if (Object.keys(conversationSettings).length > 0) {
