@@ -217,7 +217,7 @@ class LiteLlmManager:
 
         oss_settings.update(
             {
-                'agent_settings': {
+                'agent_settings_diff': {
                     'agent': 'CodeActAgent',
                     'llm': {
                         'model': get_default_litellm_model(),

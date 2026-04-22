@@ -26,6 +26,7 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import (
+    ColumnElement,
     DateTime,
     Select,
     String,
@@ -241,7 +242,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         sandbox_id__eq: str | None = None,
     ) -> Select:
         # Apply the same filters as search_app_conversations
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
                 StoredConversationMetadata.title.like(f'%{title__contains}%')
@@ -569,10 +570,15 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             updated_at=updated_at,
         )
 
-    def _fix_timezone(self, value: datetime) -> datetime:
-        """Sqlite does not stpre timezones - and since we can't update the existing models
-        we assume UTC if the timezone is missing.
+    def _fix_timezone(self, value: datetime | None) -> datetime:
+        """Sqlite does not store timezones - and since we can't update the existing models
+        we assume UTC if the timezone is missing. Returns current UTC time if value is None.
         """
+        if value is None:
+            # Fallback for legacy data: use current time to match model defaults.
+            # The DB columns have default=utc_now, so None only occurs in legacy records.
+            # Using utc_now() keeps the API model non-nullable and matches new record behavior.
+            return utc_now()
         if not value.tzinfo:
             value = value.replace(tzinfo=UTC)
         return value
