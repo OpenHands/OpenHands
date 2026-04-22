@@ -8,30 +8,22 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import uuid
 from types import MappingProxyType
-from typing import Any
 
-from pydantic import SecretStr
-
-from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.logger import openhands_logger as logger
-from openhands.events.action.message import MessageAction
 from openhands.integrations.provider import (
-    CUSTOM_SECRETS_TYPE,
     PROVIDER_TOKEN_TYPE,
     ProviderToken,
 )
 from openhands.integrations.service_types import ProviderType
-from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 from openhands.server.session.conversation_init_data import ConversationInitData
 from openhands.server.shared import (
     ConversationStoreImpl,
     SecretsStoreImpl,
     SettingsStoreImpl,
     config,
-    conversation_manager,
     server_config,
 )
-from openhands.server.types import AppMode, LLMAuthenticationError, MissingSettingsError
+from openhands.server.types import AppMode
 from openhands.storage.data_models.conversation_metadata import (
     ConversationMetadata,
     ConversationTrigger,
@@ -77,137 +69,6 @@ async def initialize_conversation(
 
     conversation_metadata = await conversation_store.get_metadata(conversation_id)
     return conversation_metadata
-
-
-async def start_conversation(
-    user_id: str | None,
-    git_provider_tokens: PROVIDER_TOKEN_TYPE | None,
-    custom_secrets: CUSTOM_SECRETS_TYPE | None,
-    initial_user_msg: str | None,
-    image_urls: list[str] | None,
-    replay_json: str | None,
-    conversation_id: str,
-    conversation_metadata: ConversationMetadata,
-    conversation_instructions: str | None,
-    mcp_config: MCPConfig | None = None,
-) -> AgentLoopInfo:
-    logger.info(
-        'Creating conversation',
-        extra={
-            'signal': 'create_conversation',
-            'user_id': user_id,
-            'trigger': conversation_metadata.trigger,
-        },
-    )
-    logger.info('Loading settings')
-    settings_store = await SettingsStoreImpl.get_instance(config, user_id)
-    settings = await settings_store.load()
-    logger.info('Settings loaded')
-
-    session_init_args: dict[str, Any] = {}
-    if settings:
-        session_init_args = settings.model_dump()
-        agent_settings = settings.agent_settings
-        # We could use litellm.check_valid_key for a more accurate check,
-        # but that would run a tiny inference.
-        model_name = agent_settings.llm.model
-        llm_api_key = settings.agent_settings.llm.api_key
-        is_bedrock_model = model_name.startswith('bedrock/')
-        is_lemonade_model = model_name.startswith('lemonade/')
-
-        key_value: str | None = None
-        if isinstance(llm_api_key, SecretStr):
-            key_value = llm_api_key.get_secret_value()
-        elif isinstance(llm_api_key, str):
-            key_value = llm_api_key
-        if (
-            not is_bedrock_model
-            and not is_lemonade_model
-            and (not key_value or key_value.isspace())
-        ):
-            logger.warning(f'Missing api key for model {model_name}')
-            raise LLMAuthenticationError(
-                'Error authenticating with the LLM provider. Please check your API key'
-            )
-        elif is_bedrock_model:
-            logger.info(f'Bedrock model detected ({model_name}), API key not required')
-
-    else:
-        logger.warning('Settings not present, not starting conversation')
-        raise MissingSettingsError('Settings not found')
-
-    session_init_args['git_provider_tokens'] = git_provider_tokens
-    session_init_args['selected_repository'] = conversation_metadata.selected_repository
-    session_init_args['custom_secrets'] = custom_secrets
-    session_init_args['selected_branch'] = conversation_metadata.selected_branch
-    session_init_args['git_provider'] = conversation_metadata.git_provider
-    session_init_args['conversation_instructions'] = conversation_instructions
-    if mcp_config:
-        agent_settings_payload = dict(session_init_args.get('agent_settings') or {})
-        agent_settings_payload['mcp_config'] = mcp_config.model_dump(mode='python')
-        session_init_args['agent_settings'] = agent_settings_payload
-
-    conversation_init_data = ConversationInitData(**session_init_args)
-
-    logger.info(
-        f'Starting agent loop for conversation {conversation_id}',
-        extra={'user_id': user_id, 'session_id': conversation_id},
-    )
-
-    initial_message_action = None
-    if initial_user_msg or image_urls:
-        initial_message_action = MessageAction(
-            content=initial_user_msg or '',
-            image_urls=image_urls or [],
-        )
-
-    agent_loop_info = await conversation_manager.maybe_start_agent_loop(
-        conversation_id,
-        conversation_init_data,
-        user_id,
-        initial_user_msg=initial_message_action,
-        replay_json=replay_json,
-    )
-    logger.info(f'Finished initializing conversation {agent_loop_info.conversation_id}')
-    return agent_loop_info
-
-
-async def create_new_conversation(
-    user_id: str | None,
-    git_provider_tokens: PROVIDER_TOKEN_TYPE | None,
-    custom_secrets: CUSTOM_SECRETS_TYPE | None,
-    selected_repository: str | None,
-    selected_branch: str | None,
-    initial_user_msg: str | None,
-    image_urls: list[str] | None,
-    replay_json: str | None,
-    conversation_instructions: str | None = None,
-    conversation_trigger: ConversationTrigger = ConversationTrigger.GUI,
-    git_provider: ProviderType | None = None,
-    conversation_id: str | None = None,
-    mcp_config: MCPConfig | None = None,
-) -> AgentLoopInfo:
-    conversation_metadata = await initialize_conversation(
-        user_id,
-        conversation_id,
-        selected_repository,
-        selected_branch,
-        conversation_trigger,
-        git_provider,
-    )
-
-    return await start_conversation(
-        user_id,
-        git_provider_tokens,
-        custom_secrets,
-        initial_user_msg,
-        image_urls,
-        replay_json,
-        conversation_metadata.conversation_id,
-        conversation_metadata,
-        conversation_instructions,
-        mcp_config,
-    )
 
 
 def create_provider_tokens_object(
