@@ -1090,7 +1090,9 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
         name='Test Organization',
         agent_settings=AgentSettings(llm={'model': 'openhands/claude-3'}),
     )
-    update_data = OrgUpdate(agent_settings_diff={'llm': {'model': 'openhands/claude-3'}})
+    update_data = OrgUpdate(
+        agent_settings_diff={'llm': {'model': 'openhands/claude-3'}}
+    )
 
     mock_session = AsyncMock()
     mock_result = MagicMock()

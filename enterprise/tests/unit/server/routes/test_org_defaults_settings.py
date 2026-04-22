@@ -12,7 +12,6 @@ from server.routes.org_models import (
 from storage.org import Org
 
 
-
 def test_org_update_keeps_sparse_diff_dicts():
     """OrgUpdate should preserve sparse org-default diffs as dictionaries."""
     update_data = OrgUpdate.model_validate(

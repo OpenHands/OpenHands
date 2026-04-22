@@ -244,9 +244,7 @@ class OrgStore:
             # ``hasattr(org, 'agent_settings')`` is True and the loop would
             # *overwrite* the JSON column instead of deep-merging into it.
             agent_settings_diff = kwargs.pop('agent_settings_diff', None)
-            conversation_settings_diff = kwargs.pop(
-                'conversation_settings_diff', None
-            )
+            conversation_settings_diff = kwargs.pop('conversation_settings_diff', None)
             for key, value in kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
