@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, AsyncGenerator, Union
 from urllib.parse import urlparse
 from uuid import UUID
@@ -11,8 +12,9 @@ import base62
 import httpx
 from fastapi import Request
 from pydantic import Field
-from sqlalchemy import Column, String, func, select
+from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
 from openhands.agent_server.models import ConversationInfo, EventPage
 from openhands.agent_server.utils import utc_now
@@ -71,7 +73,7 @@ def _hash_session_api_key(session_api_key: str) -> str:
     return hashlib.sha256(session_api_key.encode()).hexdigest()
 
 
-class StoredRemoteSandbox(Base):  # type: ignore
+class StoredRemoteSandbox(Base):
     """Local storage for remote sandbox info.
 
     The remote runtime API does not return some variables we need, and does not
@@ -80,11 +82,20 @@ class StoredRemoteSandbox(Base):  # type: ignore
     run historicallly."""
 
     __tablename__ = 'v1_remote_sandbox'
-    id = Column(String, primary_key=True)
-    created_by_user_id = Column(String, nullable=True, index=True)
-    sandbox_spec_id = Column(String, index=True)  # shadows runtime['image']
-    session_api_key_hash = Column(String, nullable=True, index=True)
-    created_at = Column(UtcDateTime, server_default=func.now(), index=True)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    sandbox_spec_id: Mapped[str] = mapped_column(
+        String, index=True
+    )  # shadows runtime['image']
+    session_api_key_hash: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now(), index=True
+    )
 
 
 @dataclass

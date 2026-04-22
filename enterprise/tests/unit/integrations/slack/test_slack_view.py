@@ -1,9 +1,8 @@
-"""Tests for the Slack view classes and their v1 vs v0 conversation handling.
+"""Tests for the Slack view classes and V1 conversation handling.
 
-Focuses on the 3 essential scenarios:
-1. V1 vs V0 decision logic based on user setting
-2. Message routing to correct method based on conversation v1 flag
-3. Paused sandbox resumption for V1 conversations
+Focuses on V1 conversation scenarios:
+1. V1 conversation creation
+2. Paused sandbox resumption for V1 conversations
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -70,37 +69,7 @@ def slack_new_conversation_view(mock_slack_user, mock_user_auth):
         send_summary_instruction=True,
         conversation_id='',
         team_id='T1234567890',
-        v1_enabled=False,
-    )
-
-
-@pytest.fixture
-def slack_update_conversation_view_v0(mock_slack_user, mock_user_auth):
-    """Create a SlackUpdateExistingConversationView instance for V0."""
-    conversation_id = '87654321-4321-8765-4321-876543218765'
-    mock_conversation = SlackConversation(
-        conversation_id=conversation_id,
-        channel_id='C1234567890',
-        keycloak_user_id='test-user-123',
-        parent_id='1234567890.123456',
-        v1_enabled=False,
-    )
-    return SlackUpdateExistingConversationView(
-        bot_access_token='xoxb-test-token',
-        user_msg='Follow up message',
-        slack_user_id='U1234567890',
-        slack_to_openhands_user=mock_slack_user,
-        saas_user_auth=mock_user_auth,
-        channel_id='C1234567890',
-        message_ts='1234567890.123457',
-        thread_ts='1234567890.123456',
-        selected_repo=None,
-        should_extract=True,
-        send_summary_instruction=True,
-        conversation_id=conversation_id,
-        slack_conversation=mock_conversation,
-        team_id='T1234567890',
-        v1_enabled=False,
+        v1_enabled=True,
     )
 
 
@@ -135,38 +104,26 @@ def slack_update_conversation_view_v1(mock_slack_user, mock_user_auth):
 
 
 # ---------------------------------------------------------------------------
-# Test 1: V1 vs V0 Decision Logic Based on User Setting
+# Test: V1 Conversation Creation
 # ---------------------------------------------------------------------------
 
 
-class TestV1V0DecisionLogic:
-    """Test the decision logic for choosing between V1 and V0 conversations based on user setting."""
+class TestV1ConversationCreation:
+    """Test V1 conversation creation in Slack integration."""
 
-    @pytest.mark.parametrize(
-        'v1_enabled,expected_v1_flag',
-        [
-            (True, True),  # V1 enabled, use V1
-            (False, False),  # V1 disabled, use V0
-        ],
-    )
     @patch('integrations.slack.slack_view.is_v1_enabled_for_slack_resolver')
     @patch.object(SlackNewConversationView, '_create_v1_conversation')
-    @patch.object(SlackNewConversationView, '_create_v0_conversation')
-    async def test_v1_v0_decision_logic(
+    async def test_v1_conversation_creation(
         self,
-        mock_create_v0,
         mock_create_v1,
         mock_is_v1_enabled,
         slack_new_conversation_view,
         mock_jinja_env,
-        v1_enabled,
-        expected_v1_flag,
     ):
-        """Test the decision logic for V1 vs V0 conversation creation based on user setting."""
+        """Test that V1 conversations are created correctly."""
         # Setup mocks
-        mock_is_v1_enabled.return_value = v1_enabled
+        mock_is_v1_enabled.return_value = True
         mock_create_v1.return_value = None
-        mock_create_v0.return_value = None
 
         # Execute
         result = await slack_new_conversation_view.create_or_update_conversation(
@@ -175,40 +132,29 @@ class TestV1V0DecisionLogic:
 
         # Verify
         assert result == slack_new_conversation_view.conversation_id
-        assert slack_new_conversation_view.v1_enabled == expected_v1_flag
-
-        if v1_enabled:
-            mock_create_v1.assert_called_once()
-            mock_create_v0.assert_not_called()
-        else:
-            mock_create_v1.assert_not_called()
-            mock_create_v0.assert_called_once()
+        assert slack_new_conversation_view.v1_enabled is True
+        mock_create_v1.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
-# Test 2: Message Routing Based on Conversation V1 Flag
+# Test: Message Routing to V1
 # ---------------------------------------------------------------------------
 
 
 class TestMessageRouting:
-    """Test that message sending routes to correct method based on conversation v1 flag."""
+    """Test that message sending routes to V1 method."""
 
     @patch.object(
         SlackUpdateExistingConversationView, 'send_message_to_v1_conversation'
     )
-    @patch.object(
-        SlackUpdateExistingConversationView, 'send_message_to_v0_conversation'
-    )
     async def test_message_routing_to_v1(
         self,
-        mock_send_v0,
         mock_send_v1,
         slack_update_conversation_view_v1,
         mock_jinja_env,
     ):
         """Test that V1 conversations route to V1 message sending method."""
         # Setup
-        mock_send_v0.return_value = None
         mock_send_v1.return_value = None
 
         # Execute
@@ -219,39 +165,10 @@ class TestMessageRouting:
         # Verify
         assert result == slack_update_conversation_view_v1.conversation_id
         mock_send_v1.assert_called_once_with(mock_jinja_env)
-        mock_send_v0.assert_not_called()
-
-    @patch.object(
-        SlackUpdateExistingConversationView, 'send_message_to_v1_conversation'
-    )
-    @patch.object(
-        SlackUpdateExistingConversationView, 'send_message_to_v0_conversation'
-    )
-    async def test_message_routing_to_v0(
-        self,
-        mock_send_v0,
-        mock_send_v1,
-        slack_update_conversation_view_v0,
-        mock_jinja_env,
-    ):
-        """Test that V0 conversations route to V0 message sending method."""
-        # Setup
-        mock_send_v0.return_value = None
-        mock_send_v1.return_value = None
-
-        # Execute
-        result = await slack_update_conversation_view_v0.create_or_update_conversation(
-            mock_jinja_env
-        )
-
-        # Verify
-        assert result == slack_update_conversation_view_v0.conversation_id
-        mock_send_v0.assert_called_once_with(mock_jinja_env)
-        mock_send_v1.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
-# Test 3: Paused Sandbox Resumption for V1 Conversations
+# Test: Paused Sandbox Resumption for V1 Conversations
 # ---------------------------------------------------------------------------
 
 
