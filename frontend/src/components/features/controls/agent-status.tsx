@@ -14,6 +14,7 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
+import { useAgentNotification } from "#/hooks/use-agent-notification";
 
 export interface AgentStatusProps {
   className?: string;
@@ -33,6 +34,9 @@ export function AgentStatus({
   const { t } = useTranslation();
   const { setShouldShownAgentLoading } = useConversationStore();
   const { curAgentState, executionStatus } = useAgentState();
+
+  // Trigger browser tab flash and notification sound on state changes
+  useAgentNotification(curAgentState);
   const webSocketStatus = useUnifiedWebSocketStatus();
   const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
