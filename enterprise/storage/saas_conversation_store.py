@@ -34,14 +34,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SaasConversationStore(ConversationStore):
     user_id: str
-    session_maker: Callable[..., ContextManager[Session]]
+    session_maker: Callable[[], ContextManager[Session]]
     org_id: UUID | None = None  # will be fetched automatically
 
     def __init__(
         self,
         user_id: str,
         org_id: UUID | None,
-        session_maker: Callable[..., ContextManager[Session]],
+        session_maker: Callable[[], ContextManager[Session]],
         resolver_org_id: UUID | None = None,
     ):
         self.user_id = user_id
