@@ -44,6 +44,7 @@ from server.routes.orgs import (
 )
 from storage.org import Org
 
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.server.user_auth import get_user_id
 
 # Test user ID constant (must be a valid UUID string)
@@ -1029,12 +1030,11 @@ async def test_get_org_defaults_settings_success():
     """
     org_id = uuid.uuid4()
     mock_org = MagicMock(spec=Org)
-    mock_org.agent_settings = {
-        'schema_version': 1,
-        'agent': 'CodeActAgent',
-        'llm': {'model': 'litellm_proxy/claude-3', 'base_url': 'https://proxy.example'},
-    }
-    mock_org.conversation_settings = {'security_analyzer': 'llm'}
+    mock_org.agent_settings = AgentSettings(
+        agent='CodeActAgent',
+        llm={'model': 'openhands/claude-3', 'base_url': 'https://proxy.example'},
+    )
+    mock_org.conversation_settings = ConversationSettings(security_analyzer='llm')
     mock_org.llm_api_key = None
     mock_org.search_api_key = None
 
@@ -1058,14 +1058,13 @@ async def test_update_org_defaults_settings_forwards_through_org_service():
     """
     org_id = uuid.uuid4()
     updated_org = MagicMock(spec=Org)
-    updated_org.agent_settings = {
-        'schema_version': 1,
-        'llm': {
-            'model': 'litellm_proxy/claude-3.5-sonnet',
+    updated_org.agent_settings = AgentSettings(
+        llm={
+            'model': 'openhands/claude-3.5-sonnet',
             'base_url': 'https://proxy.example',
-        },
-    }
-    updated_org.conversation_settings = {'confirmation_mode': False}
+        }
+    )
+    updated_org.conversation_settings = ConversationSettings(confirmation_mode=False)
     updated_org.llm_api_key = 'secret'
     updated_org.search_api_key = None
 
@@ -2727,13 +2726,13 @@ class TestGetMeEndpoint:
         status_val='active',
     ):
         """Create a MeResponse for testing."""
-        agent_settings = {'schema_version': 1}
+        agent_settings_diff = {'schema_version': 1}
         if llm_model is not None:
-            agent_settings.setdefault('llm', {})['model'] = llm_model
+            agent_settings_diff.setdefault('llm', {})['model'] = llm_model
         if llm_base_url is not None:
-            agent_settings.setdefault('llm', {})['base_url'] = llm_base_url
+            agent_settings_diff.setdefault('llm', {})['base_url'] = llm_base_url
         if max_iterations is not None:
-            agent_settings['max_iterations'] = max_iterations
+            agent_settings_diff['max_iterations'] = max_iterations
 
         return MeResponse(
             org_id=str(org_id),
@@ -2741,7 +2740,7 @@ class TestGetMeEndpoint:
             email=email,
             role=role,
             llm_api_key=llm_api_key,
-            agent_settings_diff=agent_settings,
+            agent_settings_diff=agent_settings_diff,
             status=status_val,
         )
 
