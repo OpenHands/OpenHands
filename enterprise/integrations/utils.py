@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader
 from server.constants import WEB_HOST
@@ -20,12 +19,6 @@ from openhands.events.event_filter import EventFilter
 from openhands.events.event_store_abc import EventStoreABC
 from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.integrations.service_types import Repository
-from openhands.storage.data_models.conversation_status import ConversationStatus
-
-if TYPE_CHECKING:
-    from openhands.server.conversation_manager.conversation_manager import (
-        ConversationManager,
-    )
 
 # ---- DO NOT REMOVE ----
 # WARNING: Langfuse depends on the WEB_HOST environment variable being set to track events.
@@ -361,43 +354,6 @@ def extract_summary_from_event_store(
 
     assert isinstance(summary_event, AgentFinishAction)
     return summary_event.final_thought
-
-
-async def get_event_store_from_conversation_manager(
-    conversation_manager: ConversationManager, conversation_id: str
-) -> EventStoreABC:
-    agent_loop_infos = await conversation_manager.get_agent_loop_info(
-        filter_to_sids={conversation_id}
-    )
-    if not agent_loop_infos or agent_loop_infos[0].status != ConversationStatus.RUNNING:
-        raise RuntimeError(f'conversation_not_running:{conversation_id}')
-    event_store = agent_loop_infos[0].event_store
-    if not event_store:
-        raise RuntimeError(f'event_store_missing:{conversation_id}')
-    return event_store
-
-
-async def get_last_user_msg_from_conversation_manager(
-    conversation_manager: ConversationManager, conversation_id: str
-):
-    event_store = await get_event_store_from_conversation_manager(
-        conversation_manager, conversation_id
-    )
-    return get_last_user_msg(event_store)
-
-
-async def extract_summary_from_conversation_manager(
-    conversation_manager: ConversationManager, conversation_id: str
-) -> str:
-    """
-    Get agent summary or alternative message depending on current AgentState
-    """
-
-    event_store = await get_event_store_from_conversation_manager(
-        conversation_manager, conversation_id
-    )
-    summary = extract_summary_from_event_store(event_store, conversation_id)
-    return append_conversation_footer(summary, conversation_id)
 
 
 def append_conversation_footer(message: str, conversation_id: str) -> str:

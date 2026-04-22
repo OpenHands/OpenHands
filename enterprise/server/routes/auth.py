@@ -31,7 +31,6 @@ from server.constants import (
     DEPLOYMENT_MODE,
     IS_FEATURE_ENV,
 )
-from server.routes.event_webhook import _get_session_api_key, _get_user_id
 from server.services.org_invitation_service import (
     EmailMismatchError,
     InvitationExpiredError,
@@ -39,6 +38,7 @@ from server.services.org_invitation_service import (
     OrgInvitationService,
     UserAlreadyMemberError,
 )
+from server.utils.conversation_utils import get_session_api_key, get_user_id
 from server.utils.rate_limit_utils import check_rate_limit_by_user_id
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
 from sqlalchemy import select
@@ -770,8 +770,8 @@ async def refresh_tokens(
     x_session_api_key: Annotated[str | None, Header(alias='X-Session-API-Key')],
 ) -> TokenResponse:
     """Return the latest token for a given provider."""
-    user_id = _get_user_id(sid)
-    session_api_key = await _get_session_api_key(user_id, sid)
+    user_id = get_user_id(sid)
+    session_api_key = await get_session_api_key(sid)
     if session_api_key != x_session_api_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Forbidden')
 
