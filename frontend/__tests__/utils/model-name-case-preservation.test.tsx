@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { extractSettings } from "#/utils/settings-utils";
 
 function getLlmModel(settings: ReturnType<typeof extractSettings>): unknown {
-  const as = settings.agent_settings as Record<string, unknown> | undefined;
+  const as = settings.agent_settings_diff as Record<string, unknown> | undefined;
   const llm = as?.llm as Record<string, unknown> | undefined;
   return llm?.model;
 }

@@ -40,7 +40,7 @@ export function SettingsForm({ settings, onClose }: SettingsFormProps) {
         onClose();
 
         const agentLlm =
-          ((newSettings.agent_settings as Record<string, unknown>)
+          ((newSettings.agent_settings_diff as Record<string, unknown>)
             ?.llm as Record<string, unknown>) ?? {};
         posthog.capture("settings_saved", {
           LLM_MODEL: agentLlm.model,

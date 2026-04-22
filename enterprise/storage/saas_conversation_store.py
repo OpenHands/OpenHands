@@ -4,10 +4,13 @@ import dataclasses
 import logging
 from dataclasses import dataclass
 from datetime import UTC
+from typing import TYPE_CHECKING, Callable, ContextManager
 from uuid import UUID
 
-from sqlalchemy.orm import sessionmaker
 from storage.database import session_maker
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user_store import UserStore
@@ -31,14 +34,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SaasConversationStore(ConversationStore):
     user_id: str
-    session_maker: sessionmaker
+    session_maker: Callable[[], ContextManager[Session]]
     org_id: UUID | None = None  # will be fetched automatically
 
     def __init__(
         self,
         user_id: str,
-        org_id: UUID,
-        session_maker: sessionmaker,
+        org_id: UUID | None,
+        session_maker: Callable[[], ContextManager[Session]],
         resolver_org_id: UUID | None = None,
     ):
         self.user_id = user_id

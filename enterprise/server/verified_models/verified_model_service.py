@@ -138,7 +138,8 @@ class VerifiedModelService:
             )
         )
         result = await self.db_session.execute(query)
-        return result.scalars().first()
+        stored = result.scalars().first()
+        return verified_model(stored) if stored else None
 
     async def create_verified_model(
         self,
