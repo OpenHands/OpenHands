@@ -192,14 +192,33 @@ async def test_keycloak_callback_success_with_valid_offline_token(
     mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test successful keycloak_callback with valid offline token."""
+    mock_analytics = MagicMock()
+    mock_org = MagicMock()
+    mock_org.id = 'test_org_id'
+    mock_org.name = 'Test Org'
+
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
         patch('server.routes.auth.UserStore') as mock_user_store,
-        patch('server.routes.auth.get_analytics_service'),
         patch(
-            'storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock
-        ) as _mock_get_org,
+            'server.routes.auth.get_analytics_service', return_value=mock_analytics
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            return_value=1,
+        ),
         patch(
             'server.routes.auth._should_redirect_to_onboarding',
             new_callable=AsyncMock,
@@ -258,12 +277,28 @@ async def test_keycloak_callback_success_with_valid_offline_token(
             secure=False,
             accepted_tos=True,
         )
-        # Verify analytics tracking is scheduled as a background task
+
+        # Verify background task was scheduled and execute it to test analytics
         mock_background_tasks.add_task.assert_called_once()
-        call_args = mock_background_tasks.add_task.call_args
-        assert call_args[1]['user_id'] == 'test_user_id'
-        assert call_args[1]['idp'] == 'github'
-        assert call_args[1]['consented'] is True
+        background_fn = mock_background_tasks.add_task.call_args[0][0]
+        background_kwargs = mock_background_tasks.add_task.call_args[1]
+
+        # Execute the background function to verify analytics logic
+        await background_fn(**background_kwargs)
+
+        # Verify analytics service was called correctly
+        mock_analytics.identify_user.assert_called_once()
+        identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+        assert identify_kwargs['distinct_id'] == 'test_user_id'
+        assert identify_kwargs['idp'] == 'github'
+        assert identify_kwargs['consented'] is True
+
+        mock_analytics.track_user_logged_in.assert_called_once_with(
+            distinct_id='test_user_id',
+            idp='github',
+            org_id='test_org_id',
+            consented=True,
+        )
 
 
 @pytest.mark.asyncio
@@ -458,6 +493,11 @@ async def test_keycloak_callback_success_without_offline_token(
     mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test successful keycloak_callback without valid offline token."""
+    mock_analytics = MagicMock()
+    mock_org = MagicMock()
+    mock_org.id = 'test_org_id'
+    mock_org.name = 'Test Org'
+
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
@@ -467,10 +507,24 @@ async def test_keycloak_callback_success_without_offline_token(
         patch('server.routes.auth.KEYCLOAK_REALM_NAME', 'test-realm'),
         patch('server.routes.auth.KEYCLOAK_CLIENT_ID', 'test-client'),
         patch('server.routes.auth.UserStore') as mock_user_store,
-        patch('server.routes.auth.get_analytics_service'),
         patch(
-            'storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock
-        ) as _mock_get_org,
+            'server.routes.auth.get_analytics_service', return_value=mock_analytics
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            return_value=1,
+        ),
         patch(
             'server.routes.auth._should_redirect_to_onboarding',
             new_callable=AsyncMock,
@@ -534,12 +588,28 @@ async def test_keycloak_callback_success_without_offline_token(
             secure=False,
             accepted_tos=True,
         )
-        # Verify analytics tracking is scheduled as a background task
+
+        # Verify background task was scheduled and execute it to test analytics
         mock_background_tasks.add_task.assert_called_once()
-        call_args = mock_background_tasks.add_task.call_args
-        assert call_args[1]['user_id'] == 'test_user_id'
-        assert call_args[1]['idp'] == 'github'
-        assert call_args[1]['consented'] is True
+        background_fn = mock_background_tasks.add_task.call_args[0][0]
+        background_kwargs = mock_background_tasks.add_task.call_args[1]
+
+        # Execute the background function to verify analytics logic
+        await background_fn(**background_kwargs)
+
+        # Verify analytics service was called correctly
+        mock_analytics.identify_user.assert_called_once()
+        identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+        assert identify_kwargs['distinct_id'] == 'test_user_id'
+        assert identify_kwargs['idp'] == 'github'
+        assert identify_kwargs['consented'] is True
+
+        mock_analytics.track_user_logged_in.assert_called_once_with(
+            distinct_id='test_user_id',
+            idp='github',
+            org_id='test_org_id',
+            consented=True,
+        )
 
 
 @pytest.mark.asyncio
@@ -2366,17 +2436,10 @@ async def test_get_user_orgs_with_data_returns_orgs():
     mock_org_2.id = org_id_2
     mock_org_2.name = 'Org 2'
 
-    async def mock_get_org_by_id(org_id):
-        if org_id == org_id_1:
-            return mock_org_1
-        elif org_id == org_id_2:
-            return mock_org_2
-        return None
-
     with patch(
-        'storage.org_store.OrgStore.get_org_by_id',
+        'storage.org_store.OrgStore.get_orgs_by_ids',
         new_callable=AsyncMock,
-        side_effect=mock_get_org_by_id,
+        return_value=[mock_org_1, mock_org_2],
     ):
         result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
 
@@ -2386,8 +2449,8 @@ async def test_get_user_orgs_with_data_returns_orgs():
 
 
 @pytest.mark.asyncio
-async def test_get_user_orgs_with_data_skips_none_orgs():
-    """_get_user_orgs_with_data skips orgs that return None."""
+async def test_get_user_orgs_with_data_returns_only_found_orgs():
+    """_get_user_orgs_with_data returns only orgs that exist."""
     from uuid import uuid4
 
     from server.routes.auth import _get_user_orgs_with_data
@@ -2399,15 +2462,11 @@ async def test_get_user_orgs_with_data_skips_none_orgs():
     mock_org_1.id = org_id_1
     mock_org_1.name = 'Org 1'
 
-    async def mock_get_org_by_id(org_id):
-        if org_id == org_id_1:
-            return mock_org_1
-        return None  # org_id_2 returns None
-
+    # get_orgs_by_ids only returns orgs that exist (org_id_2 not found)
     with patch(
-        'storage.org_store.OrgStore.get_org_by_id',
+        'storage.org_store.OrgStore.get_orgs_by_ids',
         new_callable=AsyncMock,
-        side_effect=mock_get_org_by_id,
+        return_value=[mock_org_1],
     ):
         result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
 
@@ -2417,7 +2476,7 @@ async def test_get_user_orgs_with_data_skips_none_orgs():
 
 @pytest.mark.asyncio
 async def test_get_user_orgs_with_data_handles_exception_gracefully():
-    """_get_user_orgs_with_data catches exceptions and continues processing."""
+    """_get_user_orgs_with_data catches exceptions and returns empty list."""
     from uuid import uuid4
 
     from server.routes.auth import _get_user_orgs_with_data
@@ -2425,25 +2484,15 @@ async def test_get_user_orgs_with_data_handles_exception_gracefully():
     org_id_1 = uuid4()
     org_id_2 = uuid4()
 
-    mock_org_2 = MagicMock()
-    mock_org_2.id = org_id_2
-    mock_org_2.name = 'Org 2'
-
-    async def mock_get_org_by_id(org_id):
-        if org_id == org_id_1:
-            raise RuntimeError('Database error')
-        return mock_org_2
-
     with patch(
-        'storage.org_store.OrgStore.get_org_by_id',
+        'storage.org_store.OrgStore.get_orgs_by_ids',
         new_callable=AsyncMock,
-        side_effect=mock_get_org_by_id,
+        side_effect=RuntimeError('Database error'),
     ):
         result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
 
-    # Should still return org_2 despite error with org_1
-    assert len(result) == 1
-    assert result[0].name == 'Org 2'
+    # Should return empty list on exception
+    assert result == []
 
 
 @pytest.mark.asyncio
@@ -2484,6 +2533,11 @@ async def test_track_login_analytics_background_calls_identify_and_track():
             'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
             return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
         ),
         patch(
             'storage.org_member_store.OrgMemberStore.get_org_members_count',
@@ -2603,6 +2657,11 @@ async def test_track_login_analytics_background_builds_orgs_data_with_member_cou
             return_value=mock_org,
         ),
         patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+        patch(
             'storage.org_member_store.OrgMemberStore.get_org_members_count',
             new_callable=AsyncMock,
             return_value=10,
@@ -2648,6 +2707,11 @@ async def test_track_login_analytics_background_handles_member_count_error():
             'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
             return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
         ),
         patch(
             'storage.org_member_store.OrgMemberStore.get_org_members_count',

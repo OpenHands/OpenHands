@@ -134,8 +134,8 @@ def _extract_oauth_state(state: str | None) -> tuple[str, str | None, str | None
 async def _get_user_orgs_with_data(user_id: str, org_member_ids: list) -> list:
     """Load Org objects for a user's org memberships.
 
-    Uses org_member.org_id list to batch-load Org objects, avoiding N+1
-    by loading all orgs a user belongs to in one query via OrgStore.
+    Uses OrgStore.get_orgs_by_ids() to batch-load all Org objects in a single
+    query, avoiding N+1.
 
     Args:
         user_id: The user's ID string
@@ -146,18 +146,17 @@ async def _get_user_orgs_with_data(user_id: str, org_member_ids: list) -> list:
     """
     from storage.org_store import OrgStore
 
-    orgs = []
-    for org_id in org_member_ids:
-        try:
-            org = await OrgStore.get_org_by_id(org_id)
-            if org:
-                orgs.append(org)
-        except Exception:
-            logger.exception(
-                'auth:_get_user_orgs_with_data:failed',
-                extra={'user_id': user_id, 'org_id': str(org_id)},
-            )
-    return orgs
+    if not org_member_ids:
+        return []
+
+    try:
+        return await OrgStore.get_orgs_by_ids(org_member_ids)
+    except Exception:
+        logger.exception(
+            'auth:_get_user_orgs_with_data:failed',
+            extra={'user_id': user_id, 'org_ids': [str(oid) for oid in org_member_ids]},
+        )
+        return []
 
 
 async def _track_login_analytics_background(
