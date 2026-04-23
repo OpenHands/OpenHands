@@ -607,12 +607,15 @@ describe("Status toasts", () => {
 
 describe("GitLab Webhook Manager Integration", () => {
   it("should not render GitLab webhook manager in OSS mode", async () => {
+    // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     getConfigSpy.mockResolvedValue(VALID_OSS_CONFIG);
 
+    // Act
     renderGitSettingsScreen();
     await screen.findByTestId("git-settings-screen");
 
+    // Assert
     await waitFor(() => {
       expect(
         screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
@@ -621,6 +624,7 @@ describe("GitLab Webhook Manager Integration", () => {
   });
 
   it("should render GitLab and Slack sections in SaaS mode without APP_SLUG", async () => {
+    // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
@@ -630,9 +634,11 @@ describe("GitLab Webhook Manager Integration", () => {
       provider_tokens_set: {},
     });
 
+    // Act
     renderGitSettingsScreen();
     await screen.findByTestId("git-settings-screen");
 
+    // Assert
     await waitFor(() => {
       expect(
         screen.queryByTestId("configure-github-repositories-button"),
@@ -646,6 +652,7 @@ describe("GitLab Webhook Manager Integration", () => {
   });
 
   it("should not render GitLab webhook manager when token is not set", async () => {
+    // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
@@ -657,9 +664,11 @@ describe("GitLab Webhook Manager Integration", () => {
       provider_tokens_set: {},
     });
 
+    // Act
     renderGitSettingsScreen();
     await screen.findByTestId("git-settings-screen");
 
+    // Assert
     await waitFor(() => {
       expect(
         screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
