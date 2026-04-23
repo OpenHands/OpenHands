@@ -1,14 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
-import { organizationService } from "#/api/organization-service/organization-service.api";
+import { useMemo } from "react";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useOrganizations } from "#/hooks/query/use-organizations";
 
 export const useOrganization = () => {
   const { organizationId } = useSelectedOrganizationId();
+  const organizationsQuery = useOrganizations();
 
-  return useQuery({
-    queryKey: ["organizations", organizationId],
-    queryFn: () =>
-      organizationService.getOrganization({ orgId: organizationId! }),
-    enabled: !!organizationId,
-  });
+  const organization = useMemo(
+    () =>
+      organizationsQuery.data?.organizations.find(
+        (candidate) => candidate.id === organizationId,
+      ),
+    [organizationId, organizationsQuery.data?.organizations],
+  );
+
+  return {
+    ...organizationsQuery,
+    data: organization,
+  };
 };

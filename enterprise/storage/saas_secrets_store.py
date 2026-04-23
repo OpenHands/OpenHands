@@ -60,13 +60,11 @@ class SaasSecretsStore(SecretsStore):
         async with a_session_maker() as session:
             # Incoming secrets are always the most updated ones
             # Delete existing records for this user AND organization only
+            # Note: user.current_org_id is non-nullable, so org_id is always set
             delete_query = delete(StoredCustomSecrets).filter(
-                StoredCustomSecrets.keycloak_user_id == self.user_id
+                StoredCustomSecrets.keycloak_user_id == self.user_id,
+                StoredCustomSecrets.org_id == org_id,
             )
-            if org_id is not None:
-                delete_query = delete_query.filter(StoredCustomSecrets.org_id == org_id)
-            else:
-                delete_query = delete_query.filter(StoredCustomSecrets.org_id.is_(None))
             await session.execute(delete_query)
 
             # Prepare the new secrets data

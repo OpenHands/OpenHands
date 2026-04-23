@@ -8,7 +8,7 @@ from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from server.routes.org_models import OrgMemberLLMSettings
+from server.routes.org_models import OrgMemberSettingsUpdate
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
@@ -262,10 +262,10 @@ class SaasSettingsStore(SettingsStore):
                 else None
             )
 
-            await OrgMemberStore.update_all_members_llm_settings_async(
+            await OrgMemberStore.update_all_members_settings_async(
                 session,
                 org_id,
-                OrgMemberLLMSettings(
+                OrgMemberSettingsUpdate(
                     agent_settings_diff=effective_agent_settings_diff,
                     conversation_settings_diff=effective_conversation_diff,
                     llm_api_key=(

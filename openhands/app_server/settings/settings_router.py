@@ -165,6 +165,10 @@ async def load_settings(
     response_model=None,
     responses={
         200: {'description': 'Settings stored successfully', 'model': dict},
+        422: {
+            'description': 'Legacy nested settings keys are not accepted',
+            'model': dict,
+        },
         500: {'description': 'Error storing settings', 'model': dict},
     },
 )
@@ -174,14 +178,27 @@ async def store_settings(
 ) -> JSONResponse:
     """Store user settings.
 
-    Accepts a partial payload and deep-merges ``agent_settings`` and
-    ``conversation_settings`` with the existing persisted values so that
+    Accepts a partial payload and deep-merges ``agent_settings_diff`` and
+    ``conversation_settings_diff`` with the existing persisted values so that
     saving one settings page never overwrites fields owned by another.
 
     Returns:
         200: Settings stored successfully
+        422: Legacy nested settings keys are rejected
         500: Error storing settings
     """
+    legacy_nested_keys = sorted(
+        key for key in ('agent_settings', 'conversation_settings') if key in payload
+    )
+    if legacy_nested_keys:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={
+                'error': 'Use *_diff nested settings payloads instead of legacy keys',
+                'keys': legacy_nested_keys,
+            },
+        )
+
     try:
         existing_settings = await settings_store.load()
         settings = existing_settings.model_copy() if existing_settings else Settings()
