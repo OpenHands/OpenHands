@@ -71,6 +71,7 @@ class Settings(BaseModel):
     email_verified: bool | None = None
     git_user_name: str | None = None
     git_user_email: str | None = None
+    include_git_context: bool = False
     v1_enabled: bool = True
     sandbox_grouping_strategy: SandboxGroupingStrategy = (
         SandboxGroupingStrategy.NO_GROUPING
@@ -152,6 +153,45 @@ class Settings(BaseModel):
             return None
         stripped = v.strip()
         return stripped or None
+
+    @model_validator(mode='after')
+    def _rewrite_volatile_ollama_url_in_settings(self) -> 'Settings':
+        """Rewrite ephemeral 172.x Ollama container base URLs to host.docker.internal at load time.
+
+        Docker bridge IPs in the 172.16.0.0/12 range are ephemeral and change on
+        every container rebuild. This validator transparently rewrites any stored
+        llm_base_url that points to such an IP (port 11434, Ollama) so the setting
+        remains valid after a container rebuild without requiring the user to
+        manually edit their settings.
+        """
+        url = self.llm_base_url
+        if not url:
+            return self
+        model = self.llm_model or ''
+        is_ollama_model = model.startswith('ollama/') or (
+            ':' in model and not model.startswith('http')
+        )
+        if not is_ollama_model:
+            return self
+        try:
+            import ipaddress
+            from urllib.parse import urlparse
+
+            parsed = urlparse(url)
+            host = parsed.hostname or ''
+            port = parsed.port
+            addr = ipaddress.ip_address(host)
+            in_172 = isinstance(
+                addr, ipaddress.IPv4Address
+            ) and addr in ipaddress.IPv4Network('172.16.0.0/12')
+            if in_172 and port == 11434:
+                path = parsed.path or ''
+                scheme = parsed.scheme or 'http'
+                rewritten = f'{scheme}://host.docker.internal:{port}{path}'
+                object.__setattr__(self, 'llm_base_url', rewritten)
+        except ValueError:
+            pass
+        return self
 
     @field_serializer('secrets_store')
     def secrets_store_serializer(self, secrets: Secrets, info: SerializationInfo):
