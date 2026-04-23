@@ -286,6 +286,26 @@ class TestSQLPendingMessageService:
         assert updated_count == 0
 
     @pytest.mark.asyncio
+    async def test_update_conversation_id_accepts_hyphenated_task_id(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+    ):
+        """Pending messages can be stored under task-{uuid-with-hyphens}."""
+        old_conversation_id = f'task-{uuid4()}'
+        new_conversation_id = str(uuid4())
+
+        await service.add_message(old_conversation_id, sample_content)
+
+        updated_count = await service.update_conversation_id(
+            old_conversation_id, new_conversation_id
+        )
+
+        assert updated_count == 1
+        assert await service.count_pending_messages(old_conversation_id) == 0
+        assert await service.count_pending_messages(new_conversation_id) == 1
+
+    @pytest.mark.asyncio
     async def test_messages_are_isolated_between_conversations(
         self,
         service: SQLPendingMessageService,

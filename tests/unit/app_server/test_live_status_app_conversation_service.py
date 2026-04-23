@@ -2484,6 +2484,50 @@ class TestPluginHandling:
         assert result.plugins[1].repo_path == 'plugins/logging'
         assert result.plugins[2].source == '/local/path/to/plugin'
 
+    @pytest.mark.asyncio
+    async def test_process_pending_messages_updates_hyphenated_task_id(self):
+        """Pending messages queued under task-{uuid} are delivered after READY."""
+        task_id = uuid4()
+        conversation_id = uuid4()
+
+        self.service.pending_message_service.update_conversation_id = AsyncMock(
+            side_effect=[0, 1]
+        )
+        pending_message = Mock()
+        pending_message.id = 'msg-1'
+        pending_message.role = 'user'
+        pending_message.content = [TextContent(text='run this once ready')]
+        self.service.pending_message_service.get_pending_messages = AsyncMock(
+            return_value=[pending_message]
+        )
+        self.service.pending_message_service.delete_messages_for_conversation = (
+            AsyncMock(return_value=1)
+        )
+        self.mock_httpx_client.post = AsyncMock(return_value=Mock())
+
+        await self.service._process_pending_messages(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            agent_server_url='http://agent-server:8000',
+            session_api_key='session-key',
+        )
+
+        self.service.pending_message_service.update_conversation_id.assert_any_call(
+            old_conversation_id=f'task-{task_id.hex}',
+            new_conversation_id=str(conversation_id),
+        )
+        self.service.pending_message_service.update_conversation_id.assert_any_call(
+            old_conversation_id=f'task-{task_id}',
+            new_conversation_id=str(conversation_id),
+        )
+        self.service.pending_message_service.get_pending_messages.assert_awaited_once_with(
+            str(conversation_id)
+        )
+        self.mock_httpx_client.post.assert_awaited_once()
+        self.service.pending_message_service.delete_messages_for_conversation.assert_awaited_once_with(
+            str(conversation_id)
+        )
+
 
 class TestPluginSpecModel:
     """Test cases for the PluginSpec model."""

@@ -1366,23 +1366,28 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             agent_server_url: URL of the agent server
             session_api_key: API key for authenticating with agent server
         """
-        # Convert UUIDs to strings for the pending message service
-        # The frontend uses task-{uuid.hex} format (no hyphens), matching OpenHandsUUID serialization
-        task_id_str = f'task-{task_id.hex}'
+        # Support both task id encodings seen in clients:
+        # - task-{uuid.hex}
+        # - task-{uuid-with-hyphens}
+        task_id_candidates = [f'task-{task_id.hex}', f'task-{task_id}']
         # conversation_id uses standard format (with hyphens) for agent server API compatibility
         conversation_id_str = str(conversation_id)
 
-        _logger.info(f'task_id={task_id_str} conversation_id={conversation_id_str}')
-
-        # First, update any messages that were queued with the task_id
-        updated_count = await self.pending_message_service.update_conversation_id(
-            old_conversation_id=task_id_str,
-            new_conversation_id=conversation_id_str,
+        _logger.info(
+            f'task_ids={task_id_candidates} conversation_id={conversation_id_str}'
         )
-        _logger.info(f'updated_count={updated_count} ')
+
+        # First, update any messages that were queued with the task id used by the client.
+        updated_count = 0
+        for task_id_str in task_id_candidates:
+            updated_count += await self.pending_message_service.update_conversation_id(
+                old_conversation_id=task_id_str,
+                new_conversation_id=conversation_id_str,
+            )
+
         if updated_count > 0:
             _logger.info(
-                f'Updated {updated_count} pending messages from task_id={task_id_str} '
+                f'Updated {updated_count} pending messages from task_ids={task_id_candidates} '
                 f'to conversation_id={conversation_id_str}'
             )
 
