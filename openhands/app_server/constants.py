@@ -5,6 +5,7 @@ including security-related configurations for secret name validation.
 """
 
 import os
+from collections.abc import Mapping
 
 # =============================================================================
 # SECRET LIMITS (configurable via environment variables)
@@ -130,7 +131,7 @@ def validate_secret_name(name: str) -> None:
     # Note: OVERRIDABLE_SYSTEM_SECRETS are intentionally allowed
 
 
-def validate_secrets_dict(secrets: dict[str, object] | None) -> None:
+def validate_secrets_dict(secrets: Mapping[str, object] | None) -> None:
     """Validate the entire secrets dictionary for size limits.
 
     This should be called before iterating over individual secrets.
