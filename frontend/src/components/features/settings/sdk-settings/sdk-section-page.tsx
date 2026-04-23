@@ -49,6 +49,35 @@ const getLessDetailedView = (
 ): SettingsView =>
   VIEW_ORDER[nextView] < VIEW_ORDER[currentView] ? nextView : currentView;
 
+const normalizeView = (
+  view: SettingsView,
+  {
+    showAdvanced,
+    showAll,
+  }: {
+    showAdvanced: boolean;
+    showAll: boolean;
+  },
+): SettingsView => {
+  if (view === "all") {
+    if (showAll) {
+      return "all";
+    }
+
+    return showAdvanced ? "advanced" : "basic";
+  }
+
+  if (view === "advanced") {
+    if (showAdvanced) {
+      return "advanced";
+    }
+
+    return showAll ? "all" : "basic";
+  }
+
+  return "basic";
+};
+
 export interface SdkSectionHeaderProps {
   values: SettingsFormValues;
   isDisabled: boolean;
@@ -75,6 +104,8 @@ export function SdkSectionPage({
   buildPayload,
   onSaveSuccess,
   getInitialView,
+  forceShowAdvancedView = false,
+  allowAllView = true,
   testId = "sdk-section-settings-screen",
 }: {
   sectionKeys: string[];
@@ -97,6 +128,8 @@ export function SdkSectionPage({
     settings: Settings,
     filteredSchema: SettingsSchema,
   ) => SettingsView;
+  forceShowAdvancedView?: boolean;
+  allowAllView?: boolean;
   testId?: string;
 }) {
   const { t } = useTranslation();
@@ -148,8 +181,9 @@ export function SdkSectionPage({
     };
   }, [schema, stableSectionKeys]);
 
-  const showAdvanced = hasAdvancedSettings(filteredSchema);
-  const showAll = hasMinorSettings(filteredSchema);
+  const showAdvanced =
+    forceShowAdvancedView || hasAdvancedSettings(filteredSchema);
+  const showAll = allowAllView && hasMinorSettings(filteredSchema);
 
   const initialValues = React.useMemo(() => {
     if (!settings || !filteredSchema) return null;
@@ -162,10 +196,20 @@ export function SdkSectionPage({
 
   const initialView = React.useMemo(() => {
     if (!settings || !filteredSchema) return null;
-    return getInitialView
+
+    const resolvedInitialView = getInitialView
       ? getInitialView(settings, filteredSchema)
       : inferInitialView(settings, filteredSchema, settingsSource);
-  }, [settings, filteredSchema, getInitialView, settingsSource]);
+
+    return normalizeView(resolvedInitialView, { showAdvanced, showAll });
+  }, [
+    settings,
+    filteredSchema,
+    getInitialView,
+    settingsSource,
+    showAdvanced,
+    showAll,
+  ]);
 
   React.useEffect(() => {
     hasHydratedViewRef.current = false;
@@ -226,10 +270,12 @@ export function SdkSectionPage({
         dirty,
         view,
       );
-      const defaultPayload =
-        settingsSource === "conversation_settings"
-          ? { conversation_settings: basePayload }
-          : { agent_settings: basePayload };
+      let defaultPayload: Record<string, unknown>;
+      if (settingsSource === "conversation_settings") {
+        defaultPayload = { conversation_settings_diff: basePayload };
+      } else {
+        defaultPayload = { agent_settings_diff: basePayload };
+      }
       payload = buildPayload
         ? buildPayload(basePayload, { values, dirty, view })
         : defaultPayload;

@@ -303,7 +303,7 @@ describe("SdkSectionPage", () => {
       .spyOn(SettingsService, "getSettings")
       .mockImplementation(async () => structuredClone(persistedSettings));
     vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
-      const agentSettings = (payload.agent_settings ?? {}) as Record<string, unknown>;
+      const agentSettings = payload.agent_settings_diff as Record<string, unknown>;
       const llmSettings = (agentSettings.llm ?? {}) as Record<string, unknown>;
 
       persistedSettings = buildSettings({
@@ -395,7 +395,7 @@ describe("SdkSectionPage", () => {
       .spyOn(SettingsService, "getSettings")
       .mockImplementation(async () => structuredClone(persistedSettings));
     vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
-      const agentSettings = (payload.agent_settings ?? {}) as Record<string, unknown>;
+      const agentSettings = payload.agent_settings_diff as Record<string, unknown>;
       const llmSettings = (agentSettings.llm ?? {}) as Record<string, unknown>;
 
       persistedSettings = buildSettings({
@@ -433,6 +433,20 @@ describe("SdkSectionPage", () => {
     });
   });
 
+
+
+  it("shows the advanced toggle when it is forced for a critical-only schema", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSavableSettings());
+
+    renderSdkSectionPage({
+      sectionKeys: ["llm"],
+      forceShowAdvancedView: true,
+    });
+
+    await screen.findByTestId("sdk-section-basic-toggle");
+    expect(screen.getByTestId("sdk-section-advanced-toggle")).toBeInTheDocument();
+    expect(screen.queryByTestId("sdk-section-all-toggle")).not.toBeInTheDocument();
+  });
 
 
   it("shows the all toggle instead of an empty advanced tier for minor-only schemas", async () => {
