@@ -87,7 +87,6 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
-from openhands.app_server.utils._redact_compat import sanitize_config
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
@@ -104,6 +103,7 @@ from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.utils.paging import page_iterator
+from openhands.sdk.utils.redact import sanitize_config
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.tools.preset.default import (
     get_default_tools,
