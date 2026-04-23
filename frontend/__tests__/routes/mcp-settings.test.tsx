@@ -126,12 +126,28 @@ describe("MCPSettingsScreen", () => {
     );
     vi.spyOn(SettingsService, "saveSettings").mockImplementation(
       async (payload) => {
-        persistedSettings = buildSettings(
-          deepMerge(
-            structuredClone(persistedSettings) as Record<string, unknown>,
-            payload as Record<string, unknown>,
-          ) as Partial<Settings>,
-        );
+        const nextSettings = structuredClone(persistedSettings) as Record<
+          string,
+          unknown
+        >;
+        const agentSettingsPatch = (payload as Record<string, unknown>)
+          .agent_settings_diff as Record<string, unknown> | undefined;
+
+        if (agentSettingsPatch) {
+          nextSettings.agent_settings = deepMerge(
+            (nextSettings.agent_settings ?? {}) as Record<string, unknown>,
+            agentSettingsPatch,
+          );
+        }
+
+        for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+          if (key === "agent_settings_diff") {
+            continue;
+          }
+          nextSettings[key] = value;
+        }
+
+        persistedSettings = buildSettings(nextSettings as Partial<Settings>);
         return true;
       },
     );

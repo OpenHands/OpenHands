@@ -160,7 +160,7 @@ export function VerificationSettingsScreen({
         payload.security_analyzer = securityAnalyzer;
       }
 
-      return { conversation_settings: payload };
+      return { conversation_settings_diff: payload };
     },
     [
       confirmationMode,

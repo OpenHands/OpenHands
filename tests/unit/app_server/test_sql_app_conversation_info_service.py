@@ -1241,3 +1241,32 @@ class TestSandboxIdFilter:
             sandbox_id__eq='sandbox_time_test', created_at__gte=cutoff
         )
         assert count == 2
+
+
+class TestFixTimezone:
+    """Test suite for the _fix_timezone helper method."""
+
+    def test_fix_timezone_with_none(self, service: SQLAppConversationInfoService):
+        """Test that None values return current UTC time."""
+        from openhands.agent_server.utils import utc_now
+
+        result = service._fix_timezone(None)
+        assert result.tzinfo == timezone.utc
+        # Verify it's close to current time (within 1 second)
+        assert abs((utc_now() - result).total_seconds()) < 1
+
+    def test_fix_timezone_with_naive_datetime(
+        self, service: SQLAppConversationInfoService
+    ):
+        """Test that naive datetime gets UTC timezone added."""
+        naive_dt = datetime(2024, 1, 1, 12, 0, 0)
+        result = service._fix_timezone(naive_dt)
+        assert result == datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    def test_fix_timezone_with_aware_datetime(
+        self, service: SQLAppConversationInfoService
+    ):
+        """Test that aware datetime is returned unchanged."""
+        aware_dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        result = service._fix_timezone(aware_dt)
+        assert result == aware_dt

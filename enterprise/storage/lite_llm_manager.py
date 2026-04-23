@@ -217,7 +217,7 @@ class LiteLlmManager:
 
         oss_settings.update(
             {
-                'agent_settings': {
+                'agent_settings_diff': {
                     'agent': 'CodeActAgent',
                     'llm': {
                         'model': get_default_litellm_model(),
@@ -402,9 +402,7 @@ class LiteLlmManager:
                             extra={'org_id': org_id, 'user_id': keycloak_user_id},
                         )
                         # Update user_settings with the new key so it gets stored in org_member
-                        # agent_settings is a JSON column (dict) on UserSettings
-                        if user_settings.agent_settings is None:
-                            user_settings.agent_settings = {}
+                        # agent_settings is a non-nullable JSON column (dict) on UserSettings
                         user_settings.agent_settings.setdefault('llm', {})[
                             'api_key'
                         ] = new_key

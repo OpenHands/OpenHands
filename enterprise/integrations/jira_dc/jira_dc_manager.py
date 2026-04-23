@@ -25,7 +25,6 @@ from integrations.utils import (
 from jinja2 import Environment, FileSystemLoader
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
-from server.utils.conversation_callback_utils import register_callback_processor
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
@@ -355,12 +354,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             return False
 
     async def start_job(self, jira_dc_view: JiraDcViewInterface) -> None:
-        """Start a Jira DC job/conversation."""
-        # Import here to prevent circular import
-        from server.conversation_callback_processor.jira_dc_callback_processor import (
-            JiraDcCallbackProcessor,
-        )
-
+        """Start a Jira DC job/conversation using V1 app conversation system."""
         try:
             user_info: JiraDcUser = jira_dc_view.jira_dc_user
             logger.info(
@@ -368,7 +362,15 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 f'issue {jira_dc_view.job_context.issue_key}',
             )
 
-            # Create conversation
+            # Set decrypted API key for new conversations (needed for V1 callback processor)
+            if isinstance(jira_dc_view, JiraDcNewConversationView):
+                api_key = self.token_manager.decrypt_text(
+                    jira_dc_view.jira_dc_workspace.svc_acc_api_key
+                )
+                jira_dc_view._decrypted_api_key = api_key
+
+            # Create conversation using V1 app conversation system
+            # The callback processor is registered automatically by the view
             conversation_id = await jira_dc_view.create_or_update_conversation(
                 self.jinja_env
             )
@@ -376,21 +378,6 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             logger.info(
                 f'[Jira DC] Created/Updated conversation {conversation_id} for issue {jira_dc_view.job_context.issue_key}'
             )
-
-            if isinstance(jira_dc_view, JiraDcNewConversationView):
-                # Register callback processor for updates
-                processor = JiraDcCallbackProcessor(
-                    issue_key=jira_dc_view.job_context.issue_key,
-                    workspace_name=jira_dc_view.jira_dc_workspace.name,
-                    base_api_url=jira_dc_view.job_context.base_api_url,
-                )
-
-                # Register the callback processor
-                register_callback_processor(conversation_id, processor)
-
-                logger.info(
-                    f'[Jira DC] Created callback processor for conversation {conversation_id}'
-                )
 
             # Send initial response
             msg_info = jira_dc_view.get_response_msg()

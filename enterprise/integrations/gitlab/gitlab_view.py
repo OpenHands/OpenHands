@@ -31,7 +31,6 @@ from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import Comment
 from openhands.sdk import TextContent
-from openhands.server.services.conversation_service import start_conversation
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationMetadata,
@@ -167,41 +166,9 @@ class GitlabIssue(ResolverViewInterface):
         conversation_metadata: ConversationMetadata,
         saas_user_auth: UserAuth,
     ):
-        # v1_enabled is already set at construction time in the factory method
-        if self.v1_enabled:
-            # Use V1 app conversation service
-            await self._create_v1_conversation(
-                jinja_env, saas_user_auth, conversation_metadata
-            )
-        else:
-            await self._create_v0_conversation(
-                jinja_env, git_provider_tokens, conversation_metadata
-            )
-
-    async def _create_v0_conversation(
-        self,
-        jinja_env: Environment,
-        git_provider_tokens: PROVIDER_TOKEN_TYPE,
-        conversation_metadata: ConversationMetadata,
-    ):
-        """Create conversation using the legacy V0 system."""
-        logger.info('[GitLab]: Creating V0 conversation')
-        custom_secrets = await self._get_user_secrets()
-
-        user_instructions, conversation_instructions = await self._get_instructions(
-            jinja_env
-        )
-
-        await start_conversation(
-            user_id=self.user_info.keycloak_user_id,
-            git_provider_tokens=git_provider_tokens,
-            custom_secrets=custom_secrets,
-            initial_user_msg=user_instructions,
-            image_urls=None,
-            replay_json=None,
-            conversation_id=conversation_metadata.conversation_id,
-            conversation_metadata=conversation_metadata,
-            conversation_instructions=conversation_instructions,
+        # V0 conversation path has been removed - all conversations use V1 app conversation service
+        await self._create_v1_conversation(
+            jinja_env, saas_user_auth, conversation_metadata
         )
 
     async def _create_v1_conversation(

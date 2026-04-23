@@ -3,15 +3,20 @@ import hashlib
 import hmac
 import os
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from integrations.github.data_collector import GitHubDataCollector
 from integrations.github.github_manager import GithubManager
 from integrations.models import Message, SourceType
-from server.auth.constants import GITHUB_APP_WEBHOOK_SECRET
+from server.auth.constants import (
+    AUTOMATION_EVENT_FORWARDING_ENABLED,
+    GITHUB_APP_WEBHOOK_SECRET,
+)
 from server.auth.token_manager import TokenManager
+from server.services.automation_event_service import AutomationEventService
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.integrations.provider import ProviderType
 
 # Environment variable to disable GitHub webhooks
 GITHUB_WEBHOOKS_ENABLED = os.environ.get('GITHUB_WEBHOOKS_ENABLED', '1') in (
@@ -22,6 +27,7 @@ github_integration_router = APIRouter(prefix='/integration')
 token_manager = TokenManager()
 data_collector = GitHubDataCollector()
 github_manager = GithubManager(token_manager, data_collector)
+automation_event_service = AutomationEventService(token_manager)
 
 
 def verify_github_signature(payload: bytes, signature: str):
@@ -46,13 +52,13 @@ def verify_github_signature(payload: bytes, signature: str):
 @github_integration_router.post('/github/events')
 async def github_events(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_hub_signature_256: str = Header(None),
+    x_github_event: str = Header(None),
 ):
     # Check if GitHub webhooks are enabled
     if not GITHUB_WEBHOOKS_ENABLED:
-        logger.info(
-            'GitHub webhooks are disabled by GITHUB_WEBHOOKS_ENABLED environment variable'
-        )
+        logger.info('GitHub webhooks disabled by GITHUB_WEBHOOKS_ENABLED env variable')
         return JSONResponse(
             status_code=200,
             content={'message': 'GitHub webhooks are currently disabled.'},
@@ -72,6 +78,16 @@ async def github_events(
                 content={'error': 'Installation ID is missing in the payload.'},
             )
 
+        # Forward to automation service (fire-and-forget background task)
+        if AUTOMATION_EVENT_FORWARDING_ENABLED:
+            background_tasks.add_task(
+                automation_event_service.forward_event,
+                provider=ProviderType.GITHUB,
+                payload=payload_data,
+                installation_id=installation_id,
+            )
+
+        # Existing resolver bot processing
         message_payload = {'payload': payload_data, 'installation': installation_id}
         message = Message(source=SourceType.GITHUB, message=message_payload)
         await github_manager.receive_message(message)

@@ -19,13 +19,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import UUID as SQLUUID
-from sqlalchemy import Column, Enum, String, func, select
+from sqlalchemy import Enum, String, func, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
 from openhands.agent_server.models import utc_now
 from openhands.app_server.app_conversation.app_conversation_models import (
@@ -50,18 +51,27 @@ from openhands.app_server.utils.sql_utils import (
 logger = logging.getLogger(__name__)
 
 
-class StoredAppConversationStartTask(Base):  # type: ignore
+class StoredAppConversationStartTask(Base):
     __tablename__ = 'app_conversation_start_task'
-    id = Column(SQLUUID, primary_key=True)
-    created_by_user_id = Column(String, index=True)
-    status = Column(Enum(AppConversationStartTaskStatus), nullable=True)
-    detail = Column(String, nullable=True)
-    app_conversation_id = Column(SQLUUID, nullable=True)
-    sandbox_id = Column(String, nullable=True)
-    agent_server_url = Column(String, nullable=True)
-    request = Column(create_json_type_decorator(AppConversationStartRequest))
-    created_at = Column(UtcDateTime, server_default=func.now(), index=True)
-    updated_at = Column(UtcDateTime, onupdate=func.now(), index=True)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    created_by_user_id: Mapped[str] = mapped_column(String, index=True)
+    status: Mapped[AppConversationStartTaskStatus | None] = mapped_column(
+        Enum(AppConversationStartTaskStatus), nullable=True
+    )
+    detail: Mapped[str | None] = mapped_column(String, nullable=True)
+    app_conversation_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    sandbox_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_server_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    request: Mapped[AppConversationStartRequest] = mapped_column(
+        create_json_type_decorator(AppConversationStartRequest)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, onupdate=func.now(), index=True
+    )
 
 
 @dataclass
@@ -255,7 +265,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
                 StoredAppConversationStartTask.created_by_user_id == self.user_id
             )
 
-        result = await self.session.execute(delete_query)
+        result = cast(CursorResult, await self.session.execute(delete_query))
 
         # Return True if any rows were affected
         return result.rowcount > 0

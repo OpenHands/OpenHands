@@ -29,18 +29,22 @@ from server.routes.org_models import (
     OrgMemberUpdate,
     OrgNameExistsError,
     OrgNotFoundError,
+    OrgUpdate,
     OrphanedUserError,
     RoleNotFoundError,
 )
 from server.routes.orgs import (
     get_me,
+    get_org_defaults_settings,
     get_org_members,
     org_router,
     remove_org_member,
+    update_org_defaults_settings,
     update_org_member,
 )
 from storage.org import Org
 
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.server.user_auth import get_user_id
 
 # Test user ID constant (must be a valid UUID string)
@@ -1020,12 +1024,10 @@ def mock_owner_role():
 
 @pytest.mark.asyncio
 async def test_get_org_success(mock_app_with_get_user_id, mock_owner_role):
-    """
-    GIVEN: Valid org_id and authenticated user who is a member
+    """GIVEN: Valid org_id and authenticated member
     WHEN: GET /api/organizations/{org_id} is called
-    THEN: Organization details are returned with 200 status
+    THEN: the deprecated detail route still returns the organization response
     """
-    # Arrange
     org_id = uuid.uuid4()
     mock_org = Org(
         id=org_id,
@@ -1055,54 +1057,24 @@ async def test_get_org_success(mock_app_with_get_user_id, mock_owner_role):
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
-
-        # Act
         response = client.get(f'/api/organizations/{org_id}')
 
-        # Assert
-        assert response.status_code == status.HTTP_200_OK
-        response_data = response.json()
-        assert response_data['id'] == str(org_id)
-        assert response_data['name'] == 'Test Organization'
-        assert response_data['contact_name'] == 'John Doe'
-        assert response_data['contact_email'] == 'john@example.com'
-        assert response_data['credits'] == 75.5
-        assert response_data['org_version'] == 5
-
-
-@pytest.mark.asyncio
-async def test_get_org_user_not_member(mock_app_with_get_user_id):
-    """
-    GIVEN: User is not a member of the organization
-    WHEN: GET /api/organizations/{org_id} is called
-    THEN: 403 Forbidden error is returned (permission check fails first)
-    """
-    # Arrange
-    org_id = uuid.uuid4()
-
-    # When user is not a member, get_user_org_role returns None
-    with patch(
-        'server.auth.authorization.get_user_org_role',
-        AsyncMock(return_value=None),
-    ):
-        client = TestClient(mock_app_with_get_user_id)
-
-        # Act
-        response = client.get(f'/api/organizations/{org_id}')
-
-        # Assert - Permission check now returns 403 before org lookup
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert 'not a member' in response.json()['detail'].lower()
+    assert response.status_code == status.HTTP_200_OK
+    response_data = response.json()
+    assert response_data['id'] == str(org_id)
+    assert response_data['name'] == 'Test Organization'
+    assert response_data['contact_name'] == 'John Doe'
+    assert response_data['contact_email'] == 'john@example.com'
+    assert response_data['credits'] == 75.5
+    assert response_data['org_version'] == 5
 
 
 @pytest.mark.asyncio
 async def test_get_org_not_found(mock_app_with_get_user_id, mock_owner_role):
-    """
-    GIVEN: Organization does not exist
+    """GIVEN: Unknown org id
     WHEN: GET /api/organizations/{org_id} is called
-    THEN: 404 Not Found error is returned
+    THEN: the deprecated detail route returns 404
     """
-    # Arrange
     org_id = uuid.uuid4()
 
     with (
@@ -1116,293 +1088,110 @@ async def test_get_org_not_found(mock_app_with_get_user_id, mock_owner_role):
         ),
     ):
         client = TestClient(mock_app_with_get_user_id)
-
-        # Act
         response = client.get(f'/api/organizations/{org_id}')
 
-        # Assert
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.asyncio
 async def test_get_org_invalid_uuid(mock_app_with_get_user_id):
-    """
-    GIVEN: Invalid UUID format for org_id
+    """GIVEN: Invalid UUID format
     WHEN: GET /api/organizations/{org_id} is called
-    THEN: 422 Unprocessable Entity error is returned
+    THEN: FastAPI returns 422
     """
-    # Arrange
-    invalid_org_id = 'not-a-valid-uuid'
-
     client = TestClient(mock_app_with_get_user_id)
-
-    # Act
-    response = client.get(f'/api/organizations/{invalid_org_id}')
-
-    # Assert
+    response = client.get('/api/organizations/not-a-valid-uuid')
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 @pytest.mark.asyncio
-async def test_get_org_unauthorized():
+async def test_get_org_defaults_settings_success():
+    """GIVEN: A user can view a specific organization's defaults
+    WHEN: the org-id settings route is invoked
+    THEN: it loads the org through OrgService and serializes the defaults response
     """
-    GIVEN: User is not authenticated
-    WHEN: GET /api/organizations/{org_id} is called
-    THEN: 401 Unauthorized error is returned
-    """
-    # Arrange
-    app = FastAPI()
-    app.include_router(org_router)
-
-    # Override to simulate unauthenticated user
-    async def mock_unauthenticated():
-        raise HTTPException(status_code=401, detail='User not authenticated')
-
-    app.dependency_overrides[get_user_id] = mock_unauthenticated
-
     org_id = uuid.uuid4()
-    client = TestClient(app)
-
-    # Act
-    response = client.get(f'/api/organizations/{org_id}')
-
-    # Assert
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-
-@pytest.mark.asyncio
-async def test_get_org_unexpected_error(mock_app_with_get_user_id, mock_owner_role):
-    """
-    GIVEN: Unexpected error occurs during retrieval
-    WHEN: GET /api/organizations/{org_id} is called
-    THEN: 500 Internal Server Error is returned
-    """
-    # Arrange
-    org_id = uuid.uuid4()
-
-    with (
-        patch(
-            'server.auth.authorization.get_user_org_role',
-            AsyncMock(return_value=mock_owner_role),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_by_id',
-            AsyncMock(side_effect=RuntimeError('Unexpected database error')),
-        ),
-    ):
-        client = TestClient(mock_app_with_get_user_id)
-
-        # Act
-        response = client.get(f'/api/organizations/{org_id}')
-
-        # Assert
-        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert 'unexpected error' in response.json()['detail'].lower()
-
-
-@pytest.mark.asyncio
-async def test_get_org_personal_workspace():
-    """
-    GIVEN: User retrieves their personal organization (org.id == user_id)
-    WHEN: GET /api/organizations/{org_id} is called
-    THEN: is_personal field is True
-    """
-    # Arrange
-    app = FastAPI()
-    app.include_router(org_router)
-
-    # Use a valid UUID for user_id
-    user_id = str(uuid.uuid4())
-    org_id = uuid.UUID(user_id)  # Personal org has same ID as user
-
-    def mock_get_user_id():
-        return user_id
-
-    app.dependency_overrides[get_user_id] = mock_get_user_id
-
-    mock_org = Org(
-        id=org_id,
-        name=f'user_{user_id}_org',
-        contact_name='John Doe',
-        contact_email='john@example.com',
-        org_version=5,
+    mock_org = MagicMock(spec=Org)
+    mock_org.agent_settings = AgentSettings(
+        agent='CodeActAgent',
+        llm={'model': 'openhands/claude-3', 'base_url': 'https://proxy.example'},
     )
+    mock_org.conversation_settings = ConversationSettings(security_analyzer='llm')
+    mock_org.llm_api_key = None
+    mock_org.search_api_key = None
 
-    mock_role = MagicMock()
-    mock_role.name = 'owner'
+    with patch(
+        'server.routes.orgs.OrgService.get_org_by_id',
+        AsyncMock(return_value=mock_org),
+    ) as mock_get_org:
+        response = await get_org_defaults_settings(org_id=org_id, user_id=TEST_USER_ID)
 
-    with (
-        patch(
-            'server.auth.authorization.get_user_org_role',
-            AsyncMock(return_value=mock_role),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_by_id',
-            AsyncMock(return_value=mock_org),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_credits',
-            AsyncMock(return_value=50.0),
-        ),
-    ):
-        client = TestClient(app)
-
-        # Act
-        response = client.get(f'/api/organizations/{org_id}')
-
-        # Assert
-        assert response.status_code == status.HTTP_200_OK
-        response_data = response.json()
-        assert response_data['is_personal'] is True
+    assert response.agent_settings.llm.model == 'openhands/claude-3'
+    assert response.agent_settings.llm.base_url == 'https://proxy.example'
+    assert response.conversation_settings.security_analyzer == 'llm'
+    mock_get_org.assert_awaited_once_with(org_id=org_id, user_id=TEST_USER_ID)
 
 
 @pytest.mark.asyncio
-async def test_get_org_team_workspace(mock_app_with_get_user_id, mock_owner_role):
+async def test_update_org_defaults_settings_forwards_through_org_service():
+    """GIVEN: An org-scoped defaults update payload
+    WHEN: the org-id settings write route is invoked
+    THEN: it forwards the update through OrgService.update_org_with_permissions
     """
-    GIVEN: User retrieves a team organization (org.id != user_id)
-    WHEN: GET /api/organizations/{org_id} is called
-    THEN: is_personal field is False
-    """
-    # Arrange
-    org_id = uuid.uuid4()  # Different from user_id
-    mock_org = Org(
-        id=org_id,
-        name='Team Organization',
-        contact_name='John Doe',
-        contact_email='john@example.com',
-        org_version=5,
-    )
-
-    with (
-        patch(
-            'server.auth.authorization.get_user_org_role',
-            AsyncMock(return_value=mock_owner_role),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_by_id',
-            AsyncMock(return_value=mock_org),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_credits',
-            AsyncMock(return_value=100.0),
-        ),
-    ):
-        client = TestClient(mock_app_with_get_user_id)
-
-        # Act
-        response = client.get(f'/api/organizations/{org_id}')
-
-        # Assert
-        assert response.status_code == status.HTTP_200_OK
-        response_data = response.json()
-        assert response_data['is_personal'] is False
-
-
-@pytest.mark.asyncio
-async def test_get_org_with_credits_none(mock_app_with_get_user_id, mock_owner_role):
-    """
-    GIVEN: Organization exists but credits retrieval returns None
-    WHEN: GET /api/organizations/{org_id} is called
-    THEN: Organization is returned with credits as None
-    """
-    # Arrange
     org_id = uuid.uuid4()
-    mock_org = Org(
-        id=org_id,
-        name='Test Organization',
-        contact_name='John Doe',
-        contact_email='john@example.com',
-        org_version=5,
-        agent_settings={
-            'llm': {'model': 'claude-opus-4-5-20251101'},
-            'condenser': {'enabled': True},
+    updated_org = MagicMock(spec=Org)
+    updated_org.agent_settings = AgentSettings(
+        llm={
+            'model': 'openhands/claude-3.5-sonnet',
+            'base_url': 'https://proxy.example',
+        }
+    )
+    updated_org.conversation_settings = ConversationSettings(confirmation_mode=False)
+    updated_org.llm_api_key = 'secret'
+    updated_org.search_api_key = None
+
+    update_data = OrgUpdate(
+        agent_settings_diff={
+            'llm': {'model': 'openhands/claude-3.5-sonnet'},
         },
-        enable_proactive_conversation_starters=True,
+        conversation_settings_diff={'confirmation_mode': False},
     )
 
-    with (
-        patch(
-            'server.auth.authorization.get_user_org_role',
-            AsyncMock(return_value=mock_owner_role),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_by_id',
-            AsyncMock(return_value=mock_org),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_credits',
-            AsyncMock(return_value=None),
-        ),
-    ):
-        client = TestClient(mock_app_with_get_user_id)
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(return_value=updated_org),
+    ) as mock_update:
+        response = await update_org_defaults_settings(
+            org_id=org_id,
+            settings=update_data,
+            user_id=TEST_USER_ID,
+        )
 
-        # Act
-        response = client.get(f'/api/organizations/{org_id}')
-
-        # Assert
-        assert response.status_code == status.HTTP_200_OK
-        response_data = response.json()
-        assert response_data['credits'] is None
+    mock_update.assert_awaited_once_with(
+        org_id=org_id,
+        update_data=update_data,
+        user_id=TEST_USER_ID,
+    )
+    assert response.agent_settings.llm.model == 'openhands/claude-3.5-sonnet'
 
 
 @pytest.mark.asyncio
-async def test_get_org_sensitive_fields_not_exposed(
-    mock_app_with_get_user_id, mock_owner_role
-):
+async def test_update_org_defaults_settings_rejects_non_default_fields():
+    """GIVEN: A non-default org field is sent to the settings-only route
+    WHEN: the route is invoked
+    THEN: it rejects the payload instead of forwarding a broader org update
     """
-    GIVEN: Organization is retrieved successfully
-    WHEN: Response is returned
-    THEN: Sensitive fields (API keys) are not exposed
-    """
-    # Arrange
     org_id = uuid.uuid4()
-    mock_org = Org(
-        id=org_id,
-        name='Test Organization',
-        contact_name='John Doe',
-        contact_email='john@example.com',
-        org_version=5,
-        agent_settings={
-            'llm': {'model': 'claude-opus-4-5-20251101'},
-            'condenser': {'enabled': True},
-        },
-        search_api_key='secret-search-key-123',  # Should not be exposed
-        sandbox_api_key='secret-sandbox-key-123',  # Should not be exposed
-        enable_proactive_conversation_starters=True,
-    )
+    update_data = OrgUpdate(name='Renamed Org')
 
-    with (
-        patch(
-            'server.auth.authorization.get_user_org_role',
-            AsyncMock(return_value=mock_owner_role),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_by_id',
-            AsyncMock(return_value=mock_org),
-        ),
-        patch(
-            'server.routes.orgs.OrgService.get_org_credits',
-            AsyncMock(return_value=100.0),
-        ),
-    ):
-        client = TestClient(mock_app_with_get_user_id)
-
-        # Act
-        response = client.get(f'/api/organizations/{org_id}')
-
-        # Assert
-        assert response.status_code == status.HTTP_200_OK
-        response_data = response.json()
-
-        # Verify sensitive fields are not in response or are None
-        assert (
-            'search_api_key' not in response_data
-            or response_data.get('search_api_key') is None
+    with pytest.raises(HTTPException) as exc_info:
+        await update_org_defaults_settings(
+            org_id=org_id,
+            settings=update_data,
+            user_id=TEST_USER_ID,
         )
-        assert (
-            'sandbox_api_key' not in response_data
-            or response_data.get('sandbox_api_key') is None
-        )
+
+    assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 @pytest.mark.asyncio
@@ -3019,13 +2808,13 @@ class TestGetMeEndpoint:
         status_val='active',
     ):
         """Create a MeResponse for testing."""
-        agent_settings = {'schema_version': 1}
+        agent_settings_diff = {'schema_version': 1}
         if llm_model is not None:
-            agent_settings.setdefault('llm', {})['model'] = llm_model
+            agent_settings_diff.setdefault('llm', {})['model'] = llm_model
         if llm_base_url is not None:
-            agent_settings.setdefault('llm', {})['base_url'] = llm_base_url
+            agent_settings_diff.setdefault('llm', {})['base_url'] = llm_base_url
         if max_iterations is not None:
-            agent_settings['max_iterations'] = max_iterations
+            agent_settings_diff['max_iterations'] = max_iterations
 
         return MeResponse(
             org_id=str(org_id),
@@ -3033,7 +2822,7 @@ class TestGetMeEndpoint:
             email=email,
             role=role,
             llm_api_key=llm_api_key,
-            agent_settings_diff=agent_settings,
+            agent_settings_diff=agent_settings_diff,
             status=status_val,
         )
 

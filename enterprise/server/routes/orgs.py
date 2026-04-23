@@ -24,8 +24,7 @@ from server.routes.org_models import (
     OrgAuthorizationError,
     OrgCreate,
     OrgDatabaseError,
-    OrgLLMSettingsResponse,
-    OrgLLMSettingsUpdate,
+    OrgDefaultsSettingsResponse,
     OrgMemberFinancialPage,
     OrgMemberNotFoundError,
     OrgMemberPage,
@@ -43,15 +42,12 @@ from server.services.org_app_settings_service import (
     OrgAppSettingsService,
     OrgAppSettingsServiceInjector,
 )
-from server.services.org_llm_settings_service import (
-    OrgLLMSettingsService,
-    OrgLLMSettingsServiceInjector,
-)
 from server.services.org_member_financial_service import OrgMemberFinancialService
 from server.services.org_member_service import OrgMemberService
 from sqlalchemy.exc import IntegrityError
 from storage.org_git_claim_store import OrgGitClaimStore
 from storage.org_service import OrgService
+from storage.org_store import OrgStore
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
@@ -60,9 +56,6 @@ from openhands.server.user_auth import get_user_id
 # Initialize API router
 org_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
 
-# Create injector instance and dependency for LLM settings
-_org_llm_settings_injector = OrgLLMSettingsServiceInjector()
-org_llm_settings_service_dependency = Depends(_org_llm_settings_injector.depends)
 # Create injector instance and dependency at module level
 _org_app_settings_injector = OrgAppSettingsServiceInjector()
 org_app_settings_service_dependency = Depends(_org_app_settings_injector.depends)
@@ -228,34 +221,15 @@ async def create_org(
         )
 
 
-@org_router.get(
-    '/llm',
-    response_model=OrgLLMSettingsResponse,
-    dependencies=[Depends(require_permission(Permission.VIEW_LLM_SETTINGS))],
-)
-async def get_org_llm_settings(
-    service: OrgLLMSettingsService = org_llm_settings_service_dependency,
-) -> OrgLLMSettingsResponse:
-    """Get LLM settings for the user's current organization.
-
-    This endpoint retrieves the LLM configuration settings for the
-    authenticated user's current organization. All organization members
-    can view these settings.
-
-    Args:
-        service: OrgLLMSettingsService (injected by dependency)
-
-    Returns:
-        OrgLLMSettingsResponse: The organization's LLM settings
-
-    Raises:
-        HTTPException: 401 if not authenticated
-        HTTPException: 403 if not a member of any organization
-        HTTPException: 404 if current organization not found
-        HTTPException: 500 if retrieval fails
-    """
+@org_router.get('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+async def get_org_defaults_settings(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Get org-default settings for a specific organization."""
     try:
-        return await service.get_org_llm_settings()
+        org = await OrgService.get_org_by_id(org_id=org_id, user_id=user_id)
+        return OrgDefaultsSettingsResponse.from_org(org)
     except OrgNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -263,45 +237,45 @@ async def get_org_llm_settings(
         )
     except Exception as e:
         logger.exception(
-            'Error getting organization LLM settings',
-            extra={'error': str(e)},
+            'Error getting organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to retrieve LLM settings',
+            detail='Failed to retrieve organization defaults settings',
         )
 
 
-@org_router.post(
-    '/llm',
-    response_model=OrgLLMSettingsResponse,
-    dependencies=[Depends(require_permission(Permission.EDIT_LLM_SETTINGS))],
-)
-async def update_org_llm_settings(
-    settings: OrgLLMSettingsUpdate,
-    service: OrgLLMSettingsService = org_llm_settings_service_dependency,
-) -> OrgLLMSettingsResponse:
-    """Update LLM settings for the user's current organization.
-
-    This endpoint updates the LLM configuration settings for the
-    authenticated user's current organization. Only admins and owners
-    can update these settings.
-
-    Args:
-        settings: The LLM settings to update (only non-None fields are updated)
-        service: OrgLLMSettingsService (injected by dependency)
-
-    Returns:
-        OrgLLMSettingsResponse: The updated organization's LLM settings
-
-    Raises:
-        HTTPException: 401 if not authenticated
-        HTTPException: 403 if user lacks EDIT_LLM_SETTINGS permission
-        HTTPException: 404 if current organization not found
-        HTTPException: 500 if update fails
-    """
+@org_router.patch('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+async def update_org_defaults_settings(
+    org_id: UUID,
+    settings: OrgUpdate,
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Update org-default settings for a specific organization."""
     try:
-        return await service.update_org_llm_settings(settings)
+        allowed_fields = {
+            'agent_settings_diff',
+            'conversation_settings_diff',
+            'search_api_key',
+            'llm_api_key',
+        }
+        invalid_fields = settings.updated_fields() - allowed_fields
+        if invalid_fields:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    'Only organization default settings fields are supported on '
+                    '/api/organizations/{org_id}/settings'
+                ),
+            )
+
+        updated_org = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=settings,
+            user_id=user_id,
+        )
+        return OrgDefaultsSettingsResponse.from_org(updated_org)
     except OrgNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -309,21 +283,94 @@ async def update_org_llm_settings(
         )
     except OrgDatabaseError as e:
         logger.error(
-            'Database error updating LLM settings',
-            extra={'error': str(e)},
+            'Database error updating organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to update LLM settings',
+            detail='Failed to update organization defaults settings',
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(
-            'Error updating organization LLM settings',
-            extra={'error': str(e)},
+            'Error updating organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to update LLM settings',
+            detail='Failed to update organization defaults settings',
+        )
+
+
+@org_router.get(
+    '/llm',
+    response_model=OrgDefaultsSettingsResponse,
+    deprecated=True,
+)
+async def get_legacy_org_defaults_settings(
+    user_id: str = Depends(require_permission(Permission.VIEW_LLM_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Get org-default settings through the deprecated ``/llm`` wrapper."""
+    try:
+        org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
+        if not org:
+            raise OrgNotFoundError('current')
+        return await get_org_defaults_settings(org_id=org.id, user_id=user_id)
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            'Error getting legacy organization defaults settings',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization defaults settings',
+        )
+
+
+@org_router.post(
+    '/llm',
+    response_model=OrgDefaultsSettingsResponse,
+    deprecated=True,
+)
+async def update_legacy_org_defaults_settings(
+    settings: OrgUpdate,
+    user_id: str = Depends(require_permission(Permission.EDIT_LLM_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Update org-default settings through the deprecated ``/llm`` wrapper."""
+    try:
+        org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
+        if not org:
+            raise OrgNotFoundError('current')
+        if not settings.has_updates():
+            return OrgDefaultsSettingsResponse.from_org(org)
+        return await update_org_defaults_settings(
+            org_id=org.id,
+            settings=settings,
+            user_id=user_id,
+        )
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            'Error updating legacy organization defaults settings',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update organization defaults settings',
         )
 
 
@@ -417,31 +464,17 @@ async def update_org_app_settings(
         )
 
 
-@org_router.get('/{org_id}', response_model=OrgResponse, status_code=status.HTTP_200_OK)
+@org_router.get(
+    '/{org_id}',
+    response_model=OrgResponse,
+    status_code=status.HTTP_200_OK,
+    deprecated=True,
+)
 async def get_org(
     org_id: UUID,
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgResponse:
-    """Get organization details by ID.
-
-    This endpoint retrieves details for a specific organization. Access requires
-    the VIEW_ORG_SETTINGS permission, which is granted to all organization members
-    (member, admin, and owner roles).
-
-    Args:
-        org_id: Organization ID (UUID)
-        user_id: Authenticated user ID (injected by require_permission dependency)
-
-    Returns:
-        OrgResponse: The organization details
-
-    Raises:
-        HTTPException: 401 if user is not authenticated
-        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission
-        HTTPException: 404 if organization not found
-        HTTPException: 422 if org_id is not a valid UUID (handled by FastAPI)
-        HTTPException: 500 if retrieval fails
-    """
+    """Get organization details by ID through the deprecated detail route."""
     logger.info(
         'Retrieving organization details',
         extra={
@@ -451,15 +484,11 @@ async def get_org(
     )
 
     try:
-        # Use service layer to get organization with membership validation
         org = await OrgService.get_org_by_id(
             org_id=org_id,
             user_id=user_id,
         )
-
-        # Retrieve credits from LiteLLM
         credits = await OrgService.get_org_credits(user_id, org.id)
-
         return OrgResponse.from_org(org, credits=credits, user_id=user_id)
     except OrgNotFoundError as e:
         raise HTTPException(

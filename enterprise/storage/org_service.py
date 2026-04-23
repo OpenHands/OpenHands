@@ -539,41 +539,31 @@ class OrgService:
                 )
                 raise OrgNameExistsError(update_data.name)
 
-        # Convert to dict for OrgStore (excluding None values)
-        update_dict = update_data.model_dump(exclude_none=True)
-        if not update_dict:
+        if not update_data.has_updates():
             logger.info(
                 'No fields to update',
                 extra={'org_id': str(org_id), 'user_id': user_id},
             )
             return existing_org
 
-        restricted_fields = {
-            'agent_settings_diff',
-            'conversation_settings_diff',
-            'search_api_key',
-            'sandbox_api_key',
-        }
-        if restricted_fields.intersection(
-            update_dict
-        ) and not await OrgService.has_admin_or_owner_role(user_id, org_id):
+        restricted_fields = update_data.restricted_fields()
+        if restricted_fields and not await OrgService.has_admin_or_owner_role(
+            user_id, org_id
+        ):
             logger.warning(
                 'Insufficient role for restricted organization settings update',
                 extra={
                     'user_id': user_id,
                     'org_id': str(org_id),
-                    'restricted_fields': sorted(
-                        restricted_fields.intersection(update_dict)
-                    ),
+                    'restricted_fields': sorted(restricted_fields),
                 },
             )
             raise PermissionError(
-                'Admin or owner role required to update organization agent settings'
+                'Admin or owner role required to update organization default settings'
             )
 
-        # Perform the update
         try:
-            updated_org = await OrgStore.update_org(org_id, update_dict)
+            updated_org = await OrgStore.update_org(org_id, update_data, user_id)
             if not updated_org:
                 raise OrgDatabaseError('Failed to update organization in database')
 
@@ -582,7 +572,7 @@ class OrgService:
                 extra={
                     'org_id': str(org_id),
                     'user_id': user_id,
-                    'updated_fields': list(update_dict.keys()),
+                    'updated_fields': sorted(update_data.updated_fields()),
                 },
             )
 

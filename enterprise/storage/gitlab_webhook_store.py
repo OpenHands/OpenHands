@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from integrations.types import GitLabResourceType
-from sqlalchemy import and_, asc, select, text, update
+from sqlalchemy import and_, asc, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook
@@ -25,6 +25,8 @@ class GitlabWebhookStore:
 
         if webhook.group_id:
             return (GitLabResourceType.GROUP, webhook.group_id)
+        # At this point, project_id must be set (we checked at least one is set above)
+        assert webhook.project_id is not None
         return (GitLabResourceType.PROJECT, webhook.project_id)
 
     async def store_webhooks(self, project_details: list[GitlabWebhook]) -> None:
@@ -123,11 +125,11 @@ class GitlabWebhookStore:
             async with session.begin():
                 # Create query based on the identifier provided
                 if resource_type == GitLabResourceType.PROJECT:
-                    query = GitlabWebhook.__table__.delete().where(
+                    query = delete(GitlabWebhook).where(
                         GitlabWebhook.project_id == resource_id
                     )
                 else:  # has_group_id must be True based on validation
-                    query = GitlabWebhook.__table__.delete().where(
+                    query = delete(GitlabWebhook).where(
                         GitlabWebhook.group_id == resource_id
                     )
 

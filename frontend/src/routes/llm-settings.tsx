@@ -378,7 +378,7 @@ export function LlmSettingsScreen({
         agentSettings.llm = llm;
       }
 
-      return { agent_settings: agentSettings };
+      return { agent_settings_diff: agentSettings };
     },
     [isSaasMode, schema, selectedProvider],
   );
@@ -391,6 +391,8 @@ export function LlmSettingsScreen({
       header={buildHeader}
       buildPayload={buildPayload}
       getInitialView={getInitialView}
+      forceShowAdvancedView
+      allowAllView={!isSaasMode}
       testId="llm-settings-screen"
     />
   );
