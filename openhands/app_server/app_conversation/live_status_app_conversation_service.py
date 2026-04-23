@@ -5,6 +5,7 @@ import os
 import tempfile
 import zipfile
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Sequence, cast
@@ -1261,7 +1262,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
             # Validate overall dict size limits first
-            validate_secrets_dict(api_secrets)
+            # Cast to Mapping for mypy compatibility (Mapping is covariant in value type)
+            validate_secrets_dict(cast('Mapping[str, object]', api_secrets))
 
             for name, value in api_secrets.items():
                 validate_secret_name(name)
