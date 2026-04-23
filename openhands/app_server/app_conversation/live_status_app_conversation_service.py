@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -8,6 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Sequence, cast
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 import httpx
@@ -123,13 +125,23 @@ _logger = logging.getLogger(__name__)
 # Ollama reject requests with `think=true` for models that don't support
 # thinking. Keep in sync with the SDK / V0 REASONING_EFFORT_PATTERNS list.
 _REASONING_EFFORT_PATTERNS: tuple[str, ...] = (
-    'o1', 'o1-*', 'o3', 'o3-*', 'o4-mini', 'o4-mini-*',
+    'o1',
+    'o1-*',
+    'o3',
+    'o3-*',
+    'o4-mini',
+    'o4-mini-*',
     'gpt-5*',
-    'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3.1-pro*',
-    'claude-sonnet-4-5*', 'claude-sonnet-4-6*', 'claude-haiku-4-5*',
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-3.1-pro*',
+    'claude-sonnet-4-5*',
+    'claude-sonnet-4-6*',
+    'claude-haiku-4-5*',
     'deepseek-r1*',
     'kimi-k2.5',
-    'glm-4*', 'glm-5*',
+    'glm-4*',
+    'glm-5*',
 )
 
 
@@ -170,6 +182,71 @@ def _model_native_tool_calling_reliable(model: str) -> bool:
     if raw.startswith('ollama/'):
         return False
     return True
+
+
+def _is_volatile_ollama_container_url(model: str | None, base_url: str | None) -> bool:
+    """Return True when Ollama base URL points to Docker private network IP.
+
+    Docker-private 172.16.0.0/12 addresses are often ephemeral and should not be
+    inherited across parent/child conversations, because new sandboxes may not be
+    able to reach the old container IP.
+
+    Detects both:
+    - Ollama-prefixed models: ollama/qwen2.5-coder:14b
+    - Bare model names on ollama's default port: qwen2.5-coder:14b on :11434
+    """
+    if not model or not base_url:
+        return False
+
+    normalized_model = model.strip().lower()
+
+    # Check if this is an Ollama model (either with prefix or bare name on port 11434)
+    is_ollama_model = normalized_model.startswith('ollama/')
+
+    # Also detect bare model names that appear to be ollama models on default port
+    if not is_ollama_model:
+        parsed_url = urlparse(base_url)
+        if parsed_url.port == 11434 and ':' in normalized_model:
+            # Bare model names on 11434 port like 'qwen2.5-coder:14b' are likely ollama
+            is_ollama_model = True
+
+    if not is_ollama_model:
+        return False
+
+    hostname = urlparse(base_url).hostname
+    if not hostname:
+        return False
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        # Hostnames like host.docker.internal should continue to be inherited.
+        return False
+
+    return ip in ipaddress.ip_network('172.16.0.0/12')
+
+
+def _rewrite_volatile_ollama_url(model: str | None, base_url: str | None) -> str | None:
+    """Rewrite a volatile Ollama container URL to a stable host.docker.internal URL.
+
+    When a user's saved ``base_url`` (or a per-request override) points at a
+    Docker private-network IP (172.16.0.0/12) on the Ollama port, that address
+    is ephemeral across sandbox restarts and will ECONNREFUSE on resubmit.
+    We rewrite such URLs to ``http://host.docker.internal:<port>`` while
+    preserving the original scheme, port, and path. Non-volatile URLs and
+    non-Ollama models are returned unchanged.
+    """
+    if not _is_volatile_ollama_container_url(model, base_url):
+        return base_url
+    parsed = urlparse(base_url or '')
+    scheme = parsed.scheme or 'http'
+    port = parsed.port or 11434
+    netloc = f'host.docker.internal:{port}'
+    path = parsed.path or ''
+    # Rebuild URL (drop query/fragment – llm base URLs do not use them).
+    rewritten = f'{scheme}://{netloc}{path}'
+    return rewritten
+
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
 PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
@@ -892,7 +969,28 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
         if not request.llm_base_url and parent_info.llm_base_url:
-            request.llm_base_url = parent_info.llm_base_url
+            inherited_model = request.llm_model or parent_info.llm_model
+            if _is_volatile_ollama_container_url(
+                inherited_model,
+                parent_info.llm_base_url,
+            ):
+                rewritten = _rewrite_volatile_ollama_url(
+                    inherited_model, parent_info.llm_base_url
+                )
+                if rewritten and rewritten != parent_info.llm_base_url:
+                    _logger.info(
+                        'Rewriting volatile Ollama base URL %s from parent conversation to %s',
+                        parent_info.llm_base_url,
+                        rewritten,
+                    )
+                    request.llm_base_url = rewritten
+                else:
+                    _logger.info(
+                        'Skipping inheritance of volatile Ollama base URL from parent conversation: %s',
+                        parent_info.llm_base_url,
+                    )
+            else:
+                request.llm_base_url = parent_info.llm_base_url
 
     def _apply_suggested_task(self, request: AppConversationStartRequest) -> None:
         """Apply suggested task defaults to the start request."""
@@ -1014,6 +1112,38 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """
         model: str = llm_model or user.llm_model or LLM.model_fields['model'].default
         base_url = llm_base_url or user.llm_base_url
+
+        # Guard against stale per-conversation Ollama container IPs leaking into
+        # retries/resubmits. Prefer the user's current base URL when the request
+        # override is a volatile Docker private address.
+        if llm_base_url and _is_volatile_ollama_container_url(model, llm_base_url):
+            if user.llm_base_url and not _is_volatile_ollama_container_url(
+                model, user.llm_base_url
+            ):
+                _logger.info(
+                    'Ignoring volatile per-request Ollama base URL and using user settings base URL: %s',
+                    llm_base_url,
+                )
+                base_url = user.llm_base_url
+            else:
+                _logger.info(
+                    'Ignoring volatile per-request Ollama base URL with no stable user override available: %s',
+                    llm_base_url,
+                )
+                base_url = user.llm_base_url
+
+        # Final safety net: if the resolved URL is still volatile (e.g. the
+        # user's saved settings themselves contain a 172.x bridge IP), rewrite
+        # to host.docker.internal rather than letting the request ECONNREFUSE.
+        if base_url and _is_volatile_ollama_container_url(model, base_url):
+            rewritten = _rewrite_volatile_ollama_url(model, base_url)
+            if rewritten and rewritten != base_url:
+                _logger.info(
+                    'Rewriting volatile Ollama base URL %s to stable host.docker.internal',
+                    base_url,
+                )
+                base_url = rewritten
+
         if model and (
             model.startswith('openhands/') or model.startswith('litellm_proxy/')
         ):

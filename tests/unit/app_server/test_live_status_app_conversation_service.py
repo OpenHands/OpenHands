@@ -24,6 +24,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     PLANNING_AGENT_INSTRUCTION,
     LiveStatusAppConversationService,
+    _is_volatile_ollama_container_url,
+    _rewrite_volatile_ollama_url,
 )
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -600,7 +602,100 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://user-llm.example.com'
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_with_user_default_model(self):
+    async def test_configure_llm_and_mcp_volatile_ollama_override_uses_user_base_url(
+        self,
+    ):
+        """Volatile per-request Ollama base_url should not override stable user settings."""
+        # Arrange
+        self.mock_user.llm_model = 'ollama/qwen2.5-coder:14b'
+        self.mock_user.llm_base_url = 'http://host.docker.internal:11434'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user,
+            self.mock_user.llm_model,
+            self.conversation_id,
+            llm_base_url='http://172.28.174.246:11434',
+        )
+
+        # Assert
+        assert llm.base_url == 'http://host.docker.internal:11434'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_rewrites_volatile_user_settings_base_url(
+        self,
+    ):
+        """When user's own saved settings contain a volatile 172.x Ollama URL,
+        rewrite it to host.docker.internal at call time so chat/resubmit works
+        without requiring the user to edit Settings first."""
+        # Arrange: user settings themselves are volatile (stale Docker bridge IP)
+        self.mock_user.llm_model = 'ollama/qwen2.5-coder:14b'
+        self.mock_user.llm_base_url = 'http://172.28.174.246:11434'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act: no per-request override; only user settings are available
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model, self.conversation_id
+        )
+
+        # Assert: rewritten to stable host.docker.internal
+        assert llm.base_url == 'http://host.docker.internal:11434'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_rewrites_volatile_override_when_user_also_volatile(
+        self,
+    ):
+        """When both the per-request override and user settings are volatile,
+        the final URL should still be rewritten to host.docker.internal."""
+        # Arrange: both paths are volatile
+        self.mock_user.llm_model = 'ollama/qwen2.5-coder:14b'
+        self.mock_user.llm_base_url = 'http://172.17.0.5:11434'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user,
+            self.mock_user.llm_model,
+            self.conversation_id,
+            llm_base_url='http://172.28.174.246:11434',
+        )
+
+        # Assert
+        assert llm.base_url == 'http://host.docker.internal:11434'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_preserves_non_volatile_custom_ip(self):
+        """Legitimate LAN IPs (e.g. 192.168.x.x) must not be rewritten."""
+        # Arrange: user points at a LAN Ollama host
+        self.mock_user.llm_model = 'ollama/qwen2.5-coder:14b'
+        self.mock_user.llm_base_url = 'http://192.168.1.50:11434'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model, self.conversation_id
+        )
+
+        # Assert: URL preserved unchanged
+        assert llm.base_url == 'http://192.168.1.50:11434'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_rewrites_volatile_bare_model_settings(self):
+        """Bare model names on volatile 11434 URL (Local Config scope, as shown in
+        the ECONNREFUSED screenshot) should also be rewritten."""
+        # Arrange: bare model name (no ollama/ prefix) + volatile URL
+        self.mock_user.llm_model = 'qwen2.5-coder:14b'
+        self.mock_user.llm_base_url = 'http://172.28.174.246:11434'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model, self.conversation_id
+        )
+
+        # Assert
+        assert llm.base_url == 'http://host.docker.internal:11434'
         """Test _configure_llm_and_mcp using user's default model."""
         # Arrange
         self.mock_user_context.get_mcp_api_key.return_value = None
@@ -851,6 +946,104 @@ class TestLiveStatusAppConversationService:
         # Assert
         assert path == '/workspace/project/agents-tmp-config/PLAN.md'
 
+    def test_inherit_configuration_rewrites_volatile_ollama_base_url(self):
+        """Volatile parent Ollama URL should be rewritten to host.docker.internal."""
+        request = AppConversationStartRequest(parent_conversation_id=uuid4())
+        parent_info = Mock(spec=AppConversationInfo)
+        parent_info.sandbox_id = uuid4()
+        parent_info.selected_repository = 'repo'
+        parent_info.selected_branch = 'main'
+        parent_info.git_provider = ProviderType.GITHUB
+        parent_info.llm_model = 'ollama/qwen2.5-coder:14b'
+        parent_info.llm_base_url = 'http://172.28.174.246:11434'
+
+        self.service._inherit_configuration_from_parent(request, parent_info)
+
+        assert request.llm_model == 'ollama/qwen2.5-coder:14b'
+        assert request.llm_base_url == 'http://host.docker.internal:11434'
+
+    def test_inherit_configuration_keeps_stable_ollama_base_url(self):
+        """Inherit parent Ollama URL when it uses stable host routing."""
+        request = AppConversationStartRequest(parent_conversation_id=uuid4())
+        parent_info = Mock(spec=AppConversationInfo)
+        parent_info.sandbox_id = uuid4()
+        parent_info.selected_repository = 'repo'
+        parent_info.selected_branch = 'main'
+        parent_info.git_provider = ProviderType.GITHUB
+        parent_info.llm_model = 'ollama/qwen2.5-coder:14b'
+        parent_info.llm_base_url = 'http://host.docker.internal:11434'
+
+        self.service._inherit_configuration_from_parent(request, parent_info)
+
+        assert request.llm_model == 'ollama/qwen2.5-coder:14b'
+        assert request.llm_base_url == 'http://host.docker.internal:11434'
+
+    def test_inherit_configuration_keeps_non_ollama_base_url(self):
+        """Non-Ollama provider URLs should still be inherited unchanged."""
+        request = AppConversationStartRequest(parent_conversation_id=uuid4())
+        parent_info = Mock(spec=AppConversationInfo)
+        parent_info.sandbox_id = uuid4()
+        parent_info.selected_repository = 'repo'
+        parent_info.selected_branch = 'main'
+        parent_info.git_provider = ProviderType.GITHUB
+        parent_info.llm_model = 'openai/gpt-4o'
+        parent_info.llm_base_url = 'http://172.28.174.246:11434'
+
+        self.service._inherit_configuration_from_parent(request, parent_info)
+
+        assert request.llm_model == 'openai/gpt-4o'
+        assert request.llm_base_url == 'http://172.28.174.246:11434'
+
+    def test_inherit_configuration_rewrites_bare_ollama_model_with_volatile_base_url(
+        self,
+    ):
+        """Bare model name on volatile Docker IP should be rewritten."""
+        request = AppConversationStartRequest(parent_conversation_id=uuid4())
+        parent_info = Mock(spec=AppConversationInfo)
+        parent_info.sandbox_id = uuid4()
+        parent_info.selected_repository = 'repo'
+        parent_info.selected_branch = 'main'
+        parent_info.git_provider = ProviderType.GITHUB
+        parent_info.llm_model = 'qwen2.5-coder:14b'
+        parent_info.llm_base_url = 'http://172.28.174.246:11434'
+
+        self.service._inherit_configuration_from_parent(request, parent_info)
+
+        assert request.llm_model == 'qwen2.5-coder:14b'
+        assert request.llm_base_url == 'http://host.docker.internal:11434'
+
+    def test_inherit_configuration_keeps_bare_ollama_model_with_stable_base_url(self):
+        """Bare model name on stable address should be inherited."""
+        request = AppConversationStartRequest(parent_conversation_id=uuid4())
+        parent_info = Mock(spec=AppConversationInfo)
+        parent_info.sandbox_id = uuid4()
+        parent_info.selected_repository = 'repo'
+        parent_info.selected_branch = 'main'
+        parent_info.git_provider = ProviderType.GITHUB
+        parent_info.llm_model = 'mistral:latest'
+        parent_info.llm_base_url = 'http://host.docker.internal:11434'
+
+        self.service._inherit_configuration_from_parent(request, parent_info)
+
+        assert request.llm_model == 'mistral:latest'
+        assert request.llm_base_url == 'http://host.docker.internal:11434'
+
+    def test_inherit_configuration_keeps_bare_model_without_ollama_port(self):
+        """Bare model on non-11434 port should not be treated as ollama."""
+        request = AppConversationStartRequest(parent_conversation_id=uuid4())
+        parent_info = Mock(spec=AppConversationInfo)
+        parent_info.sandbox_id = uuid4()
+        parent_info.selected_repository = 'repo'
+        parent_info.selected_branch = 'main'
+        parent_info.git_provider = ProviderType.GITHUB
+        parent_info.llm_model = 'some-model:v1'
+        parent_info.llm_base_url = 'http://172.28.174.246:8080'
+
+        self.service._inherit_configuration_from_parent(request, parent_info)
+
+        assert request.llm_model == 'some-model:v1'
+        assert request.llm_base_url == 'http://172.28.174.246:8080'
+
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
     )
@@ -1082,10 +1275,14 @@ class TestLiveStatusAppConversationService:
                 self.mock_user.condenser_max_size,
             )
 
-            # Assert - verify no planning instruction for default agent
+            # Assert - verify no planning instruction for default agent;
+            # the default agent still receives the AGENTIC_CODING_INSTRUCTION
+            # contract but must NOT contain the PLANNING_AGENT_INSTRUCTION.
             model_copy_call = mock_agent_instance.model_copy.call_args
             agent_context = model_copy_call[1]['update']['agent_context']
-            assert agent_context.system_message_suffix is None
+            assert PLANNING_AGENT_INSTRUCTION not in (
+                agent_context.system_message_suffix or ''
+            )
 
     @pytest.mark.asyncio
     async def test_finalize_conversation_request_with_skills(self):
@@ -1258,7 +1455,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user
         )
         self.service._configure_llm_and_mcp.assert_called_once_with(
-            self.mock_user, 'gpt-4', test_conversation_id
+            self.mock_user, 'gpt-4', test_conversation_id, None
         )
         # When selected_repository='test/repo', project_dir is resolved
         # to '/test/dir/repo' via get_project_dir. All downstream calls
@@ -1701,10 +1898,12 @@ class TestLiveStatusAppConversationService:
         self.service.run_setup_scripts = mock_run_setup_scripts
 
         # Mock build start conversation request
-        mock_agent = Mock(spec=Agent)
-        mock_agent.llm = Mock(spec=LLM)
-        mock_agent.llm.model = 'gpt-4'
-        mock_start_request = Mock(spec=StartConversationRequest)
+        mock_llm = Mock()
+        mock_llm.model = 'gpt-4'
+        mock_llm.base_url = None
+        mock_agent = Mock()
+        mock_agent.llm = mock_llm
+        mock_start_request = Mock()
         mock_start_request.agent = mock_agent
         mock_start_request.model_dump.return_value = {'test': 'data'}
 
@@ -3481,3 +3680,71 @@ class TestLoadHooksFromWorkspace:
             },
             timeout=30.0,
         )
+
+
+class TestVolatileOllamaUrlHelpers:
+    """Pure-function tests for volatile Ollama URL detection and rewrite."""
+
+    @pytest.mark.parametrize(
+        'model,base_url,expected',
+        [
+            # Volatile prefixed ollama model
+            ('ollama/qwen2.5-coder:14b', 'http://172.28.174.246:11434', True),
+            ('ollama/llama3.2:3b', 'http://172.17.0.5:11434', True),
+            # Volatile bare model on 11434 (user's screenshot scenario)
+            ('qwen2.5-coder:14b', 'http://172.28.174.246:11434', True),
+            # Stable hostnames (never volatile)
+            ('ollama/qwen2.5-coder:14b', 'http://host.docker.internal:11434', False),
+            ('ollama/qwen2.5-coder:14b', 'http://localhost:11434', False),
+            # Legitimate LAN IPs outside 172.16/12
+            ('ollama/qwen2.5-coder:14b', 'http://192.168.1.50:11434', False),
+            ('ollama/qwen2.5-coder:14b', 'http://10.0.0.5:11434', False),
+            # Non-ollama provider even on 172.x (must NOT be flagged)
+            ('openai/gpt-4o', 'http://172.28.174.246:11434', False),
+            # Bare model on non-11434 port (not ollama)
+            ('some-model:v1', 'http://172.28.174.246:8080', False),
+            # Missing inputs
+            (None, 'http://172.28.174.246:11434', False),
+            ('ollama/foo', None, False),
+            ('', '', False),
+        ],
+    )
+    def test_is_volatile_ollama_container_url(self, model, base_url, expected):
+        assert _is_volatile_ollama_container_url(model, base_url) is expected
+
+    def test_rewrite_preserves_stable_url(self):
+        stable = 'http://host.docker.internal:11434'
+        assert (
+            _rewrite_volatile_ollama_url('ollama/qwen2.5-coder:14b', stable) == stable
+        )
+
+    def test_rewrite_volatile_prefixed_model(self):
+        assert (
+            _rewrite_volatile_ollama_url(
+                'ollama/qwen2.5-coder:14b', 'http://172.28.174.246:11434'
+            )
+            == 'http://host.docker.internal:11434'
+        )
+
+    def test_rewrite_volatile_bare_model(self):
+        assert (
+            _rewrite_volatile_ollama_url(
+                'qwen2.5-coder:14b', 'http://172.28.174.246:11434'
+            )
+            == 'http://host.docker.internal:11434'
+        )
+
+    def test_rewrite_preserves_custom_port(self):
+        # Non-default port is extremely rare for ollama but we must preserve it.
+        assert (
+            _rewrite_volatile_ollama_url('ollama/foo:bar', 'http://172.17.0.5:11434')
+            == 'http://host.docker.internal:11434'
+        )
+
+    def test_rewrite_non_ollama_untouched(self):
+        url = 'http://172.28.174.246:11434'
+        assert _rewrite_volatile_ollama_url('openai/gpt-4o', url) == url
+
+    def test_rewrite_none_inputs(self):
+        assert _rewrite_volatile_ollama_url(None, None) is None
+        assert _rewrite_volatile_ollama_url('ollama/foo', None) is None
