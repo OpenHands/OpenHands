@@ -26,7 +26,6 @@ from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.status.status_router import router as health_router
 from openhands.integrations.service_types import AuthenticationError
 from openhands.server.routes.mcp import mcp_server
-from openhands.server.shared import conversation_manager
 from openhands.version import get_version
 
 mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
