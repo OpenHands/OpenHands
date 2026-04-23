@@ -19,10 +19,6 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
-from openhands.app_server.event_callback.event_callback_models import EventCallback
-from openhands.app_server.event_callback.set_title_callback_processor import (
-    SetTitleCallbackProcessor,
-)
 from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_event_service,
@@ -33,6 +29,10 @@ from openhands.app_server.config import (
 )
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
+from openhands.app_server.event_callback.event_callback_models import EventCallback
+from openhands.app_server.event_callback.set_title_callback_processor import (
+    SetTitleCallbackProcessor,
+)
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
@@ -250,7 +250,9 @@ async def on_conversation_update(
     if is_new_conversation:
         state = InjectorState()
         setattr(
-            state, USER_CONTEXT_ATTR, SpecifyUserContext(sandbox_info.created_by_user_id)
+            state,
+            USER_CONTEXT_ATTR,
+            SpecifyUserContext(sandbox_info.created_by_user_id),
         )
         async with get_event_callback_service(state) as event_callback_service:
             await event_callback_service.save_event_callback(
