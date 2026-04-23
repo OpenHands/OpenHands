@@ -9,8 +9,6 @@
 import contextlib
 import importlib
 import warnings
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi.routing import Mount
 
@@ -81,13 +79,7 @@ def combine_lifespans(*lifespans):
     return combined_lifespan
 
 
-@asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    async with conversation_manager:
-        yield
-
-
-lifespans = [_lifespan, mcp_app.lifespan]
+lifespans = [mcp_app.lifespan]
 app_lifespan_ = get_app_lifespan_service()
 if app_lifespan_:
     lifespans.append(app_lifespan_.lifespan)

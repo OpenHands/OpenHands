@@ -14,9 +14,6 @@ from dotenv import load_dotenv
 from openhands.core.config import load_openhands_config
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.config.server_config import ServerConfig, load_server_config
-from openhands.server.conversation_manager.conversation_manager import (
-    ConversationManager,
-)
 from openhands.server.monitoring import MonitoringListener
 from openhands.server.types import ServerConfigInterface
 from openhands.storage import get_file_store
@@ -65,15 +62,6 @@ MonitoringListenerImpl = get_impl(
 )
 
 monitoring_listener = MonitoringListenerImpl.get_instance(config)
-
-ConversationManagerImpl = get_impl(
-    ConversationManager,
-    server_config.conversation_manager_class,
-)
-
-conversation_manager = ConversationManagerImpl.get_instance(
-    sio, config, file_store, server_config, monitoring_listener
-)
 
 SettingsStoreImpl = get_impl(SettingsStore, server_config.settings_store_class)
 

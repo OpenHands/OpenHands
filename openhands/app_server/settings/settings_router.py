@@ -30,7 +30,11 @@ from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
-from openhands.utils.llm import get_provider_api_base, is_openhands_model
+from openhands.utils.llm import (
+    get_provider_api_base,
+    is_openhands_model,
+    resolve_llm_base_url,
+)
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -47,25 +51,16 @@ router = APIRouter(
 def _post_merge_llm_fixups(settings: Settings) -> None:
     """Apply LLM-specific fixups after merging settings.
 
-    When the merged LLM base_url is empty-string, treat it as cleared.
-    When it is None, try to auto-detect the provider default.
+    Delegates the empty-string → cleared and provider-default inference
+    rules to :func:`openhands.utils.llm.resolve_llm_base_url` so the
+    personal-save and enterprise org-defaults paths stay in lockstep.
     """
     llm = settings.agent_settings.llm
-
-    if llm.base_url == '':
-        llm.base_url = None
-    elif llm.base_url is None and llm.model:
-        if is_openhands_model(llm.model):
-            llm.base_url = LITE_LLM_API_URL
-        else:
-            try:
-                api_base = get_provider_api_base(llm.model)
-                if api_base:
-                    llm.base_url = api_base
-            except Exception as e:
-                logger.error(
-                    f'Failed to get api_base from litellm for model {llm.model}: {e}'
-                )
+    llm.base_url = resolve_llm_base_url(
+        model=llm.model,
+        base_url=llm.base_url,
+        managed_proxy_url=LITE_LLM_API_URL,
+    )
 
 
 # NOTE: We use response_model=None for endpoints that return JSONResponse directly.
@@ -170,6 +165,10 @@ async def load_settings(
     response_model=None,
     responses={
         200: {'description': 'Settings stored successfully', 'model': dict},
+        422: {
+            'description': 'Legacy nested settings keys are not accepted',
+            'model': dict,
+        },
         500: {'description': 'Error storing settings', 'model': dict},
     },
 )
@@ -179,14 +178,27 @@ async def store_settings(
 ) -> JSONResponse:
     """Store user settings.
 
-    Accepts a partial payload and deep-merges ``agent_settings`` and
-    ``conversation_settings`` with the existing persisted values so that
+    Accepts a partial payload and deep-merges ``agent_settings_diff`` and
+    ``conversation_settings_diff`` with the existing persisted values so that
     saving one settings page never overwrites fields owned by another.
 
     Returns:
         200: Settings stored successfully
+        422: Legacy nested settings keys are rejected
         500: Error storing settings
     """
+    legacy_nested_keys = sorted(
+        key for key in ('agent_settings', 'conversation_settings') if key in payload
+    )
+    if legacy_nested_keys:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={
+                'error': 'Use *_diff nested settings payloads instead of legacy keys',
+                'keys': legacy_nested_keys,
+            },
+        )
+
     try:
         existing_settings = await settings_store.load()
         settings = existing_settings.model_copy() if existing_settings else Settings()

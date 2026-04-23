@@ -24,7 +24,6 @@ from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
-from server.utils.conversation_callback_utils import register_callback_processor
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
@@ -171,17 +170,11 @@ class GitlabManager(Manager[GitlabViewType]):
             )
 
     async def start_job(self, gitlab_view: GitlabViewType) -> None:
-        """
-        Start a job for the GitLab view.
+        """Start a job for the GitLab view using V1 app conversation system.
 
         Args:
             gitlab_view: The GitLab view object containing issue/PR/comment info
         """
-        # Importing here prevents circular import
-        from server.conversation_callback_processor.gitlab_callback_processor import (
-            GitlabCallbackProcessor,
-        )
-
         try:
             try:
                 user_info = gitlab_view.user_info
@@ -235,19 +228,7 @@ class GitlabManager(Manager[GitlabViewType]):
                     f'[GitLab] Created conversation {conversation_id} for user {user_info.username}'
                 )
 
-                if not gitlab_view.v1_enabled:
-                    # Create a GitlabCallbackProcessor for this conversation
-                    processor = GitlabCallbackProcessor(
-                        gitlab_view=gitlab_view,
-                        send_summary_instruction=True,
-                    )
-
-                    # Register the callback processor
-                    register_callback_processor(conversation_id, processor)
-
-                    logger.info(
-                        f'[GitLab] Created callback processor for conversation {conversation_id}'
-                    )
+                # V1 callback processors are registered by the view during conversation creation
 
                 conversation_link = CONVERSATION_URL.format(conversation_id)
                 msg_info = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"

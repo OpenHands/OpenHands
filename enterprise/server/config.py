@@ -75,10 +75,6 @@ class SaaSServerConfig(ServerConfig):
     conversation_store_class: str = (
         'storage.saas_conversation_store.SaasConversationStore'
     )
-    conversation_manager_class: str = os.environ.get(
-        'CONVERSATION_MANAGER_CLASS',
-        'server.clustered_conversation_manager.ClusteredConversationManager',
-    )
     monitoring_listener_class: str = (
         'server.saas_monitoring_listener.SaaSMonitoringListener'
     )

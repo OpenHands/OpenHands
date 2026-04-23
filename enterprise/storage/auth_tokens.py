@@ -1,18 +1,20 @@
-from sqlalchemy import BigInteger, Column, Identity, Index, Integer, String
+from sqlalchemy import BigInteger, Identity, Index, String
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 
-class AuthTokens(Base):  # type: ignore
+class AuthTokens(Base):
     __tablename__ = 'auth_tokens'
-    id = Column(Integer, Identity(), primary_key=True)
-    keycloak_user_id = Column(String, nullable=False, index=True)
-    identity_provider = Column(String, nullable=False)
-    access_token = Column(String, nullable=False)
-    refresh_token = Column(String, nullable=False)
-    access_token_expires_at = Column(
+
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    keycloak_user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    identity_provider: Mapped[str] = mapped_column(String, nullable=False)
+    access_token: Mapped[str] = mapped_column(String, nullable=False)
+    refresh_token: Mapped[str] = mapped_column(String, nullable=False)
+    access_token_expires_at: Mapped[int] = mapped_column(
         BigInteger, nullable=False
     )  # Time since epoch in seconds
-    refresh_token_expires_at = Column(
+    refresh_token_expires_at: Mapped[int] = mapped_column(
         BigInteger, nullable=False
     )  # Time since epoch in seconds
 

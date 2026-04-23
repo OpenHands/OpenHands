@@ -6,6 +6,7 @@ import { getSettingsQueryFn, useSettings } from "#/hooks/query/use-settings";
 import { useGetSecrets } from "#/hooks/query/use-get-secrets";
 import { useApiKeys } from "#/hooks/query/use-api-keys";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import ApiKeysClient from "#/api/api-keys";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -115,6 +116,19 @@ describe("Organization-scoped query hooks", () => {
       ]);
       expect(org1Data).toBeDefined();
       expect(org2Data).toBeDefined();
+    });
+
+    it("should fetch org-scoped settings with the selected org id", async () => {
+      const getOrganizationSettingsSpy = vi
+        .spyOn(organizationService, "getOrganizationSettings")
+        .mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
+
+      const settings = await getSettingsQueryFn("org", "org-1");
+
+      expect(settings.llm_model).toBe(MOCK_DEFAULT_USER_SETTINGS.llm_model);
+      expect(getOrganizationSettingsSpy).toHaveBeenCalledWith({
+        orgId: "org-1",
+      });
     });
 
     it("should prefer schema-managed LLM values over stale legacy flat fields", async () => {

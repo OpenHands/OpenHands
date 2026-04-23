@@ -146,54 +146,59 @@ class Settings(BaseModel):
     def update(self, payload: dict[str, Any]) -> None:
         """Apply a batch of changes from a nested dict.
 
-        ``agent_settings`` values use nested dict shape (matching model_dump).
-        ``conversation_settings`` values likewise.
-        Top-level keys are set directly on the model.
+        ``agent_settings_diff`` and ``conversation_settings_diff`` use nested
+        dict shape (matching model_dump). Top-level keys are set directly on the
+        model.
         """
-        if 'agent_settings' in payload:
-            agent_update = payload['agent_settings']
-            if isinstance(agent_update, dict):
-                coerced: dict[str, Any] = {}
-                for key, value in agent_update.items():
-                    coerced[key] = (
-                        _coerce_value(value) if not isinstance(value, dict) else value
-                    )
+        legacy_nested_keys = [
+            key for key in ('agent_settings', 'conversation_settings') if key in payload
+        ]
+        if legacy_nested_keys:
+            raise ValueError(
+                'Use *_diff nested settings payloads instead of legacy '
+                + ', '.join(sorted(legacy_nested_keys))
+            )
 
-                replace_mcp_config = 'mcp_config' in agent_update
-                mcp_config = (
-                    coerced.pop('mcp_config', None) if replace_mcp_config else None
-                )
-
-                merged = deep_merge(
-                    self.agent_settings.model_dump(
-                        mode='json', context={'expose_secrets': True}
-                    ),
-                    coerced,
-                )
-                if replace_mcp_config:
-                    merged['mcp_config'] = mcp_config
-
-                # Use object.__setattr__ to avoid validate_assignment
-                # side-effects on other fields.
-                object.__setattr__(
-                    self, 'agent_settings', AgentSettings.model_validate(merged)
+        agent_update = payload.get('agent_settings_diff')
+        if isinstance(agent_update, dict):
+            coerced: dict[str, Any] = {}
+            for key, value in agent_update.items():
+                coerced[key] = (
+                    _coerce_value(value) if not isinstance(value, dict) else value
                 )
 
-        if 'conversation_settings' in payload:
-            conv_update = payload['conversation_settings']
-            if isinstance(conv_update, dict):
-                merged = deep_merge(
-                    self.conversation_settings.model_dump(mode='json'),
-                    conv_update,
-                )
-                object.__setattr__(
-                    self,
-                    'conversation_settings',
-                    ConversationSettings.model_validate(merged),
-                )
+            replace_mcp_config = 'mcp_config' in agent_update
+            mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
+
+            merged = deep_merge(
+                self.agent_settings.model_dump(
+                    mode='json', context={'expose_secrets': True}
+                ),
+                coerced,
+            )
+            if replace_mcp_config:
+                merged['mcp_config'] = mcp_config
+
+            # Use object.__setattr__ to avoid validate_assignment
+            # side-effects on other fields.
+            object.__setattr__(
+                self, 'agent_settings', AgentSettings.model_validate(merged)
+            )
+
+        conv_update = payload.get('conversation_settings_diff')
+        if isinstance(conv_update, dict):
+            merged = deep_merge(
+                self.conversation_settings.model_dump(mode='json'),
+                conv_update,
+            )
+            object.__setattr__(
+                self,
+                'conversation_settings',
+                ConversationSettings.model_validate(merged),
+            )
 
         for key, value in payload.items():
-            if key in ('agent_settings', 'conversation_settings'):
+            if key in ('agent_settings_diff', 'conversation_settings_diff'):
                 continue
             if key in Settings.model_fields and key not in _SETTINGS_FROZEN_FIELDS:
                 field_info = Settings.model_fields[key]

@@ -6,12 +6,12 @@ import {
   SdkSectionHeaderProps,
   SdkSectionPage,
 } from "#/components/features/settings/sdk-settings/sdk-section-page";
-import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { SettingsScope } from "#/types/settings";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-defaults-guard";
 
 const VERIFICATION_SCHEMA_EXCLUDE_KEYS = new Set([
   "confirmation_mode",
@@ -19,7 +19,6 @@ const VERIFICATION_SCHEMA_EXCLUDE_KEYS = new Set([
 ]);
 
 function VerificationSettingsHeader({
-  scope,
   confirmationMode,
   securityAnalyzer,
   isConversationSettingsDisabled,
@@ -27,7 +26,6 @@ function VerificationSettingsHeader({
   onSecurityAnalyzerChange,
   renderTopContent,
 }: {
-  scope: SettingsScope;
   confirmationMode: boolean;
   securityAnalyzer: string | null;
   isConversationSettingsDisabled: boolean;
@@ -56,7 +54,6 @@ function VerificationSettingsHeader({
   return (
     <div className="flex flex-col gap-6">
       {renderTopContent?.()}
-      {scope === "org" ? <OrgWideSettingsBadge /> : null}
 
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1.5">
@@ -132,7 +129,6 @@ export function VerificationSettingsScreen({
   const buildHeader = React.useCallback(
     ({ isDisabled }: SdkSectionHeaderProps) => (
       <VerificationSettingsHeader
-        scope={scope}
         confirmationMode={confirmationMode}
         securityAnalyzer={securityAnalyzer}
         isConversationSettingsDisabled={isDisabled}
@@ -147,7 +143,7 @@ export function VerificationSettingsScreen({
         renderTopContent={renderTopContent}
       />
     ),
-    [confirmationMode, renderTopContent, scope, securityAnalyzer],
+    [confirmationMode, renderTopContent, securityAnalyzer],
   );
 
   const buildPayload = React.useCallback(
@@ -164,7 +160,7 @@ export function VerificationSettingsScreen({
         payload.security_analyzer = securityAnalyzer;
       }
 
-      return { conversation_settings: payload };
+      return { conversation_settings_diff: payload };
     },
     [
       confirmationMode,
@@ -193,6 +189,15 @@ export function VerificationSettingsScreen({
   );
 }
 
-export const clientLoader = createPermissionGuard("view_llm_settings");
+const orgDefaultsRedirectGuard = requireOrgDefaultsRedirect(
+  "/settings/org-defaults/verification",
+);
+const verificationPermissionGuard = createPermissionGuard("view_llm_settings");
+
+export const clientLoader = async (args: { request: Request }) => {
+  const blocked = await orgDefaultsRedirectGuard(args);
+  if (blocked) return blocked;
+  return verificationPermissionGuard(args);
+};
 
 export default VerificationSettingsScreen;
