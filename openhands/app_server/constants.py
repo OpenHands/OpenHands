@@ -4,6 +4,28 @@ This module contains constants that are used across the app server,
 including security-related configurations for secret name validation.
 """
 
+import os
+
+# =============================================================================
+# SECRET LIMITS (configurable via environment variables)
+# =============================================================================
+
+# Maximum number of secrets that can be passed via API in a single request.
+# Prevents abuse by limiting the size of the secrets dictionary.
+# Override with: OH_MAX_API_SECRETS_COUNT
+MAX_API_SECRETS_COUNT: int = int(os.getenv('OH_MAX_API_SECRETS_COUNT', '50'))
+
+# Maximum length of a secret name in characters.
+# Environment variable names should be concise; this prevents excessively long names.
+# Override with: OH_MAX_API_SECRET_NAME_LENGTH
+MAX_API_SECRET_NAME_LENGTH: int = int(os.getenv('OH_MAX_API_SECRET_NAME_LENGTH', '256'))
+
+# Maximum length of a secret value in bytes.
+# 64KB is generous for API keys/tokens while preventing massive payloads.
+# Override with: OH_MAX_API_SECRET_VALUE_LENGTH
+MAX_API_SECRET_VALUE_LENGTH: int = int(os.getenv('OH_MAX_API_SECRET_VALUE_LENGTH', '65536'))
+
+
 # =============================================================================
 # SECRET NAME VALIDATION
 # =============================================================================
@@ -76,8 +98,16 @@ def validate_secret_name(name: str) -> None:
         name: The secret name to validate
 
     Raises:
-        ValueError: If the name is blocked (exact match or prefix match)
+        ValueError: If the name is blocked (exact match or prefix match),
+                    or exceeds the maximum length
     """
+    # Check name length
+    if len(name) > MAX_API_SECRET_NAME_LENGTH:
+        raise ValueError(
+            f'Secret name exceeds maximum length of {MAX_API_SECRET_NAME_LENGTH} characters '
+            f'(got {len(name)}). Configure via OH_MAX_API_SECRET_NAME_LENGTH.'
+        )
+
     upper_name = name.upper()
 
     # Check exact matches
@@ -96,3 +126,35 @@ def validate_secret_name(name: str) -> None:
             )
 
     # Note: OVERRIDABLE_SYSTEM_SECRETS are intentionally allowed
+
+
+def validate_secrets_dict(secrets: dict[str, str] | None) -> None:
+    """Validate the entire secrets dictionary for size limits.
+
+    This should be called before iterating over individual secrets.
+
+    Args:
+        secrets: The secrets dictionary to validate (can be None)
+
+    Raises:
+        ValueError: If the dictionary exceeds size limits
+    """
+    if secrets is None:
+        return
+
+    # Check number of secrets
+    if len(secrets) > MAX_API_SECRETS_COUNT:
+        raise ValueError(
+            f'Too many secrets provided: {len(secrets)} exceeds maximum of '
+            f'{MAX_API_SECRETS_COUNT}. Configure via OH_MAX_API_SECRETS_COUNT.'
+        )
+
+    # Check individual value lengths
+    for name, value in secrets.items():
+        value_bytes = len(value.encode('utf-8'))
+        if value_bytes > MAX_API_SECRET_VALUE_LENGTH:
+            raise ValueError(
+                f"Secret '{name}' value exceeds maximum length of "
+                f'{MAX_API_SECRET_VALUE_LENGTH} bytes (got {value_bytes}). '
+                f'Configure via OH_MAX_API_SECRET_VALUE_LENGTH.'
+            )

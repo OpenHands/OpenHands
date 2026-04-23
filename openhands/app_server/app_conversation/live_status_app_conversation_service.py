@@ -1255,7 +1255,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Merge API-provided secrets (they take precedence over existing ones)
         if api_secrets:
-            from openhands.app_server.constants import validate_secret_name
+            from openhands.app_server.constants import (
+                validate_secret_name,
+                validate_secrets_dict,
+            )
+
+            # Validate overall dict size limits first
+            validate_secrets_dict(api_secrets)
 
             for name, value in api_secrets.items():
                 validate_secret_name(name)
