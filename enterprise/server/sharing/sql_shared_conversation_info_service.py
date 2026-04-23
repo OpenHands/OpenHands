@@ -26,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     StoredConversationMetadata,
 )
@@ -146,9 +147,15 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
             updated_at=updated_at,
         )
 
-    def _fix_timezone(self, value: datetime) -> datetime:
+    def _fix_timezone(self, value: datetime | None) -> datetime:
         """Sqlite does not store timezones - and since we can't update the existing models
-        we assume UTC if the timezone is missing."""
+        we assume UTC if the timezone is missing. Returns current UTC time if value is None.
+        """
+        if value is None:
+            # Fallback for legacy data: use current time to match model defaults.
+            # The DB columns have default=utc_now, so None only occurs in legacy records.
+            # Using utc_now() keeps the API model non-nullable and matches new record behavior.
+            return utc_now()
         if not value.tzinfo:
             value = value.replace(tzinfo=UTC)
         return value

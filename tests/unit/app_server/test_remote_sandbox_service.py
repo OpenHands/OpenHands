@@ -526,6 +526,7 @@ class TestSandboxLifecycle:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
+        mock_response.json.return_value = {'session_api_key': 'new-session-key-123'}
         remote_sandbox_service.httpx_client.request.return_value = mock_response
 
         # Execute

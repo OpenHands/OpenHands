@@ -1,6 +1,7 @@
 import warnings
 from unittest.mock import patch
 
+import pytest
 from fastmcp.mcp_config import MCPConfig
 from pydantic import SecretStr
 
@@ -112,7 +113,7 @@ def test_settings_update_deep_merges_agent_settings():
         ),
     )
 
-    settings.update({'agent_settings': {'condenser': {'max_size': 300}}})
+    settings.update({'agent_settings_diff': {'condenser': {'max_size': 300}}})
 
     assert settings.agent_settings.llm.model == 'existing-model'
     assert settings.agent_settings.llm.api_key.get_secret_value() == 'existing-key'
@@ -205,7 +206,7 @@ def test_settings_update_mcp_config():
 
     settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'mcp_config': {
                     'mcpServers': {
                         'custom': {
@@ -242,7 +243,7 @@ def test_settings_update_replaces_existing_mcp_servers():
 
     settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'mcp_config': {
                     'mcpServers': {
                         'fresh': {
@@ -276,7 +277,7 @@ def test_settings_update_can_clear_mcp_config():
         )
     )
 
-    settings.update({'agent_settings': {'mcp_config': None}})
+    settings.update({'agent_settings_diff': {'mcp_config': None}})
 
     assert settings.agent_settings.mcp_config is None
 
@@ -286,11 +287,11 @@ def test_settings_update_batch():
     settings.update(
         {
             'language': 'fr',
-            'agent_settings': {
+            'agent_settings_diff': {
                 'agent': 'TestAgent',
                 'llm': {'model': 'new-model', 'api_key': 'new-key'},
             },
-            'conversation_settings': {
+            'conversation_settings_diff': {
                 'max_iterations': 200,
             },
         }
@@ -300,6 +301,33 @@ def test_settings_update_batch():
     assert settings.agent_settings.llm.model == 'new-model'
     assert settings.agent_settings.llm.api_key.get_secret_value() == 'new-key'
     assert settings.conversation_settings.max_iterations == 200
+
+
+def test_settings_update_batch_accepts_diff_keys():
+    settings = Settings()
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'agent': 'DiffAgent',
+                'llm': {'model': 'diff-model', 'api_key': 'diff-key'},
+            },
+            'conversation_settings_diff': {
+                'max_iterations': 123,
+            },
+        }
+    )
+
+    assert settings.agent_settings.agent == 'DiffAgent'
+    assert settings.agent_settings.llm.model == 'diff-model'
+    assert settings.agent_settings.llm.api_key.get_secret_value() == 'diff-key'
+    assert settings.conversation_settings.max_iterations == 123
+
+
+def test_settings_update_rejects_legacy_nested_keys():
+    settings = Settings()
+
+    with pytest.raises(ValueError, match=r'Use \*_diff nested settings payloads'):
+        settings.update({'agent_settings': {'agent': 'LegacyAgent'}})
 
 
 def test_settings_no_pydantic_frozen_field_warning():

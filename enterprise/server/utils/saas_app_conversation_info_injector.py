@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
@@ -242,7 +242,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
     ):
         """Apply filters to query that includes SAAS metadata."""
         # Apply the same filters as the base class
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
                 StoredConversationMetadata.title.like(f'%{title__contains}%')
@@ -350,8 +350,8 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             # Convert string user_id to UUID
             user_id_uuid = UUID(user_id_str)
             user_query = select(User).where(User.id == user_id_uuid)
-            result = await self.db_session.execute(user_query)
-            user = result.scalar_one_or_none()
+            user_result = await self.db_session.execute(user_query)
+            user = user_result.scalar_one_or_none()
             assert user
 
             # Determine org_id: prefer API key's org_id if authenticated via API key
@@ -372,8 +372,8 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             saas_query = select(StoredConversationMetadataSaas).where(
                 StoredConversationMetadataSaas.conversation_id == str(info.id)
             )
-            result = await self.db_session.execute(saas_query)
-            existing_saas_metadata = result.scalar_one_or_none()
+            saas_result = await self.db_session.execute(saas_query)
+            existing_saas_metadata = saas_result.scalar_one_or_none()
             assert existing_saas_metadata is None or (
                 existing_saas_metadata.user_id == user_id_uuid
                 and existing_saas_metadata.org_id == org_id

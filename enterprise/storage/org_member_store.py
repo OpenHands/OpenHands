@@ -5,7 +5,7 @@ Store class for managing organization-member relationships.
 from typing import Any, Optional
 from uuid import UUID
 
-from server.routes.org_models import OrgMemberLLMSettings
+from server.routes.org_models import OrgMemberSettingsUpdate
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -237,12 +237,12 @@ class OrgMemberStore:
             return members, has_more
 
     @staticmethod
-    async def update_all_members_llm_settings_async(
+    async def update_all_members_settings_async(
         session: AsyncSession,
         org_id: UUID,
-        member_settings: OrgMemberLLMSettings,
+        member_settings: OrgMemberSettingsUpdate,
     ) -> None:
-        """Update shared LLM settings for all members of an organization.
+        """Update shared settings for all members of an organization.
 
         Args:
             session: Database session (passed from caller for transaction)
