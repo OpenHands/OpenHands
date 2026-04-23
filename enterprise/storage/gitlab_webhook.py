@@ -1,16 +1,16 @@
 import sys
+from datetime import datetime
 from enum import IntEnum
+from typing import Any
 
 from sqlalchemy import (
     ARRAY,
-    Boolean,
-    Column,
     DateTime,
-    Integer,
     String,
     Text,
     text,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 
@@ -21,23 +21,26 @@ class WebhookStatus(IntEnum):
     INVALID = 3  # Unexpected error occur when checking (keycloak connection, etc)
 
 
-class GitlabWebhook(Base):  # type: ignore
+class GitlabWebhook(Base):
     """
     Represents a Gitlab webhook configuration for a repository or group.
     """
 
     __tablename__ = 'gitlab_webhook'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    group_id = Column(String, nullable=True)
-    project_id = Column(String, nullable=True)
-    user_id = Column(String, nullable=False)
-    webhook_exists = Column(Boolean, nullable=False)
-    webhook_url = Column(String, nullable=True)
-    webhook_secret = Column(String, nullable=True)
-    webhook_uuid = Column(String, nullable=True)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    group_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    project_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    webhook_exists: Mapped[bool] = mapped_column(nullable=False)
+    webhook_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    webhook_secret: Mapped[str | None] = mapped_column(String, nullable=True)
+    webhook_uuid: Mapped[str | None] = mapped_column(String, nullable=True)
     # Use Text for tests (SQLite compatibility) and ARRAY for production (PostgreSQL)
-    scopes = Column(Text if 'pytest' in sys.modules else ARRAY(Text), nullable=True)
-    last_synced = Column(
+    scopes: Mapped[Any] = mapped_column(
+        Text if 'pytest' in sys.modules else ARRAY(Text), nullable=True
+    )
+    last_synced: Mapped[datetime | None] = mapped_column(
         DateTime,
         server_default=text('CURRENT_TIMESTAMP'),
         onupdate=text('CURRENT_TIMESTAMP'),

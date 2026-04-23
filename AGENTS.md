@@ -13,6 +13,14 @@ export RUNTIME=local
 make build && make run FRONTEND_PORT=12000 FRONTEND_HOST=0.0.0.0 BACKEND_HOST=0.0.0.0 &> /tmp/openhands-log.txt &
 ```
 
+Local run troubleshooting notes:
+- If the backend fails with `nc: command not found`, install `netcat-openbsd`.
+- If local runtime startup fails with `duplicate session: test-session`, clear the stale tmux session on the default socket: `tmux -S /tmp/tmux-$(id -u)/default kill-session -t test-session`.
+- Local runtime browser startup expects Playwright browsers under `~/.cache/playwright`; if needed run `PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/playwright poetry run playwright install chromium`.
+- In this sandbox environment, an inherited `SESSION_API_KEY` can make `/api/v1/settings` return 401 in the browser. Unset it before `make run` when you want to use the local web UI directly.
+- In this sandbox, `frontend`'s `npm run dev:mock` / `dev:mock:saas` can start but still be awkward to browse through the work-host proxy. For PR QA screenshots, a reliable fallback is to `npm run build` with the desired `VITE_MOCK_*` env, then serve `build/` with a tiny custom HTTP server that returns the minimal mock JSON endpoints needed by the settings page.
+
+
 IMPORTANT: Before making any changes to the codebase, ALWAYS run `make install-pre-commit-hooks` to ensure pre-commit hooks are properly installed.
 
 Before pushing any changes, you MUST ensure that any lint errors or simple test errors have been fixed.
@@ -138,6 +146,8 @@ Frontend:
   - Query hooks should follow the pattern use[Resource] (e.g., `useConversationSkills`)
   - Mutation hooks should follow the pattern use[Action] (e.g., `useDeleteConversation`)
   - Architecture rule: UI components → TanStack Query hooks → Data Access Layer (`frontend/src/api`) → API endpoints
+  - For SaaS organization management screens, prefer deriving the selected organization from `useOrganizations()` plus the selected org ID store instead of adding a dedicated single-org fetch when only list-level fields (for example `name`) are needed.
+
 
 VSCode Extension:
 - Located in the `openhands/integrations/vscode` directory
@@ -226,6 +236,7 @@ Each integration follows a consistent pattern with service classes, storage mode
 - Database changes require careful migration planning in `enterprise/migrations/`
 - Always test changes in both OpenHands and enterprise contexts
 - Use the enterprise-specific Makefile commands for development
+- When the `openhands-ai` package (root project) version has been updated, run `poetry lock` in the `enterprise/` folder to update the version in the enterprise poetry lockfile.
 
 **Enterprise Testing Best Practices:**
 

@@ -28,7 +28,7 @@ export const useAddGitProviders = () => {
       }
 
       await queryClient.invalidateQueries({
-        queryKey: ["settings", organizationId],
+        queryKey: ["settings", "personal", organizationId],
       });
     },
     meta: {

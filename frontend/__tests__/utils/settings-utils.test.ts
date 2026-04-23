@@ -65,7 +65,7 @@ describe("extractSettings", () => {
       const settings = extractSettings(formData);
 
       const expectedModel = `${provider}/${model}`;
-      const as = settings.agent_settings as Record<string, unknown>;
+      const as = settings.agent_settings_diff as Record<string, unknown>;
       const llm = as?.llm as Record<string, unknown>;
       expect(llm?.model).toBe(expectedModel);
       if (expectedModel !== expectedModel.toLowerCase()) {
@@ -83,7 +83,7 @@ describe("extractSettings", () => {
 
     const settings = extractSettings(formData);
 
-    const as = settings.agent_settings as Record<string, unknown>;
+    const as = settings.agent_settings_diff as Record<string, unknown>;
     const llm = as?.llm as Record<string, unknown>;
     expect(llm?.model).toBe("sambanova/Meta-Llama-3.1-8B-Instruct");
     expect(llm?.model).not.toBe("custom-model-name");

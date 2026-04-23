@@ -79,7 +79,6 @@ from openhands.runtime.plugins import (
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.runtime.utils.edit import FileEditRuntimeMixin
 from openhands.runtime.utils.git_handler import CommandResult, GitHandler
-from openhands.security import SecurityAnalyzer, options
 from openhands.storage.locations import get_conversation_dir
 from openhands.utils.async_utils import (
     GENERAL_TIMEOUT,
@@ -142,7 +141,6 @@ class Runtime(FileEditRuntimeMixin):
     status_callback: Callable[[str, RuntimeStatus, str], None] | None
     runtime_status: RuntimeStatus | None
     _runtime_initialized: bool = False
-    security_analyzer: 'SecurityAnalyzer | None' = None
 
     def __init__(
         self,
@@ -212,18 +210,6 @@ class Runtime(FileEditRuntimeMixin):
         self.user_id = user_id
         self.git_provider_tokens = git_provider_tokens
         self.runtime_status = None
-
-        # Initialize security analyzer
-        self.security_analyzer = None
-        if self.config.security.security_analyzer:
-            analyzer_cls = options.SecurityAnalyzers.get(
-                self.config.security.security_analyzer, SecurityAnalyzer
-            )
-            self.security_analyzer = analyzer_cls()
-            self.security_analyzer.set_event_stream(self.event_stream)
-            logger.debug(
-                f'Security analyzer {analyzer_cls.__name__} initialized for runtime {self.sid}'
-            )
 
     @property
     def runtime_initialized(self) -> bool:
