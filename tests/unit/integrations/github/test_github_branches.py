@@ -110,7 +110,7 @@ async def test_search_branches_github_success_and_variables():
                             },
                             'branchProtectionRule': None,
                         },
-                    ]
+                    ],
                 }
             }
         }
