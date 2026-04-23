@@ -25,6 +25,8 @@ jobs:
         #   3. The 'review-this' label is added, OR
         #   4. openhands-agent or all-hands-bot is requested as a reviewer
         # Note: FIRST_TIME_CONTRIBUTOR and NONE PRs require manual trigger via label/reviewer request.
+        # The author association check is duplicated intentionally for both
+        # auto-triggered actions (`opened` and `ready_for_review`).
         if: |
             (
                 (
@@ -37,8 +39,6 @@ jobs:
                 )
             ) &&
             (
-                # The author association check is duplicated intentionally for both
-                # auto-triggered actions (`opened` and `ready_for_review`).
                 (github.event.action == 'opened' && github.event.pull_request.draft == false && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' && github.event.pull_request.author_association != 'NONE') ||
                 (github.event.action == 'ready_for_review' && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' && github.event.pull_request.author_association != 'NONE') ||
                 (github.event.action == 'labeled' && github.event.label.name == 'review-this') ||
