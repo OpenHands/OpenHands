@@ -268,7 +268,10 @@ describe("Content", () => {
 
   it("should render the 'Configure GitHub Repositories' button if SaaS mode and github_app_slug exists", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+
     getConfigSpy.mockResolvedValue(VALID_OSS_CONFIG);
+    getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
 
     const { rerender } = renderGitSettingsScreen();
 
@@ -283,10 +286,14 @@ describe("Content", () => {
     rerender();
 
     await waitFor(() => {
-      // wait until queries are resolved
-      expect(queryClient.isFetching()).toBe(0);
       button = screen.queryByTestId("configure-github-repositories-button");
       expect(button).not.toBeInTheDocument();
+      expect(screen.getByTestId("gitlab-status-text")).toBeInTheDocument();
+      expect(screen.getByTestId("install-slack-app-button")).toBeInTheDocument();
+      expect(screen.queryByTestId("submit-button")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("disconnect-tokens-button"),
+      ).not.toBeInTheDocument();
     });
 
     getConfigSpy.mockResolvedValue({
@@ -299,6 +306,8 @@ describe("Content", () => {
     await waitFor(() => {
       button = screen.getByTestId("configure-github-repositories-button");
       expect(button).toBeInTheDocument();
+      expect(screen.getByTestId("gitlab-status-text")).toBeInTheDocument();
+      expect(screen.getByTestId("install-slack-app-button")).toBeInTheDocument();
       expect(screen.queryByTestId("submit-button")).not.toBeInTheDocument();
       expect(
         screen.queryByTestId("disconnect-tokens-button"),
@@ -598,15 +607,12 @@ describe("Status toasts", () => {
 
 describe("GitLab Webhook Manager Integration", () => {
   it("should not render GitLab webhook manager in OSS mode", async () => {
-    // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     getConfigSpy.mockResolvedValue(VALID_OSS_CONFIG);
 
-    // Act
     renderGitSettingsScreen();
     await screen.findByTestId("git-settings-screen");
 
-    // Assert
     await waitFor(() => {
       expect(
         screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
@@ -614,17 +620,25 @@ describe("GitLab Webhook Manager Integration", () => {
     });
   });
 
-  it("should not render GitLab webhook manager in SaaS mode without APP_SLUG", async () => {
-    // Arrange
+  it("should render GitLab and Slack sections in SaaS mode without APP_SLUG", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    getConfigSpy.mockResolvedValue(VALID_SAAS_CONFIG);
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
-    // Act
+    getConfigSpy.mockResolvedValue(VALID_SAAS_CONFIG);
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      provider_tokens_set: {},
+    });
+
     renderGitSettingsScreen();
     await screen.findByTestId("git-settings-screen");
 
-    // Assert
     await waitFor(() => {
+      expect(
+        screen.queryByTestId("configure-github-repositories-button"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("gitlab-status-text")).toBeInTheDocument();
+      expect(screen.getByTestId("install-slack-app-button")).toBeInTheDocument();
       expect(
         screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
       ).not.toBeInTheDocument();
@@ -632,7 +646,6 @@ describe("GitLab Webhook Manager Integration", () => {
   });
 
   it("should not render GitLab webhook manager when token is not set", async () => {
-    // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
@@ -644,11 +657,9 @@ describe("GitLab Webhook Manager Integration", () => {
       provider_tokens_set: {},
     });
 
-    // Act
     renderGitSettingsScreen();
     await screen.findByTestId("git-settings-screen");
 
-    // Assert
     await waitFor(() => {
       expect(
         screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
