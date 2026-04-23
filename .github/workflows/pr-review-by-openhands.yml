@@ -2,7 +2,10 @@
 name: PR Review by OpenHands
 
 on:
-    # Use pull_request_target so the reviewer can also run on fork PRs.
+    # Use pull_request for same-repo PRs so workflow changes can self-verify in PRs.
+    pull_request:
+        types: [opened, ready_for_review, labeled, review_requested]
+    # Use pull_request_target for fork PRs.
     # The bot token used here is intentionally scoped to PR review operations,
     # so the remaining blast radius is bounded even though PR content is untrusted.
     pull_request_target:
@@ -15,13 +18,24 @@ permissions:
 
 jobs:
     pr-review:
-        # Run when one of the following conditions is met:
+        # Run on same-repo PRs via pull_request and on fork PRs via pull_request_target.
+        # Trigger when one of the following conditions is met:
         #   1. A new non-draft PR is opened by a non-first-time contributor, OR
         #   2. A draft PR is converted to ready for review by a non-first-time contributor, OR
         #   3. The 'review-this' label is added, OR
         #   4. openhands-agent or all-hands-bot is requested as a reviewer
         # Note: FIRST_TIME_CONTRIBUTOR and NONE PRs require manual trigger via label/reviewer request.
         if: |
+            (
+                (
+                    github.event_name == 'pull_request' &&
+                    github.event.pull_request.head.repo.full_name == github.repository
+                ) ||
+                (
+                    github.event_name == 'pull_request_target' &&
+                    github.event.pull_request.head.repo.full_name != github.repository
+                )
+            ) &&
             (
                 (github.event.action == 'opened' && github.event.pull_request.draft == false && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' && github.event.pull_request.author_association != 'NONE') ||
                 (github.event.action == 'ready_for_review' && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' && github.event.pull_request.author_association != 'NONE') ||
