@@ -93,7 +93,7 @@ async def test_search_branches_gitlab_uses_search_param():
 
     with patch.object(service, '_make_request', return_value=(mock_response, {})) as m:
         branches = await service.search_branches(
-            'group/repo', query='feat', per_page=50
+            'group/repo', query='feat', per_page=50, page=3
         )
 
         # Verify parameters
@@ -102,6 +102,7 @@ async def test_search_branches_gitlab_uses_search_param():
         params = args[1]
         assert 'repository/branches' in url
         assert params['per_page'] == '50'
+        assert params['page'] == '3'
         assert params['search'] == 'feat'
 
         assert len(branches) == 2

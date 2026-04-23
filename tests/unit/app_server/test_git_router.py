@@ -773,6 +773,45 @@ class TestSearchBranches:
         assert call_kwargs.get('repository') == 'user/repo'
         assert call_kwargs.get('query') == 'feature'
         assert call_kwargs.get('per_page') == 11  # limit + 1
+        assert call_kwargs.get('page') == 1
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_supports_paginated_search_queries(self, mock_handler_cls):
+        """Test that search queries can request later pages."""
+        mock_handler = MagicMock()
+        mock_handler.search_branches = AsyncMock(
+            return_value=[
+                Branch(name='release/3', commit_sha='ghi789', protected=False),
+                Branch(name='release/4', commit_sha='jkl012', protected=False),
+                Branch(name='release/5', commit_sha='mno345', protected=False),
+            ]
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='release',
+            page_id=encode_page_id(2),
+            limit=2,
+            user_context=mock_context,
+        )
+
+        assert [branch.name for branch in result.items] == ['release/3', 'release/4']
+        assert result.next_page_id == encode_page_id(3)
+
+        mock_handler.search_branches.assert_called_once()
+        call_kwargs = mock_handler.search_branches.call_args.kwargs
+        assert call_kwargs.get('page') == 2
+        assert call_kwargs.get('per_page') == 3
 
     def test_returns_401_when_no_provider_tokens(self, test_client):
         """Test that 401 is returned when no provider tokens."""

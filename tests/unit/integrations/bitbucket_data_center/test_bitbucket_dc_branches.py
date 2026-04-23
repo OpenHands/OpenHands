@@ -110,11 +110,12 @@ async def test_search_branches_uses_filter_text():
         svc, '_make_request', return_value=(mock_response, {})
     ) as mock_req:
         branches = await svc.search_branches(
-            'PROJ/myrepo', query='my-thing', per_page=15
+            'PROJ/myrepo', query='my-thing', per_page=15, page=3
         )
 
     call_url, call_params = mock_req.call_args[0]
     assert 'filterText' in call_params
+    assert call_params['start'] == 30
     assert call_params['filterText'] == 'my-thing'
     assert 'q' not in call_params
     assert len(branches) == 1

@@ -91,6 +91,7 @@ async def test_search_branches_github_success_and_variables():
         'data': {
             'repository': {
                 'refs': {
+                    'pageInfo': {'hasNextPage': False, 'endCursor': None},
                     'nodes': [
                         {
                             'name': 'feature/bar',
@@ -126,6 +127,7 @@ async def test_search_branches_github_success_and_variables():
         assert variables['owner'] == 'foo'
         assert variables['name'] == 'bar'
         assert variables['query'] == 'fe'
+        assert variables['after'] is None
         assert 1 <= variables['perPage'] <= 100
 
         assert len(branches) == 2
@@ -166,3 +168,91 @@ async def test_search_branches_github_graphql_error_returns_empty():
     with patch.object(service, 'execute_graphql_query', exec_mock):
         branches = await service.search_branches('foo/bar', query='q')
         assert branches == []
+
+
+@pytest.mark.asyncio
+async def test_search_branches_github_supports_later_pages():
+    service = GitHubService(token=SecretStr('t'))
+
+    exec_mock = AsyncMock(
+        side_effect=[
+            {
+                'data': {
+                    'repository': {
+                        'refs': {
+                            'pageInfo': {'hasNextPage': True, 'endCursor': 'cursor-1'},
+                            'nodes': [
+                                {
+                                    'name': 'feature/a',
+                                    'target': {'__typename': 'Commit', 'oid': 'aaa'},
+                                    'branchProtectionRule': None,
+                                }
+                            ],
+                        }
+                    }
+                }
+            },
+            {
+                'data': {
+                    'repository': {
+                        'refs': {
+                            'pageInfo': {'hasNextPage': False, 'endCursor': None},
+                            'nodes': [
+                                {
+                                    'name': 'feature/b',
+                                    'target': {
+                                        '__typename': 'Commit',
+                                        'oid': 'bbb',
+                                        'committedDate': '2024-01-06T10:00:00Z',
+                                    },
+                                    'branchProtectionRule': None,
+                                }
+                            ],
+                        }
+                    }
+                }
+            },
+        ]
+    )
+
+    with patch.object(service, 'execute_graphql_query', exec_mock):
+        branches = await service.search_branches(
+            'foo/bar', query='feature', per_page=1, page=2
+        )
+
+    assert [branch.name for branch in branches] == ['feature/b']
+    first_call = exec_mock.await_args_list[0].args[1]
+    second_call = exec_mock.await_args_list[1].args[1]
+    assert first_call['after'] is None
+    assert second_call['after'] == 'cursor-1'
+
+
+@pytest.mark.asyncio
+async def test_search_branches_github_returns_empty_when_page_is_out_of_range():
+    service = GitHubService(token=SecretStr('t'))
+
+    exec_mock = AsyncMock(
+        return_value={
+            'data': {
+                'repository': {
+                    'refs': {
+                        'pageInfo': {'hasNextPage': False, 'endCursor': None},
+                        'nodes': [
+                            {
+                                'name': 'feature/a',
+                                'target': {'__typename': 'Commit', 'oid': 'aaa'},
+                                'branchProtectionRule': None,
+                            }
+                        ],
+                    }
+                }
+            }
+        }
+    )
+
+    with patch.object(service, 'execute_graphql_query', exec_mock):
+        branches = await service.search_branches(
+            'foo/bar', query='feature', per_page=1, page=2
+        )
+
+    assert branches == []
