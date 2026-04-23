@@ -37,6 +37,8 @@ jobs:
                 )
             ) &&
             (
+                # The author association check is duplicated intentionally for both
+                # auto-triggered actions (`opened` and `ready_for_review`).
                 (github.event.action == 'opened' && github.event.pull_request.draft == false && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' && github.event.pull_request.author_association != 'NONE') ||
                 (github.event.action == 'ready_for_review' && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' && github.event.pull_request.author_association != 'NONE') ||
                 (github.event.action == 'labeled' && github.event.label.name == 'review-this') ||
