@@ -55,7 +55,7 @@ def test_get_kwargs_from_settings():
     )
     settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'llm': {
                     'model': 'anthropic/claude-sonnet-4-5-20250929',
                     'api_key': 'test-key',
@@ -93,7 +93,7 @@ async def test_create_default_settings_with_litellm(mock_litellm_api):
     mock_settings = Settings(language='en')
     mock_settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'agent': 'CodeActAgent',
                 'llm': {
                     'model': 'anthropic/claude-sonnet-4-5-20250929',

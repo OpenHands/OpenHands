@@ -1,21 +1,24 @@
-"""
-Store class for managing organizations.
-"""
+"""Store class for managing organizations."""
 
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
+from pydantic import SecretStr
 from server.constants import (
     DEFAULT_V1_ENABLED,
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
 )
-from server.routes.org_models import OrgLLMSettingsUpdate, OrphanedUserError
+from server.routes.org_models import (
+    OrgMemberSettingsUpdate,
+    OrgUpdate,
+    OrphanedUserError,
+)
 from sqlalchemy import select, text
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
-from storage.lite_llm_manager import LiteLlmManager
+from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.user import User
@@ -25,6 +28,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.storage.data_models.settings import Settings
 from openhands.utils.jsonpatch_compat import deep_merge
+from openhands.utils.llm import is_openhands_model
 
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
     'id',
@@ -129,11 +133,11 @@ class OrgStore:
     async def _validate_org_version(org: Org | None) -> Org | None:
         """Check if we need to update org version."""
         if org and org.org_version < ORG_SETTINGS_VERSION:
-            org = await OrgStore.update_org(
+            org = await OrgStore._update_org_kwargs(
                 org.id,
                 {
                     'org_version': ORG_SETTINGS_VERSION,
-                    'agent_settings': {
+                    'agent_settings_diff': {
                         'llm': {
                             'model': get_default_litellm_model(),
                             'base_url': LITE_LLM_API_URL,
@@ -155,8 +159,7 @@ class OrgStore:
     async def get_user_orgs_paginated(
         user_id: UUID, page_id: str | None = None, limit: int = 100
     ) -> tuple[list[Org], str | None]:
-        """
-        Get paginated list of organizations for a user.
+        """Get paginated list of organizations for a user.
 
         Args:
             user_id: User UUID
@@ -212,40 +215,110 @@ class OrgStore:
             return validated_orgs, next_page_id
 
     @staticmethod
+    def _merge_and_validate_settings(
+        current_settings: dict[str, Any],
+        settings_diff: dict[str, Any],
+        settings_type: type[AgentSettings] | type[ConversationSettings],
+    ) -> AgentSettings | ConversationSettings:
+        """Deep-merge a sparse settings diff and validate the merged result."""
+        merged_settings = deep_merge(current_settings or {}, settings_diff)
+        return settings_type.model_validate(merged_settings)
+
+    @staticmethod
     async def update_org(
         org_id: UUID,
-        kwargs: dict,
+        update_data: OrgUpdate,
+        user_id: str | None = None,
     ) -> Optional[Org]:
-        """Update organization details."""
+        """Update organization details from a validated OrgUpdate payload."""
+        return await OrgStore._update_org_kwargs(
+            org_id,
+            update_data.model_update_dict(),
+            user_id=user_id,
+            update_data=update_data,
+        )
+
+    @staticmethod
+    async def _update_org_kwargs(
+        org_id: UUID,
+        org_kwargs: dict[str, Any],
+        user_id: str | None = None,
+        update_data: OrgUpdate | None = None,
+    ) -> Optional[Org]:
+        """Internal helper for updating organization fields from raw kwargs."""
+        from storage.org_member_store import OrgMemberStore
+
+        org_kwargs = dict(org_kwargs)
+
         async with a_session_maker() as session:
             result = await session.execute(select(Org).filter(Org.id == org_id))
             org = result.scalars().first()
             if not org:
                 return None
 
-            if 'id' in kwargs:
-                kwargs.pop('id')
+            if 'id' in org_kwargs:
+                org_kwargs.pop('id')
 
             # Pop the diff-style kwargs before the setattr loop — otherwise
             # ``hasattr(org, 'agent_settings')`` is True and the loop would
             # *overwrite* the JSON column instead of deep-merging into it.
-            agent_settings_diff = kwargs.pop('agent_settings', None)
-            conversation_settings_diff = kwargs.pop('conversation_settings', None)
-            for key, value in kwargs.items():
+            agent_settings_diff = (
+                update_data.agent_settings_diff
+                if update_data is not None
+                else org_kwargs.pop('agent_settings_diff', None)
+            )
+            conversation_settings_diff = (
+                update_data.conversation_settings_diff
+                if update_data is not None
+                else org_kwargs.pop('conversation_settings_diff', None)
+            )
+            for key, value in org_kwargs.items():
                 if hasattr(org, key):
                     setattr(org, key, value)
 
             if agent_settings_diff is not None:
-                org.agent_settings = deep_merge(
+                org.agent_settings = OrgStore._merge_and_validate_settings(
                     org.agent_settings,
                     agent_settings_diff,
-                )
+                    AgentSettings,
+                ).model_dump(mode='json', exclude_unset=True)
 
             if conversation_settings_diff is not None:
-                org.conversation_settings = deep_merge(
+                org.conversation_settings = OrgStore._merge_and_validate_settings(
                     org.conversation_settings,
                     conversation_settings_diff,
+                    ConversationSettings,
+                ).model_dump(mode='json', exclude_unset=True)
+
+            if update_data is not None and update_data.touches_org_defaults():
+                if user_id is None:
+                    raise ValueError(
+                        'user_id is required when updating organization defaults'
+                    )
+
+                member_updates = update_data.get_member_updates()
+                effective_managed_key = (
+                    await OrgStore._maybe_get_managed_llm_key_for_user(
+                        session,
+                        org,
+                        user_id,
+                    )
                 )
+                should_reset_custom_key_flag = (
+                    update_data.llm_api_key is not None
+                    or effective_managed_key is not None
+                )
+                if effective_managed_key is not None:
+                    if member_updates is None:
+                        member_updates = OrgMemberSettingsUpdate()
+                    member_updates.llm_api_key = SecretStr(effective_managed_key)
+
+                if member_updates is not None:
+                    if should_reset_custom_key_flag:
+                        member_updates.has_custom_llm_api_key = False
+                    await OrgMemberStore.update_all_members_settings_async(
+                        session, org_id, member_updates
+                    )
 
             await session.commit()
             await session.refresh(org)
@@ -273,8 +346,7 @@ class OrgStore:
         org: Org,
         org_member: OrgMember,
     ) -> Org:
-        """
-        Persist organization and owner membership in a single transaction.
+        """Persist organization and owner membership in a single transaction.
 
         Args:
             org: Organization entity to persist
@@ -295,8 +367,7 @@ class OrgStore:
 
     @staticmethod
     async def delete_org_cascade(org_id: UUID) -> Org | None:
-        """
-        Delete organization and all associated data in cascade, including external LiteLLM cleanup.
+        """Delete organization and all associated data in cascade, including external LiteLLM cleanup.
 
         Args:
             org_id: UUID of the organization to delete
@@ -445,46 +516,81 @@ class OrgStore:
         return await OrgStore.get_org_by_id(org_id)
 
     @staticmethod
-    async def update_org_llm_settings_async(
+    async def _maybe_get_managed_llm_key_for_user(
+        session,
+        updated_org: Org,
+        user_id: str,
+    ) -> str | None:
+        """Return the managed LLM key every member row should carry, if any."""
+        llm_settings = OrgStore.get_agent_settings_from_org(updated_org).llm
+        llm_model = llm_settings.model
+        llm_base_url = llm_settings.base_url
+        normalized_llm_base_url = llm_base_url.rstrip('/') if llm_base_url else None
+        normalized_managed_base_url = LITE_LLM_API_URL.rstrip('/')
+        openhands_type = is_openhands_model(llm_model)
+        uses_managed_llm_key = (
+            normalized_llm_base_url == normalized_managed_base_url
+            or (normalized_llm_base_url is None and openhands_type)
+        )
+        if not uses_managed_llm_key:
+            return None
+
+        result = await session.execute(
+            select(OrgMember).where(
+                OrgMember.org_id == updated_org.id,
+                OrgMember.user_id == UUID(user_id),
+            )
+        )
+        acting_member = result.scalars().first()
+        if acting_member is None:
+            logger.error(
+                'Acting member row not found during managed LLM key '
+                'rotation; skipping managed-key propagation. Members may '
+                'retain stale keys until they save personal settings.',
+                extra={'user_id': user_id, 'org_id': str(updated_org.id)},
+            )
+            return None
+
+        existing_key = acting_member.llm_api_key
+        existing_key_raw = existing_key.get_secret_value() if existing_key else None
+        if existing_key_raw and await LiteLlmManager.verify_existing_key(
+            existing_key_raw,
+            user_id,
+            str(updated_org.id),
+            openhands_type=openhands_type,
+        ):
+            return existing_key_raw
+
+        if openhands_type:
+            logger.info(
+                'Generated managed LLM key for acting user on org-defaults save',
+                extra={'user_id': user_id, 'org_id': str(updated_org.id)},
+            )
+            return await LiteLlmManager.generate_key(
+                user_id,
+                str(updated_org.id),
+                None,
+                {'type': 'openhands'},
+            )
+
+        key_alias = get_openhands_cloud_key_alias(user_id, str(updated_org.id))
+        await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
+        logger.info(
+            'Generated managed LLM key for acting user on org-defaults save',
+            extra={'user_id': user_id, 'org_id': str(updated_org.id)},
+        )
+        return await LiteLlmManager.generate_key(
+            user_id,
+            str(updated_org.id),
+            key_alias,
+            None,
+        )
+
+    @staticmethod
+    async def update_org_defaults_async(
         org_id: UUID,
-        llm_settings: OrgLLMSettingsUpdate,
+        update_data: OrgUpdate,
+        user_id: str,
     ) -> Org | None:
-        """Update organization LLM settings and propagate to members (async version).
-
-        Args:
-            org_id: Organization ID
-            llm_settings: Typed LLM settings update model
-
-        Returns:
-            Updated Org or None if not found
-        """
-        from storage.org_member_store import OrgMemberStore
-
-        async with a_session_maker() as session:
-            result = await session.execute(select(Org).filter(Org.id == org_id))
-            org = result.scalars().first()
-            if not org:
-                return None
-
-            llm_settings.apply_to_org(org)
-            if llm_settings.agent_settings is not None:
-                org.agent_settings = deep_merge(
-                    org.agent_settings,
-                    llm_settings.agent_settings,
-                )
-            if llm_settings.conversation_settings is not None:
-                org.conversation_settings = deep_merge(
-                    org.conversation_settings,
-                    llm_settings.conversation_settings,
-                )
-
-            # Propagate relevant settings to all org members
-            member_updates = llm_settings.get_member_updates()
-            if member_updates:
-                await OrgMemberStore.update_all_members_llm_settings_async(
-                    session, org_id, member_updates
-                )
-
-            await session.commit()
-            await session.refresh(org)
-            return org
+        """Backward-compatible wrapper for org-defaults updates."""
+        return await OrgStore.update_org(org_id, update_data, user_id)
