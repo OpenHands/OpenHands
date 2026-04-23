@@ -30,69 +30,10 @@ from openhands.integrations.provider import (
 from openhands.llm.llm_registry import LLMRegistry
 from openhands.memory.memory import Memory
 from openhands.microagent.microagent import BaseMicroagent
-from openhands.runtime import get_runtime_cls
 from openhands.runtime.base import Runtime
 from openhands.server.services.conversation_stats import ConversationStats
-from openhands.storage import get_file_store
 from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
-
-
-def create_runtime(
-    config: OpenHandsConfig,
-    llm_registry: LLMRegistry | None = None,
-    sid: str | None = None,
-    headless_mode: bool = True,
-    agent: Agent | None = None,
-    git_provider_tokens: PROVIDER_TOKEN_TYPE | None = None,
-) -> Runtime:
-    """Create a runtime for the agent to run on.
-
-    Args:
-        config: The app config.
-        sid: (optional) The session id. IMPORTANT: please don't set this unless you know what you're doing.
-            Set it to incompatible value will cause unexpected behavior on RemoteRuntime.
-        headless_mode: Whether the agent is run in headless mode. `create_runtime` is typically called within evaluation scripts,
-            where we don't want to have the VSCode UI open, so it defaults to True.
-        agent: (optional) The agent instance to use for configuring the runtime.
-
-    Returns:
-        The created Runtime instance (not yet connected or initialized).
-    """
-    # if sid is provided on the command line, use it as the name of the event stream
-    # otherwise generate it on the basis of the configured jwt_secret
-    # we can do this better, this is just so that the sid is retrieved when we want to restore the session
-    session_id = sid or generate_sid(config)
-
-    # set up the event stream
-    file_store = get_file_store(config.file_store, config.file_store_path)
-    event_stream = EventStream(session_id, file_store)
-
-    # agent class
-    if agent:
-        agent_cls = type(agent)
-    else:
-        agent_cls = Agent.get_cls(config.default_agent)
-
-    # runtime and tools
-    runtime_cls = get_runtime_cls(config.runtime)
-    logger.debug(f'Initializing runtime: {runtime_cls.__name__}')
-    runtime: Runtime = runtime_cls(
-        config=config,
-        event_stream=event_stream,
-        sid=session_id,
-        plugins=agent_cls.sandbox_plugins,
-        headless_mode=headless_mode,
-        llm_registry=llm_registry or LLMRegistry(config),
-        git_provider_tokens=git_provider_tokens,
-    )
-
-    # Log the plugins that have been registered with the runtime for debugging purposes
-    logger.debug(
-        f'Runtime created with plugins: {[plugin.name for plugin in runtime.plugins]}'
-    )
-
-    return runtime
 
 
 def get_provider_tokens():

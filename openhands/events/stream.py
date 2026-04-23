@@ -1,4 +1,5 @@
 import asyncio
+import json
 import queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +12,6 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.events.event import Event, EventSource
 from openhands.events.event_store import EventStore
 from openhands.events.serialization.event import event_from_dict, event_to_dict
-from openhands.io import json
 from openhands.storage import FileStore
 from openhands.storage.locations import (
     get_conversation_dir,
