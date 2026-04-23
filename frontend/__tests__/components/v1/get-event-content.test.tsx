@@ -58,6 +58,31 @@ const terminalObservationEvent: ObservationEvent = {
   },
 };
 
+const thinkActionEvent: ActionEvent = {
+  id: "action-think-1",
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  thought: [{ type: "text", text: "Inspecting the request." }],
+  thinking_blocks: [],
+  action: {
+    kind: "ThinkAction",
+    thought: "Inspecting the request.",
+  },
+  tool_name: "think",
+  tool_call_id: "tool-think-1",
+  tool_call: {
+    id: "tool-think-1",
+    type: "function",
+    function: {
+      name: "think",
+      arguments: '{"thought":"Inspecting the request."}',
+    },
+  },
+  llm_response_id: "response-think-1",
+  security_risk: SecurityRisk.LOW,
+  summary: 'think: {"thought":"Inspecting the request."}',
+};
+
 describe("getEventContent", () => {
   it("uses the action summary as the full action title", () => {
     const { title } = getEventContent(terminalActionEvent);
@@ -79,6 +104,31 @@ describe("getEventContent", () => {
     expect(
       screen.queryByText("Check repository status"),
     ).not.toBeInTheDocument();
+  });
+
+  it("falls back to the think title when summary is the default JSON dump", () => {
+    const { title } = getEventContent(thinkActionEvent);
+
+    render(<span>{title}</span>);
+
+    expect(screen.getByText("ACTION_MESSAGE$THINK")).toBeInTheDocument();
+    expect(
+      screen.queryByText('think: {"thought":"Inspecting the request."}'),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserves non-default think summaries", () => {
+    const { title } = getEventContent({
+      ...thinkActionEvent,
+      summary: "Thinking through the Helm chart appVersion mismatch",
+    });
+
+    render(<span>{title}</span>);
+
+    expect(
+      screen.getByText("Thinking through the Helm chart appVersion mismatch"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("ACTION_MESSAGE$THINK")).not.toBeInTheDocument();
   });
 
   it("returns empty details for file view action instead of 'Unknown event'", () => {

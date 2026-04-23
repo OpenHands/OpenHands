@@ -41,6 +41,15 @@ const getSummaryTitleForActionEvent = (
   event: ActionEvent,
 ): React.ReactNode | null => {
   const summary = event.summary?.trim().replace(/\s+/g, " ") || "";
+
+  // TODO: Remove this once the SDK stops emitting default think summaries. See #13690.
+  if (
+    event.action.kind === "ThinkAction" &&
+    /^think:\s*\{.*\}$/i.test(summary)
+  ) {
+    return null;
+  }
+
   return summary || null;
 };
 
