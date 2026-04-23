@@ -7,6 +7,7 @@
 # Tag: Legacy-V0
 # V1 replacement for this module lives in the Software Agent SDK.
 import copy
+import json
 import os
 import time
 import warnings
@@ -245,8 +246,6 @@ class LLM(RetryMixin, DebugMixin):
         )
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for the litellm completion function. Logs the input and output of the completion function."""
-            from openhands.io import json
-
             messages_kwarg: (
                 dict[str, Any] | Message | list[dict[str, Any]] | list[Message]
             ) = []
@@ -505,7 +504,6 @@ class LLM(RetryMixin, DebugMixin):
             # noinspection PyBroadException
             except Exception:
                 pass
-        from openhands.io import json
 
         logger.debug(
             f'Model info: {json.dumps({"model": self.config.model, "base_url": self.config.base_url}, indent=2)}'
