@@ -179,6 +179,13 @@ def get_provider_api_base(model: str) -> str | None:
     try:
         api_base = litellm.get_api_base(model, {})
         if api_base:
+            # For gemini/<model>, litellm returns the fully-resolved request URL
+            # (e.g. ``.../v1beta/models/gemini-xxx:generateContent``) instead of a
+            # reusable base. Persisting that as ``base_url`` makes the subsequent
+            # request append the model path a second time and 404. Treat it as no
+            # base_url so litellm falls back to its own default. See issue #14028.
+            if api_base.endswith((':generateContent', ':streamGenerateContent')):
+                return None
             return api_base
     except Exception:
         pass
