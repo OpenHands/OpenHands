@@ -211,7 +211,18 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         """
         repo_id = repo.get('uuid', '')
 
-        workspace_slug = repo.get('workspace', {}).get('slug', '')
+        # Bitbucket's repository endpoint can return `"workspace": null` or
+        # `"mainbranch": null` for empty / uninitialized repos (the downstream
+        # checks in `_get_cursorrules_url` and `_get_microagents_directory_url`
+        # already handle `main_branch is None` by raising ResourceNotFoundError,
+        # so callers expect None here rather than an AttributeError crash).
+        # The `or {}` idiom mirrors the defensive pattern used by the sibling
+        # `get_user` avatar extraction in this file and by every other
+        # provider's repository parser.
+        workspace = repo.get('workspace') or {}
+        workspace_slug = (
+            workspace.get('slug', '') if isinstance(workspace, dict) else ''
+        )
         repo_slug = repo.get('slug', '')
         full_name = (
             f'{workspace_slug}/{repo_slug}' if workspace_slug and repo_slug else ''
@@ -219,7 +230,8 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
 
         is_public = not repo.get('is_private', True)
         owner_type = OwnerType.ORGANIZATION
-        main_branch = repo.get('mainbranch', {}).get('name')
+        mainbranch = repo.get('mainbranch') or {}
+        main_branch = mainbranch.get('name') if isinstance(mainbranch, dict) else None
 
         return Repository(
             id=repo_id,

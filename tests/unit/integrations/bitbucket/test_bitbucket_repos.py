@@ -136,3 +136,84 @@ async def test_search_repositories_url_parsing_insufficient_path_segments(
         # Should return empty list for insufficient path segments and not call API
         assert len(repositories) == 0
         mock_get_repo.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'raw_repo, expected_full_name, expected_main_branch',
+    [
+        pytest.param(
+            {
+                'uuid': '{abc}',
+                'slug': 'empty-repo',
+                'workspace': None,
+                'mainbranch': None,
+                'is_private': True,
+            },
+            '',
+            None,
+            id='workspace_and_mainbranch_both_null',
+        ),
+        pytest.param(
+            {
+                'uuid': '{abc}',
+                'slug': 'empty-repo',
+                'workspace': {'slug': 'ws'},
+                'mainbranch': None,
+                'is_private': True,
+            },
+            'ws/empty-repo',
+            None,
+            id='mainbranch_null_only',
+        ),
+        pytest.param(
+            {
+                'uuid': '{abc}',
+                'slug': 'repo',
+                'workspace': None,
+                'mainbranch': {'name': 'main'},
+                'is_private': True,
+            },
+            '',
+            'main',
+            id='workspace_null_only',
+        ),
+        pytest.param(
+            {
+                'uuid': '{abc}',
+                'slug': 'repo',
+                'workspace': {'slug': 'ws'},
+                'mainbranch': {'name': 'main'},
+                'is_private': False,
+            },
+            'ws/repo',
+            'main',
+            id='happy_path',
+        ),
+        pytest.param(
+            {
+                'uuid': '{abc}',
+                'slug': 'repo',
+                'workspace': [],
+                'mainbranch': 'not-a-dict',
+                'is_private': True,
+            },
+            '',
+            None,
+            id='workspace_and_mainbranch_non_dict_types',
+        ),
+    ],
+)
+def test_parse_repository_handles_null_nested_fields(
+    bitbucket_service, raw_repo, expected_full_name, expected_main_branch
+):
+    """_parse_repository must not crash when Bitbucket returns null (or a
+    non-dict) for `workspace` / `mainbranch`; downstream callers
+    (`_get_cursorrules_url`, `_get_microagents_directory_url`) already expect
+    `main_branch is None` on empty repos and raise `ResourceNotFoundError`
+    themselves, so this extraction should degrade gracefully rather than
+    crashing with AttributeError."""
+    repository = bitbucket_service._parse_repository(raw_repo)
+
+    assert repository.full_name == expected_full_name
+    assert repository.main_branch == expected_main_branch
+    assert repository.id == '{abc}'
