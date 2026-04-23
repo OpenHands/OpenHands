@@ -14,6 +14,7 @@ from openhands.integrations.provider import (
 )
 from openhands.integrations.service_types import ProviderType
 
+
 def create_provider_tokens_object(
     providers_set: list[ProviderType],
 ) -> PROVIDER_TOKEN_TYPE:
