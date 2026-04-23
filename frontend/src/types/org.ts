@@ -18,7 +18,7 @@ export interface Organization {
   max_budget_per_task: number;
   enable_solvability_analysis: boolean;
   v1_enabled: boolean;
-  credits: number;
+  credits: number | null;
   is_personal?: boolean;
 }
 

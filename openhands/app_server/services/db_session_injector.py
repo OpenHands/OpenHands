@@ -24,7 +24,7 @@ DB_SESSION_ATTR = 'db_session'
 DB_SESSION_KEEP_OPEN_ATTR = 'db_session_keep_open'
 
 
-class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
+class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     persistence_dir: Path
     host: str | None = None
     port: int | None = None
@@ -166,6 +166,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         if self.gcp_db_instance:  # GCP environments
             async_engine = await self._create_async_gcp_engine()
         else:
+            url: str | URL
             if self.host:
                 try:
                     import asyncpg  # noqa: F401
@@ -199,6 +200,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                     poolclass=NullPool,
                     pool_pre_ping=True,
                 )
+        assert async_engine is not None  # Always assigned in either branch above
         self._async_engine = async_engine
         return async_engine
 
@@ -209,6 +211,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         if self.gcp_db_instance:  # GCP environments
             engine = self._create_gcp_engine()
         else:
+            url: str | URL
             if self.host:
                 try:
                     import pg8000  # noqa: F401
@@ -234,6 +237,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                 pool_recycle=self.pool_recycle,
                 pool_pre_ping=True,
             )
+        assert engine is not None  # Always assigned in either branch above
         self._engine = engine
         return engine
 

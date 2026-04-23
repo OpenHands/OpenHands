@@ -8,7 +8,7 @@ import {
 import { Settings } from "#/types/settings";
 import { openHands } from "../open-hands-axios";
 
-type OrganizationAgentSettingsResponse = Pick<
+type OrganizationSettingsResponse = Pick<
   Settings,
   | "agent_settings"
   | "conversation_settings"
@@ -22,13 +22,6 @@ export const organizationService = {
       `/api/organizations/${orgId}/me`,
     );
 
-    return data;
-  },
-
-  getOrganization: async ({ orgId }: { orgId: string }) => {
-    const { data } = await openHands.get<Organization>(
-      `/api/organizations/${orgId}`,
-    );
     return data;
   },
 
@@ -178,18 +171,22 @@ export const organizationService = {
     return data;
   },
 
-  getOrganizationAgentSettings: async () => {
-    const { data } = await openHands.get<OrganizationAgentSettingsResponse>(
-      "/api/organizations/llm",
+  getOrganizationSettings: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<OrganizationSettingsResponse>(
+      `/api/organizations/${orgId}/settings`,
     );
     return data;
   },
 
-  saveOrganizationAgentSettings: async (
-    settings: Partial<Settings> & Record<string, unknown>,
-  ) => {
-    const { data } = await openHands.post<OrganizationAgentSettingsResponse>(
-      "/api/organizations/llm",
+  saveOrganizationSettings: async ({
+    orgId,
+    settings,
+  }: {
+    orgId: string;
+    settings: Partial<Settings> & Record<string, unknown>;
+  }) => {
+    const { data } = await openHands.patch<OrganizationSettingsResponse>(
+      `/api/organizations/${orgId}/settings`,
       settings,
     );
     return data;

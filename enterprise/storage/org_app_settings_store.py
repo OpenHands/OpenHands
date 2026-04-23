@@ -35,10 +35,10 @@ class OrgAppSettingsStore:
             Org: The organization object, or None if not found
         """
         # Get user with their current_org_id
-        result = await self.db_session.execute(
+        user_result = await self.db_session.execute(
             select(User).filter(User.id == UUID(user_id))
         )
-        user = result.scalars().first()
+        user = user_result.scalars().first()
 
         if not user:
             return None
@@ -48,8 +48,8 @@ class OrgAppSettingsStore:
             return None
 
         # Get the organization
-        result = await self.db_session.execute(select(Org).filter(Org.id == org_id))
-        org = result.scalars().first()
+        org_result = await self.db_session.execute(select(Org).filter(Org.id == org_id))
+        org = org_result.scalars().first()
 
         if not org:
             return None

@@ -59,11 +59,11 @@ async def find_or_create_customer_by_user_id(user_id: str) -> dict | None:
         extra={'user_id': user_id, 'org_id': str(org.id)},
     )
 
-    # Create the customer in stripe
-    customer = await stripe.Customer.create_async(
-        email=org.contact_email,
-        metadata={'org_id': str(org.id)},
-    )
+    # Create the customer in stripe (only include email if available)
+    create_params: dict = {'metadata': {'org_id': str(org.id)}}
+    if org.contact_email:
+        create_params['email'] = org.contact_email
+    customer = await stripe.Customer.create_async(**create_params)
 
     # Save the stripe customer in the local db
     async with a_session_maker() as session:
@@ -108,11 +108,14 @@ async def migrate_customer(session, user_id: str, org: Org):
     if stripe_customer is None:
         return
     stripe_customer.org_id = org.id
-    customer = await stripe.Customer.modify_async(
-        id=stripe_customer.stripe_customer_id,
-        email=org.contact_email,
-        metadata={'user_id': '', 'org_id': str(org.id)},
-    )
+    # Only include email if available to avoid sending empty strings to Stripe
+    modify_params: dict = {
+        'id': stripe_customer.stripe_customer_id,
+        'metadata': {'user_id': '', 'org_id': str(org.id)},
+    }
+    if org.contact_email:
+        modify_params['email'] = org.contact_email
+    customer = await stripe.Customer.modify_async(**modify_params)
 
     logger.info(
         'migrated_customer',

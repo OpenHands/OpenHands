@@ -9,25 +9,27 @@ type SettingsUpdate = Partial<Settings> & Record<string, unknown>;
 const saveSettingsMutationFn = async (
   scope: SettingsScope,
   settings: SettingsUpdate,
+  organizationId?: string | null,
 ) => {
   const settingsToSave: SettingsUpdate = { ...settings };
   delete settingsToSave.agent_settings_schema;
   delete settingsToSave.conversation_settings_schema;
 
-  const conversationSettings: Record<string, SettingsValue> = {
-    ...((settingsToSave.conversation_settings as Record<
+  const conversationSettings = {
+    ...((settingsToSave.conversation_settings_diff as Record<
       string,
       SettingsValue
     >) ?? {}),
   };
 
   if (Object.keys(conversationSettings).length > 0) {
-    settingsToSave.conversation_settings = conversationSettings;
+    settingsToSave.conversation_settings_diff = conversationSettings;
   } else {
-    delete settingsToSave.conversation_settings;
+    delete settingsToSave.conversation_settings_diff;
   }
+  delete settingsToSave.conversation_settings;
 
-  const agentSettings = settingsToSave.agent_settings as
+  const agentSettings = settingsToSave.agent_settings_diff as
     | Record<string, unknown>
     | undefined;
   const llmSettings = agentSettings?.llm as Record<string, unknown> | undefined;
@@ -35,6 +37,12 @@ const saveSettingsMutationFn = async (
     const apiKey = llmSettings.api_key.trim();
     llmSettings.api_key = apiKey === "" ? "" : apiKey;
   }
+  if (agentSettings && Object.keys(agentSettings).length > 0) {
+    settingsToSave.agent_settings_diff = agentSettings;
+  } else {
+    delete settingsToSave.agent_settings_diff;
+  }
+  delete settingsToSave.agent_settings;
 
   if (typeof settingsToSave.search_api_key === "string") {
     settingsToSave.search_api_key = settingsToSave.search_api_key.trim();
@@ -47,7 +55,14 @@ const saveSettingsMutationFn = async (
   }
 
   if (scope === "org") {
-    await organizationService.saveOrganizationAgentSettings(settingsToSave);
+    if (!organizationId) {
+      throw new Error("Organization ID is required for org settings saves");
+    }
+
+    await organizationService.saveOrganizationSettings({
+      orgId: organizationId,
+      settings: settingsToSave,
+    });
     return;
   }
 
@@ -60,7 +75,7 @@ export const useSaveSettings = (scope: SettingsScope = "personal") => {
 
   return useMutation({
     mutationFn: async (settings: SettingsUpdate) => {
-      await saveSettingsMutationFn(scope, settings);
+      await saveSettingsMutationFn(scope, settings, organizationId);
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({

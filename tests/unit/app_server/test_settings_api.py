@@ -31,6 +31,16 @@ def _dump(settings: Settings) -> dict:
     return settings.model_dump(mode='json', context=_EXPOSE, exclude_unset=True)
 
 
+def _dump_update(settings: Settings) -> dict:
+    """Dump a settings update payload using diff-only nested keys."""
+    payload = _dump(settings)
+    if 'agent_settings' in payload:
+        payload['agent_settings_diff'] = payload.pop('agent_settings')
+    if 'conversation_settings' in payload:
+        payload['conversation_settings_diff'] = payload.pop('conversation_settings')
+    return payload
+
+
 class MockUserAuth(UserAuth):
     """Mock implementation of UserAuth for testing."""
 
@@ -162,7 +172,7 @@ async def test_settings_api_endpoints(test_client):
     )
 
     # Make the POST request to store settings (V1 endpoint)
-    response = test_client.post('/api/v1/settings', json=_dump(settings))
+    response = test_client.post('/api/v1/settings', json=_dump_update(settings))
 
     # We're not checking the exact response, just that it doesn't error
     assert response.status_code == 200
@@ -205,12 +215,29 @@ async def test_settings_api_endpoints(test_client):
 
 
 @pytest.mark.asyncio
+async def test_store_settings_rejects_legacy_nested_payload_keys(test_client):
+    response = test_client.post(
+        '/api/v1/settings',
+        json={
+            'agent_settings': {'llm': {'model': 'legacy-model'}},
+            'conversation_settings': {'max_iterations': 5},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        'error': 'Use *_diff nested settings payloads instead of legacy keys',
+        'keys': ['agent_settings', 'conversation_settings'],
+    }
+
+
+@pytest.mark.asyncio
 async def test_saving_settings_with_frozen_secrets_store(test_client):
     """Regression: POSTing settings must not fail with `secrets_store`.
 
     See https://github.com/OpenHands/OpenHands/issues/13306.
     """
-    payload = _dump(
+    payload = _dump_update(
         Settings(
             language='en',
             agent_settings=AgentSettings(llm=LLM(model='gpt-4')),
@@ -227,7 +254,7 @@ async def test_search_api_key_explicit_clear(test_client):
     """Explicit empty search_api_key payloads should clear the stored secret."""
     response = test_client.post(
         '/api/v1/settings',
-        json=_dump(
+        json=_dump_update(
             Settings(
                 search_api_key='initial-secret-key',
                 agent_settings=AgentSettings(llm=LLM(model='gpt-4')),
@@ -242,7 +269,7 @@ async def test_search_api_key_explicit_clear(test_client):
 
     response = test_client.post(
         '/api/v1/settings',
-        json=_dump(
+        json=_dump_update(
             Settings(
                 search_api_key='',
                 agent_settings=AgentSettings(llm=LLM(model='claude-3-opus')),
@@ -262,7 +289,7 @@ async def test_disabled_skills_persistence(test_client):
     """Test that disabled_skills can be saved and retrieved via the settings API."""
     response = test_client.post(
         '/api/v1/settings',
-        json=_dump(
+        json=_dump_update(
             Settings(
                 disabled_skills=['skill_a', 'skill_b'],
                 agent_settings=AgentSettings(llm=LLM(model='test-model')),
