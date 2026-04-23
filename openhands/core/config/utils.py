@@ -797,29 +797,6 @@ def parse_arguments() -> argparse.Namespace:
     return args
 
 
-def register_custom_agents(config: OpenHandsConfig) -> None:
-    """Register custom agents from configuration.
-
-    This function is called after configuration is loaded to ensure all custom agents
-    specified in the config are properly imported and registered.
-    """
-    # Import here to avoid circular dependency
-    from openhands.controller.agent import Agent
-
-    for agent_name, agent_config in config.agents.items():
-        if agent_config.classpath:
-            try:
-                agent_cls = get_impl(Agent, agent_config.classpath)
-                Agent.register(agent_name, agent_cls)
-                logger.openhands_logger.info(
-                    f"Registered custom agent '{agent_name}' from {agent_config.classpath}"
-                )
-            except Exception as e:
-                logger.openhands_logger.error(
-                    f"Failed to register agent '{agent_name}': {e}"
-                )
-
-
 def load_openhands_config(
     set_logging_levels: bool = True, config_file: str = 'config.toml'
 ) -> OpenHandsConfig:
@@ -833,7 +810,6 @@ def load_openhands_config(
     load_from_toml(config, config_file)
     load_from_env(config, os.environ)
     finalize_config(config)
-    register_custom_agents(config)
     if set_logging_levels:
         logger.DEBUG = config.debug
         logger.DISABLE_COLOR_PRINTING = config.disable_color
