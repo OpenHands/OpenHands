@@ -33,7 +33,7 @@ export function useDeleteMcpServer() {
       }
 
       await SettingsService.saveSettings({
-        agent_settings: { mcp_config: toSdkMcpConfig(newConfig) },
+        agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
       });
     },
     onSuccess: () => {

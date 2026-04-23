@@ -32,7 +32,7 @@ def _make_settings(
     language: str | None = None,
     **extra_agent: object,
 ) -> DataSettings:
-    """Build a DataSettings with the new nested agent_settings API."""
+    """Build a DataSettings with diff-only nested settings payloads."""
     top_level: dict = {}
     if language is not None:
         top_level['language'] = language
@@ -44,20 +44,20 @@ def _make_settings(
         llm['base_url'] = base_url
     if api_key is not None:
         llm['api_key'] = api_key
-    agent_settings: dict = {}
+    agent_settings_diff: dict = {}
     if agent is not None:
-        agent_settings['agent'] = agent
+        agent_settings_diff['agent'] = agent
     if llm:
-        agent_settings['llm'] = llm
-    agent_settings.update(extra_agent)
+        agent_settings_diff['llm'] = llm
+    agent_settings_diff.update(extra_agent)
     payload: dict = {}
-    if agent_settings:
-        payload['agent_settings'] = agent_settings
-    conv: dict = {}
+    if agent_settings_diff:
+        payload['agent_settings_diff'] = agent_settings_diff
+    conversation_settings_diff: dict = {}
     if max_iterations is not None:
-        conv['max_iterations'] = max_iterations
-    if conv:
-        payload['conversation_settings'] = conv
+        conversation_settings_diff['max_iterations'] = max_iterations
+    if conversation_settings_diff:
+        payload['conversation_settings_diff'] = conversation_settings_diff
     if payload:
         s.update(payload)
     return s
@@ -86,7 +86,7 @@ def test_member_settings_persist_full_effective_agent_settings(mock_config):
     settings = Settings()
     settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'agent': 'CodeActAgent',
                 'llm': {
                     'model': 'anthropic/claude-sonnet-4-5-20250929',
@@ -97,7 +97,7 @@ def test_member_settings_persist_full_effective_agent_settings(mock_config):
                     'max_size': 128,
                 },
             },
-            'conversation_settings': {
+            'conversation_settings_diff': {
                 'max_iterations': 42,
                 'confirmation_mode': True,
                 'security_analyzer': 'llm',
@@ -158,7 +158,7 @@ def settings_store(async_session_maker, mock_config):
             )
             payload: dict = {}
             if agent_dict:
-                payload['agent_settings'] = agent_dict
+                payload['agent_settings_diff'] = agent_dict
             if payload:
                 settings.update(payload)
             return settings
@@ -224,7 +224,7 @@ async def test_store_and_load_keycloak_user(settings_store):
     )
     settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'agent': 'smith',
                 'llm': {
                     'model': 'anthropic/claude-sonnet-4-5-20250929',
@@ -288,7 +288,7 @@ async def test_encryption(settings_store):
     )
     settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'agent': 'smith',
                 'llm': {
                     'model': 'anthropic/claude-sonnet-4-5-20250929',
@@ -609,7 +609,7 @@ async def test_store_saves_mcp_config_in_agent_settings(
     new_settings = DataSettings()
     new_settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'llm': {
                     'model': 'test-model',
                     'base_url': 'http://non-litellm-url.com',
@@ -745,7 +745,7 @@ async def test_store_and_load_mcp_config_via_agent_settings(
     admin_settings = DataSettings()
     admin_settings.update(
         {
-            'agent_settings': {
+            'agent_settings_diff': {
                 'llm': {
                     'model': 'test-model',
                     'base_url': 'http://non-litellm-url.com',
