@@ -1259,6 +1259,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             for name, value in api_secrets.items():
                 validate_secret_name(name)
+                if name in secrets:
+                    _logger.warning(
+                        'API-provided secret %r overrides existing secret', name
+                    )
                 secrets[name] = StaticSecret(value=value)
 
         # --- LLM + MCP -----------------------------------------------------
