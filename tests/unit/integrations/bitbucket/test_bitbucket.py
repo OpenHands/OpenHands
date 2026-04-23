@@ -628,10 +628,9 @@ async def test_get_user_handles_user_emails_api_failure():
 
 # Setup.py Bitbucket Token Tests
 @patch('openhands.core.setup.call_async_from_sync')
-@patch('openhands.core.setup.get_file_store')
 @patch('openhands.core.setup.EventStream')
 def test_initialize_repository_for_runtime_with_bitbucket_token(
-    mock_event_stream, mock_get_file_store, mock_call_async_from_sync
+    mock_event_stream, mock_call_async_from_sync
 ):
     """Test that initialize_repository_for_runtime properly handles BITBUCKET_TOKEN."""
     from openhands.core.setup import initialize_repository_for_runtime
@@ -677,10 +676,9 @@ def test_initialize_repository_for_runtime_with_bitbucket_token(
 
 
 @patch('openhands.core.setup.call_async_from_sync')
-@patch('openhands.core.setup.get_file_store')
 @patch('openhands.core.setup.EventStream')
 def test_initialize_repository_for_runtime_with_multiple_tokens(
-    mock_event_stream, mock_get_file_store, mock_call_async_from_sync
+    mock_event_stream, mock_call_async_from_sync
 ):
     """Test that initialize_repository_for_runtime handles multiple provider tokens including Bitbucket."""
     from openhands.core.setup import initialize_repository_for_runtime
@@ -740,10 +738,9 @@ def test_initialize_repository_for_runtime_with_multiple_tokens(
 
 
 @patch('openhands.core.setup.call_async_from_sync')
-@patch('openhands.core.setup.get_file_store')
 @patch('openhands.core.setup.EventStream')
 def test_initialize_repository_for_runtime_without_bitbucket_token(
-    mock_event_stream, mock_get_file_store, mock_call_async_from_sync
+    mock_event_stream, mock_call_async_from_sync
 ):
     """Test that initialize_repository_for_runtime works without BITBUCKET_TOKEN."""
     from openhands.core.setup import initialize_repository_for_runtime
