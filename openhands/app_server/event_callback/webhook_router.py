@@ -19,6 +19,10 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
+from openhands.app_server.event_callback.event_callback_models import EventCallback
+from openhands.app_server.event_callback.set_title_callback_processor import (
+    SetTitleCallbackProcessor,
+)
 from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_event_service,
@@ -203,6 +207,9 @@ async def on_conversation_update(
     if conversation_info.execution_status == ConversationExecutionStatus.DELETING:
         return Success()
 
+    # Detect if this is a new conversation (stub has title=None)
+    is_new_conversation = existing.title is None
+
     # Merge tags from incoming conversation info
     # SDK can set tags via Conversation(tags=...) which includes automation context
     merged_tags = merge_conversation_tags(existing.tags, conversation_info.tags)
@@ -236,6 +243,22 @@ async def on_conversation_update(
     await app_conversation_info_service.save_app_conversation_info(
         app_conversation_info
     )
+
+    # Register SetTitleCallbackProcessor for new conversations created via webhook.
+    # This enables auto-titling for conversations created directly on the agent-server
+    # (e.g., automation runs) that notify the app-server via webhook.
+    if is_new_conversation:
+        state = InjectorState()
+        setattr(
+            state, USER_CONTEXT_ATTR, SpecifyUserContext(sandbox_info.created_by_user_id)
+        )
+        async with get_event_callback_service(state) as event_callback_service:
+            await event_callback_service.save_event_callback(
+                EventCallback(
+                    conversation_id=conversation_info.id,
+                    processor=SetTitleCallbackProcessor(),
+                )
+            )
 
     return Success()
 
