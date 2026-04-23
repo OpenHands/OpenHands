@@ -20,6 +20,7 @@ import {
 } from "#/utils/settings-utils";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { useConfig } from "#/hooks/query/use-config";
+import { useMe } from "#/hooks/query/use-me";
 import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 
 const SAAS_ONLY_PATHS = [
@@ -131,12 +132,15 @@ function SettingsScreen() {
   const navItems = useSettingsNavItems();
   const { data: config } = useConfig();
   const { isTeamOrg } = useOrgTypeAndAccess();
+  const { data: me } = useMe();
 
   // Determine if we should show the org-wide settings badge
-  // Only show for Admin/Owner roles on LLM/org-defaults pages in team orgs
   const isOrgWideBadgePath = ORG_WIDE_BADGE_PATHS.has(location.pathname);
   const isSaasMode = config?.app_mode === "saas";
   const shouldShowOrgWideBadge = isOrgWideBadgePath && isTeamOrg && isSaasMode;
+  // Members see a read-only message; Admins/Owners see the org-wide notice.
+  const orgWideBadgeVariant =
+    me?.role === "member" ? "managed-by-admin" : "org-wide";
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {
@@ -165,7 +169,9 @@ function SettingsScreen() {
           {!shouldHideTitle && (
             <div className="flex items-center gap-3 flex-wrap">
               <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
-              {shouldShowOrgWideBadge && <OrgWideSettingsBadge />}
+              {shouldShowOrgWideBadge && (
+                <OrgWideSettingsBadge variant={orgWideBadgeVariant} />
+              )}
             </div>
           )}
           <div className="flex-1 overflow-auto custom-scrollbar-always">
