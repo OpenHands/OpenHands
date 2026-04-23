@@ -23,7 +23,9 @@ MAX_API_SECRET_NAME_LENGTH: int = int(os.getenv('OH_MAX_API_SECRET_NAME_LENGTH',
 # Maximum length of a secret value in bytes.
 # 64KB is generous for API keys/tokens while preventing massive payloads.
 # Override with: OH_MAX_API_SECRET_VALUE_LENGTH
-MAX_API_SECRET_VALUE_LENGTH: int = int(os.getenv('OH_MAX_API_SECRET_VALUE_LENGTH', '65536'))
+MAX_API_SECRET_VALUE_LENGTH: int = int(
+    os.getenv('OH_MAX_API_SECRET_VALUE_LENGTH', '65536')
+)
 
 
 # =============================================================================
@@ -128,13 +130,14 @@ def validate_secret_name(name: str) -> None:
     # Note: OVERRIDABLE_SYSTEM_SECRETS are intentionally allowed
 
 
-def validate_secrets_dict(secrets: dict[str, str] | None) -> None:
+def validate_secrets_dict(secrets: dict[str, object] | None) -> None:
     """Validate the entire secrets dictionary for size limits.
 
     This should be called before iterating over individual secrets.
 
     Args:
-        secrets: The secrets dictionary to validate (can be None)
+        secrets: The secrets dictionary to validate (can be None).
+                 Values can be str or SecretStr (uses get_secret_value()).
 
     Raises:
         ValueError: If the dictionary exceeds size limits
@@ -151,7 +154,12 @@ def validate_secrets_dict(secrets: dict[str, str] | None) -> None:
 
     # Check individual value lengths
     for name, value in secrets.items():
-        value_bytes = len(value.encode('utf-8'))
+        # Handle both str and SecretStr (Pydantic's SecretStr has get_secret_value())
+        if hasattr(value, 'get_secret_value'):
+            value_str = value.get_secret_value()  # type: ignore[union-attr]
+        else:
+            value_str = str(value)
+        value_bytes = len(value_str.encode('utf-8'))
         if value_bytes > MAX_API_SECRET_VALUE_LENGTH:
             raise ValueError(
                 f"Secret '{name}' value exceeds maximum length of "

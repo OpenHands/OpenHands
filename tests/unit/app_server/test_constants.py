@@ -81,10 +81,12 @@ class TestValidateSecretsDict:
 
     def test_valid_secrets(self):
         """Valid secrets dict should not raise."""
-        validate_secrets_dict({
-            'KEY1': 'value1',
-            'KEY2': 'value2',
-        })
+        validate_secrets_dict(
+            {
+                'KEY1': 'value1',
+                'KEY2': 'value2',
+            }
+        )
 
     def test_too_many_secrets(self):
         """Exceeding max count should raise."""
@@ -115,6 +117,25 @@ class TestValidateSecretsDict:
         unicode_value = '🔐' * emoji_count
         with pytest.raises(ValueError, match='value exceeds maximum length'):
             validate_secrets_dict({'KEY': unicode_value})
+
+    def test_secretstr_values(self):
+        """Should handle Pydantic SecretStr values."""
+        from pydantic import SecretStr
+
+        validate_secrets_dict(
+            {
+                'KEY1': SecretStr('value1'),
+                'KEY2': SecretStr('value2'),
+            }
+        )
+
+    def test_secretstr_value_too_long(self):
+        """Should check SecretStr value length correctly."""
+        from pydantic import SecretStr
+
+        long_value = SecretStr('x' * (MAX_API_SECRET_VALUE_LENGTH + 1))
+        with pytest.raises(ValueError, match='value exceeds maximum length'):
+            validate_secrets_dict({'KEY': long_value})
 
 
 class TestConfigurableLimits:
