@@ -16,24 +16,24 @@ including security-related configurations for secret name validation.
 # when exported in bash commands, potentially breaking the sandbox or
 # creating security vulnerabilities.
 # -----------------------------------------------------------------------------
-BLOCKED_SECRET_NAMES: frozenset[str] = frozenset({
-    # Agent-server container configuration (from initial_env)
-    'OPENVSCODE_SERVER_ROOT',
-    'OH_ENABLE_VNC',
-    'LOG_JSON',
-    'OH_CONVERSATIONS_PATH',
-    'OH_BASH_EVENTS_DIR',
-    'PYTHONUNBUFFERED',
-    'ENV_LOG_LEVEL',
-    
-    # Webhook and CORS - overriding could redirect callbacks to malicious endpoints
-    'OH_WEBHOOKS_0_BASE_URL',
-    'OH_ALLOW_CORS_ORIGINS_0',
-    
-    # Worker ports - could break web application functionality
-    'WORKER_1',
-    'WORKER_2',
-})
+BLOCKED_SECRET_NAMES: frozenset[str] = frozenset(
+    {
+        # Agent-server container configuration (from initial_env)
+        'OPENVSCODE_SERVER_ROOT',
+        'OH_ENABLE_VNC',
+        'LOG_JSON',
+        'OH_CONVERSATIONS_PATH',
+        'OH_BASH_EVENTS_DIR',
+        'PYTHONUNBUFFERED',
+        'ENV_LOG_LEVEL',
+        # Webhook and CORS - overriding could redirect callbacks to malicious endpoints
+        'OH_WEBHOOKS_0_BASE_URL',
+        'OH_ALLOW_CORS_ORIGINS_0',
+        # Worker ports - could break web application functionality
+        'WORKER_1',
+        'WORKER_2',
+    }
+)
 
 # -----------------------------------------------------------------------------
 # BLOCKED PREFIXES: Secret names starting with these prefixes are blocked.
@@ -42,9 +42,7 @@ BLOCKED_SECRET_NAMES: frozenset[str] = frozenset({
 # LLM controls (timeouts, retries, model restrictions, etc.). Allowing users
 # to override these would let them escape app-server LLM controls.
 # -----------------------------------------------------------------------------
-BLOCKED_SECRET_PREFIXES: tuple[str, ...] = (
-    'LLM_',
-)
+BLOCKED_SECRET_PREFIXES: tuple[str, ...] = ('LLM_',)
 
 # -----------------------------------------------------------------------------
 # OVERRIDABLE: These are system-provided but users MAY override them.
@@ -53,21 +51,22 @@ BLOCKED_SECRET_PREFIXES: tuple[str, ...] = (
 # Use case: User wants to use their own credentials instead of the
 # organization-level credentials provided by the system.
 # -----------------------------------------------------------------------------
-OVERRIDABLE_SYSTEM_SECRETS: frozenset[str] = frozenset({
-    # Git Provider Tokens - users may provide their own credentials
-    # Note: Provider tokens are fetched via app-server API, not container env
-    'GITHUB_TOKEN',
-    'GITLAB_TOKEN',
-    'BITBUCKET_TOKEN',
-    'AZURE_DEVOPS_TOKEN',
-    'FORGEJO_TOKEN',
-    
-    # AWS Credentials - used for Bedrock LLM access
-    # Users may want to use their own AWS account for Bedrock models
-    'AWS_ACCESS_KEY_ID',
-    'AWS_SECRET_ACCESS_KEY',
-    'AWS_REGION_NAME',
-})
+OVERRIDABLE_SYSTEM_SECRETS: frozenset[str] = frozenset(
+    {
+        # Git Provider Tokens - users may provide their own credentials
+        # Note: Provider tokens are fetched via app-server API, not container env
+        'GITHUB_TOKEN',
+        'GITLAB_TOKEN',
+        'BITBUCKET_TOKEN',
+        'AZURE_DEVOPS_TOKEN',
+        'FORGEJO_TOKEN',
+        # AWS Credentials - used for Bedrock LLM access
+        # Users may want to use their own AWS account for Bedrock models
+        'AWS_ACCESS_KEY_ID',
+        'AWS_SECRET_ACCESS_KEY',
+        'AWS_REGION_NAME',
+    }
+)
 
 
 def validate_secret_name(name: str) -> None:
@@ -80,20 +79,20 @@ def validate_secret_name(name: str) -> None:
         ValueError: If the name is blocked (exact match or prefix match)
     """
     upper_name = name.upper()
-    
+
     # Check exact matches
     if upper_name in BLOCKED_SECRET_NAMES:
         raise ValueError(
             f"Secret name '{name}' is reserved for internal use and cannot be overridden. "
-            f"See openhands.app_server.constants for the list of blocked names."
+            f'See openhands.app_server.constants for the list of blocked names.'
         )
-    
+
     # Check prefix matches
     for prefix in BLOCKED_SECRET_PREFIXES:
         if upper_name.startswith(prefix):
             raise ValueError(
                 f"Secret name '{name}' starts with reserved prefix '{prefix}' and cannot be used. "
-                f"These variables are used for LLM configuration controls."
+                f'These variables are used for LLM configuration controls.'
             )
-    
+
     # Note: OVERRIDABLE_SYSTEM_SECRETS are intentionally allowed
