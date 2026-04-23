@@ -15,6 +15,12 @@ function appendDefaultQueryParams(url: string): string {
     parsed.searchParams.set("initialScreen", "chatPreviewInitialScreen");
     parsed.searchParams.set("colorScheme", "light");
     parsed.searchParams.set("_mcp", "1");
+    const previewApp = new URLSearchParams(window.location.search).get(
+      "preview_app",
+    );
+    if (previewApp) {
+      parsed.searchParams.set("app", previewApp);
+    }
     return parsed.toString();
   } catch {
     return url;
