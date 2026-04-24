@@ -25,6 +25,7 @@ def test_user_settings_are_split_into_agent_and_conversation_buckets():
         'llm_base_url': 'https://api.example.com',
         'enable_default_condenser': False,
         'condenser_max_size': 128,
+        'mcp_config': {'mcpServers': {'admin': {'url': 'https://mcp.example.com'}}},
         'agent_settings': {},
         'conversation_settings': {},
     }
@@ -40,6 +41,7 @@ def test_user_settings_are_split_into_agent_and_conversation_buckets():
             'base_url': 'https://api.example.com',
         },
         'condenser': {'enabled': False, 'max_size': 128},
+        'mcp_config': {'mcpServers': {'admin': {'url': 'https://mcp.example.com'}}},
     }
     assert conversation_settings == {
         'max_iterations': 42,
@@ -72,6 +74,41 @@ def test_org_member_diffs_use_nested_llm_and_conversation_settings():
         'mcp_config': {'mcpServers': {'admin': {'url': 'https://mcp.example.com'}}},
     }
     assert conversation_settings_diff == {'max_iterations': 50}
+
+
+def test_org_settings_are_split_into_agent_and_conversation_buckets():
+    row = {
+        'agent': 'CodeActAgent',
+        'default_max_iterations': 99,
+        'security_analyzer': 'auto',
+        'confirmation_mode': False,
+        'default_llm_model': 'anthropic/claude-3-7-sonnet',
+        'default_llm_base_url': 'https://api.example.com',
+        'enable_default_condenser': True,
+        'condenser_max_size': 256,
+        'mcp_config': {'mcpServers': {'org': {'url': 'https://org-mcp.example.com'}}},
+        'agent_settings': {},
+        'conversation_settings': {},
+    }
+
+    agent_settings = migration_108._build_org_agent_settings(row)
+    conversation_settings = migration_108._build_org_conversation_settings(row)
+
+    assert agent_settings == {
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'llm': {
+            'model': 'anthropic/claude-3-7-sonnet',
+            'base_url': 'https://api.example.com',
+        },
+        'condenser': {'enabled': True, 'max_size': 256},
+        'mcp_config': {'mcpServers': {'org': {'url': 'https://org-mcp.example.com'}}},
+    }
+    assert conversation_settings == {
+        'max_iterations': 99,
+        'confirmation_mode': False,
+        'security_analyzer': 'auto',
+    }
 
 
 def test_downgrade_extracts_legacy_values_from_nested_settings():
@@ -114,6 +151,7 @@ def test_migrated_payload_loads_via_user_settings_to_settings():
         'llm_base_url': 'https://api.example.com',
         'enable_default_condenser': False,
         'condenser_max_size': 128,
+        'mcp_config': {'mcpServers': {'admin': {'url': 'https://mcp.example.com'}}},
         'agent_settings': {},
         'conversation_settings': {},
     }
@@ -130,6 +168,11 @@ def test_migrated_payload_loads_via_user_settings_to_settings():
     assert settings.agent_settings.llm.base_url == 'https://api.example.com'
     assert settings.agent_settings.condenser.enabled is False
     assert settings.agent_settings.condenser.max_size == 128
+    assert settings.agent_settings.mcp_config is not None
+    assert (
+        settings.agent_settings.mcp_config.mcpServers['admin'].url
+        == 'https://mcp.example.com'
+    )
     assert settings.conversation_settings.max_iterations == 42
     assert settings.conversation_settings.confirmation_mode is True
     assert settings.conversation_settings.security_analyzer == 'llm'
