@@ -14,6 +14,8 @@ from pydantic import SecretStr
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
+from openhands.analytics.analytics_context import AnalyticsContext
+from openhands.analytics.analytics_service import AnalyticsService
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -96,6 +98,145 @@ def merge_conversation_tags(
     existing = existing_tags or {}
     incoming = incoming_tags or {}
     return {**existing, **incoming}
+
+
+async def _track_user_activated(
+    analytics: AnalyticsService,
+    ctx: AnalyticsContext,
+    conversation_id: UUID,
+    app_conversation_info: AppConversationInfo,
+) -> None:
+    """Track user activation (first finished conversation).
+
+    Fires ACTV-01 event if this is the user's first completed conversation.
+    """
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
+    from storage.database import a_session_maker
+    from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
+
+    user_uuid = _uuid.UUID(app_conversation_info.created_by_user_id)
+    async with a_session_maker() as session:
+        count_result = await session.execute(
+            sa_select(func.count()).where(
+                StoredConversationMetadataSaas.user_id == user_uuid,
+                StoredConversationMetadataSaas.conversation_id != str(conversation_id),
+            )
+        )
+        prior_count = count_result.scalar()
+
+    if prior_count != 0:
+        return
+
+    tos_ts = ctx.user.accepted_tos if ctx.user else None
+    time_to_activate_seconds = None
+    if tos_ts is not None:
+        if tos_ts.tzinfo is None:
+            tos_ts = tos_ts.replace(tzinfo=timezone.utc)
+        time_to_activate_seconds = (datetime.now(timezone.utc) - tos_ts).total_seconds()
+
+    analytics.track_user_activated(
+        ctx=ctx,
+        conversation_id=str(conversation_id),
+        time_to_activate_seconds=time_to_activate_seconds,
+        llm_model=app_conversation_info.llm_model,
+        trigger=app_conversation_info.trigger.value
+        if app_conversation_info.trigger
+        else None,
+    )
+
+
+async def _track_conversation_terminal(
+    conversation_id: UUID,
+    app_conversation_info: AppConversationInfo,
+    events: list[Event],
+    exec_status: ConversationExecutionStatus,
+) -> None:
+    """Track analytics for terminal conversation states.
+
+    Handles BIZZ-03 (credit limit), BIZZ-05 (finished), BIZZ-06 (errored),
+    and ACTV-01 (user activated) events.
+    """
+    analytics = get_analytics_service()
+    if not analytics or not app_conversation_info.created_by_user_id:
+        return
+
+    ctx = await resolve_analytics_context(app_conversation_info.created_by_user_id)
+
+    # Extract metrics
+    metrics = app_conversation_info.metrics
+    accumulated_cost = metrics.accumulated_cost if metrics else None
+    prompt_tokens = (
+        metrics.accumulated_token_usage.prompt_tokens
+        if metrics and metrics.accumulated_token_usage
+        else None
+    )
+    completion_tokens = (
+        metrics.accumulated_token_usage.completion_tokens
+        if metrics and metrics.accumulated_token_usage
+        else None
+    )
+
+    is_error = exec_status in (
+        ConversationExecutionStatus.ERROR,
+        ConversationExecutionStatus.STUCK,
+    )
+
+    if is_error:
+        # Find last error message
+        error_message = None
+        for ev in events:
+            if isinstance(ev, ConversationStateUpdateEvent) and ev.key == 'last_error':
+                error_message = str(ev.value)[:500] if ev.value else None
+
+        error_type = _classify_error_type(error_message)
+
+        # BIZZ-06: conversation errored
+        analytics.track_conversation_errored(
+            ctx=ctx,
+            conversation_id=str(conversation_id),
+            error_type=error_type,
+            error_message=error_message,
+            llm_model=app_conversation_info.llm_model,
+            turn_count=None,
+            terminal_state=exec_status.value,
+        )
+
+        # BIZZ-03: credit limit reached
+        if error_type == 'budget_exceeded':
+            analytics.track_credit_limit_reached(
+                ctx=ctx,
+                conversation_id=str(conversation_id),
+                llm_model=app_conversation_info.llm_model,
+            )
+        return
+
+    # BIZZ-05: conversation finished
+    analytics.track_conversation_finished(
+        ctx=ctx,
+        conversation_id=str(conversation_id),
+        terminal_state=exec_status.value,
+        turn_count=None,
+        accumulated_cost_usd=accumulated_cost,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        llm_model=app_conversation_info.llm_model,
+        trigger=app_conversation_info.trigger.value
+        if app_conversation_info.trigger
+        else None,
+    )
+
+    # ACTV-01: user activated (first finished conversation)
+    if exec_status == ConversationExecutionStatus.FINISHED:
+        try:
+            await _track_user_activated(
+                analytics, ctx, conversation_id, app_conversation_info
+            )
+        except Exception:
+            _logger.exception('analytics:user_activated:failed')
 
 
 def detect_automation_trigger(
@@ -305,154 +446,18 @@ async def on_event(
 
         # Analytics: conversation terminal state detection
         for event in events:
-            if (
-                isinstance(event, ConversationStateUpdateEvent)
-                and event.key == 'execution_status'
-            ):
-                try:
-                    exec_status = ConversationExecutionStatus(event.value)
-                    if exec_status.is_terminal():
-                        analytics = get_analytics_service()
-                        if analytics and app_conversation_info.created_by_user_id:
-                            ctx = await resolve_analytics_context(
-                                app_conversation_info.created_by_user_id
-                            )
-
-                            # Extract metrics from stored conversation info (updated by process_stats_event above)
-                            metrics = app_conversation_info.metrics
-                            accumulated_cost = (
-                                metrics.accumulated_cost if metrics else None
-                            )
-                            prompt_tokens = (
-                                metrics.accumulated_token_usage.prompt_tokens
-                                if metrics and metrics.accumulated_token_usage
-                                else None
-                            )
-                            completion_tokens = (
-                                metrics.accumulated_token_usage.completion_tokens
-                                if metrics and metrics.accumulated_token_usage
-                                else None
-                            )
-
-                            is_error = exec_status in (
-                                ConversationExecutionStatus.ERROR,
-                                ConversationExecutionStatus.STUCK,
-                            )
-
-                            if is_error:
-                                # Look for the last error info in events batch
-                                error_message = None
-                                for ev in events:
-                                    if (
-                                        isinstance(ev, ConversationStateUpdateEvent)
-                                        and ev.key == 'last_error'
-                                    ):
-                                        error_message = (
-                                            str(ev.value)[:500] if ev.value else None
-                                        )
-
-                                error_type = _classify_error_type(error_message)
-
-                                # BIZZ-06: conversation errored
-                                analytics.track_conversation_errored(
-                                    ctx=ctx,
-                                    conversation_id=str(conversation_id),
-                                    error_type=error_type,
-                                    error_message=error_message,
-                                    llm_model=app_conversation_info.llm_model,
-                                    turn_count=None,
-                                    terminal_state=exec_status.value,
-                                )
-
-                                # BIZZ-03: credit limit reached (fires alongside conversation errored)
-                                if error_type == 'budget_exceeded':
-                                    analytics.track_credit_limit_reached(
-                                        ctx=ctx,
-                                        conversation_id=str(conversation_id),
-                                        credit_balance=None,
-                                        llm_model=app_conversation_info.llm_model,
-                                    )
-                            else:
-                                # BIZZ-05: conversation finished (includes FINISHED, STOPPED, etc.)
-                                analytics.track_conversation_finished(
-                                    ctx=ctx,
-                                    conversation_id=str(conversation_id),
-                                    terminal_state=exec_status.value,
-                                    turn_count=None,
-                                    accumulated_cost_usd=accumulated_cost,
-                                    prompt_tokens=prompt_tokens,
-                                    completion_tokens=completion_tokens,
-                                    llm_model=app_conversation_info.llm_model,
-                                    trigger=(
-                                        app_conversation_info.trigger.value
-                                        if app_conversation_info.trigger
-                                        else None
-                                    ),
-                                )
-
-                                # ACTV-01: user activated (first finished conversation only)
-                                if exec_status == ConversationExecutionStatus.FINISHED:
-                                    try:
-                                        import uuid as _uuid
-                                        from datetime import datetime, timezone
-
-                                        from sqlalchemy import func
-                                        from sqlalchemy import select as sa_select
-                                        from storage.database import (
-                                            a_session_maker,
-                                        )
-                                        from storage.stored_conversation_metadata_saas import (
-                                            StoredConversationMetadataSaas,
-                                        )
-
-                                        user_uuid = _uuid.UUID(
-                                            app_conversation_info.created_by_user_id
-                                        )
-                                        async with a_session_maker() as act_session:
-                                            count_result = await act_session.execute(
-                                                sa_select(func.count()).where(
-                                                    StoredConversationMetadataSaas.user_id
-                                                    == user_uuid,
-                                                    StoredConversationMetadataSaas.conversation_id
-                                                    != str(conversation_id),
-                                                )
-                                            )
-                                            prior_count = count_result.scalar()
-
-                                        if prior_count == 0:
-                                            tos_ts = (
-                                                ctx.user.accepted_tos
-                                                if ctx.user
-                                                else None
-                                            )
-                                            if tos_ts is not None:
-                                                if tos_ts.tzinfo is None:
-                                                    tos_ts = tos_ts.replace(
-                                                        tzinfo=timezone.utc
-                                                    )
-                                                time_to_activate_seconds = (
-                                                    datetime.now(timezone.utc) - tos_ts
-                                                ).total_seconds()
-                                            else:
-                                                time_to_activate_seconds = None
-
-                                            analytics.track_user_activated(
-                                                ctx=ctx,
-                                                conversation_id=str(conversation_id),
-                                                time_to_activate_seconds=time_to_activate_seconds,
-                                                llm_model=app_conversation_info.llm_model,
-                                                trigger=(
-                                                    app_conversation_info.trigger.value
-                                                    if app_conversation_info.trigger
-                                                    else None
-                                                ),
-                                            )
-                                    except Exception:
-                                        _logger.exception(
-                                            'analytics:user_activated:failed'
-                                        )
-                except Exception:
-                    _logger.exception('analytics:conversation_terminal:failed')
+            if not isinstance(event, ConversationStateUpdateEvent):
+                continue
+            if event.key != 'execution_status':
+                continue
+            try:
+                exec_status = ConversationExecutionStatus(event.value)
+                if exec_status.is_terminal():
+                    await _track_conversation_terminal(
+                        conversation_id, app_conversation_info, events, exec_status
+                    )
+            except Exception:
+                _logger.exception('analytics:conversation_terminal:failed')
 
         asyncio.create_task(
             _run_callbacks_in_bg_and_close(
