@@ -108,11 +108,20 @@ class TestGetProviderApiBase:
             == 'https://api.anthropic.com'
         )
 
-    def test_gemini_model_returns_google_api_base(self):
-        """Test that Gemini models return a Google API base URL."""
-        api_base = get_provider_api_base('gemini/gemini-pro')
-        assert api_base is not None
-        assert 'generativelanguage.googleapis.com' in api_base
+    def test_gemini_model_returns_none_not_model_specific_endpoint(self):
+        """Regression for #14028.
+
+        litellm.get_api_base returns the fully-resolved request URL for
+        gemini/<model> (e.g. .../models/gemini-pro:generateContent), not a
+        reusable base. Persisting that as base_url caused the subsequent
+        request to append the model path a second time and 404. We now
+        return None so litellm falls back to its own default.
+        """
+        assert get_provider_api_base('gemini/gemini-pro') is None
+        assert get_provider_api_base('gemini/gemini-3.1-pro-preview') is None
+        assert get_provider_api_base('gemini/gemini-3-flash-preview') is None
+        assert get_provider_api_base('gemini/gemini-2.5-pro') is None
+        assert get_provider_api_base('gemini/gemini-2.5-flash') is None
 
     def test_mistral_model_returns_mistral_api_base(self):
         """Test that Mistral models return the Mistral API base URL."""
