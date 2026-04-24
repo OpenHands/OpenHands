@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from openhands.agent_server.models import OpenHandsModel, SendMessageRequest
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
@@ -172,6 +172,18 @@ class AppConversationStartRequest(OpenHandsModel):
         description=(
             'List of plugins to load for this conversation. Plugins are loaded '
             'and their skills/MCP config are merged into the agent.'
+        ),
+    )
+
+    # Secrets passed directly via API at conversation start time
+    secrets: dict[str, SecretStr] | None = Field(
+        default=None,
+        description=(
+            'Secrets to pass to the conversation. These are merged with any '
+            'existing secrets (from database or git providers), with API-provided '
+            'secrets taking precedence (overriding any existing secret with the same name). '
+            'Keys are secret names (e.g., "MY_API_KEY"), values are the secret values. '
+            'Warning: Providing a secret that already exists will silently override it.'
         ),
     )
 

@@ -5,6 +5,7 @@ import os
 import tempfile
 import zipfile
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Sequence, cast
@@ -309,6 +310,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
                     plugins=request.plugins,
+                    api_secrets=request.secrets,
                 )
             )
 
@@ -1216,6 +1218,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
+        api_secrets: dict[str, SecretStr] | None = None,
     ) -> StartConversationRequest:
         """Build a complete StartConversationRequest for a user.
 
@@ -1224,6 +1227,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Server-only overrides (system prompts, LLM tracing metadata,
         skills, hooks) are applied to the agent after creation.
         Finally delegates to ``ConversationSettings.create_request()``.
+
+        Args:
+            sandbox: Sandbox information
+            conversation_id: Unique conversation identifier
+            initial_message: Optional initial message to send
+            system_message_suffix: Optional suffix for system message
+            git_provider: Optional git provider type
+            working_dir: Working directory path
+            agent_type: Type of agent (DEFAULT or PLAN)
+            llm_model: Optional specific LLM model to use
+            remote_workspace: Optional remote workspace instance
+            selected_repository: Optional repository name
+            plugins: Optional list of plugins to load
+            api_secrets: Optional secrets passed directly via the API.
+                These are merged with existing secrets (from database
+                and git providers), with API-provided secrets taking
+                precedence.
         """
         user = await self.user_context.get_user_info()
 
@@ -1231,7 +1251,27 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         workspace = LocalWorkspace(working_dir=project_dir)
 
         # --- secrets --------------------------------------------------------
+        # Start with secrets from git providers and database
         secrets = await self._setup_secrets_for_git_providers(user)
+
+        # Merge API-provided secrets (they take precedence over existing ones)
+        if api_secrets:
+            from openhands.app_server.constants import (
+                validate_secret_name,
+                validate_secrets_dict,
+            )
+
+            # Validate overall dict size limits first
+            # Cast to Mapping for mypy compatibility (Mapping is covariant in value type)
+            validate_secrets_dict(cast('Mapping[str, object]', api_secrets))
+
+            for name, value in api_secrets.items():
+                validate_secret_name(name)
+                if name in secrets:
+                    _logger.warning(
+                        'API-provided secret %r overrides existing secret', name
+                    )
+                secrets[name] = StaticSecret(value=value)
 
         # --- LLM + MCP -----------------------------------------------------
         llm, mcp_config = await self._configure_llm_and_mcp(
