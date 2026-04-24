@@ -22,4 +22,17 @@ describe("OrgWideSettingsBadge", () => {
     const icon = badge.querySelector("svg");
     expect(icon).toBeInTheDocument();
   });
+
+  it("should render the managed-by-admin i18n key when variant is set", () => {
+    // Arrange & Act
+    render(<OrgWideSettingsBadge variant="managed-by-admin" />);
+
+    // Assert
+    expect(
+      screen.getByText("SETTINGS$ORG_MANAGED_BY_ADMIN_BADGE"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("SETTINGS$ORG_WIDE_SETTING_BADGE"),
+    ).not.toBeInTheDocument();
+  });
 });
