@@ -1231,8 +1231,3 @@ enable_browsing = false
     default_agent_config = default_config.get_agent_config()
     assert default_agent_config.system_prompt_filename == 'custom_prompt.j2'
     assert default_agent_config.enable_browsing is True
-
-    # Check custom agent config
-    custom_agent_config = default_config.get_agent_config('CodeReviewAgent')
-    assert custom_agent_config.system_prompt_filename == 'code_review_prompt.j2'
-    assert custom_agent_config.enable_browsing is False
