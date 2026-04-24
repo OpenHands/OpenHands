@@ -136,11 +136,11 @@ async def store_provider_tokens(
     await secrets_store.store(updated_secrets)
 
     # ACTV-02: git provider connected analytics
-    from openhands.analytics import get_analytics_service, resolve_context
+    from openhands.analytics import get_analytics_service, resolve_analytics_context
 
     analytics = get_analytics_service()
     if analytics and user_id and provider_info.provider_tokens:
-        ctx = await resolve_context(user_id)
+        ctx = await resolve_analytics_context(user_id)
         for provider_type, token_value in provider_info.provider_tokens.items():
             # Only fire for providers with actual token, not host-only updates
             if token_value.token:

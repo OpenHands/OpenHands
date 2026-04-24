@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.models import Success
-from openhands.analytics import get_analytics_service, resolve_context
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -373,7 +373,7 @@ async def start_app_conversation(
             if analytics:
                 user_id = await user_context.get_user_id()
                 if user_id:
-                    ctx = await resolve_context(user_id)
+                    ctx = await resolve_analytics_context(user_id)
                     analytics.track_conversation_created(
                         distinct_id=user_id,
                         conversation_id=str(result.app_conversation_id)
@@ -496,7 +496,9 @@ async def delete_app_conversation(
     try:
         analytics = get_analytics_service()
         if analytics and app_conversation_info.created_by_user_id:
-            ctx = await resolve_context(app_conversation_info.created_by_user_id)
+            ctx = await resolve_analytics_context(
+                app_conversation_info.created_by_user_id
+            )
             analytics.track_conversation_deleted(
                 distinct_id=app_conversation_info.created_by_user_id,
                 conversation_id=conversation_id,

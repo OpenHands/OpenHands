@@ -68,24 +68,10 @@ from server.verified_models.verified_model_router import (  # noqa: E402
     override_llm_models_dependency,
 )
 
-# Patch global config with SaaS lifespan BEFORE openhands.server.app is imported.
-# app.py reads get_app_lifespan_service() at module level (line ~69), so this
-# must execute first.
-from openhands.app_server.config import get_global_config  # noqa: E402
+from openhands.server.app import create_app  # noqa: E402
 
-_config = get_global_config()
-_config.lifespan = SaasAppLifespanService()
+base_app = create_app(lifespan_service=SaasAppLifespanService())
 
-# Safety check - fail fast if import order is wrong
-import sys  # noqa: E402
-
-if 'openhands.server.app' in sys.modules:
-    raise ImportError(
-        'openhands.server.app was imported before SaaS lifespan was configured. '
-        'Check import order in saas_server.py'
-    )
-
-from openhands.server.app import app as base_app  # noqa: E402
 from openhands.server.listen_socket import sio  # noqa: E402
 from openhands.server.middleware import (  # noqa: E402
     CacheControlMiddleware,

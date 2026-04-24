@@ -33,11 +33,11 @@ async def submit_onboarding(
     """Submit onboarding form selections and fire analytics event."""
     # ACTV-03: onboarding completed
     try:
-        from openhands.analytics import get_analytics_service, resolve_context
+        from openhands.analytics import get_analytics_service, resolve_analytics_context
 
         analytics = get_analytics_service()
         if analytics and user_id:
-            ctx = await resolve_context(user_id)
+            ctx = await resolve_analytics_context(user_id)
 
             analytics.track_onboarding_completed(
                 distinct_id=user_id,

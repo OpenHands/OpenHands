@@ -2335,6 +2335,10 @@ async def test_accept_tos_stores_timezone_naive_datetime(mock_request):
             'server.routes.auth._get_post_auth_redirect',
             AsyncMock(return_value='http://example.com'),
         ),
+        patch(
+            'server.routes.auth.UserStore.consent_to_analytics',
+            AsyncMock(return_value=True),
+        ) as mock_consent,
     ):
         # Act
         result = await accept_tos(mock_request)
@@ -2345,6 +2349,8 @@ async def test_accept_tos_stores_timezone_naive_datetime(mock_request):
         # The datetime assigned to user.accepted_tos must be timezone-naive
         # (compatible with TIMESTAMP WITHOUT TIME ZONE database column)
         assert mock_user.accepted_tos.tzinfo is None
+        # Verify consent_to_analytics was called with the user_id
+        mock_consent.assert_called_once_with(test_user_id)
 
 
 @pytest.mark.asyncio
@@ -2390,6 +2396,10 @@ async def test_accept_tos_preserves_offline_flow_redirect(mock_request):
         patch(
             'server.routes.auth._get_post_auth_redirect',
             mock_get_post_auth_redirect,
+        ),
+        patch(
+            'server.routes.auth.UserStore.consent_to_analytics',
+            AsyncMock(return_value=True),
         ),
     ):
         # Act

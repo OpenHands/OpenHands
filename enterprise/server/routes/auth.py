@@ -805,6 +805,9 @@ async def accept_tos(request: Request):
 
         logger.info(f'User {user_id} accepted TOS')
 
+    # Grant analytics consent now that TOS has been accepted
+    await UserStore.consent_to_analytics(user_id)
+
     # Determine final redirect - but don't override if it's the offline token flow
     # (the offline callback will handle post-auth redirect after storing the token)
     is_offline_flow = 'offline' in redirect_url

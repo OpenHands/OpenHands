@@ -1,12 +1,12 @@
 """AnalyticsContext: resolution helper for analytics call sites.
 
 Provides a dataclass that bundles user_id, consent status, org_id, and the
-full user object into a single value.  The async ``resolve_context`` factory
+full user object into a single value.  The async ``resolve_analytics_context`` factory
 performs the UserStore lookup with full error isolation so callers never need
 try/except around user resolution.
 
 This module must NOT import from enterprise/ at module level.  The UserStore
-import is deferred to the ``resolve_context`` function body, matching the
+import is deferred to the ``resolve_analytics_context`` function body, matching the
 established pattern used throughout the codebase (e.g., auth.py, oauth_device.py,
 conversation_callback_utils.py).
 """
@@ -18,7 +18,7 @@ from typing import Any
 
 from openhands.core.logger import openhands_logger as logger
 
-# Sentinel reused by resolve_context for the safe-default path.
+# Sentinel reused by resolve_analytics_context for the safe-default path.
 _SAFE_DEFAULT_KWARGS: dict[str, Any] = {
     'consented': False,
     'org_id': None,
@@ -46,7 +46,7 @@ class AnalyticsContext:
     user: Any | None
 
 
-async def resolve_context(user_id: str) -> AnalyticsContext:
+async def resolve_analytics_context(user_id: str) -> AnalyticsContext:
     """Resolve a user_id into a fully-populated :class:`AnalyticsContext`.
 
     Performs the UserStore lookup, extracts consent and org_id, and wraps
@@ -75,7 +75,7 @@ async def resolve_context(user_id: str) -> AnalyticsContext:
         )
     except Exception:
         logger.warning(
-            'resolve_context failed for user_id=%s, returning safe default',
+            'resolve_analytics_context failed for user_id=%s, returning safe default',
             user_id,
         )
         return AnalyticsContext(user_id=user_id, **_SAFE_DEFAULT_KWARGS)

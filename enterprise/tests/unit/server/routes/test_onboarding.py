@@ -94,7 +94,7 @@ async def test_submit_onboarding_tracks_analytics_event(
             return_value=mock_analytics_service,
         ),
         patch(
-            'openhands.analytics.resolve_context',
+            'openhands.analytics.resolve_analytics_context',
             new_callable=AsyncMock,
             return_value=mock_analytics_context,
         ),
@@ -126,7 +126,7 @@ async def test_submit_onboarding_calls_group_identify_when_org_id_present(
             return_value=mock_analytics_service,
         ),
         patch(
-            'openhands.analytics.resolve_context',
+            'openhands.analytics.resolve_analytics_context',
             new_callable=AsyncMock,
             return_value=mock_analytics_context,
         ),
@@ -155,7 +155,7 @@ async def test_submit_onboarding_skips_group_identify_when_no_org_id(
             return_value=mock_analytics_service,
         ),
         patch(
-            'openhands.analytics.resolve_context',
+            'openhands.analytics.resolve_analytics_context',
             new_callable=AsyncMock,
             return_value=mock_analytics_context_no_org,
         ),
@@ -220,7 +220,7 @@ async def test_submit_onboarding_handles_analytics_exception_gracefully(
             return_value=mock_analytics_service,
         ),
         patch(
-            'openhands.analytics.resolve_context',
+            'openhands.analytics.resolve_analytics_context',
             new_callable=AsyncMock,
             return_value=mock_context,
         ),
@@ -244,7 +244,7 @@ async def test_submit_onboarding_passes_consent_false_to_analytics(
             return_value=mock_analytics_service,
         ),
         patch(
-            'openhands.analytics.resolve_context',
+            'openhands.analytics.resolve_analytics_context',
             new_callable=AsyncMock,
             return_value=mock_analytics_context_no_consent,
         ),

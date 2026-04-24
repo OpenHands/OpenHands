@@ -13,7 +13,7 @@ from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
-from openhands.analytics import get_analytics_service, resolve_context
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -264,7 +264,7 @@ async def on_conversation_update(
     # Analytics: conversation created
     analytics = get_analytics_service()
     if analytics and sandbox_info.created_by_user_id:
-        ctx = await resolve_context(sandbox_info.created_by_user_id)
+        ctx = await resolve_analytics_context(sandbox_info.created_by_user_id)
         analytics.track_conversation_created(
             distinct_id=sandbox_info.created_by_user_id,
             conversation_id=str(conversation_info.id),
@@ -316,7 +316,7 @@ async def on_event(
                     if exec_status.is_terminal():
                         analytics = get_analytics_service()
                         if analytics and app_conversation_info.created_by_user_id:
-                            ctx = await resolve_context(
+                            ctx = await resolve_analytics_context(
                                 app_conversation_info.created_by_user_id
                             )
 

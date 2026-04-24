@@ -1139,9 +1139,9 @@ async def switch_org(
         analytics = get_analytics_service()
         if analytics:
             try:
-                from openhands.analytics import resolve_context
+                from openhands.analytics import resolve_analytics_context
 
-                ctx = await resolve_context(user_id)
+                ctx = await resolve_analytics_context(user_id)
 
                 analytics.set_person_properties(
                     distinct_id=user_id,

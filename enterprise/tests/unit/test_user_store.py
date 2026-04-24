@@ -1732,3 +1732,81 @@ async def test_get_first_owner_in_org_returns_none_for_empty_org(async_session_m
         result = await UserStore.get_first_owner_in_org(org_id)
 
     assert result is None
+
+
+# --- Tests for consent_to_analytics ---
+
+
+@pytest.mark.asyncio
+async def test_consent_to_analytics_success(async_session_maker):
+    """Test that consent_to_analytics successfully updates user consent."""
+    user_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+
+    # Create test data - user without consent
+    async with async_session_maker() as session:
+        org = Org(id=org_id, name='test-org')
+        session.add(org)
+        user = User(
+            id=user_id,
+            current_org_id=org_id,
+            user_consents_to_analytics=False,
+        )
+        session.add(user)
+        await session.commit()
+
+    # Call consent_to_analytics
+    with patch('storage.user_store.a_session_maker', async_session_maker):
+        result = await UserStore.consent_to_analytics(str(user_id))
+
+    # Assert success
+    assert result is True
+
+    # Verify the user's consent was updated in the database
+    async with async_session_maker() as session:
+        updated_user = await session.execute(select(User).where(User.id == user_id))
+        user = updated_user.scalar_one()
+        assert user.user_consents_to_analytics is True
+
+
+@pytest.mark.asyncio
+async def test_consent_to_analytics_user_not_found(async_session_maker):
+    """Test that consent_to_analytics returns False when user doesn't exist."""
+    non_existent_user_id = str(uuid.uuid4())
+
+    with patch('storage.user_store.a_session_maker', async_session_maker):
+        result = await UserStore.consent_to_analytics(non_existent_user_id)
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_consent_to_analytics_already_consented(async_session_maker):
+    """Test that consent_to_analytics works even if user already consented."""
+    user_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+
+    # Create test data - user already with consent
+    async with async_session_maker() as session:
+        org = Org(id=org_id, name='test-org')
+        session.add(org)
+        user = User(
+            id=user_id,
+            current_org_id=org_id,
+            user_consents_to_analytics=True,
+        )
+        session.add(user)
+        await session.commit()
+
+    # Call consent_to_analytics
+    with patch('storage.user_store.a_session_maker', async_session_maker):
+        result = await UserStore.consent_to_analytics(str(user_id))
+
+    # Should still succeed
+    assert result is True
+
+    # User should still have consent
+    async with async_session_maker() as session:
+        updated_user = await session.execute(select(User).where(User.id == user_id))
+        user = updated_user.scalar_one()
+        assert user.user_consents_to_analytics is True

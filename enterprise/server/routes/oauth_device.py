@@ -10,7 +10,7 @@ from server.utils.url_utils import get_web_url
 from storage.api_key_store import ApiKeyStore
 from storage.device_code_store import DeviceCodeStore
 
-from openhands.analytics import get_analytics_service, resolve_context
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
 
@@ -329,7 +329,7 @@ async def device_verification_authenticated(
         analytics = get_analytics_service()
         if analytics:
             try:
-                ctx = await resolve_context(user_id)
+                ctx = await resolve_analytics_context(user_id)
 
                 # Load current org name for identify_user
                 from storage.org_store import OrgStore
