@@ -232,8 +232,16 @@ class BashSession:
             session_name=session_name,
             start_directory=self.work_dir,  # This parameter is supported by libtmux
             kill_session=True,
-            x=1000,
-            y=1000,
+            # Tmux emulates a pty the size of the grid. A 1000x1000 grid
+            # (a million cells) makes tmux server burn ~80% of a CPU core
+            # in kernel-mode pty I/O even when the session is detached and
+            # the agent is idle waiting on inference. Keep the pane wide
+            # enough that most tool output doesn't wrap awkwardly (git,
+            # grep, make) while avoiding the oversized grid; capture-pane
+            # still reads the full history via `-pS -`, so a shorter y
+            # doesn't lose any scrollback.
+            x=256,
+            y=50,
         )
 
         # Set history limit to a large number to avoid losing history
