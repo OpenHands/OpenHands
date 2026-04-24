@@ -12,7 +12,6 @@ from openhands.integrations.service_types import (
     ProviderType,
     Repository,
     RequestMethod,
-    ResourceNotFoundError,
     User,
 )
 from openhands.utils.http_session import httpx_verify_option
@@ -236,47 +235,3 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         url = f'{self.BASE_URL}/repositories/{repository}'
         data, _ = await self._make_request(url)
         return self._parse_repository(data)
-
-    async def _get_cursorrules_url(self, repository: str) -> str:
-        """Get the URL for checking .cursorrules file."""
-        # Get repository details to get the main branch
-        repo_details = await self.get_repository_details_from_repo_name(repository)
-        if not repo_details.main_branch:
-            raise ResourceNotFoundError(
-                f'Main branch not found for repository {repository}. '
-                f'This repository may be empty or have no default branch configured.'
-            )
-        return f'{self.BASE_URL}/repositories/{repository}/src/{repo_details.main_branch}/.cursorrules'
-
-    async def _get_microagents_directory_url(
-        self, repository: str, microagents_path: str
-    ) -> str:
-        """Get the URL for checking microagents directory."""
-        # Get repository details to get the main branch
-        repo_details = await self.get_repository_details_from_repo_name(repository)
-        if not repo_details.main_branch:
-            raise ResourceNotFoundError(
-                f'Main branch not found for repository {repository}. '
-                f'This repository may be empty or have no default branch configured.'
-            )
-        return f'{self.BASE_URL}/repositories/{repository}/src/{repo_details.main_branch}/{microagents_path}'
-
-    def _get_microagents_directory_params(self, microagents_path: str) -> dict | None:
-        """Get parameters for the microagents directory request. Return None if no parameters needed."""
-        return None
-
-    def _is_valid_microagent_file(self, item: dict) -> bool:
-        """Check if an item represents a valid microagent file."""
-        return (
-            item['type'] == 'commit_file'
-            and item['path'].endswith('.md')
-            and not item['path'].endswith('README.md')
-        )
-
-    def _get_file_name_from_item(self, item: dict) -> str:
-        """Extract file name from directory item."""
-        return item['path'].split('/')[-1]
-
-    def _get_file_path_from_item(self, item: dict, microagents_path: str) -> str:
-        """Extract file path from directory item."""
-        return item['path']

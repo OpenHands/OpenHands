@@ -695,6 +695,66 @@ async def test_list_users(async_session_maker):
     assert user_id2 in user_ids
 
 
+def test_get_org_kwargs_for_migration_preserves_existing_llm_when_not_custom():
+    from server.constants import ORG_SETTINGS_VERSION
+    from storage.user_settings import UserSettings
+
+    user_settings = UserSettings(
+        keycloak_user_id='test',
+        user_version=3,
+        agent_settings={
+            'schema_version': 1,
+            'llm': {
+                'model': 'anthropic/claude-sonnet-4-5-20250929',
+                'base_url': 'https://api.anthropic.com/v1',
+            },
+        },
+        conversation_settings={'max_iterations': 42},
+    )
+
+    org_kwargs = UserStore._get_org_kwargs_for_migration(
+        user_settings, custom_settings=False
+    )
+
+    assert org_kwargs['org_version'] == ORG_SETTINGS_VERSION
+    assert org_kwargs['agent_settings'] == user_settings.agent_settings
+    assert org_kwargs['conversation_settings'] == user_settings.conversation_settings
+
+
+def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm():
+    from server.constants import (
+        LITE_LLM_API_URL,
+        ORG_SETTINGS_VERSION,
+        get_default_litellm_model,
+    )
+    from storage.user_settings import UserSettings
+
+    user_settings = UserSettings(
+        keycloak_user_id='test',
+        user_version=3,
+        agent_settings={
+            'schema_version': 1,
+            'llm': {
+                'model': 'anthropic/claude-sonnet-4-5-20250929',
+                'base_url': 'https://api.anthropic.com/v1',
+            },
+        },
+    )
+
+    org_kwargs = UserStore._get_org_kwargs_for_migration(
+        user_settings, custom_settings=True
+    )
+
+    assert org_kwargs['org_version'] == ORG_SETTINGS_VERSION
+    assert org_kwargs['agent_settings'] == {
+        'schema_version': 1,
+        'llm': {
+            'model': get_default_litellm_model(),
+            'base_url': LITE_LLM_API_URL,
+        },
+    }
+
+
 # --- Tests for _has_custom_settings ---
 
 

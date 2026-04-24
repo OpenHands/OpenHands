@@ -71,9 +71,6 @@ These reference the V0 runtime image (`ghcr.io/openhands/runtime:X.Y-nikolaik`) 
 ### `enterprise/enterprise_local/README.md`
 - Uses `ghcr.io/openhands/runtime:main-nikolaik` (points to `main`, not versioned)
 
-### `third_party/runtime/impl/daytona/README.md`
-- Uses `${OPENHANDS_VERSION}` variable, not hardcoded
-
 ## Image Registries
 
 | Registry | Usage |
