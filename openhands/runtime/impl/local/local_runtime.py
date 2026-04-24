@@ -431,7 +431,7 @@ class LocalRuntime(ActionExecutionClient):
         initial_num_warm_servers = int(os.getenv('INITIAL_NUM_WARM_SERVERS', '0'))
         # Initialize warm servers if needed
         if initial_num_warm_servers > 0 and len(_WARM_SERVERS) == 0:
-            plugins = _get_plugins(config)
+            plugins: list[PluginRequirement] = []
 
             # Copy the logic from Runtime where we add a VSCodePlugin on init if missing
             if not headless_mode and not DISABLE_VSCODE_PLUGIN:
@@ -841,10 +841,3 @@ def _create_warm_server_in_background(
         target=_create_warm_server, daemon=True, args=(config, plugins)
     )
     thread.start()
-
-
-def _get_plugins(config: OpenHandsConfig) -> list[PluginRequirement]:
-    from openhands.controller.agent import Agent
-
-    plugins = Agent.get_cls(config.default_agent).sandbox_plugins
-    return plugins
