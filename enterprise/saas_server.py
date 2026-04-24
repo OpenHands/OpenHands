@@ -106,7 +106,17 @@ if GITHUB_APP_CLIENT_ID:
 
 # Add GitLab integration router only if GITLAB_APP_CLIENT_ID is set
 if GITLAB_APP_CLIENT_ID:
+    # Make sure that the callback processor is loaded here so we don't get an
+    # error when deserializing EventCallback rows from the database — the
+    # class otherwise only gets imported lazily inside gitlab_view and stays
+    # invisible to DiscriminatedUnionMixin.get_known_concrete_subclasses().
+    from integrations.gitlab.gitlab_v1_callback_processor import (  # noqa: E402
+        GitlabV1CallbackProcessor,
+    )
     from server.routes.integration.gitlab import gitlab_integration_router  # noqa: E402
+
+    # Bludgeon mypy into not deleting my import
+    logger.debug(f'Loaded {GitlabV1CallbackProcessor.__name__}')
 
     base_app.include_router(gitlab_integration_router)
 
