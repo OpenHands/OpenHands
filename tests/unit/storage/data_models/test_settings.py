@@ -1,5 +1,6 @@
 import importlib
 import warnings
+from unittest.mock import patch
 
 import pytest
 from fastmcp.mcp_config import MCPConfig
@@ -40,6 +41,33 @@ def test_settings_handles_sensitive_data():
     llm_api_key = settings.agent_settings.llm.api_key
     assert str(llm_api_key) == '**********'
     assert llm_api_key.get_secret_value() == 'test-key'
+
+
+def test_settings_loads_persisted_settings_via_from_persisted():
+    loaded_agent_settings = AgentSettings(agent='migrated-agent')
+    loaded_conversation_settings = ConversationSettings(max_iterations=77)
+
+    with (
+        patch.object(
+            AgentSettings,
+            'from_persisted',
+            return_value=loaded_agent_settings,
+        ) as agent_loader,
+        patch.object(
+            ConversationSettings,
+            'from_persisted',
+            return_value=loaded_conversation_settings,
+        ) as conversation_loader,
+    ):
+        settings = Settings(
+            agent_settings={'legacy': True},
+            conversation_settings={'legacy': True},
+        )
+
+    agent_loader.assert_called_once_with({'legacy': True})
+    conversation_loader.assert_called_once_with({'legacy': True})
+    assert settings.agent_settings.agent == 'migrated-agent'
+    assert settings.conversation_settings.max_iterations == 77
 
 
 def test_settings_update_deep_merges_agent_settings():
