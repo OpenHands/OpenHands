@@ -287,16 +287,16 @@ async def test_keycloak_callback_success_with_valid_offline_token(
         # Verify analytics service was called correctly
         mock_analytics.identify_user.assert_called_once()
         identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-        assert identify_kwargs['distinct_id'] == 'test_user_id'
+        assert identify_kwargs['ctx'].user_id == 'test_user_id'
+        assert identify_kwargs['ctx'].consented is True
         assert identify_kwargs['idp'] == 'github'
-        assert identify_kwargs['consented'] is True
 
-        mock_analytics.track_user_logged_in.assert_called_once_with(
-            distinct_id='test_user_id',
-            idp='github',
-            org_id='test_org_id',
-            consented=True,
-        )
+        mock_analytics.track_user_logged_in.assert_called_once()
+        track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
+        assert track_kwargs['ctx'].user_id == 'test_user_id'
+        assert track_kwargs['ctx'].org_id == 'test_org_id'
+        assert track_kwargs['ctx'].consented is True
+        assert track_kwargs['idp'] == 'github'
 
 
 @pytest.mark.asyncio
@@ -596,16 +596,16 @@ async def test_keycloak_callback_success_without_offline_token(
         # Verify analytics service was called correctly
         mock_analytics.identify_user.assert_called_once()
         identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-        assert identify_kwargs['distinct_id'] == 'test_user_id'
+        assert identify_kwargs['ctx'].user_id == 'test_user_id'
+        assert identify_kwargs['ctx'].consented is True
         assert identify_kwargs['idp'] == 'github'
-        assert identify_kwargs['consented'] is True
 
-        mock_analytics.track_user_logged_in.assert_called_once_with(
-            distinct_id='test_user_id',
-            idp='github',
-            org_id='test_org_id',
-            consented=True,
-        )
+        mock_analytics.track_user_logged_in.assert_called_once()
+        track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
+        assert track_kwargs['ctx'].user_id == 'test_user_id'
+        assert track_kwargs['ctx'].org_id == 'test_org_id'
+        assert track_kwargs['ctx'].consented is True
+        assert track_kwargs['idp'] == 'github'
 
 
 @pytest.mark.asyncio
@@ -2565,16 +2565,16 @@ async def test_track_login_analytics_background_calls_identify_and_track():
 
     # Verify identify_user call
     identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-    assert identify_kwargs['distinct_id'] == 'user-123'
+    assert identify_kwargs['ctx'].user_id == 'user-123'
+    assert identify_kwargs['ctx'].consented is True
     assert identify_kwargs['email'] == 'user@example.com'
     assert identify_kwargs['idp'] == 'github'
-    assert identify_kwargs['consented'] is True
 
     # Verify track_user_logged_in call
     track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
-    assert track_kwargs['distinct_id'] == 'user-123'
+    assert track_kwargs['ctx'].user_id == 'user-123'
+    assert track_kwargs['ctx'].consented is True
     assert track_kwargs['idp'] == 'github'
-    assert track_kwargs['consented'] is True
 
 
 @pytest.mark.asyncio
@@ -2614,7 +2614,7 @@ async def test_track_login_analytics_background_handles_org_id_none():
         )
 
     identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-    assert identify_kwargs['org_id'] is None
+    assert identify_kwargs['ctx'].org_id is None
     assert identify_kwargs['org_name'] is None
 
 

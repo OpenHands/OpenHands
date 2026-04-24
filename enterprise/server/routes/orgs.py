@@ -1144,13 +1144,12 @@ async def switch_org(
                 ctx = await resolve_analytics_context(user_id)
 
                 analytics.set_person_properties(
-                    distinct_id=user_id,
+                    ctx=ctx,
                     properties={
                         'org_id': str(org_id),
                         'org_name': org.name,
                         'plan_tier': None,  # plan_tier not yet on Org model
                     },
-                    consented=ctx.consented,
                 )
             except Exception:
                 logger.exception(

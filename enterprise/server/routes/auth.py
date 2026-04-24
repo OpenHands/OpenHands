@@ -200,21 +200,26 @@ async def _track_login_analytics_background(
                 {'id': str(org.id), 'name': org.name, 'member_count': member_count}
             )
 
-        analytics.identify_user(
-            distinct_id=user_id,
+        from openhands.analytics.analytics_context import AnalyticsContext
+
+        ctx = AnalyticsContext(
+            user_id=user_id,
             consented=consented,
-            email=email,
             org_id=org_id_str,
+            user=None,
+        )
+
+        analytics.identify_user(
+            ctx=ctx,
+            email=email,
             org_name=current_org.name if current_org else None,
             idp=idp,
             orgs=orgs_data,
         )
 
         analytics.track_user_logged_in(
-            distinct_id=user_id,
+            ctx=ctx,
             idp=idp,
-            org_id=org_id_str,
-            consented=consented,
         )
     except Exception:
         logger.exception(
@@ -326,13 +331,21 @@ async def keycloak_callback(
         try:
             analytics = get_analytics_service()
             if analytics:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
                 consented = (
                     user.user_consents_to_analytics is True
                 )  # None = undecided = not consented
                 org_id_str = str(user.current_org_id) if user.current_org_id else None
 
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=consented,
+                    org_id=org_id_str,
+                    user=user,
+                )
                 analytics.track_user_signed_up(
-                    distinct_id=user_id,
+                    ctx=ctx,
                     idp=user_info.get('identity_provider', 'keycloak'),
                     email_domain=email.split('@')[1]
                     if email and '@' in email
@@ -340,13 +353,10 @@ async def keycloak_callback(
                     invitation_source='invitation'
                     if invitation_token
                     else 'self_signup',
-                    org_id=org_id_str,
-                    consented=consented,
                 )
                 analytics.set_person_properties(
-                    distinct_id=user_id,
+                    ctx=ctx,
                     properties={'signed_up_at': datetime.now(timezone.utc).isoformat()},
-                    consented=consented,
                 )
         except Exception:
             logger.exception('analytics:user_signed_up:failed')

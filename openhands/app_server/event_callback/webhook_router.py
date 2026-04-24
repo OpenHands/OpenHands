@@ -266,7 +266,7 @@ async def on_conversation_update(
     if analytics and sandbox_info.created_by_user_id:
         ctx = await resolve_analytics_context(sandbox_info.created_by_user_id)
         analytics.track_conversation_created(
-            distinct_id=sandbox_info.created_by_user_id,
+            ctx=ctx,
             conversation_id=str(conversation_info.id),
             trigger=existing.trigger.value if existing.trigger else None,
             llm_model=(
@@ -276,8 +276,6 @@ async def on_conversation_update(
             ),
             agent_type='default',
             has_repository=existing.selected_repository is not None,
-            org_id=ctx.org_id,
-            consented=ctx.consented,
         )
 
     return Success()
@@ -357,31 +355,27 @@ async def on_event(
 
                                 # BIZZ-06: conversation errored
                                 analytics.track_conversation_errored(
-                                    distinct_id=app_conversation_info.created_by_user_id,
+                                    ctx=ctx,
                                     conversation_id=str(conversation_id),
                                     error_type=error_type,
                                     error_message=error_message,
                                     llm_model=app_conversation_info.llm_model,
                                     turn_count=None,
                                     terminal_state=exec_status.value,
-                                    org_id=ctx.org_id,
-                                    consented=ctx.consented,
                                 )
 
                                 # BIZZ-03: credit limit reached (fires alongside conversation errored)
                                 if error_type == 'budget_exceeded':
                                     analytics.track_credit_limit_reached(
-                                        distinct_id=app_conversation_info.created_by_user_id,
+                                        ctx=ctx,
                                         conversation_id=str(conversation_id),
                                         credit_balance=None,
                                         llm_model=app_conversation_info.llm_model,
-                                        org_id=ctx.org_id,
-                                        consented=ctx.consented,
                                     )
                             else:
                                 # BIZZ-05: conversation finished (includes FINISHED, STOPPED, etc.)
                                 analytics.track_conversation_finished(
-                                    distinct_id=app_conversation_info.created_by_user_id,
+                                    ctx=ctx,
                                     conversation_id=str(conversation_id),
                                     terminal_state=exec_status.value,
                                     turn_count=None,
@@ -394,8 +388,6 @@ async def on_event(
                                         if app_conversation_info.trigger
                                         else None
                                     ),
-                                    org_id=ctx.org_id,
-                                    consented=ctx.consented,
                                 )
 
                                 # ACTV-01: user activated (first finished conversation only)
@@ -445,7 +437,7 @@ async def on_event(
                                                 time_to_activate_seconds = None
 
                                             analytics.track_user_activated(
-                                                distinct_id=app_conversation_info.created_by_user_id,
+                                                ctx=ctx,
                                                 conversation_id=str(conversation_id),
                                                 time_to_activate_seconds=time_to_activate_seconds,
                                                 llm_model=app_conversation_info.llm_model,
@@ -454,8 +446,6 @@ async def on_event(
                                                     if app_conversation_info.trigger
                                                     else None
                                                 ),
-                                                org_id=ctx.org_id,
-                                                consented=ctx.consented,
                                             )
                                     except Exception:
                                         _logger.exception(

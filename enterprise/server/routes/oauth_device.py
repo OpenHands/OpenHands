@@ -341,18 +341,14 @@ async def device_verification_authenticated(
                 )
 
                 analytics.identify_user(
-                    distinct_id=user_id,
-                    consented=ctx.consented,
-                    org_id=ctx.org_id,
+                    ctx=ctx,
                     org_name=current_org.name if current_org else None,
                     idp='device_auth',
                 )
 
                 analytics.track_user_logged_in(
-                    distinct_id=user_id,
+                    ctx=ctx,
                     idp='device_auth',
-                    org_id=ctx.org_id,
-                    consented=ctx.consented,
                 )
             except Exception:
                 logger.exception(

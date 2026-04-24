@@ -375,7 +375,7 @@ async def start_app_conversation(
                 if user_id:
                     ctx = await resolve_analytics_context(user_id)
                     analytics.track_conversation_created(
-                        distinct_id=user_id,
+                        ctx=ctx,
                         conversation_id=str(result.app_conversation_id)
                         if result.app_conversation_id
                         else result.id,
@@ -385,8 +385,6 @@ async def start_app_conversation(
                         llm_model=None,  # Not available at start time
                         agent_type='default',
                         has_repository=start_request.selected_repository is not None,
-                        org_id=ctx.org_id,
-                        consented=ctx.consented,
                     )
         except Exception:
             logger.exception('analytics:conversation_created:failed')
@@ -500,10 +498,8 @@ async def delete_app_conversation(
                 app_conversation_info.created_by_user_id
             )
             analytics.track_conversation_deleted(
-                distinct_id=app_conversation_info.created_by_user_id,
+                ctx=ctx,
                 conversation_id=conversation_id,
-                org_id=ctx.org_id,
-                consented=ctx.consented,
             )
     except Exception:
         logger.exception('analytics:conversation_deleted:failed')
@@ -994,16 +990,20 @@ async def export_conversation(
             analytics = get_analytics_service()
             user_id = await user_context.get_user_id()
             if analytics and user_id:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
                 user_info = await user_context.get_user_info()
-                consented = (
-                    user_info.user_consents_to_analytics
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=user_info.user_consents_to_analytics
                     if user_info and user_info.user_consents_to_analytics is not None
-                    else False
+                    else False,
+                    org_id=None,
+                    user=None,
                 )
                 analytics.track_trajectory_downloaded(
-                    distinct_id=user_id,
+                    ctx=ctx,
                     conversation_id=str(conversation_id),
-                    consented=consented,
                 )
         except Exception:
             logger.exception('analytics:trajectory_downloaded:failed')

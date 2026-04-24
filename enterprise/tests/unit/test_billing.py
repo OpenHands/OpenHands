@@ -678,11 +678,11 @@ async def test_success_callback_tracks_credit_purchased_analytics(
 
     mock_analytics.track_credit_purchased.assert_called_once()
     call_kwargs = mock_analytics.track_credit_purchased.call_args.kwargs
-    assert call_kwargs['distinct_id'] == str(test_user.id)
+    assert call_kwargs['ctx'].user_id == str(test_user.id)
+    assert call_kwargs['ctx'].consented is True
     assert call_kwargs['amount_usd'] == 50.0
     assert call_kwargs['credit_balance_before'] == 100.0
     assert call_kwargs['credit_balance_after'] == 150.0
-    assert call_kwargs['consented'] is True
 
 
 @pytest.mark.asyncio
@@ -792,7 +792,7 @@ async def test_success_callback_analytics_respects_consent_false(
         await success_callback(session_id, mock_request)
 
     call_kwargs = mock_analytics.track_credit_purchased.call_args.kwargs
-    assert call_kwargs['consented'] is False
+    assert call_kwargs['ctx'].consented is False
 
 
 @pytest.mark.asyncio

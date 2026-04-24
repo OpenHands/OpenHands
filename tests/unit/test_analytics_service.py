@@ -27,9 +27,25 @@ from openhands.analytics.analytics_constants import (
     USER_LOGGED_IN,
     USER_SIGNED_UP,
 )
+from openhands.analytics.analytics_context import AnalyticsContext
 from openhands.analytics.analytics_service import AnalyticsService as DirectService
 from openhands.analytics.oss_install_id import get_or_create_install_id
 from openhands.server.types import AppMode
+
+
+def make_ctx(
+    user_id: str = 'user-1',
+    consented: bool = True,
+    org_id: str | None = None,
+) -> AnalyticsContext:
+    """Helper to create an AnalyticsContext for tests."""
+    return AnalyticsContext(
+        user_id=user_id,
+        consented=consented,
+        org_id=org_id,
+        user=None,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -149,41 +165,42 @@ class TestConsentGate:
     def test_capture_with_consented_false_makes_zero_posthog_calls(self, oss_service):
         """capture() with consented=False produces zero PostHog client calls."""
         service, mock_client = oss_service
+        ctx = make_ctx(user_id='user123', consented=False)
         service.capture(
-            distinct_id='user123',
+            ctx=ctx,
             event='test event',
-            consented=False,
         )
         mock_client.capture.assert_not_called()
 
     def test_capture_with_consented_true_makes_posthog_call(self, oss_service):
         """capture() with consented=True calls the PostHog client."""
         service, mock_client = oss_service
+        ctx = make_ctx(user_id='user123', consented=True)
         service.capture(
-            distinct_id='user123',
+            ctx=ctx,
             event='test event',
-            consented=True,
         )
         mock_client.capture.assert_called_once()
 
     def test_set_person_properties_with_consented_false_is_noop(self, saas_service):
         """set_person_properties() with consented=False does not call SDK."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user123', consented=False)
         service.set_person_properties(
-            distinct_id='user123',
+            ctx=ctx,
             properties={'name': 'Alice'},
-            consented=False,
         )
         mock_client.set.assert_not_called()
 
     def test_group_identify_with_consented_false_is_noop(self, saas_service):
         """group_identify() with consented=False does not call SDK."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user123', consented=False)
         service.group_identify(
+            ctx=ctx,
             group_type='org',
             group_key='org123',
             properties={'name': 'Acme'},
-            consented=False,
         )
         mock_client.group_identify.assert_not_called()
 
@@ -197,10 +214,10 @@ class TestOssSaasMode:
     def test_capture_oss_mode_includes_process_person_profile_false(self, oss_service):
         """In OSS mode, captured events include '$process_person_profile': False."""
         service, mock_client = oss_service
+        ctx = make_ctx(user_id='user123')
         service.capture(
-            distinct_id='user123',
+            ctx=ctx,
             event='test event',
-            consented=True,
         )
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
@@ -211,10 +228,10 @@ class TestOssSaasMode:
     ):
         """In SaaS mode, captured events do NOT include '$process_person_profile'."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user123')
         service.capture(
-            distinct_id='user123',
+            ctx=ctx,
             event='test event',
-            consented=True,
         )
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
@@ -223,42 +240,44 @@ class TestOssSaasMode:
     def test_set_person_properties_oss_mode_is_noop(self, oss_service):
         """set_person_properties() in OSS mode does not call SDK."""
         service, mock_client = oss_service
+        ctx = make_ctx(user_id='user123')
         service.set_person_properties(
-            distinct_id='user123',
+            ctx=ctx,
             properties={'name': 'Alice'},
-            consented=True,
         )
         mock_client.set.assert_not_called()
 
     def test_set_person_properties_saas_mode_calls_sdk(self, saas_service):
         """set_person_properties() in SaaS mode calls SDK when consented."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user123')
         service.set_person_properties(
-            distinct_id='user123',
+            ctx=ctx,
             properties={'name': 'Alice'},
-            consented=True,
         )
         mock_client.set.assert_called_once()
 
     def test_group_identify_oss_mode_is_noop(self, oss_service):
         """group_identify() in OSS mode does not call SDK."""
         service, mock_client = oss_service
+        ctx = make_ctx(user_id='user123')
         service.group_identify(
+            ctx=ctx,
             group_type='org',
             group_key='org123',
             properties={'name': 'Acme'},
-            consented=True,
         )
         mock_client.group_identify.assert_not_called()
 
     def test_group_identify_saas_mode_calls_sdk(self, saas_service):
         """group_identify() in SaaS mode calls SDK when consented."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user123')
         service.group_identify(
+            ctx=ctx,
             group_type='org',
             group_key='org123',
             properties={'name': 'Acme'},
-            consented=True,
         )
         mock_client.group_identify.assert_called_once()
 
@@ -272,7 +291,8 @@ class TestCommonProperties:
     def test_capture_always_includes_app_mode(self, saas_service):
         """Every captured event includes app_mode in properties."""
         service, mock_client = saas_service
-        service.capture(distinct_id='user123', event='test event', consented=True)
+        ctx = make_ctx(user_id='user123')
+        service.capture(ctx=ctx, event='test event')
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
         assert 'app_mode' in props
@@ -281,7 +301,8 @@ class TestCommonProperties:
     def test_capture_always_includes_is_feature_env(self, saas_service):
         """Every captured event includes is_feature_env in properties."""
         service, mock_client = saas_service
-        service.capture(distinct_id='user123', event='test event', consented=True)
+        ctx = make_ctx(user_id='user123')
+        service.capture(ctx=ctx, event='test event')
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
         assert 'is_feature_env' in props
@@ -290,11 +311,10 @@ class TestCommonProperties:
     def test_capture_includes_org_id_when_provided(self, saas_service):
         """capture() includes org_id when provided."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user123', org_id='org-abc')
         service.capture(
-            distinct_id='user123',
+            ctx=ctx,
             event='test event',
-            org_id='org-abc',
-            consented=True,
         )
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
@@ -303,7 +323,8 @@ class TestCommonProperties:
     def test_capture_omits_org_id_when_not_provided(self, saas_service):
         """capture() omits org_id when not provided."""
         service, mock_client = saas_service
-        service.capture(distinct_id='user123', event='test event', consented=True)
+        ctx = make_ctx(user_id='user123')
+        service.capture(ctx=ctx, event='test event')
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
         assert 'org_id' not in props
@@ -311,11 +332,11 @@ class TestCommonProperties:
     def test_capture_includes_session_id_when_provided(self, saas_service):
         """capture() includes $session_id when session_id provided."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user123')
         service.capture(
-            distinct_id='user123',
+            ctx=ctx,
             event='test event',
             session_id='sess-xyz',
-            consented=True,
         )
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
@@ -324,7 +345,8 @@ class TestCommonProperties:
     def test_capture_omits_session_id_when_not_provided(self, saas_service):
         """capture() omits $session_id when not provided."""
         service, mock_client = saas_service
-        service.capture(distinct_id='user123', event='test event', consented=True)
+        ctx = make_ctx(user_id='user123')
+        service.capture(ctx=ctx, event='test event')
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
         assert '$session_id' not in props
@@ -332,11 +354,11 @@ class TestCommonProperties:
     def test_capture_merges_caller_properties(self, saas_service):
         """capture() merges caller-provided properties with common ones."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user123')
         service.capture(
-            distinct_id='user123',
+            ctx=ctx,
             event='test event',
             properties={'custom_prop': 'custom_val'},
-            consented=True,
         )
         _, kwargs = mock_client.capture.call_args
         props = kwargs.get('properties', {})
@@ -365,10 +387,10 @@ class TestDistinctId:
     def test_capture_uses_distinct_id_helper(self, feature_env_service):
         """capture() passes the prefixed distinct_id to the PostHog client."""
         service, mock_client = feature_env_service
+        ctx = make_ctx(user_id='user123')
         service.capture(
-            distinct_id='user123',
+            ctx=ctx,
             event='test event',
-            consented=True,
         )
         _, kwargs = mock_client.capture.call_args
         assert kwargs.get('distinct_id') == 'FEATURE_user123'
@@ -404,8 +426,9 @@ class TestErrorHandling:
         """capture() catches SDK errors and does not raise to caller."""
         service, mock_client = saas_service
         mock_client.capture.side_effect = RuntimeError('Network error')
+        ctx = make_ctx(user_id='user123')
         # Should not raise
-        service.capture(distinct_id='user123', event='test event', consented=True)
+        service.capture(ctx=ctx, event='test event')
 
 
 # ---------------------------------------------------------------------------
@@ -493,11 +516,10 @@ class TestIdentifyUser:
     def test_identify_user_consent_false_is_noop(self, saas_service):
         """identify_user with consented=False is a complete no-op."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1', consented=False, org_id='org-1')
         service.identify_user(
-            distinct_id='user-1',
-            consented=False,
+            ctx=ctx,
             email='a@b.com',
-            org_id='org-1',
         )
         mock_client.set.assert_not_called()
         mock_client.group_identify.assert_not_called()
@@ -505,11 +527,10 @@ class TestIdentifyUser:
     def test_identify_user_oss_mode_is_noop(self, oss_service):
         """identify_user in OSS mode is a complete no-op."""
         service, mock_client = oss_service
+        ctx = make_ctx(user_id='user-1', org_id='org-1')
         service.identify_user(
-            distinct_id='user-1',
-            consented=True,
+            ctx=ctx,
             email='a@b.com',
-            org_id='org-1',
         )
         mock_client.set.assert_not_called()
         mock_client.group_identify.assert_not_called()
@@ -517,11 +538,10 @@ class TestIdentifyUser:
     def test_identify_user_saas_sets_person_properties(self, saas_service):
         """identify_user in SaaS mode with consent calls set_person_properties with expected fields."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1', org_id='org-42')
         service.identify_user(
-            distinct_id='user-1',
-            consented=True,
+            ctx=ctx,
             email='alice@example.com',
-            org_id='org-42',
             org_name='Acme Corp',
             idp='github',
         )
@@ -542,9 +562,9 @@ class TestIdentifyUser:
             {'id': 'org-1', 'name': 'Org One', 'member_count': 5},
             {'id': 'org-2', 'name': 'Org Two', 'member_count': 10},
         ]
+        ctx = make_ctx(user_id='user-1')
         service.identify_user(
-            distinct_id='user-1',
-            consented=True,
+            ctx=ctx,
             orgs=orgs,
         )
         assert mock_client.group_identify.call_count == 2
@@ -552,9 +572,9 @@ class TestIdentifyUser:
     def test_identify_user_with_user_none_skips_all(self, saas_service):
         """identify_user with no email/org/orgs still calls set_person_properties (with None values)."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.identify_user(
-            distinct_id='user-1',
-            consented=True,
+            ctx=ctx,
         )
         # set_person_properties is still called (with None fields)
         mock_client.set.assert_called_once()
@@ -565,10 +585,10 @@ class TestIdentifyUser:
         """identify_user catches any exception internally and does not raise."""
         service, mock_client = saas_service
         mock_client.set.side_effect = RuntimeError('PostHog SDK error')
+        ctx = make_ctx(user_id='user-1')
         # Should not raise
         service.identify_user(
-            distinct_id='user-1',
-            consented=True,
+            ctx=ctx,
             email='a@b.com',
         )
 
@@ -578,9 +598,9 @@ class TestIdentifyUser:
         orgs = [
             {'id': 'org-1', 'name': None, 'member_count': 3},
         ]
+        ctx = make_ctx(user_id='user-1')
         service.identify_user(
-            distinct_id='user-1',
-            consented=True,
+            ctx=ctx,
             orgs=orgs,
         )
         assert mock_client.group_identify.call_count == 1
@@ -595,13 +615,14 @@ class TestIdentifyUser:
 
 
 class TestTypedEventMethods:
-    """Tests for the 10 typed event methods on AnalyticsService."""
+    """Tests for the 15 typed event methods on AnalyticsService."""
 
     def test_track_user_signed_up(self, saas_service):
         """track_user_signed_up calls capture with USER_SIGNED_UP and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_user_signed_up(
-            distinct_id='user-1',
+            ctx=ctx,
             idp='github',
             email_domain='example.com',
             invitation_source='invite_link',
@@ -617,8 +638,9 @@ class TestTypedEventMethods:
     def test_track_user_logged_in(self, saas_service):
         """track_user_logged_in calls capture with USER_LOGGED_IN and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_user_logged_in(
-            distinct_id='user-1',
+            ctx=ctx,
             idp='google',
         )
         mock_client.capture.assert_called_once()
@@ -630,8 +652,9 @@ class TestTypedEventMethods:
     def test_track_conversation_created(self, saas_service):
         """track_conversation_created calls capture with CONVERSATION_CREATED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_conversation_created(
-            distinct_id='user-1',
+            ctx=ctx,
             conversation_id='conv-abc',
             trigger='ui',
             llm_model='gpt-4',
@@ -651,8 +674,9 @@ class TestTypedEventMethods:
     def test_track_conversation_finished(self, saas_service):
         """track_conversation_finished calls capture with CONVERSATION_FINISHED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_conversation_finished(
-            distinct_id='user-1',
+            ctx=ctx,
             conversation_id='conv-abc',
             terminal_state='completed',
             turn_count=5,
@@ -678,8 +702,9 @@ class TestTypedEventMethods:
     def test_track_conversation_errored(self, saas_service):
         """track_conversation_errored calls capture with CONVERSATION_ERRORED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_conversation_errored(
-            distinct_id='user-1',
+            ctx=ctx,
             conversation_id='conv-abc',
             error_type='LLMError',
             error_message='Rate limit exceeded',
@@ -701,8 +726,9 @@ class TestTypedEventMethods:
     def test_track_credit_purchased(self, saas_service):
         """track_credit_purchased calls capture with CREDIT_PURCHASED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_credit_purchased(
-            distinct_id='user-1',
+            ctx=ctx,
             amount_usd=10.0,
             credit_balance_before=5.0,
             credit_balance_after=15.0,
@@ -718,8 +744,9 @@ class TestTypedEventMethods:
     def test_track_credit_limit_reached(self, saas_service):
         """track_credit_limit_reached calls capture with CREDIT_LIMIT_REACHED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_credit_limit_reached(
-            distinct_id='user-1',
+            ctx=ctx,
             conversation_id='conv-abc',
             credit_balance=0.0,
             llm_model='gpt-4',
@@ -735,8 +762,9 @@ class TestTypedEventMethods:
     def test_track_user_activated(self, saas_service):
         """track_user_activated calls capture with USER_ACTIVATED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_user_activated(
-            distinct_id='user-1',
+            ctx=ctx,
             conversation_id='conv-abc',
             time_to_activate_seconds=120.5,
             llm_model='gpt-4',
@@ -754,8 +782,9 @@ class TestTypedEventMethods:
     def test_track_git_provider_connected(self, saas_service):
         """track_git_provider_connected calls capture with GIT_PROVIDER_CONNECTED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_git_provider_connected(
-            distinct_id='user-1',
+            ctx=ctx,
             provider_type='github',
         )
         mock_client.capture.assert_called_once()
@@ -767,8 +796,9 @@ class TestTypedEventMethods:
     def test_track_onboarding_completed(self, saas_service):
         """track_onboarding_completed calls capture with ONBOARDING_COMPLETED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_onboarding_completed(
-            distinct_id='user-1',
+            ctx=ctx,
             selections={
                 'role': 'developer',
                 'org_size': '11-50',
@@ -786,8 +816,9 @@ class TestTypedEventMethods:
     def test_track_conversation_deleted(self, saas_service):
         """track_conversation_deleted calls capture with CONVERSATION_DELETED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_conversation_deleted(
-            distinct_id='user-1',
+            ctx=ctx,
             conversation_id='conv-xyz',
         )
         mock_client.capture.assert_called_once()
@@ -799,8 +830,9 @@ class TestTypedEventMethods:
     def test_track_settings_saved(self, saas_service):
         """track_settings_saved calls capture with SETTINGS_SAVED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_settings_saved(
-            distinct_id='user-1',
+            ctx=ctx,
             settings_changed=['llm_model', 'agent_type'],
         )
         mock_client.capture.assert_called_once()
@@ -812,8 +844,9 @@ class TestTypedEventMethods:
     def test_track_mcp_config_updated(self, saas_service):
         """track_mcp_config_updated calls capture with MCP_CONFIG_UPDATED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_mcp_config_updated(
-            distinct_id='user-1',
+            ctx=ctx,
             has_mcp_config=True,
             sse_servers_count=2,
             stdio_servers_count=1,
@@ -829,8 +862,9 @@ class TestTypedEventMethods:
     def test_track_trajectory_downloaded(self, saas_service):
         """track_trajectory_downloaded calls capture with TRAJECTORY_DOWNLOADED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1')
         service.track_trajectory_downloaded(
-            distinct_id='user-1',
+            ctx=ctx,
             conversation_id='conv-download-123',
         )
         mock_client.capture.assert_called_once()
@@ -842,9 +876,9 @@ class TestTypedEventMethods:
     def test_track_team_members_invited(self, saas_service):
         """track_team_members_invited calls capture with TEAM_MEMBERS_INVITED and correct properties."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1', org_id='org-123')
         service.track_team_members_invited(
-            distinct_id='user-1',
-            org_id='org-123',
+            ctx=ctx,
             invited_count=5,
             successful_count=4,
             failed_count=1,
@@ -862,20 +896,20 @@ class TestTypedEventMethods:
     def test_typed_method_consent_false_is_noop(self, saas_service):
         """A typed method with consented=False results in no capture call."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1', consented=False)
         service.track_user_logged_in(
-            distinct_id='user-1',
+            ctx=ctx,
             idp='github',
-            consented=False,
         )
         mock_client.capture.assert_not_called()
 
     def test_typed_method_passes_org_id(self, saas_service):
         """A typed method passes org_id through to self.capture."""
         service, mock_client = saas_service
+        ctx = make_ctx(user_id='user-1', org_id='org-99')
         service.track_user_logged_in(
-            distinct_id='user-1',
+            ctx=ctx,
             idp='github',
-            org_id='org-99',
         )
         mock_client.capture.assert_called_once()
         _, kwargs = mock_client.capture.call_args

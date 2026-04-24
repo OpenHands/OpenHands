@@ -245,14 +245,20 @@ async def store_settings(
         try:
             analytics = get_analytics_service()
             if analytics and user_id:
-                consented = settings.user_consents_to_analytics is True
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=settings.user_consents_to_analytics is True,
+                    org_id=None,
+                    user=None,
+                )
 
                 # Track settings saved
                 settings_changed = list(payload.keys())
                 analytics.track_settings_saved(
-                    distinct_id=user_id,
+                    ctx=ctx,
                     settings_changed=settings_changed,
-                    consented=consented,
                 )
 
                 # Track MCP config update if MCP settings changed
@@ -273,11 +279,10 @@ async def store_settings(
                             if isinstance(s, dict) and s.get('command')
                         )
                         analytics.track_mcp_config_updated(
-                            distinct_id=user_id,
+                            ctx=ctx,
                             has_mcp_config=bool(mcp_servers),
                             sse_servers_count=sse_count,
                             stdio_servers_count=stdio_count,
-                            consented=consented,
                         )
         except Exception:
             logger.exception('analytics:settings_saved:failed')

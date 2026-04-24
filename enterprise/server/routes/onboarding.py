@@ -40,15 +40,14 @@ async def submit_onboarding(
             ctx = await resolve_analytics_context(user_id)
 
             analytics.track_onboarding_completed(
-                distinct_id=user_id,
+                ctx=ctx,
                 selections=body.selections,
-                org_id=ctx.org_id,
-                consented=ctx.consented,
             )
 
             # Associate onboarding timestamp with org group
             if ctx.org_id:
                 analytics.group_identify(
+                    ctx=ctx,
                     group_type='org',
                     group_key=ctx.org_id,
                     properties={
@@ -56,8 +55,6 @@ async def submit_onboarding(
                             timezone.utc
                         ).isoformat(),
                     },
-                    distinct_id=user_id,
-                    consented=ctx.consented,
                 )
     except Exception:
         import logging

@@ -101,16 +101,16 @@ async def test_submit_onboarding_tracks_analytics_event(
     ):
         await submit_onboarding(body=body, user_id='test-user-123')
 
-    mock_analytics_service.track_onboarding_completed.assert_called_once_with(
-        distinct_id='test-user-123',
-        selections={
-            'role': 'software_engineer',
-            'org_size': 'solo',
-            'use_case': ['new_features', 'fixing_bugs'],
-        },
-        org_id='org-abc-456',
-        consented=True,
-    )
+    mock_analytics_service.track_onboarding_completed.assert_called_once()
+    call_kwargs = mock_analytics_service.track_onboarding_completed.call_args.kwargs
+    assert call_kwargs['ctx'].user_id == 'test-user-123'
+    assert call_kwargs['ctx'].org_id == 'org-abc-456'
+    assert call_kwargs['ctx'].consented is True
+    assert call_kwargs['selections'] == {
+        'role': 'software_engineer',
+        'org_size': 'solo',
+        'use_case': ['new_features', 'fixing_bugs'],
+    }
 
 
 @pytest.mark.asyncio
@@ -135,11 +135,11 @@ async def test_submit_onboarding_calls_group_identify_when_org_id_present(
 
     mock_analytics_service.group_identify.assert_called_once()
     call_kwargs = mock_analytics_service.group_identify.call_args.kwargs
+    assert call_kwargs['ctx'].user_id == 'test-user-123'
+    assert call_kwargs['ctx'].consented is True
     assert call_kwargs['group_type'] == 'org'
     assert call_kwargs['group_key'] == 'org-abc-456'
     assert 'onboarding_completed_at' in call_kwargs['properties']
-    assert call_kwargs['distinct_id'] == 'test-user-123'
-    assert call_kwargs['consented'] is True
 
 
 @pytest.mark.asyncio
@@ -252,4 +252,4 @@ async def test_submit_onboarding_passes_consent_false_to_analytics(
         await submit_onboarding(body=body, user_id='test-user-123')
 
     call_kwargs = mock_analytics_service.track_onboarding_completed.call_args.kwargs
-    assert call_kwargs['consented'] is False
+    assert call_kwargs['ctx'].consented is False

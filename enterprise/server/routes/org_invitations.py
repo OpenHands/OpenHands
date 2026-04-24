@@ -99,20 +99,24 @@ async def create_invitation(
         try:
             analytics = get_analytics_service()
             if analytics and user_id:
+                from openhands.analytics.analytics_context import AnalyticsContext
                 from storage.user_store import UserStore
 
                 user_obj = await UserStore.get_user_by_id(user_id)
-                consented = (
-                    user_obj.user_consents_to_analytics is True if user_obj else False
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=user_obj.user_consents_to_analytics is True
+                    if user_obj
+                    else False,
+                    org_id=str(org_id),
+                    user=user_obj,
                 )
                 analytics.track_team_members_invited(
-                    distinct_id=user_id,
-                    org_id=str(org_id),
+                    ctx=ctx,
                     invited_count=len(invitation_data.emails),
                     successful_count=len(successful),
                     failed_count=len(failed),
                     role=invitation_data.role,
-                    consented=consented,
                 )
         except Exception:
             logger.exception('analytics:team_members_invited:failed')

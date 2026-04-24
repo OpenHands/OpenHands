@@ -145,10 +145,8 @@ async def store_provider_tokens(
             # Only fire for providers with actual token, not host-only updates
             if token_value.token:
                 analytics.track_git_provider_connected(
-                    distinct_id=user_id,
+                    ctx=ctx,
                     provider_type=provider_type.value,
-                    org_id=ctx.org_id,
-                    consented=ctx.consented,
                 )
 
     return EditResponse(

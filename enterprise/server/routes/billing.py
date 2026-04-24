@@ -302,14 +302,19 @@ async def success_callback(session_id: str, request: Request):
         try:
             analytics = get_analytics_service()
             if analytics and user:
-                consented = user.user_consents_to_analytics is True
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                ctx = AnalyticsContext(
+                    user_id=billing_session.user_id,
+                    consented=user.user_consents_to_analytics is True,
+                    org_id=str(user.current_org_id) if user.current_org_id else None,
+                    user=user,
+                )
                 analytics.track_credit_purchased(
-                    distinct_id=billing_session.user_id,
+                    ctx=ctx,
                     amount_usd=add_credits,
                     credit_balance_before=max_budget,
                     credit_balance_after=new_max_budget,
-                    org_id=str(user.current_org_id) if user.current_org_id else None,
-                    consented=consented,
                 )
         except Exception:
             logger.exception('analytics:credit_purchased:failed')
