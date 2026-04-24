@@ -1,9 +1,7 @@
 """Feature operations for Azure DevOps integration (microagents, suggested tasks, user)."""
 
-from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.azure_devops.service.base import AzureDevOpsMixinBase
 from openhands.integrations.service_types import (
-    MicroagentContentResponse,
     ProviderType,
     RequestMethod,
     SuggestedTask,
@@ -139,85 +137,3 @@ class AzureDevOpsFeaturesMixin(AzureDevOpsMixinBase):
                 continue
 
         return tasks
-
-    async def _get_cursorrules_url(self, repository: str) -> str:
-        """Get the URL for checking .cursorrules file in Azure DevOps."""
-        org, project, repo = self._parse_repository(repository)
-        # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
-        repo_enc = self._encode_url_component(repo)
-        return f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/items?path=/.cursorrules&api-version=7.1'
-
-    async def _get_microagents_directory_url(
-        self, repository: str, microagents_path: str
-    ) -> str:
-        """Get the URL for checking microagents directory in Azure DevOps.
-
-        Note: For org-level microagents (e.g., 'org/.openhands'), Azure DevOps doesn't support
-        this concept, so we raise ValueError to let the caller fall back to other providers.
-        """
-        parts = repository.split('/')
-        if len(parts) < 3:
-            # Azure DevOps doesn't support org-level configs, only full repo paths
-            raise ValueError(
-                f'Invalid repository format: {repository}. Expected format: organization/project/repo'
-            )
-        org, project, repo = parts[0], parts[1], parts[2]
-        # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
-        repo_enc = self._encode_url_component(repo)
-        return f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/items?path=/{microagents_path}&recursionLevel=OneLevel&api-version=7.1'
-
-    def _get_microagents_directory_params(self, microagents_path: str) -> dict | None:
-        """Get parameters for the microagents directory request. Return None if no parameters needed."""
-        return None
-
-    def _is_valid_microagent_file(self, item: dict) -> bool:
-        """Check if an item represents a valid microagent file in Azure DevOps."""
-        return (
-            not item.get('isFolder', False)
-            and item.get('path', '').endswith('.md')
-            and not item.get('path', '').endswith('README.md')
-        )
-
-    def _get_file_name_from_item(self, item: dict) -> str:
-        """Extract file name from directory item in Azure DevOps."""
-        path = item.get('path', '')
-        return path.split('/')[-1] if path else ''
-
-    def _get_file_path_from_item(self, item: dict, microagents_path: str) -> str:
-        """Extract file path from directory item in Azure DevOps."""
-        return item.get('path', '').lstrip('/')
-
-    async def get_microagent_content(
-        self, repository: str, file_path: str
-    ) -> MicroagentContentResponse:
-        """Get content of a specific microagent file.
-
-        Args:
-            repository: Repository name in Azure DevOps format 'org/project/repo'
-            file_path: Path to the microagent file
-
-        Returns:
-            MicroagentContentResponse with parsed content and triggers
-        """
-        org, project, repo = self._parse_repository(repository)
-        # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
-        repo_enc = self._encode_url_component(repo)
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/items?path={file_path}&api-version=7.1'
-
-        try:
-            response, _ = await self._make_request(url)
-            content = (
-                response if isinstance(response, str) else response.get('content', '')
-            )
-
-            # Parse the content using the base class method
-            return self._parse_microagent_content(content, file_path)
-        except Exception as e:
-            logger.warning(f'Failed to fetch microagent content from {file_path}: {e}')
-            raise

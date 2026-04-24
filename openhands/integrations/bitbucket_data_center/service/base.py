@@ -13,7 +13,6 @@ from openhands.integrations.service_types import (
     ProviderType,
     Repository,
     RequestMethod,
-    ResourceNotFoundError,
     User,
 )
 from openhands.utils.http_session import httpx_verify_option
@@ -282,58 +281,3 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         url = self._repo_api_base(owner, repo)
         data, _ = await self._make_request(url)
         return await self._parse_repository(data, fetch_default_branch=True)
-
-    async def _get_cursorrules_url(self, repository: str) -> str:
-        """Get the URL for checking .cursorrules file."""
-        # Get repository details to get the main branch
-        repo_details = await self.get_repository_details_from_repo_name(repository)
-        if not repo_details.main_branch:
-            raise ResourceNotFoundError(
-                f'Main branch not found for repository {repository}. '
-                f'This repository may be empty or have no default branch configured.'
-            )
-        owner, repo = self._extract_owner_and_repo(repository)
-        return (
-            f'{self.BASE_URL}/projects/{owner}/repos/{repo}/browse/.cursorrules'
-            f'?at=refs/heads/{repo_details.main_branch}'
-        )
-
-    async def _get_microagents_directory_url(
-        self, repository: str, microagents_path: str
-    ) -> str:
-        """Get the URL for checking microagents directory."""
-        # Get repository details to get the main branch
-        repo_details = await self.get_repository_details_from_repo_name(repository)
-        if not repo_details.main_branch:
-            raise ResourceNotFoundError(
-                f'Main branch not found for repository {repository}. '
-                f'This repository may be empty or have no default branch configured.'
-            )
-
-        owner, repo = self._extract_owner_and_repo(repository)
-        return (
-            f'{self.BASE_URL}/projects/{owner}/repos/{repo}/browse/{microagents_path}'
-            f'?at=refs/heads/{repo_details.main_branch}'
-        )
-
-    def _get_microagents_directory_params(self, microagents_path: str) -> dict | None:
-        """Get parameters for the microagents directory request. Return None if no parameters needed."""
-        return None
-
-    def _is_valid_microagent_file(self, item: dict) -> bool:
-        """Check if an item represents a valid microagent file."""
-        file_name = item.get('path', {}).get('name', '')
-        return (
-            item.get('type') == 'FILE'
-            and file_name.endswith('.md')
-            and file_name != 'README.md'
-        )
-
-    def _get_file_name_from_item(self, item: dict) -> str:
-        """Extract file name from directory item."""
-        return item.get('path', {}).get('name', '')
-
-    def _get_file_path_from_item(self, item: dict, microagents_path: str) -> str:
-        """Extract file path from directory item."""
-        file_name = self._get_file_name_from_item(item)
-        return f'{microagents_path}/{file_name}'
