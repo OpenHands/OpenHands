@@ -35,6 +35,7 @@ const VALID_OSS_CONFIG: WebClientConfig = {
   error_message: null,
   updated_at: "2024-01-14T10:00:00Z",
   github_app_slug: null,
+  slack_enabled: false,
 };
 
 const VALID_SAAS_CONFIG: WebClientConfig = {
@@ -58,6 +59,7 @@ const VALID_SAAS_CONFIG: WebClientConfig = {
   error_message: null,
   updated_at: "2024-01-14T10:00:00Z",
   github_app_slug: null,
+  slack_enabled: false,
 };
 
 const queryClient = new QueryClient();
@@ -288,8 +290,10 @@ describe("Content", () => {
     await waitFor(() => {
       button = screen.queryByTestId("configure-github-repositories-button");
       expect(button).not.toBeInTheDocument();
-      expect(screen.getByTestId("gitlab-status-text")).toBeInTheDocument();
-      expect(screen.getByTestId("install-slack-app-button")).toBeInTheDocument();
+      expect(screen.queryByTestId("gitlab-status-text")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("install-slack-app-button"),
+      ).not.toBeInTheDocument();
       expect(screen.queryByTestId("submit-button")).not.toBeInTheDocument();
       expect(
         screen.queryByTestId("disconnect-tokens-button"),
@@ -298,7 +302,9 @@ describe("Content", () => {
 
     getConfigSpy.mockResolvedValue({
       ...VALID_SAAS_CONFIG,
+      providers_configured: ["gitlab"],
       github_app_slug: "test-slug",
+      slack_enabled: true,
     });
     queryClient.invalidateQueries();
     rerender();
@@ -623,12 +629,16 @@ describe("GitLab Webhook Manager Integration", () => {
     });
   });
 
-  it("should render GitLab and Slack sections in SaaS mode without APP_SLUG", async () => {
+  it("should render configured GitLab and Slack sections in SaaS mode without APP_SLUG", async () => {
     // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
-    getConfigSpy.mockResolvedValue(VALID_SAAS_CONFIG);
+    getConfigSpy.mockResolvedValue({
+      ...VALID_SAAS_CONFIG,
+      providers_configured: ["gitlab"],
+      slack_enabled: true,
+    });
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
       provider_tokens_set: {},
@@ -651,13 +661,41 @@ describe("GitLab Webhook Manager Integration", () => {
     });
   });
 
-  it("should not render GitLab webhook manager when token is not set", async () => {
+  it("should not render GitLab or Slack sections when the backend does not enable them", async () => {
+    // Arrange
+    const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+
+    getConfigSpy.mockResolvedValue(VALID_SAAS_CONFIG);
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      provider_tokens_set: {},
+    });
+
+    // Act
+    renderGitSettingsScreen();
+    await screen.findByTestId("git-settings-screen");
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.queryByTestId("gitlab-status-text")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("install-slack-app-button"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("should not render GitLab webhook manager when the token is not set", async () => {
     // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
     getConfigSpy.mockResolvedValue({
       ...VALID_SAAS_CONFIG,
+      providers_configured: ["gitlab"],
     });
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
@@ -670,6 +708,7 @@ describe("GitLab Webhook Manager Integration", () => {
 
     // Assert
     await waitFor(() => {
+      expect(screen.getByTestId("gitlab-status-text")).toBeInTheDocument();
       expect(
         screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
       ).not.toBeInTheDocument();

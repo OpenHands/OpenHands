@@ -43,4 +43,5 @@ export interface WebClientConfig {
   error_message: string | null;
   updated_at: string;
   github_app_slug: string | null;
+  slack_enabled?: boolean;
 }

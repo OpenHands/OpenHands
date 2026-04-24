@@ -91,6 +91,16 @@ def _get_github_app_slug() -> str | None:
     return slug if slug else None
 
 
+def _get_slack_enabled() -> bool:
+    """Return whether Slack integration is fully configured for the web client."""
+    return (
+        os.getenv('SLACK_WEBHOOKS_ENABLED', 'false').lower() == 'true'
+        and bool(os.getenv('SLACK_CLIENT_ID', '').strip())
+        and bool(os.getenv('SLACK_CLIENT_SECRET', '').strip())
+        and bool(os.getenv('SLACK_SIGNING_SECRET', '').strip())
+    )
+
+
 def _get_feature_flags() -> WebClientFeatureFlags:
     """Get feature flags from environment variables.
 
@@ -133,6 +143,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
         ),
     )
     github_app_slug: str | None = Field(default_factory=_get_github_app_slug)
+    slack_enabled: bool = Field(default_factory=_get_slack_enabled)
 
     async def get_web_client_config(self) -> WebClientConfig:
         from openhands.app_server.config import get_global_config
@@ -150,5 +161,6 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             error_message=self.error_message,
             updated_at=self.updated_at,
             github_app_slug=self.github_app_slug,
+            slack_enabled=self.slack_enabled,
         )
         return result

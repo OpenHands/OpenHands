@@ -62,6 +62,7 @@ export const createMockWebClientConfig = (
   error_message: null,
   updated_at: new Date().toISOString(),
   github_app_slug: null,
+  slack_enabled: false,
   ...overrides,
 });
 
@@ -425,6 +426,7 @@ export const SETTINGS_HANDLERS = [
       error_message: null,
       updated_at: new Date().toISOString(),
       github_app_slug: mockSaas ? "openhands" : null,
+      slack_enabled: false,
     };
 
     return HttpResponse.json(config);

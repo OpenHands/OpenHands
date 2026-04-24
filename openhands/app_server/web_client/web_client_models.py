@@ -42,3 +42,4 @@ class WebClientConfig(DiscriminatedUnionMixin):
     error_message: str | None
     updated_at: datetime
     github_app_slug: str | None
+    slack_enabled: bool = False
