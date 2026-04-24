@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "108"
-down_revision: Union[str, None] = "107"
+revision: str = '108'
+down_revision: Union[str, None] = '107'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -54,68 +54,68 @@ def _next_server_name(existing: Mapping[str, Any], base_name: str) -> str:
         return base_name
 
     suffix = 1
-    while f"{base_name}_{suffix}" in existing:
+    while f'{base_name}_{suffix}' in existing:
         suffix += 1
-    return f"{base_name}_{suffix}"
+    return f'{base_name}_{suffix}'
 
 
 def _normalize_mcp_config(value: Any) -> Any:
     if not isinstance(value, Mapping):
         return value
 
-    raw_mcp_servers = value.get("mcpServers")
+    raw_mcp_servers = value.get('mcpServers')
     if isinstance(raw_mcp_servers, Mapping):
         mcp_servers = dict(raw_mcp_servers)
-        return {"mcpServers": mcp_servers} if mcp_servers else None
+        return {'mcpServers': mcp_servers} if mcp_servers else None
 
     if not any(
-        key in value for key in ("sse_servers", "stdio_servers", "shttp_servers")
+        key in value for key in ('sse_servers', 'stdio_servers', 'shttp_servers')
     ):
         return value
 
     servers: dict[str, dict[str, Any]] = {}
 
-    for entry in value.get("sse_servers", []) or []:
+    for entry in value.get('sse_servers', []) or []:
         if isinstance(entry, str):
-            entry = {"url": entry}
-        if not isinstance(entry, Mapping) or not isinstance(entry.get("url"), str):
+            entry = {'url': entry}
+        if not isinstance(entry, Mapping) or not isinstance(entry.get('url'), str):
             continue
 
-        server: dict[str, Any] = {"url": entry["url"], "transport": "sse"}
-        if entry.get("api_key") is not None:
-            server["auth"] = entry.get("api_key")
-        servers[_next_server_name(servers, "sse")] = server
+        server: dict[str, Any] = {'url': entry['url'], 'transport': 'sse'}
+        if entry.get('api_key') is not None:
+            server['auth'] = entry.get('api_key')
+        servers[_next_server_name(servers, 'sse')] = server
 
-    for entry in value.get("shttp_servers", []) or []:
+    for entry in value.get('shttp_servers', []) or []:
         if isinstance(entry, str):
-            entry = {"url": entry}
-        if not isinstance(entry, Mapping) or not isinstance(entry.get("url"), str):
+            entry = {'url': entry}
+        if not isinstance(entry, Mapping) or not isinstance(entry.get('url'), str):
             continue
 
-        server = {"url": entry["url"]}
-        if entry.get("api_key") is not None:
-            server["auth"] = entry.get("api_key")
-        if entry.get("timeout") is not None:
-            server["timeout"] = entry.get("timeout")
-        servers[_next_server_name(servers, "shttp")] = server
+        server = {'url': entry['url']}
+        if entry.get('api_key') is not None:
+            server['auth'] = entry.get('api_key')
+        if entry.get('timeout') is not None:
+            server['timeout'] = entry.get('timeout')
+        servers[_next_server_name(servers, 'shttp')] = server
 
-    for entry in value.get("stdio_servers", []) or []:
-        if not isinstance(entry, Mapping) or not isinstance(entry.get("command"), str):
+    for entry in value.get('stdio_servers', []) or []:
+        if not isinstance(entry, Mapping) or not isinstance(entry.get('command'), str):
             continue
 
-        server = {"command": entry["command"]}
-        if entry.get("args") is not None:
-            server["args"] = entry.get("args")
-        if entry.get("env") is not None:
-            server["env"] = entry.get("env")
-        base_name = entry.get("name") if isinstance(entry.get("name"), str) else "stdio"
+        server = {'command': entry['command']}
+        if entry.get('args') is not None:
+            server['args'] = entry.get('args')
+        if entry.get('env') is not None:
+            server['env'] = entry.get('env')
+        base_name = entry.get('name') if isinstance(entry.get('name'), str) else 'stdio'
         servers[_next_server_name(servers, base_name)] = server
 
-    return {"mcpServers": servers} if servers else None
+    return {'mcpServers': servers} if servers else None
 
 
 def _legacy_api_key(auth_value: Any) -> str | None:
-    if isinstance(auth_value, str) and auth_value != "oauth":
+    if isinstance(auth_value, str) and auth_value != 'oauth':
         return auth_value
     return None
 
@@ -124,77 +124,77 @@ def _to_legacy_mcp_config(value: Any) -> Any:
     if not isinstance(value, Mapping):
         return value
 
-    raw_mcp_servers = value.get("mcpServers")
+    raw_mcp_servers = value.get('mcpServers')
     if not isinstance(raw_mcp_servers, Mapping):
         return value
 
     legacy: dict[str, list[Any]] = {
-        "sse_servers": [],
-        "stdio_servers": [],
-        "shttp_servers": [],
+        'sse_servers': [],
+        'stdio_servers': [],
+        'shttp_servers': [],
     }
 
     for server_name, server_config in raw_mcp_servers.items():
         if not isinstance(server_config, Mapping):
             continue
 
-        url = server_config.get("url")
+        url = server_config.get('url')
         if isinstance(url, str):
-            entry: dict[str, Any] = {"url": url}
-            api_key = _legacy_api_key(server_config.get("auth"))
+            entry: dict[str, Any] = {'url': url}
+            api_key = _legacy_api_key(server_config.get('auth'))
             if api_key is not None:
-                entry["api_key"] = api_key
-            if server_config.get("transport") == "sse":
-                legacy["sse_servers"].append(entry)
+                entry['api_key'] = api_key
+            if server_config.get('transport') == 'sse':
+                legacy['sse_servers'].append(entry)
             else:
-                if server_config.get("timeout") is not None:
-                    entry["timeout"] = server_config.get("timeout")
-                legacy["shttp_servers"].append(entry)
+                if server_config.get('timeout') is not None:
+                    entry['timeout'] = server_config.get('timeout')
+                legacy['shttp_servers'].append(entry)
             continue
 
-        command = server_config.get("command")
+        command = server_config.get('command')
         if not isinstance(command, str):
             continue
 
-        entry = {"name": server_name, "command": command}
-        if server_config.get("args") is not None:
-            entry["args"] = server_config.get("args")
-        if server_config.get("env") is not None:
-            entry["env"] = server_config.get("env")
-        legacy["stdio_servers"].append(entry)
+        entry = {'name': server_name, 'command': command}
+        if server_config.get('args') is not None:
+            entry['args'] = server_config.get('args')
+        if server_config.get('env') is not None:
+            entry['env'] = server_config.get('env')
+        legacy['stdio_servers'].append(entry)
 
     return legacy
 
 
 def _normalize_nested_mcp_config(settings: Mapping[str, Any] | None) -> dict[str, Any]:
     normalized = dict(settings or {})
-    mcp_config = _normalize_mcp_config(normalized.get("mcp_config"))
+    mcp_config = _normalize_mcp_config(normalized.get('mcp_config'))
     if mcp_config is None:
-        normalized.pop("mcp_config", None)
+        normalized.pop('mcp_config', None)
     else:
-        normalized["mcp_config"] = mcp_config
+        normalized['mcp_config'] = mcp_config
     return normalized
 
 
 def _build_user_agent_settings(row: Mapping[str, Any]) -> dict[str, Any]:
     generated = _strip_none_and_empty(
         {
-            "schema_version": 1,
-            "agent": row["agent"],
-            "llm": {
-                "model": row["llm_model"],
-                "base_url": row["llm_base_url"],
+            'schema_version': 1,
+            'agent': row['agent'],
+            'llm': {
+                'model': row['llm_model'],
+                'base_url': row['llm_base_url'],
             },
-            "condenser": {
-                "enabled": row["enable_default_condenser"],
-                "max_size": row["condenser_max_size"],
+            'condenser': {
+                'enabled': row['enable_default_condenser'],
+                'max_size': row['condenser_max_size'],
             },
-            "mcp_config": _normalize_mcp_config(row["mcp_config"]),
+            'mcp_config': _normalize_mcp_config(row['mcp_config']),
         }
     )
     merged = _deep_merge(
         generated,
-        _normalize_nested_mcp_config(row.get("agent_settings")),
+        _normalize_nested_mcp_config(row.get('agent_settings')),
     )
     return _normalize_nested_mcp_config(merged)
 
@@ -202,28 +202,28 @@ def _build_user_agent_settings(row: Mapping[str, Any]) -> dict[str, Any]:
 def _build_user_conversation_settings(row: Mapping[str, Any]) -> dict[str, Any]:
     generated = _strip_none_and_empty(
         {
-            "max_iterations": row["max_iterations"],
-            "confirmation_mode": row["confirmation_mode"],
-            "security_analyzer": row["security_analyzer"],
+            'max_iterations': row['max_iterations'],
+            'confirmation_mode': row['confirmation_mode'],
+            'security_analyzer': row['security_analyzer'],
         }
     )
-    return _deep_merge(generated, row.get("conversation_settings") or {})
+    return _deep_merge(generated, row.get('conversation_settings') or {})
 
 
 def _build_org_member_agent_settings_diff(row: Mapping[str, Any]) -> dict[str, Any]:
     generated = _strip_none_and_empty(
         {
-            "schema_version": 1,
-            "llm": {
-                "model": row["llm_model"],
-                "base_url": row["llm_base_url"],
+            'schema_version': 1,
+            'llm': {
+                'model': row['llm_model'],
+                'base_url': row['llm_base_url'],
             },
-            "mcp_config": _normalize_mcp_config(row["mcp_config"]),
+            'mcp_config': _normalize_mcp_config(row['mcp_config']),
         }
     )
     merged = _deep_merge(
         generated,
-        _normalize_nested_mcp_config(row.get("agent_settings_diff")),
+        _normalize_nested_mcp_config(row.get('agent_settings_diff')),
     )
     return _normalize_nested_mcp_config(merged)
 
@@ -231,29 +231,29 @@ def _build_org_member_agent_settings_diff(row: Mapping[str, Any]) -> dict[str, A
 def _build_org_member_conversation_settings_diff(
     row: Mapping[str, Any],
 ) -> dict[str, Any]:
-    generated = _strip_none_and_empty({"max_iterations": row["max_iterations"]})
-    return _deep_merge(generated, row.get("conversation_settings_diff") or {})
+    generated = _strip_none_and_empty({'max_iterations': row['max_iterations']})
+    return _deep_merge(generated, row.get('conversation_settings_diff') or {})
 
 
 def _build_org_agent_settings(row: Mapping[str, Any]) -> dict[str, Any]:
     generated = _strip_none_and_empty(
         {
-            "schema_version": 1,
-            "agent": row["agent"],
-            "llm": {
-                "model": row["default_llm_model"],
-                "base_url": row["default_llm_base_url"],
+            'schema_version': 1,
+            'agent': row['agent'],
+            'llm': {
+                'model': row['default_llm_model'],
+                'base_url': row['default_llm_base_url'],
             },
-            "condenser": {
-                "enabled": row["enable_default_condenser"],
-                "max_size": row["condenser_max_size"],
+            'condenser': {
+                'enabled': row['enable_default_condenser'],
+                'max_size': row['condenser_max_size'],
             },
-            "mcp_config": _normalize_mcp_config(row["mcp_config"]),
+            'mcp_config': _normalize_mcp_config(row['mcp_config']),
         }
     )
     merged = _deep_merge(
         generated,
-        _normalize_nested_mcp_config(row.get("agent_settings")),
+        _normalize_nested_mcp_config(row.get('agent_settings')),
     )
     return _normalize_nested_mcp_config(merged)
 
@@ -261,12 +261,12 @@ def _build_org_agent_settings(row: Mapping[str, Any]) -> dict[str, Any]:
 def _build_org_conversation_settings(row: Mapping[str, Any]) -> dict[str, Any]:
     generated = _strip_none_and_empty(
         {
-            "max_iterations": row["default_max_iterations"],
-            "confirmation_mode": row["confirmation_mode"],
-            "security_analyzer": row["security_analyzer"],
+            'max_iterations': row['default_max_iterations'],
+            'confirmation_mode': row['confirmation_mode'],
+            'security_analyzer': row['security_analyzer'],
         }
     )
-    return _deep_merge(generated, row.get("conversation_settings") or {})
+    return _deep_merge(generated, row.get('conversation_settings') or {})
 
 
 def _get_nested_value(data: Mapping[str, Any] | None, *path: str) -> Any:
@@ -279,128 +279,128 @@ def _get_nested_value(data: Mapping[str, Any] | None, *path: str) -> Any:
 
 
 def _legacy_user_settings_values(row: Mapping[str, Any]) -> dict[str, Any]:
-    agent_settings = row.get("agent_settings") or {}
-    conversation_settings = row.get("conversation_settings") or {}
-    condenser_enabled = _get_nested_value(agent_settings, "condenser", "enabled")
+    agent_settings = row.get('agent_settings') or {}
+    conversation_settings = row.get('conversation_settings') or {}
+    condenser_enabled = _get_nested_value(agent_settings, 'condenser', 'enabled')
     return {
-        "agent": _get_nested_value(agent_settings, "agent"),
-        "max_iterations": _get_nested_value(conversation_settings, "max_iterations"),
-        "security_analyzer": _get_nested_value(
-            conversation_settings, "security_analyzer"
+        'agent': _get_nested_value(agent_settings, 'agent'),
+        'max_iterations': _get_nested_value(conversation_settings, 'max_iterations'),
+        'security_analyzer': _get_nested_value(
+            conversation_settings, 'security_analyzer'
         ),
-        "confirmation_mode": _get_nested_value(
-            conversation_settings, "confirmation_mode"
+        'confirmation_mode': _get_nested_value(
+            conversation_settings, 'confirmation_mode'
         ),
-        "llm_model": _get_nested_value(agent_settings, "llm", "model"),
-        "llm_base_url": _get_nested_value(agent_settings, "llm", "base_url"),
-        "enable_default_condenser": (
+        'llm_model': _get_nested_value(agent_settings, 'llm', 'model'),
+        'llm_base_url': _get_nested_value(agent_settings, 'llm', 'base_url'),
+        'enable_default_condenser': (
             True if condenser_enabled is None else condenser_enabled
         ),
-        "condenser_max_size": _get_nested_value(
-            agent_settings, "condenser", "max_size"
+        'condenser_max_size': _get_nested_value(
+            agent_settings, 'condenser', 'max_size'
         ),
     }
 
 
 def _legacy_org_member_values(row: Mapping[str, Any]) -> dict[str, Any]:
-    agent_settings_diff = row.get("agent_settings_diff") or {}
-    conversation_settings_diff = row.get("conversation_settings_diff") or {}
+    agent_settings_diff = row.get('agent_settings_diff') or {}
+    conversation_settings_diff = row.get('conversation_settings_diff') or {}
     return {
-        "llm_model": _get_nested_value(agent_settings_diff, "llm", "model"),
-        "llm_base_url": _get_nested_value(agent_settings_diff, "llm", "base_url"),
-        "max_iterations": _get_nested_value(
-            conversation_settings_diff, "max_iterations"
+        'llm_model': _get_nested_value(agent_settings_diff, 'llm', 'model'),
+        'llm_base_url': _get_nested_value(agent_settings_diff, 'llm', 'base_url'),
+        'max_iterations': _get_nested_value(
+            conversation_settings_diff, 'max_iterations'
         ),
-        "mcp_config": _to_legacy_mcp_config(
-            _get_nested_value(agent_settings_diff, "mcp_config")
+        'mcp_config': _to_legacy_mcp_config(
+            _get_nested_value(agent_settings_diff, 'mcp_config')
         ),
     }
 
 
 def _legacy_org_values(row: Mapping[str, Any]) -> dict[str, Any]:
-    agent_settings = row.get("agent_settings") or {}
-    conversation_settings = row.get("conversation_settings") or {}
-    condenser_enabled = _get_nested_value(agent_settings, "condenser", "enabled")
+    agent_settings = row.get('agent_settings') or {}
+    conversation_settings = row.get('conversation_settings') or {}
+    condenser_enabled = _get_nested_value(agent_settings, 'condenser', 'enabled')
     return {
-        "agent": _get_nested_value(agent_settings, "agent"),
-        "default_max_iterations": _get_nested_value(
-            conversation_settings, "max_iterations"
+        'agent': _get_nested_value(agent_settings, 'agent'),
+        'default_max_iterations': _get_nested_value(
+            conversation_settings, 'max_iterations'
         ),
-        "security_analyzer": _get_nested_value(
-            conversation_settings, "security_analyzer"
+        'security_analyzer': _get_nested_value(
+            conversation_settings, 'security_analyzer'
         ),
-        "confirmation_mode": _get_nested_value(
-            conversation_settings, "confirmation_mode"
+        'confirmation_mode': _get_nested_value(
+            conversation_settings, 'confirmation_mode'
         ),
-        "default_llm_model": _get_nested_value(agent_settings, "llm", "model"),
-        "default_llm_base_url": _get_nested_value(agent_settings, "llm", "base_url"),
-        "enable_default_condenser": (
+        'default_llm_model': _get_nested_value(agent_settings, 'llm', 'model'),
+        'default_llm_base_url': _get_nested_value(agent_settings, 'llm', 'base_url'),
+        'enable_default_condenser': (
             True if condenser_enabled is None else condenser_enabled
         ),
-        "mcp_config": _to_legacy_mcp_config(
-            _get_nested_value(agent_settings, "mcp_config")
+        'mcp_config': _to_legacy_mcp_config(
+            _get_nested_value(agent_settings, 'mcp_config')
         ),
-        "condenser_max_size": _get_nested_value(
-            agent_settings, "condenser", "max_size"
+        'condenser_max_size': _get_nested_value(
+            agent_settings, 'condenser', 'max_size'
         ),
     }
 
 
 def upgrade() -> None:
     op.add_column(
-        "user_settings",
+        'user_settings',
         sa.Column(
-            "agent_settings", sa.JSON(), nullable=False, server_default=_EMPTY_JSON
+            'agent_settings', sa.JSON(), nullable=False, server_default=_EMPTY_JSON
         ),
     )
     op.add_column(
-        "user_settings",
+        'user_settings',
         sa.Column(
-            "conversation_settings",
+            'conversation_settings',
             sa.JSON(),
             nullable=False,
             server_default=_EMPTY_JSON,
         ),
     )
     op.add_column(
-        "org_member",
+        'org_member',
         sa.Column(
-            "agent_settings_diff",
+            'agent_settings_diff',
             sa.JSON(),
             nullable=False,
             server_default=_EMPTY_JSON,
         ),
     )
     op.add_column(
-        "org_member",
+        'org_member',
         sa.Column(
-            "conversation_settings_diff",
+            'conversation_settings_diff',
             sa.JSON(),
             nullable=False,
             server_default=_EMPTY_JSON,
         ),
     )
     op.add_column(
-        "org",
+        'org',
         sa.Column(
-            "agent_settings", sa.JSON(), nullable=False, server_default=_EMPTY_JSON
+            'agent_settings', sa.JSON(), nullable=False, server_default=_EMPTY_JSON
         ),
     )
     op.add_column(
-        "org",
+        'org',
         sa.Column(
-            "conversation_settings",
+            'conversation_settings',
             sa.JSON(),
             nullable=False,
             server_default=_EMPTY_JSON,
         ),
     )
 
-    op.add_column("org", sa.Column("_llm_api_key", sa.String(), nullable=True))
+    op.add_column('org', sa.Column('_llm_api_key', sa.String(), nullable=True))
     op.add_column(
-        "org_member",
+        'org_member',
         sa.Column(
-            "has_custom_llm_api_key",
+            'has_custom_llm_api_key',
             sa.Boolean(),
             nullable=False,
             server_default=sa.false(),
@@ -410,19 +410,19 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     user_settings_table = sa.table(
-        "user_settings",
-        sa.column("id", sa.Integer()),
-        sa.column("agent", sa.String()),
-        sa.column("max_iterations", sa.Integer()),
-        sa.column("security_analyzer", sa.String()),
-        sa.column("confirmation_mode", sa.Boolean()),
-        sa.column("llm_model", sa.String()),
-        sa.column("llm_base_url", sa.String()),
-        sa.column("enable_default_condenser", sa.Boolean()),
-        sa.column("condenser_max_size", sa.Integer()),
-        sa.column("mcp_config", sa.JSON()),
-        sa.column("agent_settings", sa.JSON()),
-        sa.column("conversation_settings", sa.JSON()),
+        'user_settings',
+        sa.column('id', sa.Integer()),
+        sa.column('agent', sa.String()),
+        sa.column('max_iterations', sa.Integer()),
+        sa.column('security_analyzer', sa.String()),
+        sa.column('confirmation_mode', sa.Boolean()),
+        sa.column('llm_model', sa.String()),
+        sa.column('llm_base_url', sa.String()),
+        sa.column('enable_default_condenser', sa.Boolean()),
+        sa.column('condenser_max_size', sa.Integer()),
+        sa.column('mcp_config', sa.JSON()),
+        sa.column('agent_settings', sa.JSON()),
+        sa.column('conversation_settings', sa.JSON()),
     )
     user_settings_rows = bind.execute(
         sa.select(
@@ -443,7 +443,7 @@ def upgrade() -> None:
     for row in user_settings_rows:
         bind.execute(
             user_settings_table.update()
-            .where(user_settings_table.c.id == row["id"])
+            .where(user_settings_table.c.id == row['id'])
             .values(
                 agent_settings=_build_user_agent_settings(row),
                 conversation_settings=_build_user_conversation_settings(row),
@@ -451,15 +451,15 @@ def upgrade() -> None:
         )
 
     org_member_table = sa.table(
-        "org_member",
-        sa.column("org_id", sa.Uuid()),
-        sa.column("user_id", sa.Uuid()),
-        sa.column("max_iterations", sa.Integer()),
-        sa.column("llm_model", sa.String()),
-        sa.column("llm_base_url", sa.String()),
-        sa.column("mcp_config", sa.JSON()),
-        sa.column("agent_settings_diff", sa.JSON()),
-        sa.column("conversation_settings_diff", sa.JSON()),
+        'org_member',
+        sa.column('org_id', sa.Uuid()),
+        sa.column('user_id', sa.Uuid()),
+        sa.column('max_iterations', sa.Integer()),
+        sa.column('llm_model', sa.String()),
+        sa.column('llm_base_url', sa.String()),
+        sa.column('mcp_config', sa.JSON()),
+        sa.column('agent_settings_diff', sa.JSON()),
+        sa.column('conversation_settings_diff', sa.JSON()),
     )
     org_member_rows = bind.execute(
         sa.select(
@@ -476,8 +476,8 @@ def upgrade() -> None:
     for row in org_member_rows:
         bind.execute(
             org_member_table.update()
-            .where(org_member_table.c.org_id == row["org_id"])
-            .where(org_member_table.c.user_id == row["user_id"])
+            .where(org_member_table.c.org_id == row['org_id'])
+            .where(org_member_table.c.user_id == row['user_id'])
             .values(
                 agent_settings_diff=_build_org_member_agent_settings_diff(row),
                 conversation_settings_diff=_build_org_member_conversation_settings_diff(
@@ -487,19 +487,19 @@ def upgrade() -> None:
         )
 
     org_table = sa.table(
-        "org",
-        sa.column("id", sa.Uuid()),
-        sa.column("agent", sa.String()),
-        sa.column("default_max_iterations", sa.Integer()),
-        sa.column("security_analyzer", sa.String()),
-        sa.column("confirmation_mode", sa.Boolean()),
-        sa.column("default_llm_model", sa.String()),
-        sa.column("default_llm_base_url", sa.String()),
-        sa.column("enable_default_condenser", sa.Boolean()),
-        sa.column("mcp_config", sa.JSON()),
-        sa.column("condenser_max_size", sa.Integer()),
-        sa.column("agent_settings", sa.JSON()),
-        sa.column("conversation_settings", sa.JSON()),
+        'org',
+        sa.column('id', sa.Uuid()),
+        sa.column('agent', sa.String()),
+        sa.column('default_max_iterations', sa.Integer()),
+        sa.column('security_analyzer', sa.String()),
+        sa.column('confirmation_mode', sa.Boolean()),
+        sa.column('default_llm_model', sa.String()),
+        sa.column('default_llm_base_url', sa.String()),
+        sa.column('enable_default_condenser', sa.Boolean()),
+        sa.column('mcp_config', sa.JSON()),
+        sa.column('condenser_max_size', sa.Integer()),
+        sa.column('agent_settings', sa.JSON()),
+        sa.column('conversation_settings', sa.JSON()),
     )
     org_rows = bind.execute(
         sa.select(
@@ -520,111 +520,111 @@ def upgrade() -> None:
     for row in org_rows:
         bind.execute(
             org_table.update()
-            .where(org_table.c.id == row["id"])
+            .where(org_table.c.id == row['id'])
             .values(
                 agent_settings=_build_org_agent_settings(row),
                 conversation_settings=_build_org_conversation_settings(row),
             )
         )
 
-    op.alter_column("user_settings", "agent_settings", server_default=None)
-    op.alter_column("user_settings", "conversation_settings", server_default=None)
-    op.alter_column("org_member", "agent_settings_diff", server_default=None)
-    op.alter_column("org_member", "conversation_settings_diff", server_default=None)
-    op.alter_column("org", "agent_settings", server_default=None)
-    op.alter_column("org", "conversation_settings", server_default=None)
-    op.alter_column("org_member", "has_custom_llm_api_key", server_default=None)
-    op.drop_column("user_settings", "agent")
-    op.drop_column("user_settings", "max_iterations")
-    op.drop_column("user_settings", "security_analyzer")
-    op.drop_column("user_settings", "confirmation_mode")
-    op.drop_column("user_settings", "llm_model")
-    op.drop_column("user_settings", "llm_base_url")
-    op.drop_column("user_settings", "enable_default_condenser")
-    op.drop_column("user_settings", "condenser_max_size")
-    op.drop_column("org_member", "max_iterations")
-    op.drop_column("org_member", "llm_model")
-    op.drop_column("org_member", "llm_base_url")
-    op.drop_column("org_member", "mcp_config")
-    op.drop_column("org", "agent")
-    op.drop_column("org", "default_max_iterations")
-    op.drop_column("org", "security_analyzer")
-    op.drop_column("org", "confirmation_mode")
-    op.drop_column("org", "default_llm_model")
-    op.drop_column("org", "default_llm_base_url")
-    op.drop_column("org", "enable_default_condenser")
-    op.drop_column("org", "mcp_config")
-    op.drop_column("org", "condenser_max_size")
+    op.alter_column('user_settings', 'agent_settings', server_default=None)
+    op.alter_column('user_settings', 'conversation_settings', server_default=None)
+    op.alter_column('org_member', 'agent_settings_diff', server_default=None)
+    op.alter_column('org_member', 'conversation_settings_diff', server_default=None)
+    op.alter_column('org', 'agent_settings', server_default=None)
+    op.alter_column('org', 'conversation_settings', server_default=None)
+    op.alter_column('org_member', 'has_custom_llm_api_key', server_default=None)
+    op.drop_column('user_settings', 'agent')
+    op.drop_column('user_settings', 'max_iterations')
+    op.drop_column('user_settings', 'security_analyzer')
+    op.drop_column('user_settings', 'confirmation_mode')
+    op.drop_column('user_settings', 'llm_model')
+    op.drop_column('user_settings', 'llm_base_url')
+    op.drop_column('user_settings', 'enable_default_condenser')
+    op.drop_column('user_settings', 'condenser_max_size')
+    op.drop_column('org_member', 'max_iterations')
+    op.drop_column('org_member', 'llm_model')
+    op.drop_column('org_member', 'llm_base_url')
+    op.drop_column('org_member', 'mcp_config')
+    op.drop_column('org', 'agent')
+    op.drop_column('org', 'default_max_iterations')
+    op.drop_column('org', 'security_analyzer')
+    op.drop_column('org', 'confirmation_mode')
+    op.drop_column('org', 'default_llm_model')
+    op.drop_column('org', 'default_llm_base_url')
+    op.drop_column('org', 'enable_default_condenser')
+    op.drop_column('org', 'mcp_config')
+    op.drop_column('org', 'condenser_max_size')
 
 
 def downgrade() -> None:
-    op.add_column("user_settings", sa.Column("agent", sa.String(), nullable=True))
+    op.add_column('user_settings', sa.Column('agent', sa.String(), nullable=True))
     op.add_column(
-        "user_settings", sa.Column("max_iterations", sa.Integer(), nullable=True)
+        'user_settings', sa.Column('max_iterations', sa.Integer(), nullable=True)
     )
     op.add_column(
-        "user_settings", sa.Column("security_analyzer", sa.String(), nullable=True)
+        'user_settings', sa.Column('security_analyzer', sa.String(), nullable=True)
     )
     op.add_column(
-        "user_settings", sa.Column("confirmation_mode", sa.Boolean(), nullable=True)
+        'user_settings', sa.Column('confirmation_mode', sa.Boolean(), nullable=True)
     )
-    op.add_column("user_settings", sa.Column("llm_model", sa.String(), nullable=True))
+    op.add_column('user_settings', sa.Column('llm_model', sa.String(), nullable=True))
     op.add_column(
-        "user_settings", sa.Column("llm_base_url", sa.String(), nullable=True)
+        'user_settings', sa.Column('llm_base_url', sa.String(), nullable=True)
     )
     op.add_column(
-        "user_settings",
+        'user_settings',
         sa.Column(
-            "enable_default_condenser",
+            'enable_default_condenser',
             sa.Boolean(),
             nullable=False,
             server_default=sa.true(),
         ),
     )
     op.add_column(
-        "user_settings", sa.Column("condenser_max_size", sa.Integer(), nullable=True)
+        'user_settings', sa.Column('condenser_max_size', sa.Integer(), nullable=True)
     )
-    op.add_column("org_member", sa.Column("llm_base_url", sa.String(), nullable=True))
-    op.add_column("org_member", sa.Column("llm_model", sa.String(), nullable=True))
+    op.add_column('org_member', sa.Column('llm_base_url', sa.String(), nullable=True))
+    op.add_column('org_member', sa.Column('llm_model', sa.String(), nullable=True))
     op.add_column(
-        "org_member", sa.Column("max_iterations", sa.Integer(), nullable=True)
+        'org_member', sa.Column('max_iterations', sa.Integer(), nullable=True)
     )
-    op.add_column("org_member", sa.Column("mcp_config", sa.JSON(), nullable=True))
-    op.add_column("org", sa.Column("agent", sa.String(), nullable=True))
+    op.add_column('org_member', sa.Column('mcp_config', sa.JSON(), nullable=True))
+    op.add_column('org', sa.Column('agent', sa.String(), nullable=True))
     op.add_column(
-        "org", sa.Column("default_max_iterations", sa.Integer(), nullable=True)
+        'org', sa.Column('default_max_iterations', sa.Integer(), nullable=True)
     )
-    op.add_column("org", sa.Column("security_analyzer", sa.String(), nullable=True))
-    op.add_column("org", sa.Column("confirmation_mode", sa.Boolean(), nullable=True))
-    op.add_column("org", sa.Column("default_llm_model", sa.String(), nullable=True))
-    op.add_column("org", sa.Column("default_llm_base_url", sa.String(), nullable=True))
+    op.add_column('org', sa.Column('security_analyzer', sa.String(), nullable=True))
+    op.add_column('org', sa.Column('confirmation_mode', sa.Boolean(), nullable=True))
+    op.add_column('org', sa.Column('default_llm_model', sa.String(), nullable=True))
+    op.add_column('org', sa.Column('default_llm_base_url', sa.String(), nullable=True))
     op.add_column(
-        "org",
+        'org',
         sa.Column(
-            "enable_default_condenser",
+            'enable_default_condenser',
             sa.Boolean(),
             nullable=False,
             server_default=sa.true(),
         ),
     )
-    op.add_column("org", sa.Column("mcp_config", sa.JSON(), nullable=True))
-    op.add_column("org", sa.Column("condenser_max_size", sa.Integer(), nullable=True))
+    op.add_column('org', sa.Column('mcp_config', sa.JSON(), nullable=True))
+    op.add_column('org', sa.Column('condenser_max_size', sa.Integer(), nullable=True))
 
     bind = op.get_bind()
 
     user_settings_table = sa.table(
-        "user_settings",
-        sa.column("id", sa.Integer()),
-        sa.column("agent_settings", sa.JSON()),
-        sa.column("conversation_settings", sa.JSON()),
-        sa.column("agent", sa.String()),
-        sa.column("max_iterations", sa.Integer()),
-        sa.column("security_analyzer", sa.String()),
-        sa.column("confirmation_mode", sa.Boolean()),
-        sa.column("llm_model", sa.String()),
-        sa.column("llm_base_url", sa.String()),
-        sa.column("enable_default_condenser", sa.Boolean()),
-        sa.column("condenser_max_size", sa.Integer()),
+        'user_settings',
+        sa.column('id', sa.Integer()),
+        sa.column('agent_settings', sa.JSON()),
+        sa.column('conversation_settings', sa.JSON()),
+        sa.column('agent', sa.String()),
+        sa.column('max_iterations', sa.Integer()),
+        sa.column('security_analyzer', sa.String()),
+        sa.column('confirmation_mode', sa.Boolean()),
+        sa.column('llm_model', sa.String()),
+        sa.column('llm_base_url', sa.String()),
+        sa.column('enable_default_condenser', sa.Boolean()),
+        sa.column('condenser_max_size', sa.Integer()),
     )
     user_settings_rows = bind.execute(
         sa.select(
@@ -636,20 +636,20 @@ def downgrade() -> None:
     for row in user_settings_rows:
         bind.execute(
             user_settings_table.update()
-            .where(user_settings_table.c.id == row["id"])
+            .where(user_settings_table.c.id == row['id'])
             .values(**_legacy_user_settings_values(row))
         )
 
     org_member_table = sa.table(
-        "org_member",
-        sa.column("org_id", sa.Uuid()),
-        sa.column("user_id", sa.Uuid()),
-        sa.column("agent_settings_diff", sa.JSON()),
-        sa.column("conversation_settings_diff", sa.JSON()),
-        sa.column("llm_model", sa.String()),
-        sa.column("llm_base_url", sa.String()),
-        sa.column("max_iterations", sa.Integer()),
-        sa.column("mcp_config", sa.JSON()),
+        'org_member',
+        sa.column('org_id', sa.Uuid()),
+        sa.column('user_id', sa.Uuid()),
+        sa.column('agent_settings_diff', sa.JSON()),
+        sa.column('conversation_settings_diff', sa.JSON()),
+        sa.column('llm_model', sa.String()),
+        sa.column('llm_base_url', sa.String()),
+        sa.column('max_iterations', sa.Integer()),
+        sa.column('mcp_config', sa.JSON()),
     )
     org_member_rows = bind.execute(
         sa.select(
@@ -662,25 +662,25 @@ def downgrade() -> None:
     for row in org_member_rows:
         bind.execute(
             org_member_table.update()
-            .where(org_member_table.c.org_id == row["org_id"])
-            .where(org_member_table.c.user_id == row["user_id"])
+            .where(org_member_table.c.org_id == row['org_id'])
+            .where(org_member_table.c.user_id == row['user_id'])
             .values(**_legacy_org_member_values(row))
         )
 
     org_table = sa.table(
-        "org",
-        sa.column("id", sa.Uuid()),
-        sa.column("agent_settings", sa.JSON()),
-        sa.column("conversation_settings", sa.JSON()),
-        sa.column("agent", sa.String()),
-        sa.column("default_max_iterations", sa.Integer()),
-        sa.column("security_analyzer", sa.String()),
-        sa.column("confirmation_mode", sa.Boolean()),
-        sa.column("default_llm_model", sa.String()),
-        sa.column("default_llm_base_url", sa.String()),
-        sa.column("enable_default_condenser", sa.Boolean()),
-        sa.column("mcp_config", sa.JSON()),
-        sa.column("condenser_max_size", sa.Integer()),
+        'org',
+        sa.column('id', sa.Uuid()),
+        sa.column('agent_settings', sa.JSON()),
+        sa.column('conversation_settings', sa.JSON()),
+        sa.column('agent', sa.String()),
+        sa.column('default_max_iterations', sa.Integer()),
+        sa.column('security_analyzer', sa.String()),
+        sa.column('confirmation_mode', sa.Boolean()),
+        sa.column('default_llm_model', sa.String()),
+        sa.column('default_llm_base_url', sa.String()),
+        sa.column('enable_default_condenser', sa.Boolean()),
+        sa.column('mcp_config', sa.JSON()),
+        sa.column('condenser_max_size', sa.Integer()),
     )
     org_rows = bind.execute(
         sa.select(
@@ -692,15 +692,15 @@ def downgrade() -> None:
     for row in org_rows:
         bind.execute(
             org_table.update()
-            .where(org_table.c.id == row["id"])
+            .where(org_table.c.id == row['id'])
             .values(**_legacy_org_values(row))
         )
 
-    op.drop_column("org", "agent_settings")
-    op.drop_column("org", "conversation_settings")
-    op.drop_column("org", "_llm_api_key")
-    op.drop_column("org_member", "agent_settings_diff")
-    op.drop_column("org_member", "conversation_settings_diff")
-    op.drop_column("org_member", "has_custom_llm_api_key")
-    op.drop_column("user_settings", "agent_settings")
-    op.drop_column("user_settings", "conversation_settings")
+    op.drop_column('org', 'agent_settings')
+    op.drop_column('org', 'conversation_settings')
+    op.drop_column('org', '_llm_api_key')
+    op.drop_column('org_member', 'agent_settings_diff')
+    op.drop_column('org_member', 'conversation_settings_diff')
+    op.drop_column('org_member', 'has_custom_llm_api_key')
+    op.drop_column('user_settings', 'agent_settings')
+    op.drop_column('user_settings', 'conversation_settings')
