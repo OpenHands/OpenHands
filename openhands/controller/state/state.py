@@ -19,6 +19,7 @@ from openhands.controller.state.control_flags import (
     BudgetControlFlag,
     IterationControlFlag,
 )
+from openhands.controller.state.view import View
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema import AgentState
 from openhands.events.action import (
@@ -27,7 +28,6 @@ from openhands.events.action import (
 from openhands.events.action.agent import AgentFinishAction
 from openhands.events.event import Event, EventSource
 from openhands.llm.metrics import Metrics
-from openhands.memory.view import View
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.storage.files import FileStore
 from openhands.storage.locations import get_conversation_agent_state_filename

@@ -16,16 +16,6 @@ class AgentError(Exception):
     pass
 
 
-class AgentNoInstructionError(AgentError):
-    def __init__(self, message: str = 'Instruction must be provided') -> None:
-        super().__init__(message)
-
-
-class AgentEventTypeError(AgentError):
-    def __init__(self, message: str = 'Event must be a dictionary') -> None:
-        super().__init__(message)
-
-
 class AgentAlreadyRegisteredError(AgentError):
     def __init__(self, name: str | None = None) -> None:
         if name is not None:
@@ -46,20 +36,6 @@ class AgentNotRegisteredError(AgentError):
 
 class AgentStuckInLoopError(AgentError):
     def __init__(self, message: str = 'Agent got stuck in a loop') -> None:
-        super().__init__(message)
-
-
-# ============================================
-# Agent Controller Exceptions
-# ============================================
-
-
-class TaskInvalidStateError(Exception):
-    def __init__(self, state: str | None = None) -> None:
-        if state is not None:
-            message = f'Invalid state {state}'
-        else:
-            message = 'Invalid state'
         super().__init__(message)
 
 

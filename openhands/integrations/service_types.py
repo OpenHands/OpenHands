@@ -120,12 +120,6 @@ class SuggestedTask(BaseModel):
         return template.render(issue_number=issue_number, repo=repo, **terms)
 
 
-class CreateMicroagent(BaseModel):
-    repo: str
-    git_provider: ProviderType | None = None
-    title: str | None = None
-
-
 class UserGitInfo(BaseModel):
     id: str
     login: str
