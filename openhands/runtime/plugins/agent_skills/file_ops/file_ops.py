@@ -43,40 +43,6 @@ def _output_error(error_msg: str) -> bool:
     return False
 
 
-def _is_valid_filename(file_name: str) -> bool:
-    if not file_name or not isinstance(file_name, str) or not file_name.strip():
-        return False
-    invalid_chars = '<>:"/\\|?*'
-    if os.name == 'nt':  # Windows
-        invalid_chars = '<>:"/\\|?*'
-    elif os.name == 'posix':  # Unix-like systems
-        invalid_chars = '\0'
-
-    for char in invalid_chars:
-        if char in file_name:
-            return False
-    return True
-
-
-def _is_valid_path(path: str) -> bool:
-    if not path or not isinstance(path, str):
-        return False
-    try:
-        return os.path.exists(os.path.normpath(path))
-    except PermissionError:
-        return False
-
-
-def _create_paths(file_name: str) -> bool:
-    try:
-        dirname = os.path.dirname(file_name)
-        if dirname:
-            os.makedirs(dirname, exist_ok=True)
-        return True
-    except PermissionError:
-        return False
-
-
 def _check_current_file(file_path: str | None = None) -> bool:
     global CURRENT_FILE
     if not file_path:
@@ -267,10 +233,6 @@ def scroll_up() -> None:
         CURRENT_FILE, CURRENT_LINE, WINDOW, return_str=True, ignore_window=True
     )
     print(output)
-
-
-class LineNumberError(Exception):
-    pass
 
 
 def search_dir(search_term: str, dir_path: str = './') -> None:

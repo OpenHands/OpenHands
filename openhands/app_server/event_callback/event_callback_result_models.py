@@ -13,11 +13,6 @@ class EventCallbackResultStatus(Enum):
     ERROR = 'ERROR'
 
 
-class EventCallbackResultSortOrder(Enum):
-    CREATED_AT = 'CREATED_AT'
-    CREATED_AT_DESC = 'CREATED_AT_DESC'
-
-
 class EventCallbackResult(BaseModel):
     """Object representing the result of an event callback."""
 
@@ -28,8 +23,3 @@ class EventCallbackResult(BaseModel):
     conversation_id: OpenHandsUUID
     detail: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
-
-
-class EventCallbackResultPage(BaseModel):
-    items: list[EventCallbackResult]
-    next_page_id: str | None = None

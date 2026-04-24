@@ -11,11 +11,10 @@ from __future__ import annotations
 from pydantic import (
     BaseModel,
     ConfigDict,
-    SecretStr,
 )
 
 from openhands.core.config.mcp_config import MCPConfig
-from openhands.integrations.provider import CustomSecret, ProviderToken
+from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
 from openhands.storage.data_models.settings import Settings
 
@@ -25,12 +24,6 @@ class POSTProviderModel(BaseModel):
 
     mcp_config: MCPConfig | None = None
     provider_tokens: dict[ProviderType, ProviderToken] = {}
-
-
-class POSTCustomSecrets(BaseModel):
-    """Adding new custom secret"""
-
-    custom_secrets: dict[str, CustomSecret] = {}
 
 
 class GETSettingsModel(Settings):
@@ -50,15 +43,3 @@ class CustomSecretWithoutValueModel(BaseModel):
 
     name: str
     description: str | None = None
-
-
-class CustomSecretModel(CustomSecretWithoutValueModel):
-    """Custom secret model with value"""
-
-    value: SecretStr
-
-
-class GETCustomSecrets(BaseModel):
-    """Custom secrets names"""
-
-    custom_secrets: list[CustomSecretWithoutValueModel] | None = None
