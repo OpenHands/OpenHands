@@ -99,8 +99,9 @@ async def create_invitation(
         try:
             analytics = get_analytics_service()
             if analytics and user_id:
-                from openhands.analytics.analytics_context import AnalyticsContext
                 from storage.user_store import UserStore
+
+                from openhands.analytics.analytics_context import AnalyticsContext
 
                 user_obj = await UserStore.get_user_by_id(user_id)
                 ctx = AnalyticsContext(
