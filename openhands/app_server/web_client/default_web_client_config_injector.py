@@ -58,6 +58,11 @@ def _get_maintenance_start_time() -> datetime | None:
         return None
 
 
+def _is_gitlab_enabled() -> bool:
+    """Return whether GitLab OAuth is configured for the web client."""
+    return bool(os.getenv('GITLAB_APP_CLIENT_ID', '').strip())
+
+
 def _get_providers_configured() -> list[ProviderType]:
     """Get configured OAuth providers from environment variables.
 
@@ -69,7 +74,7 @@ def _get_providers_configured() -> list[ProviderType]:
     if os.getenv('GITHUB_APP_CLIENT_ID', '').strip():
         providers.append(ProviderType.GITHUB)
 
-    if os.getenv('GITLAB_APP_CLIENT_ID', '').strip():
+    if _is_gitlab_enabled():
         providers.append(ProviderType.GITLAB)
 
     if os.getenv('BITBUCKET_APP_CLIENT_ID', '').strip():
@@ -143,6 +148,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
         ),
     )
     github_app_slug: str | None = Field(default_factory=_get_github_app_slug)
+    gitlab_enabled: bool = Field(default_factory=_is_gitlab_enabled)
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
 
     async def get_web_client_config(self) -> WebClientConfig:
@@ -161,6 +167,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             error_message=self.error_message,
             updated_at=self.updated_at,
             github_app_slug=self.github_app_slug,
+            gitlab_enabled=self.gitlab_enabled,
             slack_enabled=self.slack_enabled,
         )
         return result

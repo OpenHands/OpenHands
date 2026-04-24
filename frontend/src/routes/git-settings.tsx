@@ -182,8 +182,7 @@ function GitSettingsScreen() {
     !azureDevOpsHostInputHasValue &&
     !forgejoHostInputHasValue;
   const shouldRenderGitHubConfigureButton = isSaas && config?.github_app_slug;
-  const shouldRenderGitLabSection =
-    isSaas && (config?.providers_configured.includes("gitlab") ?? false);
+  const shouldRenderGitLabSection = isSaas && Boolean(config?.gitlab_enabled);
   const shouldRenderSlackSection = isSaas && Boolean(config?.slack_enabled);
   const shouldRenderProjectManagementIntegrations =
     config?.feature_flags?.enable_jira ||

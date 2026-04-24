@@ -468,6 +468,37 @@ class TestGetGithubAppSlug:
             assert result is None
 
 
+class TestIsGitlabEnabled:
+    """Test cases for _is_gitlab_enabled helper function."""
+
+    def test_returns_true_when_gitlab_client_id_is_set(self):
+        """GitLab is enabled when its OAuth client ID is configured."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _is_gitlab_enabled,
+        )
+
+        with patch.dict(os.environ, {'GITLAB_APP_CLIENT_ID': 'gitlab-client-id'}):
+            assert _is_gitlab_enabled() is True
+
+    def test_returns_false_when_gitlab_client_id_is_missing(self):
+        """GitLab stays disabled when its OAuth client ID is absent."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _is_gitlab_enabled,
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            assert _is_gitlab_enabled() is False
+
+    def test_returns_false_when_gitlab_client_id_is_whitespace(self):
+        """GitLab stays disabled when its OAuth client ID is blank."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _is_gitlab_enabled,
+        )
+
+        with patch.dict(os.environ, {'GITLAB_APP_CLIENT_ID': '   '}):
+            assert _is_gitlab_enabled() is False
+
+
 class TestGetSlackEnabled:
     """Test cases for _get_slack_enabled helper function."""
 

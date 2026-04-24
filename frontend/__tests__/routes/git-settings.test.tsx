@@ -35,6 +35,7 @@ const VALID_OSS_CONFIG: WebClientConfig = {
   error_message: null,
   updated_at: "2024-01-14T10:00:00Z",
   github_app_slug: null,
+  gitlab_enabled: false,
   slack_enabled: false,
 };
 
@@ -59,6 +60,7 @@ const VALID_SAAS_CONFIG: WebClientConfig = {
   error_message: null,
   updated_at: "2024-01-14T10:00:00Z",
   github_app_slug: null,
+  gitlab_enabled: false,
   slack_enabled: false,
 };
 
@@ -304,6 +306,7 @@ describe("Content", () => {
       ...VALID_SAAS_CONFIG,
       providers_configured: ["gitlab"],
       github_app_slug: "test-slug",
+      gitlab_enabled: true,
       slack_enabled: true,
     });
     queryClient.invalidateQueries();
@@ -637,6 +640,7 @@ describe("GitLab Webhook Manager Integration", () => {
     getConfigSpy.mockResolvedValue({
       ...VALID_SAAS_CONFIG,
       providers_configured: ["gitlab"],
+      gitlab_enabled: true,
       slack_enabled: true,
     });
     getSettingsSpy.mockResolvedValue({
@@ -696,6 +700,7 @@ describe("GitLab Webhook Manager Integration", () => {
     getConfigSpy.mockResolvedValue({
       ...VALID_SAAS_CONFIG,
       providers_configured: ["gitlab"],
+      gitlab_enabled: true,
     });
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
