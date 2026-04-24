@@ -181,8 +181,9 @@ function GitSettingsScreen() {
     !bitbucketDCHostInputHasValue &&
     !azureDevOpsHostInputHasValue &&
     !forgejoHostInputHasValue;
-  const shouldRenderExternalConfigureButtons =
-    isSaas && config?.github_app_slug;
+  const shouldRenderGitHubConfigureButton = isSaas && config?.github_app_slug;
+  const shouldRenderGitLabSection = isSaas && Boolean(config?.gitlab_enabled);
+  const shouldRenderSlackSection = isSaas && Boolean(config?.slack_enabled);
   const shouldRenderProjectManagementIntegrations =
     config?.feature_flags?.enable_jira ||
     config?.feature_flags?.enable_jira_dc ||
@@ -196,7 +197,7 @@ function GitSettingsScreen() {
     >
       {!isLoading && (
         <div className="flex flex-col">
-          {shouldRenderExternalConfigureButtons && !isLoading && (
+          {shouldRenderGitHubConfigureButton && (
             <>
               <div className="pb-1 flex flex-col">
                 <h3 className="text-xl font-medium text-white">
@@ -210,7 +211,7 @@ function GitSettingsScreen() {
             </>
           )}
 
-          {shouldRenderExternalConfigureButtons && !isLoading && (
+          {shouldRenderGitLabSection && (
             <>
               <div className="mt-6 flex flex-col gap-4 pb-8">
                 <Typography.H3 className="text-xl">
@@ -237,7 +238,7 @@ function GitSettingsScreen() {
             </>
           )}
 
-          {shouldRenderExternalConfigureButtons && !isLoading && (
+          {shouldRenderSlackSection && (
             <>
               <div className="pb-1 mt-6 flex flex-col">
                 <h3 className="text-xl font-medium text-white">
@@ -346,7 +347,7 @@ function GitSettingsScreen() {
       {isLoading && <GitSettingInputsSkeleton />}
 
       <div className="flex gap-6 p-6 justify-end">
-        {!shouldRenderExternalConfigureButtons && (
+        {!isSaas && (
           <>
             <BrandButton
               testId="disconnect-tokens-button"
