@@ -230,19 +230,10 @@ class UserStore:
 
             from storage.org_store import OrgStore
 
-            org_kwargs = OrgStore.get_kwargs_from_user_settings(decrypted_user_settings)
-            org_kwargs.pop('id', None)
-
-            # If the user has custom settings, keep the org defaults minimal.
-            if custom_settings:
-                org_kwargs['agent_settings'] = {
-                    'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
-                    'llm': {
-                        'model': get_default_litellm_model(),
-                        'base_url': LITE_LLM_API_URL,
-                    },
-                }
-                org_kwargs['org_version'] = ORG_SETTINGS_VERSION
+            org_kwargs = UserStore._get_org_kwargs_for_migration(
+                decrypted_user_settings,
+                custom_settings=custom_settings,
+            )
 
             for key, value in org_kwargs.items():
                 if hasattr(org, key):
@@ -1065,6 +1056,27 @@ class UserStore:
             conversation_settings=conversation_settings,
             already_migrated=False,
         )
+
+    @staticmethod
+    def _get_org_kwargs_for_migration(
+        user_settings: UserSettings, *, custom_settings: bool
+    ) -> dict:
+        from storage.org_store import OrgStore
+
+        org_kwargs = OrgStore.get_kwargs_from_user_settings(user_settings)
+        org_kwargs.pop('id', None)
+        org_kwargs['org_version'] = ORG_SETTINGS_VERSION
+
+        if custom_settings:
+            org_kwargs['agent_settings'] = {
+                'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
+                'llm': {
+                    'model': get_default_litellm_model(),
+                    'base_url': LITE_LLM_API_URL,
+                },
+            }
+
+        return org_kwargs
 
     @staticmethod
     def _has_custom_settings(
