@@ -9,11 +9,9 @@ from openhands.core.config import (
     LLMConfig,
     OpenHandsConfig,
     finalize_config,
-    get_agent_config_arg,
     get_llm_config_arg,
     load_from_env,
     load_from_toml,
-    load_openhands_config,
 )
 from openhands.core.config.condenser_config import (
     ConversationWindowCondenserConfig,
