@@ -52,9 +52,6 @@ These files contain image tags that **must** be updated whenever the SDK version
 ### `enterprise/Dockerfile`
 - `ARG BASE="ghcr.io/openhands/openhands"` — base image, version supplied at build time
 
-### `third_party/runtime/impl/daytona/README.md`
-- Uses `${OPENHANDS_VERSION}` variable, not hardcoded
-
 ## Image Registries
 
 | Registry | Usage |
