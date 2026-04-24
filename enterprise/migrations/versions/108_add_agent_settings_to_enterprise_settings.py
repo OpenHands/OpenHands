@@ -139,26 +139,81 @@ def _get_nested_value(data: Mapping[str, Any] | None, *path: str) -> Any:
     return current
 
 
+def _get_nested_or_legacy_value(
+    data: Mapping[str, Any] | None,
+    path: tuple[str, ...],
+    *,
+    legacy_keys: tuple[str, ...] = (),
+) -> Any:
+    value = _get_nested_value(data, *path)
+    if value is not None:
+        return value
+    if not isinstance(data, Mapping):
+        return None
+    for legacy_key in legacy_keys:
+        if legacy_key in data and data[legacy_key] is not None:
+            return data[legacy_key]
+    return None
+
+
+def _coalesce(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
 def _legacy_user_settings_values(row: Mapping[str, Any]) -> dict[str, Any]:
     agent_settings = row.get('agent_settings') or {}
     conversation_settings = row.get('conversation_settings') or {}
-    condenser_enabled = _get_nested_value(agent_settings, 'condenser', 'enabled')
+    condenser_enabled = _get_nested_or_legacy_value(
+        agent_settings,
+        ('condenser', 'enabled'),
+        legacy_keys=('condenser.enabled',),
+    )
     return {
-        'agent': _get_nested_value(agent_settings, 'agent'),
-        'max_iterations': _get_nested_value(conversation_settings, 'max_iterations'),
-        'security_analyzer': _get_nested_value(
-            conversation_settings, 'security_analyzer'
+        'agent': _get_nested_or_legacy_value(agent_settings, ('agent',)),
+        'max_iterations': _coalesce(
+            _get_nested_or_legacy_value(conversation_settings, ('max_iterations',)),
+            _get_nested_or_legacy_value(
+                agent_settings,
+                ('max_iterations',),
+                legacy_keys=('max_iterations',),
+            ),
         ),
-        'confirmation_mode': _get_nested_value(
-            conversation_settings, 'confirmation_mode'
+        'security_analyzer': _coalesce(
+            _get_nested_or_legacy_value(conversation_settings, ('security_analyzer',)),
+            _get_nested_or_legacy_value(
+                agent_settings,
+                ('verification', 'security_analyzer'),
+                legacy_keys=('verification.security_analyzer',),
+            ),
         ),
-        'llm_model': _get_nested_value(agent_settings, 'llm', 'model'),
-        'llm_base_url': _get_nested_value(agent_settings, 'llm', 'base_url'),
+        'confirmation_mode': _coalesce(
+            _get_nested_or_legacy_value(conversation_settings, ('confirmation_mode',)),
+            _get_nested_or_legacy_value(
+                agent_settings,
+                ('verification', 'confirmation_mode'),
+                legacy_keys=('verification.confirmation_mode',),
+            ),
+        ),
+        'llm_model': _get_nested_or_legacy_value(
+            agent_settings,
+            ('llm', 'model'),
+            legacy_keys=('llm.model',),
+        ),
+        'llm_base_url': _get_nested_or_legacy_value(
+            agent_settings,
+            ('llm', 'base_url'),
+            legacy_keys=('llm.base_url',),
+        ),
         'enable_default_condenser': (
             True if condenser_enabled is None else condenser_enabled
         ),
-        'condenser_max_size': _get_nested_value(
-            agent_settings, 'condenser', 'max_size'
+        'condenser_max_size': _get_nested_or_legacy_value(
+            agent_settings,
+            ('condenser', 'max_size'),
+            legacy_keys=('condenser.max_size',),
         ),
     }
 
@@ -167,38 +222,80 @@ def _legacy_org_member_values(row: Mapping[str, Any]) -> dict[str, Any]:
     agent_settings_diff = row.get('agent_settings_diff') or {}
     conversation_settings_diff = row.get('conversation_settings_diff') or {}
     return {
-        'llm_model': _get_nested_value(agent_settings_diff, 'llm', 'model'),
-        'llm_base_url': _get_nested_value(agent_settings_diff, 'llm', 'base_url'),
-        'max_iterations': _get_nested_value(
-            conversation_settings_diff, 'max_iterations'
+        'llm_model': _get_nested_or_legacy_value(
+            agent_settings_diff,
+            ('llm', 'model'),
+            legacy_keys=('llm.model',),
         ),
-        'mcp_config': _get_nested_value(agent_settings_diff, 'mcp_config'),
+        'llm_base_url': _get_nested_or_legacy_value(
+            agent_settings_diff,
+            ('llm', 'base_url'),
+            legacy_keys=('llm.base_url',),
+        ),
+        'max_iterations': _coalesce(
+            _get_nested_or_legacy_value(conversation_settings_diff, ('max_iterations',)),
+            _get_nested_or_legacy_value(
+                agent_settings_diff,
+                ('max_iterations',),
+                legacy_keys=('max_iterations',),
+            ),
+        ),
+        'mcp_config': _get_nested_or_legacy_value(agent_settings_diff, ('mcp_config',)),
     }
 
 
 def _legacy_org_values(row: Mapping[str, Any]) -> dict[str, Any]:
     agent_settings = row.get('agent_settings') or {}
     conversation_settings = row.get('conversation_settings') or {}
-    condenser_enabled = _get_nested_value(agent_settings, 'condenser', 'enabled')
+    condenser_enabled = _get_nested_or_legacy_value(
+        agent_settings,
+        ('condenser', 'enabled'),
+        legacy_keys=('condenser.enabled',),
+    )
     return {
-        'agent': _get_nested_value(agent_settings, 'agent'),
-        'default_max_iterations': _get_nested_value(
-            conversation_settings, 'max_iterations'
+        'agent': _get_nested_or_legacy_value(agent_settings, ('agent',)),
+        'default_max_iterations': _coalesce(
+            _get_nested_or_legacy_value(conversation_settings, ('max_iterations',)),
+            _get_nested_or_legacy_value(
+                agent_settings,
+                ('max_iterations',),
+                legacy_keys=('max_iterations',),
+            ),
         ),
-        'security_analyzer': _get_nested_value(
-            conversation_settings, 'security_analyzer'
+        'security_analyzer': _coalesce(
+            _get_nested_or_legacy_value(conversation_settings, ('security_analyzer',)),
+            _get_nested_or_legacy_value(
+                agent_settings,
+                ('verification', 'security_analyzer'),
+                legacy_keys=('verification.security_analyzer',),
+            ),
         ),
-        'confirmation_mode': _get_nested_value(
-            conversation_settings, 'confirmation_mode'
+        'confirmation_mode': _coalesce(
+            _get_nested_or_legacy_value(conversation_settings, ('confirmation_mode',)),
+            _get_nested_or_legacy_value(
+                agent_settings,
+                ('verification', 'confirmation_mode'),
+                legacy_keys=('verification.confirmation_mode',),
+            ),
         ),
-        'default_llm_model': _get_nested_value(agent_settings, 'llm', 'model'),
-        'default_llm_base_url': _get_nested_value(agent_settings, 'llm', 'base_url'),
+        'default_llm_model': _get_nested_or_legacy_value(
+            agent_settings,
+            ('llm', 'model'),
+            legacy_keys=('llm.model',),
+        ),
+        'default_llm_base_url': _get_nested_or_legacy_value(
+            agent_settings,
+            ('llm', 'base_url'),
+            legacy_keys=('llm.base_url',),
+        ),
         'enable_default_condenser': (
             True if condenser_enabled is None else condenser_enabled
         ),
-        'mcp_config': _get_nested_value(agent_settings, 'mcp_config'),
-        'condenser_max_size': _get_nested_value(
-            agent_settings, 'condenser', 'max_size'
+        'mcp_config': _get_nested_or_legacy_value(agent_settings, ('mcp_config',)),
+        'condenser_max_size': _get_nested_or_legacy_value(
+            agent_settings,
+            ('condenser', 'max_size'),
+            legacy_keys=('condenser.max_size',),
         ),
     }
 

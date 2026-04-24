@@ -142,6 +142,87 @@ def test_downgrade_extracts_legacy_values_from_nested_settings():
     }
 
 
+def test_downgrade_extracts_legacy_values_from_malformed_user_agent_settings():
+    row = {
+        'agent_settings': {
+            'schema_version': 1,
+            'agent': 'CodeActAgent',
+            'llm.model': 'anthropic/claude-sonnet-4-5-20250929',
+            'llm.base_url': 'https://api.example.com',
+            'condenser.enabled': False,
+            'condenser.max_size': 128,
+            'max_iterations': 42,
+            'verification.confirmation_mode': True,
+            'verification.security_analyzer': 'llm',
+        },
+        'conversation_settings': {},
+    }
+
+    assert migration_108._legacy_user_settings_values(row) == {
+        'agent': 'CodeActAgent',
+        'max_iterations': 42,
+        'security_analyzer': 'llm',
+        'confirmation_mode': True,
+        'llm_model': 'anthropic/claude-sonnet-4-5-20250929',
+        'llm_base_url': 'https://api.example.com',
+        'enable_default_condenser': False,
+        'condenser_max_size': 128,
+    }
+
+
+
+def test_downgrade_extracts_legacy_values_from_malformed_org_member_diff():
+    row = {
+        'agent_settings_diff': {
+            'schema_version': 1,
+            'llm.model': 'anthropic/claude-sonnet-4-5-20250929',
+            'llm.base_url': 'https://api.example.com',
+            'max_iterations': 50,
+            'mcp_config': {'mcpServers': {'admin': {'url': 'https://mcp.example.com'}}},
+        },
+        'conversation_settings_diff': {},
+    }
+
+    assert migration_108._legacy_org_member_values(row) == {
+        'llm_model': 'anthropic/claude-sonnet-4-5-20250929',
+        'llm_base_url': 'https://api.example.com',
+        'max_iterations': 50,
+        'mcp_config': {'mcpServers': {'admin': {'url': 'https://mcp.example.com'}}},
+    }
+
+
+
+def test_downgrade_extracts_legacy_values_from_malformed_org_settings():
+    row = {
+        'agent_settings': {
+            'schema_version': 1,
+            'agent': 'CodeActAgent',
+            'llm.model': 'anthropic/claude-sonnet-4-5-20250929',
+            'llm.base_url': 'https://api.example.com',
+            'condenser.enabled': True,
+            'condenser.max_size': 256,
+            'max_iterations': 99,
+            'verification.confirmation_mode': False,
+            'verification.security_analyzer': 'auto',
+            'mcp_config': {'mcpServers': {'org': {'url': 'https://org-mcp.example.com'}}},
+        },
+        'conversation_settings': {},
+    }
+
+    assert migration_108._legacy_org_values(row) == {
+        'agent': 'CodeActAgent',
+        'default_max_iterations': 99,
+        'security_analyzer': 'auto',
+        'confirmation_mode': False,
+        'default_llm_model': 'anthropic/claude-sonnet-4-5-20250929',
+        'default_llm_base_url': 'https://api.example.com',
+        'enable_default_condenser': True,
+        'mcp_config': {'mcpServers': {'org': {'url': 'https://org-mcp.example.com'}}},
+        'condenser_max_size': 256,
+    }
+
+
+
 def test_migrated_payload_loads_via_user_settings_to_settings():
     row = {
         'agent': 'CodeActAgent',
