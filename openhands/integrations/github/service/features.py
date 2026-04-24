@@ -1,5 +1,3 @@
-import base64
-
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.github.queries import (
     suggested_task_issue_graphql_query,

@@ -13,7 +13,6 @@ from openhands.integrations.service_types import (
     ProviderType,
     Repository,
     RequestMethod,
-    ResourceNotFoundError,
     User,
 )
 from openhands.utils.http_session import httpx_verify_option
