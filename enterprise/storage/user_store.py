@@ -228,6 +228,8 @@ class UserStore:
                 extra={'user_id': user_id},
             )
 
+            from storage.org_store import OrgStore
+
             org_kwargs = UserStore._get_org_kwargs_for_migration(
                 decrypted_user_settings,
                 custom_settings=custom_settings,

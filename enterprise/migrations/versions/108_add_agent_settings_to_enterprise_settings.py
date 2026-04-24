@@ -233,7 +233,9 @@ def _legacy_org_member_values(row: Mapping[str, Any]) -> dict[str, Any]:
             legacy_keys=('llm.base_url',),
         ),
         'max_iterations': _coalesce(
-            _get_nested_or_legacy_value(conversation_settings_diff, ('max_iterations',)),
+            _get_nested_or_legacy_value(
+                conversation_settings_diff, ('max_iterations',)
+            ),
             _get_nested_or_legacy_value(
                 agent_settings_diff,
                 ('max_iterations',),

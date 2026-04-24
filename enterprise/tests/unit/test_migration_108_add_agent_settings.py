@@ -111,7 +111,6 @@ def test_org_settings_are_split_into_agent_and_conversation_buckets():
     }
 
 
-
 def test_downgrade_extracts_legacy_values_from_nested_settings():
     row = {
         'agent_settings': {
@@ -170,7 +169,6 @@ def test_downgrade_extracts_legacy_values_from_malformed_user_agent_settings():
     }
 
 
-
 def test_downgrade_extracts_legacy_values_from_malformed_org_member_diff():
     row = {
         'agent_settings_diff': {
@@ -191,7 +189,6 @@ def test_downgrade_extracts_legacy_values_from_malformed_org_member_diff():
     }
 
 
-
 def test_downgrade_extracts_legacy_values_from_malformed_org_settings():
     row = {
         'agent_settings': {
@@ -204,7 +201,9 @@ def test_downgrade_extracts_legacy_values_from_malformed_org_settings():
             'max_iterations': 99,
             'verification.confirmation_mode': False,
             'verification.security_analyzer': 'auto',
-            'mcp_config': {'mcpServers': {'org': {'url': 'https://org-mcp.example.com'}}},
+            'mcp_config': {
+                'mcpServers': {'org': {'url': 'https://org-mcp.example.com'}}
+            },
         },
         'conversation_settings': {},
     }
@@ -220,7 +219,6 @@ def test_downgrade_extracts_legacy_values_from_malformed_org_settings():
         'mcp_config': {'mcpServers': {'org': {'url': 'https://org-mcp.example.com'}}},
         'condenser_max_size': 256,
     }
-
 
 
 def test_migrated_payload_loads_via_user_settings_to_settings():
