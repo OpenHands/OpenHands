@@ -4895,6 +4895,23 @@
     "uk": "Це налаштування впливає на всю організацію",
     "ca": "Aquesta configuració afecta tota l'organització"
   },
+  "SETTINGS$ORG_MANAGED_BY_ADMIN_BADGE": {
+    "en": "This setting is managed by your organization administrator",
+    "ja": "この設定は組織の管理者によって管理されています",
+    "zh-CN": "此设置由您的组织管理员管理",
+    "zh-TW": "此設定由您的組織管理員管理",
+    "ko-KR": "이 설정은 조직 관리자가 관리합니다",
+    "no": "Denne innstillingen administreres av organisasjonsadministratoren din",
+    "it": "Questa impostazione è gestita dall’amministratore della tua organizzazione",
+    "pt": "Esta configuração é gerida pelo administrador da sua organização",
+    "es": "Esta configuración está gestionada por el administrador de tu organización",
+    "ar": "يتم إدارة هذا الإعداد من قبل مسؤول مؤسستك",
+    "fr": "Ce paramètre est géré par l’administrateur de votre organisation",
+    "tr": "Bu ayar kuruluş yöneticiniz tarafından yönetilmektedir",
+    "de": "Diese Einstellung wird von Ihrem Organisationsadministrator verwaltet",
+    "uk": "Це налаштування керується адміністратором вашої організації",
+    "ca": "Aquesta configuració està gestionada per l'administrador de la teva organització"
+  },
   "SETTINGS$ORG_DEFAULTS_INFO": {
     "en": "These organization defaults are applied first. Members can still add their own credentials or personal overrides where allowed.",
     "ja": "これらの組織のデフォルト設定が最初に適用されます。メンバーは許可されている範囲で、自分の認証情報や個人設定を追加できます。",

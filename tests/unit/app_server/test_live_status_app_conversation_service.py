@@ -1110,6 +1110,155 @@ class TestLiveStatusAppConversationService:
             self.mock_user, 'gpt-4', test_conversation_id
         )
 
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_start_conversation_request_with_api_secrets(self, _mock_tools):
+        """Test _build_start_conversation_request_for_user with API-provided secrets."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        # Existing secrets from git providers
+        existing_secrets = {
+            'GITHUB_TOKEN': StaticSecret(value=SecretStr('github_tok')),
+            'EXISTING_SECRET': StaticSecret(value=SecretStr('existing_value')),
+        }
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        mock_mcp_config = {'default': {'url': 'test'}}
+        test_conversation_id = uuid4()
+
+        self.service._setup_secrets_for_git_providers = AsyncMock(
+            return_value=existing_secrets
+        )
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(real_llm, mock_mcp_config)
+        )
+
+        # API-provided secrets - should be merged with existing secrets
+        api_secrets = {
+            'MY_API_KEY': SecretStr('my_api_key_value'),
+            'ANOTHER_SECRET': SecretStr('another_value'),
+        }
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=test_conversation_id,
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            agent_type=AgentType.DEFAULT,
+            llm_model='gpt-4',
+            remote_workspace=None,
+            selected_repository='test/repo',
+            api_secrets=api_secrets,
+        )
+
+        assert isinstance(result, StartConversationRequest)
+        # All secrets should be present (existing + API-provided)
+        secrets = result.agent.agent_context.secrets
+        assert 'GITHUB_TOKEN' in secrets
+        assert 'EXISTING_SECRET' in secrets
+        assert 'MY_API_KEY' in secrets
+        assert 'ANOTHER_SECRET' in secrets
+
+        # API-provided secrets should be StaticSecret instances
+        assert isinstance(secrets['MY_API_KEY'], StaticSecret)
+        assert secrets['MY_API_KEY'].value.get_secret_value() == 'my_api_key_value'
+        assert secrets['ANOTHER_SECRET'].value.get_secret_value() == 'another_value'
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_start_conversation_request_api_secrets_override_existing(
+        self, _mock_tools
+    ):
+        """Test that API-provided secrets override existing secrets with the same name."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        # Existing secrets
+        existing_secrets = {
+            'SHARED_SECRET': StaticSecret(value=SecretStr('original_value')),
+        }
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        mock_mcp_config = None
+        test_conversation_id = uuid4()
+
+        self.service._setup_secrets_for_git_providers = AsyncMock(
+            return_value=existing_secrets
+        )
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(real_llm, mock_mcp_config)
+        )
+
+        # API-provided secret with same name should override
+        api_secrets = {
+            'SHARED_SECRET': SecretStr('overridden_value'),
+        }
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=test_conversation_id,
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            agent_type=AgentType.DEFAULT,
+            llm_model='gpt-4',
+            remote_workspace=None,
+            selected_repository=None,
+            api_secrets=api_secrets,
+        )
+
+        # API-provided secret should override the existing one
+        secrets = result.agent.agent_context.secrets
+        assert secrets['SHARED_SECRET'].value.get_secret_value() == 'overridden_value'
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_start_conversation_request_no_api_secrets(self, _mock_tools):
+        """Test _build_start_conversation_request_for_user without API-provided secrets."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        existing_secrets = {
+            'GITHUB_TOKEN': StaticSecret(value=SecretStr('tok')),
+        }
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        mock_mcp_config = None
+        test_conversation_id = uuid4()
+
+        self.service._setup_secrets_for_git_providers = AsyncMock(
+            return_value=existing_secrets
+        )
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(real_llm, mock_mcp_config)
+        )
+
+        # No API secrets provided (None)
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=test_conversation_id,
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            agent_type=AgentType.DEFAULT,
+            llm_model='gpt-4',
+            remote_workspace=None,
+            selected_repository=None,
+            api_secrets=None,
+        )
+
+        # Only existing secrets should be present
+        secrets = result.agent.agent_context.secrets
+        assert secrets == existing_secrets
+
     @pytest.mark.asyncio
     async def test_find_running_sandbox_for_user_found(self):
         """Test _find_running_sandbox_for_user when a running sandbox is found."""
