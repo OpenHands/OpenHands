@@ -4,8 +4,9 @@ This module tests that parent_conversation_id is correctly preserved when
 conversations are updated via the on_conversation_update webhook endpoint.
 """
 
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -26,6 +27,14 @@ from openhands.app_server.utils.sql_utils import Base
 from openhands.integrations.provider import ProviderType
 from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+
+
+@asynccontextmanager
+async def mock_get_event_callback_service(state, request=None):
+    """Mock for get_event_callback_service to avoid database access in tests."""
+    mock_service = AsyncMock()
+    mock_service.save_event_callback = AsyncMock()
+    yield mock_service
 
 
 @pytest.fixture
@@ -236,9 +245,16 @@ class TestOnConversationUpdateParentConversationId:
         )
 
         # Act - call on_conversation_update directly with mocked valid_conversation
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            return_value=stub_conv,
+        # Also mock get_event_callback_service since new conversations trigger callback registration
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=stub_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.get_event_callback_service',
+                mock_get_event_callback_service,
+            ),
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
@@ -475,9 +491,16 @@ class TestOnConversationUpdateParentConversationId:
         )
 
         # Act - call on_conversation_update directly with mocked valid_conversation
-        with patch(
-            'openhands.app_server.event_callback.webhook_router.valid_conversation',
-            return_value=existing_conv,
+        # Also mock get_event_callback_service since title=None triggers callback registration
+        with (
+            patch(
+                'openhands.app_server.event_callback.webhook_router.valid_conversation',
+                return_value=existing_conv,
+            ),
+            patch(
+                'openhands.app_server.event_callback.webhook_router.get_event_callback_service',
+                mock_get_event_callback_service,
+            ),
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
