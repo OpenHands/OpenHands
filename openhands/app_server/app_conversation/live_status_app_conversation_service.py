@@ -1307,7 +1307,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             tools = get_planning_tools(plan_path=plan_path)
         else:
             tools = get_default_tools(enable_browser=True)
-            tools.append(Tool(name=TaskToolSet.name))
+            if user.agent_settings.enable_sub_agents:
+                tools.append(Tool(name=TaskToolSet.name))
 
         # --- build AgentSettings and create agent ---------------------------
         from fastmcp.mcp_config import MCPConfig
