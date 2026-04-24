@@ -14,15 +14,11 @@ from pydantic import SecretStr
 from openhands.core.config import (
     OpenHandsConfig,
 )
-from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
-    PROVIDER_TOKEN_TYPE,
     ProviderToken,
     ProviderType,
 )
-from openhands.runtime.base import Runtime
 from openhands.storage.data_models.secrets import Secrets
-from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 
 
 def get_provider_tokens():
@@ -74,44 +70,6 @@ def get_provider_tokens():
         Secrets(provider_tokens=provider_tokens) if provider_tokens else None  # type: ignore[arg-type]
     )
     return secret_store.provider_tokens if secret_store else None
-
-
-def initialize_repository_for_runtime(
-    runtime: Runtime,
-    immutable_provider_tokens: PROVIDER_TOKEN_TYPE | None = None,
-    selected_repository: str | None = None,
-) -> str | None:
-    """Initialize the repository for the runtime by cloning or initializing it,
-    running setup scripts, and setting up git hooks if present.
-
-    Args:
-        runtime: The runtime to initialize the repository for.
-        immutable_provider_tokens: (optional) Provider tokens to use for authentication.
-        selected_repository: (optional) The repository to use.
-
-    Returns:
-        The repository directory path if a repository was cloned, None otherwise.
-    """
-    # If provider tokens are not provided, attempt to retrieve them from the environment
-    if not immutable_provider_tokens:
-        immutable_provider_tokens = get_provider_tokens()
-
-    logger.debug(f'Selected repository {selected_repository}.')
-
-    # Clone or initialize the repository using the runtime
-    repo_directory = call_async_from_sync(
-        runtime.clone_or_init_repo,
-        GENERAL_TIMEOUT,
-        immutable_provider_tokens,
-        selected_repository,
-        None,
-    )
-    # Run setup script if it exists in the repository
-    runtime.maybe_run_setup_script()
-    # Set up git hooks if pre-commit.sh exists in the repository
-    runtime.maybe_setup_git_hooks()
-
-    return repo_directory
 
 
 def generate_sid(config: OpenHandsConfig, session_name: str | None = None) -> str:

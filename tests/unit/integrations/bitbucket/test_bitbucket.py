@@ -1,7 +1,6 @@
 """Tests for Bitbucket integration."""
 
-import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -12,128 +11,8 @@ from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import OwnerType, Repository
 from openhands.integrations.service_types import ProviderType as ServiceProviderType
 from openhands.integrations.utils import validate_provider_token
-from openhands.runtime.base import Runtime
 from openhands.server.settings import POSTProviderModel
 from openhands.server.types import AppMode
-
-
-# Bitbucket Provider Domain Tests
-class TestBitbucketProviderDomain(unittest.TestCase):
-    """Test that Bitbucket provider domain is properly handled in Runtime.clone_or_init_repo."""
-
-    @patch('openhands.runtime.base.Runtime.__abstractmethods__', set())
-    @patch(
-        'openhands.runtime.utils.edit.FileEditRuntimeMixin.__init__', return_value=None
-    )
-    @patch('openhands.runtime.base.ProviderHandler')
-    @pytest.mark.asyncio
-    async def test_get_authenticated_git_url_bitbucket(
-        self, mock_provider_handler, mock_file_edit_init, *args
-    ):
-        """Test that _get_authenticated_git_url correctly handles Bitbucket repositories."""
-        # Mock the provider handler to return a repository with Bitbucket as the provider
-        mock_repository = Repository(
-            id='1',
-            full_name='workspace/repo',
-            git_provider=ServiceProviderType.BITBUCKET,
-            is_public=True,
-        )
-
-        mock_provider_instance = MagicMock()
-        mock_provider_instance.verify_repo_provider.return_value = mock_repository
-        mock_provider_handler.return_value = mock_provider_instance
-
-        # Create a minimal runtime instance with abstract methods patched
-        config = MagicMock()
-        config.get_llm_config.return_value.model = 'test_model'
-        runtime = Runtime(config=config, event_stream=MagicMock(), sid='test_sid')
-
-        # Test with no token
-        url = await runtime._get_authenticated_git_url('workspace/repo', None)
-        self.assertEqual(url, 'https://bitbucket.org/workspace/repo.git')
-
-        # Test with username:password format token
-        git_provider_tokens = {
-            ProviderType.BITBUCKET: ProviderToken(
-                token=SecretStr('username:app_password'), host='bitbucket.org'
-            )
-        }
-        url = await runtime._get_authenticated_git_url(
-            'workspace/repo', git_provider_tokens
-        )
-        # Bitbucket tokens with colon are used directly as username:password
-        self.assertEqual(
-            url, 'https://username:app_password@bitbucket.org/workspace/repo.git'
-        )
-
-        # Test with email:password format token (more realistic)
-        git_provider_tokens = {
-            ProviderType.BITBUCKET: ProviderToken(
-                token=SecretStr('user@example.com:app_password'), host='bitbucket.org'
-            )
-        }
-        url = await runtime._get_authenticated_git_url(
-            'workspace/repo', git_provider_tokens
-        )
-        # Email addresses in tokens are used as-is (no URL encoding in our implementation)
-        self.assertEqual(
-            url,
-            'https://user@example.com:app_password@bitbucket.org/workspace/repo.git',
-        )
-
-        # Test with simple token format (access token)
-        git_provider_tokens = {
-            ProviderType.BITBUCKET: ProviderToken(
-                token=SecretStr('simple_token'), host='bitbucket.org'
-            )
-        }
-        url = await runtime._get_authenticated_git_url(
-            'workspace/repo', git_provider_tokens
-        )
-        # Simple tokens use x-token-auth format
-        self.assertEqual(
-            url, 'https://x-token-auth:simple_token@bitbucket.org/workspace/repo.git'
-        )
-
-    @patch('openhands.runtime.base.ProviderHandler')
-    @patch.object(Runtime, 'run_action')
-    async def test_bitbucket_provider_domain(
-        self, mock_run_action, mock_provider_handler
-    ):
-        # Mock the provider handler to return a repository with Bitbucket as the provider
-        mock_repository = Repository(
-            id='1',
-            full_name='test/repo',
-            git_provider=ServiceProviderType.BITBUCKET,
-            is_public=True,
-        )
-
-        mock_provider_instance = MagicMock()
-        mock_provider_instance.verify_repo_provider.return_value = mock_repository
-        mock_provider_handler.return_value = mock_provider_instance
-
-        # Create a minimal runtime instance
-        runtime = Runtime(config=MagicMock(), event_stream=MagicMock(), sid='test_sid')
-
-        # Mock the workspace_root property to avoid AttributeError
-        runtime.workspace_root = '/workspace'
-
-        # Call clone_or_init_repo with a Bitbucket repository
-        # This should now succeed with our fix
-        await runtime.clone_or_init_repo(
-            git_provider_tokens=None,
-            selected_repository='test/repo',
-            selected_branch=None,
-        )
-
-        # Verify that run_action was called at least once (for git clone)
-        self.assertTrue(mock_run_action.called)
-
-        # Verify that the domain used was 'bitbucket.org'
-        # Extract the command from the first call to run_action
-        args, _ = mock_run_action.call_args
-        action = args[0]
-        self.assertIn('bitbucket.org', action.command)
 
 
 # Provider Token Validation Tests
