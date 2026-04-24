@@ -7,10 +7,6 @@ import pytest
 
 from openhands.controller.agent import Agent
 from openhands.controller.agent_controller import AgentController
-from openhands.controller.state.control_flags import (
-    BudgetControlFlag,
-    IterationControlFlag,
-)
 from openhands.controller.state.state import State
 from openhands.core.config import OpenHandsConfig
 from openhands.core.config.agent_config import AgentConfig
@@ -18,17 +14,9 @@ from openhands.core.config.llm_config import LLMConfig
 from openhands.core.schema import AgentState
 from openhands.events import EventSource, EventStream
 from openhands.events.action import (
-    AgentDelegateAction,
-    AgentFinishAction,
     MessageAction,
 )
-from openhands.events.action.agent import RecallAction
-from openhands.events.action.commands import CmdRunAction
 from openhands.events.action.message import SystemMessageAction
-from openhands.events.event import Event
-from openhands.events.observation.agent import RecallObservation
-from openhands.events.recall_type import RecallType
-from openhands.events.stream import EventStreamSubscriber
 from openhands.llm.llm import LLM
 from openhands.llm.llm_registry import LLMRegistry
 from openhands.llm.metrics import Metrics
@@ -200,4 +188,3 @@ async def test_delegate_step_different_states(
         assert mock_delegate.close.call_count == 1
 
     await controller.close()
-
