@@ -35,7 +35,6 @@ from openhands.core.config.sandbox_config import SandboxConfig
 from openhands.core.config.security_config import SecurityConfig
 from openhands.storage import get_file_store
 from openhands.storage.files import FileStore
-from openhands.utils.import_utils import get_impl
 
 JWT_SECRET = '.jwt_secret'
 load_dotenv()

@@ -1,6 +1,5 @@
 """Tests for Bitbucket integration."""
 
-import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
