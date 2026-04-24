@@ -50,6 +50,43 @@ def test_user_settings_are_split_into_agent_and_conversation_buckets():
     }
 
 
+def test_user_settings_normalize_legacy_mcp_config():
+    row = {
+        'agent': 'CodeActAgent',
+        'max_iterations': 42,
+        'security_analyzer': 'llm',
+        'confirmation_mode': True,
+        'llm_model': 'anthropic/claude-sonnet-4-5-20250929',
+        'llm_base_url': 'https://api.example.com',
+        'enable_default_condenser': False,
+        'condenser_max_size': 128,
+        'mcp_config': {
+            'sse_servers': [],
+            'stdio_servers': [],
+            'shttp_servers': [
+                {'url': 'https://mcp.example.com', 'api_key': None, 'timeout': 60}
+            ],
+        },
+        'agent_settings': {},
+        'conversation_settings': {},
+    }
+
+    assert migration_108._build_user_agent_settings(row) == {
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'llm': {
+            'model': 'anthropic/claude-sonnet-4-5-20250929',
+            'base_url': 'https://api.example.com',
+        },
+        'condenser': {'enabled': False, 'max_size': 128},
+        'mcp_config': {
+            'mcpServers': {
+                'shttp': {'url': 'https://mcp.example.com', 'timeout': 60}
+            }
+        },
+    }
+
+
 def test_org_member_diffs_use_nested_llm_and_conversation_settings():
     row = {
         'max_iterations': 50,
@@ -74,6 +111,36 @@ def test_org_member_diffs_use_nested_llm_and_conversation_settings():
         'mcp_config': {'mcpServers': {'admin': {'url': 'https://mcp.example.com'}}},
     }
     assert conversation_settings_diff == {'max_iterations': 50}
+
+
+def test_org_member_diffs_normalize_legacy_mcp_config():
+    row = {
+        'max_iterations': 50,
+        'llm_model': 'openhands/claude-3',
+        'llm_base_url': 'https://proxy.example.com',
+        'mcp_config': {
+            'sse_servers': [],
+            'stdio_servers': [],
+            'shttp_servers': [
+                {'url': 'https://mcp.deepwiki.com/mcp', 'api_key': None, 'timeout': 60}
+            ],
+        },
+        'agent_settings_diff': {},
+        'conversation_settings_diff': {},
+    }
+
+    assert migration_108._build_org_member_agent_settings_diff(row) == {
+        'schema_version': 1,
+        'llm': {
+            'model': 'openhands/claude-3',
+            'base_url': 'https://proxy.example.com',
+        },
+        'mcp_config': {
+            'mcpServers': {
+                'shttp': {'url': 'https://mcp.deepwiki.com/mcp', 'timeout': 60}
+            }
+        },
+    }
 
 
 def test_org_settings_are_split_into_agent_and_conversation_buckets():
@@ -138,6 +205,44 @@ def test_downgrade_extracts_legacy_values_from_nested_settings():
         'llm_base_url': 'https://api.example.com',
         'enable_default_condenser': False,
         'condenser_max_size': 128,
+    }
+
+
+def test_downgrade_restores_legacy_mcp_config_from_sdk_settings():
+    row = {
+        'agent_settings_diff': {
+            'schema_version': 1,
+            'mcp_config': {
+                'mcpServers': {
+                    'sse': {'url': 'https://mcp.example.com', 'transport': 'sse'},
+                    'shttp': {
+                        'url': 'https://mcp.deepwiki.com/mcp',
+                        'timeout': 60,
+                    },
+                    'deepwiki-stdio': {
+                        'command': 'npx',
+                        'args': ['-y', 'deepwiki-mcp'],
+                        'env': {'A': 'B'},
+                    },
+                }
+            },
+        },
+        'conversation_settings_diff': {},
+    }
+
+    assert migration_108._legacy_org_member_values(row)['mcp_config'] == {
+        'sse_servers': [{'url': 'https://mcp.example.com'}],
+        'stdio_servers': [
+            {
+                'name': 'deepwiki-stdio',
+                'command': 'npx',
+                'args': ['-y', 'deepwiki-mcp'],
+                'env': {'A': 'B'},
+            }
+        ],
+        'shttp_servers': [
+            {'url': 'https://mcp.deepwiki.com/mcp', 'timeout': 60}
+        ],
     }
 
 

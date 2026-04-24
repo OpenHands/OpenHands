@@ -49,6 +49,133 @@ def _strip_none_and_empty(value: Any) -> Any:
     return value
 
 
+def _next_server_name(existing: Mapping[str, Any], base_name: str) -> str:
+    if base_name not in existing:
+        return base_name
+
+    suffix = 1
+    while f'{base_name}_{suffix}' in existing:
+        suffix += 1
+    return f'{base_name}_{suffix}'
+
+
+def _normalize_mcp_config(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return value
+
+    raw_mcp_servers = value.get('mcpServers')
+    if isinstance(raw_mcp_servers, Mapping):
+        mcp_servers = dict(raw_mcp_servers)
+        return {'mcpServers': mcp_servers} if mcp_servers else None
+
+    if not any(
+        key in value for key in ('sse_servers', 'stdio_servers', 'shttp_servers')
+    ):
+        return value
+
+    servers: dict[str, dict[str, Any]] = {}
+
+    for entry in value.get('sse_servers', []) or []:
+        if isinstance(entry, str):
+            entry = {'url': entry}
+        if not isinstance(entry, Mapping) or not isinstance(entry.get('url'), str):
+            continue
+
+        server: dict[str, Any] = {'url': entry['url'], 'transport': 'sse'}
+        if entry.get('api_key') is not None:
+            server['auth'] = entry.get('api_key')
+        servers[_next_server_name(servers, 'sse')] = server
+
+    for entry in value.get('shttp_servers', []) or []:
+        if isinstance(entry, str):
+            entry = {'url': entry}
+        if not isinstance(entry, Mapping) or not isinstance(entry.get('url'), str):
+            continue
+
+        server = {'url': entry['url']}
+        if entry.get('api_key') is not None:
+            server['auth'] = entry.get('api_key')
+        if entry.get('timeout') is not None:
+            server['timeout'] = entry.get('timeout')
+        servers[_next_server_name(servers, 'shttp')] = server
+
+    for entry in value.get('stdio_servers', []) or []:
+        if not isinstance(entry, Mapping) or not isinstance(entry.get('command'), str):
+            continue
+
+        server = {'command': entry['command']}
+        if entry.get('args') is not None:
+            server['args'] = entry.get('args')
+        if entry.get('env') is not None:
+            server['env'] = entry.get('env')
+        base_name = entry.get('name') if isinstance(entry.get('name'), str) else 'stdio'
+        servers[_next_server_name(servers, base_name)] = server
+
+    return {'mcpServers': servers} if servers else None
+
+
+def _legacy_api_key(auth_value: Any) -> str | None:
+    if isinstance(auth_value, str) and auth_value != 'oauth':
+        return auth_value
+    return None
+
+
+def _to_legacy_mcp_config(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return value
+
+    raw_mcp_servers = value.get('mcpServers')
+    if not isinstance(raw_mcp_servers, Mapping):
+        return value
+
+    legacy: dict[str, list[Any]] = {
+        'sse_servers': [],
+        'stdio_servers': [],
+        'shttp_servers': [],
+    }
+
+    for server_name, server_config in raw_mcp_servers.items():
+        if not isinstance(server_config, Mapping):
+            continue
+
+        url = server_config.get('url')
+        if isinstance(url, str):
+            entry: dict[str, Any] = {'url': url}
+            api_key = _legacy_api_key(server_config.get('auth'))
+            if api_key is not None:
+                entry['api_key'] = api_key
+            if server_config.get('transport') == 'sse':
+                legacy['sse_servers'].append(entry)
+            else:
+                if server_config.get('timeout') is not None:
+                    entry['timeout'] = server_config.get('timeout')
+                legacy['shttp_servers'].append(entry)
+            continue
+
+        command = server_config.get('command')
+        if not isinstance(command, str):
+            continue
+
+        entry = {'name': server_name, 'command': command}
+        if server_config.get('args') is not None:
+            entry['args'] = server_config.get('args')
+        if server_config.get('env') is not None:
+            entry['env'] = server_config.get('env')
+        legacy['stdio_servers'].append(entry)
+
+    return legacy
+
+
+def _normalize_nested_mcp_config(settings: Mapping[str, Any] | None) -> dict[str, Any]:
+    normalized = dict(settings or {})
+    mcp_config = _normalize_mcp_config(normalized.get('mcp_config'))
+    if mcp_config is None:
+        normalized.pop('mcp_config', None)
+    else:
+        normalized['mcp_config'] = mcp_config
+    return normalized
+
+
 def _build_user_agent_settings(row: Mapping[str, Any]) -> dict[str, Any]:
     generated = _strip_none_and_empty(
         {
@@ -62,10 +189,14 @@ def _build_user_agent_settings(row: Mapping[str, Any]) -> dict[str, Any]:
                 'enabled': row['enable_default_condenser'],
                 'max_size': row['condenser_max_size'],
             },
-            'mcp_config': row['mcp_config'],
+            'mcp_config': _normalize_mcp_config(row['mcp_config']),
         }
     )
-    return _deep_merge(generated, row.get('agent_settings') or {})
+    merged = _deep_merge(
+        generated,
+        _normalize_nested_mcp_config(row.get('agent_settings')),
+    )
+    return _normalize_nested_mcp_config(merged)
 
 
 def _build_user_conversation_settings(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -87,10 +218,14 @@ def _build_org_member_agent_settings_diff(row: Mapping[str, Any]) -> dict[str, A
                 'model': row['llm_model'],
                 'base_url': row['llm_base_url'],
             },
-            'mcp_config': row['mcp_config'],
+            'mcp_config': _normalize_mcp_config(row['mcp_config']),
         }
     )
-    return _deep_merge(generated, row.get('agent_settings_diff') or {})
+    merged = _deep_merge(
+        generated,
+        _normalize_nested_mcp_config(row.get('agent_settings_diff')),
+    )
+    return _normalize_nested_mcp_config(merged)
 
 
 def _build_org_member_conversation_settings_diff(
@@ -113,10 +248,14 @@ def _build_org_agent_settings(row: Mapping[str, Any]) -> dict[str, Any]:
                 'enabled': row['enable_default_condenser'],
                 'max_size': row['condenser_max_size'],
             },
-            'mcp_config': row['mcp_config'],
+            'mcp_config': _normalize_mcp_config(row['mcp_config']),
         }
     )
-    return _deep_merge(generated, row.get('agent_settings') or {})
+    merged = _deep_merge(
+        generated,
+        _normalize_nested_mcp_config(row.get('agent_settings')),
+    )
+    return _normalize_nested_mcp_config(merged)
 
 
 def _build_org_conversation_settings(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -172,7 +311,9 @@ def _legacy_org_member_values(row: Mapping[str, Any]) -> dict[str, Any]:
         'max_iterations': _get_nested_value(
             conversation_settings_diff, 'max_iterations'
         ),
-        'mcp_config': _get_nested_value(agent_settings_diff, 'mcp_config'),
+        'mcp_config': _to_legacy_mcp_config(
+            _get_nested_value(agent_settings_diff, 'mcp_config')
+        ),
     }
 
 
@@ -196,7 +337,9 @@ def _legacy_org_values(row: Mapping[str, Any]) -> dict[str, Any]:
         'enable_default_condenser': (
             True if condenser_enabled is None else condenser_enabled
         ),
-        'mcp_config': _get_nested_value(agent_settings, 'mcp_config'),
+        'mcp_config': _to_legacy_mcp_config(
+            _get_nested_value(agent_settings, 'mcp_config')
+        ),
         'condenser_max_size': _get_nested_value(
             agent_settings, 'condenser', 'max_size'
         ),
