@@ -78,7 +78,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 f'[GitHub V1] Posting summary {conversation_id}',
                 extra={'summary': summary},
             )
-            await self._post_summary_to_github(summary, conversation_id)
+            await self._post_final_summary_to_github(summary, conversation_id)
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
@@ -132,10 +132,25 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         token_data = github_integration.get_access_token(installation_id)
         return token_data.token
 
-    async def _post_summary_to_github(
-        self, summary: str, conversation_id: UUID
+    async def _post_summary_to_github(self, comment_body: str) -> None:
+        """Post an error comment to GitHub (used by handle_callback_error)."""
+        await self._post_comment_to_github(comment_body, conversation_id=None)
+
+    async def _post_final_summary_to_github(
+        self,
+        summary: str,
+        conversation_id: UUID,
     ) -> None:
-        """Post a summary comment to the configured GitHub issue."""
+        """Post the final resolver summary to GitHub."""
+        comment_body = build_final_resolver_comment(summary, conversation_id)
+        await self._post_comment_to_github(comment_body, conversation_id=conversation_id)
+
+    async def _post_comment_to_github(
+        self,
+        comment_body: str,
+        conversation_id: UUID | None,
+    ) -> None:
+        """Post a comment to the configured GitHub issue."""
         installation_token = self._get_installation_access_token()
 
         if not installation_token:
@@ -143,7 +158,6 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
 
         full_repo_name = self.github_view_data['full_repo_name']
         issue_number = self.github_view_data['issue_number']
-        comment_body = build_final_resolver_comment(summary, conversation_id)
 
         try:
             with Github(auth=Auth.Token(installation_token)) as github_client:
@@ -151,8 +165,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
 
                 if self.inline_pr_comment:
                     pr = repo.get_pull(issue_number)
-                    if self._edit_existing_review_ack_comment(pr, comment_body, conversation_id):
-                        return
+                    if conversation_id is not None:
+                        if self._edit_existing_review_ack_comment(pr, comment_body, conversation_id):
+                            return
 
                     pr.create_review_comment_reply(
                         comment_id=self.github_view_data.get('comment_id', ''),
@@ -161,8 +176,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                     return
 
                 issue = repo.get_issue(number=issue_number)
-                if self._edit_existing_issue_ack_comment(issue, comment_body, conversation_id):
-                    return
+                if conversation_id is not None:
+                    if self._edit_existing_issue_ack_comment(issue, comment_body, conversation_id):
+                        return
 
                 issue.create_comment(comment_body)
         except GithubException as e:
