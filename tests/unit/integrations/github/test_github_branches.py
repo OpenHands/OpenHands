@@ -91,6 +91,7 @@ async def test_search_branches_github_success_and_variables():
         'data': {
             'repository': {
                 'refs': {
+                    'pageInfo': {'hasNextPage': False, 'endCursor': None},
                     'nodes': [
                         {
                             'name': 'feature/bar',
@@ -109,7 +110,7 @@ async def test_search_branches_github_success_and_variables():
                             },
                             'branchProtectionRule': None,
                         },
-                    ]
+                    ],
                 }
             }
         }
@@ -127,6 +128,7 @@ async def test_search_branches_github_success_and_variables():
         assert variables['name'] == 'bar'
         assert variables['query'] == 'fe'
         assert 1 <= variables['perPage'] <= 100
+        assert variables['after'] is None
 
         assert len(branches) == 2
         b0, b1 = branches
@@ -140,6 +142,55 @@ async def test_search_branches_github_success_and_variables():
         assert b1.commit_sha == ''
         assert b1.last_push_date is None
         assert b1.protected is False
+
+
+@pytest.mark.asyncio
+async def test_search_branches_github_uses_cursor_for_requested_page():
+    service = GitHubService(token=SecretStr('t'))
+
+    first_page = {
+        'data': {
+            'repository': {
+                'refs': {
+                    'pageInfo': {'hasNextPage': True, 'endCursor': 'cursor-1'},
+                    'nodes': [
+                        {
+                            'name': 'feature/a',
+                            'target': {'__typename': 'Commit', 'oid': 'aaa111'},
+                        }
+                    ],
+                }
+            }
+        }
+    }
+    second_page = {
+        'data': {
+            'repository': {
+                'refs': {
+                    'pageInfo': {'hasNextPage': False, 'endCursor': None},
+                    'nodes': [
+                        {
+                            'name': 'feature/b',
+                            'target': {'__typename': 'Commit', 'oid': 'bbb222'},
+                        }
+                    ],
+                }
+            }
+        }
+    }
+
+    exec_mock = AsyncMock(side_effect=[first_page, second_page])
+    with patch.object(service, 'execute_graphql_query', exec_mock) as mock_exec:
+        branches = await service.search_branches(
+            'foo/bar', query='feature', page=2, per_page=1
+        )
+
+    assert [branch.name for branch in branches] == ['feature/b']
+    assert mock_exec.call_count == 2
+    first_call_vars = mock_exec.call_args_list[0].args[1]
+    second_call_vars = mock_exec.call_args_list[1].args[1]
+    assert first_call_vars['after'] is None
+    assert second_call_vars['after'] == 'cursor-1'
 
 
 @pytest.mark.asyncio

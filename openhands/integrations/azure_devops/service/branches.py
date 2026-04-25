@@ -135,7 +135,7 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
     ) -> list[Branch]:
         """Search for branches within a repository."""
         # Parse repository string: organization/project/repo
@@ -162,6 +162,8 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
 
             # Filter branches by query
             filtered_branches = []
+            start = max((page - 1) * per_page, 0)
+            end = start + per_page
             for branch_data in branches_data:
                 # Extract branch name from the ref (e.g., "refs/heads/main" -> "main")
                 name = branch_data.get('name', '').replace('refs/heads/', '')
@@ -186,10 +188,7 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
                     )
                     filtered_branches.append(branch)
 
-                    if len(filtered_branches) >= per_page:
-                        break
-
-            return filtered_branches
+            return filtered_branches[start:end]
         except Exception:
             # Return empty list on error instead of None
             return []

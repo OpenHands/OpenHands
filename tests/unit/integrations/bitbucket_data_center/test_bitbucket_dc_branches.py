@@ -116,6 +116,7 @@ async def test_search_branches_uses_filter_text():
     call_url, call_params = mock_req.call_args[0]
     assert 'filterText' in call_params
     assert call_params['filterText'] == 'my-thing'
+    assert call_params['start'] == 0
     assert 'q' not in call_params
     assert len(branches) == 1
     assert branches[0].name == 'feature/my-thing'

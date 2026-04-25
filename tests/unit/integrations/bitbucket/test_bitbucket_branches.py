@@ -71,6 +71,7 @@ async def test_search_branches_bitbucket_filters_by_name_contains():
         params = args[1]
         assert 'refs/branches' in url
         assert params['pagelen'] == 15
+        assert params['page'] == 1
         assert params['q'] == 'name~"bugfix"'
         assert params['sort'] == '-target.date'
 

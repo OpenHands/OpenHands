@@ -772,7 +772,50 @@ class TestSearchBranches:
         assert call_kwargs.get('selected_provider') == ProviderType.GITHUB
         assert call_kwargs.get('repository') == 'user/repo'
         assert call_kwargs.get('query') == 'feature'
+        assert call_kwargs.get('page') == 1
         assert call_kwargs.get('per_page') == 11  # limit + 1
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_returns_second_page_for_branch_search(self, mock_handler_cls):
+        """Test that branch search accepts a page_id and passes the page through."""
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.search_branches = AsyncMock(
+            return_value=[
+                Branch(name='feature-c', commit_sha='ghi789', protected=False),
+                Branch(name='feature-d', commit_sha='jkl012', protected=False),
+                Branch(name='feature-e', commit_sha='mno345', protected=False),
+            ]
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='feature',
+            page_id=encode_page_id(2),
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert
+        assert len(result.items) == 2
+        assert result.items[0].name == 'feature-c'
+        assert result.items[1].name == 'feature-d'
+        assert result.next_page_id == encode_page_id(3)
+
+        call_kwargs = mock_handler.search_branches.call_args.kwargs
+        assert call_kwargs.get('page') == 2
+        assert call_kwargs.get('per_page') == 3  # limit + 1
 
     def test_returns_401_when_no_provider_tokens(self, test_client):
         """Test that 401 is returned when no provider tokens."""

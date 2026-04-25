@@ -326,13 +326,14 @@ class ProviderHandler:
         selected_provider: ProviderType | None,
         repository: str,
         query: str,
+        page: int = 1,
         per_page: int = 30,
     ) -> list[Branch]:
         """Search for branches within a repository using the appropriate provider service."""
         if selected_provider:
             service = self.get_service(selected_provider)
             try:
-                return await service.search_branches(repository, query, per_page)
+                return await service.search_branches(repository, query, page, per_page)
             except Exception as e:
                 logger.warning(
                     f'Error searching branches from selected provider {selected_provider}: {e}'
@@ -343,7 +344,7 @@ class ProviderHandler:
         try:
             repo_details = await self.verify_repo_provider(repository)
             service = self.get_service(repo_details.git_provider)
-            return await service.search_branches(repository, query, per_page)
+            return await service.search_branches(repository, query, page, per_page)
         except Exception as e:
             logger.warning(f'Error searching branches for {repository}: {e}')
             return []

@@ -100,7 +100,7 @@ class GitHubBranchesMixin(GitHubMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
     ) -> list[Branch]:
         """Search branches by name using GitHub GraphQL with a partial query."""
         # Require a non-empty query
@@ -121,12 +121,25 @@ class GitHubBranchesMixin(GitHubMixinBase):
             'name': name,
             'query': query or '',
             'perPage': per_page,
+            'after': None,
         }
 
         try:
-            result = await self.execute_graphql_query(
-                search_branches_graphql_query, variables
-            )
+            result = {}
+            target_page = max(page, 1)
+            current_page = 0
+            for _ in range(target_page):
+                result = await self.execute_graphql_query(
+                    search_branches_graphql_query, variables.copy()
+                )
+                current_page += 1
+                refs = result.get('data', {}).get('repository', {}).get('refs')
+                page_info = refs.get('pageInfo', {}) if refs else {}
+                variables['after'] = page_info.get('endCursor')
+                if current_page < target_page and not page_info.get('hasNextPage'):
+                    return []
+                if current_page == target_page:
+                    break
         except Exception as e:
             logger.warning(f'Failed to search for branches: {e}')
             # Fallback to empty result on any GraphQL error
