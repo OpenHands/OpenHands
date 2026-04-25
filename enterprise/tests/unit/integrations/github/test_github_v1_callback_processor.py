@@ -285,7 +285,12 @@ class TestGithubV1CallbackProcessor:
         mock_github.assert_called_once_with(auth=mock_token_auth_instance)
         mock_github_client.get_repo.assert_called_once_with('test-owner/test-repo')
         mock_repo.get_issue.assert_called_once_with(number=42)
-        mock_issue.create_comment.assert_called_once_with('Test summary from agent')
+        mock_issue.create_comment.assert_called_once()
+        created_comment_body = mock_issue.create_comment.call_args.args[0]
+        assert created_comment_body.startswith('Test summary from agent')
+        assert 'Track progress [here]' in created_comment_body
+        assert str(conversation_id) in created_comment_body
+        assert '<!-- openhands-ack:' in created_comment_body
 
         mock_httpx_client.post.assert_called_once()
         url_arg, kwargs = mock_httpx_client.post.call_args
@@ -357,9 +362,13 @@ class TestGithubV1CallbackProcessor:
         assert result.status == EventCallbackResultStatus.SUCCESS
 
         mock_repo.get_pull.assert_called_once_with(42)
-        mock_pr.create_review_comment_reply.assert_called_once_with(
-            comment_id='comment_123', body='Test summary from agent'
-        )
+        mock_pr.create_review_comment_reply.assert_called_once()
+        reply_kwargs = mock_pr.create_review_comment_reply.call_args.kwargs
+        assert reply_kwargs['comment_id'] == 'comment_123'
+        assert reply_kwargs['body'].startswith('Test summary from agent')
+        assert 'Track progress [here]' in reply_kwargs['body']
+        assert str(conversation_id) in reply_kwargs['body']
+        assert '<!-- openhands-ack:' in reply_kwargs['body']
 
     @patch(
         'integrations.github.github_v1_callback_processor.GITHUB_APP_CLIENT_ID',
