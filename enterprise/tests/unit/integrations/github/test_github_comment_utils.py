@@ -1,12 +1,9 @@
-from uuid import UUID, uuid4
-
-import pytest
+from uuid import uuid4
 
 from integrations.github.github_comment_utils import (
     append_ack_marker,
     build_ack_marker,
     build_final_resolver_comment,
-    ensure_conversation_link,
     iter_recent_paginated_items,
 )
 

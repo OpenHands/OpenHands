@@ -143,7 +143,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
     ) -> None:
         """Post the final resolver summary to GitHub."""
         comment_body = build_final_resolver_comment(summary, conversation_id)
-        await self._post_comment_to_github(comment_body, conversation_id=conversation_id)
+        await self._post_comment_to_github(
+            comment_body, conversation_id=conversation_id
+        )
 
     async def _post_comment_to_github(
         self,
@@ -166,7 +168,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 if self.inline_pr_comment:
                     pr = repo.get_pull(issue_number)
                     if conversation_id is not None:
-                        if self._edit_existing_review_ack_comment(pr, comment_body, conversation_id):
+                        if self._edit_existing_review_ack_comment(
+                            pr, comment_body, conversation_id
+                        ):
                             return
 
                     pr.create_review_comment_reply(
@@ -177,7 +181,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
 
                 issue = repo.get_issue(number=issue_number)
                 if conversation_id is not None:
-                    if self._edit_existing_issue_ack_comment(issue, comment_body, conversation_id):
+                    if self._edit_existing_issue_ack_comment(
+                        issue, comment_body, conversation_id
+                    ):
                         return
 
                 issue.create_comment(comment_body)
