@@ -58,9 +58,18 @@ class GitHubBranchesMixin(GitHubMixinBase):
         return all_branches
 
     async def get_paginated_branches(
-        self, repository: str, page: int = 1, per_page: int = 30
+        self,
+        repository: str,
+        page: int = 1,
+        per_page: int = 30,
+        query: str | None = None,
     ) -> PaginatedBranchesResponse:
         """Get branches for a repository with pagination"""
+        if query:
+            return await self._search_paginated_branches(
+                repository, query, page, per_page
+            )
+
         url = f'{self.BASE_URL}/repos/{repository}/branches'
 
         params = {'per_page': str(per_page), 'page': str(page)}
@@ -100,44 +109,99 @@ class GitHubBranchesMixin(GitHubMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int = 1
     ) -> list[Branch]:
         """Search branches by name using GitHub GraphQL with a partial query."""
         # Require a non-empty query
         if not query:
             return []
 
+        paginated = await self._search_paginated_branches(
+            repository, query, page, per_page
+        )
+        return paginated.branches
+
+    async def _search_paginated_branches(
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
+    ) -> PaginatedBranchesResponse:
+        """Search branches by name using GitHub GraphQL with cursor pagination."""
+        if not query:
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=page,
+                per_page=per_page,
+                total_count=0,
+            )
+
         # Clamp per_page to GitHub GraphQL limits
         per_page = min(max(per_page, 1), 100)
+        page = max(page, 1)
 
         # Extract owner and repo name from the repository string
         parts = repository.split('/')
         if len(parts) < 2:
-            return []
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=page,
+                per_page=per_page,
+                total_count=0,
+            )
         owner, name = parts[-2], parts[-1]
 
-        variables = {
-            'owner': owner,
-            'name': name,
-            'query': query or '',
-            'perPage': per_page,
-        }
+        after_cursor = None
+        refs = {}
+        for current_page in range(1, page + 1):
+            variables = {
+                'owner': owner,
+                'name': name,
+                'query': query,
+                'perPage': per_page,
+                'after': after_cursor,
+            }
 
-        try:
-            result = await self.execute_graphql_query(
-                search_branches_graphql_query, variables
-            )
-        except Exception as e:
-            logger.warning(f'Failed to search for branches: {e}')
-            # Fallback to empty result on any GraphQL error
-            return []
+            try:
+                result = await self.execute_graphql_query(
+                    search_branches_graphql_query, variables
+                )
+            except Exception as e:
+                logger.warning(f'Failed to search for branches: {e}')
+                # Fallback to empty result on any GraphQL error
+                return PaginatedBranchesResponse(
+                    branches=[],
+                    has_next_page=False,
+                    current_page=page,
+                    per_page=per_page,
+                    total_count=0,
+                )
 
-        repo = result.get('data', {}).get('repository')
-        if not repo or not repo.get('refs'):
-            return []
+            repo = result.get('data', {}).get('repository')
+            if not repo or not repo.get('refs'):
+                return PaginatedBranchesResponse(
+                    branches=[],
+                    has_next_page=False,
+                    current_page=page,
+                    per_page=per_page,
+                    total_count=0,
+                )
+
+            refs = repo['refs']
+            page_info = refs.get('pageInfo') or {}
+            if current_page == page:
+                break
+            if not page_info.get('hasNextPage'):
+                return PaginatedBranchesResponse(
+                    branches=[],
+                    has_next_page=False,
+                    current_page=page,
+                    per_page=per_page,
+                    total_count=0,
+                )
+            after_cursor = page_info.get('endCursor')
 
         branches: list[Branch] = []
-        for node in repo['refs'].get('nodes', []):
+        for node in refs.get('nodes', []):
             bname = node.get('name') or ''
             target = node.get('target') or {}
             typename = target.get('__typename')
@@ -158,4 +222,11 @@ class GitHubBranchesMixin(GitHubMixinBase):
                 )
             )
 
-        return branches
+        page_info = refs.get('pageInfo') or {}
+        return PaginatedBranchesResponse(
+            branches=branches,
+            has_next_page=bool(page_info.get('hasNextPage')),
+            current_page=page,
+            per_page=per_page,
+            total_count=None,
+        )

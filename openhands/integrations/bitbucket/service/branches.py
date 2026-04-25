@@ -39,7 +39,11 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
         return branches
 
     async def get_paginated_branches(
-        self, repository: str, page: int = 1, per_page: int = 30
+        self,
+        repository: str,
+        page: int = 1,
+        per_page: int = 30,
+        query: str | None = None,
     ) -> PaginatedBranchesResponse:
         """Get branches for a repository with pagination."""
         # Extract owner and repo from the repository string (e.g., "owner/repo")
@@ -57,6 +61,8 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
             'page': page,
             'sort': '-target.date',  # Sort by most recent commit date, descending
         }
+        if query:
+            params['q'] = f'name~"{query}"'
 
         response, _ = await self._make_request(url, params)
 
@@ -84,33 +90,12 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int = 1
     ) -> list[Branch]:
         """Search branches by name using Bitbucket API with `q` param."""
-        parts = repository.split('/')
-        if len(parts) < 2:
-            raise ValueError(f'Invalid repository name: {repository}')
-
-        owner = parts[-2]
-        repo = parts[-1]
-
-        url = f'{self.BASE_URL}/repositories/{owner}/{repo}/refs/branches'
-        # Bitbucket filtering: name ~ "query"
-        params = {
-            'pagelen': per_page,
-            'q': f'name~"{query}"',
-            'sort': '-target.date',
-        }
-        response, _ = await self._make_request(url, params)
-
-        branches: list[Branch] = []
-        for branch in response.get('values', []):
-            branches.append(
-                Branch(
-                    name=branch.get('name', ''),
-                    commit_sha=branch.get('target', {}).get('hash', ''),
-                    protected=False,
-                    last_push_date=branch.get('target', {}).get('date', None),
-                )
-            )
-        return branches
+        if not query:
+            return []
+        paginated = await self.get_paginated_branches(
+            repository, page, per_page, query=query
+        )
+        return paginated.branches

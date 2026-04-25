@@ -46,13 +46,19 @@ class GitLabBranchesMixin(GitLabMixinBase):
         return all_branches
 
     async def get_paginated_branches(
-        self, repository: str, page: int = 1, per_page: int = 30
+        self,
+        repository: str,
+        page: int = 1,
+        per_page: int = 30,
+        query: str | None = None,
     ) -> PaginatedBranchesResponse:
         """Get branches for a repository with pagination"""
         encoded_name = repository.replace('/', '%2F')
         url = f'{self.BASE_URL}/projects/{encoded_name}/repository/branches'
 
         params = {'per_page': str(per_page), 'page': str(page)}
+        if query:
+            params['search'] = query
         response, headers = await self._make_request(url, params)
 
         branches: list[Branch] = []
@@ -85,23 +91,12 @@ class GitLabBranchesMixin(GitLabMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int = 1
     ) -> list[Branch]:
         """Search branches using GitLab API which supports `search` param."""
-        encoded_name = repository.replace('/', '%2F')
-        url = f'{self.BASE_URL}/projects/{encoded_name}/repository/branches'
-
-        params = {'per_page': str(per_page), 'search': query}
-        response, _ = await self._make_request(url, params)
-
-        branches: list[Branch] = []
-        for branch_data in response:
-            branches.append(
-                Branch(
-                    name=branch_data.get('name'),
-                    commit_sha=branch_data.get('commit', {}).get('id', ''),
-                    protected=branch_data.get('protected', False),
-                    last_push_date=branch_data.get('commit', {}).get('committed_date'),
-                )
-            )
-        return branches
+        if not query:
+            return []
+        paginated = await self.get_paginated_branches(
+            repository, page, per_page, query=query
+        )
+        return paginated.branches

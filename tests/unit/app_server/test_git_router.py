@@ -24,6 +24,7 @@ from openhands.app_server.utils.paging_utils import encode_page_id, paginate_res
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import (
     Branch,
+    PaginatedBranchesResponse,
     ProviderType,
     Repository,
     SuggestedTask,
@@ -708,12 +709,16 @@ class TestSearchBranches:
         """Test that search branches are returned with pagination."""
         # Arrange
         mock_handler = MagicMock()
-        mock_handler.search_branches = AsyncMock(
-            return_value=[
-                Branch(name='main', commit_sha='abc123', protected=False),
-                Branch(name='develop', commit_sha='def456', protected=False),
-                Branch(name='feature-branch', commit_sha='ghi789', protected=False),
-            ]
+        mock_handler.get_branches = AsyncMock(
+            return_value=PaginatedBranchesResponse(
+                branches=[
+                    Branch(name='main', commit_sha='abc123', protected=False),
+                    Branch(name='develop', commit_sha='def456', protected=False),
+                ],
+                has_next_page=True,
+                current_page=1,
+                per_page=2,
+            )
         )
         mock_handler_cls.return_value = mock_handler
 
@@ -742,11 +747,115 @@ class TestSearchBranches:
 
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_returns_second_page_for_branch_search(self, mock_handler_cls):
+        """Test that branch search supports page_id pagination."""
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.get_branches = AsyncMock(
+            return_value=PaginatedBranchesResponse(
+                branches=[
+                    Branch(name='feature/two', commit_sha='def456', protected=False),
+                    Branch(name='feature/three', commit_sha='ghi789', protected=False),
+                ],
+                has_next_page=False,
+                current_page=2,
+                per_page=2,
+            )
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='feature',
+            page_id=encode_page_id(2),
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert
+        assert [branch.name for branch in result.items] == [
+            'feature/two',
+            'feature/three',
+        ]
+        assert result.next_page_id is None
+        mock_handler.get_branches.assert_called_once_with(
+            repository='user/repo',
+            specified_provider=ProviderType.GITHUB,
+            page=2,
+            per_page=2,
+            query='feature',
+        )
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_lists_branches_without_query(self, mock_handler_cls):
+        """Test that empty query lists branches using the same paginated method."""
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.get_branches = AsyncMock(
+            return_value=PaginatedBranchesResponse(
+                branches=[
+                    Branch(name='main', commit_sha='abc123', protected=False),
+                    Branch(name='develop', commit_sha='def456', protected=False),
+                ],
+                has_next_page=True,
+                current_page=1,
+                per_page=2,
+            )
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='',
+            page_id=None,
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert
+        assert [branch.name for branch in result.items] == ['main', 'develop']
+        assert result.next_page_id == encode_page_id(2)
+        mock_handler.get_branches.assert_called_once_with(
+            repository='user/repo',
+            specified_provider=ProviderType.GITHUB,
+            page=1,
+            per_page=2,
+            query=None,
+        )
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
     async def test_passes_parameters_to_provider(self, mock_handler_cls):
         """Test that all parameters are passed through to the provider."""
         # Arrange
         mock_handler = MagicMock()
-        mock_handler.search_branches = AsyncMock(return_value=[])
+        mock_handler.get_branches = AsyncMock(
+            return_value=PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=1,
+                per_page=10,
+            )
+        )
         mock_handler_cls.return_value = mock_handler
 
         mock_context = _make_mock_user_context(
@@ -767,12 +876,13 @@ class TestSearchBranches:
         )
 
         # Assert
-        mock_handler.search_branches.assert_called_once()
-        call_kwargs = mock_handler.search_branches.call_args.kwargs
-        assert call_kwargs.get('selected_provider') == ProviderType.GITHUB
-        assert call_kwargs.get('repository') == 'user/repo'
-        assert call_kwargs.get('query') == 'feature'
-        assert call_kwargs.get('per_page') == 11  # limit + 1
+        mock_handler.get_branches.assert_called_once_with(
+            repository='user/repo',
+            specified_provider=ProviderType.GITHUB,
+            page=1,
+            per_page=10,
+            query='feature',
+        )
 
     def test_returns_401_when_no_provider_tokens(self, test_client):
         """Test that 401 is returned when no provider tokens."""
