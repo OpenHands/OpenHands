@@ -19,7 +19,6 @@ from openhands.app_server.utils.paging_utils import (
     paginate_results,
 )
 from openhands.sdk.llm.utils.verified_models import VERIFIED_MODELS
-from openhands.utils.llm import ModelsResponse
 from openhands.server.shared import config
 from openhands.utils.llm import ModelsResponse, get_supported_llm_models
 
