@@ -4,6 +4,11 @@ from uuid import UUID
 
 import httpx
 from github import Auth, Github, GithubException, GithubIntegration
+from integrations.github.github_comment_utils import (
+    build_ack_marker,
+    build_final_resolver_comment,
+    iter_recent_paginated_items,
+)
 from integrations.utils import get_summary_instruction
 from integrations.v1_utils import handle_callback_error
 from pydantic import Field
@@ -73,7 +78,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 f'[GitHub V1] Posting summary {conversation_id}',
                 extra={'summary': summary},
             )
-            await self._post_summary_to_github(summary)
+            await self._post_summary_to_github(summary, conversation_id)
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
@@ -127,7 +132,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         token_data = github_integration.get_access_token(installation_id)
         return token_data.token
 
-    async def _post_summary_to_github(self, summary: str) -> None:
+    async def _post_summary_to_github(
+        self, summary: str, conversation_id: UUID
+    ) -> None:
         """Post a summary comment to the configured GitHub issue."""
         installation_token = self._get_installation_access_token()
 
@@ -136,31 +143,82 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
 
         full_repo_name = self.github_view_data['full_repo_name']
         issue_number = self.github_view_data['issue_number']
+        comment_body = build_final_resolver_comment(summary, conversation_id)
 
         try:
-            if self.inline_pr_comment:
-                with Github(auth=Auth.Token(installation_token)) as github_client:
-                    repo = github_client.get_repo(full_repo_name)
-                    pr = repo.get_pull(issue_number)
-                    pr.create_review_comment_reply(
-                        comment_id=self.github_view_data.get('comment_id', ''),
-                        body=summary,
-                    )
-                return
-
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(full_repo_name)
+
+                if self.inline_pr_comment:
+                    pr = repo.get_pull(issue_number)
+                    if self._edit_existing_review_ack_comment(pr, comment_body, conversation_id):
+                        return
+
+                    pr.create_review_comment_reply(
+                        comment_id=self.github_view_data.get('comment_id', ''),
+                        body=comment_body,
+                    )
+                    return
+
                 issue = repo.get_issue(number=issue_number)
-                issue.create_comment(summary)
+                if self._edit_existing_issue_ack_comment(issue, comment_body, conversation_id):
+                    return
+
+                issue.create_comment(comment_body)
         except GithubException as e:
-            if e.status == 410:
+            if e.status in {403, 404, 410, 422, 423, 429}:
                 _logger.info(
-                    '[GitHub V1] Issue/PR %s#%s was deleted, skipping summary post',
+                    '[GitHub V1] Skipping summary post due to non-fatal GitHub error %s on %s#%s',
+                    e.status,
                     full_repo_name,
                     issue_number,
                 )
             else:
                 raise
+
+    def _edit_existing_issue_ack_comment(
+        self, issue: Any, comment_body: str, conversation_id: UUID
+    ) -> bool:
+        marker = build_ack_marker(conversation_id)
+        comments = issue.get_comments()
+
+        for comment in iter_recent_paginated_items(comments, max_items=200):
+            if marker in getattr(comment, 'body', ''):
+                try:
+                    comment.edit(comment_body)
+                    return True
+                except GithubException as e:
+                    if e.status in {403, 404, 410, 422, 423, 429}:
+                        _logger.info(
+                            '[GitHub V1] Failed to edit existing ack comment due to non-fatal GitHub error %s',
+                            e.status,
+                        )
+                        return False
+                    raise
+
+        return False
+
+    def _edit_existing_review_ack_comment(
+        self, pr: Any, comment_body: str, conversation_id: UUID
+    ) -> bool:
+        marker = build_ack_marker(conversation_id)
+        review_comments = pr.get_review_comments()
+
+        for comment in iter_recent_paginated_items(review_comments, max_items=200):
+            if marker in getattr(comment, 'body', ''):
+                try:
+                    comment.edit(comment_body)
+                    return True
+                except GithubException as e:
+                    if e.status in {403, 404, 410, 422, 423, 429}:
+                        _logger.info(
+                            '[GitHub V1] Failed to edit existing ack-review comment due to non-fatal GitHub error %s',
+                            e.status,
+                        )
+                        return False
+                    raise
+
+        return False
 
     # -------------------------------------------------------------------------
     # Agent / sandbox helpers

@@ -2,6 +2,7 @@ from types import MappingProxyType
 
 from github import Auth, Github, GithubIntegration
 from integrations.github.data_collector import GitHubDataCollector
+from integrations.github.github_comment_utils import append_ack_marker
 from integrations.github.github_solvability import summarize_issue_solvability
 from integrations.github.github_view import (
     GithubFactory,
@@ -406,6 +407,8 @@ class GithubManager(Manager[GithubViewType]):
                     msg_info = f'{base_msg}\n\n{solvability_summary}'
                 else:
                     msg_info = base_msg
+
+                msg_info = append_ack_marker(msg_info, conversation_id)
 
             except MissingSettingsError as e:
                 logger.warning(

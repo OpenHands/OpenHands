@@ -16,6 +16,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from github import GithubException
+from integrations.github.github_comment_utils import build_ack_marker
 from integrations.github.github_v1_callback_processor import (
     GithubV1CallbackProcessor,
 )
@@ -359,6 +360,214 @@ class TestGithubV1CallbackProcessor:
         mock_pr.create_review_comment_reply.assert_called_once_with(
             comment_id='comment_123', body='Test summary from agent'
         )
+
+    @patch(
+        'integrations.github.github_v1_callback_processor.GITHUB_APP_CLIENT_ID',
+        'test_client_id',
+    )
+    @patch(
+        'integrations.github.github_v1_callback_processor.GITHUB_APP_PRIVATE_KEY',
+        'test_private_key',
+    )
+    @patch('openhands.app_server.config.get_app_conversation_info_service')
+    @patch('openhands.app_server.config.get_sandbox_service')
+    @patch('openhands.app_server.config.get_httpx_client')
+    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
+    @patch('integrations.github.github_v1_callback_processor.GithubIntegration')
+    @patch('integrations.github.github_v1_callback_processor.Github')
+    async def test_successful_callback_edits_existing_ack_comment_if_present(
+        self,
+        mock_github,
+        mock_github_integration,
+        mock_get_summary_instruction,
+        mock_get_httpx_client,
+        mock_get_sandbox_service,
+        mock_get_app_conversation_info_service,
+        github_callback_processor,
+        conversation_state_update_event,
+        event_callback,
+        mock_app_conversation_info,
+        mock_sandbox_info,
+    ):
+        conversation_id = uuid4()
+
+        await _setup_happy_path_services(
+            mock_get_app_conversation_info_service,
+            mock_get_sandbox_service,
+            mock_get_httpx_client,
+            mock_app_conversation_info,
+            mock_sandbox_info,
+        )
+
+        mock_get_summary_instruction.return_value = 'Please provide a summary'
+
+        mock_token_data = MagicMock()
+        mock_token_data.token = 'test_access_token'
+        mock_integration_instance = MagicMock()
+        mock_integration_instance.get_access_token.return_value = mock_token_data
+        mock_github_integration.return_value = mock_integration_instance
+
+        mock_github_client = MagicMock()
+        mock_repo = MagicMock()
+        mock_issue = MagicMock()
+        mock_comment = MagicMock()
+        mock_comment.body = f"I'm on it! {build_ack_marker(conversation_id)}"
+        mock_issue.get_comments.return_value = MagicMock(
+            totalCount=1,
+            get_page=MagicMock(return_value=[mock_comment]),
+        )
+        mock_repo.get_issue.return_value = mock_issue
+        mock_github_client.get_repo.return_value = mock_repo
+        mock_github.return_value.__enter__.return_value = mock_github_client
+
+        result = await github_callback_processor(
+            conversation_id=conversation_id,
+            callback=event_callback,
+            event=conversation_state_update_event,
+        )
+
+        assert result is not None
+        assert result.status == EventCallbackResultStatus.SUCCESS
+        mock_comment.edit.assert_called_once()
+        mock_issue.create_comment.assert_not_called()
+
+    @patch(
+        'integrations.github.github_v1_callback_processor.GITHUB_APP_CLIENT_ID',
+        'test_client_id',
+    )
+    @patch(
+        'integrations.github.github_v1_callback_processor.GITHUB_APP_PRIVATE_KEY',
+        'test_private_key',
+    )
+    @patch('openhands.app_server.config.get_app_conversation_info_service')
+    @patch('openhands.app_server.config.get_sandbox_service')
+    @patch('openhands.app_server.config.get_httpx_client')
+    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
+    @patch('integrations.github.github_v1_callback_processor.GithubIntegration')
+    @patch('integrations.github.github_v1_callback_processor.Github')
+    async def test_successful_callback_falls_back_to_create_comment_when_ack_comment_missing(
+        self,
+        mock_github,
+        mock_github_integration,
+        mock_get_summary_instruction,
+        mock_get_httpx_client,
+        mock_get_sandbox_service,
+        mock_get_app_conversation_info_service,
+        github_callback_processor,
+        conversation_state_update_event,
+        event_callback,
+        mock_app_conversation_info,
+        mock_sandbox_info,
+    ):
+        conversation_id = uuid4()
+
+        await _setup_happy_path_services(
+            mock_get_app_conversation_info_service,
+            mock_get_sandbox_service,
+            mock_get_httpx_client,
+            mock_app_conversation_info,
+            mock_sandbox_info,
+        )
+
+        mock_get_summary_instruction.return_value = 'Please provide a summary'
+
+        mock_token_data = MagicMock()
+        mock_token_data.token = 'test_access_token'
+        mock_integration_instance = MagicMock()
+        mock_integration_instance.get_access_token.return_value = mock_token_data
+        mock_github_integration.return_value = mock_integration_instance
+
+        mock_github_client = MagicMock()
+        mock_repo = MagicMock()
+        mock_issue = MagicMock()
+        mock_issue.get_comments.return_value = MagicMock(
+            totalCount=1,
+            get_page=MagicMock(return_value=[MagicMock(body='no marker here')]),
+        )
+        mock_repo.get_issue.return_value = mock_issue
+        mock_github_client.get_repo.return_value = mock_repo
+        mock_github.return_value.__enter__.return_value = mock_github_client
+
+        result = await github_callback_processor(
+            conversation_id=conversation_id,
+            callback=event_callback,
+            event=conversation_state_update_event,
+        )
+
+        assert result is not None
+        assert result.status == EventCallbackResultStatus.SUCCESS
+        mock_issue.create_comment.assert_called_once()
+
+    @patch(
+        'integrations.github.github_v1_callback_processor.GITHUB_APP_CLIENT_ID',
+        'test_client_id',
+    )
+    @patch(
+        'integrations.github.github_v1_callback_processor.GITHUB_APP_PRIVATE_KEY',
+        'test_private_key',
+    )
+    @patch('openhands.app_server.config.get_app_conversation_info_service')
+    @patch('openhands.app_server.config.get_sandbox_service')
+    @patch('openhands.app_server.config.get_httpx_client')
+    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
+    @patch('integrations.github.github_v1_callback_processor.GithubIntegration')
+    @patch('integrations.github.github_v1_callback_processor.Github')
+    async def test_post_summary_to_github_ignores_nonfatal_github_status_errors(
+        self,
+        mock_github,
+        mock_github_integration,
+        mock_get_summary_instruction,
+        mock_get_httpx_client,
+        mock_get_sandbox_service,
+        mock_get_app_conversation_info_service,
+        github_callback_processor,
+        conversation_state_update_event,
+        event_callback,
+        mock_app_conversation_info,
+        mock_sandbox_info,
+    ):
+        conversation_id = uuid4()
+
+        await _setup_happy_path_services(
+            mock_get_app_conversation_info_service,
+            mock_get_sandbox_service,
+            mock_get_httpx_client,
+            mock_app_conversation_info,
+            mock_sandbox_info,
+        )
+
+        mock_get_summary_instruction.return_value = 'Please provide a summary'
+
+        mock_token_data = MagicMock()
+        mock_token_data.token = 'test_access_token'
+        mock_integration_instance = MagicMock()
+        mock_integration_instance.get_access_token.return_value = mock_token_data
+        mock_github_integration.return_value = mock_integration_instance
+
+        mock_github_client = MagicMock()
+        mock_repo = MagicMock()
+        mock_issue = MagicMock()
+        mock_issue.get_comments.return_value = MagicMock(
+            totalCount=1,
+            get_page=MagicMock(return_value=[MagicMock(body='no marker here')]),
+        )
+        mock_issue.create_comment.side_effect = GithubException(
+            status=403,
+            data={'message': 'Forbidden'},
+            headers={},
+        )
+        mock_repo.get_issue.return_value = mock_issue
+        mock_github_client.get_repo.return_value = mock_repo
+        mock_github.return_value.__enter__.return_value = mock_github_client
+
+        result = await github_callback_processor(
+            conversation_id=conversation_id,
+            callback=event_callback,
+            event=conversation_state_update_event,
+        )
+
+        assert result is not None
+        assert result.status == EventCallbackResultStatus.SUCCESS
 
     # ------------------------------------------------------------------ #
     # Error paths
