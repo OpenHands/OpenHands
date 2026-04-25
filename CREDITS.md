@@ -16,7 +16,7 @@ open source community:
 
 #### [Aider](https://github.com/paul-gauthier/aider)
    - License: Apache License 2.0
-   - Description: AI pair programming tool. OpenHands has adapted and integrated its linter module for code-related tasks in [`agentskills utilities`](https://github.com/OpenHands/OpenHands/tree/main/openhands/runtime/plugins/agent_skills/utils/aider)
+   - Description: AI pair programming tool. OpenHands has adapted and integrated its linter module for code-related tasks.
 
 #### [BrowserGym](https://github.com/ServiceNow/BrowserGym)
    - License: Apache License 2.0

@@ -6,8 +6,6 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
-import uuid
-
 from fastapi import Depends, HTTPException, Request, status
 
 from openhands.server.shared import (
@@ -73,15 +71,6 @@ async def get_conversation_store(request: Request) -> ConversationStore | None:
     conversation_store = await ConversationStoreImpl.get_instance(config, user_id)
     request.state.conversation_store = conversation_store
     return conversation_store
-
-
-async def generate_unique_conversation_id(
-    conversation_store: ConversationStore,
-) -> str:
-    conversation_id = uuid.uuid4().hex
-    while await conversation_store.exists(conversation_id):
-        conversation_id = uuid.uuid4().hex
-    return conversation_id
 
 
 async def get_conversation_metadata(
