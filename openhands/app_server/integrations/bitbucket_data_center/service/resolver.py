@@ -92,9 +92,16 @@ class BitbucketDCResolverMixin(BitbucketDCMixinBase):
                 else datetime.fromtimestamp(0, tz=timezone.utc)
             )
 
+            # Bitbucket Data Center returns `"author": null` for comments from
+            # deleted / anonymous accounts. The `or 'unknown'` fallback below
+            # was intended to cover this, but `.get('author', {})` only
+            # short-circuits when the key is absent — when the key is present
+            # with a null value, `.get('slug')` raises AttributeError. Use
+            # `or {}` so the fallback actually fires.
+            author_data = comment_data.get('author') or {}
             author = (
-                comment_data.get('author', {}).get('slug')
-                or comment_data.get('author', {}).get('name')
+                (author_data.get('slug') if isinstance(author_data, dict) else None)
+                or (author_data.get('name') if isinstance(author_data, dict) else None)
                 or 'unknown'
             )
 

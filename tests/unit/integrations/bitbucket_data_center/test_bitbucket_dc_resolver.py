@@ -157,6 +157,30 @@ def test_process_raw_comments_missing_timestamps(svc):
     assert comments[0].id == '5'
 
 
+@pytest.mark.parametrize(
+    'author_value, expected_author',
+    [
+        pytest.param(None, 'unknown', id='author_null'),
+        pytest.param({}, 'unknown', id='author_empty_dict'),
+        pytest.param('not-a-dict', 'unknown', id='author_non_dict'),
+        pytest.param({'name': 'Alice'}, 'Alice', id='author_only_name_falls_back'),
+        pytest.param({'slug': 'alice'}, 'alice', id='author_slug_preferred'),
+    ],
+)
+def test_process_raw_comments_handles_null_or_malformed_author(
+    svc, author_value, expected_author
+):
+    """Bitbucket Data Center returns `"author": null` for comments from
+    deleted / anonymous accounts. The existing `or 'unknown'` fallback was
+    intended to cover this, but `.get('author', {}).get('slug')` raises
+    AttributeError when the key is present with a null value (the absent-key
+    case the default `{}` was guarding never actually fires for this API)."""
+    raw = [{'id': 1, 'text': 'hi', 'author': author_value}]
+    comments = svc._process_raw_comments(raw)
+    assert len(comments) == 1
+    assert comments[0].author == expected_author
+
+
 # ── reply_to_pr_comment ───────────────────────────────────────────────────────
 
 

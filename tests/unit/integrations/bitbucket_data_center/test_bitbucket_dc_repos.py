@@ -338,3 +338,33 @@ async def _make_parsed_repo(svc, repo_dict):
     """Helper to create a parsed Repository from a repo dict (with mocked default branch)."""
     with patch.object(svc, '_make_request', return_value=({'displayId': 'main'}, {})):
         return await svc._parse_repository(repo_dict, fetch_default_branch=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'raw_project, raw_slug, expect_raises, expected_full_name',
+    [
+        pytest.param(None, 'myrepo', True, None, id='project_null_raises_value_error'),
+        pytest.param(
+            [], 'myrepo', True, None, id='project_non_dict_raises_value_error'
+        ),
+        pytest.param({'key': 'PROJ'}, 'myrepo', False, 'PROJ/myrepo', id='happy_path'),
+    ],
+)
+async def test_parse_repository_handles_null_project(
+    raw_project, raw_slug, expect_raises, expected_full_name
+):
+    """`_parse_repository` must not crash with AttributeError when Bitbucket
+    Data Center returns `"project": null` (orphaned repos / proxied payloads).
+    A missing project key should produce the same ValueError as a missing
+    `slug`, not an unhandled `'NoneType' object has no attribute 'get'`.
+    """
+    svc = make_service()
+    raw_repo = {'id': 1, 'slug': raw_slug, 'project': raw_project}
+
+    if expect_raises:
+        with pytest.raises(ValueError, match='missing project key or slug'):
+            await _make_parsed_repo(svc, raw_repo)
+    else:
+        repo = await _make_parsed_repo(svc, raw_repo)
+        assert repo.full_name == expected_full_name

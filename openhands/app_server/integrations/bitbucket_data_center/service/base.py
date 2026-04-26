@@ -253,7 +253,13 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         Returns:
             Repository object
         """
-        project_key = repo.get('project', {}).get('key', '')
+        # Bitbucket Data Center can return `"project": null` on orphaned /
+        # admin-listed repositories and on payloads passed through custom
+        # corporate proxies that strip empty objects. The `(x or {})` idiom
+        # mirrors the defensive pattern used in the cloud Bitbucket parser
+        # (see `bitbucket/service/base.py::_parse_repository`).
+        project = repo.get('project') or {}
+        project_key = project.get('key', '') if isinstance(project, dict) else ''
         repo_slug = repo.get('slug', '')
 
         if not project_key or not repo_slug:
