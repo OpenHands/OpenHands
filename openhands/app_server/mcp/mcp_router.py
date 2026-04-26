@@ -65,6 +65,7 @@ async def get_conversation_link(
 async def save_pr_metadata(
     user_id: str | None, conversation_id: str, tool_result: str
 ) -> None:
+    # Manually construct state for background operation (no request context available)
     state = InjectorState()
     setattr(state, USER_CONTEXT_ATTR, SpecifyUserContext(user_id))
     async with get_app_conversation_info_service(
