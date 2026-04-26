@@ -47,8 +47,8 @@ async def test_get_conversation_link_non_saas_mode():
     mock_service = AsyncMock(spec=GitService)
 
     # Test with non-SAAS mode
-    with patch('openhands.server.routes.mcp.server_config') as mock_config:
-        mock_config.app_mode = AppMode.OPENHANDS
+    with patch('openhands.app_server.mcp.mcp_router.get_global_config') as mock_config:
+        mock_config.return_value.app_mode = AppMode.OPENHANDS
 
         # Call the function
         result = await get_conversation_link(
@@ -72,13 +72,13 @@ async def test_get_conversation_link_saas_mode():
 
     # Test with SAAS mode
     with (
-        patch('openhands.server.routes.mcp.server_config') as mock_config,
+        patch('openhands.app_server.mcp.mcp_router.get_global_config') as mock_config,
         patch(
-            'openhands.server.routes.mcp.CONVERSATION_URL',
+            'openhands.app_server.mcp.mcp_router.CONVERSATION_URL',
             'https://test.example.com/conversations/{}',
         ),
     ):
-        mock_config.app_mode = AppMode.SAAS
+        mock_config.return_value.app_mode = AppMode.SAAS
 
         # Call the function
         result = await get_conversation_link(
@@ -104,13 +104,13 @@ async def test_get_conversation_link_empty_body():
 
     # Test with SAAS mode and empty body
     with (
-        patch('openhands.server.routes.mcp.server_config') as mock_config,
+        patch('openhands.app_server.mcp.mcp_router.get_global_config') as mock_config,
         patch(
-            'openhands.server.routes.mcp.CONVERSATION_URL',
+            'openhands.app_server.mcp.mcp_router.CONVERSATION_URL',
             'https://test.example.com/conversations/{}',
         ),
     ):
-        mock_config.app_mode = AppMode.SAAS
+        mock_config.return_value.app_mode = AppMode.SAAS
 
         # Call the function
         result = await get_conversation_link(
@@ -130,8 +130,8 @@ async def test_get_conversation_link_none_conversation_id():
     """Test get_conversation_link returns body unchanged when conversation_id is None."""
     mock_service = AsyncMock(spec=GitService)
 
-    with patch('openhands.server.routes.mcp.server_config') as mock_config:
-        mock_config.app_mode = AppMode.SAAS
+    with patch('openhands.app_server.mcp.mcp_router.get_global_config') as mock_config:
+        mock_config.return_value.app_mode = AppMode.SAAS
 
         body = 'This is the PR body.'
 
