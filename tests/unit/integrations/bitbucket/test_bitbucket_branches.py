@@ -87,3 +87,40 @@ async def test_search_branches_bitbucket_filters_by_name_contains():
                 last_push_date='2024-01-10T10:00:00Z',
             )
         ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'raw_target, expected_sha, expected_date',
+    [
+        pytest.param(None, '', None, id='target_null'),
+        pytest.param([], '', None, id='target_non_dict'),
+        pytest.param({}, '', None, id='target_empty_dict'),
+        pytest.param(
+            {'hash': 'abc', 'date': '2024-01-01T00:00:00Z'},
+            'abc',
+            '2024-01-01T00:00:00Z',
+            id='happy_path',
+        ),
+    ],
+)
+async def test_get_branches_handles_null_target(
+    raw_target, expected_sha, expected_date
+):
+    """Bitbucket cloud branches API can return ``target: null`` for branches
+    whose tip commit was rewritten by a corporate proxy or in edge-case repo
+    states. The original ``branch.get('target', {}).get(...)`` chain only
+    short-circuited the absent-key case and crashed with AttributeError on
+    explicit nulls; the new ``_target`` helper degrades to an empty dict so
+    the fallback values defined in each ``.get`` call (``''`` for hash,
+    ``None`` for date) actually fire."""
+    service = BitBucketService(token=SecretStr('t'))
+    raw_branches = [{'name': 'b1', 'target': raw_target}]
+
+    with patch.object(service, '_fetch_paginated_data', return_value=raw_branches):
+        branches = await service.get_branches('w/r')
+
+    assert len(branches) == 1
+    assert branches[0].name == 'b1'
+    assert branches[0].commit_sha == expected_sha
+    assert branches[0].last_push_date == expected_date

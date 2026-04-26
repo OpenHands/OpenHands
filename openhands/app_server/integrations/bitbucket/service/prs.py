@@ -47,8 +47,17 @@ class BitBucketPRsMixin(BitBucketMixinBase):
             url=url, params=payload, method=RequestMethod.POST
         )
 
-        # Return the URL to the pull request
-        return data.get('links', {}).get('html', {}).get('href', '')
+        # Return the URL to the pull request. Bitbucket can return
+        # `"links": null` when responses pass through corporate proxies that
+        # strip empty objects; the `(x or {})` idiom mirrors the defensive
+        # pattern used by `bitbucket/service/base.py::get_user` (#14070) and
+        # `_parse_repository` (#14085) so a successful create_pr doesn't
+        # raise AttributeError instead of returning the new PR's URL.
+        links = data.get('links') or {}
+        html_link = links.get('html') if isinstance(links, dict) else None
+        if isinstance(html_link, dict):
+            return html_link.get('href', '')
+        return ''
 
     async def get_pr_details(self, repository: str, pr_number: int) -> dict:
         """Get detailed information about a specific pull request
