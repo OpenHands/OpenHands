@@ -76,7 +76,7 @@ async def save_pr_metadata(
             )
         )
         if not app_conversation_info:
-            raise ToolError('No such conversation {conversation_id}')
+            raise ToolError(f'No such conversation {conversation_id}')
 
         pull_pattern = r'pull/(\d+)'
         merge_request_pattern = r'merge_requests/(\d+)'
