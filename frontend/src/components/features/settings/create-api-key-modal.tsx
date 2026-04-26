@@ -58,7 +58,7 @@ export function CreateApiKeyModal({
         isDisabled={createApiKeyMutation.isPending || !newKeyName.trim()}
       >
         {createApiKeyMutation.isPending ? (
-          <LoadingSpinner size="small" />
+          <LoadingSpinner size="small" className="text-white" />
         ) : (
           t(I18nKey.BUTTON$CREATE)
         )}

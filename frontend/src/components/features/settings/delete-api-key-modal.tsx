@@ -47,7 +47,7 @@ export function DeleteApiKeyModal({
         isDisabled={deleteApiKeyMutation.isPending}
       >
         {deleteApiKeyMutation.isPending ? (
-          <LoadingSpinner size="small" />
+          <LoadingSpinner size="small" className="text-white" />
         ) : (
           t(I18nKey.BUTTON$DELETE)
         )}

@@ -96,7 +96,7 @@ export function InvitationAcceptModal({
             isDisabled={isPending}
           >
             {isPending ? (
-              <LoadingSpinner size="small" />
+              <LoadingSpinner size="small" className="text-white" />
             ) : (
               t(I18nKey.BUTTON$CONFIRM)
             )}

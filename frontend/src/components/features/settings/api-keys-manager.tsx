@@ -90,7 +90,7 @@ function LlmApiKeyManager({
           isDisabled={refreshLlmApiKey.isPending}
         >
           {refreshLlmApiKey.isPending ? (
-            <LoadingSpinner size="small" />
+            <LoadingSpinner size="small" className="text-white" />
           ) : (
             t(I18nKey.SETTINGS$REFRESH_LLM_API_KEY)
           )}

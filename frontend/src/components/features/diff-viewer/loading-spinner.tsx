@@ -1,20 +1,9 @@
-import { cn } from "#/utils/utils";
+import { Spinner } from "#/components/shared/spinner";
 
 export interface LoadingSpinnerProps {
   className?: string;
 }
 
 export function LoadingSpinner({ className }: LoadingSpinnerProps) {
-  return (
-    <div className="flex items-center justify-center">
-      <div
-        className={cn(
-          "animate-spin rounded-full border-4 border-gray-200 border-t-blue-500",
-          className,
-        )}
-        role="status"
-        aria-label="Loading"
-      />
-    </div>
-  );
+  return <Spinner size="md" spinnerClassName={className} />;
 }
