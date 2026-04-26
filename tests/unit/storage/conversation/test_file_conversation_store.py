@@ -200,3 +200,22 @@ async def test_get_all_metadata():
     assert results[0].title == 'First conversation'
     assert results[1].conversation_id == 'conv2'
     assert results[1].title == 'Second conversation'
+
+
+def test_conversation_metadata_filename_rejects_traversal_ids():
+    for conversation_id in (
+        '../outside',
+        '..\\outside',
+        'safe/../outside',
+        '%2e%2e%2foutside',
+        'safe\x00outside',
+    ):
+        with pytest.raises(ValueError):
+            get_conversation_metadata_filename(conversation_id)
+
+
+def test_conversation_metadata_filename_allows_uuid_like_ids():
+    assert (
+        get_conversation_metadata_filename('550e8400-e29b-41d4-a716-446655440000')
+        == 'sessions/550e8400-e29b-41d4-a716-446655440000/metadata.json'
+    )

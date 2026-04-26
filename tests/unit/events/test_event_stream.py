@@ -863,3 +863,16 @@ def test_nested_dict_secret_replacement(temp_dir: str):
     assert 'password123' not in data_with_secrets_replaced['args']['command']
     assert 'password123' not in data_with_secrets_replaced['args']['env']['SECRET_KEY']
     assert 'password123' not in data_with_secrets_replaced['args']['env']['timestamp']
+
+
+def test_event_stream_rejects_traversal_conversation_id(temp_dir: str):
+    file_store = get_file_store('local', temp_dir)
+    sibling = f'{temp_dir}_escape'
+    event_stream = EventStream('../' + os.path.basename(sibling), file_store)
+    try:
+        with pytest.raises(ValueError):
+            event_stream.add_event(NullAction(), EventSource.USER)
+    finally:
+        event_stream.close()
+
+    assert not os.path.exists(os.path.join(sibling, 'events', '0.json'))

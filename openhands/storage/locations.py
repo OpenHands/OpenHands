@@ -1,8 +1,24 @@
+import re
+from urllib.parse import unquote
+
 CONVERSATION_BASE_DIR = 'sessions'
+
+_SAFE_PATH_COMPONENT_RE = re.compile(r'^[A-Za-z0-9_-]+$')
+
+
+def _validate_path_component(value: str, name: str) -> None:
+    decoded_value = unquote(value)
+    if not _SAFE_PATH_COMPONENT_RE.fullmatch(decoded_value):
+        raise ValueError(
+            f'Invalid {name}: only letters, numbers, hyphens, and underscores are allowed'
+        )
+
 
 
 def get_conversation_dir(sid: str, user_id: str | None = None) -> str:
+    _validate_path_component(sid, 'conversation id')
     if user_id:
+        _validate_path_component(user_id, 'user id')
         return f'users/{user_id}/conversations/{sid}/'
     else:
         return f'{CONVERSATION_BASE_DIR}/{sid}/'
