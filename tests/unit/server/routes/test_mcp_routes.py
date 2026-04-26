@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from openhands.app_server.app_conversation.mcp.mcp_router import get_conversation_link
+from openhands.app_server.mcp.mcp_router import get_conversation_link
 from openhands.integrations.service_types import GitService
 from openhands.server.types import AppMode
 
@@ -22,7 +22,7 @@ def test_mcp_server_no_stateless_http_deprecation_warning():
         warnings.simplefilter('always')
 
         # Import the mcp_server which triggers FastMCP creation
-        from openhands.app_server.app_conversation.mcp.mcp_router import mcp_server
+        from openhands.app_server.mcp.mcp_router import mcp_server
 
         # Check that no deprecation warning about stateless_http was raised
         stateless_http_warnings = [
