@@ -224,7 +224,7 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
           default: false,
           choices: [],
           depends_on: [],
-          prominence: "major",
+          prominence: "critical",
           secret: false,
           required: true,
         },
