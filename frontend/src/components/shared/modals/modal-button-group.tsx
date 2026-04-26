@@ -44,7 +44,11 @@ export function ModalButtonGroup({
         testId={primaryTestId}
         isDisabled={isLoading}
       >
-        {isLoading ? <Spinner size="md" className="text-white" /> : primaryText}
+        {isLoading ? (
+          <Spinner size="md" className="text-white" testId="loading-spinner" />
+        ) : (
+          primaryText
+        )}
       </BrandButton>
       <BrandButton
         type="button"
