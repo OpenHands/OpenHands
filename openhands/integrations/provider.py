@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, Coroutine, Literal, cast, overload
+from typing import cast
 from urllib.parse import quote
 
 import httpx
@@ -15,9 +15,6 @@ from pydantic import (
 )
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.events.action.action import Action
-from openhands.events.action.commands import CmdRunAction
-from openhands.events.stream import EventStream
 from openhands.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
@@ -401,110 +398,6 @@ class ProviderHandler:
                 unique_repos.append(repo)
         return unique_repos
 
-    async def set_event_stream_secrets(
-        self,
-        event_stream: EventStream,
-        env_vars: dict[ProviderType, SecretStr] | None = None,
-    ) -> None:
-        """This ensures that the latest provider tokens are masked from the event stream
-        It is called when the provider tokens are first initialized in the runtime or when tokens are re-exported with the latest working ones
-
-        Args:
-            event_stream: Agent session's event stream
-            env_vars: Dict of providers and their tokens that require updating
-        """
-        if env_vars:
-            exposed_env_vars = self.expose_env_vars(env_vars)
-        else:
-            exposed_env_vars = await self.get_env_vars(expose_secrets=True)
-        event_stream.set_secrets(exposed_env_vars)
-
-    def expose_env_vars(
-        self, env_secrets: dict[ProviderType, SecretStr]
-    ) -> dict[str, str]:
-        """Return string values instead of typed values for environment secrets
-        Called just before exporting secrets to runtime, or setting secrets in the event stream
-        """
-        exposed_envs = {}
-        for provider, token in env_secrets.items():
-            env_key = ProviderHandler.get_provider_env_key(provider)
-            exposed_envs[env_key] = token.get_secret_value()
-
-        return exposed_envs
-
-    @overload
-    def get_env_vars(
-        self,
-        expose_secrets: Literal[True],
-        providers: list[ProviderType] | None = ...,
-        get_latest: bool = False,
-    ) -> Coroutine[Any, Any, dict[str, str]]: ...
-
-    @overload
-    def get_env_vars(
-        self,
-        expose_secrets: Literal[False],
-        providers: list[ProviderType] | None = ...,
-        get_latest: bool = False,
-    ) -> Coroutine[Any, Any, dict[ProviderType, SecretStr]]: ...
-
-    async def get_env_vars(
-        self,
-        expose_secrets: bool = False,
-        providers: list[ProviderType] | None = None,
-        get_latest: bool = False,
-    ) -> dict[ProviderType, SecretStr] | dict[str, str]:
-        """Retrieves the provider tokens from ProviderHandler object
-        This is used when initializing/exporting new provider tokens in the runtime
-
-        Args:
-            expose_secrets: Flag which returns strings instead of secrets
-            providers: Return provider tokens for the list passed in, otherwise return all available providers
-            get_latest: Get the latest working token for the providers if True, otherwise get the existing ones
-        """
-        if not self.provider_tokens:
-            return {}
-
-        env_vars: dict[ProviderType, SecretStr] = {}
-        all_providers = [provider for provider in ProviderType]
-        provider_list = providers if providers else all_providers
-
-        for provider in provider_list:
-            if provider in self.provider_tokens:
-                token = (
-                    self.provider_tokens[provider].token
-                    if self.provider_tokens
-                    else SecretStr('')
-                )
-
-                if get_latest and self.REFRESH_TOKEN_URL and self.sid:
-                    token = await self._get_latest_provider_token(provider)
-
-                if token:
-                    env_vars[provider] = token
-
-        if not expose_secrets:
-            return env_vars
-
-        return self.expose_env_vars(env_vars)
-
-    @classmethod
-    def check_cmd_action_for_provider_token_ref(
-        cls, event: Action
-    ) -> list[ProviderType]:
-        """Detect if agent run action is using a provider token (e.g github_token)
-        Returns a list of providers which are called by the agent
-        """
-        if not isinstance(event, CmdRunAction):
-            return []
-
-        called_providers = []
-        for provider in ProviderType:
-            if ProviderHandler.get_provider_env_key(provider) in event.command.lower():
-                called_providers.append(provider)
-
-        return called_providers
-
     @classmethod
     def get_provider_env_key(cls, provider: ProviderType) -> str:
         """Map ProviderType value to the environment variable name in the runtime"""
@@ -753,30 +646,3 @@ class ProviderHandler:
             remote_url = f'{protocol}://{domain}/{repo_name}.git'
 
         return remote_url
-
-    async def is_pr_open(
-        self, repository: str, pr_number: int, git_provider: ProviderType
-    ) -> bool:
-        """Check if a PR is still active (not closed/merged).
-
-        This method checks the PR status using the provider's service method.
-
-        Args:
-            repository: Repository name in format 'owner/repo'
-            pr_number: The PR number to check
-            git_provider: The Git provider type for this repository
-
-        Returns:
-            True if PR is active (open), False if closed/merged, True if can't determine
-        """
-        try:
-            service = self.get_service(git_provider)
-            return await service.is_pr_open(repository, pr_number)
-
-        except Exception as e:
-            logger.warning(
-                f'Could not determine PR status for {repository}#{pr_number}: {e}. '
-                f'Including conversation to be safe.'
-            )
-            # If we can't determine the PR status, include the conversation to be safe
-            return True
