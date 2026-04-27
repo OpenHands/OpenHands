@@ -62,6 +62,7 @@ def _build_user_agent_settings(row: Mapping[str, Any]) -> dict[str, Any]:
                 'enabled': row['enable_default_condenser'],
                 'max_size': row['condenser_max_size'],
             },
+            'mcp_config': row['mcp_config'],
         }
     )
     return _deep_merge(generated, row.get('agent_settings') or {})
@@ -276,6 +277,7 @@ def upgrade() -> None:
         sa.column('llm_base_url', sa.String()),
         sa.column('enable_default_condenser', sa.Boolean()),
         sa.column('condenser_max_size', sa.Integer()),
+        sa.column('mcp_config', sa.JSON()),
         sa.column('agent_settings', sa.JSON()),
         sa.column('conversation_settings', sa.JSON()),
     )
@@ -290,6 +292,7 @@ def upgrade() -> None:
             user_settings_table.c.llm_base_url,
             user_settings_table.c.enable_default_condenser,
             user_settings_table.c.condenser_max_size,
+            user_settings_table.c.mcp_config,
             user_settings_table.c.agent_settings,
             user_settings_table.c.conversation_settings,
         )

@@ -950,7 +950,6 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
         sandbox_runtime_container_image='test-runtime',
         org_version=5,
         max_budget_per_task=1000.0,
-        enable_solvability_analysis=True,
         v1_enabled=True,
     )
     mock_user = MagicMock()
@@ -994,7 +993,6 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
         assert org_data['sandbox_runtime_container_image'] == 'test-runtime'
         assert org_data['org_version'] == 5
         assert org_data['max_budget_per_task'] == 1000.0
-        assert org_data['enable_solvability_analysis'] is True
         assert org_data['v1_enabled'] is True
         assert org_data['credits'] is None
 
@@ -3245,7 +3243,6 @@ async def test_get_org_app_settings_success(
     # Arrange
     mock_response = OrgAppSettingsResponse(
         enable_proactive_conversation_starters=True,
-        enable_solvability_analysis=False,
         max_budget_per_task=10.0,
     )
 
@@ -3268,7 +3265,6 @@ async def test_get_org_app_settings_success(
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
         assert response_data['enable_proactive_conversation_starters'] is True
-        assert response_data['enable_solvability_analysis'] is False
         assert response_data['max_budget_per_task'] == 10.0
 
 
@@ -3285,7 +3281,6 @@ async def test_get_org_app_settings_with_null_values(
     # OrgAppSettingsResponse.from_org() handles defaults, so we test the response model
     mock_response = OrgAppSettingsResponse(
         enable_proactive_conversation_starters=True,  # Default when None in Org
-        enable_solvability_analysis=None,
         max_budget_per_task=None,
     )
 
@@ -3309,7 +3304,6 @@ async def test_get_org_app_settings_with_null_values(
         response_data = response.json()
         # enable_proactive_conversation_starters defaults to True when None
         assert response_data['enable_proactive_conversation_starters'] is True
-        assert response_data['enable_solvability_analysis'] is None
         assert response_data['max_budget_per_task'] is None
 
 
@@ -3377,7 +3371,6 @@ async def test_update_org_app_settings_success(
     # Arrange
     mock_response = OrgAppSettingsResponse(
         enable_proactive_conversation_starters=False,
-        enable_solvability_analysis=True,
         max_budget_per_task=25.0,
     )
 
@@ -3398,7 +3391,6 @@ async def test_update_org_app_settings_success(
             '/api/organizations/app',
             json={
                 'enable_proactive_conversation_starters': False,
-                'enable_solvability_analysis': True,
                 'max_budget_per_task': 25.0,
             },
         )
@@ -3407,7 +3399,6 @@ async def test_update_org_app_settings_success(
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
         assert response_data['enable_proactive_conversation_starters'] is False
-        assert response_data['enable_solvability_analysis'] is True
         assert response_data['max_budget_per_task'] == 25.0
         mock_update.assert_called_once()
 
@@ -3424,7 +3415,6 @@ async def test_update_org_app_settings_partial_update(
     # Arrange
     mock_response = OrgAppSettingsResponse(
         enable_proactive_conversation_starters=False,
-        enable_solvability_analysis=True,
         max_budget_per_task=10.0,  # Unchanged
     )
 
@@ -3467,7 +3457,6 @@ async def test_update_org_app_settings_set_null(
     # Arrange
     mock_response = OrgAppSettingsResponse(
         enable_proactive_conversation_starters=True,
-        enable_solvability_analysis=True,
         max_budget_per_task=None,
     )
 

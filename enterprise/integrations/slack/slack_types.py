@@ -112,7 +112,6 @@ class SlackViewInterface(SlackMessageView, SummaryExtractionTracker, ABC):
     should_extract: bool
     send_summary_instruction: bool
     conversation_id: str
-    v1_enabled: bool
 
     @abstractmethod
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:

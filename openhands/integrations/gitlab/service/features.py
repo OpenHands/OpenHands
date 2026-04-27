@@ -1,6 +1,5 @@
 from openhands.integrations.gitlab.service.base import GitLabMixinBase
 from openhands.integrations.service_types import (
-    MicroagentContentResponse,
     ProviderType,
     RequestMethod,
     SuggestedTask,
@@ -12,40 +11,6 @@ class GitLabFeaturesMixin(GitLabMixinBase):
     """
     Methods used for custom features in UI driven via GitLab integration
     """
-
-    async def _get_cursorrules_url(self, repository: str) -> str:
-        """Get the URL for checking .cursorrules file."""
-        project_id = self._extract_project_id(repository)
-        return (
-            f'{self.BASE_URL}/projects/{project_id}/repository/files/.cursorrules/raw'
-        )
-
-    async def _get_microagents_directory_url(
-        self, repository: str, microagents_path: str
-    ) -> str:
-        """Get the URL for checking microagents directory."""
-        project_id = self._extract_project_id(repository)
-        return f'{self.BASE_URL}/projects/{project_id}/repository/tree'
-
-    def _get_microagents_directory_params(self, microagents_path: str) -> dict:
-        """Get parameters for the microagents directory request."""
-        return {'path': microagents_path, 'recursive': 'true'}
-
-    def _is_valid_microagent_file(self, item: dict) -> bool:
-        """Check if an item represents a valid microagent file."""
-        return (
-            item['type'] == 'blob'
-            and item['name'].endswith('.md')
-            and item['name'] != 'README.md'
-        )
-
-    def _get_file_name_from_item(self, item: dict) -> str:
-        """Extract file name from directory item."""
-        return item['name']
-
-    def _get_file_path_from_item(self, item: dict, microagents_path: str) -> str:
-        """Extract file path from directory item."""
-        return item['path']
 
     async def get_suggested_tasks(self) -> list[SuggestedTask]:
         """Get suggested tasks for the authenticated user across all repositories.
@@ -178,30 +143,3 @@ class GitLabFeaturesMixin(GitLabMixinBase):
             return tasks
         except Exception:
             return []
-
-    async def get_microagent_content(
-        self, repository: str, file_path: str
-    ) -> MicroagentContentResponse:
-        """Fetch individual file content from GitLab repository.
-
-        Args:
-            repository: Repository name in format 'owner/repo' or 'domain/owner/repo'
-            file_path: Path to the file within the repository
-
-        Returns:
-            MicroagentContentResponse with parsed content and triggers
-
-        Raises:
-            RuntimeError: If file cannot be fetched or doesn't exist
-        """
-        # Extract project_id from repository name
-        project_id = self._extract_project_id(repository)
-
-        encoded_file_path = file_path.replace('/', '%2F')
-        base_url = f'{self.BASE_URL}/projects/{project_id}'
-        file_url = f'{base_url}/repository/files/{encoded_file_path}/raw'
-
-        response, _ = await self._make_request(file_url)
-
-        # Parse the content to extract triggers from frontmatter
-        return self._parse_microagent_content(response, file_path)

@@ -3,8 +3,8 @@ import os
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports import NpxStdioTransport
 
+from openhands.app_server.mcp.mcp_router import mcp_server
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.routes.mcp import mcp_server
 
 ENABLE_MCP_SEARCH_ENGINE = (
     os.getenv('ENABLE_MCP_SEARCH_ENGINE', 'false').lower() == 'true'

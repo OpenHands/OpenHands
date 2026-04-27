@@ -703,6 +703,41 @@ async def accept_tos(request: Request):
     return response
 
 
+@api_router.get('/onboarding_status')
+async def onboarding_status(request: Request):
+    """Return whether the current user must still complete onboarding.
+
+    Kept as a dedicated endpoint instead of riding on ``GET /api/v1/settings``
+    (the natural home for fields like ``email_verified``) because the settings
+    response is heavyweight: ``SaasSettingsStore.load`` joins User, Org, and
+    OrgMember rows and deep-merges the org-level and member-level
+    ``agent_settings`` before returning. Onboarding gating runs on every
+    protected-route navigation, so we need a lightweight read of a single
+    boolean rather than paying for the full settings aggregation.
+    """
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
+    user_id = await user_auth.get_user_id()
+
+    if not user_id:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'User is not authenticated'},
+        )
+
+    user = await UserStore.get_user_by_id(user_id)
+    if not user:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'User not found'},
+        )
+
+    should_complete = await _should_redirect_to_onboarding(user_id, user)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={'should_complete_onboarding': should_complete},
+    )
+
+
 @api_router.post('/complete_onboarding')
 async def complete_onboarding(request: Request):
     """Mark onboarding as completed for the current user."""

@@ -215,7 +215,6 @@ def new_conversation_view(
         conversation_id='conv-123',
         _decrypted_api_key='decrypted_key',
     )
-    view.v1_enabled = False
     return view
 
 

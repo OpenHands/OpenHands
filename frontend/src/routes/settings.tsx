@@ -30,6 +30,9 @@ const SAAS_ONLY_PATHS = [
   "/settings/api-keys",
   "/settings/team",
   "/settings/org",
+  "/settings/org-defaults",
+  "/settings/org-defaults/condenser",
+  "/settings/org-defaults/verification",
 ];
 
 const ORG_WIDE_BADGE_PATHS = new Set<string>([

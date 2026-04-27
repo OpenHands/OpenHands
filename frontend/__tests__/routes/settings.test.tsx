@@ -279,6 +279,38 @@ describe("Settings Screen", () => {
     getConfigSpy.mockRestore();
   });
 
+  it.each([
+    {
+      path: "/settings/org-defaults",
+      testId: "org-default-llm-settings-screen",
+    },
+    {
+      path: "/settings/org-defaults/condenser",
+      testId: "org-default-condenser-settings-screen",
+    },
+    {
+      path: "/settings/org-defaults/verification",
+      testId: "org-default-verification-settings-screen",
+    },
+  ])(
+    "should redirect away from $path in OSS mode",
+    async ({ path, testId }) => {
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - only return app mode
+      getConfigSpy.mockResolvedValue({ app_mode: "oss" });
+      mockQueryClient.clear();
+
+      renderSettingsScreen(path);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
+
+      getConfigSpy.mockRestore();
+    },
+  );
+
   it.todo("should not be able to access oss-only routes in saas mode");
 
   describe("Personal org vs team org visibility", () => {
