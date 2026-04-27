@@ -8,7 +8,6 @@ import { I18nextProvider } from "react-i18next";
 import GitSettingsScreen, { clientLoader } from "#/routes/git-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
-import AuthService from "#/api/auth-service/auth-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
@@ -484,11 +483,12 @@ describe("Form submission", () => {
     await waitFor(() => expect(disconnectButton).toBeDisabled());
   });
 
-  it("should call logout when pressing the disconnect tokens button", async () => {
+  it("should delete git providers when pressing the disconnect tokens button", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    const logoutSpy = vi.spyOn(AuthService, "logout");
+    const deleteGitProvidersSpy = vi.spyOn(SecretsService, "deleteGitProviders");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
+    deleteGitProvidersSpy.mockResolvedValue(true);
     getConfigSpy.mockResolvedValue(VALID_OSS_CONFIG);
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
@@ -506,7 +506,7 @@ describe("Form submission", () => {
     await waitFor(() => expect(disconnectButton).not.toBeDisabled());
     await userEvent.click(disconnectButton);
 
-    expect(logoutSpy).toHaveBeenCalled();
+    expect(deleteGitProvidersSpy).toHaveBeenCalled();
   });
 
   // flaky test

@@ -389,6 +389,7 @@ There are two main patterns for saving settings in the OpenHands frontend:
 **When to use each pattern:**
 - Use Pattern 1 (Immediate Save) for entity management where each item is independent
 - Use Pattern 2 (Manual Save) for configuration forms where settings are interdependent or need validation
+- Git provider tokens in the local/OSS integrations settings are managed through the V1 secrets endpoints (`POST`/`DELETE /api/v1/secrets/git-providers`). Do not reuse the logout flow for disconnecting tokens; `useLogout` is for actual app logout and still targets legacy OSS logout behavior.
 
 ### Adding New LLM Models
 

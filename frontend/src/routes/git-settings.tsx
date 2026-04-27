@@ -4,7 +4,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { useSettings } from "#/hooks/query/use-settings";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useLogout } from "#/hooks/mutation/use-logout";
+import { useDeleteGitProviders } from "#/hooks/mutation/use-delete-git-providers";
 import { GitHubTokenInput } from "#/components/features/settings/git-settings/github-token-input";
 import { GitLabTokenInput } from "#/components/features/settings/git-settings/gitlab-token-input";
 import { GitLabWebhookManager } from "#/components/features/settings/git-settings/gitlab-webhook-manager";
@@ -33,7 +33,8 @@ function GitSettingsScreen() {
   const { t } = useTranslation();
 
   const { mutate: saveGitProviders, isPending } = useAddGitProviders();
-  const { mutate: disconnectGitTokens } = useLogout();
+  const { mutate: disconnectGitTokens, isPending: isDisconnecting } =
+    useDeleteGitProviders();
 
   const { data: settings, isLoading } = useSettings();
   const { providers } = useUserProviders();
@@ -87,7 +88,15 @@ function GitSettingsScreen() {
       formData.get("disconnect-tokens-button") !== null;
 
     if (disconnectButtonClicked) {
-      disconnectGitTokens();
+      disconnectGitTokens(undefined, {
+        onSuccess: () => {
+          displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+        },
+        onError: (error) => {
+          const errorMessage = retrieveAxiosErrorMessage(error);
+          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+        },
+      });
       return;
     }
 
@@ -355,12 +364,13 @@ function GitSettingsScreen() {
               type="submit"
               variant="secondary"
               isDisabled={
-                !isGitHubTokenSet &&
-                !isGitLabTokenSet &&
-                !isBitbucketTokenSet &&
-                !isBitbucketDCTokenSet &&
-                !isAzureDevOpsTokenSet &&
-                !isForgejoTokenSet
+                isDisconnecting ||
+                (!isGitHubTokenSet &&
+                  !isGitLabTokenSet &&
+                  !isBitbucketTokenSet &&
+                  !isBitbucketDCTokenSet &&
+                  !isAzureDevOpsTokenSet &&
+                  !isForgejoTokenSet)
               }
             >
               {t(I18nKey.GIT$DISCONNECT_TOKENS)}
