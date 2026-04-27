@@ -337,9 +337,9 @@ def test_settings_no_pydantic_frozen_field_warning():
 
         import importlib
 
-        import openhands.storage.data_models.settings
+        import openhands.app_server.settings.settings_models
 
-        importlib.reload(openhands.storage.data_models.settings)
+        importlib.reload(openhands.app_server.settings.settings_models)
 
         frozen_warnings = [
             warning for warning in w if 'frozen' in str(warning.message).lower()
