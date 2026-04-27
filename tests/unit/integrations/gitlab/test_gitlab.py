@@ -1,10 +1,14 @@
 """Tests for GitLab integration."""
 
+import importlib
 from unittest.mock import patch
 
 import pytest
 from pydantic import SecretStr
 
+from openhands.integrations import provider as provider_module
+from openhands.integrations.gitlab import constants as gitlab_constants_module
+from openhands.integrations.gitlab.constants import GITLAB_HOST
 from openhands.integrations.gitlab.gitlab_service import GitLabService
 from openhands.integrations.service_types import OwnerType, ProviderType, Repository
 from openhands.server.types import AppMode
@@ -475,3 +479,45 @@ async def test_gitlab_search_repositories_single_term_query():
 
         # Verify we got the expected repositories
         assert len(repositories) == 1
+
+
+class TestGitLabHostEnvVar:
+    """GITLAB_HOST env var configures the deployment-wide GitLab URL."""
+
+    def test_base_url_derived_from_gitlab_host(self):
+        assert GitLabService.BASE_URL == f'https://{GITLAB_HOST}/api/v4'
+        assert GitLabService.GRAPHQL_URL == f'https://{GITLAB_HOST}/api/graphql'
+
+    def test_provider_domains_uses_gitlab_host(self):
+        assert (
+            provider_module.ProviderHandler.PROVIDER_DOMAINS[ProviderType.GITLAB]
+            == GITLAB_HOST
+        )
+
+    def test_empty_gitlab_host_falls_back_to_default(self):
+        """An explicitly empty GITLAB_HOST falls back to gitlab.com."""
+        with patch.dict('os.environ', {'GITLAB_HOST': ''}):
+            reloaded = importlib.reload(gitlab_constants_module)
+        try:
+            assert reloaded.GITLAB_HOST == 'gitlab.com'
+        finally:
+            importlib.reload(gitlab_constants_module)
+
+    @pytest.mark.parametrize(
+        'raw,expected',
+        [
+            ('gitlab.example.com/', 'gitlab.example.com'),
+            ('https://gitlab.example.com', 'gitlab.example.com'),
+            ('http://gitlab.example.com', 'gitlab.example.com'),
+            ('https://gitlab.example.com/', 'gitlab.example.com'),
+            ('  https://gitlab.example.com/  ', 'gitlab.example.com'),
+        ],
+    )
+    def test_gitlab_host_is_sanitized(self, raw, expected):
+        """Common user input mistakes (protocol prefix, trailing slash, whitespace) are stripped."""
+        with patch.dict('os.environ', {'GITLAB_HOST': raw}):
+            reloaded = importlib.reload(gitlab_constants_module)
+        try:
+            assert reloaded.GITLAB_HOST == expected
+        finally:
+            importlib.reload(gitlab_constants_module)
