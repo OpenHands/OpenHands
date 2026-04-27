@@ -27,9 +27,6 @@ class ServerConfig(ServerConfigInterface):
     secret_store_class: str = (
         'openhands.storage.secrets.file_secrets_store.FileSecretsStore'
     )
-    conversation_store_class: str = (
-        'openhands.storage.conversation.file_conversation_store.FileConversationStore'
-    )
     monitoring_listener_class: str = 'openhands.server.monitoring.MonitoringListener'
     user_auth_class: str = (
         'openhands.server.user_auth.default_user_auth.DefaultUserAuth'

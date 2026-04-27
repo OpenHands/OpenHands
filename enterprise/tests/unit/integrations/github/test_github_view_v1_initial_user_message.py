@@ -77,7 +77,6 @@ class TestGithubViewV1InitialUserMessage:
             title='ignored',
             description='ignored',
             previous_comments=[],
-            v1_enabled=True,
             comment_body='please fix this',
             comment_id=999,
         )
@@ -131,7 +130,6 @@ class TestGithubViewV1InitialUserMessage:
             title='ignored',
             description='ignored',
             previous_comments=[],
-            v1_enabled=True,
             comment_body='nit: rename variable',
             comment_id=1001,
             branch_name='feature-branch',
@@ -187,7 +185,6 @@ class TestGithubViewV1InitialUserMessage:
             title='ignored',
             description='ignored',
             previous_comments=[],
-            v1_enabled=True,
             comment_body='please add a null check',
             comment_id=1002,
             branch_name='feature-branch',

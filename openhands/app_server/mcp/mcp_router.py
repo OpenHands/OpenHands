@@ -1,12 +1,22 @@
 import os
 import re
 from typing import Annotated
+from uuid import UUID
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_http_request
 from pydantic import Field
 
+from openhands.app_server.config import (
+    get_app_conversation_info_service,
+    get_global_config,
+)
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import (
+    USER_CONTEXT_ATTR,
+    SpecifyUserContext,
+)
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
@@ -19,14 +29,12 @@ from openhands.integrations.github.github_service import GithubServiceImpl
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import GitService, ProviderType
-from openhands.server.shared import ConversationStoreImpl, config, server_config
 from openhands.server.types import AppMode
 from openhands.server.user_auth import (
     get_access_token,
     get_provider_tokens,
     get_user_id,
 )
-from openhands.storage.data_models.conversation_metadata import ConversationMetadata
 
 mcp_server = FastMCP('mcp', mask_error_details=True)
 
@@ -38,7 +46,7 @@ async def get_conversation_link(
     service: GitService, conversation_id: str | None, body: str
 ) -> str:
     """Appends a followup link, in the PR body, to the OpenHands conversation that opened the PR"""
-    if server_config.app_mode != AppMode.SAAS:
+    if get_global_config().app_mode != AppMode.SAAS:
         return body
 
     if not conversation_id:
@@ -57,37 +65,50 @@ async def get_conversation_link(
 async def save_pr_metadata(
     user_id: str | None, conversation_id: str, tool_result: str
 ) -> None:
-    conversation_store = await ConversationStoreImpl.get_instance(config, user_id)
-    conversation: ConversationMetadata = await conversation_store.get_metadata(
-        conversation_id
-    )
-
-    pull_pattern = r'pull/(\d+)'
-    merge_request_pattern = r'merge_requests/(\d+)'
-    pull_requests_pattern = r'pull-requests/(\d+)'
-
-    # Check if the tool_result contains the PR number
-    pr_number = None
-    match_pull = re.search(pull_pattern, tool_result)
-    match_merge_request = re.search(merge_request_pattern, tool_result)
-    match_pull_requests = re.search(pull_requests_pattern, tool_result)
-
-    if match_pull:
-        pr_number = int(match_pull.group(1))
-    elif match_merge_request:
-        pr_number = int(match_merge_request.group(1))
-    elif match_pull_requests:
-        pr_number = int(match_pull_requests.group(1))
-
-    if pr_number:
-        logger.info(f'Saving PR number: {pr_number} for conversation {conversation_id}')
-        conversation.pr_number.append(pr_number)
-    else:
-        logger.warning(
-            f'Failed to extract PR number for conversation {conversation_id}'
+    # Manually construct state for background operation (no request context available)
+    state = InjectorState()
+    setattr(state, USER_CONTEXT_ATTR, SpecifyUserContext(user_id))
+    async with get_app_conversation_info_service(
+        state
+    ) as app_conversation_info_service:
+        app_conversation_info = (
+            await app_conversation_info_service.get_app_conversation_info(
+                UUID(conversation_id)
+            )
         )
+        if not app_conversation_info:
+            raise ToolError(f'No such conversation {conversation_id}')
 
-    await conversation_store.save_metadata(conversation)
+        pull_pattern = r'pull/(\d+)'
+        merge_request_pattern = r'merge_requests/(\d+)'
+        pull_requests_pattern = r'pull-requests/(\d+)'
+
+        # Check if the tool_result contains the PR number
+        pr_number = None
+        match_pull = re.search(pull_pattern, tool_result)
+        match_merge_request = re.search(merge_request_pattern, tool_result)
+        match_pull_requests = re.search(pull_requests_pattern, tool_result)
+
+        if match_pull:
+            pr_number = int(match_pull.group(1))
+        elif match_merge_request:
+            pr_number = int(match_merge_request.group(1))
+        elif match_pull_requests:
+            pr_number = int(match_pull_requests.group(1))
+
+        if pr_number:
+            logger.info(
+                f'Saving PR number: {pr_number} for conversation {conversation_id}'
+            )
+            app_conversation_info.pr_number.append(pr_number)
+        else:
+            logger.warning(
+                f'Failed to extract PR number for conversation {conversation_id}'
+            )
+
+        await app_conversation_info_service.save_app_conversation_info(
+            app_conversation_info
+        )
 
 
 @mcp_server.tool()
