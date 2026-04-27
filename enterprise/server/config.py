@@ -72,9 +72,6 @@ class SaaSServerConfig(ServerConfig):
     auth_url: str | None = os.environ.get('AUTH_URL')
     settings_store_class: str = 'storage.saas_settings_store.SaasSettingsStore'
     secret_store_class: str = 'storage.saas_secrets_store.SaasSecretsStore'
-    monitoring_listener_class: str = (
-        'server.saas_monitoring_listener.SaaSMonitoringListener'
-    )
     user_auth_class: str = 'server.auth.saas_user_auth.SaasUserAuth'
     # Maintenance window configuration
     maintenance_start_time: str = os.environ.get(
