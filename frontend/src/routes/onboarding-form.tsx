@@ -25,6 +25,11 @@ import OptionService from "#/api/option-service/option-service.api";
 import { ENABLE_ONBOARDING } from "#/utils/feature-flags";
 
 export const clientLoader = async () => {
+  // Check feature flag FIRST (sync) to block access immediately without flash
+  if (!ENABLE_ONBOARDING()) {
+    return redirect("/");
+  }
+
   let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
   if (!config) {
     config = await OptionService.getConfig();
@@ -33,7 +38,7 @@ export const clientLoader = async () => {
 
   // Only allow access to onboarding for SaaS mode (cloud or self-hosted)
   // OSS users should never reach /onboarding
-  if (config?.app_mode !== "saas" && !ENABLE_ONBOARDING()) {
+  if (config?.app_mode !== "saas") {
     return redirect("/");
   }
 
