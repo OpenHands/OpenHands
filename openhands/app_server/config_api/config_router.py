@@ -6,7 +6,7 @@ provider search with pagination support.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from openhands.app_server.config_api.config_models import (
     LLMModel,
@@ -19,8 +19,18 @@ from openhands.app_server.utils.paging_utils import (
     paginate_results,
 )
 from openhands.sdk.llm.utils.verified_models import VERIFIED_MODELS
-from openhands.server.routes.public import get_llm_models_dependency
-from openhands.utils.llm import ModelsResponse
+from openhands.server.shared import config
+from openhands.utils.llm import ModelsResponse, get_supported_llm_models
+
+
+async def get_llm_models_dependency(request: Request) -> ModelsResponse:
+    """Returns a callable that provides the LLM models implementation.
+
+    Returns a factory that produces the actual implementation function.
+    Override this in enterprise/saas mode via app.dependency_overrides.
+    """
+    return get_supported_llm_models(config)
+
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
