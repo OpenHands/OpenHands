@@ -59,8 +59,13 @@ function BillingSettingsScreen() {
   const checkoutStatus = searchParams.get("checkout");
   const amount = searchParams.get("amount");
   const sessionId = searchParams.get("session_id");
+  const hasHandledCheckoutRef = React.useRef(false);
 
   React.useEffect(() => {
+    if (!checkoutStatus) return;
+    if (hasHandledCheckoutRef.current) return;
+    hasHandledCheckoutRef.current = true;
+
     if (checkoutStatus === "success") {
       // Track credits purchased if we have the necessary data
       if (amount && sessionId) {
