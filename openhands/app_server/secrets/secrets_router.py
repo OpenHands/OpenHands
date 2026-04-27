@@ -13,6 +13,7 @@ from openhands.app_server.secrets.secrets_models import (
     CustomSecretPage,
     CustomSecretWithoutValue,
 )
+from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.models import EditResponse
 from openhands.integrations.provider import (
@@ -30,7 +31,6 @@ from openhands.server.user_auth import (
     get_secrets_store,
 )
 from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.secrets.secrets_store import SecretsStore
 
 # Create router with /api/v1/secrets prefix
 router = APIRouter(

@@ -4,7 +4,7 @@ import { constructBranchUrl, cn } from "#/utils/utils";
 import { Provider } from "#/types/settings";
 import { I18nKey } from "#/i18n/declaration";
 import { GitExternalLinkIcon } from "./git-external-link-icon";
-import { useSettings } from "#/hooks/query/use-settings";
+import { useProviderHost } from "#/hooks/use-provider-host";
 
 interface GitControlBarBranchButtonProps {
   selectedBranch: string | null | undefined;
@@ -18,11 +18,7 @@ export function GitControlBarBranchButton({
   gitProvider,
 }: GitControlBarBranchButtonProps) {
   const { t } = useTranslation();
-  const { data: settings } = useSettings();
-
-  const providerHost = gitProvider
-    ? settings?.provider_tokens_set[gitProvider]
-    : null;
+  const providerHost = useProviderHost(gitProvider);
 
   const hasBranch = selectedBranch && selectedRepository && gitProvider;
   const branchUrl = hasBranch

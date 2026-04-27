@@ -10,6 +10,7 @@ from openhands.app_server.web_client.web_client_models import (
     WebClientConfig,
     WebClientFeatureFlags,
 )
+from openhands.integrations.provider import ProviderHandler
 from openhands.integrations.service_types import ProviderType
 
 
@@ -149,6 +150,12 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     )
     github_app_slug: str | None = Field(default_factory=_get_github_app_slug)
     gitlab_enabled: bool = Field(default_factory=_is_gitlab_enabled)
+    provider_default_hosts: dict[str, str] = Field(
+        default_factory=lambda: {
+            provider.value: host
+            for provider, host in ProviderHandler.PROVIDER_DOMAINS.items()
+        }
+    )
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
 
     async def get_web_client_config(self) -> WebClientConfig:
@@ -168,6 +175,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             updated_at=self.updated_at,
             github_app_slug=self.github_app_slug,
             gitlab_enabled=self.gitlab_enabled,
+            provider_default_hosts=self.provider_default_hosts,
             slack_enabled=self.slack_enabled,
         )
         return result
