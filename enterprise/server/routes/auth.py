@@ -705,7 +705,16 @@ async def accept_tos(request: Request):
 
 @api_router.get('/onboarding_status')
 async def onboarding_status(request: Request):
-    """Return whether the current user must still complete onboarding."""
+    """Return whether the current user must still complete onboarding.
+
+    Kept as a dedicated endpoint instead of riding on ``GET /api/v1/settings``
+    (the natural home for fields like ``email_verified``) because the settings
+    response is heavyweight: ``SaasSettingsStore.load`` joins User, Org, and
+    OrgMember rows and deep-merges the org-level and member-level
+    ``agent_settings`` before returning. Onboarding gating runs on every
+    protected-route navigation, so we need a lightweight read of a single
+    boolean rather than paying for the full settings aggregation.
+    """
     user_auth = cast(SaasUserAuth, await get_user_auth(request))
     user_id = await user_auth.get_user_id()
 
