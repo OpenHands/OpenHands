@@ -156,13 +156,15 @@ class Settings(BaseModel):
 
     @model_validator(mode='after')
     def _rewrite_volatile_ollama_url_in_settings(self) -> 'Settings':
-        """Rewrite ephemeral 172.x Ollama container base URLs to host.docker.internal at load time.
+        """Clear ephemeral 172.x / host.docker.internal Ollama base URLs at load time.
 
-        Docker bridge IPs in the 172.16.0.0/12 range are ephemeral and change on
-        every container rebuild. This validator transparently rewrites any stored
-        llm_base_url that points to such an IP (port 11434, Ollama) so the setting
-        remains valid after a container rebuild without requiring the user to
-        manually edit their settings.
+        Docker bridge IPs in the 172.16.0.0/12 range and host.docker.internal
+        are ephemeral and may change on every container rebuild, or may resolve
+        to an unreachable address (e.g. the WSL2 bridge rather than the actual
+        Ollama VM). This validator clears any such stored llm_base_url so the
+        LLM falls back to its own default rather than attempting a connection to
+        an unreachable host. Users with a stable external Ollama URL (e.g.
+        10.x.x.x) are unaffected.
         """
         url = self.llm_base_url
         if not url:
@@ -180,15 +182,19 @@ class Settings(BaseModel):
             parsed = urlparse(url)
             host = parsed.hostname or ''
             port = parsed.port
+
+            # Check for host.docker.internal
+            if host == 'host.docker.internal' and port == 11434:
+                object.__setattr__(self, 'llm_base_url', None)
+                return self
+
+            # Check for 172.16.0.0/12 bridge IPs
             addr = ipaddress.ip_address(host)
             in_172 = isinstance(
                 addr, ipaddress.IPv4Address
             ) and addr in ipaddress.IPv4Network('172.16.0.0/12')
             if in_172 and port == 11434:
-                path = parsed.path or ''
-                scheme = parsed.scheme or 'http'
-                rewritten = f'{scheme}://host.docker.internal:{port}{path}'
-                object.__setattr__(self, 'llm_base_url', rewritten)
+                object.__setattr__(self, 'llm_base_url', None)
         except ValueError:
             pass
         return self
