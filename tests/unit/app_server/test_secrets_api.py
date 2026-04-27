@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.secrets.file_secrets_store import FileSecretsStore
 from openhands.app_server.secrets.secrets_router import (
     router as secrets_router,
 )
@@ -19,7 +20,6 @@ from openhands.integrations.provider import (
 )
 from openhands.storage import get_file_store
 from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.secrets.file_secrets_store import FileSecretsStore
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def file_secrets_store(temp_dir):
     file_store = get_file_store('local', temp_dir)
     store = FileSecretsStore(file_store)
     with patch(
-        'openhands.storage.secrets.file_secrets_store.FileSecretsStore.get_instance',
+        'openhands.app_server.secrets.file_secrets_store.FileSecretsStore.get_instance',
         AsyncMock(return_value=store),
     ):
         yield store
