@@ -1,5 +1,6 @@
 import warnings
 
+import boto3
 import httpx
 from pydantic import BaseModel
 
@@ -10,7 +11,6 @@ with warnings.catch_warnings():
 
 from openhands.core.config import LLMConfig, OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
-from openhands.llm import bedrock
 
 # ---------------------------------------------------------------------------
 # The ``openhands-sdk`` package is the **single source of truth** for which
@@ -277,9 +277,7 @@ def get_supported_llm_models(
             hardcoded ``OPENHANDS_MODELS``.
     """
     litellm_model_list = litellm.model_list + list(litellm.model_cost.keys())
-    litellm_model_list_without_bedrock = bedrock.remove_error_modelId(
-        litellm_model_list
-    )
+    litellm_model_list_without_bedrock = remove_error_modelId(litellm_model_list)
     # TODO: for bedrock, this is using the default config
     llm_config: LLMConfig = config.get_llm_config()
     bedrock_model_list: list[str] = []
@@ -288,7 +286,7 @@ def get_supported_llm_models(
         and llm_config.aws_access_key_id
         and llm_config.aws_secret_access_key
     ):
-        bedrock_model_list = bedrock.list_foundation_models(
+        bedrock_model_list = list_foundation_models(
             llm_config.aws_region_name,
             llm_config.aws_access_key_id.get_secret_value(),
             llm_config.aws_secret_access_key.get_secret_value(),
@@ -323,3 +321,32 @@ def get_supported_llm_models(
         verified_providers=VERIFIED_PROVIDERS,
         default_model=DEFAULT_OPENHANDS_MODEL,
     )
+
+
+def list_foundation_models(
+    aws_region_name: str, aws_access_key_id: str, aws_secret_access_key: str
+) -> list[str]:
+    try:
+        # The AWS bedrock model id is not queried, if no AWS parameters are configured.
+        client = boto3.client(
+            service_name='bedrock',
+            region_name=aws_region_name,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+        )
+        foundation_models_list = client.list_foundation_models(
+            byOutputModality='TEXT', byInferenceType='ON_DEMAND'
+        )
+        model_summaries = foundation_models_list['modelSummaries']
+        return ['bedrock/' + model['modelId'] for model in model_summaries]
+    except Exception as err:
+        logger.warning(
+            '%s. Please config AWS_REGION_NAME AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY'
+            ' if you want use bedrock model.',
+            err,
+        )
+        return []
+
+
+def remove_error_modelId(model_list: list[str]) -> list[str]:
+    return list(filter(lambda m: not m.startswith('bedrock'), model_list))

@@ -76,11 +76,6 @@ def get_user_not_found_message(username: str | None = None) -> str:
     return f"It looks like you haven't created an OpenHands account yet. Please sign up at [OpenHands Cloud]({HOST_URL}) and try again."
 
 
-# Toggle for solvability report feature
-ENABLE_SOLVABILITY_ANALYSIS = (
-    os.getenv('ENABLE_SOLVABILITY_ANALYSIS', 'false').lower() == 'true'
-)
-
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
     or 'openhands/integrations/templates/resolver/'
