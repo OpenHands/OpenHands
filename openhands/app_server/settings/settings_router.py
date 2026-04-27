@@ -9,6 +9,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
+from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
@@ -28,8 +30,6 @@ from openhands.server.user_auth import (
 )
 from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
-from openhands.storage.secrets.secrets_store import SecretsStore
-from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.llm import (
     get_provider_api_base,
     is_openhands_model,

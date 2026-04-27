@@ -10,10 +10,10 @@ from storage.database import a_session_maker
 from storage.stored_custom_secrets import StoredCustomSecrets
 from storage.user_store import UserStore
 
+from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.secrets.secrets_store import SecretsStore
 
 
 @dataclass
