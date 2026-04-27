@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 from openhands.core.config import load_openhands_config
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.config.server_config import ServerConfig, load_server_config
-from openhands.server.monitoring import MonitoringListener
 from openhands.server.types import ServerConfigInterface
 from openhands.storage import get_file_store
 from openhands.storage.files import FileStore
@@ -54,13 +53,6 @@ sio = socketio.AsyncServer(
     # Increase buffer size to 4MB (to handle 3MB files with base64 overhead)
     max_http_buffer_size=4 * 1024 * 1024,
 )
-
-MonitoringListenerImpl = get_impl(
-    MonitoringListener,
-    server_config.monitoring_listener_class,
-)
-
-monitoring_listener = MonitoringListenerImpl.get_instance(config)
 
 SettingsStoreImpl = get_impl(SettingsStore, server_config.settings_store_class)
 

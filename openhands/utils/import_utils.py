@@ -64,7 +64,7 @@ def get_impl(cls: type[T], impl_name: str | None) -> type[T]:
         >>> CustomStore = get_impl(SettingsStore, 'myapp.CustomSettingsStore')
 
     Common Use Cases:
-        - Server components (UserAuth, MonitoringListener, etc.)
+        - Server components (UserAuth, etc.)
         - Storage implementations (SettingsStore, SecretsStore, etc.)
         - Service integrations (GitHub, GitLab, Bitbucket, Azure DevOps services)
 
