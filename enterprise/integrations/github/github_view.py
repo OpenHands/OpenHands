@@ -152,7 +152,6 @@ class GithubIssue(ResolverViewInterface):
         )
 
         # All conversations use V1 app conversation service
-        # V1 conversations are stored in a separate table, not in SaasConversationStore
         self.conversation_id = uuid4().hex
         return ConversationMetadata(
             conversation_id=self.conversation_id,
