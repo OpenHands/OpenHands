@@ -58,6 +58,12 @@ vi.mock("#/api/option-service/option-service.api", () => ({
   },
 }));
 
+// Mock feature flag - enable onboarding by default for tests
+const mockEnableOnboarding = vi.fn(() => true);
+vi.mock("#/utils/feature-flags", () => ({
+  ENABLE_ONBOARDING: () => mockEnableOnboarding(),
+}));
+
 const renderOnboardingForm = async () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -596,9 +602,25 @@ describe("onboarding-form clientLoader", () => {
     mockQueryClientGetData.mockReset();
     mockQueryClientSetData.mockReset();
     mockGetConfig.mockReset();
+    mockEnableOnboarding.mockReturnValue(true);
   });
 
   describe("redirect behavior", () => {
+    it("should redirect to / when ENABLE_ONBOARDING feature flag is false", async () => {
+      mockEnableOnboarding.mockReturnValue(false);
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud" },
+      };
+      mockQueryClientGetData.mockReturnValue(saasConfig);
+
+      const result = await clientLoader();
+
+      expect(result).toBeDefined();
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
     it("should redirect to / when app_mode is oss", async () => {
       const ossConfig = {
         app_mode: "oss",
