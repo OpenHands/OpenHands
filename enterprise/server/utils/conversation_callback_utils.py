@@ -1,6 +1,4 @@
-import base64
 import json
-import pickle
 from datetime import datetime
 
 from server.logger import logger
