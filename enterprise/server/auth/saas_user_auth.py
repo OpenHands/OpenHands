@@ -35,6 +35,7 @@ from storage.user_authorization_store import UserAuthorizationStore
 from storage.user_store import UserStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderToken,
@@ -43,7 +44,6 @@ from openhands.integrations.provider import (
 from openhands.server.settings import Settings
 from openhands.server.user_auth.user_auth import AuthType, UserAuth
 from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.settings.settings_store import SettingsStore
 
 token_manager = TokenManager()
 

@@ -22,8 +22,14 @@ import {
 } from "#/api/option-service/option.types";
 import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
+import { ENABLE_ONBOARDING } from "#/utils/feature-flags";
 
 export const clientLoader = async () => {
+  // Check feature flag FIRST (sync) to block access immediately without flash
+  if (!ENABLE_ONBOARDING()) {
+    return redirect("/");
+  }
+
   let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
   if (!config) {
     config = await OptionService.getConfig();

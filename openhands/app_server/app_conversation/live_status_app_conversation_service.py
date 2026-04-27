@@ -34,6 +34,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskStatus,
     AppConversationUpdateRequest,
+    ConversationTrigger,
     PluginSpec,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
@@ -98,7 +99,6 @@ from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 from openhands.storage.data_models.settings import SandboxGroupingStrategy
 from openhands.tools.preset.default import (
     get_default_tools,
