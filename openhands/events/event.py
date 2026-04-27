@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
+from openhands.events.metrics import Metrics
 from openhands.events.tool import ToolCallMetadata
-from openhands.llm.metrics import Metrics
 
 
 class EventSource(str, Enum):
