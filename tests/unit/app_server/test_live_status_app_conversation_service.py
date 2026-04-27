@@ -3182,3 +3182,428 @@ class TestLoadHooksFromWorkspace:
             },
             timeout=30.0,
         )
+
+
+class TestAcpProviderEnv:
+    """Unit tests for ``LiveStatusAppConversationService._acp_provider_env`` —
+    the helper that translates UI-saved LLM credentials into the
+    provider env vars the chosen ACP subprocess expects.
+    """
+
+    @pytest.fixture
+    def _acp_settings_factory(self):
+        from pydantic import SecretStr
+
+        try:
+            from openhands.sdk.settings import (
+                ACPAgentSettings,  # type: ignore[attr-defined]
+            )
+        except ImportError:
+            pytest.skip('ACPAgentSettings not available in this SDK build')
+
+        def _make(
+            *,
+            acp_server: str = 'claude-code',
+            api_key: str | None = None,
+            base_url: str | None = None,
+            acp_env: dict[str, str] | None = None,
+        ):
+            return ACPAgentSettings(
+                acp_server=acp_server,  # type: ignore[arg-type]
+                llm=LLM(
+                    model='claude-sonnet-4-5',
+                    api_key=SecretStr(api_key) if api_key else None,
+                    base_url=base_url,
+                ),
+                acp_env=acp_env or {},
+            )
+
+        return _make
+
+    def test_claude_code_translates_to_anthropic_vars(self, _acp_settings_factory):
+        s = _acp_settings_factory(
+            acp_server='claude-code',
+            api_key='sk-test-anthropic',
+            base_url='https://proxy.example.com',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(s)
+        assert env == {
+            'ANTHROPIC_API_KEY': 'sk-test-anthropic',
+            'ANTHROPIC_BASE_URL': 'https://proxy.example.com',
+        }
+
+    def test_codex_translates_to_openai_vars(self, _acp_settings_factory):
+        s = _acp_settings_factory(
+            acp_server='codex',
+            api_key='sk-test-openai',
+            base_url='https://proxy.example.com',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(s)
+        assert env == {
+            'OPENAI_API_KEY': 'sk-test-openai',
+            'OPENAI_BASE_URL': 'https://proxy.example.com',
+        }
+
+    def test_gemini_translates_to_gemini_vars(self, _acp_settings_factory):
+        s = _acp_settings_factory(
+            acp_server='gemini-cli',
+            api_key='sk-test-gemini',
+            base_url='https://proxy.example.com',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(s)
+        assert env == {
+            'GEMINI_API_KEY': 'sk-test-gemini',
+            'GEMINI_BASE_URL': 'https://proxy.example.com',
+        }
+
+    def test_custom_server_returns_empty(self, _acp_settings_factory):
+        """For acp_server='custom', the user is on their own via acp_env."""
+        s = _acp_settings_factory(
+            acp_server='custom',
+            api_key='sk-test',
+            base_url='https://proxy.example.com',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(s)
+        assert env == {}
+
+    def test_no_credentials_returns_empty(self, _acp_settings_factory):
+        """No api_key + no base_url → nothing synthesized."""
+        s = _acp_settings_factory(acp_server='claude-code')
+        env = LiveStatusAppConversationService._acp_provider_env(s)
+        assert env == {}
+
+    def test_base_url_alone_is_ignored(self, _acp_settings_factory):
+        """base_url without api_key → no plumbing.
+
+        The LLM settings page persists a provider-default ``base_url``
+        as soon as the user picks a model. Plumbing that default would
+        clobber a real proxy URL set via ``OH_AGENT_SERVER_ENV`` and
+        silently route the ACP subprocess to the wrong endpoint with a
+        proxy key it can't use. Require an explicit ``api_key`` as the
+        user's opt-in signal before plumbing anything.
+        """
+        s = _acp_settings_factory(
+            acp_server='claude-code', base_url='https://api.anthropic.com'
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(s)
+        assert env == {}
+
+    def test_api_key_alone_is_plumbed(self, _acp_settings_factory):
+        """api_key alone → plumb the key (provider default URL comes
+        from the SDK / OS env, not from us)."""
+        s = _acp_settings_factory(acp_server='claude-code', api_key='sk-test')
+        env = LiveStatusAppConversationService._acp_provider_env(s)
+        assert env == {'ANTHROPIC_API_KEY': 'sk-test'}
+
+    def test_unexpected_api_key_type_raises(self, _acp_settings_factory):
+        """Anything other than ``SecretStr`` / ``str`` for the api_key
+        raises. ``str(SecretStr)`` yields ``**********``; silently
+        falling back would plumb the placeholder as the credential.
+        """
+        s = _acp_settings_factory(acp_server='claude-code', api_key='sk-test')
+        # Swap in a non-string, non-SecretStr sentinel to simulate a
+        # future LLM config that stores api_key as (e.g.) a Provider
+        # object. Bypass Pydantic validation via __dict__.
+        s.llm.__dict__['api_key'] = object()  # type: ignore[assignment]
+
+        with pytest.raises(TypeError, match='Unexpected type for llm.api_key'):
+            LiveStatusAppConversationService._acp_provider_env(s)
+
+
+class TestAgentKindConversationUrl:
+    """Regression tests for the conversation_url / live-status route
+    dispatch — ``/api/conversations`` for LLM, ``/api/acp/conversations``
+    for ACP. Getting this wrong makes ACP conversations look stuck on
+    "Loading" because the frontend polls the wrong route and 404s."""
+
+    def test_build_conversation_url_llm(self):
+        from uuid import UUID
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfo,
+        )
+        from openhands.app_server.sandbox.sandbox_models import (
+            AGENT_SERVER,
+            ExposedUrl,
+            SandboxInfo,
+            SandboxStatus,
+        )
+
+        # Instantiate a stripped service (no deps needed for _build_conversation).
+        service = LiveStatusAppConversationService.__new__(
+            LiveStatusAppConversationService
+        )
+
+        info = AppConversationInfo(
+            id=UUID('11111111-1111-1111-1111-111111111111'),
+            created_by_user_id=None,
+            sandbox_id='sandbox-a',
+            agent_kind='llm',
+        )
+        sandbox = SandboxInfo(
+            id='sandbox-a',
+            created_by_user_id=None,
+            sandbox_spec_id='spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='sk',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:8000', port=8000),
+            ],
+        )
+        result = service._build_conversation(info, sandbox, None)
+        assert result is not None
+        assert result.conversation_url == (
+            'http://localhost:8000/api/conversations/11111111111111111111111111111111'
+        )
+
+    def test_build_conversation_url_acp(self):
+        from uuid import UUID
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfo,
+        )
+        from openhands.app_server.sandbox.sandbox_models import (
+            AGENT_SERVER,
+            ExposedUrl,
+            SandboxInfo,
+            SandboxStatus,
+        )
+
+        service = LiveStatusAppConversationService.__new__(
+            LiveStatusAppConversationService
+        )
+
+        info = AppConversationInfo(
+            id=UUID('22222222-2222-2222-2222-222222222222'),
+            created_by_user_id=None,
+            sandbox_id='sandbox-a',
+            agent_kind='acp',
+        )
+        sandbox = SandboxInfo(
+            id='sandbox-a',
+            created_by_user_id=None,
+            sandbox_spec_id='spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='sk',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:8000', port=8000),
+            ],
+        )
+        result = service._build_conversation(info, sandbox, None)
+        assert result is not None
+        assert result.conversation_url == (
+            'http://localhost:8000/api/acp/conversations/'
+            '22222222222222222222222222222222'
+        )
+
+    def test_agent_kind_to_router_path_known_kinds(self):
+        """``'llm'`` / ``None`` → legacy route, ``'acp'`` → ACP route."""
+        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
+            _agent_kind_to_router_path,
+        )
+
+        assert _agent_kind_to_router_path('llm') == '/api/conversations'
+        assert _agent_kind_to_router_path(None) == '/api/conversations'
+        assert _agent_kind_to_router_path('acp') == '/api/acp/conversations'
+
+    def test_agent_kind_to_router_path_unknown_warns_and_falls_back(self):
+        """Unknown variants warn and fall back to the LLM route.
+
+        Routing an unknown kind to ACP would 404 in more cases; the LLM
+        route at least returns a readable 4xx instead of a bare 404.
+        """
+        from unittest.mock import patch
+
+        from openhands.app_server.app_conversation import (  # noqa: E501
+            live_status_app_conversation_service as service_module,
+        )
+
+        with patch.object(service_module._logger, 'warning') as mock_warning:
+            path = service_module._agent_kind_to_router_path('future-variant')
+
+        assert path == '/api/conversations'
+        mock_warning.assert_called_once()
+        assert 'future-variant' in str(mock_warning.call_args)
+
+
+class TestBuildAcpStartConversationRequestSecrets:
+    """Tests for user-secret injection in ``_build_acp_start_conversation_request``.
+
+    Covers issue #14167: secrets from the Secrets panel and git provider
+    tokens must be available to ACP subprocesses as environment variables,
+    mirroring how they flow into the regular OpenHands sandbox.
+    """
+
+    @pytest.fixture
+    def service(self):
+        mock_user_context = Mock(spec=UserContext)
+        return LiveStatusAppConversationService(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+            app_conversation_info_service=Mock(),
+            app_conversation_start_task_service=Mock(),
+            event_callback_service=Mock(),
+            event_service=Mock(),
+            sandbox_service=Mock(),
+            sandbox_spec_service=Mock(),
+            jwt_service=Mock(),
+            pending_message_service=Mock(),
+            sandbox_startup_timeout=30,
+            sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
+            httpx_client=Mock(),
+            web_url=None,
+            openhands_provider_base_url=None,
+            access_token_hard_timeout=None,
+            app_mode='test',
+        )
+
+    def _make_acp_user(self, acp_server='claude-code', acp_env=None, api_key=None):
+        try:
+            from openhands.sdk.settings import (
+                ACPAgentSettings,  # type: ignore[attr-defined]
+            )
+        except ImportError:
+            pytest.skip('ACPAgentSettings not available in this SDK build')
+
+        user = _TestUserInfo(
+            id='user1',
+            llm_model='',
+            llm_base_url=None,
+            llm_api_key=None,
+            sandbox_grouping_strategy=SandboxGroupingStrategy.ADD_TO_ANY,
+            confirmation_mode=False,
+            security_analyzer=None,
+            search_api_key=None,
+            mcp_config=None,
+            disabled_skills=[],
+        )
+        user.agent_settings = ACPAgentSettings(
+            acp_server=acp_server,  # type: ignore[arg-type]
+            llm=LLM(
+                model='claude-sonnet-4-5',
+                api_key=SecretStr(api_key) if api_key else None,
+            ),
+            acp_env=acp_env or {},
+        )
+        return user
+
+    def _workspace(self, tmp_path):
+        from openhands.sdk import LocalWorkspace
+
+        return LocalWorkspace(working_dir=str(tmp_path))
+
+    @pytest.mark.asyncio
+    async def test_static_secrets_injected_into_acp_env(self, service, tmp_path):
+        """StaticSecrets from the Secrets panel appear in acp_env."""
+        user = self._make_acp_user()
+        service._setup_secrets_for_git_providers = AsyncMock(
+            return_value={
+                'GITHUB_TOKEN': StaticSecret(value=SecretStr('ghp_test123')),
+                'MY_API_KEY': StaticSecret(value=SecretStr('secret-value')),
+            }
+        )
+
+        request = await service._build_acp_start_conversation_request(
+            user=user,
+            conversation_id=uuid4(),
+            initial_message=None,
+            workspace=self._workspace(tmp_path),
+            plugins=None,
+        )
+
+        env = request.agent.acp_env
+        assert env.get('GITHUB_TOKEN') == 'ghp_test123'
+        assert env.get('MY_API_KEY') == 'secret-value'
+
+    @pytest.mark.asyncio
+    async def test_lookup_secret_resolved_via_executor(self, service, tmp_path):
+        """LookupSecrets (git provider tokens in web-URL deployments) are
+        resolved off-thread and their values appear in acp_env."""
+        user = self._make_acp_user()
+        lookup = LookupSecret(url='https://example.com/token', headers={})
+
+        service._setup_secrets_for_git_providers = AsyncMock(
+            return_value={'GITHUB_TOKEN': lookup}
+        )
+
+        # Patch the class method so the synchronous HTTP call is skipped.
+        with patch.object(LookupSecret, 'get_value', return_value='dynamic-token-value'):
+            request = await service._build_acp_start_conversation_request(
+                user=user,
+                conversation_id=uuid4(),
+                initial_message=None,
+                workspace=self._workspace(tmp_path),
+                plugins=None,
+            )
+
+        assert request.agent.acp_env.get('GITHUB_TOKEN') == 'dynamic-token-value'
+
+    @pytest.mark.asyncio
+    async def test_priority_acp_env_beats_secrets(self, service, tmp_path):
+        """Explicit acp_env overrides a secret with the same key."""
+        user = self._make_acp_user(acp_env={'MY_TOKEN': 'explicit-override'})
+        service._setup_secrets_for_git_providers = AsyncMock(
+            return_value={'MY_TOKEN': StaticSecret(value=SecretStr('secret-panel-value'))}
+        )
+
+        request = await service._build_acp_start_conversation_request(
+            user=user,
+            conversation_id=uuid4(),
+            initial_message=None,
+            workspace=self._workspace(tmp_path),
+            plugins=None,
+        )
+
+        assert request.agent.acp_env.get('MY_TOKEN') == 'explicit-override'
+
+    @pytest.mark.asyncio
+    async def test_priority_provider_env_beats_secrets(self, service, tmp_path):
+        """_acp_provider_env (LLM credentials) wins over Secrets panel."""
+        # User has an LLM API key (Claude Code), which _acp_provider_env maps to
+        # ANTHROPIC_API_KEY.  The Secrets panel has a different value for the same
+        # key — the UI-saved credential must win.
+        user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
+        service._setup_secrets_for_git_providers = AsyncMock(
+            return_value={
+                'ANTHROPIC_API_KEY': StaticSecret(
+                    value=SecretStr('sk-from-secrets-panel')
+                )
+            }
+        )
+
+        request = await service._build_acp_start_conversation_request(
+            user=user,
+            conversation_id=uuid4(),
+            initial_message=None,
+            workspace=self._workspace(tmp_path),
+            plugins=None,
+        )
+
+        # _acp_provider_env derives ANTHROPIC_API_KEY from llm.api_key; it
+        # should win over the Secrets-panel value.
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
+
+    @pytest.mark.asyncio
+    async def test_none_value_secrets_excluded(self, service, tmp_path):
+        """Secrets whose get_value() returns None are not added to acp_env."""
+        user = self._make_acp_user()
+        service._setup_secrets_for_git_providers = AsyncMock(
+            return_value={
+                'PRESENT': StaticSecret(value=SecretStr('real-value')),
+                'ABSENT': StaticSecret(value=None),
+            }
+        )
+
+        request = await service._build_acp_start_conversation_request(
+            user=user,
+            conversation_id=uuid4(),
+            initial_message=None,
+            workspace=self._workspace(tmp_path),
+            plugins=None,
+        )
+
+        env = request.agent.acp_env
+        assert env.get('PRESENT') == 'real-value'
+        assert 'ABSENT' not in env
+
