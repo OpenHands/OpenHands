@@ -46,6 +46,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     AppConversationInfoPage,
     AppConversationSortOrder,
+    ConversationTrigger,
 )
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.user_context import UserContext
@@ -57,7 +58,6 @@ from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 logger = logging.getLogger(__name__)
 
