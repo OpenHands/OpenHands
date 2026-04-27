@@ -502,3 +502,22 @@ class TestGitLabHostEnvVar:
             assert reloaded.GITLAB_HOST == 'gitlab.com'
         finally:
             importlib.reload(gitlab_constants_module)
+
+    @pytest.mark.parametrize(
+        'raw,expected',
+        [
+            ('gitlab.example.com/', 'gitlab.example.com'),
+            ('https://gitlab.example.com', 'gitlab.example.com'),
+            ('http://gitlab.example.com', 'gitlab.example.com'),
+            ('https://gitlab.example.com/', 'gitlab.example.com'),
+            ('  https://gitlab.example.com/  ', 'gitlab.example.com'),
+        ],
+    )
+    def test_gitlab_host_is_sanitized(self, raw, expected):
+        """Common user input mistakes (protocol prefix, trailing slash, whitespace) are stripped."""
+        with patch.dict('os.environ', {'GITLAB_HOST': raw}):
+            reloaded = importlib.reload(gitlab_constants_module)
+        try:
+            assert reloaded.GITLAB_HOST == expected
+        finally:
+            importlib.reload(gitlab_constants_module)

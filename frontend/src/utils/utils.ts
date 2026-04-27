@@ -182,7 +182,7 @@ export const shouldUseInstallationRepos = (
   }
 };
 
-export const getGitProviderBaseUrl = (host?: string | null): string => {
+export const ensureHttpsPrefix = (host?: string | null): string => {
   if (!host || host.trim() === "") return "";
   return host.startsWith("http") ? host : `https://${host}`;
 };
@@ -235,7 +235,7 @@ export const constructPullRequestUrl = (
   repositoryName: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(host);
+  const baseUrl = ensureHttpsPrefix(host);
 
   switch (provider) {
     case "github":
@@ -285,7 +285,7 @@ export const constructMicroagentUrl = (
   microagentPath: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(host);
+  const baseUrl = ensureHttpsPrefix(host);
 
   switch (gitProvider) {
     case "github":
@@ -349,7 +349,7 @@ export const constructRepositoryUrl = (
   repositoryName: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(host);
+  const baseUrl = ensureHttpsPrefix(host);
   if (provider === "bitbucket_data_center") {
     const [project, repo] = repositoryName.split("/");
     return `${baseUrl}/projects/${project}/repos/${repo}`;
@@ -377,7 +377,7 @@ export const constructBranchUrl = (
   branchName: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(host);
+  const baseUrl = ensureHttpsPrefix(host);
 
   switch (provider) {
     case "github":
