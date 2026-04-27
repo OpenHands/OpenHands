@@ -28,8 +28,15 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
     SandboxStatus,
 )
-from openhands.events.action.message import MessageAction
 from openhands.sdk.event import ConversationStateUpdateEvent
+
+
+def _create_mock_event():
+    """Create a mock event that is not a ConversationStateUpdateEvent."""
+    mock_event = MagicMock()
+    mock_event.id = uuid4()
+    return mock_event
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -105,8 +112,10 @@ class TestSlackV1CallbackProcessor:
     @pytest.mark.parametrize(
         'event,expected_result',
         [
-            # Wrong event types should be ignored
-            (MessageAction(content='Hello world'), None),
+            # Wrong event types should be ignored (use lazy evaluation for mock)
+            pytest.param(
+                None, None, id='wrong_event_type', marks=pytest.mark.wrong_event_type
+            ),
             # Wrong state values should be ignored
             (
                 ConversationStateUpdateEvent(key='execution_status', value='running'),
@@ -120,9 +129,12 @@ class TestSlackV1CallbackProcessor:
         ],
     )
     async def test_event_filtering(
-        self, slack_callback_processor, event_callback, event, expected_result
+        self, slack_callback_processor, event_callback, event, expected_result, request
     ):
         """Test that processor correctly filters events."""
+        # Handle the mock event case specially
+        if event is None and 'wrong_event_type' in request.node.name:
+            event = _create_mock_event()
         result = await slack_callback_processor(uuid4(), event_callback, event)
         assert result == expected_result
 
