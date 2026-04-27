@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
 from integrations.resolver_org_router import resolve_org_for_repo
+from integrations.slack.slack_errors import SlackError, SlackErrorCode
 from integrations.slack.slack_types import (
     SlackMessageView,
     SlackViewInterface,
@@ -16,6 +17,7 @@ from integrations.utils import (
 )
 from jinja2 import Environment
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from storage.slack_conversation import SlackConversation
 from storage.slack_conversation_store import SlackConversationStore
 from storage.slack_team_store import SlackTeamStore
@@ -88,24 +90,34 @@ class SlackNewConversationView(SlackViewInterface):
         messages = []
         if self.thread_ts:
             client = WebClient(token=self.bot_access_token)
-            result = client.conversations_replies(
-                channel=self.channel_id,
-                ts=self.thread_ts,
-                inclusive=True,
-                latest=self.message_ts,
-                limit=CONTEXT_LIMIT,  # We can be smarter about getting more context/condensing it even in the future
-            )
+            try:
+                result = client.conversations_replies(
+                    channel=self.channel_id,
+                    ts=self.thread_ts,
+                    inclusive=True,
+                    latest=self.message_ts,
+                    limit=CONTEXT_LIMIT,  # We can be smarter about getting more context/condensing it even in the future
+                )
+            except SlackApiError as e:
+                if e.response.get('error') == 'missing_scope':
+                    raise SlackError(SlackErrorCode.MISSING_SLACK_SCOPES) from e
+                raise
 
             messages = result['messages']
 
         else:
             client = WebClient(token=self.bot_access_token)
-            result = client.conversations_history(
-                channel=self.channel_id,
-                inclusive=True,
-                latest=self.message_ts,
-                limit=CONTEXT_LIMIT,
-            )
+            try:
+                result = client.conversations_history(
+                    channel=self.channel_id,
+                    inclusive=True,
+                    latest=self.message_ts,
+                    limit=CONTEXT_LIMIT,
+                )
+            except SlackApiError as e:
+                if e.response.get('error') == 'missing_scope':
+                    raise SlackError(SlackErrorCode.MISSING_SLACK_SCOPES) from e
+                raise
 
             messages = result['messages']
             messages.reverse()
@@ -282,13 +294,18 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         client = WebClient(token=self.bot_access_token)
-        result = client.conversations_replies(
-            channel=self.channel_id,
-            ts=self.message_ts,
-            inclusive=True,
-            latest=self.message_ts,
-            limit=1,  # Get exact user message, in future we can be smarter with collecting additional context
-        )
+        try:
+            result = client.conversations_replies(
+                channel=self.channel_id,
+                ts=self.message_ts,
+                inclusive=True,
+                latest=self.message_ts,
+                limit=1,  # Get exact user message, in future we can be smarter with collecting additional context
+            )
+        except SlackApiError as e:
+            if e.response.get('error') == 'missing_scope':
+                raise SlackError(SlackErrorCode.MISSING_SLACK_SCOPES) from e
+            raise
 
         user_message = result['messages'][0]
         user_message = self._get_initial_prompt(
@@ -351,9 +368,9 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 httpx_client=httpx_client,
             )
 
-            assert (
-                running_sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {running_sandbox.id}'
+            assert running_sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {running_sandbox.id}'
+            )
 
             # 3. Get the agent server URL
             agent_server_url = get_agent_server_url_from_sandbox(running_sandbox)
@@ -367,7 +384,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
             )
 
             # 6. Send the message to the agent server
-            url = f"{agent_server_url.rstrip('/')}/api/conversations/{UUID(self.conversation_id)}/events"
+            url = f'{agent_server_url.rstrip("/")}/api/conversations/{UUID(self.conversation_id)}/events'
 
             headers = {'X-Session-API-Key': running_sandbox.session_api_key}
             payload = send_message_request.model_dump()
