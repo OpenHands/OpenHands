@@ -91,9 +91,20 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: read
+            issues: write
             pull-requests: write
         steps:
             - uses: actions/checkout@v6
+
+            - name: Check if fork PR
+              id: check-fork
+              run: |
+                  if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.event.pull_request.base.repo.full_name }}" ]; then
+                    echo "is_fork=true" >> $GITHUB_OUTPUT
+                    echo "::notice::Fork PR detected - skipping PR comment update because pull_request workflows cannot write issue comments from forks"
+                  else
+                    echo "is_fork=false" >> $GITHUB_OUTPUT
+                  fi
 
             - name: Check for .pr/ directory
               id: check
@@ -106,7 +117,7 @@ jobs:
                   fi
 
             - name: Post or update PR comment
-              if: steps.check.outputs.exists == 'true'
+              if: steps.check.outputs.exists == 'true' && steps.check-fork.outputs.is_fork == 'false'
               uses: actions/github-script@v9
               with:
                   script: |
@@ -134,3 +145,8 @@ jobs:
                           body: body,
                         });
                       }
+
+            - name: Note skipped PR comment on fork
+              if: steps.check.outputs.exists == 'true' && steps.check-fork.outputs.is_fork == 'true'
+              run: |
+                  echo "::notice::Skipping PR comment update for fork PR because GITHUB_TOKEN cannot create issue comments in pull_request workflows from forks"
