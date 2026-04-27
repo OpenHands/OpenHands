@@ -337,20 +337,29 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
-  const { data: preloadedEvents } = useConversationHistory(conversationId);
+  const { data: preloadedEvents, isFetched: isHistoryFetched } =
+    useConversationHistory(conversationId);
 
   useEffect(() => {
+    // Don't do anything until the history query has completed
+    // This prevents prematurely setting loading to false before data is available
+    if (!isHistoryFetched) {
+      return;
+    }
+
+    // If no events (empty conversation or query returned empty), just stop loading
     if (!preloadedEvents || preloadedEvents.length === 0) {
       setIsLoadingHistoryMain(false);
       return;
     }
 
+    // Add all preloaded events to the store
     for (const event of preloadedEvents) {
       addEvent(event);
     }
 
     setIsLoadingHistoryMain(false);
-  }, [preloadedEvents, addEvent]);
+  }, [preloadedEvents, isHistoryFetched, addEvent]);
 
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(

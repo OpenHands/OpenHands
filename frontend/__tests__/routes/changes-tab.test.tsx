@@ -39,7 +39,7 @@ describe("Changes Tab", () => {
       refetch: vi.fn(),
     });
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.RUNNING,
+      curAgentState: AgentState.RUNNING, isArchived: false,
     });
 
     render(<GitChanges />, { wrapper });
@@ -58,7 +58,7 @@ describe("Changes Tab", () => {
       refetch: vi.fn(),
     });
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.RUNNING,
+      curAgentState: AgentState.RUNNING, isArchived: false,
     });
 
     render(<GitChanges />, { wrapper });
