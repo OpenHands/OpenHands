@@ -39,7 +39,7 @@ from openhands.server.types import (
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.storage.data_models.secrets import Secrets
+from openhands.app_server.secrets.secrets_models import Secrets
 
 
 class GithubManager(Manager[GithubViewType]):

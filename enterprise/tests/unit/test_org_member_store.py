@@ -12,7 +12,7 @@ from storage.role import Role
 from storage.user import User
 from storage.user_settings import UserSettings
 
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
 
 
 def test_get_kwargs_from_user_settings_uses_agent_settings_as_source_of_truth():

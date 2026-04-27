@@ -41,9 +41,9 @@ from openhands.integrations.provider import (
     ProviderToken,
     ProviderType,
 )
-from openhands.server.settings import Settings
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.settings.settings_models import Settings
 from openhands.server.user_auth.user_auth import AuthType, UserAuth
-from openhands.storage.data_models.secrets import Secrets
 
 token_manager = TokenManager()
 

@@ -17,7 +17,7 @@ from openhands.integrations.service_types import ProviderType
 
 # Import the SDK types we need for testing
 from openhands.sdk.secret import SecretSource, StaticSecret
-from openhands.storage.data_models.secrets import Secrets
+from openhands.app_server.secrets.secrets_models import Secrets
 
 
 @pytest.fixture

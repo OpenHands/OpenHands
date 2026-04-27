@@ -13,7 +13,7 @@ from storage.org import Org
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
 
 # --- Fixtures ---
 

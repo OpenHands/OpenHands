@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from openhands.app_server.settings.settings_models import Settings
 from openhands.core.config.mcp_config import (
     MCPConfig,
     RemoteMCPServer,
@@ -12,7 +13,6 @@ from openhands.core.config.mcp_config import (
 )
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
-from openhands.storage.data_models.settings import Settings
 
 
 @pytest.fixture(autouse=True)

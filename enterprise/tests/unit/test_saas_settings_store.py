@@ -5,8 +5,8 @@ import pytest
 from pydantic import SecretStr
 
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.server.settings import Settings
-from openhands.storage.data_models.settings import Settings as DataSettings
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_models import Settings as DataSettings
 
 
 def _agent_value(settings: Settings, key: str):

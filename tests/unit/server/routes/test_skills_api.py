@@ -7,6 +7,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_store import SettingsStore
@@ -14,7 +15,6 @@ from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import UserGitInfo
 from openhands.server.app import app
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.memory import InMemoryFileStore
 
 

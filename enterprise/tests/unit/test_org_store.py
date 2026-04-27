@@ -14,7 +14,7 @@ from storage.role import Role
 from storage.user import User
 
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
 
 
 @pytest.fixture

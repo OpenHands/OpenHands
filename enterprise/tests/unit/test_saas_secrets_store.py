@@ -10,7 +10,7 @@ from storage.stored_custom_secrets import StoredCustomSecrets
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.integrations.provider import CustomSecret
-from openhands.storage.data_models.secrets import Secrets
+from openhands.app_server.secrets.secrets_models import Secrets
 
 
 @pytest.fixture
