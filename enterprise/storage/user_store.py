@@ -1049,7 +1049,6 @@ class UserStore:
             if org.sandbox_api_key
             else None,
             max_budget_per_task=org.max_budget_per_task,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             sandbox_grouping_strategy=org.sandbox_grouping_strategy,
             agent_settings=agent_settings,

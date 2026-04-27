@@ -162,7 +162,6 @@ class OrgResponse(BaseModel):
     search_api_key: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = None
-    enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     credits: float | None = None
     is_personal: bool = False
@@ -195,7 +194,6 @@ class OrgResponse(BaseModel):
             search_api_key=None,
             sandbox_api_key=None,
             max_budget_per_task=org.max_budget_per_task,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             credits=credits,
             is_personal=str(org.id) == user_id if user_id else False,
@@ -232,7 +230,6 @@ class OrgUpdate(BaseModel):
     sandbox_runtime_container_image: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = Field(default=None, gt=0)
-    enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
@@ -553,7 +550,6 @@ class OrgAppSettingsResponse(BaseModel):
     """Response model for organization app settings."""
 
     enable_proactive_conversation_starters: bool = True
-    enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
     @classmethod
@@ -570,7 +566,6 @@ class OrgAppSettingsResponse(BaseModel):
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
             if org.enable_proactive_conversation_starters is not None
             else True,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             max_budget_per_task=org.max_budget_per_task,
         )
 
@@ -579,7 +574,6 @@ class OrgAppSettingsUpdate(BaseModel):
     """Request model for updating organization app settings."""
 
     enable_proactive_conversation_starters: bool | None = None
-    enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
     @field_validator('max_budget_per_task')

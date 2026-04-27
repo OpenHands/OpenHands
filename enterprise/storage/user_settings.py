@@ -50,9 +50,6 @@ class UserSettings(Base):
     search_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     sandbox_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
-    enable_solvability_analysis: Mapped[bool | None] = mapped_column(
-        nullable=True, default=False
-    )
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     email_verified: Mapped[bool | None] = mapped_column(nullable=True)
     git_user_name: Mapped[str | None] = mapped_column(String, nullable=True)

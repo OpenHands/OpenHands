@@ -2,7 +2,6 @@ from types import MappingProxyType
 
 from github import Auth, Github, GithubIntegration
 from integrations.github.data_collector import GitHubDataCollector
-from integrations.github.github_solvability import summarize_issue_solvability
 from integrations.github.github_view import (
     GithubFactory,
     GithubFailingAction,
@@ -20,7 +19,6 @@ from integrations.models import (
 from integrations.types import ResolverViewInterface
 from integrations.utils import (
     CONVERSATION_URL,
-    ENABLE_SOLVABILITY_ANALYSIS,
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
@@ -358,26 +356,7 @@ class GithubManager(Manager[GithubViewType]):
                     )
                 )
 
-                # We first initialize a conversation and generate the solvability report BEFORE starting the conversation runtime
-                # This helps us accumulate llm spend without requiring a running runtime. This setups us up for
-                #   1. If there is a problem starting the runtime we still have accumulated total conversation cost
-                #   2. In the future, based on the report confidence we can conditionally start the conversation
-                #   3. Once the conversation is started, its base cost will include the report's spend as well which allows us to control max budget per resolver task
                 convo_metadata = await github_view.initialize_new_conversation()
-                solvability_summary = None
-                if not ENABLE_SOLVABILITY_ANALYSIS:
-                    logger.info(
-                        '[Github]: Solvability report feature is disabled, skipping'
-                    )
-                else:
-                    try:
-                        solvability_summary = await summarize_issue_solvability(
-                            github_view, user_token
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f'[Github]: Error summarizing issue solvability: {str(e)}'
-                        )
 
                 saas_user_auth = await get_saas_user_auth(
                     github_view.user_info.keycloak_user_id, self.token_manager
@@ -400,12 +379,7 @@ class GithubManager(Manager[GithubViewType]):
 
                 # Send message with conversation link
                 conversation_link = CONVERSATION_URL.format(conversation_id)
-                base_msg = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
-                # Combine messages: include solvability report with "I'm on it!" if successful
-                if solvability_summary:
-                    msg_info = f'{base_msg}\n\n{solvability_summary}'
-                else:
-                    msg_info = base_msg
+                msg_info = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
 
             except MissingSettingsError as e:
                 logger.warning(
