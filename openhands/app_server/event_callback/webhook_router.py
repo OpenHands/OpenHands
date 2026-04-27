@@ -18,6 +18,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
+    ConversationTrigger,
 )
 from openhands.app_server.config import (
     depends_app_conversation_info_service,
@@ -50,7 +51,6 @@ from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()
