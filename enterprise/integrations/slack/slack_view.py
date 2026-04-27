@@ -13,8 +13,6 @@ from integrations.slack.slack_types import (
 from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProcessor
 from integrations.utils import (
     CONVERSATION_URL,
-    ENABLE_V1_SLACK_RESOLVER,
-    get_user_v1_enabled_setting,
 )
 from jinja2 import Environment
 from slack_sdk import WebClient
@@ -51,10 +49,6 @@ slack_conversation_store = SlackConversationStore.get_instance()
 slack_team_store = SlackTeamStore.get_instance()
 
 
-async def is_v1_enabled_for_slack_resolver(user_id: str) -> bool:
-    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_SLACK_RESOLVER
-
-
 @dataclass
 class SlackNewConversationView(SlackViewInterface):
     bot_access_token: str
@@ -70,7 +64,6 @@ class SlackNewConversationView(SlackViewInterface):
     send_summary_instruction: bool
     conversation_id: str
     team_id: str
-    v1_enabled: bool
 
     def _get_initial_prompt(self, text: str, blocks: list[dict]):
         bot_id = self._get_bot_id(blocks)
@@ -149,7 +142,7 @@ class SlackNewConversationView(SlackViewInterface):
                 'Attempting to start conversation without confirming selected repo from user'
             )
 
-    async def save_slack_convo(self, v1_enabled: bool = False):
+    async def save_slack_convo(self):
         if self.slack_to_openhands_user:
             user_info: SlackUser = self.slack_to_openhands_user
 
@@ -161,7 +154,6 @@ class SlackNewConversationView(SlackViewInterface):
                     'keycloak_user_id': user_info.keycloak_user_id,
                     'org_id': user_info.org_id,
                     'parent_id': self.thread_ts or self.message_ts,
-                    'v1_enabled': v1_enabled,
                 },
             )
             slack_conversation = SlackConversation(
@@ -171,7 +163,7 @@ class SlackNewConversationView(SlackViewInterface):
                 org_id=user_info.org_id,
                 parent_id=self.thread_ts
                 or self.message_ts,  # conversations can start in a thread reply as well; we should always references the parent's (root level msg's) message ID
-                v1_enabled=v1_enabled,
+                v1_enabled=True,  # All conversations are V1
             )
             await slack_conversation_store.create_slack_conversation(slack_conversation)
 
@@ -268,7 +260,7 @@ class SlackNewConversationView(SlackViewInterface):
                     )
 
         logger.info(f'[Slack V1]: Created new conversation: {self.conversation_id}')
-        await self.save_slack_convo(v1_enabled=True)
+        await self.save_slack_convo()
 
     def get_response_msg(self) -> str:
         user_info: SlackUser = self.slack_to_openhands_user
@@ -516,7 +508,6 @@ class SlackFactory:
                 conversation_id=conversation.conversation_id,
                 slack_conversation=conversation,
                 team_id=team_id,
-                v1_enabled=False,
             )
 
         elif SlackFactory.did_user_select_repo_from_form(message):
@@ -534,7 +525,6 @@ class SlackFactory:
                 send_summary_instruction=True,
                 conversation_id='',
                 team_id=team_id,
-                v1_enabled=False,
             )
 
         else:
@@ -552,7 +542,6 @@ class SlackFactory:
                 send_summary_instruction=True,
                 conversation_id='',
                 team_id=team_id,
-                v1_enabled=False,
             )
 
 

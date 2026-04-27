@@ -6,7 +6,6 @@ import re
 
 from jinja2 import Environment, FileSystemLoader
 from server.constants import WEB_HOST
-from storage.org_store import OrgStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
@@ -82,20 +81,6 @@ ENABLE_SOLVABILITY_ANALYSIS = (
     os.getenv('ENABLE_SOLVABILITY_ANALYSIS', 'false').lower() == 'true'
 )
 
-# Toggle for V1 GitHub resolver feature
-ENABLE_V1_GITHUB_RESOLVER = (
-    os.getenv('ENABLE_V1_GITHUB_RESOLVER', 'false').lower() == 'true'
-)
-
-ENABLE_V1_SLACK_RESOLVER = (
-    os.getenv('ENABLE_V1_SLACK_RESOLVER', 'false').lower() == 'true'
-)
-
-# Toggle for V1 GitLab resolver feature
-ENABLE_V1_GITLAB_RESOLVER = (
-    os.getenv('ENABLE_V1_GITLAB_RESOLVER', 'false').lower() == 'true'
-)
-
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
     or 'openhands/integrations/templates/resolver/'
@@ -125,26 +110,6 @@ def get_summary_instruction():
     summary_instruction_template = jinja_env.get_template('summary_prompt.j2')
     summary_instruction = summary_instruction_template.render()
     return summary_instruction
-
-
-async def get_user_v1_enabled_setting(user_id: str | None) -> bool:
-    """Get the user's V1 conversation API setting.
-
-    Args:
-        user_id: The keycloak user ID
-
-    Returns:
-        True if V1 conversations are enabled for this user, False otherwise
-    """
-    if not user_id:
-        return False
-
-    org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
-
-    if not org or org.v1_enabled is None:
-        return False
-
-    return org.v1_enabled
 
 
 def has_exact_mention(text: str, mention: str) -> bool:
