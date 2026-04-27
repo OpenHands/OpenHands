@@ -1543,6 +1543,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Unlike the LLM path, ACP agents run as separate subprocesses; we pass
         credentials via environment variables rather than injecting an LLM object.
 
+        User secrets (Secrets panel + git provider tokens) are also passed through
+        ``AgentContext.secrets`` so the SDK renders a ``<CUSTOM_SECRETS>`` block
+        in the ACP prompt and injects values into the subprocess env at start time.
+
         Args:
             sandbox: Sandbox information
             conversation_id: Unique conversation identifier
@@ -1590,6 +1594,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             acp_model=acp_settings.acp_model,
             acp_session_mode=acp_settings.acp_session_mode,
             acp_prompt_timeout=acp_settings.acp_prompt_timeout,
+        )
+
+        # Pass user secrets via AgentContext so the SDK renders a
+        # <CUSTOM_SECRETS> block in the ACP prompt and injects values into
+        # the subprocess env at start time (SDK PR #2984).
+        if secrets:
+            acp_agent.agent_context = AgentContext(secrets=secrets)
+
+        final_initial_message = self._construct_initial_message_with_plugin_params(
+            initial_message, plugins
         )
 
         sdk_plugins: list[PluginSource] | None = None
