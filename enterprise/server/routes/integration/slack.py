@@ -46,7 +46,8 @@ slack_router = APIRouter(prefix='/slack')
 
 # Build https://slack.com/oauth/v2/authorize with sufficient query parameters
 authorize_url_generator = AuthorizeUrlGenerator(
-    client_id=SLACK_CLIENT_ID, scopes=['app_mentions:read', 'chat:write']
+    client_id=SLACK_CLIENT_ID,
+    scopes=['app_mentions:read', 'chat:write', 'users:read', 'channels:history', 'groups:history', 'mpim:history', 'im:history'],
 )
 token_manager = TokenManager()
 
