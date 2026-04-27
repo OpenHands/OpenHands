@@ -1,6 +1,4 @@
-import base64
 import json
-import pickle
 from datetime import datetime
 
 from server.logger import logger
@@ -19,7 +17,6 @@ from openhands.core.schema.agent import AgentState
 from openhands.events.event_store import EventStore
 from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.events.serialization.event import event_from_dict
-from openhands.server.services.conversation_stats import ConversationStats
 from openhands.storage import get_file_store
 from openhands.storage.files import FileStore
 from openhands.storage.locations import (
@@ -280,16 +277,3 @@ def update_agent_state(user_id: str, conversation_id: str, content: bytes):
     )
     write_path = get_conversation_agent_state_filename(conversation_id, user_id)
     file_store.write(write_path, content)
-
-
-def update_conversation_stats(user_id: str, conversation_id: str, content: bytes):
-    existing_convo_stats = ConversationStats(
-        file_store=file_store, conversation_id=conversation_id, user_id=user_id
-    )
-
-    incoming_convo_stats = ConversationStats(None, conversation_id, None)
-    pickled = base64.b64decode(content)
-    incoming_convo_stats.restored_metrics = pickle.loads(pickled)
-
-    # Merging automatically saves to file store
-    existing_convo_stats.merge_and_save(incoming_convo_stats)
