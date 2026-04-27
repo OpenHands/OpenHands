@@ -1,22 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 
 from jinja2 import Environment, FileSystemLoader
 from server.constants import WEB_HOST
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.core.schema.agent import AgentState
-from openhands.events import Event, EventSource
-from openhands.events.action import (
-    AgentFinishAction,
-    MessageAction,
-)
-from openhands.events.event_filter import EventFilter
-from openhands.events.event_store_abc import EventStoreABC
-from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.integrations.service_types import Repository
 
 # ---- DO NOT REMOVE ----
@@ -26,10 +15,8 @@ HOST = WEB_HOST
 
 IS_LOCAL_DEPLOYMENT = 'localhost' in HOST
 HOST_URL = f'https://{HOST}' if not IS_LOCAL_DEPLOYMENT else f'http://{HOST}'
-GITHUB_WEBHOOK_URL = f'{HOST_URL}/integration/github/events'
 GITLAB_WEBHOOK_URL = f'{HOST_URL}/integration/gitlab/events'
-conversation_prefix = 'conversations/{}'
-CONVERSATION_URL = f'{HOST_URL}/{conversation_prefix}'
+CONVERSATION_URL = f'{HOST_URL}/conversations/{{}}'
 
 # Toggle for auto-response feature that proactively starts conversations with users when workflow tests fail
 ENABLE_PROACTIVE_CONVERSATION_STARTERS = (
@@ -80,7 +67,7 @@ OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
     or 'openhands/integrations/templates/resolver/'
 )
-jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
+_jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
 
 
 def get_oh_labels(web_host: str) -> tuple[str, str]:
@@ -102,7 +89,7 @@ def get_oh_labels(web_host: str) -> tuple[str, str]:
 
 
 def get_summary_instruction():
-    summary_instruction_template = jinja_env.get_template('summary_prompt.j2')
+    summary_instruction_template = _jinja_env.get_template('summary_prompt.j2')
     summary_instruction = summary_instruction_template.render()
     return summary_instruction
 
@@ -131,205 +118,6 @@ def has_exact_mention(text: str, mention: str) -> bool:
     pattern = re.escape(mention_lower)
     # Match mention that is not part of a larger word
     return bool(re.search(rf'(?:^|[^\w@]){pattern}(?![\w-])', text_lower))
-
-
-def confirm_event_type(event: Event):
-    return isinstance(event, AgentStateChangedObservation) and not (
-        event.agent_state == AgentState.REJECTED
-        or event.agent_state == AgentState.USER_CONFIRMED
-        or event.agent_state == AgentState.USER_REJECTED
-        or event.agent_state == AgentState.LOADING
-        or event.agent_state == AgentState.RUNNING
-    )
-
-
-def get_readable_error_reason(reason: str):
-    if reason == 'STATUS$ERROR_LLM_AUTHENTICATION':
-        reason = 'Authentication with the LLM provider failed. Please check your API key or credentials'
-    elif reason == 'STATUS$ERROR_LLM_SERVICE_UNAVAILABLE':
-        reason = 'The LLM service is temporarily unavailable. Please try again later'
-    elif reason == 'STATUS$ERROR_LLM_INTERNAL_SERVER_ERROR':
-        reason = 'The LLM provider encountered an internal error. Please try again soon'
-    elif reason == 'STATUS$ERROR_LLM_OUT_OF_CREDITS':
-        reason = "You've run out of credits. Please top up to continue"
-    elif reason == 'STATUS$ERROR_LLM_CONTENT_POLICY_VIOLATION':
-        reason = 'Content policy violation. The output was blocked by content filtering policy'
-    return reason
-
-
-def get_summary_for_agent_state(
-    observations: list[AgentStateChangedObservation], conversation_link: str
-) -> str:
-    unknown_error_msg = f'OpenHands encountered an unknown error. [See the conversation]({conversation_link}) for more information, or try again'
-
-    if len(observations) == 0:
-        logger.error(
-            'Unknown error: No agent state observations found',
-            extra={'conversation_link': conversation_link},
-        )
-        return unknown_error_msg
-
-    observation: AgentStateChangedObservation = observations[0]
-    state = observation.agent_state
-
-    if state == AgentState.RATE_LIMITED:
-        logger.warning(
-            'Agent was rate limited',
-            extra={
-                'agent_state': state.value,
-                'conversation_link': conversation_link,
-                'observation_reason': getattr(observation, 'reason', None),
-            },
-        )
-        return 'OpenHands was rate limited by the LLM provider. Please try again later.'
-
-    if state == AgentState.ERROR:
-        reason = observation.reason
-        reason = get_readable_error_reason(reason)
-
-        logger.error(
-            'Agent encountered an error',
-            extra={
-                'agent_state': state.value,
-                'conversation_link': conversation_link,
-                'observation_reason': observation.reason,
-                'readable_reason': reason,
-            },
-        )
-
-        return f'OpenHands encountered an error: **{reason}**.\n\n[See the conversation]({conversation_link}) for more information.'
-
-    if state == AgentState.AWAITING_USER_INPUT:
-        logger.info(
-            'Agent is awaiting user input',
-            extra={
-                'agent_state': state.value,
-                'conversation_link': conversation_link,
-                'observation_reason': getattr(observation, 'reason', None),
-            },
-        )
-        return f'OpenHands is waiting for your input. [Continue the conversation]({conversation_link}) to provide additional instructions.'
-
-    # Log unknown agent state as error
-    logger.error(
-        'Unknown error: Unhandled agent state',
-        extra={
-            'agent_state': state.value if hasattr(state, 'value') else str(state),
-            'conversation_link': conversation_link,
-            'observation_reason': getattr(observation, 'reason', None),
-        },
-    )
-    return unknown_error_msg
-
-
-def get_final_agent_observation(
-    event_store: EventStoreABC,
-) -> list[AgentStateChangedObservation]:
-    events = list(
-        event_store.search_events(
-            filter=EventFilter(
-                source=EventSource.ENVIRONMENT,
-                include_types=(AgentStateChangedObservation,),
-            ),
-            limit=1,
-            reverse=True,
-        )
-    )
-    result = [e for e in events if isinstance(e, AgentStateChangedObservation)]
-    assert len(result) == len(events)
-    return result
-
-
-def get_last_user_msg(event_store: EventStoreABC) -> list[MessageAction]:
-    events = list(
-        event_store.search_events(
-            filter=EventFilter(
-                source=EventSource.USER,
-                include_types=(MessageAction,),
-            ),
-            limit=1,
-            reverse=True,
-        )
-    )
-    result = [e for e in events if isinstance(e, MessageAction)]
-    assert len(result) == len(events)
-    return result
-
-
-def extract_summary_from_event_store(
-    event_store: EventStoreABC, conversation_id: str
-) -> str:
-    """
-    Get agent summary or alternative message depending on current AgentState
-    """
-    conversation_link = CONVERSATION_URL.format(conversation_id)
-    summary_instruction = get_summary_instruction()
-
-    instruction_events = list(
-        event_store.search_events(
-            filter=EventFilter(
-                query=json.dumps(summary_instruction),
-                source=EventSource.USER,
-                include_types=(MessageAction,),
-            ),
-            limit=1,
-            reverse=True,
-        )
-    )
-
-    final_agent_observation = get_final_agent_observation(event_store)
-
-    # Find summary instruction event ID
-    if not instruction_events:
-        logger.warning(
-            'no_instruction_event_found', extra={'conversation_id': conversation_id}
-        )
-        return get_summary_for_agent_state(
-            final_agent_observation, conversation_link
-        )  # Agent did not receive summary instruction
-
-    summary_events = list(
-        event_store.search_events(
-            filter=EventFilter(
-                source=EventSource.AGENT,
-                include_types=(MessageAction, AgentFinishAction),
-            ),
-            limit=1,
-            reverse=True,
-            start_id=instruction_events[0].id,
-        )
-    )
-
-    if not summary_events:
-        logger.warning(
-            'no_agent_messages_found', extra={'conversation_id': conversation_id}
-        )
-        return get_summary_for_agent_state(
-            final_agent_observation, conversation_link
-        )  # Agent failed to generate summary
-
-    summary_event = summary_events[0]
-    if isinstance(summary_event, MessageAction):
-        return summary_event.content
-
-    assert isinstance(summary_event, AgentFinishAction)
-    return summary_event.final_thought
-
-
-def append_conversation_footer(message: str, conversation_id: str) -> str:
-    """
-    Append a small footer with the conversation URL to a message.
-
-    Args:
-        message: The original message content
-        conversation_id: The conversation ID to link to
-
-    Returns:
-        The message with the conversation footer appended
-    """
-    conversation_link = CONVERSATION_URL.format(conversation_id)
-    footer = f'\n\n[View full conversation]({conversation_link})'
-    return message + footer
 
 
 def infer_repo_from_message(user_msg: str) -> list[str]:
