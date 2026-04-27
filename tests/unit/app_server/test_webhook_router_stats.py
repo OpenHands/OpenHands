@@ -529,18 +529,19 @@ class TestOnEventStatsProcessing:
     @pytest.mark.asyncio
     async def test_on_event_skips_non_stats_events(self):
         """Test that on_event skips non-stats events."""
-        from unittest.mock import patch
+        from unittest.mock import MagicMock, patch
 
         from openhands.app_server.event_callback.webhook_router import on_event
-        from openhands.events.action.message import MessageAction
 
         conversation_id = uuid4()
         sandbox_id = 'sandbox_123'
 
-        # Create non-stats events
+        # Create non-stats events (use MagicMock for non-ConversationStateUpdateEvent)
+        mock_other_event = MagicMock()
+        mock_other_event.id = uuid4()
         events = [
             ConversationStateUpdateEvent(key='execution_status', value='running'),
-            MessageAction(content='test'),
+            mock_other_event,
         ]
 
         mock_app_conversation_info = AppConversationInfo(
