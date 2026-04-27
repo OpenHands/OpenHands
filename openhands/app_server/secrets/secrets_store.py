@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.storage.data_models.secrets import Secrets
 
 
@@ -31,6 +30,12 @@ class SecretsStore(ABC):
     @classmethod
     @abstractmethod
     async def get_instance(
-        cls, config: OpenHandsConfig, user_id: str | None
+        cls, config: object | None = None, user_id: str | None = None
     ) -> SecretsStore:
-        """Get a store for the user represented by the token given."""
+        """Get a store for the user represented by the token given.
+
+        Args:
+            config: Legacy parameter, kept for backward compatibility but ignored.
+                    Configuration is now obtained from app_server.get_global_config().
+            user_id: Optional user ID for multi-tenant implementations.
+        """
