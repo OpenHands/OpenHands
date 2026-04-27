@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_models import Settings as DataSettings
+from openhands.core.config.openhands_config import OpenHandsConfig
 
 
 def _agent_value(settings: Settings, key: str):
