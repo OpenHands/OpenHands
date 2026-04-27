@@ -106,7 +106,7 @@ async def test_get_instance():
     config = OpenHandsConfig(file_store='local', file_store_path='/test/path')
 
     with patch(
-        'openhands.storage.settings.file_settings_store.get_file_store'
+        'openhands.app_server.settings.file_settings_store.get_file_store'
     ) as mock_get_store:
         mock_store = MagicMock(spec=FileStore)
         mock_get_store.return_value = mock_store

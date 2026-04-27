@@ -45,7 +45,7 @@ def file_secrets_store(temp_dir):
     file_store = get_file_store('local', temp_dir)
     store = FileSecretsStore(file_store)
     with patch(
-        'openhands.storage.secrets.file_secrets_store.FileSecretsStore.get_instance',
+        'openhands.app_server.secrets.file_secrets_store.FileSecretsStore.get_instance',
         AsyncMock(return_value=store),
     ):
         yield store

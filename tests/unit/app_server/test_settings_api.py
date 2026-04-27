@@ -103,7 +103,7 @@ def test_client():
             return_value=MockUserAuth(),
         ),
         patch(
-            'openhands.storage.settings.file_settings_store.FileSettingsStore.get_instance',
+            'openhands.app_server.settings.file_settings_store.FileSettingsStore.get_instance',
             AsyncMock(return_value=FileSettingsStore(InMemoryFileStore())),
         ),
     ):
