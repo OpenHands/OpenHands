@@ -23,7 +23,7 @@ from storage.user_store import UserStore
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings
-from openhands.storage.settings.settings_store import SettingsStore
+from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.utils.jsonpatch_compat import deep_merge
 from openhands.utils.llm import is_openhands_model
 

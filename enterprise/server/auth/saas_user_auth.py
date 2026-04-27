@@ -43,7 +43,7 @@ from openhands.integrations.provider import (
 from openhands.server.settings import Settings
 from openhands.server.user_auth.user_auth import AuthType, UserAuth
 from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.settings.settings_store import SettingsStore
+from openhands.app_server.settings.settings_store import SettingsStore
 
 token_manager = TokenManager()
 

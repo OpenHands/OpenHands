@@ -4,12 +4,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
+from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
-from openhands.storage.settings.file_settings_store import FileSettingsStore
 
 
 @pytest.fixture
