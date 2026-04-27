@@ -7,6 +7,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { useSubmitOnboarding } from "#/hooks/mutation/use-submit-onboarding";
+import { useOnboardingStatus } from "#/hooks/query/use-onboarding-status";
 import { useTracking } from "#/hooks/use-tracking";
 import { cn } from "#/utils/utils";
 import { useMe } from "#/hooks/query/use-me";
@@ -82,8 +83,21 @@ function OnboardingForm() {
   const loaderData = useLoaderData<typeof clientLoader>();
   const config = loaderData?.config;
   const { data: me } = useMe();
+  const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
+    useOnboardingStatus();
   const { mutate: submitOnboarding } = useSubmitOnboarding();
   const { trackOnboardingCompleted } = useTracking();
+
+  React.useEffect(() => {
+    if (isOnboardingStatusLoading) return;
+    if (onboardingStatus?.should_complete_onboarding === false) {
+      navigate("/", { replace: true });
+    }
+  }, [
+    onboardingStatus?.should_complete_onboarding,
+    isOnboardingStatusLoading,
+    navigate,
+  ]);
 
   const onboardingAppMode: OnboardingAppMode = getOnboardingAppMode(
     config?.feature_flags?.deployment_mode,

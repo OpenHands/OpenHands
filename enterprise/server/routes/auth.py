@@ -703,6 +703,32 @@ async def accept_tos(request: Request):
     return response
 
 
+@api_router.get('/onboarding_status')
+async def onboarding_status(request: Request):
+    """Return whether the current user must still complete onboarding."""
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
+    user_id = await user_auth.get_user_id()
+
+    if not user_id:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'User is not authenticated'},
+        )
+
+    user = await UserStore.get_user_by_id(user_id)
+    if not user:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'User not found'},
+        )
+
+    should_complete = await _should_redirect_to_onboarding(user_id, user)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={'should_complete_onboarding': should_complete},
+    )
+
+
 @api_router.post('/complete_onboarding')
 async def complete_onboarding(request: Request):
     """Mark onboarding as completed for the current user."""
