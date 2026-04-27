@@ -8,6 +8,7 @@ import { MarkdownRenderer } from "#/components/features/markdown/markdown-render
 import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
 import { cn } from "#/utils/utils";
+import { useAgentState } from "#/hooks/use-agent-state";
 
 function PlannerTab() {
   const { t } = useTranslation();
@@ -20,6 +21,7 @@ function PlannerTab() {
   } = useScrollToBottom(scrollRef);
 
   const { planContent, conversationMode } = useConversationStore();
+  const { isArchived } = useAgentState();
 
   // Auto-scroll to bottom when plan content changes
   React.useEffect(() => {
@@ -29,6 +31,9 @@ function PlannerTab() {
   }, [planContent, autoScroll, scrollDomToBottom]);
   const isPlanMode = conversationMode === "plan";
   const { handlePlanClick } = useHandlePlanClick();
+
+  // Disable button for archived conversations or when already in plan mode
+  const isButtonDisabled = isPlanMode || isArchived;
 
   if (planContent !== null && planContent !== undefined) {
     return (
@@ -53,10 +58,10 @@ function PlannerTab() {
       <button
         type="button"
         onClick={handlePlanClick}
-        disabled={isPlanMode}
+        disabled={isButtonDisabled}
         className={cn(
           "flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px]",
-          isPlanMode
+          isButtonDisabled
             ? "opacity-50 cursor-not-allowed"
             : "hover:cursor-pointer hover:opacity-80",
         )}
