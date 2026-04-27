@@ -22,6 +22,7 @@ import {
 } from "#/api/option-service/option.types";
 import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
+import { ENABLE_ONBOARDING } from "#/utils/feature-flags";
 
 export const clientLoader = async () => {
   let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
@@ -32,7 +33,7 @@ export const clientLoader = async () => {
 
   // Only allow access to onboarding for SaaS mode (cloud or self-hosted)
   // OSS users should never reach /onboarding
-  if (config?.app_mode !== "saas") {
+  if (config?.app_mode !== "saas" && !ENABLE_ONBOARDING()) {
     return redirect("/");
   }
 
