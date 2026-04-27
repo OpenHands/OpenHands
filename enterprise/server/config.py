@@ -72,9 +72,6 @@ class SaaSServerConfig(ServerConfig):
     auth_url: str | None = os.environ.get('AUTH_URL')
     settings_store_class: str = 'storage.saas_settings_store.SaasSettingsStore'
     secret_store_class: str = 'storage.saas_secrets_store.SaasSecretsStore'
-    conversation_store_class: str = (
-        'storage.saas_conversation_store.SaasConversationStore'
-    )
     monitoring_listener_class: str = (
         'server.saas_monitoring_listener.SaaSMonitoringListener'
     )
