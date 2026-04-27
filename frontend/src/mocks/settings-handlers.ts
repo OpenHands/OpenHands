@@ -63,6 +63,13 @@ export const createMockWebClientConfig = (
   updated_at: new Date().toISOString(),
   github_app_slug: null,
   gitlab_enabled: false,
+  provider_default_hosts: {
+    github: "github.com",
+    gitlab: "gitlab.com",
+    bitbucket: "bitbucket.org",
+    azure_devops: "dev.azure.com",
+    forgejo: "codeberg.org",
+  },
   slack_enabled: false,
   ...overrides,
 });
@@ -428,6 +435,13 @@ export const SETTINGS_HANDLERS = [
       updated_at: new Date().toISOString(),
       github_app_slug: mockSaas ? "openhands" : null,
       gitlab_enabled: false,
+      provider_default_hosts: {
+        github: "github.com",
+        gitlab: "gitlab.com",
+        bitbucket: "bitbucket.org",
+        azure_devops: "dev.azure.com",
+        forgejo: "codeberg.org",
+      },
       slack_enabled: false,
     };
 
