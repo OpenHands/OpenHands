@@ -5,6 +5,7 @@ import pytest
 from fastmcp.mcp_config import MCPConfig
 from pydantic import SecretStr
 
+from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.config.sandbox_config import SandboxConfig
@@ -348,3 +349,57 @@ def test_settings_no_pydantic_frozen_field_warning():
         assert len(frozen_warnings) == 0, (
             f'Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}'
         )
+
+
+def test_litellm_proxy_to_openhands_conversion_with_openhands_proxy():
+    """Test that litellm_proxy/ is converted to openhands/ when using OpenHands proxy."""
+    settings = Settings(
+        agent_settings=AgentSettings(
+            llm=LLM(
+                model='litellm_proxy/claude-opus-4-5-20251101',
+                base_url=LITE_LLM_API_URL,
+            )
+        )
+    )
+
+    # Internal representation should be litellm_proxy/
+    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5-20251101'
+
+    # Display representation should convert to openhands/
+    api_data = settings.get_agent_settings_display()
+    assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
+
+
+def test_litellm_proxy_custom_endpoint_keeps_prefix():
+    """Test that custom litellm_proxy endpoints keep their litellm_proxy/ prefix."""
+    settings = Settings(
+        agent_settings=AgentSettings(
+            llm=LLM(
+                model='litellm_proxy/gpt-5.3-codex',
+                base_url='http://custom-proxy.example.com:4000',
+            )
+        )
+    )
+
+    # Internal representation
+    assert settings.agent_settings.llm.model == 'litellm_proxy/gpt-5.3-codex'
+
+    # Display should NOT convert to openhands/ because it's a custom endpoint
+    api_data = settings.get_agent_settings_display()
+    assert api_data['llm']['model'] == 'litellm_proxy/gpt-5.3-codex'
+
+
+def test_openhands_model_converts_to_litellm_proxy_internally():
+    """Test that openhands/ models are stored as litellm_proxy/ internally."""
+    settings = Settings(
+        agent_settings=AgentSettings(
+            llm=LLM(model='openhands/claude-opus-4-5-20251101')
+        )
+    )
+
+    # Internal representation should be litellm_proxy/
+    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5-20251101'
+
+    # Display representation should convert back to openhands/
+    api_data = settings.get_agent_settings_display()
+    assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
