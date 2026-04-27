@@ -607,6 +607,56 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             f'{environment_url}/service/swat/mcp/knowledge/dev'
         )
 
+    async def _fetch_mcp_auth_token(self) -> str | None:
+        """Fetch the Bearer token used to authenticate MCP requests.
+
+        Signs in to the Better Auth server with the configured system
+        credentials and returns the `token` field from the response.
+        """
+        auth_url = os.environ.get('BETTER_AUTH_URL', '').rstrip('/')
+        email = os.environ.get('B1_SYSTEM_USER_EMAIL', '')
+        password = os.environ.get('B1_SYSTEM_USER_PASSWORD', '')
+        if not (auth_url and email and password):
+            _logger.warning(
+                'Cannot fetch MCP auth token: BETTER_AUTH_URL, '
+                'B1_SYSTEM_USER_EMAIL or B1_SYSTEM_USER_PASSWORD is not set'
+            )
+            return None
+        try:
+            response = await self.httpx_client.post(
+                f'{auth_url}/api/auth/sign-in/email',
+                json={'email': email, 'password': password},
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            token = response.json().get('token')
+            return token or None
+        except Exception:
+            _logger.warning(
+                'Failed to fetch MCP auth token from auth server',
+                exc_info=True,
+            )
+            return None
+
+    @staticmethod
+    def _apply_mcp_auth_token(
+        mcp_servers: dict[str, Any],
+        token: str,
+        server_names: list[str],
+    ) -> None:
+        """Set `Authorization: Bearer <token>` on the given MCP server configs.
+
+        Overwrites any existing Authorization header.
+        """
+        auth_header = f'Bearer {token}'
+        for name in server_names:
+            config = mcp_servers.get(name)
+            if config is None:
+                continue
+            headers = dict(config.get('headers') or {})
+            headers['Authorization'] = auth_header
+            config['headers'] = headers
+
     async def _build_app_conversations(
         self, app_conversation_infos: Sequence[AppConversationInfo | None]
     ) -> list[AppConversation | None]:
@@ -1457,9 +1507,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
 
         # Add remote environment as MCP server if provided
+        mcp_server_names_needing_auth: list[str] = []
         if environment_url:
             mcp_servers = mcp_config.get('mcpServers', {})
             self._add_environment_mcp_server(mcp_servers, environment_url)
+            mcp_server_names_needing_auth.extend(
+                ['environment-blueprint', 'environment-knowledge']
+            )
             mcp_config['mcpServers'] = mcp_servers
 
         # Merge API-provided MCP servers (highest precedence)
@@ -1470,10 +1524,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             mcp_servers = mcp_config.get('mcpServers', {})
             mcp_servers.update(api_mcp_servers)
             mcp_config['mcpServers'] = mcp_servers
+            mcp_server_names_needing_auth.extend(api_mcp_servers.keys())
             _logger.info(
                 f'Merged {len(api_mcp_servers)} API-provided MCP servers: '
                 f'{list(api_mcp_servers.keys())}'
             )
+
+        # Apply Bearer token fetched from the auth server to environment-provided
+        # and API-provided MCP servers (overwrites any existing Authorization).
+        if mcp_server_names_needing_auth:
+            mcp_auth_token = await self._fetch_mcp_auth_token()
+            if mcp_auth_token:
+                self._apply_mcp_auth_token(
+                    mcp_config.get('mcpServers', {}),
+                    mcp_auth_token,
+                    mcp_server_names_needing_auth,
+                )
 
         # Create agent with context
         agent = self._create_agent_with_context(

@@ -27,6 +27,8 @@ services:
       # --- Auth ---
       - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-develop.test.build.one}
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
+      - B1_SYSTEM_USER_EMAIL=${B1_SYSTEM_USER_EMAIL:-system@build.one}
+      - B1_SYSTEM_USER_PASSWORD=${B1_SYSTEM_USER_PASSWORD:-}
 
       # --- Sandbox / Runtime ---
       - SANDBOX_USER_ID=${SANDBOX_USER_ID:-0}
