@@ -80,6 +80,7 @@ class SaaSServerConfig(ServerConfig):
     enable_jira = ENABLE_JIRA
     enable_jira_dc = ENABLE_JIRA_DC
     enable_linear = ENABLE_LINEAR
+    enable_onboarding = os.environ.get('OH_ENABLE_ONBOARDING', 'false') == 'true'
 
     app_slug: None | str = None
 
@@ -171,6 +172,7 @@ class SaaSServerConfig(ServerConfig):
                 'ENABLE_JIRA_DC': self.enable_jira_dc,
                 'ENABLE_LINEAR': self.enable_linear,
                 'DEPLOYMENT_MODE': DEPLOYMENT_MODE,
+                'ENABLE_ONBOARDING': self.enable_onboarding,
             },
             'PROVIDERS_CONFIGURED': providers_configured,
         }
