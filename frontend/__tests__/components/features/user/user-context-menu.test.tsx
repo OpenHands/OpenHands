@@ -90,6 +90,11 @@ vi.mock("#/hooks/query/use-is-authed", () => ({
   useIsAuthed: () => ({ data: true }),
 }));
 
+const mockSettingsData = vi.hoisted(() => ({ data: null as Record<string, unknown> | null }));
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => mockSettingsData,
+}));
+
 const createMockUser = (
   overrides: Partial<OrganizationMember> = {},
 ): OrganizationMember => ({
@@ -866,6 +871,76 @@ describe("UserContextMenu", () => {
       });
 
       expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("ACP agent — disabled nav items", () => {
+    beforeEach(() => {
+      mockSettingsData.data = null;
+    });
+
+    it("greys out Condenser and MCP links when ACP agent is active", async () => {
+      mockSettingsData.data = {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+      };
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+        createMockWebClientConfig({
+          app_mode: "oss",
+          feature_flags: {
+            enable_acp: true,
+            enable_billing: false,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+          },
+        }),
+      );
+
+      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
+      });
+
+      // Condenser and MCP links should be present but rendered as disabled divs
+      const condenserLink = screen.getByText("SETTINGS$NAV_CONDENSER");
+      expect(condenserLink.closest("a")).toBeNull(); // not a link
+      expect(condenserLink.closest("div")).toHaveClass("cursor-not-allowed");
+    });
+
+    it("does not grey out Condenser when LLM agent is active", async () => {
+      mockSettingsData.data = {
+        agent_settings: { agent_kind: "llm" },
+      };
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+        createMockWebClientConfig({
+          app_mode: "oss",
+          feature_flags: {
+            enable_acp: true,
+            enable_billing: false,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+          },
+        }),
+      );
+
+      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
+      });
+
+      const condenserLink = screen.getByText("SETTINGS$NAV_CONDENSER");
+      expect(condenserLink.closest("a")).not.toBeNull(); // is a link
     });
   });
 });
