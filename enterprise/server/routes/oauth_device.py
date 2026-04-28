@@ -10,8 +10,8 @@ from server.utils.url_utils import get_web_url
 from storage.api_key_store import ApiKeyStore
 from storage.device_code_store import DeviceCodeStore
 
+from openhands.app_server.user_auth import get_user_id
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_id
 
 # ---------------------------------------------------------------------------
 # Constants

@@ -7,7 +7,7 @@ from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.server.user_auth.user_auth import AuthType, get_user_auth
+from openhands.app_server.user_auth.user_auth import AuthType, get_user_auth
 
 
 async def get_provider_tokens(request: Request) -> PROVIDER_TOKEN_TYPE | None:

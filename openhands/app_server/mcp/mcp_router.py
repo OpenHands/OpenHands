@@ -30,13 +30,13 @@ from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
 )
-from openhands.core.logger import openhands_logger as logger
-from openhands.server.types import AppMode
-from openhands.server.user_auth import (
+from openhands.app_server.user_auth import (
     get_access_token,
     get_provider_tokens,
     get_user_id,
 )
+from openhands.core.logger import openhands_logger as logger
+from openhands.server.types import AppMode
 
 mcp_server = FastMCP('mcp', mask_error_details=True)
 
