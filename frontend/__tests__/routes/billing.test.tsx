@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { createRoutesStub } from "react-router";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import React, { StrictMode } from "react";
+import { createRoutesStub, MemoryRouter } from "react-router";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
 import BillingSettingsScreen, { clientLoader } from "#/routes/billing";
@@ -32,6 +33,25 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: (...args: unknown[]) => mockDisplaySuccessToast(...args),
   displayErrorToast: (...args: unknown[]) => mockDisplayErrorToast(...args),
 }));
+
+// Allow individual tests to pin `useSearchParams` to a fixed value (e.g. to
+// hold checkout=success across forced re-renders). When unset, the real
+// react-router implementation is used.
+const { searchParamsOverride } = vi.hoisted(() => ({
+  searchParamsOverride: {
+    current: null as null | [URLSearchParams, () => void],
+  },
+}));
+vi.mock("react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router")>();
+  return {
+    ...actual,
+    useRevalidator: () => ({ revalidate: vi.fn() }),
+    useSearchParams: ((...args: Parameters<typeof actual.useSearchParams>) =>
+      searchParamsOverride.current ??
+      actual.useSearchParams(...args)) as typeof actual.useSearchParams,
+  };
+});
 
 // Mock useBalance hook
 const mockUseBalance = vi.fn();
@@ -114,6 +134,7 @@ describe("Billing Route", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    searchParamsOverride.current = null;
   });
 
   describe("clientLoader cache key", () => {
@@ -319,55 +340,74 @@ describe("Billing Route", () => {
       });
     });
 
-    it("should display success toast exactly once and track credits on checkout success", async () => {
-      const RouterStub = createRoutesStub([
-        {
-          Component: BillingSettingsScreen,
-          path: "/settings/billing",
-        },
-      ]);
+    /**
+     * Forces multiple parent re-renders of `BillingSettingsScreen` while
+     * `useSearchParams` is pinned to `?checkout=...`, simulating the
+     * production timing window where re-renders fire the effect again
+     * before the URL has cleared.
+     */
+    function renderWithForcedReRenders(
+      query:
+        | "checkout=success&amount=25&session_id=sess_123"
+        | "checkout=cancel",
+    ) {
+      searchParamsOverride.current = [new URLSearchParams(query), vi.fn()];
 
-      render(
-        <RouterStub
-          initialEntries={[
-            "/settings/billing?checkout=success&amount=25&session_id=sess_123",
-          ]}
-        />,
-        {
-          wrapper: ({ children }) => (
+      let triggerReRender: (() => void) | undefined;
+
+      function ReRenderHarness() {
+        const [, setTick] = React.useState(0);
+        React.useEffect(() => {
+          triggerReRender = () => setTick((t) => t + 1);
+        }, []);
+        return <BillingSettingsScreen />;
+      }
+
+      const result = render(<ReRenderHarness />, {
+        wrapper: ({ children }) => (
+          <StrictMode>
             <QueryClientProvider client={mockQueryClient}>
-              {children}
+              <MemoryRouter initialEntries={[`/settings/billing?${query}`]}>
+                {children}
+              </MemoryRouter>
             </QueryClientProvider>
-          ),
-        },
-      );
+          </StrictMode>
+        ),
+      });
 
+      return {
+        ...result,
+        forceReRenders: async (count: number) => {
+          const trigger = triggerReRender;
+          for (let i = 0; i < count; i += 1) {
+            // eslint-disable-next-line no-await-in-loop
+            await act(async () => {
+              trigger?.();
+            });
+          }
+        },
+      };
+    }
+
+    it("should display success toast exactly once even when the effect re-fires before the URL clears", async () => {
+      // Arrange + Act
+      const { forceReRenders } = renderWithForcedReRenders(
+        "checkout=success&amount=25&session_id=sess_123",
+      );
+      await forceReRenders(3);
+
+      // Assert
       await waitFor(() => {
         expect(mockDisplaySuccessToast).toHaveBeenCalledTimes(1);
       });
     });
 
-    it("should display error toast exactly once on checkout cancel", async () => {
-      const RouterStub = createRoutesStub([
-        {
-          Component: BillingSettingsScreen,
-          path: "/settings/billing",
-        },
-      ]);
+    it("should display error toast exactly once on checkout cancel even when the effect re-fires", async () => {
+      // Arrange + Act
+      const { forceReRenders } = renderWithForcedReRenders("checkout=cancel");
+      await forceReRenders(3);
 
-      render(
-        <RouterStub
-          initialEntries={["/settings/billing?checkout=cancel"]}
-        />,
-        {
-          wrapper: ({ children }) => (
-            <QueryClientProvider client={mockQueryClient}>
-              {children}
-            </QueryClientProvider>
-          ),
-        },
-      );
-
+      // Assert
       await waitFor(() => {
         expect(mockDisplayErrorToast).toHaveBeenCalledTimes(1);
       });

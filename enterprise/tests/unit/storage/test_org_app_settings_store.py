@@ -49,7 +49,6 @@ async def test_get_current_org_by_user_id_success(async_session_maker):
         org = Org(
             name='test-org',
             enable_proactive_conversation_starters=True,
-            enable_solvability_analysis=False,
             max_budget_per_task=25.0,
         )
         session.add(org)
@@ -71,7 +70,6 @@ async def test_get_current_org_by_user_id_success(async_session_maker):
     assert result is not None
     assert result.name == 'test-org'
     assert result.enable_proactive_conversation_starters is True
-    assert result.enable_solvability_analysis is False
     assert result.max_budget_per_task == 25.0
 
 
@@ -106,7 +104,6 @@ async def test_update_org_app_settings_success(async_session_maker):
         org = Org(
             name='test-org',
             enable_proactive_conversation_starters=True,
-            enable_solvability_analysis=False,
             max_budget_per_task=10.0,
         )
         session.add(org)
@@ -115,7 +112,6 @@ async def test_update_org_app_settings_success(async_session_maker):
 
         update_data = OrgAppSettingsUpdate(
             enable_proactive_conversation_starters=False,
-            enable_solvability_analysis=True,
             max_budget_per_task=50.0,
         )
 
@@ -126,7 +122,6 @@ async def test_update_org_app_settings_success(async_session_maker):
     # Assert
     assert result is not None
     assert result.enable_proactive_conversation_starters is False
-    assert result.enable_solvability_analysis is True
     assert result.max_budget_per_task == 50.0
 
 
@@ -142,7 +137,6 @@ async def test_update_org_app_settings_partial(async_session_maker):
         org = Org(
             name='test-org',
             enable_proactive_conversation_starters=True,
-            enable_solvability_analysis=False,
             max_budget_per_task=10.0,
         )
         session.add(org)
@@ -160,7 +154,6 @@ async def test_update_org_app_settings_partial(async_session_maker):
     assert result is not None
     assert result.max_budget_per_task == 100.0
     assert result.enable_proactive_conversation_starters is True  # Unchanged
-    assert result.enable_solvability_analysis is False  # Unchanged
 
 
 @pytest.mark.asyncio

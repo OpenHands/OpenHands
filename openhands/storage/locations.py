@@ -24,7 +24,3 @@ def get_conversation_metadata_filename(sid: str, user_id: str | None = None) -> 
 
 def get_conversation_agent_state_filename(sid: str, user_id: str | None = None) -> str:
     return f'{get_conversation_dir(sid, user_id)}agent_state.pkl'
-
-
-def get_conversation_stats_filename(sid: str, user_id: str | None = None) -> str:
-    return f'{get_conversation_dir(sid, user_id)}conversation_stats.pkl'

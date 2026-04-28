@@ -13,7 +13,7 @@ from storage.org import Org
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
 
 # --- Fixtures ---
 
@@ -877,7 +877,6 @@ def test_create_user_settings_from_entities():
     org.search_api_key = None
     org.sandbox_api_key = None
     org.max_budget_per_task = None
-    org.enable_solvability_analysis = False
     org.v1_enabled = True
 
     result = UserStore._create_user_settings_from_entities(
@@ -940,7 +939,6 @@ def test_create_user_settings_from_entities_with_org_fallback():
     org.search_api_key = SecretStr('search-key')
     org.sandbox_api_key = None
     org.max_budget_per_task = 10.0
-    org.enable_solvability_analysis = True
     org.v1_enabled = False
 
     result = UserStore._create_user_settings_from_entities(

@@ -22609,6 +22609,23 @@
     "uk": "Створення нової розмови...",
     "ca": "S'està creant una nova conversa..."
   },
+  "CONVERSATION$ARCHIVED_READ_ONLY": {
+    "en": "This conversation is archived and read-only",
+    "ja": "この会話はアーカイブされており、読み取り専用です",
+    "zh-CN": "此对话已归档，只读",
+    "zh-TW": "此對話已歸檔，只讀",
+    "ko-KR": "이 대화는 보관되었으며 읽기 전용입니다",
+    "no": "Denne samtalen er arkivert og skrivebeskyttet",
+    "it": "Questa conversazione è archiviata e di sola lettura",
+    "pt": "Esta conversa está arquivada e é somente leitura",
+    "es": "Esta conversación está archivada y es de solo lectura",
+    "ar": "هذه المحادثة مؤرشفة وللقراءة فقط",
+    "fr": "Cette conversation est archivée et en lecture seule",
+    "tr": "Bu konuşma arşivlenmiş ve salt okunurdur",
+    "de": "Diese Konversation ist archiviert und schreibgeschützt",
+    "uk": "Ця розмова заархівована та доступна лише для читання",
+    "ca": "Aquesta conversa està arxivada i és de només lectura"
+  },
   "CTA$ENTERPRISE": {
     "en": "Enterprise",
     "ja": "エンタープライズ",

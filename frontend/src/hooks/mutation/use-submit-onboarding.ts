@@ -26,6 +26,7 @@ export const useSubmitOnboarding = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
 
       const finalRedirectUrl = data.redirect_url || "/";
       // Check if the redirect URL is an external URL (starts with http or https)

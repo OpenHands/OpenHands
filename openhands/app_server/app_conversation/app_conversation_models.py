@@ -11,15 +11,29 @@ from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+
+# Import from new location and re-export for backward compatibility
+from openhands.app_server.settings.settings_models import SandboxGroupingStrategy
 from openhands.integrations.service_types import ProviderType, SuggestedTask
 from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
-from openhands.storage.data_models.settings import SandboxGroupingStrategy
 
-# Re-export SandboxGroupingStrategy for backward compatibility
 __all__ = ['SandboxGroupingStrategy']
+
+
+class ConversationTrigger(Enum):
+    RESOLVER = 'resolver'
+    GUI = 'gui'
+    SUGGESTED_TASK = 'suggested_task'
+    REMOTE_API_KEY = 'openhands_api'
+    SLACK = 'slack'
+    MICROAGENT_MANAGEMENT = 'microagent_management'
+    JIRA = 'jira'
+    JIRA_DC = 'jira_dc'
+    LINEAR = 'linear'
+    BITBUCKET = 'bitbucket'
+    AUTOMATION = 'automation'
 
 
 class AgentType(Enum):

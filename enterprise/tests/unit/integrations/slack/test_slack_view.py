@@ -69,7 +69,6 @@ def slack_new_conversation_view(mock_slack_user, mock_user_auth):
         send_summary_instruction=True,
         conversation_id='',
         team_id='T1234567890',
-        v1_enabled=True,
     )
 
 
@@ -99,7 +98,6 @@ def slack_update_conversation_view_v1(mock_slack_user, mock_user_auth):
         conversation_id=conversation_id,
         slack_conversation=mock_conversation,
         team_id='T1234567890',
-        v1_enabled=True,
     )
 
 
@@ -111,18 +109,15 @@ def slack_update_conversation_view_v1(mock_slack_user, mock_user_auth):
 class TestV1ConversationCreation:
     """Test V1 conversation creation in Slack integration."""
 
-    @patch('integrations.slack.slack_view.is_v1_enabled_for_slack_resolver')
     @patch.object(SlackNewConversationView, '_create_v1_conversation')
     async def test_v1_conversation_creation(
         self,
         mock_create_v1,
-        mock_is_v1_enabled,
         slack_new_conversation_view,
         mock_jinja_env,
     ):
         """Test that V1 conversations are created correctly."""
         # Setup mocks
-        mock_is_v1_enabled.return_value = True
         mock_create_v1.return_value = None
 
         # Execute
@@ -132,7 +127,6 @@ class TestV1ConversationCreation:
 
         # Verify
         assert result == slack_new_conversation_view.conversation_id
-        assert slack_new_conversation_view.v1_enabled is True
         mock_create_v1.assert_called_once()
 
 

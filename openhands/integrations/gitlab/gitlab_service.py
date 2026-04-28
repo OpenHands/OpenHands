@@ -2,6 +2,7 @@ import os
 
 from pydantic import SecretStr
 
+from openhands.integrations.gitlab.constants import GITLAB_HOST
 from openhands.integrations.gitlab.service import (
     GitLabBranchesMixin,
     GitLabFeaturesMixin,
@@ -39,8 +40,8 @@ class GitLabService(
     The class is instantiated via get_impl() in openhands.server.shared.py.
     """
 
-    BASE_URL = 'https://gitlab.com/api/v4'
-    GRAPHQL_URL = 'https://gitlab.com/api/graphql'
+    BASE_URL = f'https://{GITLAB_HOST}/api/v4'
+    GRAPHQL_URL = f'https://{GITLAB_HOST}/api/graphql'
 
     def __init__(
         self,

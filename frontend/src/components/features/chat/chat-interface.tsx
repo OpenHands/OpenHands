@@ -33,6 +33,7 @@ import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { I18nKey } from "#/i18n/declaration";
+import { ArchivedBanner } from "./archived-banner";
 
 export function ChatInterface() {
   const { setMessageToSend } = useConversationStore();
@@ -66,7 +67,7 @@ export function ChatInterface() {
     isPending: isNewConversationPending,
   } = useNewConversationCommand();
 
-  const { curAgentState } = useAgentState();
+  const { curAgentState, isArchived } = useAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Disable Build button while agent is running (streaming)
@@ -289,10 +290,14 @@ export function ChatInterface() {
             />
           )}
 
-          <InteractiveChatBox
-            onSubmit={handleSendMessage}
-            disabled={isNewConversationPending}
-          />
+          {isArchived && <ArchivedBanner />}
+
+          {!isArchived && (
+            <InteractiveChatBox
+              onSubmit={handleSendMessage}
+              disabled={isNewConversationPending}
+            />
+          )}
         </div>
       </div>
     </ScrollProvider>

@@ -55,8 +55,13 @@ function BillingSettingsScreen() {
   const { hasPermission } = usePermission(me?.role ?? "member");
   const canAddCredits = !!me && hasPermission("add_credits");
   const checkoutStatus = searchParams.get("checkout");
+  const hasHandledCheckoutRef = React.useRef(false);
 
   React.useEffect(() => {
+    if (!checkoutStatus) return;
+    if (hasHandledCheckoutRef.current) return;
+    hasHandledCheckoutRef.current = true;
+
     if (checkoutStatus === "success") {
       displaySuccessToast(t(I18nKey.PAYMENT$SUCCESS));
       setSearchParams({});

@@ -26,6 +26,7 @@ import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
 import { useAutoSelectOrganization } from "#/hooks/use-auto-select-organization";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
+import { OnboardingGuard } from "#/components/features/guards/onboarding-guard";
 import { AlertBanner } from "#/components/features/alerts/alert-banner";
 import { cn } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -278,9 +279,11 @@ export default function MainApp() {
           id="root-outlet"
           className="flex-1 relative overflow-auto custom-scrollbar"
         >
-          <EmailVerificationGuard>
-            <Outlet />
-          </EmailVerificationGuard>
+          <OnboardingGuard>
+            <EmailVerificationGuard>
+              <Outlet />
+            </EmailVerificationGuard>
+          </OnboardingGuard>
         </div>
       </div>
 
