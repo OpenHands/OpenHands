@@ -24,6 +24,7 @@ from openhands.integrations.bitbucket_data_center.bitbucket_dc_service import (
 )
 from openhands.integrations.forgejo.forgejo_service import ForgejoServiceImpl
 from openhands.integrations.github.github_service import GithubServiceImpl
+from openhands.integrations.gitlab.constants import GITLAB_HOST
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.integrations.service_types import (
     AuthenticationError,
@@ -102,7 +103,7 @@ class ProviderHandler:
     # Class variable for provider domains
     PROVIDER_DOMAINS: dict[ProviderType, str] = {
         ProviderType.GITHUB: 'github.com',
-        ProviderType.GITLAB: 'gitlab.com',
+        ProviderType.GITLAB: GITLAB_HOST,
         ProviderType.BITBUCKET: 'bitbucket.org',
         ProviderType.FORGEJO: 'codeberg.org',
         ProviderType.AZURE_DEVOPS: 'dev.azure.com',

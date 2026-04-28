@@ -31,6 +31,7 @@ from server.auth.auth_error import ExpiredError
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 
+from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import AuthenticationError
@@ -39,7 +40,6 @@ from openhands.server.types import (
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.storage.data_models.secrets import Secrets
 
 
 class GithubManager(Manager[GithubViewType]):
@@ -356,7 +356,7 @@ class GithubManager(Manager[GithubViewType]):
                     )
                 )
 
-                convo_metadata = await github_view.initialize_new_conversation()
+                conversation_id = await github_view.initialize_new_conversation()
 
                 saas_user_auth = await get_saas_user_auth(
                     github_view.user_info.keycloak_user_id, self.token_manager
@@ -365,20 +365,20 @@ class GithubManager(Manager[GithubViewType]):
                 await github_view.create_new_conversation(
                     self.jinja_env,
                     secret_store.provider_tokens,
-                    convo_metadata,
+                    conversation_id,
                     saas_user_auth,
                 )
 
-                conversation_id = github_view.conversation_id
+                conversation_id_hex = github_view.conversation_id
 
                 logger.info(
-                    f'[GitHub] Created conversation {conversation_id} for user {user_info.username}'
+                    f'[GitHub] Created conversation {conversation_id_hex} for user {user_info.username}'
                 )
 
                 # V1 callback processors are registered by the view during conversation creation
 
                 # Send message with conversation link
-                conversation_link = CONVERSATION_URL.format(conversation_id)
+                conversation_link = CONVERSATION_URL.format(conversation_id_hex)
                 msg_info = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
 
             except MissingSettingsError as e:

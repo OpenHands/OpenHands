@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from integrations.github.github_view import (
@@ -17,7 +17,6 @@ from jinja2 import Environment, FileSystemLoader
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTaskStatus,
 )
-from openhands.storage.data_models.conversation_metadata import ConversationMetadata
 
 
 @pytest.fixture
@@ -44,11 +43,8 @@ class _FakeAppConversationService:
         yield MagicMock(status=AppConversationStartTaskStatus.READY, detail=None)
 
 
-def _build_conversation_metadata() -> ConversationMetadata:
-    return ConversationMetadata(
-        conversation_id=str(uuid4()),
-        selected_repository='test-owner/test-repo',
-    )
+def _build_conversation_id() -> UUID:
+    return uuid4()
 
 
 def _build_user_data() -> UserData:
@@ -97,7 +93,7 @@ class TestGithubViewV1InitialUserMessage:
         await view._create_v1_conversation(
             jinja_env=jinja_env,
             saas_user_auth=MagicMock(),
-            conversation_metadata=_build_conversation_metadata(),
+            conversation_id=_build_conversation_id(),
         )
 
         assert len(fake_service.requests) == 1
@@ -153,7 +149,7 @@ class TestGithubViewV1InitialUserMessage:
         await view._create_v1_conversation(
             jinja_env=jinja_env,
             saas_user_auth=MagicMock(),
-            conversation_metadata=_build_conversation_metadata(),
+            conversation_id=_build_conversation_id(),
         )
 
         assert len(fake_service.requests) == 1
@@ -207,7 +203,7 @@ class TestGithubViewV1InitialUserMessage:
         await view._create_v1_conversation(
             jinja_env=jinja_env,
             saas_user_auth=MagicMock(),
-            conversation_metadata=_build_conversation_metadata(),
+            conversation_id=_build_conversation_id(),
         )
 
         req = fake_service.requests[0]

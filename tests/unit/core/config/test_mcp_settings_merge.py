@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from openhands.app_server.settings.settings_models import Settings
 from openhands.core.config.mcp_config import (
     MCPConfig,
     RemoteMCPServer,
@@ -12,7 +13,6 @@ from openhands.core.config.mcp_config import (
 )
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
-from openhands.storage.data_models.settings import Settings
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +52,7 @@ async def test_mcp_settings_merge_config_only():
     frontend_settings = Settings(agent_settings=AgentSettings(llm=LLM(model='gpt-4')))
 
     with patch(
-        'openhands.storage.data_models.settings.Settings.from_config',
+        'openhands.app_server.settings.settings_models.Settings.from_config',
         return_value=mock_config_settings,
     ):
         merged_settings = frontend_settings.merge_with_config_settings()
@@ -83,7 +83,7 @@ async def test_mcp_settings_merge_frontend_only():
     )
 
     with patch(
-        'openhands.storage.data_models.settings.Settings.from_config',
+        'openhands.app_server.settings.settings_models.Settings.from_config',
         return_value=mock_config_settings,
     ):
         merged_settings = frontend_settings.merge_with_config_settings()
@@ -122,7 +122,7 @@ async def test_mcp_settings_merge_both_present():
     )
 
     with patch(
-        'openhands.storage.data_models.settings.Settings.from_config',
+        'openhands.app_server.settings.settings_models.Settings.from_config',
         return_value=mock_config_settings,
     ):
         merged_settings = frontend_settings.merge_with_config_settings()
@@ -154,7 +154,7 @@ async def test_mcp_settings_merge_no_config():
     )
 
     with patch(
-        'openhands.storage.data_models.settings.Settings.from_config',
+        'openhands.app_server.settings.settings_models.Settings.from_config',
         return_value=mock_config_settings,
     ):
         merged_settings = frontend_settings.merge_with_config_settings()
@@ -175,7 +175,7 @@ async def test_mcp_settings_merge_neither_present():
     frontend_settings = Settings(agent_settings=AgentSettings(llm=LLM(model='gpt-4')))
 
     with patch(
-        'openhands.storage.data_models.settings.Settings.from_config',
+        'openhands.app_server.settings.settings_models.Settings.from_config',
         return_value=mock_config_settings,
     ):
         merged_settings = frontend_settings.merge_with_config_settings()

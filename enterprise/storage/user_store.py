@@ -931,7 +931,7 @@ class UserStore:
     from typing import TYPE_CHECKING
 
     if TYPE_CHECKING:
-        from openhands.storage.data_models.settings import Settings
+        from openhands.app_server.settings.settings_models import Settings
 
     @staticmethod
     async def create_default_settings(
@@ -945,7 +945,7 @@ class UserStore:
         if not org_id:
             return None
 
-        from openhands.storage.data_models.settings import Settings
+        from openhands.app_server.settings.settings_models import Settings
 
         default_settings = Settings(
             language='en', enable_proactive_conversation_starters=True

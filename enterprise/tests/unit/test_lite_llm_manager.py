@@ -20,7 +20,7 @@ from storage.lite_llm_manager import (
 )
 from storage.user_settings import UserSettings
 
-from openhands.server.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
 
 
 def _agent_value(settings: Settings, key: str):

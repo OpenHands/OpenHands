@@ -3,7 +3,7 @@ from datetime import datetime
 # Simplified imports to avoid dependency chain issues
 # from openhands.integrations.service_types import ProviderType
 # from openhands.sdk.llm import MetricsSnapshot
-# from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+# from openhands.app_server.app_conversation.app_conversation_models import ConversationTrigger
 # For now, use Any to avoid import issues
 from typing import Any
 from uuid import uuid4

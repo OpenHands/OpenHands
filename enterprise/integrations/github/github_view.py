@@ -31,6 +31,7 @@ from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
+    ConversationTrigger,
 )
 from openhands.app_server.config import get_app_conversation_service
 from openhands.app_server.services.injector import InjectorState
@@ -41,10 +42,6 @@ from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import Comment
 from openhands.sdk import TextContent
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import (
-    ConversationMetadata,
-    ConversationTrigger,
-)
 from openhands.utils.async_utils import call_sync_from_async
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
@@ -143,7 +140,7 @@ class GithubIssue(ResolverViewInterface):
 
         return user_secrets.custom_secrets if user_secrets else None
 
-    async def initialize_new_conversation(self) -> ConversationMetadata:
+    async def initialize_new_conversation(self) -> UUID:
         # Resolve target org based on claimed git organizations
         self.resolved_org_id = await resolve_org_for_repo(
             provider='github',
@@ -152,23 +149,19 @@ class GithubIssue(ResolverViewInterface):
         )
 
         # All conversations use V1 app conversation service
-        self.conversation_id = uuid4().hex
-        return ConversationMetadata(
-            conversation_id=self.conversation_id,
-            selected_repository=self.full_repo_name,
-        )
+        conversation_id = uuid4()
+        self.conversation_id = conversation_id.hex
+        return conversation_id
 
     async def create_new_conversation(
         self,
         jinja_env: Environment,
         git_provider_tokens: PROVIDER_TOKEN_TYPE,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
         saas_user_auth: UserAuth,
     ):
         # V0 conversation path has been removed - all conversations use V1 app conversation service
-        await self._create_v1_conversation(
-            jinja_env, saas_user_auth, conversation_metadata
-        )
+        await self._create_v1_conversation(jinja_env, saas_user_auth, conversation_id)
 
     async def _get_v1_initial_user_message(self, jinja_env: Environment) -> str:
         """Build the initial user message for V1 resolver conversations.
@@ -196,7 +189,7 @@ class GithubIssue(ResolverViewInterface):
         self,
         jinja_env: Environment,
         saas_user_auth: UserAuth,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
     ):
         """Create conversation using the new V1 app conversation system."""
         logger.info('[GitHub V1]: Creating V1 conversation')
@@ -216,7 +209,7 @@ class GithubIssue(ResolverViewInterface):
 
         # Create the V1 conversation start request with the callback processor
         start_request = AppConversationStartRequest(
-            conversation_id=UUID(conversation_metadata.conversation_id),
+            conversation_id=conversation_id,
             # NOTE: Resolver instructions are intended to be lower priority than the
             # system prompt, so we inject them into the initial user message.
             system_message_suffix=None,
