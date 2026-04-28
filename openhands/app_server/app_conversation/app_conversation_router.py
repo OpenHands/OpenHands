@@ -28,6 +28,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
     AppConversationUpdateRequest,
+    AppSendMessageRequest,
+    AppSendMessageResponse,
     GetHooksResponse,
     HookDefinitionResponse,
     HookEventResponse,
@@ -386,6 +388,183 @@ async def update_app_conversation(
     if info is None:
         raise HTTPException(404, 'unknown_app_conversation')
     return info
+
+
+# Default timeout for waiting for sandbox to become ready (in seconds)
+SANDBOX_READY_TIMEOUT_SECONDS = 60
+# Poll interval when waiting for sandbox status (in seconds)
+SANDBOX_POLL_INTERVAL_SECONDS = 1.0
+
+
+@router.post(
+    '/{conversation_id}/send-message',
+    responses={
+        404: {'description': 'Conversation or sandbox not found'},
+        410: {'description': 'Conversation is archived (sandbox no longer exists)'},
+        503: {'description': 'Sandbox is in error state'},
+        504: {'description': 'Timeout waiting for sandbox to become ready'},
+    },
+)
+async def send_message_to_conversation(
+    conversation_id: UUID,
+    request: AppSendMessageRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> AppSendMessageResponse:
+    """Send a follow-up message to an existing conversation.
+
+    This REST endpoint allows sending messages to an already-running conversation
+    without requiring a WebSocket connection. It handles:
+
+    1. Checking that the sandbox hasn't been archived (returns 410 if archived)
+    2. Resuming the sandbox if it's paused
+    3. Waiting for the sandbox to be running
+    4. Forwarding the message to the agent-server
+
+    Args:
+        conversation_id: The UUID of the conversation to send the message to
+        request: The message content and options
+
+    Returns:
+        AppSendMessageResponse with success status and sandbox state
+    """
+    # Get conversation info
+    conversation = await app_conversation_service.get_app_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Conversation {conversation_id} not found',
+        )
+
+    # Get sandbox info
+    sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
+    if not sandbox:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Sandbox not found for conversation {conversation_id}',
+        )
+
+    # Check sandbox status
+    if sandbox.status == SandboxStatus.MISSING:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail='Conversation is archived. The sandbox no longer exists.',
+        )
+
+    if sandbox.status == SandboxStatus.ERROR:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Sandbox is in an error state and cannot accept messages.',
+        )
+
+    resumed = False
+    # Resume sandbox if it's paused
+    if sandbox.status == SandboxStatus.PAUSED:
+        logger.info(
+            f'Resuming paused sandbox {sandbox.id} for conversation {conversation_id}'
+        )
+        success = await sandbox_service.resume_sandbox(sandbox.id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail='Failed to resume sandbox.',
+            )
+        resumed = True
+
+    # Wait for sandbox to be running
+    if sandbox.status != SandboxStatus.RUNNING or resumed:
+        start_time = asyncio.get_event_loop().time()
+        while True:
+            sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
+            if not sandbox:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail='Sandbox disappeared while waiting for it to become ready.',
+                )
+
+            if sandbox.status == SandboxStatus.RUNNING:
+                break
+
+            if sandbox.status in (SandboxStatus.MISSING, SandboxStatus.ERROR):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f'Sandbox entered {sandbox.status.value} state while starting.',
+                )
+
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed >= SANDBOX_READY_TIMEOUT_SECONDS:
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail='Timeout waiting for sandbox to become ready.',
+                )
+
+            await asyncio.sleep(SANDBOX_POLL_INTERVAL_SECONDS)
+
+    # Get agent server URL from sandbox
+    if not sandbox.exposed_urls:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='No agent server URL found for sandbox.',
+        )
+
+    agent_server_url = None
+    for exposed_url in sandbox.exposed_urls:
+        if exposed_url.name == AGENT_SERVER:
+            agent_server_url = exposed_url.url
+            break
+
+    if not agent_server_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Agent server URL not found in sandbox.',
+        )
+
+    agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+
+    # Send message to agent server
+    try:
+        content_json = [item.model_dump() for item in request.content]
+        response = await httpx_client.post(
+            f'{agent_server_url}/api/conversations/{conversation_id}/events',
+            json={
+                'role': request.role,
+                'content': content_json,
+                'run': request.run,
+            },
+            headers=(
+                {'X-Session-API-Key': sandbox.session_api_key}
+                if sandbox.session_api_key
+                else {}
+            ),
+            timeout=30.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            f'Agent server returned error when sending message: '
+            f'{e.response.status_code} - {e.response.text}'
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Agent server error: {e.response.status_code}',
+        )
+    except httpx.RequestError as e:
+        logger.error(f'Failed to reach agent server: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+    message = 'Sandbox was resumed before sending message.' if resumed else None
+    return AppSendMessageResponse(
+        success=True,
+        sandbox_status=sandbox.status,
+        message=message,
+    )
 
 
 async def _finalize_sandbox_delete(
