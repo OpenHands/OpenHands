@@ -6,7 +6,6 @@ from openhands.core.config.arg_utils import (
 from openhands.core.config.config_utils import (
     OH_DEFAULT_AGENT,
     OH_MAX_ITERATIONS,
-    get_field_info,
 )
 from openhands.core.config.extended_config import ExtendedConfig
 from openhands.core.config.llm_config import LLMConfig
@@ -45,7 +44,6 @@ __all__ = [
     'finalize_config',
     'get_agent_config_arg',
     'get_llm_config_arg',
-    'get_field_info',
     'get_headless_parser',
     'get_evaluation_parser',
     'parse_arguments',
