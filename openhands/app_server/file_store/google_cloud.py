@@ -5,21 +5,38 @@ from google.cloud import storage
 from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
+from pydantic import Field, PrivateAttr, model_validator
 
-from openhands.storage.files import FileStore
+from openhands.app_server.file_store.files import FileStore
 
 
 class GoogleCloudFileStore(FileStore):
-    def __init__(self, bucket_name: str | None = None) -> None:
-        """Create a new FileStore.
+    """Google Cloud Storage file store.
 
-        If GOOGLE_APPLICATION_CREDENTIALS is defined in the environment it will be used
-        for authentication. Otherwise access will be anonymous.
-        """
-        if bucket_name is None:
-            bucket_name = os.environ['GOOGLE_CLOUD_BUCKET_NAME']
-        self.storage_client: Client = storage.Client()
-        self.bucket: Bucket = self.storage_client.bucket(bucket_name)
+    If GOOGLE_APPLICATION_CREDENTIALS is defined in the environment it will be used
+    for authentication. Otherwise access will be anonymous.
+    """
+
+    bucket_name: str = Field(default='')
+
+    _storage_client: Client = PrivateAttr(default=None)
+    _bucket: Bucket = PrivateAttr(default=None)
+
+    @model_validator(mode='after')
+    def _setup_client(self) -> 'GoogleCloudFileStore':
+        if not self.bucket_name:
+            self.bucket_name = os.environ['GOOGLE_CLOUD_BUCKET_NAME']
+        self._storage_client = storage.Client()
+        self._bucket = self._storage_client.bucket(self.bucket_name)
+        return self
+
+    @property
+    def storage_client(self) -> Client:
+        return self._storage_client
+
+    @property
+    def bucket(self) -> Bucket:
+        return self._bucket
 
     def write(self, path: str, contents: str | bytes) -> None:
         blob: Blob = self.bucket.blob(path)

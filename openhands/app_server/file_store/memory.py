@@ -1,16 +1,13 @@
 import os
 
+from pydantic import Field
+
+from openhands.app_server.file_store.files import FileStore
 from openhands.core.logger import openhands_logger as logger
-from openhands.storage.files import FileStore
 
 
 class InMemoryFileStore(FileStore):
-    files: dict[str, str]
-
-    def __init__(self, files: dict[str, str] | None = None) -> None:
-        self.files = {}
-        if files is not None:
-            self.files = files
+    files: dict[str, str] = Field(default_factory=dict)
 
     def write(self, path: str, contents: str | bytes) -> None:
         if isinstance(contents, bytes):

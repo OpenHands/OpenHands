@@ -11,14 +11,14 @@ import os
 import socketio
 from dotenv import load_dotenv
 
+from openhands.app_server.file_store import get_file_store
+from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.core.config import load_openhands_config
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.config.server_config import ServerConfig, load_server_config
 from openhands.server.types import ServerConfigInterface
-from openhands.storage import get_file_store
-from openhands.storage.files import FileStore
 from openhands.utils.import_utils import get_impl
 
 load_dotenv()

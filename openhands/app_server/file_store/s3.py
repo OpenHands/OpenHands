@@ -3,8 +3,9 @@ from typing import Any, TypedDict
 
 import boto3
 import botocore
+from pydantic import Field, PrivateAttr, model_validator
 
-from openhands.storage.files import FileStore
+from openhands.app_server.file_store.files import FileStore
 
 
 class S3ObjectDict(TypedDict):
@@ -20,21 +21,30 @@ class ListObjectsV2OutputDict(TypedDict):
 
 
 class S3FileStore(FileStore):
-    def __init__(self, bucket_name: str | None) -> None:
+    bucket: str = Field(default='')
+
+    _client: Any = PrivateAttr(default=None)
+
+    @model_validator(mode='after')
+    def _setup_client(self) -> 'S3FileStore':
         access_key = os.getenv('AWS_ACCESS_KEY_ID')
         secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
         secure = os.getenv('AWS_S3_SECURE', 'true').lower() == 'true'
         endpoint = self._ensure_url_scheme(secure, os.getenv('AWS_S3_ENDPOINT'))
-        if bucket_name is None:
-            bucket_name = os.environ['AWS_S3_BUCKET']
-        self.bucket: str = bucket_name
-        self.client: Any = boto3.client(
+        if not self.bucket:
+            self.bucket = os.environ['AWS_S3_BUCKET']
+        self._client = boto3.client(
             's3',
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             endpoint_url=endpoint,
             use_ssl=secure,
         )
+        return self
+
+    @property
+    def client(self) -> Any:
+        return self._client
 
     def write(self, path: str, contents: str | bytes) -> None:
         try:

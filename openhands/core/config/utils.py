@@ -19,6 +19,8 @@ import toml
 from dotenv import load_dotenv
 from pydantic import BaseModel, SecretStr, ValidationError
 
+from openhands.app_server.file_store import get_file_store
+from openhands.app_server.file_store.files import FileStore
 from openhands.core import logger
 from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.arg_utils import get_headless_parser
@@ -33,8 +35,6 @@ from openhands.core.config.model_routing_config import ModelRoutingConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.config.sandbox_config import SandboxConfig
 from openhands.core.config.security_config import SecurityConfig
-from openhands.storage import get_file_store
-from openhands.storage.files import FileStore
 
 JWT_SECRET = '.jwt_secret'
 load_dotenv()

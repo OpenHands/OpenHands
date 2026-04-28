@@ -13,11 +13,11 @@ from unittest.mock import patch
 import botocore.exceptions
 from google.api_core.exceptions import NotFound
 
-from openhands.storage.files import FileStore
-from openhands.storage.google_cloud import GoogleCloudFileStore
-from openhands.storage.local import LocalFileStore
-from openhands.storage.memory import InMemoryFileStore
-from openhands.storage.s3 import S3FileStore
+from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
+from openhands.app_server.file_store.local import LocalFileStore
+from openhands.app_server.file_store.memory import InMemoryFileStore
+from openhands.app_server.file_store.s3 import S3FileStore
 
 
 class _StorageTest(ABC):
@@ -112,7 +112,7 @@ class TestLocalFileStore(TestCase, _StorageTest):
     def setUp(self):
         # Create a unique temporary directory for each test instance
         self.temp_dir = tempfile.mkdtemp(prefix='openhands_test_')
-        self.store = LocalFileStore(self.temp_dir)
+        self.store = LocalFileStore(root=self.temp_dir)
 
     def tearDown(self):
         try:
@@ -183,13 +183,13 @@ class TestInMemoryFileStore(TestCase, _StorageTest):
 class TestGoogleCloudFileStore(TestCase, _StorageTest):
     def setUp(self):
         with patch('google.cloud.storage.Client', _MockGoogleCloudClient):
-            self.store = GoogleCloudFileStore('dear-liza')
+            self.store = GoogleCloudFileStore(bucket_name='dear-liza')
 
 
 class TestS3FileStore(TestCase, _StorageTest):
     def setUp(self):
         with patch('boto3.client', lambda service, **kwargs: _MockS3Client()):
-            self.store = S3FileStore('dear-liza')
+            self.store = S3FileStore(bucket='dear-liza')
 
 
 # I would have liked to use cloud-storage-mocker here but the python versions were incompatible :(
