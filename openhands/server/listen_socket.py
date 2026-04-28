@@ -7,7 +7,26 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 
-# Re-export sio for backward compatibility with listen.py and enterprise code
-from openhands.server.shared import sio
+# Note: socketio is no longer used. This file is kept for backward compatibility only.
+# Any code importing 'sio' from here should be updated to use the FastAPI app directly.
+
+# For backward compatibility - provides a dummy object that will fail if anyone tries to use it
+class _SioPlaceholder:
+    """Placeholder for removed socketio server.
+
+    This class exists only for backward compatibility. Code should be updated
+    to not rely on socketio at all.
+    """
+
+    manager = None
+
+    def __getattr__(self, name):
+        raise AttributeError(
+            "socketio is no longer used. "
+            "Use the FastAPI app directly or update your code to not use sio."
+        )
+
+
+sio = _SioPlaceholder()
 
 __all__ = ['sio']

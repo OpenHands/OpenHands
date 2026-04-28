@@ -21,7 +21,6 @@ from storage.gitlab_webhook_store import GitlabWebhookStore
 
 from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.shared import sio
 from openhands.server.user_auth import get_user_id
 
 gitlab_integration_router = APIRouter(prefix='/integration')
@@ -103,7 +102,9 @@ async def gitlab_events(
             dedup_hash = hashlib.sha256(dedup_json.encode()).hexdigest()
             dedup_key = f'gitlab_msg: {dedup_hash}'
 
-        redis = sio.manager.redis
+        from storage.redis import create_redis_client_async
+
+        redis = await create_redis_client_async()
         created = await redis.set(dedup_key, 1, nx=True, ex=60)
         if not created:
             logger.info('gitlab_is_duplicate')

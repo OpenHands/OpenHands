@@ -109,10 +109,13 @@ class UserStore:
 
     @staticmethod
     def _get_redis_client():
-        """Get the Redis client from the Socket.IO manager."""
-        from openhands.server.shared import sio
+        """Get the async Redis client from enterprise storage."""
+        from storage.redis import create_redis_client_async
 
-        return getattr(sio.manager, 'redis', None)
+        try:
+            return create_redis_client_async()
+        except Exception:
+            return None
 
     @staticmethod
     async def _acquire_user_creation_lock(user_id: str) -> bool:
@@ -121,7 +124,10 @@ class UserStore:
         Returns True if the lock was acquired or if Redis is unavailable (fallback to no locking).
         Returns False if another process holds the lock.
         """
-        redis_client = UserStore._get_redis_client()
+        try:
+            redis_client = UserStore._get_redis_client()
+        except Exception:
+            redis_client = None
         if redis_client is None:
             logger.warning(
                 'user_store:_acquire_user_creation_lock:no_redis_client',
@@ -129,11 +135,18 @@ class UserStore:
             )
             return True  # Proceed without locking if Redis is unavailable
 
-        user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
-        lock_acquired = await redis_client.set(
-            user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
-        )
-        return bool(lock_acquired)
+        try:
+            user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
+            lock_acquired = await redis_client.set(
+                user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
+            )
+            return bool(lock_acquired)
+        except Exception:
+            logger.warning(
+                'user_store:_acquire_user_creation_lock:redis_error',
+                extra={'user_id': user_id},
+            )
+            return True  # Proceed without locking on error
 
     @staticmethod
     async def _release_user_creation_lock(user_id: str) -> bool:
@@ -142,7 +155,10 @@ class UserStore:
         Returns True if the lock was released or if Redis is unavailable.
         Returns False if the lock could not be released.
         """
-        redis_client = UserStore._get_redis_client()
+        try:
+            redis_client = UserStore._get_redis_client()
+        except Exception:
+            redis_client = None
         if redis_client is None:
             logger.warning(
                 'user_store:_release_user_creation_lock:no_redis_client',
@@ -150,9 +166,16 @@ class UserStore:
             )
             return True  # Nothing to release if Redis is unavailable
 
-        user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
-        deleted = await redis_client.delete(user_key)
-        return bool(deleted)
+        try:
+            user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
+            deleted = await redis_client.delete(user_key)
+            return bool(deleted)
+        except Exception:
+            logger.warning(
+                'user_store:_release_user_creation_lock:redis_error',
+                extra={'user_id': user_id},
+            )
+            return True  # Proceed without locking on error
 
     @staticmethod
     async def migrate_user(
