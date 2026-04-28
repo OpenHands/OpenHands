@@ -1,10 +1,14 @@
 import binascii
 import hashlib
+import json
 from base64 import b64decode, b64encode
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import SecretStr
 from server.config import get_config
+from sqlalchemy import String, TypeDecorator
+from sqlalchemy.engine.interfaces import Dialect
 
 _jwt_service = None
 _fernet = None
@@ -135,3 +139,31 @@ def model_to_kwargs(model_instance):
         column.name: getattr(model_instance, column.name)
         for column in model_instance.__table__.columns
     }
+
+
+class EncryptedJSON(TypeDecorator[dict[str, Any]]):
+    """JSON column whose serialized payload is encrypted at rest.
+
+    Use for JSON dicts that may contain secrets (e.g. nested ``api_key``
+    fields) where the existing ``_<field>`` String + property pattern is
+    awkward — this keeps the column accessible as a normal ORM attribute
+    while encrypting the entire JSON blob via the same JWE service used
+    by ``encrypt_value``/``decrypt_value``.
+    """
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(
+        self, value: dict[str, Any] | None, dialect: Dialect
+    ) -> str | None:
+        if value is None:
+            return None
+        return encrypt_value(json.dumps(value))
+
+    def process_result_value(
+        self, value: str | None, dialect: Dialect
+    ) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        return json.loads(decrypt_value(value))

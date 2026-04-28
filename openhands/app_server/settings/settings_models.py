@@ -29,8 +29,16 @@ from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.utils import load_openhands_config
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings
+from openhands.storage.data_models.llm_profiles import LLMProfiles
 from openhands.utils.jsonpatch_compat import deep_merge
+from openhands.utils.sdk_settings_compat import (
+    ACPAgentSettings,
+    AgentSettingsConfig,
+    LLMAgentSettings,
+    default_agent_settings,
+    validate_agent_settings,
+)
 
 
 def _coerce_value(value: Any) -> Any:
@@ -99,7 +107,14 @@ class SandboxGroupingStrategy(str, Enum):
     ADD_TO_ANY = 'ADD_TO_ANY'  # Add to any available sandbox (first found)
 
 
-_SETTINGS_FROZEN_FIELDS = frozenset(['secrets_store'])
+# Fields the batch ``update()`` method refuses to touch:
+# - ``secrets_store`` is frozen (Pydantic would raise).
+# - ``llm_profiles`` is off-limits for the generic settings POST; profile
+#   mutations go through ``/api/v1/settings/profiles/...`` which validate
+#   inputs, enforce the count cap, and take the per-user lock. Accepting a
+#   raw dict here both bypassed those guards and crashed downstream
+#   serialisation.
+_SETTINGS_UPDATE_IGNORED_FIELDS = frozenset(['secrets_store', 'llm_profiles'])
 
 
 class Settings(BaseModel):
@@ -130,12 +145,19 @@ class Settings(BaseModel):
     git_user_name: str | None = None
     git_user_email: str | None = None
     v1_enabled: bool = True
-    agent_settings: AgentSettings = Field(default_factory=AgentSettings)
+    agent_settings: AgentSettingsConfig = Field(default_factory=default_agent_settings)
     conversation_settings: ConversationSettings = Field(
         default_factory=ConversationSettings
     )
     sandbox_grouping_strategy: SandboxGroupingStrategy = (
         SandboxGroupingStrategy.NO_GROUPING
+    )
+    llm_profiles: LLMProfiles = Field(
+        default_factory=LLMProfiles,
+        description=(
+            'Saved LLM profiles and the currently active profile name. '
+            'See ``LLMProfiles`` for the profile-management API.'
+        ),
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -159,6 +181,22 @@ class Settings(BaseModel):
         return bool(secret_value and secret_value.strip())
 
     # ── Batch update ────────────────────────────────────────────────
+
+    def reconcile_active_profile(self) -> None:
+        """Clear ``llm_profiles.active`` when the current LLM diverges from it.
+
+        The active profile is a pointer into ``llm_profiles.profiles``; if the
+        user edits ``agent_settings.llm`` directly (via the main settings
+        endpoint), the pointer becomes a lie. Rather than mutate the saved
+        profile, we drop the active marker so the frontend stops claiming a
+        profile is "in use" that no longer matches what's actually running.
+        """
+        active = self.llm_profiles.active
+        if active is None:
+            return
+        saved = self.llm_profiles.get(active)
+        if saved is None or saved != self.agent_settings.llm:
+            self.llm_profiles.active = None
 
     def update(self, payload: dict[str, Any]) -> None:
         """Apply a batch of changes from a nested dict.
@@ -198,9 +236,7 @@ class Settings(BaseModel):
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
-            object.__setattr__(
-                self, 'agent_settings', AgentSettings.model_validate(merged)
-            )
+            object.__setattr__(self, 'agent_settings', validate_agent_settings(merged))
 
         conv_update = payload.get('conversation_settings_diff')
         if isinstance(conv_update, dict):
@@ -217,7 +253,10 @@ class Settings(BaseModel):
         for key, value in payload.items():
             if key in ('agent_settings_diff', 'conversation_settings_diff'):
                 continue
-            if key in Settings.model_fields and key not in _SETTINGS_FROZEN_FIELDS:
+            if (
+                key in Settings.model_fields
+                and key not in _SETTINGS_UPDATE_IGNORED_FIELDS
+            ):
                 field_info = Settings.model_fields[key]
                 # Coerce plain strings to SecretStr when the field type expects it
                 if value is not None and isinstance(value, str):
@@ -228,6 +267,8 @@ class Settings(BaseModel):
                     ):
                         value = SecretStr(value) if value else None
                 setattr(self, key, value)
+
+        self.reconcile_active_profile()
 
     # ── Serialization ───────────────────────────────────────────────
 
@@ -245,7 +286,9 @@ class Settings(BaseModel):
 
     @field_serializer('agent_settings')
     def agent_settings_serializer(
-        self, agent_settings: AgentSettings, info: SerializationInfo
+        self,
+        agent_settings: LLMAgentSettings | ACPAgentSettings,
+        info: SerializationInfo,
     ) -> dict[str, Any]:
         context = info.context or {}
         if context.get('expose_secrets', False):
@@ -253,6 +296,21 @@ class Settings(BaseModel):
                 mode='json', context={'expose_secrets': True}
             )
         return agent_settings.model_dump(mode='json')
+
+    # ── Profile management ─────────────────────────────────────────
+    #
+    # Pure profile operations (get/save/delete/summaries) live on
+    # ``LLMProfiles``. ``switch_to_profile`` remains here because it
+    # touches ``agent_settings.llm``.
+
+    def switch_to_profile(self, name: str) -> None:
+        """Switch ``agent_settings.llm`` to a saved profile.
+
+        Raises :class:`ProfileNotFoundError` if ``name`` isn't a saved profile.
+        """
+        llm = self.llm_profiles.require(name)
+        self.agent_settings = self.agent_settings.model_copy(update={'llm': llm})
+        self.llm_profiles.active = name
 
     @model_validator(mode='before')
     @classmethod
@@ -268,7 +326,7 @@ class Settings(BaseModel):
         agent_settings = data.get('agent_settings')
         if isinstance(agent_settings, dict):
             data['agent_settings'] = _coerce_dict_secrets(agent_settings)
-        elif isinstance(agent_settings, AgentSettings):
+        elif isinstance(agent_settings, (LLMAgentSettings, ACPAgentSettings)):
             data['agent_settings'] = agent_settings.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
@@ -337,7 +395,8 @@ class Settings(BaseModel):
             remote_runtime_resource_factor=app_config.sandbox.remote_runtime_resource_factor,
             search_api_key=app_config.search_api_key,
             max_budget_per_task=app_config.max_budget_per_task,
-            agent_settings=AgentSettings(**agent_settings_dict),
+            # Always LLM for config-file-sourced settings
+            agent_settings=LLMAgentSettings(**agent_settings_dict),
             conversation_settings=ConversationSettings.model_validate(
                 {
                     'confirmation_mode': bool(app_config.security.confirmation_mode),
@@ -349,6 +408,8 @@ class Settings(BaseModel):
 
     def merge_with_config_settings(self) -> 'Settings':
         """Merge config.toml MCP settings with stored SDK agent_settings."""
+        if not isinstance(self.agent_settings, LLMAgentSettings):
+            return self
         config_settings = Settings.from_config()
         if not config_settings:
             return self
@@ -363,7 +424,7 @@ class Settings(BaseModel):
         self.agent_settings.mcp_config = merged_mcp
         return self
 
-    def to_agent_settings(self) -> AgentSettings:
+    def to_agent_settings(self) -> LLMAgentSettings | ACPAgentSettings:
         return self.agent_settings
 
     def get_agent_settings_display(self) -> dict[str, Any]:
