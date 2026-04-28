@@ -221,6 +221,7 @@ async def on_conversation_update(
         sandbox_id=sandbox_info.id,
         created_by_user_id=sandbox_info.created_by_user_id,
         llm_model=conversation_info.agent.llm.model,
+        llm_base_url=conversation_info.agent.llm.base_url or existing.llm_base_url,
         # Git parameters
         selected_repository=existing.selected_repository,
         selected_branch=existing.selected_branch,

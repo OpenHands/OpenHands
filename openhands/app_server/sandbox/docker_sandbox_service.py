@@ -331,7 +331,7 @@ class DockerSandboxService(SandboxService):
                 return None
             container = self.docker_client.containers.get(sandbox_id)
             return await self._container_to_checked_sandbox_info(container)
-        except (NotFound, APIError):
+        except (NotFound, APIError, OSError):
             return None
 
     async def get_sandbox_by_session_api_key(
@@ -354,7 +354,7 @@ class DockerSandboxService(SandboxService):
                         return await self._container_to_checked_sandbox_info(container)
 
             return None
-        except (NotFound, APIError):
+        except (NotFound, APIError, OSError):
             return None
 
     async def start_sandbox(
@@ -509,7 +509,7 @@ class DockerSandboxService(SandboxService):
                 container.start()
 
             return True
-        except (NotFound, APIError):
+        except (NotFound, APIError, OSError):
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
@@ -523,7 +523,7 @@ class DockerSandboxService(SandboxService):
                 container.pause()
 
             return True
-        except (NotFound, APIError):
+        except (NotFound, APIError, OSError):
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
@@ -545,12 +545,12 @@ class DockerSandboxService(SandboxService):
                 volume_name = f'openhands-workspace-{sandbox_id}'
                 volume = self.docker_client.volumes.get(volume_name)
                 volume.remove()
-            except (NotFound, APIError):
+            except (NotFound, APIError, OSError):
                 # Volume might not exist or already removed
                 pass
 
             return True
-        except (NotFound, APIError):
+        except (NotFound, APIError, OSError):
             return False
 
 

@@ -96,6 +96,7 @@ class StoredConversationMetadata(Base):  # type: ignore
 
     # LLM model used for the conversation
     llm_model = Column(String, nullable=True)
+    llm_base_url = Column(String, nullable=True)
 
     conversation_version = Column(String, nullable=False, default='V0', index=True)
     sandbox_id = Column(String, nullable=True, index=True)
@@ -360,6 +361,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             context_window=usage.context_window,
             per_turn_token=usage.per_turn_token,
             llm_model=info.llm_model,
+            llm_base_url=info.llm_base_url,
             conversation_version='V1',
             sandbox_id=info.sandbox_id,
             parent_conversation_id=(
@@ -558,6 +560,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 else []
             ),
             llm_model=cast(str | None, stored.llm_model),
+            llm_base_url=cast(str | None, stored.llm_base_url),
             metrics=metrics,
             parent_conversation_id=(
                 UUID(cast(str, stored.parent_conversation_id))

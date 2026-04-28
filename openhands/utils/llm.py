@@ -1,3 +1,4 @@
+import os
 import warnings
 
 import httpx
@@ -242,7 +243,9 @@ def get_supported_llm_models(
         if ollama_base_url:
             ollama_url = ollama_base_url.strip('/') + '/api/tags'
             try:
-                ollama_models_list = httpx.get(ollama_url, timeout=3).json()['models']  # noqa: ASYNC100
+                # Get timeout from environment variable, default to 10 seconds
+                ollama_timeout = int(os.getenv('OLLAMA_DISCOVERY_TIMEOUT', '10'))
+                ollama_models_list = httpx.get(ollama_url, timeout=ollama_timeout).json()['models']  # noqa: ASYNC100
                 for model in ollama_models_list:
                     model_list.append('ollama/' + model['name'])
                 break
