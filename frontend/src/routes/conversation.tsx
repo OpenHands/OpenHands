@@ -28,12 +28,7 @@ import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
-
-const ACP_SERVER_DISPLAY_NAMES: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  "gemini-cli": "Gemini CLI",
-};
+import { ACP_SERVER_DISPLAY_NAMES } from "#/constants/acp-agents";
 
 function AgentIncompatibleBanner({
   conversationAgentKind,

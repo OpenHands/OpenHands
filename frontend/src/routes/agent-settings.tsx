@@ -14,10 +14,15 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import {
+  AcpServerKind,
+  ACP_SERVER_DISPLAY_NAMES,
+  isAcpServerKind,
+} from "#/constants/acp-agents";
 
 export const handle = { hideTitle: true };
 
-type AgentType = "openhands" | "claude-code" | "codex" | "gemini-cli";
+type AgentType = "openhands" | AcpServerKind;
 type TabType = "basic" | "advanced";
 
 interface AgentOption {
@@ -27,9 +32,10 @@ interface AgentOption {
 
 const AGENT_OPTIONS: AgentOption[] = [
   { key: "openhands", label: "OpenHands" },
-  { key: "claude-code", label: "Claude Code" },
-  { key: "codex", label: "Codex" },
-  { key: "gemini-cli", label: "Gemini CLI" },
+  ...Object.entries(ACP_SERVER_DISPLAY_NAMES).map(([key, label]) => ({
+    key: key as AcpServerKind,
+    label,
+  })),
 ];
 
 const API_KEY_LABELS: Partial<Record<AgentType, string>> = {
@@ -38,7 +44,11 @@ const API_KEY_LABELS: Partial<Record<AgentType, string>> = {
   "gemini-cli": "Google API Key",
 };
 
-const DEFAULT_COMMANDS: Partial<Record<AgentType, string>> = {
+// Default commands mirror ACPAgentSettings._DEFAULT_ACP_COMMANDS in the SDK.
+// Note: space-splitting is used to convert to/from the backend's string[]
+// format. Arguments containing spaces are not supported via this UI field;
+// use acp_env or a custom acp_command array via the API instead.
+const DEFAULT_COMMANDS: Partial<Record<AcpServerKind, string>> = {
   "claude-code": "npx -y @agentclientprotocol/claude-agent-acp",
   codex: "npx -y @zed-industries/codex-acp",
   "gemini-cli": "npx -y @google/gemini-cli --acp",
@@ -62,22 +72,22 @@ function AgentSettingsScreen() {
     if (!settings) return;
     const kind = settings.agent_settings?.kind;
     if (kind === "acp") {
-      const server =
-        (settings.agent_settings?.acp_server as string) ?? "claude-code";
-      setAgentType(server as AgentType);
-      const acpCommand = settings.agent_settings?.acp_command as
-        | string[]
-        | undefined;
-      setCommand(acpCommand ? acpCommand.join(" ") : "");
-      const acpArgs = settings.agent_settings?.acp_args as string[] | undefined;
-      setArgs(acpArgs ? acpArgs.join(" ") : "");
-      const acpEnv = settings.agent_settings?.acp_env as
-        | Record<string, string>
-        | undefined;
+      const rawServer = settings.agent_settings?.acp_server;
+      setAgentType(isAcpServerKind(rawServer) ? rawServer : "claude-code");
+
+      const acpCommand = settings.agent_settings?.acp_command;
+      setCommand(Array.isArray(acpCommand) ? acpCommand.join(" ") : "");
+
+      const acpArgs = settings.agent_settings?.acp_args;
+      setArgs(Array.isArray(acpArgs) ? acpArgs.join(" ") : "");
+
+      const acpEnv = settings.agent_settings?.acp_env;
+      const envObj =
+        acpEnv != null && typeof acpEnv === "object" && !Array.isArray(acpEnv)
+          ? (acpEnv as Record<string, string>)
+          : {};
       setEnvJson(
-        acpEnv && Object.keys(acpEnv).length > 0
-          ? JSON.stringify(acpEnv, null, 2)
-          : "{}",
+        Object.keys(envObj).length > 0 ? JSON.stringify(envObj, null, 2) : "{}",
       );
     } else {
       setAgentType("openhands");
@@ -87,8 +97,9 @@ function AgentSettingsScreen() {
 
   const handleAgentTypeChange = (key: React.Key | null) => {
     if (!key) return;
+    // Don't clear the API key here — it's cleared after a successful save so
+    // users don't lose an entry they haven't saved yet when switching providers.
     setAgentType(key as AgentType);
-    setApiKey("");
     setIsDirty(true);
   };
 

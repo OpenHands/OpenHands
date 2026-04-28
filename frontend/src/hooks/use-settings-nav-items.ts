@@ -14,6 +14,7 @@ import { useOrgTypeAndAccess } from "./use-org-type-and-access";
 import { useSettings } from "./query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
 import { ENABLE_ACP } from "#/utils/feature-flags";
+import { ACP_SERVER_DISPLAY_NAMES } from "#/constants/acp-agents";
 
 // Rendered navigation item types
 export type SettingsNavRenderedItem =
@@ -40,13 +41,13 @@ const SECTION_HEADERS: Partial<Record<SettingsNavSection, I18nKey>> = {
  * - org type (personal vs team)
  * @returns Settings Nav Rendered Items (items, headers, dividers)
  */
+// Condenser and MCP are managed internally by ACP agents (Claude Code, Codex,
+// Gemini CLI) and cannot be configured through OpenHands settings when an ACP
+// agent is active. Showing them as disabled (rather than hidden) preserves
+// discoverability and explains why they are unavailable.
 const ACP_DISABLED_PATHS = new Set(["/settings/condenser", "/settings/mcp"]);
 
-const ACP_SERVER_NAMES: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  "gemini-cli": "Gemini CLI",
-};
+const ACP_SERVER_NAMES: Record<string, string> = ACP_SERVER_DISPLAY_NAMES;
 
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
