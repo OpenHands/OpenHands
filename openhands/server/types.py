@@ -8,30 +8,15 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, ClassVar, Protocol
+from typing import Any
 
 
 class AppMode(Enum):
     OPENHANDS = 'oss'
     SAAS = 'saas'
 
-    # Backwards-compatible alias (deprecated): prefer AppMode.OPENHANDS
-    OSS = 'oss'
-
-
-class SessionMiddlewareInterface(Protocol):
-    """Protocol for session middleware classes."""
-
-    pass
-
 
 class ServerConfigInterface(ABC):
-    CONFIG_PATH: ClassVar[str | None]
-    APP_MODE: ClassVar[AppMode]
-    POSTHOG_CLIENT_KEY: ClassVar[str]
-    GITHUB_CLIENT_ID: ClassVar[str]
-    ATTACH_SESSION_MIDDLEWARE_PATH: ClassVar[str]
-
     @abstractmethod
     def verify_config(self) -> None:
         """Verify configuration settings."""

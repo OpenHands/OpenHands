@@ -11,8 +11,6 @@ import os
 import socketio
 from dotenv import load_dotenv
 
-from openhands.app_server.file_store import get_file_store
-from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.core.config import load_openhands_config
@@ -29,10 +27,6 @@ assert isinstance(server_config_interface, ServerConfig), (
     'Loaded server config interface is not a ServerConfig, despite this being assumed'
 )
 server_config: ServerConfig = server_config_interface
-file_store: FileStore = get_file_store(
-    file_store_type=config.file_store,
-    file_store_path=config.file_store_path,
-)
 
 client_manager = None
 redis_host = os.environ.get('REDIS_HOST')
