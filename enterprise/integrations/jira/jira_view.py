@@ -35,6 +35,7 @@ from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
+    ConversationTrigger,
 )
 from openhands.app_server.config import get_app_conversation_service
 from openhands.app_server.services.injector import InjectorState
@@ -43,10 +44,6 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler, ProviderType
 from openhands.sdk import TextContent
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import (
-    ConversationMetadata,
-    ConversationTrigger,
-)
 from openhands.utils.http_session import httpx_verify_option
 
 JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
@@ -192,32 +189,30 @@ class JiraNewConversationView(JiraViewInterface):
         )
         await integration_store.create_conversation(jira_conversation)
 
-        conversation_metadata = await self._create_v1_metadata()
-        await self._create_v1_conversation(jinja_env, conversation_metadata)
+        conversation_id = await self._initialize_conversation()
+        await self._create_v1_conversation(jinja_env, conversation_id)
         return self.conversation_id
 
-    async def _create_v1_metadata(self) -> ConversationMetadata:
-        """Create conversation metadata for V1 conversations.
+    async def _initialize_conversation(self) -> UUID:
+        """Initialize conversation and return the conversation ID.
 
         The JiraConversation mapping is saved to the integration store (above), but
         V1 conversation metadata is managed by the app conversation system, not
         the legacy conversation store.
         """
-        logger.info('[Jira]: Creating V1 metadata')
+        logger.info('[Jira]: Initializing V1 conversation')
 
-        # Generate a dummy conversation for V1 (not saved to store)
-        self.conversation_id = uuid4().hex
+        # Generate a conversation ID for V1
+        conversation_id = uuid4()
+        self.conversation_id = conversation_id.hex
         self.resolved_org_id = await self._get_resolved_org_id()
 
-        return ConversationMetadata(
-            conversation_id=self.conversation_id,
-            selected_repository=self.selected_repo,
-        )
+        return conversation_id
 
     async def _create_v1_conversation(
         self,
         jinja_env: Environment,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
     ):
         """Create conversation using the new V1 app conversation system."""
         logger.info('[Jira]: Creating V1 conversation')
@@ -236,7 +231,7 @@ class JiraNewConversationView(JiraViewInterface):
 
         # Create the V1 conversation start request
         start_request = AppConversationStartRequest(
-            conversation_id=UUID(conversation_metadata.conversation_id),
+            conversation_id=conversation_id,
             system_message_suffix=None,
             initial_message=initial_message,
             selected_repository=self.selected_repo,
