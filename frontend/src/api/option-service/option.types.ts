@@ -28,6 +28,7 @@ export interface WebClientFeatureFlags {
   hide_users_page: boolean;
   hide_billing_page: boolean;
   hide_integrations_page: boolean;
+  enable_acp?: boolean;
   deployment_mode?: DeploymentMode;
   enable_onboarding: boolean;
 }

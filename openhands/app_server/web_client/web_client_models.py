@@ -20,6 +20,7 @@ class WebClientFeatureFlags(BaseModel):
     hide_users_page: bool = False
     hide_billing_page: bool = False
     hide_integrations_page: bool = False
+    enable_acp: bool = False
     deployment_mode: DeploymentMode | None = None
     enable_onboarding: bool = False
 

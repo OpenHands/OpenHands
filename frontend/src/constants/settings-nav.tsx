@@ -9,6 +9,7 @@ import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
 import PuzzlePieceIcon from "#/icons/u-puzzle-piece.svg?react";
 import UserIcon from "#/icons/user.svg?react";
+import RobotIcon from "#/icons/robot.svg?react";
 
 export type SettingsNavSection =
   | "org"
@@ -22,6 +23,7 @@ export interface SettingsNavItem {
   to: string;
   text: string;
   section?: SettingsNavSection;
+  acpGated?: boolean;
 }
 
 export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
@@ -54,6 +56,13 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/org-defaults/verification",
     text: "SETTINGS$NAV_VERIFICATION",
     section: "org",
+  },
+  {
+    icon: <RobotIcon width={22} height={22} />,
+    to: "/settings/agent",
+    text: "SETTINGS$NAV_AGENT",
+    section: "personal",
+    acpGated: true,
   },
   {
     icon: <CircuitIcon width={22} height={22} />,
@@ -124,6 +133,12 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
 ];
 
 export const OSS_NAV_ITEMS: SettingsNavItem[] = [
+  {
+    icon: <RobotIcon width={22} height={22} />,
+    to: "/settings/agent",
+    text: "SETTINGS$NAV_AGENT",
+    acpGated: true,
+  },
   {
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",

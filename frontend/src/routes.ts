@@ -26,6 +26,7 @@ export default [
         "org-defaults/verification",
         "routes/org-default-verification-settings.tsx",
       ),
+      route("agent", "routes/agent-settings.tsx"),
       route("mcp", "routes/mcp-settings.tsx"),
       route("skills", "routes/skills-settings.tsx"),
       route("user", "routes/user-settings.tsx"),

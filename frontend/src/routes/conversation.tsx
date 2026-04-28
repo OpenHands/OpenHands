@@ -13,6 +13,7 @@ import { EventHandler } from "../wrapper/event-handler";
 
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
+import { useSettings } from "#/hooks/query/use-settings";
 
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
@@ -28,6 +29,40 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 
+const ACP_SERVER_DISPLAY_NAMES: Record<string, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "gemini-cli": "Gemini CLI",
+};
+
+function AgentIncompatibleBanner({
+  conversationAgentKind,
+}: {
+  conversationAgentKind: string;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  const agentName =
+    ACP_SERVER_DISPLAY_NAMES[conversationAgentKind] ??
+    (conversationAgentKind === "acp" ? "ACP Agent" : conversationAgentKind);
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 bg-amber-900/40 border border-amber-600/50 rounded-lg text-sm">
+      <span className="flex-1 text-amber-200">
+        {t(I18nKey.SETTINGS$AGENT_INCOMPATIBLE_CONVERSATION, { agentName })}
+      </span>
+      <button
+        type="button"
+        className="shrink-0 text-amber-300 hover:text-white underline underline-offset-2 transition-colors"
+        onClick={() => navigate("/settings/agent")}
+      >
+        {t(I18nKey.SETTINGS$AGENT_INCOMPATIBLE_CHANGE)}
+      </button>
+    </div>
+  );
+}
+
 function AppContent() {
   const { t } = useTranslation();
   const { conversationId } = useConversationId();
@@ -37,6 +72,7 @@ function AppContent() {
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
 
   const { data: conversation, isFetched } = useActiveConversation();
+  const { data: settings } = useSettings();
   const { data: isAuthed } = useIsAuthed();
   const { resetConversationState } = useConversationStore();
   const navigate = useNavigate();
@@ -110,6 +146,12 @@ function AppContent() {
     );
   }
 
+  // Check for agent kind mismatch between conversation and current settings
+  const conversationAgentKind = conversation?.agent_kind ?? "llm";
+  const settingsAgentKind = (settings?.agent_settings?.kind as string) ?? "llm";
+  const isAgentIncompatible =
+    isFetched && !!conversation && conversationAgentKind !== settingsAgentKind;
+
   const content = (
     <ConversationSubscriptionsProvider>
       <EventHandler>
@@ -117,6 +159,11 @@ function AppContent() {
           data-testid="app-route"
           className="p-3 md:p-0 flex flex-col h-full gap-3"
         >
+          {isAgentIncompatible && (
+            <AgentIncompatibleBanner
+              conversationAgentKind={conversationAgentKind}
+            />
+          )}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4.5 pt-2 lg:pt-0">
             <ConversationNameWithStatus />
             <ConversationTabs />
