@@ -1577,11 +1577,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
         assert isinstance(acp_settings, ACPAgentSettings)
 
-        # Merge provider env vars (API keys etc.) into acp_env
+        # Merge provider env vars (API keys etc.) into acp_env.
+        # Priority (highest → lowest): acp_env > provider_env
         provider_env = self._acp_provider_env(user)
         merged_env: dict[str, str] = {
-            **dict(acp_settings.acp_env or {}),
             **provider_env,
+            **dict(acp_settings.acp_env or {}),
         }
 
         acp_agent = ACPAgent(

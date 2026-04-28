@@ -3535,3 +3535,24 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.agent_context is None
+
+    @pytest.mark.asyncio
+    async def test_acp_env_overrides_provider_env(self, service, tmp_path):
+        """Explicit acp_env entries take priority over auto-generated provider_env.
+
+        When a user sets ANTHROPIC_API_KEY explicitly in acp_env, it must win
+        over the same key that _acp_provider_env derives from the UI-saved LLM
+        credentials.  This exercises the merge priority:
+          acp_env > provider_env > agent_context.secrets
+        """
+        user = self._make_acp_user(
+            acp_server='claude-code',
+            acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
+            api_key='sk-ui-key',
+        )
+        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+
+        request = await self._call_build(service, user, tmp_path)
+
+        # acp_env must win; the UI-saved key must NOT overwrite it
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
