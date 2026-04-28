@@ -19,7 +19,7 @@ from server.routes.auth import (
     set_response_cookie,
 )
 
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
 
 
 def create_mock_user_authorizer(success: bool = True, error_detail: str | None = None):

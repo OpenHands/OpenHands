@@ -12,23 +12,25 @@ from openhands.app_server.config import (
     get_app_conversation_info_service,
     get_global_config,
 )
+from openhands.app_server.integrations.azure_devops.azure_devops_service import (
+    AzureDevOpsServiceImpl,
+)
+from openhands.app_server.integrations.bitbucket.bitbucket_service import (
+    BitBucketServiceImpl,
+)
+from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_service import (
+    BitbucketDCServiceImpl,
+)
+from openhands.app_server.integrations.github.github_service import GithubServiceImpl
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.integrations.provider import ProviderToken
+from openhands.app_server.integrations.service_types import GitService, ProviderType
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
 )
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.azure_devops.azure_devops_service import (
-    AzureDevOpsServiceImpl,
-)
-from openhands.integrations.bitbucket.bitbucket_service import BitBucketServiceImpl
-from openhands.integrations.bitbucket_data_center.bitbucket_dc_service import (
-    BitbucketDCServiceImpl,
-)
-from openhands.integrations.github.github_service import GithubServiceImpl
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
-from openhands.integrations.provider import ProviderToken
-from openhands.integrations.service_types import GitService, ProviderType
 from openhands.server.types import AppMode
 from openhands.server.user_auth import (
     get_access_token,

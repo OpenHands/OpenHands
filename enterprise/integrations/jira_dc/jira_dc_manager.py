@@ -29,9 +29,9 @@ from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
 
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import Repository
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import Repository
 from openhands.server.shared import server_config
 from openhands.server.types import (
     LLMAuthenticationError,

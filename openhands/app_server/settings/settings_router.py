@@ -12,6 +12,10 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderType,
+)
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.llm_profiles import (
@@ -27,10 +31,6 @@ from openhands.app_server.settings.settings_models import (
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import (
-    PROVIDER_TOKEN_TYPE,
-    ProviderType,
-)
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import ConversationSettings
 from openhands.server.shared import config

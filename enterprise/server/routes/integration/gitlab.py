@@ -19,8 +19,8 @@ from server.auth.token_manager import TokenManager
 from storage.gitlab_webhook import GitlabWebhook
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.server.shared import sio
 from openhands.server.user_auth import get_user_id
 

@@ -46,9 +46,9 @@ from storage.database import a_session_maker
 from storage.user import User
 from storage.user_store import UserStore
 
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import ProviderType, TokenResponse
 from openhands.server.services.conversation_service import create_provider_tokens_object
 from openhands.server.shared import config
 from openhands.server.user_auth import get_access_token

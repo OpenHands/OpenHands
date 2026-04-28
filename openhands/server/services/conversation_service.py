@@ -8,11 +8,11 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from types import MappingProxyType
 
-from openhands.integrations.provider import (
+from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderToken,
 )
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
 
 
 def create_provider_tokens_object(

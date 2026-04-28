@@ -5,10 +5,10 @@ from unittest.mock import patch
 import pytest
 from pydantic import SecretStr
 
-from openhands.integrations.bitbucket_data_center.bitbucket_dc_service import (
+from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_service import (
     BitbucketDCService,
 )
-from openhands.integrations.service_types import Comment
+from openhands.app_server.integrations.service_types import Comment
 
 
 @pytest.fixture
@@ -160,10 +160,10 @@ def test_process_raw_comments_missing_timestamps(svc):
 
 
 def test_mro_includes_resolver_mixin_and_base_git_service():
-    from openhands.integrations.bitbucket_data_center.service.resolver import (
+    from openhands.app_server.integrations.bitbucket_data_center.service.resolver import (
         BitbucketDCResolverMixin,
     )
-    from openhands.integrations.service_types import BaseGitService
+    from openhands.app_server.integrations.service_types import BaseGitService
 
     mro_names = [cls.__name__ for cls in BitbucketDCService.__mro__]
     assert 'BitbucketDCResolverMixin' in mro_names

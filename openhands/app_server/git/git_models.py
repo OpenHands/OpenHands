@@ -4,7 +4,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.service_types import (
     Branch,
     Repository,
     SuggestedTask,

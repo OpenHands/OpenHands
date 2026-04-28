@@ -9,7 +9,7 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from integrations.models import Message
 
-    from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
+    from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
     from openhands.server.user_auth.user_auth import UserAuth
 
 

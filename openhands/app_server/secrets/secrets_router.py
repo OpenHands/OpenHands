@@ -8,6 +8,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from openhands.app_server.errors import AuthError
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    CustomSecret,
+    ProviderType,
+)
+from openhands.app_server.integrations.utils import validate_provider_token
 from openhands.app_server.secrets.secrets_models import (
     CustomSecretCreate,
     CustomSecretPage,
@@ -18,12 +24,6 @@ from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_models import POSTProviderModel
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.models import EditResponse
-from openhands.integrations.provider import (
-    PROVIDER_TOKEN_TYPE,
-    CustomSecret,
-    ProviderType,
-)
-from openhands.integrations.utils import validate_provider_token
 from openhands.server.user_auth import (
     get_provider_tokens,
     get_secrets,
