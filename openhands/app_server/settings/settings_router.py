@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from openhands.analytics import get_analytics_service
+from openhands.app_server.config import get_critic_model_name, get_critic_server_url
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
@@ -81,10 +82,43 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     )
 
 
-# NOTE: We use response_model=None for endpoints that return JSONResponse directly.
-# This is because FastAPI's response_model expects a Pydantic model, but we're returning
-# a response object directly. We document the possible responses using the 'responses'
-# parameter and maintain proper type annotations for mypy.
+def _get_critic_sdk_defaults() -> tuple[str, str]:
+    """Return (server_url, model_name) SDK built-in defaults."""
+    from openhands.sdk.critic.impl.api.client import CriticClient
+
+    return (
+        CriticClient.model_fields['server_url'].default,
+        CriticClient.model_fields['model_name'].default,
+    )
+
+
+def _fill_critic_defaults(verification: Any) -> Any:
+    """Return a copy of *verification* with effective critic defaults filled.
+
+    When the user hasn't overridden ``critic_server_url`` or
+    ``critic_model_name``, we fill them with:
+    1. Deployment env var (``CRITIC_SERVER_URL`` / ``CRITIC_MODEL_NAME``),
+    2. SDK built-in default from :class:`CriticClient`.
+
+    Returns a new object — does not mutate the original.
+    """
+    if verification is None:
+        return verification
+
+    sdk_url, sdk_model = _get_critic_sdk_defaults()
+    updates: dict[str, object] = {}
+
+    if verification.critic_server_url is None:
+        updates['critic_server_url'] = get_critic_server_url() or sdk_url
+
+    if verification.critic_model_name is None:
+        updates['critic_model_name'] = get_critic_model_name() or sdk_model
+
+    if not updates:
+        return verification
+    return verification.model_copy(update=updates)
+
+
 @router.get(
     '',
     response_model=GETSettingsModel,
@@ -168,6 +202,13 @@ async def load_settings(
         resp_llm.api_key = None
         settings_with_token_data.search_api_key = None
         settings_with_token_data.sandbox_api_key = None
+
+        # Fill effective critic defaults so the frontend shows what the
+        # agent will actually use rather than empty fields.
+        settings_with_token_data.agent_settings.verification = _fill_critic_defaults(
+            settings_with_token_data.agent_settings.verification
+        )
+
         return settings_with_token_data
     except Exception as e:
         logger.warning(f'Invalid token: {e}')

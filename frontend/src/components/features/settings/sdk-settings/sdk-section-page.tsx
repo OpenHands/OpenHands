@@ -14,7 +14,12 @@ import { useMe } from "#/hooks/query/use-me";
 import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
-import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
+import {
+  SettingProminence,
+  Settings,
+  SettingsSchema,
+  SettingsScope,
+} from "#/types/settings";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -104,6 +109,7 @@ export function SdkSectionPage({
   buildPayload,
   onSaveSuccess,
   getInitialView,
+  prominenceOverrides,
   forceShowAdvancedView = false,
   allowAllView = true,
   trailingActions,
@@ -133,6 +139,8 @@ export function SdkSectionPage({
   // after the view toggles. Used by the LLM page to drop a Profiles
   // navigation button into the same row.
   trailingActions?: React.ReactNode;
+  /** Override the prominence level of specific field keys. */
+  prominenceOverrides?: Record<string, SettingProminence>;
   forceShowAdvancedView?: boolean;
   allowAllView?: boolean;
   testId?: string;
@@ -180,11 +188,23 @@ export function SdkSectionPage({
   const filteredSchema = React.useMemo(() => {
     if (!schema) return null;
     const sectionSet = new Set(stableSectionKeys);
-    return {
+    const filtered = {
       ...schema,
       sections: schema.sections.filter((s) => sectionSet.has(s.key)),
     };
-  }, [schema, stableSectionKeys]);
+    if (!prominenceOverrides) return filtered;
+    return {
+      ...filtered,
+      sections: filtered.sections.map((s) => ({
+        ...s,
+        fields: s.fields.map((f) =>
+          prominenceOverrides[f.key]
+            ? { ...f, prominence: prominenceOverrides[f.key] }
+            : f,
+        ),
+      })),
+    };
+  }, [schema, stableSectionKeys, prominenceOverrides]);
 
   const showAdvanced =
     forceShowAdvancedView || hasAdvancedSettings(filteredSchema);
