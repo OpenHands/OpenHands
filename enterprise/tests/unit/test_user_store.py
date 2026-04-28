@@ -73,6 +73,66 @@ def test_get_kwargs_from_settings():
     assert 'llm_api_key' not in kwargs
 
 
+@pytest.mark.asyncio
+async def test_create_user_with_llm_profiles_does_not_crash_and_preserves_secrets(
+    async_session_maker,
+):
+    """Regression: User creation must not crash on a populated ``llm_profiles``.
+
+    ``UserStore.get_kwargs_from_settings`` hands ``settings.llm_profiles``
+    (an ``LLMProfiles`` pydantic model) straight to ``User(**kwargs)``.
+    Before ``EncryptedJSON`` accepted pydantic models, ``json.dumps`` in
+    ``process_bind_param`` raised
+    ``TypeError: Object of type LLMProfiles is not JSON serializable``,
+    crashing keycloak_callback → create_user for every new login —
+    default ``Settings`` already carries an empty ``LLMProfiles()`` via
+    ``default_factory``, so the path was hit even for users who never
+    saved a profile.
+
+    Also locks in that nested ``SecretStr`` api_keys keep their plaintext
+    through the column: the column itself is the encryption boundary, so
+    masking on the way in would corrupt round-trips.
+    """
+    from openhands.sdk.llm import LLM
+
+    user_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+
+    settings = Settings(language='en')
+    settings.llm_profiles.save(
+        'work',
+        LLM(
+            model='anthropic/claude-sonnet-4-5-20250929',
+            base_url='https://api.anthropic.com/v1',
+            api_key=SecretStr('work-secret-key'),
+        ),
+    )
+    settings.llm_profiles.active = 'work'
+
+    kwargs = UserStore.get_kwargs_from_settings(settings)
+    assert 'llm_profiles' in kwargs
+    # Caller hands the pydantic model straight to User; the column
+    # converts it on bind, so the kwarg is still the model here.
+    assert kwargs['llm_profiles'] is settings.llm_profiles
+
+    async with async_session_maker() as session:
+        session.add(Org(id=org_id, name='test-org'))
+        session.add(User(id=user_id, current_org_id=org_id, **kwargs))
+        # Would raise TypeError before the EncryptedJSON BaseModel branch.
+        await session.commit()
+
+    async with async_session_maker() as session:
+        user = (
+            await session.execute(select(User).where(User.id == user_id))
+        ).scalar_one()
+
+    assert user.llm_profiles is not None
+    assert user.llm_profiles['active'] == 'work'
+    # SecretStr would serialize as '**********' without
+    # context={'expose_secrets': True}; assert the real value survived.
+    assert user.llm_profiles['profiles']['work']['api_key'] == 'work-secret-key'
+
+
 # --- Tests for create_default_settings ---
 
 
