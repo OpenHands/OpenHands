@@ -464,7 +464,9 @@ class TestJiraV1Conversation:
             mock_get_org.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_initialize_conversation_sets_resolved_org(self, new_conversation_view):
+    async def test_initialize_conversation_sets_resolved_org(
+        self, new_conversation_view
+    ):
         """Test that _initialize_conversation sets resolved_org_id."""
         from uuid import UUID
 
