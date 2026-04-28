@@ -94,6 +94,7 @@ def sample_conversation_info() -> AppConversationInfo:
         trigger=ConversationTrigger.GUI,
         pr_number=[123, 456],
         llm_model='gpt-4',
+        llm_base_url='http://host.docker.internal:11434',
         metrics=None,
         created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
         updated_at=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
@@ -117,6 +118,7 @@ def multiple_conversation_infos() -> list[AppConversationInfo]:
             trigger=ConversationTrigger.GUI,
             pr_number=[i * 100],
             llm_model='gpt-4',
+            llm_base_url=f'http://host.docker.internal:1143{i}',
             metrics=None,
             created_at=base_time.replace(hour=12 + i),
             updated_at=base_time.replace(hour=12 + i, minute=30),
@@ -166,6 +168,9 @@ class TestSQLAppConversationInfoService:
         assert retrieved_info.trigger == sample_conversation_info.trigger
         assert retrieved_info.pr_number == sample_conversation_info.pr_number
         assert retrieved_info.llm_model == sample_conversation_info.llm_model
+        assert (
+            retrieved_info.llm_base_url == sample_conversation_info.llm_base_url
+        )
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_conversation_info(
@@ -192,6 +197,7 @@ class TestSQLAppConversationInfoService:
             trigger=ConversationTrigger.RESOLVER,
             pr_number=[789, 101112],
             llm_model='claude-3',
+            llm_base_url='http://host.docker.internal:11434',
             metrics=MetricsSnapshot(accumulated_token_usage=TokenUsage()),
             created_at=datetime(2024, 2, 15, 10, 30, 0, tzinfo=timezone.utc),
             updated_at=datetime(2024, 2, 15, 11, 45, 0, tzinfo=timezone.utc),
@@ -212,6 +218,7 @@ class TestSQLAppConversationInfoService:
         assert retrieved_info.trigger == original_info.trigger
         assert retrieved_info.pr_number == original_info.pr_number
         assert retrieved_info.llm_model == original_info.llm_model
+        assert retrieved_info.llm_base_url == original_info.llm_base_url
         assert retrieved_info.metrics == original_info.metrics
 
     @pytest.mark.asyncio
@@ -242,6 +249,7 @@ class TestSQLAppConversationInfoService:
         assert retrieved_info.trigger is None
         assert retrieved_info.pr_number == []
         assert retrieved_info.llm_model is None
+        assert retrieved_info.llm_base_url is None
         assert retrieved_info.metrics == MetricsSnapshot(
             accumulated_token_usage=TokenUsage()
         )

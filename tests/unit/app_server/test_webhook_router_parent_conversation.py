@@ -91,6 +91,7 @@ def mock_conversation_info() -> ConversationInfo:
     conversation_info.agent = MagicMock()
     conversation_info.agent.llm = MagicMock()
     conversation_info.agent.llm.model = 'gpt-4'
+    conversation_info.agent.llm.base_url = 'http://host.docker.internal:11434'
 
     # Mock stats.get_combined_metrics() structure
     conversation_info.stats = MagicMock()
@@ -136,6 +137,7 @@ class TestOnConversationUpdateParentConversationId:
             selected_repository='https://github.com/test/repo',
             selected_branch='main',
             parent_conversation_id=parent_id,
+            llm_base_url='http://host.docker.internal:11434',
         )
 
         # Act - call on_conversation_update directly with mocked valid_conversation
@@ -157,6 +159,7 @@ class TestOnConversationUpdateParentConversationId:
         )
         assert saved_conv is not None
         assert saved_conv.parent_conversation_id == parent_id
+        assert saved_conv.llm_base_url == 'http://host.docker.internal:11434'
 
     @pytest.mark.asyncio
     async def test_preserves_none_parent_conversation_id(
