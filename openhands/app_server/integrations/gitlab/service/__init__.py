@@ -1,4 +1,4 @@
-# openhands/integrations/gitlab/service/__init__.py
+# openhands/app_server/integrations/gitlab/service/__init__.py
 
 from .base import GitLabMixinBase
 from .branches import GitLabBranchesMixin

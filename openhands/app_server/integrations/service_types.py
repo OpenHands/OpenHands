@@ -95,7 +95,7 @@ class SuggestedTask(BaseModel):
         repo = self.repo
 
         env = Environment(
-            loader=FileSystemLoader('openhands/integrations/templates/suggested_task')
+            loader=FileSystemLoader('openhands/app_server/integrations/templates/suggested_task')
         )
 
         template = None

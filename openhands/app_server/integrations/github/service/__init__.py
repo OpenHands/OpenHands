@@ -1,4 +1,4 @@
-# openhands/integrations/github/service/__init__.py
+# openhands/app_server/integrations/github/service/__init__.py
 
 from .base import GitHubMixinBase
 from .branches_prs import GitHubBranchesMixin

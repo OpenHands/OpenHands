@@ -65,7 +65,7 @@ def get_user_not_found_message(username: str | None = None) -> str:
 
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
-    or 'openhands/integrations/templates/resolver/'
+    or 'openhands/app_server/integrations/templates/resolver/'
 )
 _jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
 
