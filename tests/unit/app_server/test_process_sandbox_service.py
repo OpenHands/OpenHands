@@ -1,5 +1,6 @@
 """Tests for ProcessSandboxService."""
 
+import asyncio
 import os
 import tempfile
 from datetime import datetime
@@ -13,6 +14,7 @@ from openhands.app_server.sandbox.process_sandbox_service import (
     ProcessInfo,
     ProcessSandboxService,
     ProcessSandboxServiceInjector,
+    _processes,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
@@ -349,6 +351,61 @@ class TestProcessSandboxService:
             assert sandbox_info.status == SandboxStatus.ERROR
             assert sandbox_info.session_api_key is None
             assert sandbox_info.exposed_urls is None
+
+    @pytest.mark.asyncio
+    async def test_concurrent_start_sandbox_assigns_distinct_ports(
+        self, process_sandbox_service
+    ):
+        """Concurrent start_sandbox calls must not return the same port.
+
+        Regression test: previously, _find_unused_port did a transient
+        bind/release on each call, so two concurrent starts could each
+        select the same free port between the time the first call returned
+        and its subprocess actually bound the port.
+        """
+        created: list[str] = []
+
+        async def fake_start_agent_process(*, port, **kwargs):
+            # Yield so concurrent callers race through port allocation.
+            await asyncio.sleep(0)
+            proc = MagicMock()
+            proc.pid = 100000 + port
+            return proc
+
+        try:
+            with (
+                patch.object(
+                    process_sandbox_service,
+                    '_start_agent_process',
+                    side_effect=fake_start_agent_process,
+                ),
+                patch.object(
+                    process_sandbox_service,
+                    '_wait_for_server_ready',
+                    return_value=True,
+                ),
+                patch.object(
+                    process_sandbox_service,
+                    '_get_process_status',
+                    return_value=SandboxStatus.RUNNING,
+                ),
+            ):
+                mock_response = MagicMock()
+                mock_response.status_code = 200
+                process_sandbox_service.httpx_client.get.return_value = mock_response
+
+                results = await asyncio.gather(
+                    *[process_sandbox_service.start_sandbox() for _ in range(5)]
+                )
+
+            created = [r.id for r in results]
+            ports = [_processes[sid].port for sid in created]
+            assert len(set(ports)) == len(ports), (
+                f'concurrent start_sandbox returned duplicate ports: {ports}'
+            )
+        finally:
+            for sid in created:
+                _processes.pop(sid, None)
 
 
 class TestProcessSandboxServiceInjector:

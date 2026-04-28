@@ -58,8 +58,11 @@ class ProcessInfo(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-# Global store
+# Global store. Access is serialized through _processes_lock so that
+# port allocation and dict mutation cannot race against concurrent
+# start_sandbox / delete_sandbox / get_sandbox_by_session_api_key calls.
 _processes: dict[str, ProcessInfo] = {}
+_processes_lock = asyncio.Lock()
 
 
 @dataclass
@@ -88,9 +91,18 @@ class ProcessSandboxService(SandboxService):
         os.makedirs(self.base_working_dir, exist_ok=True)
 
     def _find_unused_port(self) -> int:
-        """Find an unused port starting from base_port."""
+        """Find an unused port starting from base_port.
+
+        Caller must hold _processes_lock. Ports already recorded in
+        _processes are skipped so an in-flight start_sandbox whose
+        subprocess has not yet bound the port is not reused.
+        """
+        in_flight = {info.port for info in _processes.values()}
         port = self.base_port
         while port < self.base_port + 10000:  # Try up to 10000 ports
+            if port in in_flight:
+                port += 1
+                continue
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.bind(('', port))
@@ -237,8 +249,10 @@ class ProcessSandboxService(SandboxService):
         limit: int = 100,
     ) -> SandboxPage:
         """Search for sandboxes."""
-        # Get all process infos
-        all_processes = list(_processes.items())
+        # Snapshot under the lock so concurrent start/delete cannot mutate
+        # _processes mid-iteration.
+        async with _processes_lock:
+            all_processes = list(_processes.items())
 
         # Sort by creation time (newest first)
         all_processes.sort(key=lambda x: x[1].created_at, reverse=True)
@@ -279,8 +293,11 @@ class ProcessSandboxService(SandboxService):
         self, session_api_key: str
     ) -> SandboxInfo | None:
         """Get a single sandbox by session API key."""
-        # Search through all processes to find one with matching session_api_key
-        for sandbox_id, process_info in _processes.items():
+        # Snapshot under the lock so concurrent start/delete cannot mutate
+        # _processes mid-iteration ("dictionary changed size" RuntimeError).
+        async with _processes_lock:
+            snapshot = list(_processes.items())
+        for sandbox_id, process_info in snapshot:
             if process_info.session_api_key == session_api_key:
                 return await self._process_to_sandbox_info(sandbox_id, process_info)
 
@@ -307,34 +324,33 @@ class ProcessSandboxService(SandboxService):
             sandbox_id = base62.encodebytes(os.urandom(16))
         session_api_key = base62.encodebytes(os.urandom(32))
 
-        # Find available port
-        port = self._find_unused_port()
+        # Hold the lock across port discovery and agent startup so that two
+        # concurrent start_sandbox calls cannot select the same port. Once
+        # _start_agent_process returns, the kernel holds the port for the
+        # subprocess and subsequent _find_unused_port calls will skip it.
+        async with _processes_lock:
+            port = self._find_unused_port()
+            working_dir = self._create_sandbox_directory(sandbox_id)
+            process = await self._start_agent_process(
+                sandbox_id=sandbox_id,
+                port=port,
+                working_dir=working_dir,
+                session_api_key=session_api_key,
+                sandbox_spec=sandbox_spec,
+            )
+            process_info = ProcessInfo(
+                pid=process.pid,
+                port=port,
+                user_id=self.user_id,
+                working_dir=working_dir,
+                session_api_key=session_api_key,
+                created_at=utc_now(),
+                sandbox_spec_id=sandbox_spec.id,
+            )
+            _processes[sandbox_id] = process_info
 
-        # Create sandbox directory
-        working_dir = self._create_sandbox_directory(sandbox_id)
-
-        # Start the agent process
-        process = await self._start_agent_process(
-            sandbox_id=sandbox_id,
-            port=port,
-            working_dir=working_dir,
-            session_api_key=session_api_key,
-            sandbox_spec=sandbox_spec,
-        )
-
-        # Store process info
-        process_info = ProcessInfo(
-            pid=process.pid,
-            port=port,
-            user_id=self.user_id,
-            working_dir=working_dir,
-            session_api_key=session_api_key,
-            created_at=utc_now(),
-            sandbox_spec_id=sandbox_spec.id,
-        )
-        _processes[sandbox_id] = process_info
-
-        # Wait for server to be ready
+        # Wait for server to be ready (outside the lock so concurrent starts
+        # are not serialized through the readiness probe).
         if not await self._wait_for_server_ready(port):
             # Clean up if server didn't start properly
             await self.delete_sandbox(sandbox_id)
@@ -372,7 +388,8 @@ class ProcessSandboxService(SandboxService):
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
         """Delete a sandbox."""
-        process_info = _processes.get(sandbox_id)
+        async with _processes_lock:
+            process_info = _processes.get(sandbox_id)
         if process_info is None:
             return False
 
@@ -396,15 +413,16 @@ class ProcessSandboxService(SandboxService):
                 shutil.rmtree(process_info.working_dir, ignore_errors=True)
 
             # Remove from our tracking
-            del _processes[sandbox_id]
+            async with _processes_lock:
+                _processes.pop(sandbox_id, None)
 
             return True
 
         except (psutil.NoSuchProcess, psutil.AccessDenied, OSError) as e:
             _logger.warning(f'Error deleting sandbox {sandbox_id}: {e}')
             # Still remove from tracking even if cleanup failed
-            if sandbox_id in _processes:
-                del _processes[sandbox_id]
+            async with _processes_lock:
+                _processes.pop(sandbox_id, None)
             return True
 
 
