@@ -14,7 +14,6 @@ from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import UserGitInfo
 from openhands.server.app import app
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.memory import InMemoryFileStore
 
 
 class MockUserAuth(UserAuth):
@@ -63,7 +62,7 @@ class MockUserAuth(UserAuth):
 
 
 @pytest.fixture
-def test_client():
+def test_client(tmp_path):
     # Create a test client
     with (
         patch(
@@ -72,7 +71,7 @@ def test_client():
         ),
         patch(
             'openhands.app_server.settings.file_settings_store.FileSettingsStore.get_instance',
-            AsyncMock(return_value=FileSettingsStore(InMemoryFileStore())),
+            AsyncMock(return_value=FileSettingsStore(root_dir=tmp_path)),
         ),
     ):
         client = TestClient(app)

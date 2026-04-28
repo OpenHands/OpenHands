@@ -2,23 +2,22 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.utils.file_store_mixin import FileStoreMixin
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.storage import get_file_store
-from openhands.storage.files import FileStore
-from openhands.utils.async_utils import call_sync_from_async
 
 
 @dataclass
-class FileSettingsStore(SettingsStore):
-    file_store: FileStore
-    path: str = 'settings.json'
+class FileSettingsStore(FileStoreMixin, SettingsStore):
+    root_dir: Path
+    filename: str = 'settings.json'
 
     async def load(self) -> Settings | None:
         try:
-            json_str = await call_sync_from_async(self.file_store.read, self.path)
+            json_str = await self._read_file_async()
             kwargs = json.loads(json_str)
             settings = Settings(**kwargs)
 
@@ -34,14 +33,11 @@ class FileSettingsStore(SettingsStore):
         json_str = settings.model_dump_json(
             context={'expose_secrets': True, 'persist_settings': True}
         )
-        await call_sync_from_async(self.file_store.write, self.path, json_str)
+        await self._write_file_async(json_str)
 
     @classmethod
     async def get_instance(
         cls, config: OpenHandsConfig, user_id: str | None
     ) -> FileSettingsStore:
-        file_store = get_file_store(
-            file_store_type=config.file_store,
-            file_store_path=config.file_store_path,
-        )
-        return FileSettingsStore(file_store)
+        root_dir = cls._resolve_root_dir(config.file_store_path)
+        return FileSettingsStore(root_dir=root_dir)

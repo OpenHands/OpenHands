@@ -9,12 +9,6 @@ from openhands.app_server.settings.settings_models import Settings
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.files import FileStore
-
-
-@pytest.fixture
-def mock_file_store():
-    return MagicMock(spec=FileStore)
 
 
 @pytest.fixture(autouse=True)
@@ -24,8 +18,13 @@ def allow_short_context_windows():
 
 
 @pytest.fixture
-def file_settings_store(mock_file_store):
-    return FileSettingsStore(mock_file_store)
+def temp_dir(tmp_path):
+    return tmp_path
+
+
+@pytest.fixture
+def file_settings_store(temp_dir):
+    return FileSettingsStore(root_dir=temp_dir)
 
 
 @pytest.mark.asyncio
@@ -34,12 +33,11 @@ async def test_load_nonexistent_data(file_settings_store):
         'openhands.app_server.settings.settings_models.load_openhands_config',
         MagicMock(return_value=OpenHandsConfig()),
     ):
-        file_settings_store.file_store.read.side_effect = FileNotFoundError()
         assert await file_settings_store.load() is None
 
 
 @pytest.mark.asyncio
-async def test_store_and_load_data(file_settings_store):
+async def test_store_and_load_data(file_settings_store, temp_dir):
     # Test data
     init_data = Settings(
         language='python',
@@ -61,16 +59,9 @@ async def test_store_and_load_data(file_settings_store):
     # Store data
     await file_settings_store.store(init_data)
 
-    # Verify store called with correct JSON
-    expected_json = init_data.model_dump_json(
-        context={'expose_secrets': True, 'persist_settings': True}
-    )
-    file_settings_store.file_store.write.assert_called_once_with(
-        'settings.json', expected_json
-    )
-
-    # Setup mock for load
-    file_settings_store.file_store.read.return_value = expected_json
+    # Verify file was written
+    expected_path = temp_dir / 'settings.json'
+    assert expected_path.exists()
 
     # Load and verify data
     loaded_data = await file_settings_store.load()
@@ -102,20 +93,10 @@ async def test_store_and_load_data(file_settings_store):
 
 
 @pytest.mark.asyncio
-async def test_get_instance():
-    config = OpenHandsConfig(file_store='local', file_store_path='/test/path')
+async def test_get_instance(tmp_path):
+    config = OpenHandsConfig(file_store='local', file_store_path=str(tmp_path))
 
-    with patch(
-        'openhands.app_server.settings.file_settings_store.get_file_store'
-    ) as mock_get_store:
-        mock_store = MagicMock(spec=FileStore)
-        mock_get_store.return_value = mock_store
+    store = await FileSettingsStore.get_instance(config, None)
 
-        store = await FileSettingsStore.get_instance(config, None)
-
-        assert isinstance(store, FileSettingsStore)
-        assert store.file_store == mock_store
-        mock_get_store.assert_called_once_with(
-            file_store_type='local',
-            file_store_path='/test/path',
-        )
+    assert isinstance(store, FileSettingsStore)
+    assert store.root_dir == tmp_path
