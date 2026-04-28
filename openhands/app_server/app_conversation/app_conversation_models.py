@@ -319,6 +319,7 @@ class AppSendMessageRequest(BaseModel):
     )
     content: list[TextContent | ImageContent] = Field(
         ...,
+        min_length=1,
         description='The message content as a list of text and/or image content blocks.',
     )
     run: bool = Field(

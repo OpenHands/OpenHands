@@ -484,3 +484,52 @@ class TestSendMessageToConversation:
 
         assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
         assert 'agent server url' in exc_info.value.detail.lower()
+
+
+class TestAppSendMessageRequestValidation:
+    """Test suite for AppSendMessageRequest model validation."""
+
+    def test_content_must_not_be_empty(self):
+        """Test that content field rejects empty lists.
+
+        Arrange: Attempt to create request with empty content
+        Act: Create AppSendMessageRequest with content=[]
+        Assert: Validation error is raised
+        """
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError) as exc_info:
+            AppSendMessageRequest(content=[])
+
+        # Check that the validation error is about min_length
+        errors = exc_info.value.errors()
+        assert len(errors) == 1
+        assert errors[0]['loc'] == ('content',)
+        assert 'at least 1' in errors[0]['msg'].lower()
+
+    def test_content_accepts_single_item(self):
+        """Test that content field accepts a list with one item.
+
+        Arrange: Create request with single content item
+        Act: Instantiate AppSendMessageRequest
+        Assert: Request is created successfully
+        """
+        request = AppSendMessageRequest(content=[TextContent(text='Hello')])
+        assert len(request.content) == 1
+        assert request.content[0].text == 'Hello'
+
+    def test_content_accepts_multiple_items(self):
+        """Test that content field accepts a list with multiple items.
+
+        Arrange: Create request with multiple content items
+        Act: Instantiate AppSendMessageRequest
+        Assert: Request is created successfully
+        """
+        request = AppSendMessageRequest(
+            content=[
+                TextContent(text='Hello'),
+                TextContent(text='World'),
+            ]
+        )
+        assert len(request.content) == 2
