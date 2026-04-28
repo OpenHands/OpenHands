@@ -3499,11 +3499,11 @@ class TestBuildAcpStartConversationRequestSecrets:
     @pytest.mark.asyncio
     async def test_secrets_passed_via_agent_context(self, service, tmp_path):
         """Secrets are forwarded via agent_context.secrets as SecretSource objects."""
-        github_secret = StaticSecret(value=SecretStr("ghp_test123"))
-        api_secret = StaticSecret(value=SecretStr("secret-value"))
+        github_secret = StaticSecret(value=SecretStr('ghp_test123'))
+        api_secret = StaticSecret(value=SecretStr('secret-value'))
         user = self._make_acp_user()
         service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={"GITHUB_TOKEN": github_secret, "MY_API_KEY": api_secret}
+            return_value={'GITHUB_TOKEN': github_secret, 'MY_API_KEY': api_secret}
         )
 
         request = await service._build_acp_start_conversation_request(
@@ -3516,16 +3516,16 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         assert request.agent.agent_context is not None
         ctx = request.agent.agent_context.secrets
-        assert ctx.get("GITHUB_TOKEN") is github_secret
-        assert ctx.get("MY_API_KEY") is api_secret
+        assert ctx.get('GITHUB_TOKEN') is github_secret
+        assert ctx.get('MY_API_KEY') is api_secret
 
     @pytest.mark.asyncio
     async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
         """LookupSecrets are forwarded as-is; the SDK resolves them at start time."""
-        lookup = LookupSecret(url="https://example.com/token", headers={})
+        lookup = LookupSecret(url='https://example.com/token', headers={})
         user = self._make_acp_user()
         service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={"GITHUB_TOKEN": lookup}
+            return_value={'GITHUB_TOKEN': lookup}
         )
 
         request = await service._build_acp_start_conversation_request(
@@ -3537,14 +3537,14 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
         assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get("GITHUB_TOKEN") is lookup
+        assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
 
     @pytest.mark.asyncio
     async def test_explicit_acp_env_preserved(self, service, tmp_path):
         """Explicit acp_env entries survive when secrets also present."""
-        user = self._make_acp_user(acp_env={"MY_TOKEN": "explicit-override"})
+        user = self._make_acp_user(acp_env={'MY_TOKEN': 'explicit-override'})
         service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={"OTHER": StaticSecret(value=SecretStr("other-value"))}
+            return_value={'OTHER': StaticSecret(value=SecretStr('other-value'))}
         )
 
         request = await service._build_acp_start_conversation_request(
@@ -3555,17 +3555,17 @@ class TestBuildAcpStartConversationRequestSecrets:
             plugins=None,
         )
 
-        assert request.agent.acp_env.get("MY_TOKEN") == "explicit-override"
+        assert request.agent.acp_env.get('MY_TOKEN') == 'explicit-override'
 
     @pytest.mark.asyncio
     async def test_provider_env_in_acp_env_secrets_in_agent_context(
         self, service, tmp_path
     ):
         """LLM credentials land in acp_env; panel secrets in agent_context."""
-        user = self._make_acp_user(acp_server="claude-code", api_key="sk-ui-key")
-        panel_secret = StaticSecret(value=SecretStr("sk-from-secrets-panel"))
+        user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
+        panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
         service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={"ANTHROPIC_API_KEY": panel_secret}
+            return_value={'ANTHROPIC_API_KEY': panel_secret}
         )
 
         request = await service._build_acp_start_conversation_request(
@@ -3576,10 +3576,10 @@ class TestBuildAcpStartConversationRequestSecrets:
             plugins=None,
         )
 
-        assert request.agent.acp_env.get("ANTHROPIC_API_KEY") == "sk-ui-key"
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
         assert request.agent.agent_context is not None
         assert (
-            request.agent.agent_context.secrets.get("ANTHROPIC_API_KEY") is panel_secret
+            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
         )
 
     @pytest.mark.asyncio
