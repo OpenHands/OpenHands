@@ -2,7 +2,7 @@
 
 This module tests the send-message endpoint, focusing on:
 - Sandbox status handling (RUNNING, PAUSED, MISSING, ERROR)
-- Sandbox resume flow
+- Requiring sandbox to be in RUNNING state
 - Agent server communication
 - Error handling
 """
@@ -78,11 +78,10 @@ def _make_mock_conversation_service(conversation=None):
     return service
 
 
-def _make_mock_sandbox_service(sandbox=None, resume_success=True):
+def _make_mock_sandbox_service(sandbox=None):
     """Create a mock SandboxService for testing."""
     service = MagicMock()
     service.get_sandbox = AsyncMock(return_value=sandbox)
-    service.resume_sandbox = AsyncMock(return_value=resume_success)
     return service
 
 
@@ -131,7 +130,6 @@ class TestSendMessageToConversation:
             request=request,
             app_conversation_service=mock_conversation_service,
             sandbox_service=mock_sandbox_service,
-            sandbox_spec_service=MagicMock(),
             httpx_client=mock_httpx_client,
         )
 
@@ -161,7 +159,6 @@ class TestSendMessageToConversation:
                 request=_make_mock_request(),
                 app_conversation_service=mock_conversation_service,
                 sandbox_service=MagicMock(),
-                sandbox_spec_service=MagicMock(),
                 httpx_client=MagicMock(),
             )
 
@@ -188,7 +185,6 @@ class TestSendMessageToConversation:
                 request=_make_mock_request(),
                 app_conversation_service=mock_conversation_service,
                 sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=MagicMock(),
                 httpx_client=MagicMock(),
             )
 
@@ -222,7 +218,6 @@ class TestSendMessageToConversation:
                 request=_make_mock_request(),
                 app_conversation_service=mock_conversation_service,
                 sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=MagicMock(),
                 httpx_client=MagicMock(),
             )
 
@@ -256,64 +251,21 @@ class TestSendMessageToConversation:
                 request=_make_mock_request(),
                 app_conversation_service=mock_conversation_service,
                 sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=MagicMock(),
                 httpx_client=MagicMock(),
             )
 
         assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
         assert 'error state' in exc_info.value.detail.lower()
 
-    async def test_resumes_paused_sandbox(self):
-        """Test that paused sandbox is resumed before sending message.
+    async def test_returns_409_for_paused_sandbox(self):
+        """Test that 409 is returned when sandbox is PAUSED.
 
-        Arrange: Create conversation with PAUSED sandbox that becomes RUNNING
+        The endpoint does not auto-resume sandboxes. Callers must resume
+        the sandbox first via POST /api/v1/sandboxes/{id}/resume.
+
+        Arrange: Create conversation with PAUSED sandbox
         Act: Call send_message_to_conversation
-        Assert: Sandbox is resumed and message is sent
-        """
-        # Arrange
-        conversation_id = uuid4()
-        sandbox_id = str(uuid4())
-        conversation = _make_mock_conversation(
-            conversation_id=conversation_id, sandbox_id=sandbox_id
-        )
-        paused_sandbox = _make_mock_sandbox(
-            sandbox_id=sandbox_id, sandbox_status=SandboxStatus.PAUSED
-        )
-        running_sandbox = _make_mock_sandbox(
-            sandbox_id=sandbox_id, sandbox_status=SandboxStatus.RUNNING
-        )
-
-        mock_conversation_service = _make_mock_conversation_service(conversation)
-        mock_sandbox_service = MagicMock()
-        # First call returns PAUSED, subsequent calls return RUNNING
-        mock_sandbox_service.get_sandbox = AsyncMock(
-            side_effect=[paused_sandbox, running_sandbox]
-        )
-        mock_sandbox_service.resume_sandbox = AsyncMock(return_value=True)
-        mock_httpx_client = _make_mock_httpx_client()
-
-        # Act
-        result = await send_message_to_conversation(
-            conversation_id=conversation_id,
-            request=_make_mock_request(),
-            app_conversation_service=mock_conversation_service,
-            sandbox_service=mock_sandbox_service,
-            sandbox_spec_service=MagicMock(),
-            httpx_client=mock_httpx_client,
-        )
-
-        # Assert
-        assert result.success is True
-        assert result.message == 'Sandbox was resumed before sending message.'
-        mock_sandbox_service.resume_sandbox.assert_called_once_with(sandbox_id)
-        mock_httpx_client.post.assert_called_once()
-
-    async def test_returns_503_when_resume_fails(self):
-        """Test that 503 is returned when sandbox resume fails.
-
-        Arrange: Create conversation with PAUSED sandbox that fails to resume
-        Act: Call send_message_to_conversation
-        Assert: HTTPException with 503 is raised
+        Assert: HTTPException with 409 is raised
         """
         # Arrange
         conversation_id = uuid4()
@@ -326,9 +278,7 @@ class TestSendMessageToConversation:
         )
 
         mock_conversation_service = _make_mock_conversation_service(conversation)
-        mock_sandbox_service = _make_mock_sandbox_service(
-            sandbox=sandbox, resume_success=False
-        )
+        mock_sandbox_service = _make_mock_sandbox_service(sandbox)
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
@@ -337,12 +287,47 @@ class TestSendMessageToConversation:
                 request=_make_mock_request(),
                 app_conversation_service=mock_conversation_service,
                 sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=MagicMock(),
                 httpx_client=MagicMock(),
             )
 
-        assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-        assert 'failed to resume' in exc_info.value.detail.lower()
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
+        assert 'paused' in exc_info.value.detail.lower()
+        assert '/resume' in exc_info.value.detail.lower()
+
+    async def test_returns_409_for_starting_sandbox(self):
+        """Test that 409 is returned when sandbox is STARTING.
+
+        Callers must wait for sandbox to reach RUNNING state before sending messages.
+
+        Arrange: Create conversation with STARTING sandbox
+        Act: Call send_message_to_conversation
+        Assert: HTTPException with 409 is raised
+        """
+        # Arrange
+        conversation_id = uuid4()
+        sandbox_id = str(uuid4())
+        conversation = _make_mock_conversation(
+            conversation_id=conversation_id, sandbox_id=sandbox_id
+        )
+        sandbox = _make_mock_sandbox(
+            sandbox_id=sandbox_id, sandbox_status=SandboxStatus.STARTING
+        )
+
+        mock_conversation_service = _make_mock_conversation_service(conversation)
+        mock_sandbox_service = _make_mock_sandbox_service(sandbox)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await send_message_to_conversation(
+                conversation_id=conversation_id,
+                request=_make_mock_request(),
+                app_conversation_service=mock_conversation_service,
+                sandbox_service=mock_sandbox_service,
+                httpx_client=MagicMock(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
+        assert 'starting' in exc_info.value.detail.lower()
 
     async def test_returns_502_on_agent_server_http_error(self):
         """Test that 502 is returned when agent server returns HTTP error.
@@ -378,7 +363,6 @@ class TestSendMessageToConversation:
                 request=_make_mock_request(),
                 app_conversation_service=mock_conversation_service,
                 sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=MagicMock(),
                 httpx_client=mock_httpx_client,
             )
 
@@ -413,7 +397,6 @@ class TestSendMessageToConversation:
                 request=_make_mock_request(),
                 app_conversation_service=mock_conversation_service,
                 sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=MagicMock(),
                 httpx_client=mock_httpx_client,
             )
 
@@ -452,7 +435,6 @@ class TestSendMessageToConversation:
             request=request,
             app_conversation_service=mock_conversation_service,
             sandbox_service=mock_sandbox_service,
-            sandbox_spec_service=MagicMock(),
             httpx_client=mock_httpx_client,
         )
 
@@ -497,7 +479,6 @@ class TestSendMessageToConversation:
                 request=_make_mock_request(),
                 app_conversation_service=mock_conversation_service,
                 sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=MagicMock(),
                 httpx_client=MagicMock(),
             )
 
