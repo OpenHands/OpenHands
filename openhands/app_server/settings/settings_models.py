@@ -24,12 +24,12 @@ from pydantic import (
     model_validator,
 )
 
+from openhands.app_server.integrations.provider import ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.utils import load_openhands_config
-from openhands.integrations.provider import ProviderToken
-from openhands.integrations.service_types import ProviderType
 from openhands.sdk.settings import ConversationSettings
 from openhands.utils.jsonpatch_compat import deep_merge
 from openhands.utils.sdk_settings_compat import (

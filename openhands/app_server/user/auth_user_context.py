@@ -5,16 +5,16 @@ from fastapi import Request
 from pydantic import PrivateAttr, SecretStr
 
 from openhands.app_server.errors import AuthError
-from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.app_server.user.user_context import UserContext, UserContextInjector
-from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import (
+from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
     ProviderType,
 )
-from openhands.integrations.service_types import UserGitInfo
+from openhands.app_server.integrations.service_types import UserGitInfo
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
+from openhands.app_server.user.user_context import UserContext, UserContextInjector
+from openhands.app_server.user.user_models import UserInfo
 from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 

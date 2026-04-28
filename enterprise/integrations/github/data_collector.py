@@ -21,10 +21,10 @@ from storage.openhands_pr_store import OpenhandsPRStore
 
 from openhands.app_server.conversation_paths import get_conversation_dir
 from openhands.app_server.file_store import get_file_store
+from openhands.app_server.integrations.github.github_service import GithubServiceImpl
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.core.config import load_openhands_config
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.github.github_service import GithubServiceImpl
-from openhands.integrations.service_types import ProviderType
 
 config = load_openhands_config()
 file_store = get_file_store(config.file_store, config.file_store_path)

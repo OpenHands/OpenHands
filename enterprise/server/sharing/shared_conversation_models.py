@@ -1,7 +1,7 @@
 from datetime import datetime
 
 # Simplified imports to avoid dependency chain issues
-# from openhands.integrations.service_types import ProviderType
+# from openhands.app_server.integrations.service_types import ProviderType
 # from openhands.sdk.llm import MetricsSnapshot
 # from openhands.app_server.app_conversation.app_conversation_models import ConversationTrigger
 # For now, use Any to avoid import issues

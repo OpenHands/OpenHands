@@ -48,13 +48,13 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationSortOrder,
     ConversationTrigger,
 )
+from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import (
     Base,
     create_json_type_decorator,
 )
-from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage

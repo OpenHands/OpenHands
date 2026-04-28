@@ -39,7 +39,10 @@ from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
 
-from openhands.integrations.service_types import ProviderTimeoutError, ProviderType
+from openhands.app_server.integrations.service_types import (
+    ProviderTimeoutError,
+    ProviderType,
+)
 from openhands.server.shared import config, sio
 
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)

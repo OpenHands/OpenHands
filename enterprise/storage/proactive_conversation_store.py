@@ -13,8 +13,8 @@ from sqlalchemy import and_, delete, select, update
 from storage.database import a_session_maker
 from storage.proactive_convos import ProactiveConversation
 
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.service_types import ProviderType
 
 
 @dataclass

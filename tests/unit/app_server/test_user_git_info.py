@@ -20,7 +20,7 @@ class TestGetCurrentUserGitInfo:
 
     async def test_returns_user_git_info_when_authenticated(self, mock_user_context):
         """Authenticated user with git info returns the git info."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         expected_git_info = UserGitInfo(
             id='user-123',
@@ -47,7 +47,7 @@ class TestGetCurrentUserGitInfo:
 
     async def test_returns_user_git_info_with_minimal_fields(self, mock_user_context):
         """User git info with only required fields returns successfully."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         minimal_git_info = UserGitInfo(
             id='user-456',
@@ -86,7 +86,7 @@ class TestGetCurrentUserGitInfo:
         self, mock_user_context
     ):
         """Ensure None values in optional fields don't trigger 401."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         git_info = UserGitInfo(
             id='user-789',
@@ -123,7 +123,7 @@ class TestUserGitInfoModel:
 
     def test_user_git_info_full_fields(self):
         """Test UserGitInfo with all fields populated."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         git_info = UserGitInfo(
             id='full-user',
@@ -143,7 +143,7 @@ class TestUserGitInfoModel:
 
     def test_user_git_info_model_dump_json(self):
         """Test UserGitInfo serializes correctly to JSON."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         git_info = UserGitInfo(
             id='json-user',
@@ -164,7 +164,7 @@ class TestUserGitInfoModel:
 
     def test_user_git_info_model_dump(self):
         """Test UserGitInfo model_dump works correctly."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         git_info = UserGitInfo(
             id='dump-user',

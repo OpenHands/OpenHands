@@ -10,15 +10,15 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from openhands.app_server.file_store import get_file_store
+from openhands.app_server.integrations.provider import (
+    CustomSecret,
+    ProviderToken,
+    ProviderType,
+)
 from openhands.app_server.secrets.file_secrets_store import FileSecretsStore
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_router import (
     router as secrets_router,
-)
-from openhands.integrations.provider import (
-    CustomSecret,
-    ProviderToken,
-    ProviderType,
 )
 
 
@@ -506,7 +506,7 @@ async def test_add_git_providers_invalid_token_with_host(
 
     # Mock validate_provider_token to return None (invalid token)
     with patch(
-        'openhands.integrations.utils.validate_provider_token',
+        'openhands.app_server.integrations.utils.validate_provider_token',
         AsyncMock(return_value=None),
     ):
         # Try to add an invalid GitHub provider with a host
