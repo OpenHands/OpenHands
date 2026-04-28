@@ -1,3 +1,4 @@
+/** Known ACP backend servers the GUI can select from. Mirrors SDK's ACPServerKind. */
 export type AcpServerKind = "claude-code" | "codex" | "gemini-cli";
 
 export const ACP_SERVER_DISPLAY_NAMES: Record<AcpServerKind | string, string> =
