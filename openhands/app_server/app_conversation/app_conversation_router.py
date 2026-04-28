@@ -412,15 +412,35 @@ async def send_message_to_conversation(
 ) -> AppSendMessageResponse:
     """Send a follow-up message to an existing conversation.
 
-    This REST endpoint allows sending messages to a running conversation
-    without requiring a WebSocket connection.
+    This REST endpoint provides a simplified way to send messages to a running
+    conversation without requiring a WebSocket connection.
+
+    **Alternative Approaches:**
+
+    This endpoint is a convenience wrapper. You can also interact with the agent
+    server directly using:
+
+    1. **WebSocket**: Connect to the agent server's WebSocket endpoint for
+       real-time bidirectional communication
+    2. **Agent Server REST API**: Call the agent server's REST endpoints directly
+       using the `conversation_url` from `GET /api/v1/app-conversations/{id}`
+
+    **Design Note:**
+
+    This endpoint is intentionally a thin proxy that forwards messages to the
+    agent server without additional processing logic. Any custom processing
+    (validation, transformation, side effects) should be implemented via
+    webhook callbacks, not in this endpoint. This ensures that direct agent
+    server invocation and this convenience endpoint remain functionally equivalent.
 
     **Prerequisites:**
+
     - The sandbox must be in RUNNING state
     - If the sandbox is PAUSED, call `POST /api/v1/sandboxes/{sandbox_id}/resume` first
     - If the sandbox is STARTING, wait for it to reach RUNNING state
 
     **Error responses:**
+
     - 404: Conversation or sandbox not found
     - 409: Sandbox exists but is not running (PAUSED, STARTING, STOPPING)
     - 410: Conversation is archived (sandbox no longer exists)
