@@ -19,7 +19,6 @@ from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.file_store.memory import InMemoryFileStore
 from openhands.app_server.file_store.s3 import S3FileStore
 
-
 # =============================================================================
 # Mock classes for cloud storage tests
 # These must be defined before the test classes that use them in decorators
