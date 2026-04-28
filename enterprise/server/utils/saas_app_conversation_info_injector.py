@@ -245,7 +245,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         conditions = []
         if title__contains is not None:
             conditions.append(
-                StoredConversationMetadata.title.like(f'%{title__contains}%')
+                StoredConversationMetadata.title.contains(title__contains, autoescape=True)
             )
 
         if created_at__gte is not None:
