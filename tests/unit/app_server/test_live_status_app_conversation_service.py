@@ -3185,8 +3185,9 @@ class TestLoadHooksFromWorkspace:
 
 
 class TestAcpProviderEnv:
-    """Unit tests for ``LiveStatusAppConversationService._acp_provider_env`` —
-    the helper that translates UI-saved LLM credentials into the
+    """Unit tests for ``LiveStatusAppConversationService._acp_provider_env``.
+
+    Tests the helper that translates UI-saved LLM credentials into the
     provider env vars the chosen ACP subprocess expects.
     """
 
@@ -3289,16 +3290,16 @@ class TestAcpProviderEnv:
         assert env == {}
 
     def test_api_key_alone_is_plumbed(self, _acp_settings_factory):
-        """api_key alone → plumb the key (provider default URL comes
-        from the SDK / OS env, not from us)."""
+        """api_key alone → plumb the key; provider default URL comes from the SDK / OS env."""
         s = _acp_settings_factory(acp_server='claude-code', api_key='sk-test')
         env = LiveStatusAppConversationService._acp_provider_env(s)
         assert env == {'ANTHROPIC_API_KEY': 'sk-test'}
 
     def test_unexpected_api_key_type_raises(self, _acp_settings_factory):
-        """Anything other than ``SecretStr`` / ``str`` for the api_key
-        raises. ``str(SecretStr)`` yields ``**********``; silently
-        falling back would plumb the placeholder as the credential.
+        """Non-``SecretStr`` / non-``str`` api_key raises.
+
+        ``str(SecretStr)`` yields ``**********``; silently falling back
+        would plumb the placeholder as the credential.
         """
         s = _acp_settings_factory(acp_server='claude-code', api_key='sk-test')
         # Swap in a non-string, non-SecretStr sentinel to simulate a
@@ -3311,10 +3312,12 @@ class TestAcpProviderEnv:
 
 
 class TestAgentKindConversationUrl:
-    """Regression tests for the conversation_url / live-status route
-    dispatch — ``/api/conversations`` for LLM, ``/api/acp/conversations``
-    for ACP. Getting this wrong makes ACP conversations look stuck on
-    "Loading" because the frontend polls the wrong route and 404s."""
+    """Regression tests for conversation_url / live-status route dispatch.
+
+    ``/api/conversations`` for LLM, ``/api/acp/conversations`` for ACP.
+    Getting this wrong makes ACP conversations look stuck on "Loading"
+    because the frontend polls the wrong route and 404s.
+    """
 
     def test_build_conversation_url_llm(self):
         from uuid import UUID
