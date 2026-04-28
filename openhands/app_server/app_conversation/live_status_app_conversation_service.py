@@ -1507,18 +1507,32 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         acp_settings = user.agent_settings
         env: dict[str, str] = {}
 
-        # Map the user's LLM API key to the env var expected by the ACP server.
-        api_key_env = acp_settings.api_key_env_var
-        if api_key_env and api_key_env not in env:
-            llm_api_key = acp_settings.llm.api_key
-            if llm_api_key:
-                key_value = (
-                    llm_api_key.get_secret_value()
-                    if isinstance(llm_api_key, SecretStr)
-                    else str(llm_api_key)
-                )
-                if key_value and key_value.strip():
-                    env[api_key_env] = key_value
+        llm_api_key = acp_settings.llm.api_key
+        if not llm_api_key:
+            return env
+
+        key_value = (
+            llm_api_key.get_secret_value()
+            if isinstance(llm_api_key, SecretStr)
+            else str(llm_api_key)
+        )
+        if not key_value or not key_value.strip():
+            return env
+
+        # TODO: simplify to `acp_settings.api_key_env_var` once OpenHands is
+        # pinned to an SDK version that includes software-agent-sdk PR #2984.
+        # The fallback per-server mapping below duplicates that SDK property.
+        api_key_env: str | None = getattr(acp_settings, 'api_key_env_var', None)
+        if api_key_env is None:
+            _SERVER_KEY_MAP = {
+                'claude-code': 'ANTHROPIC_API_KEY',
+                'codex': 'OPENAI_API_KEY',
+                'gemini-cli': 'GEMINI_API_KEY',
+            }
+            api_key_env = _SERVER_KEY_MAP.get(acp_settings.acp_server)
+
+        if api_key_env:
+            env[api_key_env] = key_value
 
         return env
 
@@ -1597,7 +1611,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Pass user secrets via AgentContext so the SDK renders a
         # <CUSTOM_SECRETS> block in the ACP prompt and injects values into
         # the subprocess env at start time (SDK PR #2984).
-        if secrets:
+        # TODO: remove the _sdk_supports_acp_secrets guard once OpenHands pins
+        # to an SDK version that includes PR #2984 (secrets acp_compatible=True).
+        _sdk_supports_acp_secrets = (
+            AgentContext.model_fields.get('secrets') is not None
+            and isinstance(AgentContext.model_fields['secrets'].json_schema_extra, dict)
+            and AgentContext.model_fields['secrets'].json_schema_extra.get(
+                'acp_compatible'
+            )
+            is True
+        )
+        if secrets and _sdk_supports_acp_secrets:
             acp_agent.agent_context = AgentContext(secrets=secrets)
 
         sdk_plugins: list[PluginSource] | None = None
