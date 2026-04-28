@@ -8,6 +8,7 @@ from pathlib import Path
 
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.utils.async_utils import call_sync_from_async
 
 
@@ -61,11 +62,9 @@ class FileSecretsStore(SecretsStore):
 
     @classmethod
     async def get_instance(
-        cls, config: object | None = None, user_id: str | None = None
+        cls, config: OpenHandsConfig, user_id: str | None
     ) -> FileSecretsStore:
-        # Import locally to avoid circular imports
-        from openhands.app_server.config import get_global_config
-
-        app_config = get_global_config()
-        root_dir = app_config.persistence_dir
+        root_dir = Path(config.file_store_path)
+        if str(root_dir).startswith('~'):
+            root_dir = root_dir.expanduser()
         return FileSecretsStore(root_dir=root_dir)

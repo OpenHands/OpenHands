@@ -8,6 +8,7 @@ from pathlib import Path
 
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.utils.async_utils import call_sync_from_async
 
 
@@ -62,11 +63,9 @@ class FileSettingsStore(SettingsStore):
 
     @classmethod
     async def get_instance(
-        cls, config: object | None = None, user_id: str | None = None
+        cls, config: OpenHandsConfig, user_id: str | None
     ) -> FileSettingsStore:
-        # Import locally to avoid circular imports
-        from openhands.app_server.config import get_global_config
-
-        app_config = get_global_config()
-        root_dir = app_config.persistence_dir
+        root_dir = Path(config.file_store_path)
+        if str(root_dir).startswith('~'):
+            root_dir = root_dir.expanduser()
         return FileSettingsStore(root_dir=root_dir)

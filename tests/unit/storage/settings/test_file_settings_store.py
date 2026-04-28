@@ -94,14 +94,9 @@ async def test_store_and_load_data(file_settings_store, temp_dir):
 
 @pytest.mark.asyncio
 async def test_get_instance(tmp_path):
-    mock_config = MagicMock()
-    mock_config.persistence_dir = tmp_path
+    config = OpenHandsConfig(file_store='local', file_store_path=str(tmp_path))
 
-    with patch(
-        'openhands.app_server.config.get_global_config',
-        return_value=mock_config,
-    ):
-        store = await FileSettingsStore.get_instance()
+    store = await FileSettingsStore.get_instance(config, None)
 
-        assert isinstance(store, FileSettingsStore)
-        assert store.root_dir == tmp_path
+    assert isinstance(store, FileSettingsStore)
+    assert store.root_dir == tmp_path
