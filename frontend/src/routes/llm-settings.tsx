@@ -9,6 +9,7 @@ import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useSettings } from "#/hooks/query/use-settings";
 import { hasAdvancedSettingsSet } from "#/utils/has-advanced-settings-set";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
+import { useLLMHealthCheck } from "#/hooks/query/use-llm-health-check";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import QuestionCircleIcon from "#/icons/question-circle.svg?react";
@@ -70,6 +71,8 @@ function LlmSettingsScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { mutate: saveSettings, isPending } = useSaveSettings();
+  const [testingConnection, setTestingConnection] = React.useState(false);
+  const { refetch: testConnection } = useLLMHealthCheck(false);
 
   const { data: securityAnalyzers } = useSecurityAnalyzers();
   const { data: providers = [] } = useSearchProviders();
@@ -227,6 +230,37 @@ function LlmSettingsScreen() {
   const handleErrorMutation = (error: AxiosError) => {
     const errorMessage = retrieveAxiosErrorMessage(error);
     displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    try {
+      const result = await testConnection();
+
+      if (result.data) {
+        const { status, error_message, model, latency_ms } = result.data;
+
+        if (status === 'connected') {
+          displaySuccessToast(`Connected to ${model} (${latency_ms.toFixed(0)}ms)`);
+        } else if (status === 'timeout') {
+          displayErrorToast(`Connection timeout: ${error_message}`);
+        } else if (status === 'model_not_found') {
+          displayErrorToast(`Model not found: ${error_message}`);
+        } else if (status === 'connection_error') {
+          displayErrorToast(`Cannot connect: ${error_message}`);
+        } else if (status === 'error') {
+          displayErrorToast(`Error: ${error_message}`);
+        } else if (status === 'configured') {
+          displaySuccessToast(
+            'Settings configured. Remote models cannot be tested offline.',
+          );
+        }
+      }
+    } catch {
+      displayErrorToast('Failed to test connection');
+    } finally {
+      setTestingConnection(false);
+    }
   };
 
   const basicFormAction = (formData: FormData) => {
@@ -755,6 +789,15 @@ function LlmSettingsScreen() {
 
         {!isReadOnly && (
           <div className="flex gap-6 p-6 justify-end">
+            <BrandButton
+              testId="test-connection-button"
+              type="button"
+              variant="secondary"
+              isDisabled={testingConnection || isPending}
+              onClick={handleTestConnection}
+            >
+              {testingConnection ? 'Testing...' : 'Test Connection'}
+            </BrandButton>
             <BrandButton
               testId="submit-button"
               type="submit"

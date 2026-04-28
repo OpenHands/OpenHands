@@ -7,6 +7,7 @@ from openhands.app_server.event_callback import (
     webhook_router,
 )
 from openhands.app_server.git.git_router import router as git_router
+from openhands.app_server.llm.llm_diagnostics_router import router as llm_diagnostics_router
 from openhands.app_server.pending_messages.pending_message_router import (
     router as pending_message_router,
 )
@@ -35,3 +36,4 @@ router.include_router(webhook_router.router)
 router.include_router(web_client_router.router)
 router.include_router(git_router)
 router.include_router(config_router)
+router.include_router(llm_diagnostics_router)
