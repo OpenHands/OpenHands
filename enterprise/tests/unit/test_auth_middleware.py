@@ -13,7 +13,7 @@ from server.auth.auth_error import (
 from server.auth.saas_user_auth import SaasUserAuth
 from server.middleware import SetAuthCookieMiddleware
 
-from openhands.server.user_auth.user_auth import AuthType
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 @pytest.fixture

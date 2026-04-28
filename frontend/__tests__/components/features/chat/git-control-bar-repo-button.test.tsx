@@ -32,8 +32,8 @@ vi.mock("#/icons/repo-forked.svg?react", () => ({
   default: () => <span data-testid="repo-forked-icon">forked</span>,
 }));
 
-vi.mock("#/hooks/query/use-settings", () => ({
-  useSettings: () => ({ data: { provider_tokens_set: {} } }),
+vi.mock("#/hooks/use-provider-host", () => ({
+  useProviderHost: () => null,
 }));
 
 // Mock constructRepositoryUrl

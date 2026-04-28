@@ -20,8 +20,8 @@ from server.auth.token_manager import TokenManager
 from storage.jira_workspace import JiraWorkspace
 from storage.redis import create_redis_client
 
+from openhands.app_server.user_auth.user_auth import get_user_auth
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth.user_auth import get_user_auth
 
 # Environment variable to disable Jira webhooks
 JIRA_WEBHOOKS_ENABLED = os.environ.get('JIRA_WEBHOOKS_ENABLED', '0') in (
@@ -149,7 +149,12 @@ async def verify_jira_signature(body: bytes, signature: str, payload: dict):
 
     workspace_name = jira_manager.get_workspace_name_from_payload(payload)
     if workspace_name is None:
-        logger.warning('[Jira] No workspace name found in webhook payload')
+        logger.warning(
+            '[Jira] No workspace name found in webhook payload',
+            extra={
+                'payload': payload,
+            },
+        )
         raise HTTPException(
             status_code=403, detail='Workspace name not found in payload'
         )

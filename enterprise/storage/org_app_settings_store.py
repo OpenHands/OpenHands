@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from storage.org import Org
 from storage.user import User
 
+from openhands.utils.jsonpatch_compat import deep_merge
+
 
 @dataclass
 class OrgAppSettingsStore:
@@ -33,10 +35,10 @@ class OrgAppSettingsStore:
             Org: The organization object, or None if not found
         """
         # Get user with their current_org_id
-        result = await self.db_session.execute(
+        user_result = await self.db_session.execute(
             select(User).filter(User.id == UUID(user_id))
         )
-        user = result.scalars().first()
+        user = user_result.scalars().first()
 
         if not user:
             return None
@@ -46,8 +48,8 @@ class OrgAppSettingsStore:
             return None
 
         # Get the organization
-        result = await self.db_session.execute(select(Org).filter(Org.id == org_id))
-        org = result.scalars().first()
+        org_result = await self.db_session.execute(select(Org).filter(Org.id == org_id))
+        org = org_result.scalars().first()
 
         if not org:
             return None
@@ -65,8 +67,15 @@ class OrgAppSettingsStore:
         """
         if org.org_version < ORG_SETTINGS_VERSION:
             org.org_version = ORG_SETTINGS_VERSION
-            org.default_llm_model = get_default_litellm_model()
-            org.llm_base_url = LITE_LLM_API_URL
+            org.agent_settings = deep_merge(
+                org.agent_settings,
+                {
+                    'llm': {
+                        'model': get_default_litellm_model(),
+                        'base_url': LITE_LLM_API_URL,
+                    },
+                },
+            )
             await self.db_session.flush()
             await self.db_session.refresh(org)
 

@@ -30,6 +30,7 @@ from server.auth.constants import (
     GITHUB_APP_CLIENT_SECRET,
     GITLAB_APP_CLIENT_ID,
     GITLAB_APP_CLIENT_SECRET,
+    GITLAB_TOKEN_URL,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL,
     KEYCLOAK_SERVER_URL_EXT,
@@ -50,7 +51,7 @@ from storage.github_app_installation import GithubAppInstallation
 from storage.offline_token_store import OfflineTokenStore
 from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
 
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.server.types import SessionExpiredError
 from openhands.utils.http_session import httpx_verify_option
 
@@ -417,7 +418,7 @@ class TokenManager:
             return await self._parse_refresh_response(data)
 
     async def _refresh_gitlab_token(self, refresh_token: str) -> dict[str, str | int]:
-        url = 'https://gitlab.com/oauth/token'
+        url = GITLAB_TOKEN_URL
         logger.info(f'Refreshing GitLab token with URL: {url}')
 
         payload = {

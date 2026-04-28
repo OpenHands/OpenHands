@@ -15,12 +15,11 @@ import logging
 import httpx
 from pydantic import BaseModel
 
+from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.integrations.provider import ProviderType
-from openhands.integrations.service_types import AuthenticationError
-from openhands.sdk.context.skills import Skill
-from openhands.sdk.context.skills.trigger import KeywordTrigger, TaskTrigger
+from openhands.sdk.context.skills import KeywordTrigger, Skill, TaskTrigger
 
 _logger = logging.getLogger(__name__)
 
@@ -31,21 +30,6 @@ class ExposedUrlConfig(BaseModel):
     name: str
     url: str
     port: int
-
-
-WORK_HOSTS_SKILL_FOOTER = """
-When starting a web server, use the corresponding ports via environment variables:
-- $WORKER_1 for the first port
-- $WORKER_2 for the second port
-
-**CRITICAL: You MUST enable CORS and bind to 0.0.0.0.** Without CORS headers, the App tab cannot detect your server and will show an empty state.
-
-Example (Flask):
-```python
-from flask_cors import CORS
-CORS(app)
-app.run(host='0.0.0.0', port=int(os.environ.get('WORKER_1', 12000)))
-```"""
 
 
 class SandboxConfig(BaseModel):
@@ -383,7 +367,7 @@ def _convert_skill_info_to_skill(skill_info: SkillInfo) -> Skill:
     Returns:
         Skill object
     """
-    trigger = None
+    trigger: TaskTrigger | KeywordTrigger | None = None
 
     if skill_info.triggers:
         # Determine trigger type based on content

@@ -13,6 +13,7 @@ from server.auth.authorization import (
     ROLE_PERMISSIONS,
     Permission,
     RoleName,
+    get_api_key_org_id_from_request,
     get_role_permissions,
     get_user_org_role,
     has_permission,
@@ -55,6 +56,7 @@ class TestPermission:
         assert Permission.VIEW_ORG_SETTINGS.value == 'view_org_settings'
         assert Permission.CHANGE_ORGANIZATION_NAME.value == 'change_organization_name'
         assert Permission.DELETE_ORGANIZATION.value == 'delete_organization'
+        assert Permission.MANAGE_AUTOMATIONS.value == 'manage_automations'
 
     def test_permission_from_string(self):
         """
@@ -141,6 +143,7 @@ class TestRolePermissions:
         assert Permission.CHANGE_USER_ROLE_OWNER in owner_perms
         assert Permission.CHANGE_ORGANIZATION_NAME in owner_perms
         assert Permission.DELETE_ORGANIZATION in owner_perms
+        assert Permission.MANAGE_AUTOMATIONS in owner_perms
 
     def test_admin_has_admin_permissions(self):
         """
@@ -158,6 +161,7 @@ class TestRolePermissions:
         assert Permission.INVITE_USER_TO_ORGANIZATION in admin_perms
         assert Permission.CHANGE_USER_ROLE_MEMBER in admin_perms
         assert Permission.CHANGE_USER_ROLE_ADMIN in admin_perms
+        assert Permission.MANAGE_AUTOMATIONS in admin_perms
         # Admin should NOT have owner-only permissions
         assert Permission.CHANGE_USER_ROLE_OWNER not in admin_perms
         assert Permission.CHANGE_ORGANIZATION_NAME not in admin_perms
@@ -176,6 +180,7 @@ class TestRolePermissions:
         assert Permission.MANAGE_INTEGRATIONS in member_perms
         assert Permission.MANAGE_APPLICATION_SETTINGS in member_perms
         assert Permission.MANAGE_API_KEYS in member_perms
+        assert Permission.MANAGE_AUTOMATIONS in member_perms
         assert Permission.VIEW_LLM_SETTINGS in member_perms
         assert Permission.VIEW_ORG_SETTINGS in member_perms
         # Member should NOT have admin/owner permissions
@@ -444,6 +449,15 @@ class TestGetUserOrgRole:
 # =============================================================================
 
 
+def _create_mock_request(api_key_org_id=None):
+    """Helper to create a mock request with optional api_key_org_id."""
+    mock_request = MagicMock()
+    mock_user_auth = MagicMock()
+    mock_user_auth.get_api_key_org_id.return_value = api_key_org_id
+    mock_request.state.user_auth = mock_user_auth
+    return mock_request
+
+
 class TestRequirePermission:
     """Tests for require_permission dependency factory."""
 
@@ -456,6 +470,7 @@ class TestRequirePermission:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'admin'
@@ -465,7 +480,9 @@ class TestRequirePermission:
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
-            result = await permission_checker(org_id=org_id, user_id=user_id)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
             assert result == user_id
 
     @pytest.mark.asyncio
@@ -476,10 +493,11 @@ class TestRequirePermission:
         THEN: 401 Unauthorized is raised
         """
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
         with pytest.raises(HTTPException) as exc_info:
-            await permission_checker(org_id=org_id, user_id=None)
+            await permission_checker(request=mock_request, org_id=org_id, user_id=None)
 
         assert exc_info.value.status_code == 401
         assert 'not authenticated' in exc_info.value.detail.lower()
@@ -493,6 +511,7 @@ class TestRequirePermission:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         with patch(
             'server.auth.authorization.get_user_org_role',
@@ -500,7 +519,9 @@ class TestRequirePermission:
         ):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
             with pytest.raises(HTTPException) as exc_info:
-                await permission_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
 
             assert exc_info.value.status_code == 403
             assert 'not a member' in exc_info.value.detail.lower()
@@ -514,6 +535,7 @@ class TestRequirePermission:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'member'
@@ -524,7 +546,9 @@ class TestRequirePermission:
         ):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
             with pytest.raises(HTTPException) as exc_info:
-                await permission_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
 
             assert exc_info.value.status_code == 403
             assert 'delete_organization' in exc_info.value.detail.lower()
@@ -538,6 +562,7 @@ class TestRequirePermission:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'owner'
@@ -547,7 +572,9 @@ class TestRequirePermission:
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
-            result = await permission_checker(org_id=org_id, user_id=user_id)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
             assert result == user_id
 
     @pytest.mark.asyncio
@@ -559,6 +586,7 @@ class TestRequirePermission:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'admin'
@@ -569,7 +597,9 @@ class TestRequirePermission:
         ):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
             with pytest.raises(HTTPException) as exc_info:
-                await permission_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
 
             assert exc_info.value.status_code == 403
 
@@ -582,6 +612,7 @@ class TestRequirePermission:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'member'
@@ -595,7 +626,9 @@ class TestRequirePermission:
         ):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
             with pytest.raises(HTTPException):
-                await permission_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
 
             mock_logger.warning.assert_called()
             call_args = mock_logger.warning.call_args
@@ -611,6 +644,7 @@ class TestRequirePermission:
         THEN: User ID is returned
         """
         user_id = str(uuid4())
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'admin'
@@ -620,7 +654,9 @@ class TestRequirePermission:
             AsyncMock(return_value=mock_role),
         ) as mock_get_role:
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
-            result = await permission_checker(org_id=None, user_id=user_id)
+            result = await permission_checker(
+                request=mock_request, org_id=None, user_id=user_id
+            )
             assert result == user_id
             mock_get_role.assert_called_once_with(user_id, None)
 
@@ -632,6 +668,7 @@ class TestRequirePermission:
         THEN: HTTPException with 403 status is raised
         """
         user_id = str(uuid4())
+        mock_request = _create_mock_request()
 
         with patch(
             'server.auth.authorization.get_user_org_role',
@@ -639,7 +676,9 @@ class TestRequirePermission:
         ):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
             with pytest.raises(HTTPException) as exc_info:
-                await permission_checker(org_id=None, user_id=user_id)
+                await permission_checker(
+                    request=mock_request, org_id=None, user_id=user_id
+                )
 
             assert exc_info.value.status_code == 403
             assert 'not a member' in exc_info.value.detail
@@ -662,6 +701,7 @@ class TestPermissionScenarios:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'member'
@@ -671,7 +711,9 @@ class TestPermissionScenarios:
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.MANAGE_SECRETS)
-            result = await permission_checker(org_id=org_id, user_id=user_id)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
             assert result == user_id
 
     @pytest.mark.asyncio
@@ -683,6 +725,7 @@ class TestPermissionScenarios:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'member'
@@ -695,7 +738,9 @@ class TestPermissionScenarios:
                 Permission.INVITE_USER_TO_ORGANIZATION
             )
             with pytest.raises(HTTPException) as exc_info:
-                await permission_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
 
             assert exc_info.value.status_code == 403
 
@@ -708,6 +753,7 @@ class TestPermissionScenarios:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'admin'
@@ -719,7 +765,9 @@ class TestPermissionScenarios:
             permission_checker = require_permission(
                 Permission.INVITE_USER_TO_ORGANIZATION
             )
-            result = await permission_checker(org_id=org_id, user_id=user_id)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
             assert result == user_id
 
     @pytest.mark.asyncio
@@ -731,6 +779,7 @@ class TestPermissionScenarios:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'admin'
@@ -741,7 +790,9 @@ class TestPermissionScenarios:
         ):
             permission_checker = require_permission(Permission.CHANGE_USER_ROLE_OWNER)
             with pytest.raises(HTTPException) as exc_info:
-                await permission_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
 
             assert exc_info.value.status_code == 403
 
@@ -754,6 +805,7 @@ class TestPermissionScenarios:
         """
         user_id = str(uuid4())
         org_id = uuid4()
+        mock_request = _create_mock_request()
 
         mock_role = MagicMock()
         mock_role.name = 'owner'
@@ -763,5 +815,431 @@ class TestPermissionScenarios:
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.CHANGE_USER_ROLE_OWNER)
-            result = await permission_checker(org_id=org_id, user_id=user_id)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
             assert result == user_id
+
+
+# =============================================================================
+# Tests for API key organization validation
+# =============================================================================
+
+
+class TestApiKeyOrgValidation:
+    """Tests for API key organization binding validation in require_permission."""
+
+    @pytest.mark.asyncio
+    async def test_allows_access_when_api_key_org_matches_target_org(self):
+        """
+        GIVEN: API key with org_id that matches the target org_id in the request
+        WHEN: Permission checker is called
+        THEN: User ID is returned (access allowed)
+        """
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request(api_key_org_id=org_id)
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        # Act & Assert
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_role),
+        ):
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_denies_access_when_api_key_org_mismatches_target_org(self):
+        """
+        GIVEN: API key created for Org A, but user tries to access Org B
+        WHEN: Permission checker is called
+        THEN: 403 Forbidden is raised with org mismatch message
+        """
+        # Arrange
+        user_id = str(uuid4())
+        api_key_org_id = uuid4()  # Org A - where API key was created
+        target_org_id = uuid4()  # Org B - where user is trying to access
+        mock_request = _create_mock_request(api_key_org_id=api_key_org_id)
+
+        # Act & Assert
+        permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+        with pytest.raises(HTTPException) as exc_info:
+            await permission_checker(
+                request=mock_request, org_id=target_org_id, user_id=user_id
+            )
+
+        assert exc_info.value.status_code == 403
+        assert (
+            'API key is not authorized for this organization' in exc_info.value.detail
+        )
+
+    @pytest.mark.asyncio
+    async def test_allows_access_for_legacy_api_key_without_org_binding(self):
+        """
+        GIVEN: Legacy API key without org_id binding (org_id is None)
+        WHEN: Permission checker is called
+        THEN: Falls through to normal permission check (backward compatible)
+        """
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request(api_key_org_id=None)
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        # Act & Assert
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_role),
+        ):
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_allows_access_for_cookie_auth_without_api_key_org_id(self):
+        """
+        GIVEN: Cookie-based authentication (no api_key_org_id in user_auth)
+        WHEN: Permission checker is called
+        THEN: Falls through to normal permission check
+        """
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request(api_key_org_id=None)
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        # Act & Assert
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=mock_role),
+        ):
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_logs_warning_on_api_key_org_mismatch(self):
+        """
+        GIVEN: API key org_id doesn't match target org_id
+        WHEN: Permission checker is called
+        THEN: Warning is logged with org mismatch details
+        """
+        # Arrange
+        user_id = str(uuid4())
+        api_key_org_id = uuid4()
+        target_org_id = uuid4()
+        mock_request = _create_mock_request(api_key_org_id=api_key_org_id)
+
+        # Act & Assert
+        with patch('server.auth.authorization.logger') as mock_logger:
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            with pytest.raises(HTTPException):
+                await permission_checker(
+                    request=mock_request, org_id=target_org_id, user_id=user_id
+                )
+
+            mock_logger.warning.assert_called()
+            call_args = mock_logger.warning.call_args
+            assert call_args[1]['extra']['user_id'] == user_id
+            assert call_args[1]['extra']['api_key_org_id'] == str(api_key_org_id)
+            assert call_args[1]['extra']['target_org_id'] == str(target_org_id)
+
+
+class TestGetApiKeyOrgIdFromRequest:
+    """Tests for get_api_key_org_id_from_request helper function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_org_id_when_user_auth_has_api_key_org_id(self):
+        """
+        GIVEN: Request with user_auth that has api_key_org_id
+        WHEN: get_api_key_org_id_from_request is called
+        THEN: Returns the api_key_org_id
+        """
+        # Arrange
+        org_id = uuid4()
+        mock_request = _create_mock_request(api_key_org_id=org_id)
+
+        # Act
+        result = await get_api_key_org_id_from_request(mock_request)
+
+        # Assert
+        assert result == org_id
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_user_auth_has_no_api_key_org_id(self):
+        """
+        GIVEN: Request with user_auth that has no api_key_org_id (cookie auth)
+        WHEN: get_api_key_org_id_from_request is called
+        THEN: Returns None
+        """
+        # Arrange
+        mock_request = _create_mock_request(api_key_org_id=None)
+
+        # Act
+        result = await get_api_key_org_id_from_request(mock_request)
+
+        # Assert
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_user_auth_in_request(self):
+        """
+        GIVEN: Request without user_auth in state
+        WHEN: get_api_key_org_id_from_request is called
+        THEN: Returns None
+        """
+        # Arrange
+        mock_request = MagicMock()
+        mock_request.state.user_auth = None
+
+        # Act
+        result = await get_api_key_org_id_from_request(mock_request)
+
+        # Assert
+        assert result is None
+
+
+# =============================================================================
+# Tests for require_financial_data_access dependency
+# =============================================================================
+
+
+def _create_mock_request_with_email(api_key_org_id=None, user_email='user@example.com'):
+    """Helper to create a mock request with optional api_key_org_id and email."""
+    mock_request = MagicMock()
+    mock_user_auth = MagicMock()
+    # get_api_key_org_id is sync, not async
+    mock_user_auth.get_api_key_org_id.return_value = api_key_org_id
+    # get_user_email is async
+    mock_user_auth.get_user_email = AsyncMock(return_value=user_email)
+    mock_request.state.user_auth = mock_user_auth
+    return mock_request
+
+
+class TestRequireFinancialDataAccess:
+    """Tests for require_financial_data_access compound authorization dependency."""
+
+    @pytest.mark.asyncio
+    async def test_grants_access_for_openhands_email(self):
+        """
+        GIVEN: User with @openhands.dev email
+        WHEN: require_financial_data_access is called
+        THEN: Returns user_id (access granted)
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='admin@openhands.dev')
+
+        with patch(
+            'server.auth.authorization.get_user_auth',
+            AsyncMock(return_value=mock_request.state.user_auth),
+        ):
+            # Act
+            result = await require_financial_data_access(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+
+            # Assert
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_grants_access_for_owner_role(self):
+        """
+        GIVEN: User with owner role in organization (non-@openhands.dev email)
+        WHEN: require_financial_data_access is called
+        THEN: Returns user_id (access granted)
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='user@company.com')
+        mock_role = MagicMock()
+        mock_role.name = 'owner'
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_auth',
+                AsyncMock(return_value=mock_request.state.user_auth),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=mock_role),
+            ),
+        ):
+            # Act
+            result = await require_financial_data_access(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+
+            # Assert
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_grants_access_for_admin_role(self):
+        """
+        GIVEN: User with admin role in organization (non-@openhands.dev email)
+        WHEN: require_financial_data_access is called
+        THEN: Returns user_id (access granted)
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='user@company.com')
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_auth',
+                AsyncMock(return_value=mock_request.state.user_auth),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=mock_role),
+            ),
+        ):
+            # Act
+            result = await require_financial_data_access(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+
+            # Assert
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_denies_access_for_member_role_without_openhands_email(self):
+        """
+        GIVEN: User with member role (not admin/owner) and non-@openhands.dev email
+        WHEN: require_financial_data_access is called
+        THEN: Raises 403 Forbidden
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='user@company.com')
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_auth',
+                AsyncMock(return_value=mock_request.state.user_auth),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=mock_role),
+            ),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await require_financial_data_access(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
+
+            assert exc_info.value.status_code == 403
+            assert 'admins, owners, or OpenHands' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_denies_access_for_non_member(self):
+        """
+        GIVEN: User who is not a member of the organization
+        WHEN: require_financial_data_access is called
+        THEN: Raises 403 Forbidden
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email(user_email='user@company.com')
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_auth',
+                AsyncMock(return_value=mock_request.state.user_auth),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=None),
+            ),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await require_financial_data_access(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
+
+            assert exc_info.value.status_code == 403
+            assert 'not a member' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_denies_access_when_not_authenticated(self):
+        """
+        GIVEN: No user_id (not authenticated)
+        WHEN: require_financial_data_access is called
+        THEN: Raises 401 Unauthorized
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        org_id = uuid4()
+        mock_request = _create_mock_request_with_email()
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await require_financial_data_access(
+                request=mock_request, org_id=org_id, user_id=None
+            )
+
+        assert exc_info.value.status_code == 401
+        assert 'not authenticated' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_denies_access_when_api_key_org_mismatch(self):
+        """
+        GIVEN: API key created for Org A, but user tries to access Org B
+        WHEN: require_financial_data_access is called
+        THEN: Raises 403 Forbidden with org mismatch message
+        """
+        from server.auth.authorization import require_financial_data_access
+
+        # Arrange
+        user_id = str(uuid4())
+        api_key_org_id = uuid4()  # Org A
+        target_org_id = uuid4()  # Org B
+        mock_request = _create_mock_request_with_email(
+            api_key_org_id=api_key_org_id, user_email='admin@openhands.dev'
+        )
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await require_financial_data_access(
+                request=mock_request, org_id=target_org_id, user_id=user_id
+            )
+
+        assert exc_info.value.status_code == 403
+        assert 'API key is not authorized' in exc_info.value.detail

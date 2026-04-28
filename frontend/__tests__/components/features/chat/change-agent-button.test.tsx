@@ -12,7 +12,7 @@ vi.mock("#/hooks/use-unified-websocket-status", () => ({
 
 // Mock agent state
 vi.mock("#/hooks/use-agent-state", () => ({
-  useAgentState: () => ({ curAgentState: "IDLE" }),
+  useAgentState: () => ({ curAgentState: "IDLE", isArchived: false }),
 }));
 
 // Track invalidateQueries calls
@@ -31,7 +31,7 @@ vi.mock("@tanstack/react-query", async () => {
 
 // Mock the active conversation hook
 const mockConversationData = {
-  conversation_id: "parent-conversation-123",
+  id: "parent-conversation-123",
   sub_conversation_ids: [],
 };
 

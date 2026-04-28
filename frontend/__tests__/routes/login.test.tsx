@@ -73,6 +73,20 @@ vi.mock("#/hooks/use-invitation", () => ({
   useInvitation: () => useInvitationMock(),
 }));
 
+// Mock useAppMode hook - enable CTA by default (SaaS Cloud mode)
+vi.mock("#/hooks/use-app-mode", () => ({
+  useAppMode: () => ({
+    isOss: false,
+    isSaas: true,
+    isCloud: true,
+    isSelfHosted: false,
+    isEnterpriseSelfHosted: false,
+    isEnterpriseCloud: true,
+    appMode: "saas",
+    deploymentMode: "cloud",
+  }),
+}));
+
 const RouterStub = createRoutesStub([
   {
     Component: LoginPage,

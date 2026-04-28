@@ -8,6 +8,8 @@ interface BadgeInputProps {
   value: string[];
   placeholder?: string;
   onChange: (value: string[]) => void;
+  className?: string;
+  inputClassName?: string;
 }
 
 export function BadgeInput({
@@ -15,6 +17,8 @@ export function BadgeInput({
   value,
   placeholder,
   onChange,
+  className,
+  inputClassName,
 }: BadgeInputProps) {
   const [inputValue, setInputValue] = React.useState("");
 
@@ -45,6 +49,7 @@ export function BadgeInput({
       className={cn(
         "bg-tertiary border border-[#717888] rounded w-full p-2 placeholder:italic placeholder:text-tertiary-alt",
         "flex flex-wrap items-center gap-2",
+        className,
       )}
     >
       {value.map((badge, index) => (
@@ -69,7 +74,7 @@ export function BadgeInput({
         placeholder={value.length === 0 ? placeholder : ""}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        className="flex-grow outline-none bg-transparent"
+        className={cn("flex-grow outline-none bg-transparent", inputClassName)}
       />
     </div>
   );

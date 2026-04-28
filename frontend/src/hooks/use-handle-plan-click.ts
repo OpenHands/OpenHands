@@ -31,17 +31,13 @@ export const useHandlePlanClick = () => {
   // Restore subConversationTaskId from localStorage on conversation load
   // This handles the case where page was refreshed while sub-conversation creation was in progress
   useEffect(() => {
-    if (!conversation?.conversation_id) return;
+    if (!conversation?.id) return;
 
-    const storedState = getConversationState(conversation.conversation_id);
+    const storedState = getConversationState(conversation.id);
     if (storedState.subConversationTaskId && !subConversationTaskId) {
       setSubConversationTaskId(storedState.subConversationTaskId);
     }
-  }, [
-    conversation?.conversation_id,
-    subConversationTaskId,
-    setSubConversationTaskId,
-  ]);
+  }, [conversation?.id, subConversationTaskId, setSubConversationTaskId]);
 
   const handlePlanClick = useCallback(
     (event?: React.MouseEvent<HTMLButtonElement> | KeyboardEvent) => {
@@ -55,7 +51,7 @@ export const useHandlePlanClick = () => {
       if (
         (conversation?.sub_conversation_ids &&
           conversation.sub_conversation_ids.length > 0) ||
-        !conversation?.conversation_id ||
+        !conversation?.id ||
         subConversationTaskId
       ) {
         // Do nothing if any condition is true
@@ -65,7 +61,7 @@ export const useHandlePlanClick = () => {
       // Create a new sub-conversation if we have a current conversation ID
       createConversation(
         {
-          parentConversationId: conversation.conversation_id,
+          parentConversationId: conversation.id,
           agentType: "plan",
         },
         {
@@ -77,7 +73,7 @@ export const useHandlePlanClick = () => {
             if (data.v1_task_id) {
               setSubConversationTaskId(data.v1_task_id);
               // Persist to localStorage so it survives page refresh
-              setConversationState(conversation.conversation_id, {
+              setConversationState(conversation.id, {
                 subConversationTaskId: data.v1_task_id,
               });
             }

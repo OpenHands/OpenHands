@@ -2,10 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Provider } from "#/types/settings";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import {
-  getConversationVersionFromQueryCache,
   resumeV1ConversationSandbox,
-  startV0Conversation,
-  updateConversationStatusInCache,
+  updateConversationSandboxStatusInCache,
   invalidateConversationQueries,
 } from "./conversation-mutation-utils";
 
@@ -31,22 +29,7 @@ export const useUnifiedResumeConversationSandbox = () => {
     mutationFn: async (variables: {
       conversationId: string;
       providers?: Provider[];
-      version?: "V0" | "V1";
-    }) => {
-      // Use provided version or fallback to cache lookup
-      const version =
-        variables.version ||
-        getConversationVersionFromQueryCache(
-          queryClient,
-          variables.conversationId,
-        );
-
-      if (version === "V1") {
-        return resumeV1ConversationSandbox(variables.conversationId);
-      }
-
-      return startV0Conversation(variables.conversationId, variables.providers);
-    },
+    }) => resumeV1ConversationSandbox(variables.conversationId),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
       const previousConversations = queryClient.getQueryData([
@@ -71,10 +54,10 @@ export const useUnifiedResumeConversationSandbox = () => {
       // Clear error messages when starting/resuming conversation
       removeErrorMessage();
 
-      updateConversationStatusInCache(
+      updateConversationSandboxStatusInCache(
         queryClient,
         variables.conversationId,
-        "RUNNING",
+        "STARTING",
       );
     },
   });

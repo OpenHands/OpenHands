@@ -15,9 +15,9 @@ from server.auth.saas_user_auth import SaasUserAuth, token_manager
 from server.routes.auth import set_response_cookie
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite
 
+from openhands.app_server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
-from openhands.server.utils import config
+from openhands.server.shared import config
 
 
 class SetAuthCookieMiddleware:
@@ -180,6 +180,10 @@ class SetAuthCookieMiddleware:
 
         # Webhooks access is controlled using separate API keys
         if path.startswith('/api/v1/webhooks/'):
+            return False
+
+        # Service API uses its own authentication (X-Service-API-Key header)
+        if path.startswith('/api/service/'):
             return False
 
         is_mcp = path.startswith('/mcp')

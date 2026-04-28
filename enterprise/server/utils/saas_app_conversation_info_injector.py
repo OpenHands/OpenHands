@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
@@ -119,6 +119,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -141,6 +142,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         # Add sort order
@@ -198,6 +200,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ) -> int:
         """Count conversations matching the given filters with SAAS metadata."""
         query = (
@@ -220,6 +223,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             created_at__lt=created_at__lt,
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
+            sandbox_id__eq=sandbox_id__eq,
         )
 
         result = await self.db_session.execute(query)
@@ -234,10 +238,11 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
+        sandbox_id__eq: str | None = None,
     ):
         """Apply filters to query that includes SAAS metadata."""
         # Apply the same filters as the base class
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
                 StoredConversationMetadata.title.like(f'%{title__contains}%')
@@ -258,6 +263,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             conditions.append(
                 StoredConversationMetadata.last_updated_at < updated_at__lt
             )
+
+        if sandbox_id__eq is not None:
+            conditions.append(StoredConversationMetadata.sandbox_id == sandbox_id__eq)
 
         if conditions:
             query = query.where(*conditions)
@@ -334,33 +342,49 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         await super().save_app_conversation_info(info)
 
         # Get current user_id for SAAS metadata
+        # Fall back to info.created_by_user_id for webhook callbacks (which use ADMIN context)
         user_id_str = await self.user_context.get_user_id()
+        if not user_id_str and info.created_by_user_id:
+            user_id_str = info.created_by_user_id
         if user_id_str:
             # Convert string user_id to UUID
             user_id_uuid = UUID(user_id_str)
             user_query = select(User).where(User.id == user_id_uuid)
-            result = await self.db_session.execute(user_query)
-            user = result.scalar_one_or_none()
+            user_result = await self.db_session.execute(user_query)
+            user = user_result.scalar_one_or_none()
             assert user
+
+            # Determine org_id: prefer API key's org_id if authenticated via API key
+            org_id = user.current_org_id  # Default fallback
+            if hasattr(self.user_context, 'user_auth'):
+                user_auth = self.user_context.user_auth
+                if hasattr(user_auth, 'get_api_key_org_id'):
+                    api_key_org_id = user_auth.get_api_key_org_id()
+                    if api_key_org_id is not None:
+                        org_id = api_key_org_id
+
+            # Override with resolver org_id if set (from git org claim resolution)
+            resolver_org_id = getattr(self.user_context, 'resolver_org_id', None)
+            if resolver_org_id is not None:
+                org_id = resolver_org_id
 
             # Check if SAAS metadata already exists
             saas_query = select(StoredConversationMetadataSaas).where(
                 StoredConversationMetadataSaas.conversation_id == str(info.id)
             )
-            result = await self.db_session.execute(saas_query)
-            existing_saas_metadata = result.scalar_one_or_none()
+            saas_result = await self.db_session.execute(saas_query)
+            existing_saas_metadata = saas_result.scalar_one_or_none()
             assert existing_saas_metadata is None or (
                 existing_saas_metadata.user_id == user_id_uuid
-                and existing_saas_metadata.org_id == user.current_org_id
+                and existing_saas_metadata.org_id == org_id
             )
 
             if not existing_saas_metadata:
-                # Create new SAAS metadata
-                # Set org_id to user_id as specified in requirements
+                # Create new SAAS metadata with the determined org_id
                 saas_metadata = StoredConversationMetadataSaas(
                     conversation_id=str(info.id),
                     user_id=user_id_uuid,
-                    org_id=user.current_org_id,
+                    org_id=org_id,
                 )
                 self.db_session.add(saas_metadata)
 

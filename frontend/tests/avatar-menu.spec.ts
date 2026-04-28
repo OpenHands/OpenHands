@@ -13,6 +13,39 @@ import test, { expect } from "@playwright/test";
 test("avatar context menu stays open when moving cursor diagonally to menu", async ({
   page,
 }) => {
+  // Intercept GET /api/settings to return settings with a configured provider.
+  // In OSS mode, the user context menu only renders when providers are configured.
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          llm_model: "openhands/claude-opus-4-5-20251101",
+          llm_base_url: "",
+          agent: "CodeActAgent",
+          language: "en",
+          llm_api_key: null,
+          llm_api_key_set: false,
+          search_api_key_set: false,
+          confirmation_mode: false,
+          security_analyzer: "llm",
+          remote_runtime_resource_factor: 1,
+          provider_tokens_set: { github: "" },
+          enable_default_condenser: true,
+          condenser_max_size: 240,
+          enable_sound_notifications: false,
+          user_consents_to_analytics: false,
+          enable_proactive_conversation_starters: false,
+          enable_solvability_analysis: false,
+          max_budget_per_task: null,
+        }),
+      });
+    } else {
+      await route.continue();
+    }
+  });
+
   await page.goto("/");
 
   // Wait for the page to be fully loaded and check for AI config modal
@@ -36,7 +69,8 @@ test("avatar context menu stays open when moving cursor diagonally to menu", asy
   // intercept clicks when the mouse triggers group-hover state
   await userAvatar.click({ force: true });
 
-  const contextMenu = page.getByTestId("account-settings-context-menu");
+  // The context menu should appear via CSS group-hover
+  const contextMenu = page.getByTestId("user-context-menu");
   await expect(contextMenu).toBeVisible();
 
   const menuWrapper = contextMenu.locator("..");

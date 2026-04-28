@@ -1,33 +1,54 @@
 import { StepOption } from "./step-option";
+import { FormInput } from "./form-input";
 
 export interface Option {
   id: string;
   label: string;
 }
 
+export interface InputField {
+  id: string;
+  label: string;
+}
+
 interface StepContentProps {
-  options: Option[];
-  selectedOptionId: string | null;
+  options?: Option[];
+  inputFields?: InputField[];
+  selectedOptionIds: string[];
+  inputValues?: Record<string, string>;
   onSelectOption: (optionId: string) => void;
+  onInputChange?: (fieldId: string, value: string) => void;
 }
 
 export function StepContent({
   options,
-  selectedOptionId,
+  inputFields,
+  selectedOptionIds,
+  inputValues = {},
   onSelectOption,
+  onInputChange,
 }: StepContentProps) {
   return (
     <div
       data-testid="step-content"
       className="flex flex-col mt-8 mb-8 gap-[12px] w-full"
     >
-      {options.map((option) => (
+      {options?.map((option) => (
         <StepOption
           key={option.id}
           id={option.id}
           label={option.label}
-          selected={selectedOptionId === option.id}
+          selected={selectedOptionIds.includes(option.id)}
           onClick={() => onSelectOption(option.id)}
+        />
+      ))}
+      {inputFields?.map((field) => (
+        <FormInput
+          key={field.id}
+          id={field.id}
+          label={field.label}
+          value={inputValues[field.id] || ""}
+          onChange={(value) => onInputChange?.(field.id, value)}
         />
       ))}
     </div>

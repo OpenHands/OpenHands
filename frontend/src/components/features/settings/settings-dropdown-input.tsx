@@ -63,7 +63,7 @@ export function SettingsDropdownInput({
         aria-label={typeof label === "string" ? label : name}
         data-testid={testId}
         name={name}
-        defaultItems={items}
+        items={items}
         defaultSelectedKey={defaultSelectedKey}
         selectedKey={selectedKey}
         onSelectionChange={onSelectionChange}
@@ -76,12 +76,12 @@ export function SettingsDropdownInput({
         isRequired={required}
         className="w-full"
         classNames={{
-          popoverContent: "bg-tertiary rounded-xl border border-[#717888]",
+          popoverContent: "bg-tertiary rounded-xl",
         }}
         inputProps={{
           classNames: {
             inputWrapper: cn(
-              "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic",
+              "bg-tertiary border border-[#717888] h-10 w-full max-w-[680px] rounded-sm p-2 placeholder:italic",
               inputWrapperClassName,
             ),
             input: inputClassName,

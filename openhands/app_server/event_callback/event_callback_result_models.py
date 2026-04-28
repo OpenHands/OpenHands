@@ -5,7 +5,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
-from openhands.sdk.event.types import EventID
+from openhands.sdk.event import EventID
 
 
 class EventCallbackResultStatus(Enum):

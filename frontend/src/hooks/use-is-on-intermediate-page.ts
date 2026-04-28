@@ -1,6 +1,6 @@
 import { useLocation } from "react-router";
 
-const INTERMEDIATE_PAGE_PATHS = ["/accept-tos", "/onboarding"];
+const INTERMEDIATE_PAGE_PATHS = ["/accept-tos", "/information-request"];
 
 /**
  * Checks if the current page is an intermediate page.

@@ -7,14 +7,14 @@ from server.auth.token_manager import TokenManager
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabService
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabService
+from openhands.app_server.integrations.service_types import (
     ProviderType,
     RateLimitError,
     Repository,
     RequestMethod,
 )
+from openhands.core.logger import openhands_logger as logger
 from openhands.server.types import AppMode
 
 

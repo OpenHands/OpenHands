@@ -5,7 +5,7 @@ from integrations.types import SummaryExtractionTracker
 from jinja2 import Environment
 from storage.slack_user import SlackUser
 
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @dataclass
@@ -112,7 +112,6 @@ class SlackViewInterface(SlackMessageView, SummaryExtractionTracker, ABC):
     should_extract: bool
     send_summary_instruction: bool
     conversation_id: str
-    v1_enabled: bool
 
     @abstractmethod
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:

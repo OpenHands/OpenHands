@@ -1,359 +1,1529 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
-import LlmSettingsScreen from "#/routes/llm-settings";
+
+import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   MOCK_DEFAULT_USER_SETTINGS,
   resetTestHandlersMockSettings,
 } from "#/mocks/handlers";
-import * as AdvancedSettingsUtlls from "#/utils/has-advanced-settings-set";
-import * as ToastHandlers from "#/utils/custom-toast-handlers";
-import OptionService from "#/api/option-service/option-service.api";
+import LlmSettingsScreen, { clientLoader } from "#/routes/llm-settings";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import { Organization, OrganizationMember } from "#/types/org";
+import { Settings, SettingsValue } from "#/types/settings";
 
-// Mock react-router hooks
 const mockUseSearchParams = vi.fn();
-vi.mock("react-router", () => ({
-  useSearchParams: () => mockUseSearchParams(),
-}));
-
-// Mock useIsAuthed hook
-const mockUseIsAuthed = vi.fn();
-vi.mock("#/hooks/query/use-is-authed", () => ({
-  useIsAuthed: () => mockUseIsAuthed(),
-}));
-
-const renderLlmSettingsScreen = () =>
-  render(<LlmSettingsScreen />, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={new QueryClient()}>
-        {children}
-      </QueryClientProvider>
-    ),
-  });
-
-beforeEach(() => {
-  vi.resetAllMocks();
-  resetTestHandlersMockSettings();
-
-  // Default mock for useSearchParams - returns empty params
-  mockUseSearchParams.mockReturnValue([
-    {
-      get: () => null,
-    },
-    vi.fn(),
-  ]);
-
-  // Default mock for useIsAuthed - returns authenticated by default
-  mockUseIsAuthed.mockReturnValue({ data: true, isLoading: false });
+vi.mock("react-router", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-router")>("react-router");
+  return {
+    ...actual,
+    useSearchParams: () => mockUseSearchParams(),
+    useRevalidator: () => ({ revalidate: vi.fn() }),
+  };
 });
 
-describe("Content", () => {
-  describe("Basic form", () => {
-    it("should render the basic form by default", async () => {
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
+const mockUseConfig = vi.fn();
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => mockUseConfig(),
+}));
 
-      const basicFom = screen.getByTestId("llm-settings-form-basic");
-      within(basicFom).getByTestId("llm-provider-input");
-      within(basicFom).getByTestId("llm-model-input");
-      within(basicFom).getByTestId("llm-api-key-input");
-      within(basicFom).getByTestId("llm-api-key-help-anchor");
+function buildSettings(overrides: Partial<Settings> = {}): Settings {
+  return {
+    ...MOCK_DEFAULT_USER_SETTINGS,
+    ...overrides,
+    agent_settings: {
+      ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+      ...overrides.agent_settings,
+    },
+    agent_settings_schema:
+      overrides.agent_settings_schema ??
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema,
+  };
+}
+
+function buildOrganizationMember(
+  overrides: Partial<OrganizationMember> = {},
+): OrganizationMember {
+  return {
+    org_id: "1",
+    user_id: "99",
+    email: "owner@example.com",
+    role: "owner",
+    status: "active",
+    llm_api_key: "",
+    max_iterations: 20,
+    llm_model: "",
+    llm_base_url: "",
+    ...overrides,
+  };
+}
+
+function buildOrganization(
+  overrides: Partial<Organization> = {},
+): Organization {
+  return {
+    id: overrides.id ?? "1",
+    name: overrides.name ?? "Example Org",
+    contact_name: overrides.contact_name ?? "Example Contact",
+    contact_email: overrides.contact_email ?? "contact@example.com",
+    conversation_expiration: overrides.conversation_expiration ?? 30,
+    remote_runtime_resource_factor:
+      overrides.remote_runtime_resource_factor ?? 1,
+    billing_margin: overrides.billing_margin ?? 0,
+    enable_proactive_conversation_starters:
+      overrides.enable_proactive_conversation_starters ?? false,
+    sandbox_base_container_image:
+      overrides.sandbox_base_container_image ??
+      "ghcr.io/all-hands-ai/runtime:latest",
+    sandbox_runtime_container_image:
+      overrides.sandbox_runtime_container_image ??
+      "ghcr.io/all-hands-ai/runtime:latest",
+    org_version: overrides.org_version ?? 1,
+    search_api_key: overrides.search_api_key ?? null,
+    sandbox_api_key: overrides.sandbox_api_key ?? null,
+    max_budget_per_task: overrides.max_budget_per_task ?? 0,
+    enable_solvability_analysis: overrides.enable_solvability_analysis ?? false,
+    v1_enabled: overrides.v1_enabled ?? true,
+    credits: overrides.credits ?? 0,
+    is_personal: overrides.is_personal,
+    ...overrides,
+  };
+}
+
+function buildSettingsWithAdvancedToggle(
+  overrides: Partial<Settings> = {},
+): Settings {
+  const schema = structuredClone(
+    overrides.agent_settings_schema ??
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+  );
+  const llmSection = schema.sections.find((section) => section.key === "llm");
+
+  if (
+    llmSection &&
+    !llmSection.fields.some((field) => field.key === "llm.timeout")
+  ) {
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: null,
+      choices: [],
+      depends_on: [],
+      prominence: "major",
+      secret: false,
+      required: false,
     });
+  }
 
-    it("should render the default values if non exist", async () => {
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
+  return buildSettings({ ...overrides, agent_settings_schema: schema });
+}
 
-      const provider = screen.getByTestId("llm-provider-input");
-      const model = screen.getByTestId("llm-model-input");
-      const apiKey = screen.getByTestId("llm-api-key-input");
+async function selectProvider(providerLabel: "OpenHands" | "OpenAI") {
+  const providerInput = screen.getByTestId("llm-provider-input");
+  await userEvent.click(providerInput);
+  await userEvent.click(await screen.findByText(providerLabel));
+  await waitFor(() => {
+    expect(providerInput).toHaveValue(providerLabel);
+  });
+  return providerInput;
+}
 
-      await waitFor(() => {
-        expect(provider).toHaveValue("OpenHands");
-        expect(model).toHaveValue("claude-opus-4-5-20251101");
+async function selectModel(modelLabel: string) {
+  const modelInput = screen.getByTestId("llm-model-input");
+  await userEvent.click(modelInput);
+  await userEvent.click(await screen.findByText(modelLabel));
+  await waitFor(() => {
+    expect(modelInput).toHaveValue(modelLabel);
+  });
+  return modelInput;
+}
 
-        expect(apiKey).toHaveValue("");
-        expect(apiKey).toHaveProperty("placeholder", "");
-      });
+
+function getPayloadAgentSettings(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  return (payload.agent_settings_diff as Record<string, unknown>) ?? {};
+}
+
+function renderLlmSettingsScreen({
+  appMode = "oss",
+  organizationId = "1",
+  meData,
+  organizations,
+  scope = "personal",
+}: {
+  appMode?: "oss" | "saas";
+  organizationId?: string;
+  meData?: OrganizationMember;
+  organizations?: Organization[];
+  scope?: "personal" | "org";
+} = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+
+  useSelectedOrganizationStore.setState({ organizationId });
+  mockUseConfig.mockReturnValue({
+    data: { app_mode: appMode },
+    isLoading: false,
+  });
+
+  if (appMode === "saas") {
+    queryClient.setQueryData(["user", "authenticated", appMode], true);
+    queryClient.setQueryData(
+      ["organizations", organizationId, "me"],
+      meData ?? buildOrganizationMember({ org_id: organizationId }),
+    );
+    queryClient.setQueryData(["organizations"], {
+      items: organizations ?? [
+        buildOrganization({ id: organizationId, is_personal: false }),
+      ],
+      currentOrgId: organizationId,
     });
+  }
 
-    it("should render the existing settings values", async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      getSettingsSpy.mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
+  return render(<LlmSettingsScreen scope={scope} />, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  resetTestHandlersMockSettings();
+  mockUseSearchParams.mockReturnValue([{ get: () => null }, vi.fn()]);
+  mockUseConfig.mockReturnValue({
+    data: { app_mode: "oss" },
+    isLoading: false,
+  });
+  useSelectedOrganizationStore.setState({ organizationId: "1" });
+});
+
+describe("LlmSettingsScreen", () => {
+  it("renders the schema-driven basic LLM form in OSS mode", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
+    expect(screen.getByTestId("llm-provider-input")).toBeInTheDocument();
+    expect(screen.getByTestId("llm-model-input")).toBeInTheDocument();
+    expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+    expect(screen.getByTestId("save-button")).toBeInTheDocument();
+  });
+
+  it("opens advanced view when a custom advanced LLM base URL is already set", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
         llm_model: "openai/gpt-4o",
-        llm_api_key_set: true,
+        llm_base_url: "https://custom.example/v1",
+        agent_settings: {
+          llm: {
+            model: "openai/gpt-4o",
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+    expect(screen.getByTestId("llm-custom-model-input")).toBeInTheDocument();
+    expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
+  });
+
+  it("shows Advanced and All toggles in OSS mode for the default LLM route schema", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      screen.getByTestId("sdk-section-advanced-toggle"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("sdk-section-all-toggle")).toBeInTheDocument();
+  });
+
+  it("keeps Advanced visible but hides All in SaaS mode for the default LLM route schema", async () => {
+    vi.spyOn(
+      organizationService,
+      "getOrganizationSettings",
+    ).mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          llm: {
+            model: "openai/gpt-4o",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "saas", scope: "org" });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      screen.getByTestId("sdk-section-advanced-toggle"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-section-all-toggle"),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+
+    expect(screen.getByTestId("llm-settings-form-advanced")).toBeInTheDocument();
+    expect(screen.getByTestId("llm-custom-model-input")).toBeInTheDocument();
+    expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
+  });
+
+  it("uses schema defaults for custom-rendered advanced fields", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+    const baseUrlField = llmSection?.fields.find(
+      (field) => field.key === "llm.base_url",
+    );
+
+    if (!baseUrlField) {
+      throw new Error("Expected llm.base_url field in test schema");
+    }
+
+    baseUrlField.default = "https://schema.default/v1";
+    llmSection?.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "major",
+      secret: false,
+      required: false,
+    });
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_base_url: "",
+        agent_settings: {
+          llm: {
+            model: "openai/gpt-4o",
+          },
+        },
+        agent_settings_schema: schema,
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+
+    expect(screen.getByTestId("base-url-input")).toHaveValue(
+      "https://schema.default/v1",
+    );
+  });
+
+  it("does not render the agent field even when the schema includes it", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+      ],
+    });
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings_schema: schema,
+        agent_settings: {
+          agent: "BrowsingAgent",
+          llm: {
+            model: "openai/gpt-4o",
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+
+    expect(screen.queryByTestId("agent-input")).not.toBeInTheDocument();
+  });
+
+  it("uses the docs.openhands.dev domain for the API key help link", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        agent_settings: {
+          llm: {
+            model: "openai/gpt-4o",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    const helpLink = within(
+      screen.getByTestId("llm-settings-form-basic"),
+    ).getByTestId("llm-api-key-help-anchor");
+
+    expect(helpLink.querySelector("a")).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev/usage/local-setup#getting-an-api-key",
+    );
+  });
+
+  it("defaults to basic view on first visit when org settings use a bare OpenAI model with the default base URL", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+
+    if (!llmSection) {
+      throw new Error("Expected llm section in test schema");
+    }
+
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+      ],
+    });
+
+    vi.spyOn(
+      organizationService,
+      "getOrganizationSettings",
+    ).mockResolvedValue(
+      buildSettings({
+        llm_model: "gpt-4",
+        llm_base_url: "https://api.openai.com",
+        agent_settings_schema: schema,
+        agent_settings: {
+          agent: "CodeActAgent",
+          llm: {
+            model: "gpt-4",
+            base_url: "https://api.openai.com",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "saas", scope: "org" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("sdk-settings-llm.timeout"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("defaults to basic view on first personal SaaS visit even when effective settings include inherited org-only LLM fields", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+
+    if (!llmSection) {
+      throw new Error("Expected llm section in test schema");
+    }
+
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "gpt-4",
+        llm_base_url: "https://api.openai.com",
+        agent_settings_schema: schema,
+        agent_settings: {
+          agent: "CodeActAgent",
+          llm: {
+            model: "gpt-4",
+            base_url: "https://api.openai.com",
+            timeout: 60,
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "saas" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("sdk-settings-llm.timeout"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the API key input for OpenHands provider in SaaS mode", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderLlmSettingsScreen({ appMode: "saas" });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
+    expect(screen.getByTestId("openhands-api-key-help")).toBeInTheDocument();
+  });
+
+  it("shows the API key input for non-OpenHands providers in SaaS mode", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        agent_settings: { llm: { model: "openai/gpt-4o" } },
+      }),
+    );
+
+    renderLlmSettingsScreen({ appMode: "saas" });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+  });
+
+  it("keeps personal settings editable for team members in SaaS mode", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderLlmSettingsScreen({
+      appMode: "saas",
+      meData: buildOrganizationMember({ role: "member" }),
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(screen.getByTestId("save-button")).toBeInTheDocument();
+  });
+
+  describe("Contextual info messages", () => {
+    it("should show admin info message for admin user in team organization", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
+
+      renderLlmSettingsScreen({
+        appMode: "saas",
+        organizationId: "3",
+        meData: buildOrganizationMember({ org_id: "3", role: "admin" }),
+        organizations: [buildOrganization({ id: "3", is_personal: false })],
       });
 
-      renderLlmSettingsScreen();
+      expect(
+        await screen.findByTestId("llm-settings-info-message"),
+      ).toBeInTheDocument();
+    });
+
+    it("should show member info message for member user in team organization", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
+
+      renderLlmSettingsScreen({
+        appMode: "saas",
+        organizationId: "2",
+        meData: buildOrganizationMember({ org_id: "2", role: "member" }),
+        organizations: [buildOrganization({ id: "2", is_personal: false })],
+      });
+
+      expect(
+        await screen.findByTestId("llm-settings-info-message"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the personal info message for personal workspace in SaaS mode", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
+
+      renderLlmSettingsScreen({
+        appMode: "saas",
+        organizationId: "1",
+        meData: buildOrganizationMember({ org_id: "1", role: "owner" }),
+        organizations: [buildOrganization({ id: "1", is_personal: true })],
+      });
+
+      expect(
+        await screen.findByTestId("llm-settings-info-message"),
+      ).toBeInTheDocument();
+    });
+
+    it("should not show info message in OSS mode", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
+
+      renderLlmSettingsScreen({ appMode: "oss" });
+
       await screen.findByTestId("llm-settings-screen");
-
-      const provider = screen.getByTestId("llm-provider-input");
-      const model = screen.getByTestId("llm-model-input");
-      const apiKey = screen.getByTestId("llm-api-key-input");
-
-      await waitFor(() => {
-        expect(provider).toHaveValue("OpenAI");
-        expect(model).toHaveValue("gpt-4o");
-
-        expect(apiKey).toHaveValue("");
-        expect(apiKey).toHaveProperty("placeholder", "<hidden>");
-        expect(screen.getByTestId("set-indicator")).toBeInTheDocument();
-      });
+      expect(
+        screen.queryByTestId("llm-settings-info-message"),
+      ).not.toBeInTheDocument();
     });
   });
 
-  describe("Advanced form", () => {
-    it("should conditionally show security analyzer based on confirmation mode", async () => {
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      // Enable advanced mode first
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
-
-      const confirmation = screen.getByTestId(
-        "enable-confirmation-mode-switch",
-      );
-
-      // Initially confirmation mode is false, so security analyzer should not be visible
-      expect(confirmation).not.toBeChecked();
-      expect(
-        screen.queryByTestId("security-analyzer-input"),
-      ).not.toBeInTheDocument();
-
-      // Enable confirmation mode
-      await userEvent.click(confirmation);
-      expect(confirmation).toBeChecked();
-
-      // Security analyzer should now be visible
-      screen.getByTestId("security-analyzer-input");
-
-      // Disable confirmation mode again
-      await userEvent.click(confirmation);
-      expect(confirmation).not.toBeChecked();
-
-      // Security analyzer should be hidden again
-      expect(
-        screen.queryByTestId("security-analyzer-input"),
-      ).not.toBeInTheDocument();
-    });
-
-    it("should render the advanced form if the switch is toggled", async () => {
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      const basicForm = screen.getByTestId("llm-settings-form-basic");
-
-      expect(
-        screen.queryByTestId("llm-settings-form-advanced"),
-      ).not.toBeInTheDocument();
-      expect(basicForm).toBeInTheDocument();
-
-      await userEvent.click(advancedSwitch);
-
-      expect(
-        screen.queryByTestId("llm-settings-form-advanced"),
-      ).toBeInTheDocument();
-      expect(basicForm).not.toBeInTheDocument();
-
-      const advancedForm = screen.getByTestId("llm-settings-form-advanced");
-      within(advancedForm).getByTestId("llm-custom-model-input");
-      within(advancedForm).getByTestId("base-url-input");
-      within(advancedForm).getByTestId("llm-api-key-input");
-      within(advancedForm).getByTestId("llm-api-key-help-anchor-advanced");
-      within(advancedForm).getByTestId("agent-input");
-      within(advancedForm).getByTestId("enable-memory-condenser-switch");
-
-      await userEvent.click(advancedSwitch);
-      expect(
-        screen.queryByTestId("llm-settings-form-advanced"),
-      ).not.toBeInTheDocument();
-      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
-    });
-
-    it("should render the default advanced settings", async () => {
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      expect(advancedSwitch).not.toBeChecked();
-
-      await userEvent.click(advancedSwitch);
-
-      const model = screen.getByTestId("llm-custom-model-input");
-      const baseUrl = screen.getByTestId("base-url-input");
-      const apiKey = screen.getByTestId("llm-api-key-input");
-      const agent = screen.getByTestId("agent-input");
-      const condensor = screen.getByTestId("enable-memory-condenser-switch");
-
-      expect(model).toHaveValue("openhands/claude-opus-4-5-20251101");
-      expect(baseUrl).toHaveValue("");
-      expect(apiKey).toHaveValue("");
-      expect(apiKey).toHaveProperty("placeholder", "");
-      expect(agent).toHaveValue("CodeActAgent");
-      expect(condensor).toBeChecked();
-    });
-
-    it("should render the advanced form if existings settings are advanced", async () => {
-      const hasAdvancedSettingsSetSpy = vi.spyOn(
-        AdvancedSettingsUtlls,
-        "hasAdvancedSettingsSet",
-      );
-      hasAdvancedSettingsSetSpy.mockReturnValue(true);
-
-      renderLlmSettingsScreen();
-
-      await waitFor(() => {
-        const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-        expect(advancedSwitch).toBeChecked();
-        screen.getByTestId("llm-settings-form-advanced");
-      });
-    });
-
-    it("should render existing advanced settings correctly", async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      getSettingsSpy.mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
+  it("submits basic form values through SDK setting keys", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
         llm_model: "openai/gpt-4o",
-        llm_base_url: "https://api.openai.com/v1/chat/completions",
-        llm_api_key_set: true,
-        agent: "CoActAgent",
-        confirmation_mode: true,
-        enable_default_condenser: false,
-        security_analyzer: "none",
+        agent_settings: { llm: { model: "openai/gpt-4o" } },
+      }),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({ api_key: "test-api-key" }),
+          }),
+        }),
+      );
+    });
+  });
+
+  it("resets hidden advanced and all settings back to defaults when saving basic view", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+
+    if (!llmSection) {
+      throw new Error("Expected llm section in test schema");
+    }
+
+    const baseUrlField = llmSection.fields.find(
+      (field) => field.key === "llm.base_url",
+    );
+    if (!baseUrlField) {
+      throw new Error("Expected llm.base_url field in test schema");
+    }
+    baseUrlField.default = "https://schema.default/v1";
+
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+      ],
+    });
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings_schema: schema,
+        agent_settings: {
+          agent: "BrowsingAgent",
+          llm: {
+            model: "openai/gpt-4o",
+            base_url: "https://custom.example/v1",
+            timeout: 90,
+          },
+        },
+      }),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+    await userEvent.click(screen.getByTestId("sdk-section-basic-toggle"));
+
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({
+              api_key: "test-api-key",
+              base_url: "https://schema.default/v1",
+              timeout: 30,
+            }),
+          }),
+        }),
+      );
+    });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(getPayloadAgentSettings(payload)).not.toHaveProperty("agent");
+  });
+
+  it("preserves existing MCP settings when saving the LLM page", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const existingMcpConfig = {
+      mcpServers: {
+        tavily: {
+          transport: "http",
+          url: "https://example.com/mcp",
+        },
+      },
+    };
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+        {
+          key: "mcp_config",
+          label: "MCP Config",
+          section: "general",
+          section_label: "General",
+          value_type: "object",
+          default: null,
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+      ],
+    });
+
+    let persistedSettings = buildSettingsWithAdvancedToggle({
+      llm_model: "openai/gpt-4o",
+      agent_settings_schema: schema,
+      agent_settings: {
+        agent: "BrowsingAgent",
+        llm: {
+          model: "openai/gpt-4o",
+        },
+        mcp_config: existingMcpConfig,
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation(async (payload) => {
+        const payloadAgentSettings = getPayloadAgentSettings(payload);
+
+        const nextAgentSettings: NonNullable<Settings["agent_settings"]> = {
+          ...(persistedSettings.agent_settings ?? {}),
+          ...(payloadAgentSettings as Record<string, SettingsValue>),
+          llm: {
+            ...((persistedSettings.agent_settings?.llm as Record<
+              string,
+              SettingsValue
+            >) ?? {}),
+            ...((payloadAgentSettings.llm as Record<string, SettingsValue>) ?? {}),
+          },
+        };
+
+        persistedSettings = buildSettingsWithAdvancedToggle({
+          ...persistedSettings,
+          agent_settings_schema: schema,
+          agent_settings: nextAgentSettings,
+        });
+
+        return true;
       });
 
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
+    renderLlmSettingsScreen({ appMode: "oss" });
 
-      const model = screen.getByTestId("llm-custom-model-input");
-      const baseUrl = screen.getByTestId("base-url-input");
-      const apiKey = screen.getByTestId("llm-api-key-input");
-      const agent = screen.getByTestId("agent-input");
-      const confirmation = screen.getByTestId(
-        "enable-confirmation-mode-switch",
-      );
-      const condensor = screen.getByTestId("enable-memory-condenser-switch");
-      const securityAnalyzer = screen.getByTestId("security-analyzer-input");
+    await screen.findByTestId("llm-settings-form-basic");
 
-      await waitFor(() => {
-        expect(model).toHaveValue("openai/gpt-4o");
-        expect(baseUrl).toHaveValue(
-          "https://api.openai.com/v1/chat/completions",
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(getPayloadAgentSettings(payload)).not.toHaveProperty("mcp_config");
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    expect(persistedSettings.agent_settings?.mcp_config).toEqual(
+      existingMcpConfig,
+    );
+  });
+
+  it("does not include search API key updates when saving basic LLM settings", async () => {
+    let persistedSettings = buildSettingsWithAdvancedToggle({
+      llm_model: "openai/gpt-4o",
+      search_api_key: "tavily-key",
+      search_api_key_set: true,
+      agent_settings: {
+        llm: {
+          model: "openai/gpt-4o",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation(async (payload) => {
+        const nextAgentSettings = {
+          ...persistedSettings.agent_settings,
+        } as NonNullable<Settings["agent_settings"]>;
+
+        const payloadAgentSettings = getPayloadAgentSettings(payload);
+        Object.assign(
+          nextAgentSettings,
+          payloadAgentSettings as Record<string, SettingsValue>,
         );
-        expect(apiKey).toHaveValue("");
-        expect(apiKey).toHaveProperty("placeholder", "<hidden>");
-        expect(agent).toHaveValue("CoActAgent");
-        expect(confirmation).toBeChecked();
-        expect(condensor).not.toBeChecked();
-        expect(securityAnalyzer).toHaveValue("SETTINGS$SECURITY_ANALYZER_NONE");
+        nextAgentSettings.llm = {
+          ...((persistedSettings.agent_settings?.llm as Record<
+            string,
+            SettingsValue
+          >) ?? {}),
+          ...((payloadAgentSettings.llm as Record<string, SettingsValue>) ?? {}),
+        };
+
+        persistedSettings = buildSettings({
+          ...persistedSettings,
+          agent_settings: nextAgentSettings,
+        });
+
+        return true;
       });
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({ api_key: "test-api-key" }),
+          }),
+        }),
+      );
     });
 
-    it("should omit invariant and custom analyzers when V1 is enabled", async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      getSettingsSpy.mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        confirmation_mode: true,
-        security_analyzer: "llm",
-        v1_enabled: true,
-      });
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload).not.toHaveProperty("search_api_key");
 
-      const getSecurityAnalyzersSpy = vi.spyOn(
-        OptionService,
-        "getSecurityAnalyzers",
-      );
-      getSecurityAnalyzersSpy.mockResolvedValue([
-        "llm",
-        "none",
-        "invariant",
-        "custom",
-      ]);
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
 
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
-
-      const securityAnalyzer = await screen.findByTestId(
-        "security-analyzer-input",
-      );
-      await userEvent.click(securityAnalyzer);
-
-      // Only llm + none should be available when V1 is enabled
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
+    await waitFor(() => {
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
       expect(
-        screen.queryByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
+        screen.queryByTestId("llm-settings-form-advanced"),
       ).not.toBeInTheDocument();
-      expect(screen.queryByText("custom")).not.toBeInTheDocument();
-    });
-
-    it("should include invariant analyzer option when V1 is disabled", async () => {
-      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-      getSettingsSpy.mockResolvedValue({
-        ...MOCK_DEFAULT_USER_SETTINGS,
-        confirmation_mode: true,
-        security_analyzer: "llm",
-        v1_enabled: false,
-      });
-
-      const getSecurityAnalyzersSpy = vi.spyOn(
-        OptionService,
-        "getSecurityAnalyzers",
-      );
-      getSecurityAnalyzersSpy.mockResolvedValue(["llm", "none", "invariant"]);
-
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
-
-      const securityAnalyzer = await screen.findByTestId(
-        "security-analyzer-input",
-      );
-      await userEvent.click(securityAnalyzer);
-
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
-      ).toBeInTheDocument();
     });
   });
 
-  it.todo("should render an indicator if the llm api key is set");
+  it("keeps the basic view after save on SaaS personal settings when an inherited org search API key remains set on refetch", async () => {
+    let persistedSettings = buildSettingsWithAdvancedToggle({
+      llm_model: "openai/gpt-4o",
+      search_api_key_set: true,
+      agent_settings: {
+        llm: {
+          model: "openai/gpt-4o",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation(async (payload) => {
+        const nextAgentSettings = {
+          ...persistedSettings.agent_settings,
+        } as NonNullable<Settings["agent_settings"]>;
+
+        const payloadAgentSettings = getPayloadAgentSettings(payload);
+        Object.assign(
+          nextAgentSettings,
+          payloadAgentSettings as Record<string, SettingsValue>,
+        );
+        nextAgentSettings.llm = {
+          ...((persistedSettings.agent_settings?.llm as Record<
+            string,
+            SettingsValue
+          >) ?? {}),
+          ...((payloadAgentSettings.llm as Record<string, SettingsValue>) ?? {}),
+        };
+
+        persistedSettings = buildSettingsWithAdvancedToggle({
+          ...persistedSettings,
+          search_api_key: "",
+          search_api_key_set: true,
+          agent_settings: nextAgentSettings,
+        });
+
+        return true;
+      });
+
+    renderLlmSettingsScreen({ appMode: "saas" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({ api_key: "test-api-key" }),
+          }),
+        }),
+      );
+    });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload).not.toHaveProperty("search_api_key");
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not clear the hidden search API key on SaaS org settings when saving basic view", async () => {
+    let persistedSettings = buildSettingsWithAdvancedToggle({
+      llm_model: "openai/gpt-4o",
+      llm_base_url: "https://custom.example/v1",
+      search_api_key: "****1234",
+      agent_settings: {
+        llm: {
+          model: "openai/gpt-4o",
+          base_url: "https://custom.example/v1",
+        },
+      },
+    });
+
+    const getOrganizationSettingsSpy = vi
+      .spyOn(organizationService, "getOrganizationSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    const saveOrganizationSettingsSpy = vi
+      .spyOn(organizationService, "saveOrganizationSettings")
+      .mockImplementation(async ({ settings }) => {
+        const nextAgentSettings = {
+          ...persistedSettings.agent_settings,
+        } as NonNullable<Settings["agent_settings"]>;
+
+        const agentSettingsDiff = settings.agent_settings_diff as
+          | Settings["agent_settings"]
+          | undefined;
+        if (agentSettingsDiff) {
+          Object.assign(nextAgentSettings, agentSettingsDiff);
+        }
+
+        Object.entries(settings).forEach(([key, value]) => {
+          if (key.includes(".") || key === "agent" || key === "mcp_config") {
+            nextAgentSettings[key] = value as SettingsValue;
+          }
+        });
+
+        persistedSettings = buildSettingsWithAdvancedToggle({
+          ...persistedSettings,
+          llm_base_url: "",
+          search_api_key: "****1234",
+          agent_settings: nextAgentSettings,
+        });
+
+        return persistedSettings;
+      });
+
+    renderLlmSettingsScreen({ appMode: "saas", scope: "org" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+    await userEvent.click(screen.getByTestId("sdk-section-basic-toggle"));
+
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveOrganizationSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            agent_settings_diff: expect.objectContaining({
+              llm: expect.objectContaining({
+                api_key: "test-api-key",
+                base_url: null,
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    const payload = saveOrganizationSettingsSpy.mock.calls[0]?.at(0) as {
+      settings: Record<string, unknown>;
+    };
+    expect(payload.settings).not.toHaveProperty("search_api_key");
+
+    await waitFor(() => {
+      expect(getOrganizationSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps the basic view after save when a stale legacy base URL lingers on refetch", async () => {
+    let persistedSettings = buildSettingsWithAdvancedToggle({
+      llm_base_url: "https://stale.example/v1",
+      agent_settings: {
+        llm: {
+          base_url: "https://stale.example/v1",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation(async (payload) => {
+        const nextAgentSettings = {
+          ...persistedSettings.agent_settings,
+        } as NonNullable<Settings["agent_settings"]>;
+
+        const payloadAgentSettings = getPayloadAgentSettings(payload);
+        Object.assign(
+          nextAgentSettings,
+          payloadAgentSettings as Record<string, SettingsValue>,
+        );
+        nextAgentSettings.llm = {
+          ...((persistedSettings.agent_settings?.llm as Record<
+            string,
+            SettingsValue
+          >) ?? {}),
+          ...((payloadAgentSettings.llm as Record<string, SettingsValue>) ?? {}),
+        };
+
+        persistedSettings = buildSettingsWithAdvancedToggle({
+          ...persistedSettings,
+          agent_settings: nextAgentSettings,
+        });
+
+        return true;
+      });
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+    await userEvent.click(screen.getByTestId("sdk-section-basic-toggle"));
+
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({
+              api_key: "test-api-key",
+              base_url: null,
+            }),
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps the basic view after saving a basic model change when refetch includes a provider base URL", async () => {
+    let persistedSettings = buildSettingsWithAdvancedToggle();
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation(async (payload) => {
+        const nextAgentSettings = {
+          ...persistedSettings.agent_settings,
+        } as NonNullable<Settings["agent_settings"]>;
+
+        const payloadAgentSettings = getPayloadAgentSettings(payload);
+        Object.assign(
+          nextAgentSettings,
+          payloadAgentSettings as Record<string, SettingsValue>,
+        );
+        nextAgentSettings.llm = {
+          ...((persistedSettings.agent_settings?.llm as Record<
+            string,
+            SettingsValue
+          >) ?? {}),
+          ...((payloadAgentSettings.llm as Record<string, SettingsValue>) ?? {}),
+        };
+
+        persistedSettings = buildSettingsWithAdvancedToggle({
+          ...persistedSettings,
+          llm_model: "openai/gpt-4o",
+          llm_base_url: "https://api.openai.com/v1",
+          agent_settings: {
+            llm: {
+              model: "openai/gpt-4o",
+              base_url: "https://api.openai.com/v1",
+            },
+          },
+        });
+
+        return true;
+      });
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    await selectProvider("OpenAI");
+    await selectModel("gpt-4o");
+    await userEvent.type(
+      await screen.findByTestId("llm-api-key-input"),
+      "test-api-key",
+    );
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({
+              model: "openai/gpt-4o",
+              api_key: "test-api-key",
+            }),
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not render the search API key input in advanced LLM settings", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle(),
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("llm-settings-form-advanced"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("search-api-key-input"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not reveal all-only fields after save when refetch includes an MCP-owned search API key", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+
+    if (!llmSection) {
+      throw new Error("Expected llm section in test schema");
+    }
+
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+
+    schema.sections.push({
+      key: "general",
+      label: "General",
+      fields: [
+        {
+          key: "agent",
+          label: "Agent",
+          section: "general",
+          section_label: "General",
+          value_type: "string",
+          default: "CodeActAgent",
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: true,
+        },
+      ],
+    });
+
+    let persistedSettings = buildSettings({
+      agent_settings_schema: schema,
+      search_api_key: "",
+      search_api_key_set: false,
+      agent_settings: {
+        llm: {
+          model: "openhands/claude-opus-4-5-20251101",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(
+      async (payload) => {
+        persistedSettings = buildSettings({
+          agent_settings_schema: schema,
+          search_api_key: "tavily-key",
+          search_api_key_set: true,
+          agent_settings: {
+            llm: {
+              model: "openhands/claude-opus-4-5-20251101",
+            },
+          },
+        });
+
+        expect(payload).not.toHaveProperty("search_api_key");
+        return true;
+      },
+    );
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    await userEvent.click(screen.getByTestId("sdk-section-all-toggle"));
+    expect(screen.getByTestId("sdk-settings-llm.timeout")).toBeInTheDocument();
+
+    const apiKeyInput = await screen.findByTestId("llm-api-key-input");
+    await userEvent.type(apiKeyInput, "test-api-key");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("sdk-settings-llm.timeout"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not reveal all-only fields after save when refetch returns a litellm_proxy model with the managed proxy base URL", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const llmSection = schema.sections.find((section) => section.key === "llm");
+
+    if (!llmSection) {
+      throw new Error("Expected llm section in test schema");
+    }
+
+    llmSection.fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    });
+
+    let persistedSettings = buildSettings({
+      agent_settings_schema: schema,
+      agent_settings: {
+        llm: {
+          model: "openhands/claude-opus-4-5-20251101",
+        },
+      },
+    });
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(async () => structuredClone(persistedSettings));
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(async () => {
+      persistedSettings = buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          llm: {
+            model: "litellm_proxy/claude-opus-4-5-20251101",
+            base_url: "https://llm-proxy.app.all-hands.dev",
+          },
+        },
+      });
+
+      return true;
+    });
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("sdk-settings-llm.timeout"),
+    ).not.toBeInTheDocument();
+
+    await userEvent.type(
+      await screen.findByTestId("llm-api-key-input"),
+      "test-api-key",
+    );
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(getSettingsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("sdk-settings-llm.timeout"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("submits advanced form values through SDK setting keys", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        agent_settings: {
+          llm: {
+            model: "openai/gpt-4o",
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderLlmSettingsScreen({ appMode: "oss" });
+
+    const baseUrlInput = await screen.findByTestId("base-url-input");
+    await userEvent.type(baseUrlInput, "/extra");
+
+    await waitFor(() => {
+      expect(baseUrlInput).toHaveValue("https://custom.example/v1/extra");
+      expect(screen.getByTestId("save-button")).not.toBeDisabled();
+    });
+
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({
+              base_url: "https://custom.example/v1/extra",
+            }),
+          }),
+        }),
+      );
+    });
+  });
 
   describe("API key visibility in Basic Settings", () => {
     it("should hide API key input when SaaS mode is enabled and OpenHands provider is selected", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return app_mode for these tests
-      getConfigSpy.mockResolvedValue({
-        app_mode: "saas",
-      });
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
 
-      renderLlmSettingsScreen();
+      renderLlmSettingsScreen({ appMode: "saas" });
       await screen.findByTestId("llm-settings-screen");
 
       const basicForm = screen.getByTestId("llm-settings-form-basic");
-      const provider = within(basicForm).getByTestId("llm-provider-input");
+      const providerInput = within(basicForm).getByTestId("llm-provider-input");
 
-      // Verify OpenHands is selected by default
       await waitFor(() => {
-        expect(provider).toHaveValue("OpenHands");
+        expect(providerInput).toHaveValue("OpenHands");
       });
 
-      // API key input should not be visible when OpenHands provider is selected in SaaS mode
       expect(
         within(basicForm).queryByTestId("llm-api-key-input"),
       ).not.toBeInTheDocument();
@@ -363,28 +1533,23 @@ describe("Content", () => {
     });
 
     it("should show API key input when SaaS mode is enabled and non-OpenHands provider is selected", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return app_mode for these tests
-      getConfigSpy.mockResolvedValue({
-        app_mode: "saas",
-      });
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openai/gpt-4o",
+          agent_settings: { llm: { model: "openai/gpt-4o" } },
+        }),
+      );
 
-      renderLlmSettingsScreen();
+      renderLlmSettingsScreen({ appMode: "saas" });
       await screen.findByTestId("llm-settings-screen");
 
       const basicForm = screen.getByTestId("llm-settings-form-basic");
-      const provider = within(basicForm).getByTestId("llm-provider-input");
-
-      // Select OpenAI provider
-      await userEvent.click(provider);
-      const providerOption = screen.getByText("OpenAI");
-      await userEvent.click(providerOption);
+      const providerInput = within(basicForm).getByTestId("llm-provider-input");
 
       await waitFor(() => {
-        expect(provider).toHaveValue("OpenAI");
+        expect(providerInput).toHaveValue("OpenAI");
       });
 
-      // API key input should be visible when non-OpenHands provider is selected in SaaS mode
       expect(
         within(basicForm).getByTestId("llm-api-key-input"),
       ).toBeInTheDocument();
@@ -394,24 +1559,20 @@ describe("Content", () => {
     });
 
     it("should show API key input when OSS mode is enabled and OpenHands provider is selected", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return app_mode for these tests
-      getConfigSpy.mockResolvedValue({
-        app_mode: "oss",
-      });
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
 
-      renderLlmSettingsScreen();
+      renderLlmSettingsScreen({ appMode: "oss" });
       await screen.findByTestId("llm-settings-screen");
 
       const basicForm = screen.getByTestId("llm-settings-form-basic");
-      const provider = within(basicForm).getByTestId("llm-provider-input");
+      const providerInput = within(basicForm).getByTestId("llm-provider-input");
 
-      // Verify OpenHands is selected by default
       await waitFor(() => {
-        expect(provider).toHaveValue("OpenHands");
+        expect(providerInput).toHaveValue("OpenHands");
       });
 
-      // API key input should be visible when OSS mode is enabled (even with OpenHands provider)
       expect(
         within(basicForm).getByTestId("llm-api-key-input"),
       ).toBeInTheDocument();
@@ -421,28 +1582,23 @@ describe("Content", () => {
     });
 
     it("should show API key input when OSS mode is enabled and non-OpenHands provider is selected", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return app_mode for these tests
-      getConfigSpy.mockResolvedValue({
-        app_mode: "oss",
-      });
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openai/gpt-4o",
+          agent_settings: { llm: { model: "openai/gpt-4o" } },
+        }),
+      );
 
-      renderLlmSettingsScreen();
+      renderLlmSettingsScreen({ appMode: "oss" });
       await screen.findByTestId("llm-settings-screen");
 
       const basicForm = screen.getByTestId("llm-settings-form-basic");
-      const provider = within(basicForm).getByTestId("llm-provider-input");
-
-      // Select OpenAI provider
-      await userEvent.click(provider);
-      const providerOption = screen.getByText("OpenAI");
-      await userEvent.click(providerOption);
+      const providerInput = within(basicForm).getByTestId("llm-provider-input");
 
       await waitFor(() => {
-        expect(provider).toHaveValue("OpenAI");
+        expect(providerInput).toHaveValue("OpenAI");
       });
 
-      // API key input should be visible when OSS mode is enabled
       expect(
         within(basicForm).getByTestId("llm-api-key-input"),
       ).toBeInTheDocument();
@@ -452,42 +1608,25 @@ describe("Content", () => {
     });
 
     it("should hide API key input when switching from non-OpenHands to OpenHands provider in SaaS mode", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return app_mode for these tests
-      getConfigSpy.mockResolvedValue({
-        app_mode: "saas",
-      });
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openai/gpt-4o",
+          agent_settings: { llm: { model: "openai/gpt-4o" } },
+        }),
+      );
 
-      renderLlmSettingsScreen();
+      renderLlmSettingsScreen({ appMode: "saas" });
       await screen.findByTestId("llm-settings-screen");
 
       const basicForm = screen.getByTestId("llm-settings-form-basic");
-      const provider = within(basicForm).getByTestId("llm-provider-input");
-
-      // Start with OpenAI provider
-      await userEvent.click(provider);
-      const openAIOption = screen.getByText("OpenAI");
-      await userEvent.click(openAIOption);
-
       await waitFor(() => {
-        expect(provider).toHaveValue("OpenAI");
+        expect(
+          within(basicForm).getByTestId("llm-api-key-input"),
+        ).toBeInTheDocument();
       });
 
-      // API key input should be visible with OpenAI
-      expect(
-        within(basicForm).getByTestId("llm-api-key-input"),
-      ).toBeInTheDocument();
+      await selectProvider("OpenHands");
 
-      // Switch to OpenHands provider
-      await userEvent.click(provider);
-      const openHandsOption = screen.getByText("OpenHands");
-      await userEvent.click(openHandsOption);
-
-      await waitFor(() => {
-        expect(provider).toHaveValue("OpenHands");
-      });
-
-      // API key input should now be hidden
       expect(
         within(basicForm).queryByTestId("llm-api-key-input"),
       ).not.toBeInTheDocument();
@@ -497,38 +1636,20 @@ describe("Content", () => {
     });
 
     it("should show API key input when switching from OpenHands to non-OpenHands provider in SaaS mode", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return app_mode for these tests
-      getConfigSpy.mockResolvedValue({
-        app_mode: "saas",
-      });
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
 
-      renderLlmSettingsScreen();
+      renderLlmSettingsScreen({ appMode: "saas" });
       await screen.findByTestId("llm-settings-screen");
 
       const basicForm = screen.getByTestId("llm-settings-form-basic");
-      const provider = within(basicForm).getByTestId("llm-provider-input");
-
-      // Verify OpenHands is selected by default
-      await waitFor(() => {
-        expect(provider).toHaveValue("OpenHands");
-      });
-
-      // API key input should be hidden with OpenHands
       expect(
         within(basicForm).queryByTestId("llm-api-key-input"),
       ).not.toBeInTheDocument();
 
-      // Switch to OpenAI provider
-      await userEvent.click(provider);
-      const openAIOption = screen.getByText("OpenAI");
-      await userEvent.click(openAIOption);
+      await selectProvider("OpenAI");
 
-      await waitFor(() => {
-        expect(provider).toHaveValue("OpenAI");
-      });
-
-      // API key input should now be visible
       expect(
         within(basicForm).getByTestId("llm-api-key-input"),
       ).toBeInTheDocument();
@@ -537,632 +1658,323 @@ describe("Content", () => {
       ).toBeInTheDocument();
     });
   });
-});
 
-describe("Form submission", () => {
-  it("should submit the basic form with the correct values", async () => {
-    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+  describe("Role-based permissions", () => {
+    describe("Member role (personal overrides allowed)", () => {
+      it("should keep all input fields enabled in basic view", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettings({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
 
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "2",
+          meData: buildOrganizationMember({ org_id: "2", role: "member" }),
+        });
 
-    const provider = screen.getByTestId("llm-provider-input");
-    const model = screen.getByTestId("llm-model-input");
-    const apiKey = screen.getByTestId("llm-api-key-input");
+        await screen.findByTestId("llm-settings-screen");
+        const basicForm = screen.getByTestId("llm-settings-form-basic");
+        const providerInput =
+          within(basicForm).getByTestId("llm-provider-input");
+        const modelInput = within(basicForm).getByTestId("llm-model-input");
+        const apiKeyInput = within(basicForm).getByTestId("llm-api-key-input");
 
-    // select provider
-    await userEvent.click(provider);
-    const providerOption = screen.getByText("OpenAI");
-    await userEvent.click(providerOption);
-    expect(provider).toHaveValue("OpenAI");
+        await waitFor(() => {
+          expect(providerInput).toBeEnabled();
+          expect(modelInput).toBeEnabled();
+          expect(apiKeyInput).toBeEnabled();
+        });
+      });
 
-    // enter api key
-    await userEvent.type(apiKey, "test-api-key");
+      it("should render the submit button", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettings(),
+        );
 
-    // select model
-    await userEvent.click(model);
-    const modelOption = screen.getByText("gpt-4o");
-    await userEvent.click(modelOption);
-    expect(model).toHaveValue("gpt-4o");
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "2",
+          meData: buildOrganizationMember({ org_id: "2", role: "member" }),
+        });
 
-    const submitButton = screen.getByTestId("submit-button");
-    await userEvent.click(submitButton);
+        await screen.findByTestId("llm-settings-screen");
+        expect(screen.getByTestId("save-button")).toBeInTheDocument();
+      });
 
-    expect(saveSettingsSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        llm_model: "openai/gpt-4o",
-        llm_api_key: "test-api-key",
-      }),
-    );
-  });
+      it("should keep the advanced/basic toggle enabled for members", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettingsWithAdvancedToggle(),
+        );
 
-  it("should submit the advanced form with the correct values", async () => {
-    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "2",
+          meData: buildOrganizationMember({ org_id: "2", role: "member" }),
+        });
 
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
+        await screen.findByTestId("llm-settings-screen");
+        const basicToggle = screen.getByTestId("sdk-section-basic-toggle");
+        const advancedToggle = screen.getByTestId(
+          "sdk-section-advanced-toggle",
+        );
 
-    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-    await userEvent.click(advancedSwitch);
-
-    const model = screen.getByTestId("llm-custom-model-input");
-    const baseUrl = screen.getByTestId("base-url-input");
-    const apiKey = screen.getByTestId("llm-api-key-input");
-    const agent = screen.getByTestId("agent-input");
-    const confirmation = screen.getByTestId("enable-confirmation-mode-switch");
-    const condensor = screen.getByTestId("enable-memory-condenser-switch");
-
-    // enter custom model
-    await userEvent.clear(model);
-    await userEvent.type(model, "openai/gpt-4o");
-    expect(model).toHaveValue("openai/gpt-4o");
-
-    // enter base url
-    await userEvent.type(baseUrl, "https://api.openai.com/v1/chat/completions");
-    expect(baseUrl).toHaveValue("https://api.openai.com/v1/chat/completions");
-
-    // enter api key
-    await userEvent.type(apiKey, "test-api-key");
-
-    // toggle confirmation mode
-    await userEvent.click(confirmation);
-    expect(confirmation).toBeChecked();
-
-    // toggle memory condensor
-    await userEvent.click(condensor);
-    expect(condensor).not.toBeChecked();
-
-    // select agent
-    await userEvent.click(agent);
-    const agentOption = screen.getByText("CoActAgent");
-    await userEvent.click(agentOption);
-    expect(agent).toHaveValue("CoActAgent");
-
-    // select security analyzer
-    const securityAnalyzer = screen.getByTestId("security-analyzer-input");
-    await userEvent.click(securityAnalyzer);
-    const securityAnalyzerOption = screen.getByText(
-      "SETTINGS$SECURITY_ANALYZER_NONE",
-    );
-    await userEvent.click(securityAnalyzerOption);
-
-    const submitButton = screen.getByTestId("submit-button");
-    await userEvent.click(submitButton);
-
-    expect(saveSettingsSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        llm_model: "openai/gpt-4o",
-        llm_base_url: "https://api.openai.com/v1/chat/completions",
-        agent: "CoActAgent",
-        confirmation_mode: true,
-        enable_default_condenser: false,
-        security_analyzer: null,
-      }),
-    );
-  });
-
-  it("should disable the button if there are no changes in the basic form", async () => {
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      llm_model: "openai/gpt-4o",
-      llm_api_key_set: true,
+        expect(basicToggle).toBeEnabled();
+        expect(advancedToggle).toBeEnabled();
+        expect(
+          screen.getByTestId("llm-settings-form-basic"),
+        ).toBeInTheDocument();
+      });
     });
 
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
-    screen.getByTestId("llm-settings-form-basic");
+    describe("Owner role (full access)", () => {
+      it("should enable all input fields in basic view", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettings({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
 
-    const submitButton = screen.getByTestId("submit-button");
-    expect(submitButton).toBeDisabled();
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "1",
+          meData: buildOrganizationMember({ org_id: "1", role: "owner" }),
+        });
 
-    const model = screen.getByTestId("llm-model-input");
-    const apiKey = screen.getByTestId("llm-api-key-input");
+        await screen.findByTestId("llm-settings-screen");
+        const basicForm = screen.getByTestId("llm-settings-form-basic");
+        const providerInput =
+          within(basicForm).getByTestId("llm-provider-input");
+        const modelInput = within(basicForm).getByTestId("llm-model-input");
+        const apiKeyInput = within(basicForm).getByTestId("llm-api-key-input");
 
-    // select model
-    await userEvent.click(model);
-    const modelOption = screen.getByText("gpt-4o-mini");
-    await userEvent.click(modelOption);
-    expect(model).toHaveValue("gpt-4o-mini");
-    expect(submitButton).not.toBeDisabled();
+        await waitFor(() => {
+          expect(providerInput).not.toBeDisabled();
+          expect(modelInput).not.toBeDisabled();
+          expect(apiKeyInput).not.toBeDisabled();
+        });
+      });
 
-    // reset model
-    await userEvent.click(model);
-    const modelOption2 = screen.getByText("gpt-4o");
-    await userEvent.click(modelOption2);
-    expect(model).toHaveValue("gpt-4o");
-    expect(submitButton).toBeDisabled();
+      it("should enable all input fields in advanced view", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettingsWithAdvancedToggle({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
 
-    // set api key
-    await userEvent.type(apiKey, "test-api-key");
-    expect(apiKey).toHaveValue("test-api-key");
-    expect(submitButton).not.toBeDisabled();
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "1",
+          meData: buildOrganizationMember({ org_id: "1", role: "owner" }),
+        });
 
-    // reset api key
-    await userEvent.clear(apiKey);
-    expect(apiKey).toHaveValue("");
-    expect(submitButton).toBeDisabled();
-  });
+        await screen.findByTestId("llm-settings-screen");
+        await userEvent.click(
+          screen.getByTestId("sdk-section-advanced-toggle"),
+        );
 
-  it("should disable the button if there are no changes in the advanced form", async () => {
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      llm_model: "openai/gpt-4o",
-      llm_base_url: "https://api.openai.com/v1/chat/completions",
-      llm_api_key_set: true,
-      confirmation_mode: true,
+        const advancedForm = screen.getByTestId("llm-settings-form-advanced");
+        const customModelInput = within(advancedForm).getByTestId(
+          "llm-custom-model-input",
+        );
+        const baseUrlInput = within(advancedForm).getByTestId("base-url-input");
+        const apiKeyInput =
+          within(advancedForm).getByTestId("llm-api-key-input");
+
+        await waitFor(() => {
+          expect(customModelInput).not.toBeDisabled();
+          expect(baseUrlInput).not.toBeDisabled();
+          expect(apiKeyInput).not.toBeDisabled();
+        });
+      });
+
+      it("should enable submit button when form is dirty", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettings({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
+
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "1",
+          meData: buildOrganizationMember({ org_id: "1", role: "owner" }),
+        });
+
+        await screen.findByTestId("llm-settings-screen");
+        const submitButton = screen.getByTestId("save-button");
+        expect(submitButton).toBeDisabled();
+
+        await userEvent.type(
+          screen.getByTestId("llm-api-key-input"),
+          "test-api-key",
+        );
+
+        await waitFor(() => {
+          expect(submitButton).not.toBeDisabled();
+        });
+      });
+
+      it("should allow submitting form changes", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettings({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
+        const saveSettingsSpy = vi
+          .spyOn(SettingsService, "saveSettings")
+          .mockResolvedValue(true);
+
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "1",
+          meData: buildOrganizationMember({ org_id: "1", role: "owner" }),
+        });
+
+        await screen.findByTestId("llm-settings-screen");
+        await userEvent.type(
+          screen.getByTestId("llm-api-key-input"),
+          "test-api-key",
+        );
+        await userEvent.click(screen.getByTestId("save-button"));
+
+        await waitFor(() => {
+          expect(saveSettingsSpy).toHaveBeenCalled();
+        });
+      });
     });
 
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
-    await screen.findByTestId("llm-settings-form-advanced");
+    describe("Admin role (full access)", () => {
+      it("should enable all input fields in basic view", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettings({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
 
-    const submitButton = await screen.findByTestId("submit-button");
-    expect(submitButton).toBeDisabled();
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "3",
+          meData: buildOrganizationMember({ org_id: "3", role: "admin" }),
+        });
 
-    const model = await screen.findByTestId("llm-custom-model-input");
-    const baseUrl = await screen.findByTestId("base-url-input");
-    const apiKey = await screen.findByTestId("llm-api-key-input");
-    const agent = await screen.findByTestId("agent-input");
-    const condensor = await screen.findByTestId(
-      "enable-memory-condenser-switch",
-    );
+        await screen.findByTestId("llm-settings-screen");
+        const basicForm = screen.getByTestId("llm-settings-form-basic");
+        const providerInput =
+          within(basicForm).getByTestId("llm-provider-input");
+        const modelInput = within(basicForm).getByTestId("llm-model-input");
+        const apiKeyInput = within(basicForm).getByTestId("llm-api-key-input");
 
-    // Confirmation mode switch is now in basic settings, always visible
-    const confirmation = await screen.findByTestId(
-      "enable-confirmation-mode-switch",
-    );
+        await waitFor(() => {
+          expect(providerInput).not.toBeDisabled();
+          expect(modelInput).not.toBeDisabled();
+          expect(apiKeyInput).not.toBeDisabled();
+        });
+      });
 
-    // enter custom model
-    await userEvent.type(model, "-mini");
-    expect(model).toHaveValue("openai/gpt-4o-mini");
-    expect(submitButton).not.toBeDisabled();
+      it("should enable all input fields in advanced view", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettingsWithAdvancedToggle({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
 
-    // reset model
-    await userEvent.clear(model);
-    expect(model).toHaveValue("");
-    expect(submitButton).toBeDisabled();
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "3",
+          meData: buildOrganizationMember({ org_id: "3", role: "admin" }),
+        });
 
-    await userEvent.type(model, "openai/gpt-4o");
-    expect(model).toHaveValue("openai/gpt-4o");
-    expect(submitButton).toBeDisabled();
+        await screen.findByTestId("llm-settings-screen");
+        await userEvent.click(
+          screen.getByTestId("sdk-section-advanced-toggle"),
+        );
 
-    // enter base url
-    await userEvent.type(baseUrl, "/extra");
-    expect(baseUrl).toHaveValue(
-      "https://api.openai.com/v1/chat/completions/extra",
-    );
-    expect(submitButton).not.toBeDisabled();
+        const advancedForm = screen.getByTestId("llm-settings-form-advanced");
+        const customModelInput = within(advancedForm).getByTestId(
+          "llm-custom-model-input",
+        );
+        const baseUrlInput = within(advancedForm).getByTestId("base-url-input");
+        const apiKeyInput =
+          within(advancedForm).getByTestId("llm-api-key-input");
 
-    await userEvent.clear(baseUrl);
-    expect(baseUrl).toHaveValue("");
-    expect(submitButton).not.toBeDisabled();
+        await waitFor(() => {
+          expect(customModelInput).not.toBeDisabled();
+          expect(baseUrlInput).not.toBeDisabled();
+          expect(apiKeyInput).not.toBeDisabled();
+        });
+      });
 
-    await userEvent.type(baseUrl, "https://api.openai.com/v1/chat/completions");
-    expect(baseUrl).toHaveValue("https://api.openai.com/v1/chat/completions");
-    expect(submitButton).toBeDisabled();
+      it("should enable submit button when form is dirty", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettings({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
 
-    // set api key
-    await userEvent.type(apiKey, "test-api-key");
-    expect(apiKey).toHaveValue("test-api-key");
-    expect(submitButton).not.toBeDisabled();
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "3",
+          meData: buildOrganizationMember({ org_id: "3", role: "admin" }),
+        });
 
-    // reset api key
-    await userEvent.clear(apiKey);
-    expect(apiKey).toHaveValue("");
-    expect(submitButton).toBeDisabled();
+        await screen.findByTestId("llm-settings-screen");
+        const submitButton = screen.getByTestId("save-button");
+        expect(submitButton).toBeDisabled();
 
-    // set agent
-    await userEvent.clear(agent);
-    await userEvent.type(agent, "test-agent");
-    expect(agent).toHaveValue("test-agent");
-    expect(submitButton).not.toBeDisabled();
+        await userEvent.type(
+          screen.getByTestId("llm-api-key-input"),
+          "test-api-key",
+        );
 
-    // reset agent
-    await userEvent.clear(agent);
-    expect(agent).toHaveValue("");
-    expect(submitButton).toBeDisabled();
+        await waitFor(() => {
+          expect(submitButton).not.toBeDisabled();
+        });
+      });
 
-    await userEvent.type(agent, "CodeActAgent");
-    expect(agent).toHaveValue("CodeActAgent");
-    expect(submitButton).toBeDisabled();
+      it("should allow submitting form changes", async () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          buildSettings({
+            llm_model: "openai/gpt-4o",
+            agent_settings: { llm: { model: "openai/gpt-4o" } },
+          }),
+        );
+        const saveSettingsSpy = vi
+          .spyOn(SettingsService, "saveSettings")
+          .mockResolvedValue(true);
 
-    // toggle confirmation mode
-    await userEvent.click(confirmation);
-    expect(confirmation).not.toBeChecked();
-    expect(submitButton).not.toBeDisabled();
-    await userEvent.click(confirmation);
-    expect(confirmation).toBeChecked();
-    expect(submitButton).toBeDisabled();
+        renderLlmSettingsScreen({
+          appMode: "saas",
+          organizationId: "3",
+          meData: buildOrganizationMember({ org_id: "3", role: "admin" }),
+        });
 
-    // toggle memory condensor
-    await userEvent.click(condensor);
-    expect(condensor).not.toBeChecked();
-    expect(submitButton).not.toBeDisabled();
-    await userEvent.click(condensor);
-    expect(condensor).toBeChecked();
-    expect(submitButton).toBeDisabled();
+        await screen.findByTestId("llm-settings-screen");
+        await userEvent.type(
+          screen.getByTestId("llm-api-key-input"),
+          "test-api-key",
+        );
+        await userEvent.click(screen.getByTestId("save-button"));
 
-    // select security analyzer
-    const securityAnalyzer = await screen.findByTestId(
-      "security-analyzer-input",
-    );
-    await userEvent.click(securityAnalyzer);
-    const securityAnalyzerOption = screen.getByText(
-      "SETTINGS$SECURITY_ANALYZER_NONE",
-    );
-    await userEvent.click(securityAnalyzerOption);
-    expect(securityAnalyzer).toHaveValue("SETTINGS$SECURITY_ANALYZER_NONE");
-
-    expect(submitButton).not.toBeDisabled();
-
-    // revert back to original value
-    await userEvent.click(securityAnalyzer);
-    const originalSecurityAnalyzerOption = screen.getByText(
-      "SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT",
-    );
-    await userEvent.click(originalSecurityAnalyzerOption);
-    expect(securityAnalyzer).toHaveValue(
-      "SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT",
-    );
-    expect(submitButton).toBeDisabled();
-  });
-
-  it("should reset button state when switching between forms", async () => {
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
-
-    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-    const submitButton = screen.getByTestId("submit-button");
-
-    expect(submitButton).toBeDisabled();
-
-    // dirty the basic form
-    const apiKey = screen.getByTestId("llm-api-key-input");
-    await userEvent.type(apiKey, "test-api-key");
-    expect(submitButton).not.toBeDisabled();
-
-    await userEvent.click(advancedSwitch);
-    expect(submitButton).toBeDisabled();
-
-    // dirty the advanced form
-    const model = screen.getByTestId("llm-custom-model-input");
-    await userEvent.type(model, "openai/gpt-4o");
-    expect(submitButton).not.toBeDisabled();
-
-    await userEvent.click(advancedSwitch);
-    expect(submitButton).toBeDisabled();
-  });
-
-  // flaky test
-  it.skip("should disable the button when submitting changes", async () => {
-    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
-
-    const apiKey = screen.getByTestId("llm-api-key-input");
-    await userEvent.type(apiKey, "test-api-key");
-
-    const submitButton = screen.getByTestId("submit-button");
-    await userEvent.click(submitButton);
-
-    expect(saveSettingsSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        llm_api_key: "test-api-key",
-      }),
-    );
-
-    expect(submitButton).toHaveTextContent("Saving...");
-    expect(submitButton).toBeDisabled();
-
-    await waitFor(() => {
-      expect(submitButton).toHaveTextContent("Save");
-      expect(submitButton).toBeDisabled();
-    });
-  });
-
-  it("should clear advanced settings when saving basic settings", async () => {
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      llm_model: "openai/gpt-4o",
-      llm_base_url: "https://api.openai.com/v1/chat/completions",
-      llm_api_key_set: true,
-      confirmation_mode: true,
-    });
-    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-    renderLlmSettingsScreen();
-
-    await screen.findByTestId("llm-settings-screen");
-    // Component automatically shows advanced view when advanced settings exist
-    // Switch to basic view to test clearing advanced settings
-    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-    await userEvent.click(advancedSwitch);
-
-    // Now we should be in basic view
-    await screen.findByTestId("llm-settings-form-basic");
-
-    const provider = screen.getByTestId("llm-provider-input");
-    const model = screen.getByTestId("llm-model-input");
-
-    // select provider
-    await userEvent.click(provider);
-    const providerOption = screen.getByText("OpenHands");
-    await userEvent.click(providerOption);
-
-    // select model
-    await userEvent.click(model);
-    const modelOption = screen.getByText("claude-sonnet-4-20250514");
-    await userEvent.click(modelOption);
-
-    const submitButton = screen.getByTestId("submit-button");
-    await userEvent.click(submitButton);
-
-    expect(saveSettingsSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        llm_model: "openhands/claude-sonnet-4-20250514",
-        llm_base_url: "",
-        confirmation_mode: false, // Confirmation mode is now an advanced setting, should be cleared when saving basic settings
-      }),
-    );
-  });
-});
-
-describe("View persistence after saving advanced settings", () => {
-  it("should remain on Advanced view after saving when memory condenser is disabled", async () => {
-    // Arrange: Start with default settings (basic view)
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-    });
-    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-    saveSettingsSpy.mockResolvedValue(true);
-
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
-
-    // Verify we start in basic view
-    expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
-
-    // Act: User manually switches to Advanced view
-    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-    await userEvent.click(advancedSwitch);
-    await screen.findByTestId("llm-settings-form-advanced");
-
-    // User disables memory condenser (advanced-only setting)
-    const condenserSwitch = screen.getByTestId(
-      "enable-memory-condenser-switch",
-    );
-    expect(condenserSwitch).toBeChecked();
-    await userEvent.click(condenserSwitch);
-    expect(condenserSwitch).not.toBeChecked();
-
-    // Mock the updated settings that will be returned after save
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      enable_default_condenser: false, // Now disabled
+        await waitFor(() => {
+          expect(saveSettingsSpy).toHaveBeenCalled();
+        });
+      });
     });
 
-    // User saves settings
-    const submitButton = screen.getByTestId("submit-button");
-    await userEvent.click(submitButton);
-
-    // Assert: View should remain on Advanced after save
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("llm-settings-form-advanced"),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("llm-settings-form-basic"),
-      ).not.toBeInTheDocument();
-      expect(advancedSwitch).toBeChecked();
-    });
-  });
-
-  it("should remain on Advanced view after saving when condenser max size is customized", async () => {
-    // Arrange: Start with default settings
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-    });
-    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-    saveSettingsSpy.mockResolvedValue(true);
-
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
-
-    // Act: User manually switches to Advanced view
-    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-    await userEvent.click(advancedSwitch);
-    await screen.findByTestId("llm-settings-form-advanced");
-
-    // User sets custom condenser max size (advanced-only setting)
-    const condenserMaxSizeInput = screen.getByTestId(
-      "condenser-max-size-input",
-    );
-    await userEvent.clear(condenserMaxSizeInput);
-    await userEvent.type(condenserMaxSizeInput, "200");
-
-    // Mock the updated settings that will be returned after save
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      condenser_max_size: 200, // Custom value
-    });
-
-    // User saves settings
-    const submitButton = screen.getByTestId("submit-button");
-    await userEvent.click(submitButton);
-
-    // Assert: View should remain on Advanced after save
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("llm-settings-form-advanced"),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("llm-settings-form-basic"),
-      ).not.toBeInTheDocument();
-      expect(advancedSwitch).toBeChecked();
-    });
-  });
-
-  it("should remain on Advanced view after saving when search API key is set", async () => {
-    // Arrange: Start with default settings (non-SaaS mode to show search API key field)
-    const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    // @ts-expect-error - partial mock for testing
-    getConfigSpy.mockResolvedValue({
-      app_mode: "oss",
-      posthog_client_key: "fake-posthog-client-key",
-      feature_flags: {
-        enable_billing: false,
-        hide_llm_settings: false,
-        enable_jira: false,
-        enable_jira_dc: false,
-        enable_linear: false,
-        hide_users_page: false,
-        hide_billing_page: false,
-        hide_integrations_page: false,
-      },
-    });
-
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      search_api_key: "", // Default empty value
-    });
-    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-    saveSettingsSpy.mockResolvedValue(true);
-
-    renderLlmSettingsScreen();
-    await screen.findByTestId("llm-settings-screen");
-
-    // Act: User manually switches to Advanced view
-    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-    await userEvent.click(advancedSwitch);
-    await screen.findByTestId("llm-settings-form-advanced");
-
-    // User sets search API key (advanced-only setting)
-    const searchApiKeyInput = screen.getByTestId("search-api-key-input");
-    await userEvent.type(searchApiKeyInput, "test-search-api-key");
-
-    // Mock the updated settings that will be returned after save
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      search_api_key: "test-search-api-key", // Now set
-    });
-
-    // User saves settings
-    const submitButton = screen.getByTestId("submit-button");
-    await userEvent.click(submitButton);
-
-    // Assert: View should remain on Advanced after save
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("llm-settings-form-advanced"),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("llm-settings-form-basic"),
-      ).not.toBeInTheDocument();
-      expect(advancedSwitch).toBeChecked();
-    });
-  });
-});
-
-describe("Status toasts", () => {
-  describe("Basic form", () => {
-    it("should call displaySuccessToast when the settings are saved", async () => {
-      const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-
-      const displaySuccessToastSpy = vi.spyOn(
-        ToastHandlers,
-        "displaySuccessToast",
-      );
-
-      renderLlmSettingsScreen();
-
-      // Toggle setting to change
-      const apiKeyInput = await screen.findByTestId("llm-api-key-input");
-      await userEvent.type(apiKeyInput, "test-api-key");
-
-      const submit = await screen.findByTestId("submit-button");
-      await userEvent.click(submit);
-
-      expect(saveSettingsSpy).toHaveBeenCalled();
-      await waitFor(() => expect(displaySuccessToastSpy).toHaveBeenCalled());
-    });
-
-    it("should call displayErrorToast when the settings fail to save", async () => {
-      const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-
-      const displayErrorToastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
-
-      saveSettingsSpy.mockRejectedValue(new Error("Failed to save settings"));
-
-      renderLlmSettingsScreen();
-
-      // Toggle setting to change
-      const apiKeyInput = await screen.findByTestId("llm-api-key-input");
-      await userEvent.type(apiKeyInput, "test-api-key");
-
-      const submit = await screen.findByTestId("submit-button");
-      await userEvent.click(submit);
-
-      expect(saveSettingsSpy).toHaveBeenCalled();
-      expect(displayErrorToastSpy).toHaveBeenCalled();
-    });
-  });
-
-  describe("Advanced form", () => {
-    it("should call displaySuccessToast when the settings are saved", async () => {
-      const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-
-      const displaySuccessToastSpy = vi.spyOn(
-        ToastHandlers,
-        "displaySuccessToast",
-      );
-
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
-      await screen.findByTestId("llm-settings-form-advanced");
-
-      // Toggle setting to change
-      const apiKeyInput = await screen.findByTestId("llm-api-key-input");
-      await userEvent.type(apiKeyInput, "test-api-key");
-
-      const submit = await screen.findByTestId("submit-button");
-      await userEvent.click(submit);
-
-      expect(saveSettingsSpy).toHaveBeenCalled();
-      await waitFor(() => expect(displaySuccessToastSpy).toHaveBeenCalled());
-    });
-
-    it("should call displayErrorToast when the settings fail to save", async () => {
-      const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
-
-      const displayErrorToastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
-
-      saveSettingsSpy.mockRejectedValue(new Error("Failed to save settings"));
-
-      renderLlmSettingsScreen();
-      await screen.findByTestId("llm-settings-screen");
-
-      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
-      await userEvent.click(advancedSwitch);
-      await screen.findByTestId("llm-settings-form-advanced");
-
-      // Toggle setting to change
-      const apiKeyInput = await screen.findByTestId("llm-api-key-input");
-      await userEvent.type(apiKeyInput, "test-api-key");
-
-      const submit = await screen.findByTestId("submit-button");
-      await userEvent.click(submit);
-
-      expect(saveSettingsSpy).toHaveBeenCalled();
-      expect(displayErrorToastSpy).toHaveBeenCalled();
+    describe("clientLoader permission checks", () => {
+      it("should export a clientLoader for route protection", () => {
+        expect(clientLoader).toBeTypeOf("function");
+      });
     });
   });
 });

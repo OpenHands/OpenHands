@@ -2,6 +2,15 @@ import { ConversationTrigger } from "../open-hands.types";
 import { V1SandboxStatus } from "../sandbox-service/sandbox-service.types";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
+import { V1ExecutionStatus } from "#/types/v1/core";
+
+// Plugin specification for starting conversations with plugins
+export interface PluginSpec {
+  source: string; // Plugin source: 'github:owner/repo', git URL, or local path
+  ref?: string | null; // Optional branch, tag, or commit
+  repo_path?: string | null; // Subdirectory path within the git repository
+  parameters?: Record<string, unknown> | null; // User-provided configuration values
+}
 
 // V1 Metrics Types
 export interface V1TokenUsage {
@@ -54,6 +63,7 @@ export interface V1AppConversationStartRequest {
   pr_number?: number[];
   parent_conversation_id?: string | null;
   agent_type?: "default" | "plan";
+  plugins?: PluginSpec[] | null; // Plugins to load when starting the conversation
 }
 
 export type V1AppConversationStartTaskStatus =
@@ -90,14 +100,6 @@ export interface V1AppConversationStartTaskPage {
   next_page_id: string | null;
 }
 
-export type V1ConversationExecutionStatus =
-  | "RUNNING"
-  | "AWAITING_USER_INPUT"
-  | "AWAITING_USER_CONFIRMATION"
-  | "FINISHED"
-  | "PAUSED"
-  | "STOPPED";
-
 export interface V1AppConversation {
   id: string;
   created_by_user_id: string | null;
@@ -113,10 +115,16 @@ export interface V1AppConversation {
   created_at: string;
   updated_at: string;
   sandbox_status: V1SandboxStatus;
-  execution_status: V1ConversationExecutionStatus | null;
+  execution_status: V1ExecutionStatus | null;
   conversation_url: string | null;
   session_api_key: string | null;
   public?: boolean;
+  sub_conversation_ids: string[];
+}
+
+export interface V1AppConversationPage {
+  items: V1AppConversation[];
+  next_page_id: string | null;
 }
 
 export interface Skill {
@@ -128,6 +136,27 @@ export interface Skill {
 
 export interface GetSkillsResponse {
   skills: Skill[];
+}
+
+export interface HookDefinition {
+  type: string; // 'command' or 'prompt'
+  command: string;
+  timeout: number;
+  async?: boolean;
+}
+
+export interface HookMatcher {
+  matcher: string; // Pattern: '*', exact match, or regex
+  hooks?: HookDefinition[]; // May be undefined while hooks are still executing on the server
+}
+
+export interface HookEvent {
+  event_type: string; // e.g., 'stop', 'pre_tool_use', 'post_tool_use'
+  matchers: HookMatcher[];
+}
+
+export interface GetHooksResponse {
+  hooks: HookEvent[];
 }
 
 // Runtime conversation types (from agent server)
@@ -163,6 +192,6 @@ export interface V1RuntimeConversationInfo {
   metrics: V1MetricsSnapshot | null;
   created_at: string;
   updated_at: string;
-  status: V1ConversationExecutionStatus;
+  status: V1ExecutionStatus;
   stats: V1RuntimeConversationStats;
 }

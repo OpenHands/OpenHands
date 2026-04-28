@@ -4,11 +4,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from server.auth.authorization import (
     Permission,
+    require_financial_data_access,
     require_permission,
 )
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
+    GitOrgAlreadyClaimedError,
+    GitOrgClaimRequest,
+    GitOrgClaimResponse,
     InsufficientPermissionError,
     InvalidRoleError,
     LastOwnerError,
@@ -20,8 +24,8 @@ from server.routes.org_models import (
     OrgAuthorizationError,
     OrgCreate,
     OrgDatabaseError,
-    OrgLLMSettingsResponse,
-    OrgLLMSettingsUpdate,
+    OrgDefaultsSettingsResponse,
+    OrgMemberFinancialPage,
     OrgMemberNotFoundError,
     OrgMemberPage,
     OrgMemberResponse,
@@ -38,23 +42,20 @@ from server.services.org_app_settings_service import (
     OrgAppSettingsService,
     OrgAppSettingsServiceInjector,
 )
-from server.services.org_llm_settings_service import (
-    OrgLLMSettingsService,
-    OrgLLMSettingsServiceInjector,
-)
+from server.services.org_member_financial_service import OrgMemberFinancialService
 from server.services.org_member_service import OrgMemberService
+from sqlalchemy.exc import IntegrityError
+from storage.org_git_claim_store import OrgGitClaimStore
 from storage.org_service import OrgService
+from storage.org_store import OrgStore
 from storage.user_store import UserStore
 
+from openhands.app_server.user_auth import get_user_id
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_id
 
 # Initialize API router
 org_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
 
-# Create injector instance and dependency for LLM settings
-_org_llm_settings_injector = OrgLLMSettingsServiceInjector()
-org_llm_settings_service_dependency = Depends(_org_llm_settings_injector.depends)
 # Create injector instance and dependency at module level
 _org_app_settings_injector = OrgAppSettingsServiceInjector()
 org_app_settings_service_dependency = Depends(_org_app_settings_injector.depends)
@@ -68,7 +69,7 @@ async def list_user_orgs(
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, lte=100),
+        Query(title='The max number of results in the page', gt=0, le=100),
     ] = 100,
     user_id: str = Depends(get_user_id),
 ) -> OrgPage:
@@ -220,34 +221,15 @@ async def create_org(
         )
 
 
-@org_router.get(
-    '/llm',
-    response_model=OrgLLMSettingsResponse,
-    dependencies=[Depends(require_permission(Permission.VIEW_LLM_SETTINGS))],
-)
-async def get_org_llm_settings(
-    service: OrgLLMSettingsService = org_llm_settings_service_dependency,
-) -> OrgLLMSettingsResponse:
-    """Get LLM settings for the user's current organization.
-
-    This endpoint retrieves the LLM configuration settings for the
-    authenticated user's current organization. All organization members
-    can view these settings.
-
-    Args:
-        service: OrgLLMSettingsService (injected by dependency)
-
-    Returns:
-        OrgLLMSettingsResponse: The organization's LLM settings
-
-    Raises:
-        HTTPException: 401 if not authenticated
-        HTTPException: 403 if not a member of any organization
-        HTTPException: 404 if current organization not found
-        HTTPException: 500 if retrieval fails
-    """
+@org_router.get('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+async def get_org_defaults_settings(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Get org-default settings for a specific organization."""
     try:
-        return await service.get_org_llm_settings()
+        org = await OrgService.get_org_by_id(org_id=org_id, user_id=user_id)
+        return OrgDefaultsSettingsResponse.from_org(org)
     except OrgNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -255,45 +237,45 @@ async def get_org_llm_settings(
         )
     except Exception as e:
         logger.exception(
-            'Error getting organization LLM settings',
-            extra={'error': str(e)},
+            'Error getting organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to retrieve LLM settings',
+            detail='Failed to retrieve organization defaults settings',
         )
 
 
-@org_router.post(
-    '/llm',
-    response_model=OrgLLMSettingsResponse,
-    dependencies=[Depends(require_permission(Permission.EDIT_LLM_SETTINGS))],
-)
-async def update_org_llm_settings(
-    settings: OrgLLMSettingsUpdate,
-    service: OrgLLMSettingsService = org_llm_settings_service_dependency,
-) -> OrgLLMSettingsResponse:
-    """Update LLM settings for the user's current organization.
-
-    This endpoint updates the LLM configuration settings for the
-    authenticated user's current organization. Only admins and owners
-    can update these settings.
-
-    Args:
-        settings: The LLM settings to update (only non-None fields are updated)
-        service: OrgLLMSettingsService (injected by dependency)
-
-    Returns:
-        OrgLLMSettingsResponse: The updated organization's LLM settings
-
-    Raises:
-        HTTPException: 401 if not authenticated
-        HTTPException: 403 if user lacks EDIT_LLM_SETTINGS permission
-        HTTPException: 404 if current organization not found
-        HTTPException: 500 if update fails
-    """
+@org_router.patch('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+async def update_org_defaults_settings(
+    org_id: UUID,
+    settings: OrgUpdate,
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Update org-default settings for a specific organization."""
     try:
-        return await service.update_org_llm_settings(settings)
+        allowed_fields = {
+            'agent_settings_diff',
+            'conversation_settings_diff',
+            'search_api_key',
+            'llm_api_key',
+        }
+        invalid_fields = settings.updated_fields() - allowed_fields
+        if invalid_fields:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    'Only organization default settings fields are supported on '
+                    '/api/organizations/{org_id}/settings'
+                ),
+            )
+
+        updated_org = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=settings,
+            user_id=user_id,
+        )
+        return OrgDefaultsSettingsResponse.from_org(updated_org)
     except OrgNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -301,21 +283,94 @@ async def update_org_llm_settings(
         )
     except OrgDatabaseError as e:
         logger.error(
-            'Database error updating LLM settings',
-            extra={'error': str(e)},
+            'Database error updating organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to update LLM settings',
+            detail='Failed to update organization defaults settings',
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(
-            'Error updating organization LLM settings',
-            extra={'error': str(e)},
+            'Error updating organization defaults settings',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to update LLM settings',
+            detail='Failed to update organization defaults settings',
+        )
+
+
+@org_router.get(
+    '/llm',
+    response_model=OrgDefaultsSettingsResponse,
+    deprecated=True,
+)
+async def get_legacy_org_defaults_settings(
+    user_id: str = Depends(require_permission(Permission.VIEW_LLM_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Get org-default settings through the deprecated ``/llm`` wrapper."""
+    try:
+        org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
+        if not org:
+            raise OrgNotFoundError('current')
+        return await get_org_defaults_settings(org_id=org.id, user_id=user_id)
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            'Error getting legacy organization defaults settings',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization defaults settings',
+        )
+
+
+@org_router.post(
+    '/llm',
+    response_model=OrgDefaultsSettingsResponse,
+    deprecated=True,
+)
+async def update_legacy_org_defaults_settings(
+    settings: OrgUpdate,
+    user_id: str = Depends(require_permission(Permission.EDIT_LLM_SETTINGS)),
+) -> OrgDefaultsSettingsResponse:
+    """Update org-default settings through the deprecated ``/llm`` wrapper."""
+    try:
+        org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
+        if not org:
+            raise OrgNotFoundError('current')
+        if not settings.has_updates():
+            return OrgDefaultsSettingsResponse.from_org(org)
+        return await update_org_defaults_settings(
+            org_id=org.id,
+            settings=settings,
+            user_id=user_id,
+        )
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            'Error updating legacy organization defaults settings',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update organization defaults settings',
         )
 
 
@@ -409,31 +464,17 @@ async def update_org_app_settings(
         )
 
 
-@org_router.get('/{org_id}', response_model=OrgResponse, status_code=status.HTTP_200_OK)
+@org_router.get(
+    '/{org_id}',
+    response_model=OrgResponse,
+    status_code=status.HTTP_200_OK,
+    deprecated=True,
+)
 async def get_org(
     org_id: UUID,
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgResponse:
-    """Get organization details by ID.
-
-    This endpoint retrieves details for a specific organization. Access requires
-    the VIEW_ORG_SETTINGS permission, which is granted to all organization members
-    (member, admin, and owner roles).
-
-    Args:
-        org_id: Organization ID (UUID)
-        user_id: Authenticated user ID (injected by require_permission dependency)
-
-    Returns:
-        OrgResponse: The organization details
-
-    Raises:
-        HTTPException: 401 if user is not authenticated
-        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission
-        HTTPException: 404 if organization not found
-        HTTPException: 422 if org_id is not a valid UUID (handled by FastAPI)
-        HTTPException: 500 if retrieval fails
-    """
+    """Get organization details by ID through the deprecated detail route."""
     logger.info(
         'Retrieving organization details',
         extra={
@@ -443,15 +484,11 @@ async def get_org(
     )
 
     try:
-        # Use service layer to get organization with membership validation
         org = await OrgService.get_org_by_id(
             org_id=org_id,
             user_id=user_id,
         )
-
-        # Retrieve credits from LiteLLM
         credits = await OrgService.get_org_credits(user_id, org.id)
-
         return OrgResponse.from_org(org, credits=credits, user_id=user_id)
     except OrgNotFoundError as e:
         raise HTTPException(
@@ -734,7 +771,7 @@ async def get_org_members(
         Query(
             title='The max number of results in the page',
             gt=0,
-            lte=100,
+            le=100,
         ),
     ] = 10,
     email: Annotated[
@@ -880,6 +917,104 @@ async def get_org_members_count(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve member count',
+        )
+
+
+@org_router.get(
+    '/{org_id}/members/financial',
+    response_model=OrgMemberFinancialPage,
+)
+async def get_org_members_financial(
+    org_id: UUID,
+    page_id: Annotated[
+        str | None,
+        Query(
+            title='Pagination offset encoded as string',
+            description='Offset for pagination (e.g., "0", "10", "20")',
+        ),
+    ] = None,
+    limit: Annotated[
+        int,
+        Query(
+            title='Maximum items per page',
+            gt=0,
+            le=100,
+        ),
+    ] = 10,
+    email: Annotated[
+        str | None,
+        Query(
+            title='Filter members by email (case-insensitive partial match)',
+            min_length=1,
+            max_length=255,
+        ),
+    ] = None,
+    user_id: str = Depends(require_financial_data_access),
+) -> OrgMemberFinancialPage:
+    """Get paginated financial data for organization members.
+
+    Returns financial information (lifetime spend, current budget) for all members
+    within the specified organization. Access is restricted to:
+    - Organization Admins
+    - Organization Owners
+    - OpenHands members (users with @openhands.dev emails)
+
+    Args:
+        org_id: Organization ID (UUID)
+        page_id: Optional pagination offset encoded as string
+        limit: Maximum items per page (1-100, default 10)
+        email: Optional email filter (case-insensitive partial match)
+        user_id: Authenticated user ID (injected by require_financial_data_access)
+
+    Returns:
+        OrgMemberFinancialPage: Paginated response with member financial data
+            - items: List of members with user_id, email, lifetime_spend,
+                     current_budget, and max_budget
+            - current_page: Current page number (1-indexed)
+            - per_page: Items per page
+            - next_page_id: Offset for next page, or None if no more pages
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks access (not admin/owner and not @openhands.dev)
+        HTTPException: 400 if page_id is invalid
+        HTTPException: 500 if retrieval fails
+    """
+    logger.info(
+        'Getting financial data for organization members',
+        extra={
+            'org_id': str(org_id),
+            'user_id': user_id,
+            'page_id': page_id,
+            'limit': limit,
+            'email_filter': email,
+        },
+    )
+
+    try:
+        return await OrgMemberFinancialService.get_org_members_financial_data(
+            org_id=org_id,
+            page_id=page_id,
+            limit=limit,
+            email_filter=email,
+        )
+    except ValueError as e:
+        logger.warning(
+            'Invalid page_id for financial data request',
+            extra={'org_id': str(org_id), 'page_id': page_id, 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception:
+        logger.exception(
+            'Error retrieving organization member financial data',
+            extra={'org_id': str(org_id)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve member financial data',
         )
 
 
@@ -1110,4 +1245,182 @@ async def update_org_member(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to update member',
+        )
+
+
+@org_router.get(
+    '/{org_id}/git-claims',
+    response_model=list[GitOrgClaimResponse],
+)
+async def get_git_claims(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.MANAGE_ORG_CLAIMS)),
+) -> list[GitOrgClaimResponse]:
+    """Get all Git organization claims for an OpenHands organization.
+
+    Only admin and owner roles can view Git organization claims.
+
+    Args:
+        org_id: OpenHands organization UUID
+        user_id: Authenticated user ID (injected by permission check)
+
+    Returns:
+        List of GitOrgClaimResponse with claim details
+    """
+    try:
+        claims = await OrgGitClaimStore.get_claims_by_org_id(org_id=org_id)
+        return [
+            GitOrgClaimResponse(
+                id=str(claim.id),
+                org_id=str(claim.org_id),
+                provider=claim.provider,
+                git_organization=claim.git_organization,
+                claimed_by=str(claim.claimed_by),
+                claimed_at=claim.claimed_at.isoformat(),
+            )
+            for claim in claims
+        ]
+    except Exception:
+        logger.exception('Error fetching Git organization claims')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to fetch Git organization claims',
+        )
+
+
+@org_router.post(
+    '/{org_id}/git-claims',
+    response_model=GitOrgClaimResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def claim_git_organization(
+    org_id: UUID,
+    request: GitOrgClaimRequest,
+    user_id: str = Depends(require_permission(Permission.MANAGE_ORG_CLAIMS)),
+) -> GitOrgClaimResponse:
+    """Claim a Git organization for an OpenHands organization.
+
+    Only admin and owner roles can claim Git organizations.
+    A Git organization can only be claimed by one OpenHands organization at a time.
+
+    Args:
+        org_id: OpenHands organization UUID
+        request: Claim request with provider and git_organization
+        user_id: Authenticated user ID (injected by permission check)
+
+    Returns:
+        GitOrgClaimResponse with the created claim details
+
+    Raises:
+        HTTPException 409: If the Git organization is already claimed
+        HTTPException 403: If user lacks permission
+    """
+    try:
+        # Check if this Git org is already claimed (early feedback for the common case)
+        existing_claim = await OrgGitClaimStore.get_claim_by_provider_and_git_org(
+            provider=request.provider,
+            git_organization=request.git_organization,
+        )
+
+        if existing_claim:
+            raise GitOrgAlreadyClaimedError(
+                provider=request.provider,
+                git_organization=request.git_organization,
+            )
+
+        # Create the claim — the DB unique constraint handles the race condition
+        # where two concurrent requests both pass the check above.
+        claim = await OrgGitClaimStore.create_claim(
+            org_id=org_id,
+            provider=request.provider,
+            git_organization=request.git_organization,
+            claimed_by=UUID(user_id),
+        )
+
+        return GitOrgClaimResponse(
+            id=str(claim.id),
+            org_id=str(claim.org_id),
+            provider=claim.provider,
+            git_organization=claim.git_organization,
+            claimed_by=str(claim.claimed_by),
+            claimed_at=claim.claimed_at.isoformat(),
+        )
+
+    except GitOrgAlreadyClaimedError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except IntegrityError as e:
+        # Only treat the unique constraint violation as a duplicate claim.
+        # Other integrity errors (e.g. FK violations) should surface as 500s.
+        if 'uq_provider_git_org' in str(e.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(
+                    GitOrgAlreadyClaimedError(
+                        provider=request.provider,
+                        git_organization=request.git_organization,
+                    )
+                ),
+            )
+        logger.exception('Integrity error claiming Git organization')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to claim Git organization',
+        )
+    except Exception:
+        logger.exception('Error claiming Git organization')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to claim Git organization',
+        )
+
+
+@org_router.delete(
+    '/{org_id}/git-claims/{claim_id}',
+    status_code=status.HTTP_200_OK,
+)
+async def disconnect_git_organization(
+    org_id: UUID,
+    claim_id: UUID,
+    user_id: str = Depends(require_permission(Permission.MANAGE_ORG_CLAIMS)),
+) -> dict:
+    """Remove a Git organization claim from an OpenHands organization.
+
+    Only admin and owner roles can disconnect Git organization claims.
+
+    Args:
+        org_id: OpenHands organization UUID
+        claim_id: Claim UUID to remove
+        user_id: Authenticated user ID (injected by permission check)
+
+    Returns:
+        dict: Confirmation message on successful deletion
+
+    Raises:
+        HTTPException 404: If the claim is not found for this organization
+        HTTPException 403: If user lacks permission
+    """
+    try:
+        deleted = await OrgGitClaimStore.delete_claim(
+            claim_id=claim_id,
+            org_id=org_id,
+        )
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='Git organization claim not found',
+            )
+
+        return {'message': 'Git organization claim removed successfully'}
+
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception('Error disconnecting Git organization')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to disconnect Git organization',
         )

@@ -27,7 +27,6 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
-    ALLOW_CORS_ORIGINS_VARIABLE,
     SESSION_API_KEY_VARIABLE,
     WEBHOOK_CALLBACK_VARIABLE,
     SandboxService,
@@ -41,6 +40,22 @@ from openhands.app_server.utils.docker_utils import (
 
 _logger = logging.getLogger(__name__)
 STARTUP_GRACE_SECONDS = 15
+
+
+def _get_use_host_network_default() -> bool:
+    """Get the default value for use_host_network from environment variables.
+
+    This function is called at runtime (not at class definition time) to ensure
+    that environment variable changes are picked up correctly.
+    """
+    value = os.getenv('AGENT_SERVER_USE_HOST_NETWORK', '')
+    return value.lower() in ('true', '1', 'yes')
+
+
+def _get_kvm_enabled_default() -> bool:
+    """Get the default value for kvm_enabled from environment variables."""
+    value = os.getenv('SANDBOX_KVM_ENABLED', '')
+    return value.lower() in ('true', '1', 'yes')
 
 
 class VolumeMount(BaseModel):
@@ -81,10 +96,12 @@ class DockerSandboxService(SandboxService):
     httpx_client: httpx.AsyncClient
     max_num_sandboxes: int
     web_url: str | None = None
+    permitted_cors_origins: list[str] = field(default_factory=list)
     extra_hosts: dict[str, str] = field(default_factory=dict)
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
+    kvm_enabled: bool = False
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -197,6 +214,12 @@ class DockerSandboxService(SandboxService):
                                     )
                                 )
 
+        if not container.image.tags:
+            _logger.debug(
+                f'Skipping container {container.name!r}: image has no tags (image id: {container.image.id})'
+            )
+            return None
+
         return SandboxInfo(
             id=container.name,
             created_by_user_id=None,
@@ -230,8 +253,16 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                # Get the started_at from the docker container info and fallback to sandbox created_at
+                try:
+                    state = container.attrs['State']
+                    started_at = datetime.fromisoformat(state['StartedAt'])
+                except Exception:
+                    _logger.debug('Error getting container start time')
+                    started_at = sandbox_info.created_at
+
                 # If the server has exceeded the startup grace period, it's an error
-                if sandbox_info.created_at < utc_now() - timedelta(
+                if started_at < utc_now() - timedelta(
                     seconds=self.startup_grace_seconds
                 ):
                     _logger.info(
@@ -370,8 +401,18 @@ class DockerSandboxService(SandboxService):
         # Set CORS origins for remote browser access when web_url is configured.
         # This allows the agent-server container to accept requests from the
         # frontend when running OpenHands on a remote machine.
+        # Each origin gets its own indexed env var (OH_ALLOW_CORS_ORIGINS_0, _1, etc.)
+        cors_origins: list[str] = []
         if self.web_url:
-            env_vars[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
+            cors_origins.append(self.web_url)
+        cors_origins.extend(self.permitted_cors_origins)
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        for origin in cors_origins:
+            if origin not in seen:
+                seen.add(origin)
+                idx = len(seen) - 1
+                env_vars[f'OH_ALLOW_CORS_ORIGINS_{idx}'] = origin
 
         # Prepare port mappings and add port environment variables
         # When using host network, container ports are directly accessible on the host
@@ -409,9 +450,17 @@ class DockerSandboxService(SandboxService):
         if self.use_host_network:
             _logger.info(f'Starting sandbox {container_name} with host network mode')
 
+        # Determine devices to pass through (e.g., /dev/kvm for hardware virtualization)
+        devices = ['/dev/kvm:/dev/kvm:rwm'] if self.kvm_enabled else None
+
+        if self.kvm_enabled:
+            _logger.info(
+                f'Starting sandbox {container_name} with KVM device passthrough'
+            )
+
         try:
             # Create and start the container
-            container = self.docker_client.containers.run(  # type: ignore[call-overload]
+            container = self.docker_client.containers.run(  # type: ignore[call-overload,misc]
                 image=sandbox_spec.id,
                 command=sandbox_spec.command,  # Use default command from image
                 remove=False,
@@ -433,6 +482,8 @@ class DockerSandboxService(SandboxService):
                 else None,
                 # Network mode: 'host' for host networking, None for default bridge
                 network_mode=network_mode,
+                # Device passthrough for KVM hardware virtualization
+                devices=devices,
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)
@@ -555,7 +606,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             ExposedPort(
                 name=WORKER_2,
                 description=(
-                    'The first port on which the agent should start application servers.'
+                    'The second port on which the agent should start application servers.'
                 ),
                 container_port=8012,
             ),
@@ -585,18 +636,23 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
         ),
     )
     use_host_network: bool = Field(
-        default=os.getenv('SANDBOX_USE_HOST_NETWORK', '').lower()
-        in (
-            'true',
-            '1',
-            'yes',
-        ),
+        default_factory=_get_use_host_network_default,
         description=(
-            'Whether to use host networking mode for sandbox containers. '
+            'Whether to use host networking mode for agent-server containers. '
             'When enabled, containers share the host network namespace, '
             'making all container ports directly accessible on the host. '
             'This is useful for reverse proxy setups where dynamic port mapping '
-            'is problematic. Configure via OH_SANDBOX_USE_HOST_NETWORK environment variable.'
+            'is problematic. Configure via AGENT_SERVER_USE_HOST_NETWORK environment variable.'
+        ),
+    )
+    kvm_enabled: bool = Field(
+        default_factory=_get_kvm_enabled_default,
+        description=(
+            'Whether to pass through /dev/kvm to sandbox containers for hardware '
+            'virtualization support. When enabled, sandboxes can run KVM-accelerated '
+            'virtual machines instead of using slower emulation. Requires the host '
+            'to have KVM available (/dev/kvm must exist and be accessible). '
+            'Configure via SANDBOX_KVM_ENABLED environment variable.'
         ),
     )
 
@@ -610,7 +666,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             get_sandbox_spec_service,
         )
 
-        # Get web_url from global config for CORS support
+        # Get web_url and permitted_cors_origins from global config
         config = get_global_config()
         web_url = config.web_url
 
@@ -629,7 +685,9 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
                 web_url=web_url,
+                permitted_cors_origins=config.permitted_cors_origins,
                 extra_hosts=self.extra_hosts,
                 startup_grace_seconds=self.startup_grace_seconds,
                 use_host_network=self.use_host_network,
+                kvm_enabled=self.kvm_enabled,
             )

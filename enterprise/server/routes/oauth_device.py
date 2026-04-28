@@ -10,8 +10,8 @@ from server.utils.url_utils import get_web_url
 from storage.api_key_store import ApiKeyStore
 from storage.device_code_store import DeviceCodeStore
 
+from openhands.app_server.user_auth import get_user_id
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_id
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -180,6 +180,18 @@ async def device_token(device_code: str = Form(...)):
             )
 
         if device_code_entry.status == 'authorized':
+            # Verify user_id is set (should always be true for authorized status)
+            if not device_code_entry.keycloak_user_id:
+                logger.error(
+                    'Authorized device code missing user_id',
+                    extra={'user_code': device_code_entry.user_code},
+                )
+                return _oauth_error(
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'server_error',
+                    'User identification missing',
+                )
+
             # Retrieve the specific API key for this device using the user_code
             api_key_store = ApiKeyStore.get_instance()
             device_key_name = f'{API_KEY_NAME} ({device_code_entry.user_code})'

@@ -16,8 +16,8 @@ from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
 
-from openhands.integrations.service_types import ProviderType, Repository
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture

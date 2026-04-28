@@ -30,9 +30,11 @@ export function useBranchData(
     provider,
   );
 
-  // Combine all branches from paginated data
+  // Combine all branches from paginated data - use .items for V1 response
   const allBranches = useMemo(
-    () => branchData?.pages?.flatMap((page) => page.branches) || [],
+    () =>
+      branchData?.pages?.flatMap((page: { items: Branch[] }) => page.items) ||
+      [],
     [branchData],
   );
 
@@ -40,7 +42,7 @@ export function useBranchData(
   const defaultBranchInLoaded = useMemo(
     () =>
       defaultBranch
-        ? allBranches.find((branch) => branch.name === defaultBranch)
+        ? allBranches.find((branch: Branch) => branch.name === defaultBranch)
         : null,
     [allBranches, defaultBranch],
   );
@@ -75,7 +77,7 @@ export function useBranchData(
     if (defaultBranch) {
       // Use the already computed defaultBranchInLoaded or check in current branches
       let defaultBranchObj = shouldUseSearch
-        ? branchesToUse.find((branch) => branch.name === defaultBranch)
+        ? branchesToUse.find((branch: Branch) => branch.name === defaultBranch)
         : defaultBranchInLoaded;
 
       // If not found in current branches, check if we have it from the default branch search

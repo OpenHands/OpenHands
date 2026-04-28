@@ -5,43 +5,35 @@ import logging
 import os
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
-
-from openhands.app_server.services.db_session_injector import set_db_session_keep_open
-from openhands.app_server.services.httpx_client_injector import (
-    set_httpx_client_keep_open,
-)
-from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.app_server.user.user_context import UserContext
-from openhands.server.dependencies import get_dependencies
-
-# Handle anext compatibility for Python < 3.10
-if sys.version_info >= (3, 10):
-    from builtins import anext
-else:
-
-    async def anext(async_iterator):
-        """Compatibility function for anext in Python < 3.10"""
-        return await async_iterator.__anext__()
-
-
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openhands.agent_server.models import Success
+from openhands.app_server.app_conversation.app_conversation_info_service import (
+    AppConversationInfoService,
+)
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
+    AppConversationInfo,
     AppConversationPage,
     AppConversationStartRequest,
     AppConversationStartTask,
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
     AppConversationUpdateRequest,
+    AppSendMessageRequest,
+    AppSendMessageResponse,
+    GetHooksResponse,
+    HookDefinitionResponse,
+    HookEventResponse,
+    HookMatcherResponse,
     SkillResponse,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
@@ -55,6 +47,7 @@ from openhands.app_server.app_conversation.app_conversation_start_task_service i
     AppConversationStartTaskService,
 )
 from openhands.app_server.config import (
+    depends_app_conversation_info_service,
     depends_app_conversation_service,
     depends_app_conversation_start_task_service,
     depends_db_session,
@@ -66,15 +59,35 @@ from openhands.app_server.config import (
 )
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
+    SandboxInfo,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
+from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
+from openhands.app_server.services.db_session_injector import set_db_session_keep_open
+from openhands.app_server.services.httpx_client_injector import (
+    set_httpx_client_keep_open,
+)
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
+from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
-from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
+from openhands.sdk.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+
+# Handle anext compatibility for Python < 3.10
+if sys.version_info >= (3, 10):
+    from builtins import anext
+else:
+
+    async def anext(async_iterator):
+        """Compatibility function for anext in Python < 3.10"""
+        return await async_iterator.__anext__()
+
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
@@ -83,6 +96,7 @@ router = APIRouter(
 )
 logger = logging.getLogger(__name__)
 app_conversation_service_dependency = depends_app_conversation_service()
+app_conversation_info_service_dependency = depends_app_conversation_info_service()
 app_conversation_start_task_service_dependency = (
     depends_app_conversation_start_task_service()
 )
@@ -91,6 +105,104 @@ db_session_dependency = depends_db_session()
 httpx_client_dependency = depends_httpx_client()
 sandbox_service_dependency = depends_sandbox_service()
 sandbox_spec_service_dependency = depends_sandbox_spec_service()
+
+
+@dataclass
+class AgentServerContext:
+    """Context for accessing the agent server for a conversation."""
+
+    conversation: AppConversationInfo
+    sandbox: SandboxInfo
+    sandbox_spec: SandboxSpecInfo
+    agent_server_url: str
+    session_api_key: str | None
+
+
+async def _get_agent_server_context(
+    conversation_id: UUID,
+    app_conversation_service: AppConversationService,
+    sandbox_service: SandboxService,
+    sandbox_spec_service: SandboxSpecService,
+) -> AgentServerContext | JSONResponse | None:
+    """Get the agent server context for a conversation.
+
+    This helper retrieves all necessary information to communicate with the
+    agent server for a given conversation, including the sandbox info,
+    sandbox spec, and agent server URL.
+
+    Args:
+        conversation_id: The conversation ID
+        app_conversation_service: Service for conversation operations
+        sandbox_service: Service for sandbox operations
+        sandbox_spec_service: Service for sandbox spec operations
+
+    Returns:
+        AgentServerContext if successful, JSONResponse(404) if conversation
+        not found, or None if sandbox is not running (e.g. closed conversation).
+    """
+    # Get the conversation info
+    conversation = await app_conversation_service.get_app_conversation(conversation_id)
+    if not conversation:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': f'Conversation {conversation_id} not found'},
+        )
+
+    # Get the sandbox info
+    sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
+    if not sandbox:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': f'Sandbox not found for conversation {conversation_id}'},
+        )
+    # Return None for paused sandboxes (closed conversation)
+    if sandbox.status == SandboxStatus.PAUSED:
+        return None
+    # Return 404 for other non-running states (STARTING, ERROR, MISSING)
+    if sandbox.status != SandboxStatus.RUNNING:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': f'Sandbox not ready for conversation {conversation_id}'},
+        )
+
+    # Get the sandbox spec to find the working directory
+    sandbox_spec = await sandbox_spec_service.get_sandbox_spec(sandbox.sandbox_spec_id)
+    if not sandbox_spec:
+        # TODO: This is a temporary work around for the fact that we don't store previous
+        # sandbox spec versions when updating OpenHands. When the SandboxSpecServices
+        # transition to truly multi sandbox spec model this should raise a 404 error
+        logger.warning('Sandbox spec not found - using default.')
+        sandbox_spec = await sandbox_spec_service.get_default_sandbox_spec()
+
+    # Get the agent server URL
+    if not sandbox.exposed_urls:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'No agent server URL found for sandbox'},
+        )
+
+    agent_server_url = None
+    for exposed_url in sandbox.exposed_urls:
+        if exposed_url.name == AGENT_SERVER:
+            agent_server_url = exposed_url.url
+            break
+
+    if not agent_server_url:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'Agent server URL not found in sandbox'},
+        )
+
+    agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+
+    return AgentServerContext(
+        conversation=conversation,
+        sandbox=sandbox,
+        sandbox_spec=sandbox_spec,
+        agent_server_url=agent_server_url,
+        session_api_key=sandbox.session_api_key,
+    )
+
 
 # Read methods
 
@@ -117,6 +229,10 @@ async def search_app_conversations(
         datetime | None,
         Query(title='Filter by updated_at less than this datetime'),
     ] = None,
+    sandbox_id__eq: Annotated[
+        str | None,
+        Query(title='Filter by exact sandbox_id'),
+    ] = None,
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -126,7 +242,7 @@ async def search_app_conversations(
         Query(
             title='The max number of results in the page',
             gt=0,
-            lte=100,
+            le=100,
         ),
     ] = 100,
     include_sub_conversations: Annotated[
@@ -140,14 +256,13 @@ async def search_app_conversations(
     ),
 ) -> AppConversationPage:
     """Search / List sandboxed conversations."""
-    assert limit > 0
-    assert limit <= 100
     return await app_conversation_service.search_app_conversations(
         title__contains=title__contains,
         created_at__gte=created_at__gte,
         created_at__lt=created_at__lt,
         updated_at__gte=updated_at__gte,
         updated_at__lt=updated_at__lt,
+        sandbox_id__eq=sandbox_id__eq,
         page_id=page_id,
         limit=limit,
         include_sub_conversations=include_sub_conversations,
@@ -176,6 +291,10 @@ async def count_app_conversations(
         datetime | None,
         Query(title='Filter by updated_at less than this datetime'),
     ] = None,
+    sandbox_id__eq: Annotated[
+        str | None,
+        Query(title='Filter by exact sandbox_id'),
+    ] = None,
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
@@ -187,6 +306,7 @@ async def count_app_conversations(
         created_at__lt=created_at__lt,
         updated_at__gte=updated_at__gte,
         updated_at__lt=updated_at__lt,
+        sandbox_id__eq=sandbox_id__eq,
     )
 
 
@@ -270,6 +390,269 @@ async def update_app_conversation(
     return info
 
 
+@router.post(
+    '/{conversation_id}/send-message',
+    responses={
+        404: {'description': 'Conversation or sandbox not found'},
+        409: {
+            'description': 'Sandbox is not running. Resume it first via POST /sandboxes/{id}/resume'
+        },
+        410: {'description': 'Conversation is archived (sandbox no longer exists)'},
+        503: {'description': 'Sandbox is in error state or agent server unavailable'},
+    },
+)
+async def send_message_to_conversation(
+    conversation_id: UUID,
+    request: AppSendMessageRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> AppSendMessageResponse:
+    """Send a follow-up message to an existing conversation.
+
+    This REST endpoint provides a simplified way to send messages to a running
+    conversation without requiring a WebSocket connection.
+
+    **Alternative Approaches:**
+
+    This endpoint is a convenience wrapper. You can also interact with the agent
+    server directly using:
+
+    1. **WebSocket**: Connect to the agent server's WebSocket endpoint for
+       real-time bidirectional communication
+    2. **Agent Server REST API**: Call the agent server's REST endpoints directly
+       using the `conversation_url` from `GET /api/v1/app-conversations/{id}`
+
+    **Design Note:**
+
+    This endpoint is intentionally a thin proxy that forwards messages to the
+    agent server without additional processing logic. Any custom processing
+    (validation, transformation, side effects) should be implemented via
+    webhook callbacks, not in this endpoint. This ensures that direct agent
+    server invocation and this convenience endpoint remain functionally equivalent.
+
+    **Prerequisites:**
+
+    - The sandbox must be in RUNNING state
+    - If the sandbox is PAUSED, call `POST /api/v1/sandboxes/{sandbox_id}/resume` first
+    - If the sandbox is STARTING, wait for it to reach RUNNING state
+
+    **Error responses:**
+
+    - 404: Conversation or sandbox not found
+    - 409: Sandbox exists but is not running (PAUSED, STARTING, STOPPING)
+    - 410: Conversation is archived (sandbox no longer exists)
+    - 503: Sandbox is in ERROR state or agent server is unavailable
+
+    Args:
+        conversation_id: The UUID of the conversation to send the message to
+        request: The message content and options
+
+    Returns:
+        AppSendMessageResponse with success status and sandbox state
+    """
+    # Get conversation info
+    conversation = await app_conversation_service.get_app_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Conversation {conversation_id} not found',
+        )
+
+    # Get sandbox info
+    sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
+    if not sandbox:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Sandbox not found for conversation {conversation_id}',
+        )
+
+    # Check sandbox status - require RUNNING state
+    if sandbox.status == SandboxStatus.MISSING:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail='Conversation is archived. The sandbox no longer exists.',
+        )
+
+    if sandbox.status == SandboxStatus.ERROR:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Sandbox is in an error state and cannot accept messages.',
+        )
+
+    if sandbox.status != SandboxStatus.RUNNING:
+        # Sandbox exists but is not running (PAUSED, STARTING, STOPPING, etc.)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f'Sandbox is {sandbox.status.value}. '
+                f'Use POST /api/v1/sandboxes/{sandbox.id}/resume to resume it first.'
+            ),
+        )
+
+    # Get agent server URL from sandbox
+    if not sandbox.exposed_urls:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='No agent server URL found for sandbox.',
+        )
+
+    agent_server_url = None
+    for exposed_url in sandbox.exposed_urls:
+        if exposed_url.name == AGENT_SERVER:
+            agent_server_url = exposed_url.url
+            break
+
+    if not agent_server_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Agent server URL not found in sandbox.',
+        )
+
+    agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+
+    # Send message to agent server
+    try:
+        content_json = [item.model_dump() for item in request.content]
+        response = await httpx_client.post(
+            f'{agent_server_url}/api/conversations/{conversation_id}/events',
+            json={
+                'role': request.role,
+                'content': content_json,
+                'run': request.run,
+            },
+            headers=(
+                {'X-Session-API-Key': sandbox.session_api_key}
+                if sandbox.session_api_key
+                else {}
+            ),
+            timeout=30.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            f'Agent server returned error when sending message: '
+            f'{e.response.status_code} - {e.response.text}'
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Agent server error: {e.response.status_code}',
+        )
+    except httpx.RequestError as e:
+        logger.error(f'Failed to reach agent server: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+    return AppSendMessageResponse(
+        success=True,
+        sandbox_status=sandbox.status,
+        message=None,
+    )
+
+
+async def _finalize_sandbox_delete(
+    sandbox_service: SandboxService,
+    app_conversation_info_service: AppConversationInfoService,
+    sandbox_id: str,
+    db_session: AsyncSession,
+    httpx_client: httpx.AsyncClient,
+) -> None:
+    """Delete sandbox if no other conversations reference it, then close connections."""
+    try:
+        conversation_count = (
+            await app_conversation_info_service.count_conversations_by_sandbox_id(
+                sandbox_id
+            )
+        )
+        if conversation_count == 0:
+            await sandbox_service.delete_sandbox(sandbox_id)
+        await db_session.commit()
+    finally:
+        await asyncio.gather(
+            db_session.aclose(),
+            httpx_client.aclose(),
+        )
+
+
+@router.delete('/{conversation_id}', responses={404: {'description': 'Item not found'}})
+async def delete_app_conversation(
+    request: Request,
+    conversation_id: str,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    app_conversation_info_service: AppConversationInfoService = (
+        app_conversation_info_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    db_session: AsyncSession = db_session_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Success:
+    """Delete an app conversation and its associated data.
+
+    This endpoint deletes the conversation and cleans up sandbox resources
+    if no other conversations are using the same sandbox.
+    """
+    try:
+        conversation_uuid = UUID(conversation_id)
+    except ValueError:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, 'Invalid conversation ID format'
+        )
+
+    # Get conversation info to check if it exists and get sandbox_id
+    app_conversation_info = (
+        await app_conversation_info_service.get_app_conversation_info(conversation_uuid)
+    )
+    if not app_conversation_info:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, 'Conversation not found')
+
+    sandbox_id = app_conversation_info.sandbox_id
+
+    # Check if sandbox is shared with other conversations
+    sandbox_is_shared = False
+    if sandbox_id:
+        conversation_count = (
+            await app_conversation_info_service.count_conversations_by_sandbox_id(
+                sandbox_id
+            )
+        )
+        sandbox_is_shared = conversation_count > 1
+
+    # Delete the conversation (skip agent server DELETE if sandbox is shared)
+    deleted = await app_conversation_service.delete_app_conversation(
+        conversation_uuid,
+        skip_agent_server_delete=sandbox_is_shared,
+    )
+    if not deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, 'Failed to delete conversation')
+
+    # Commit the deletion
+    await db_session.commit()
+
+    # Keep connections open for background task
+    set_db_session_keep_open(request.state, True)
+    set_httpx_client_keep_open(request.state, True)
+
+    # Delete the sandbox in the background if no other conversations reference it
+    if sandbox_id:
+        asyncio.create_task(
+            _finalize_sandbox_delete(
+                sandbox_service,
+                app_conversation_info_service,
+                sandbox_id,
+                db_session,
+                httpx_client,
+            )
+        )
+
+    return Success()
+
+
 @router.post('/stream-start')
 async def stream_app_conversation_start(
     request: AppConversationStartRequest,
@@ -308,7 +691,7 @@ async def search_app_conversation_start_tasks(
         Query(
             title='The max number of results in the page',
             gt=0,
-            lte=100,
+            le=100,
         ),
     ] = 100,
     app_conversation_start_task_service: AppConversationStartTaskService = (
@@ -316,8 +699,6 @@ async def search_app_conversation_start_tasks(
     ),
 ) -> AppConversationStartTaskPage:
     """Search / List conversation start tasks."""
-    assert limit > 0
-    assert limit <= 100
     return (
         await app_conversation_start_task_service.search_app_conversation_start_tasks(
             conversation_id__eq=conversation_id__eq,
@@ -358,7 +739,11 @@ async def batch_get_app_conversation_start_tasks(
     ),
 ) -> list[AppConversationStartTask | None]:
     """Get a batch of start app conversation tasks given their ids. Return None for any missing."""
-    assert len(ids) < 100
+    if len(ids) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Cannot request more than 100 start tasks at once, got {len(ids)}',
+        )
     start_tasks = await app_conversation_start_task_service.batch_get_app_conversation_start_tasks(
         ids
     )
@@ -477,63 +862,24 @@ async def get_conversation_skills(
     - Global skills (OpenHands/skills/)
     - User skills (~/.openhands/skills/)
     - Organization skills (org/.openhands repository)
-    - Repository skills (repo/.openhands/skills/ or .openhands/microagents/)
+    - Repository skills (repo .agents/skills/, .openhands/microagents/, and legacy .openhands/skills/)
 
     Returns:
         JSONResponse: A JSON response containing the list of skills.
+        Returns an empty list if the sandbox is not running.
     """
     try:
-        # Get the conversation info
-        conversation = await app_conversation_service.get_app_conversation(
-            conversation_id
+        # Get agent server context (conversation, sandbox, sandbox_spec, agent_server_url)
+        ctx = await _get_agent_server_context(
+            conversation_id,
+            app_conversation_service,
+            sandbox_service,
+            sandbox_spec_service,
         )
-        if not conversation:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={'error': f'Conversation {conversation_id} not found'},
-            )
-
-        # Get the sandbox info
-        sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
-        if not sandbox or sandbox.status != SandboxStatus.RUNNING:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={
-                    'error': f'Sandbox not found or not running for conversation {conversation_id}'
-                },
-            )
-
-        # Get the sandbox spec to find the working directory
-        sandbox_spec = await sandbox_spec_service.get_sandbox_spec(
-            sandbox.sandbox_spec_id
-        )
-        if not sandbox_spec:
-            # TODO: This is a temporary work around for the fact that we don't store previous
-            # sandbox spec versions when updating OpenHands. When the SandboxSpecServices
-            # transition to truly multi sandbox spec model this should raise a 404 error
-            logger.warning('Sandbox spec not found - using default.')
-            sandbox_spec = await sandbox_spec_service.get_default_sandbox_spec()
-
-        # Get the agent server URL
-        if not sandbox.exposed_urls:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={'error': 'No agent server URL found for sandbox'},
-            )
-
-        agent_server_url = None
-        for exposed_url in sandbox.exposed_urls:
-            if exposed_url.name == AGENT_SERVER:
-                agent_server_url = exposed_url.url
-                break
-
-        if not agent_server_url:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={'error': 'Agent server URL not found in sandbox'},
-            )
-
-        agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+        if isinstance(ctx, JSONResponse):
+            return ctx
+        if ctx is None:
+            return JSONResponse(status_code=status.HTTP_200_OK, content={'skills': []})
 
         # Load skills from all sources
         logger.info(f'Loading skills for conversation {conversation_id}')
@@ -542,13 +888,13 @@ async def get_conversation_skills(
         all_skills: list = []
         if isinstance(app_conversation_service, AppConversationServiceBase):
             project_dir = get_project_dir(
-                sandbox_spec.working_dir, conversation.selected_repository
+                ctx.sandbox_spec.working_dir, ctx.conversation.selected_repository
             )
             all_skills = await app_conversation_service.load_and_merge_all_skills(
-                sandbox,
-                conversation.selected_repository,
+                ctx.sandbox,
+                ctx.conversation.selected_repository,
                 project_dir,
-                agent_server_url,
+                ctx.agent_server_url,
             )
 
         logger.info(
@@ -569,7 +915,7 @@ async def get_conversation_skills(
                 skill_type = 'knowledge'
 
             # Extract triggers
-            triggers = []
+            triggers: list[str] = []
             if isinstance(skill.trigger, (KeywordTrigger, TaskTrigger)):
                 if hasattr(skill.trigger, 'keywords'):
                     triggers = skill.trigger.keywords
@@ -595,6 +941,150 @@ async def get_conversation_skills(
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': f'Error getting skills: {str(e)}'},
+        )
+
+
+@router.get('/{conversation_id}/hooks')
+async def get_conversation_hooks(
+    conversation_id: UUID,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> JSONResponse:
+    """Get hooks currently configured in the workspace for this conversation.
+
+    This endpoint loads hooks from the conversation's project directory in the
+    workspace (i.e. `{project_dir}/.openhands/hooks.json`) at request time.
+
+    Note:
+        This is intentionally a "live" view of the workspace configuration.
+        If `.openhands/hooks.json` changes over time, this endpoint reflects the
+        latest file content and may not match the hooks that were used when the
+        conversation originally started.
+
+    Returns:
+        JSONResponse: A JSON response containing the list of hook event types.
+        Returns an empty list if the sandbox is not running.
+    """
+    try:
+        # Get agent server context (conversation, sandbox, sandbox_spec, agent_server_url)
+        ctx = await _get_agent_server_context(
+            conversation_id,
+            app_conversation_service,
+            sandbox_service,
+            sandbox_spec_service,
+        )
+        if isinstance(ctx, JSONResponse):
+            return ctx
+        if ctx is None:
+            return JSONResponse(status_code=status.HTTP_200_OK, content={'hooks': []})
+
+        from openhands.app_server.app_conversation.hook_loader import (
+            fetch_hooks_from_agent_server,
+            get_project_dir_for_hooks,
+        )
+
+        project_dir = get_project_dir_for_hooks(
+            ctx.sandbox_spec.working_dir,
+            ctx.conversation.selected_repository,
+        )
+
+        # Load hooks from agent-server (using the error-raising variant so
+        # HTTP/connection failures are surfaced to the user, not hidden).
+        logger.debug(
+            f'Loading hooks for conversation {conversation_id}, '
+            f'agent_server_url={ctx.agent_server_url}, '
+            f'project_dir={project_dir}'
+        )
+
+        try:
+            hook_config = await fetch_hooks_from_agent_server(
+                agent_server_url=ctx.agent_server_url,
+                session_api_key=ctx.session_api_key,
+                project_dir=project_dir,
+                httpx_client=httpx_client,
+            )
+        except httpx.HTTPStatusError as e:
+            logger.warning(
+                f'Agent-server returned {e.response.status_code} when loading hooks '
+                f'for conversation {conversation_id}: {e.response.text}'
+            )
+            return JSONResponse(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                content={
+                    'error': f'Agent-server returned status {e.response.status_code} when loading hooks'
+                },
+            )
+        except httpx.RequestError as e:
+            logger.warning(
+                f'Failed to reach agent-server when loading hooks '
+                f'for conversation {conversation_id}: {e}'
+            )
+            return JSONResponse(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                content={'error': 'Failed to reach agent-server when loading hooks'},
+            )
+
+        # Transform hook_config to response format
+        hooks_response: list[HookEventResponse] = []
+
+        if hook_config:
+            # Define the event types to check
+            event_types = [
+                'pre_tool_use',
+                'post_tool_use',
+                'user_prompt_submit',
+                'session_start',
+                'session_end',
+                'stop',
+            ]
+
+            for field_name in event_types:
+                matchers = getattr(hook_config, field_name, [])
+                if matchers:
+                    matcher_responses = []
+                    for matcher in matchers:
+                        hook_defs = [
+                            HookDefinitionResponse(
+                                type=hook.type.value
+                                if hasattr(hook.type, 'value')
+                                else str(hook.type),
+                                command=hook.command,
+                                timeout=hook.timeout,
+                                async_=hook.async_,
+                            )
+                            for hook in matcher.hooks
+                        ]
+                        matcher_responses.append(
+                            HookMatcherResponse(
+                                matcher=matcher.matcher,
+                                hooks=hook_defs,
+                            )
+                        )
+                    hooks_response.append(
+                        HookEventResponse(
+                            event_type=field_name,
+                            matchers=matcher_responses,
+                        )
+                    )
+
+        logger.debug(
+            f'Loaded {len(hooks_response)} hook event types for conversation {conversation_id}'
+        )
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=GetHooksResponse(hooks=hooks_response).model_dump(by_alias=True),
+        )
+
+    except Exception as e:
+        logger.error(f'Error getting hooks for conversation {conversation_id}: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': f'Error getting hooks: {str(e)}'},
         )
 
 

@@ -32,13 +32,14 @@ describe("Changes Tab", () => {
     vi.mocked(useUnifiedGetGitChanges).mockReturnValue({
       data: [],
       isLoading: false,
+      isFetching: false,
       isSuccess: true,
       isError: false,
       error: null,
       refetch: vi.fn(),
     });
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.RUNNING,
+      curAgentState: AgentState.RUNNING, isArchived: false,
     });
 
     render(<GitChanges />, { wrapper });
@@ -50,13 +51,14 @@ describe("Changes Tab", () => {
     vi.mocked(useUnifiedGetGitChanges).mockReturnValue({
       data: [{ path: "src/file.ts", status: "M" }],
       isLoading: false,
+      isFetching: false,
       isSuccess: true,
       isError: false,
       error: null,
       refetch: vi.fn(),
     });
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.RUNNING,
+      curAgentState: AgentState.RUNNING, isArchived: false,
     });
 
     render(<GitChanges />, { wrapper });

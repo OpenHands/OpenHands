@@ -217,6 +217,64 @@ export interface PlanningFileEditorObservation extends ObservationBase<"Planning
   new_content: string | null;
 }
 
+export interface GlobObservation extends ObservationBase<"GlobObservation"> {
+  /**
+   * Content returned from the tool as a list of TextContent/ImageContent objects.
+   */
+  content: Array<TextContent | ImageContent>;
+  /**
+   * Whether the call resulted in an error.
+   */
+  is_error: boolean;
+  /**
+   * List of matching file paths sorted by modification time.
+   */
+  files: string[];
+  /**
+   * The glob pattern that was used.
+   */
+  pattern: string;
+  /**
+   * The directory that was searched.
+   */
+  search_path: string;
+  /**
+   * Whether results were truncated to 100 files.
+   */
+  truncated: boolean;
+}
+
+export interface GrepObservation extends ObservationBase<"GrepObservation"> {
+  /**
+   * Content returned from the tool as a list of TextContent/ImageContent objects.
+   */
+  content: Array<TextContent | ImageContent>;
+  /**
+   * Whether the call resulted in an error.
+   */
+  is_error: boolean;
+  /**
+   * List of file paths containing the pattern.
+   */
+  matches: string[];
+  /**
+   * The regex pattern that was used.
+   */
+  pattern: string;
+  /**
+   * The directory that was searched.
+   */
+  search_path: string;
+  /**
+   * The file pattern filter that was used.
+   */
+  include_pattern: string | null;
+  /**
+   * Whether results were truncated to 100 files.
+   */
+  truncated: boolean;
+}
+
 export type Observation =
   | MCPToolObservation
   | FinishObservation
@@ -227,4 +285,6 @@ export type Observation =
   | FileEditorObservation
   | StrReplaceEditorObservation
   | TaskTrackerObservation
-  | PlanningFileEditorObservation;
+  | PlanningFileEditorObservation
+  | GlobObservation
+  | GrepObservation;

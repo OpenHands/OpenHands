@@ -18,7 +18,7 @@ import {
   renderConversationErroredToast,
   renderConversationCreatedToast,
   renderConversationFinishedToast,
-} from "#/components/features/chat/microagent/microagent-status-toast";
+} from "#/components/shared/conversation-toast";
 import { Provider } from "#/types/settings";
 
 interface ConversationSocket {
@@ -185,14 +185,14 @@ export function ConversationSubscriptionsProvider({
           );
         } else if (isStatusUpdate(event)) {
           if (event.type === "info" && event.id === "STATUS$STARTING_RUNTIME") {
-            renderConversationCreatedToast(conversationId);
+            renderConversationCreatedToast();
           }
         } else if (
           isOpenHandsEvent(event) &&
           isAgentStateChangeObservation(event)
         ) {
           if (event.extras.agent_state === AgentState.FINISHED) {
-            renderConversationFinishedToast(conversationId);
+            renderConversationFinishedToast();
             unsubscribeFromConversation(conversationId);
           }
         }

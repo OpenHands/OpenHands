@@ -1,6 +1,7 @@
 import time
 from dataclasses import dataclass
 from types import MappingProxyType
+from uuid import UUID
 
 import jwt
 from fastapi import Request
@@ -13,6 +14,10 @@ from server.auth.auth_error import (
     ExpiredError,
     NoCredentialsError,
 )
+from server.auth.authorization import (
+    get_role_permissions,
+    get_user_org_role,
+)
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 from server.auth.token_manager import TokenManager
 from server.config import get_config
@@ -22,21 +27,23 @@ from sqlalchemy import delete, select
 from storage.api_key_store import ApiKeyStore
 from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
+from storage.org_store import OrgStore
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
+from storage.user_store import UserStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
-from openhands.integrations.provider import (
+from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderToken,
     ProviderType,
 )
-from openhands.server.settings import Settings
-from openhands.server.user_auth.user_auth import AuthType, UserAuth
-from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.settings.settings_store import SettingsStore
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.user_auth.user_auth import AuthType, UserAuth
 
 token_manager = TokenManager()
 
@@ -59,6 +66,25 @@ class SaasUserAuth(UserAuth):
     _secrets: Secrets | None = None
     accepted_tos: bool | None = None
     auth_type: AuthType = AuthType.COOKIE
+    # API key context fields - populated when authenticated via API key
+    api_key_org_id: UUID | None = None  # Org bound to the API key used for auth
+    api_key_id: int | None = None
+    api_key_name: str | None = None
+    # Organization context fields - populated lazily via get_org_info()
+    _org_id: str | None = None
+    _org_name: str | None = None
+    _role: str | None = None
+    _permissions: list[str] | None = None
+    _org_info_loaded: bool = False
+
+    def get_api_key_org_id(self) -> UUID | None:
+        """Get the organization ID bound to the API key used for authentication.
+
+        Returns:
+            The org_id if authenticated via API key with org binding, None otherwise
+            (cookie auth or legacy API keys without org binding).
+        """
+        return self.api_key_org_id
 
     async def get_user_id(self) -> str | None:
         return self.user_id
@@ -228,6 +254,72 @@ class SaasUserAuth(UserAuth):
             )
         return mcp_api_key
 
+    async def get_org_info(self) -> dict | None:
+        """Get organization info for the current user.
+
+        Lazily loads and caches organization data including:
+        - org_id: Current organization ID
+        - org_name: Current organization name
+        - role: User's role in the organization
+        - permissions: List of permission names for the role
+
+        Returns:
+            dict with org_id, org_name, role, permissions or None if not available
+        """
+        if self._org_info_loaded:
+            if self._org_id is None:
+                return None
+            return {
+                'org_id': self._org_id,
+                'org_name': self._org_name,
+                'role': self._role,
+                'permissions': self._permissions,
+            }
+
+        # Mark as loaded to avoid repeated attempts on failure
+        self._org_info_loaded = True
+
+        try:
+            # Get user and their current org
+            user = await UserStore.get_user_by_id(self.user_id)
+            if not user:
+                logger.warning(f'User {self.user_id} not found for org info')
+                return None
+
+            # Get the current org
+            org = await OrgStore.get_org_by_id(user.current_org_id)
+            if not org:
+                logger.warning(
+                    f'Organization {user.current_org_id} not found for user {self.user_id}'
+                )
+                return None
+
+            # Get user's role in the current org
+            role = await get_user_org_role(self.user_id, user.current_org_id)
+            role_name = role.name if role else None
+
+            # Get permissions for the role
+            permissions: list[str] = []
+            if role_name:
+                role_permissions = get_role_permissions(role_name)
+                permissions = [p.value for p in role_permissions]
+
+            # Cache the results
+            self._org_id = str(user.current_org_id)
+            self._org_name = org.name
+            self._role = role_name
+            self._permissions = permissions
+
+            return {
+                'org_id': self._org_id,
+                'org_name': self._org_name,
+                'role': self._role,
+                'permissions': self._permissions,
+            }
+        except Exception as e:
+            logger.error(f'Error fetching org info for user {self.user_id}: {e}')
+            return None
+
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         logger.debug('saas_user_auth_get_instance')
@@ -283,14 +375,19 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
             return None
 
         api_key_store = ApiKeyStore.get_instance()
-        user_id = await api_key_store.validate_api_key(api_key)
-        if not user_id:
+        validation_result = await api_key_store.validate_api_key(api_key)
+        if not validation_result:
             return None
-        offline_token = await token_manager.load_offline_token(user_id)
+        offline_token = await token_manager.load_offline_token(
+            validation_result.user_id
+        )
         saas_user_auth = SaasUserAuth(
-            user_id=user_id,
+            user_id=validation_result.user_id,
             refresh_token=SecretStr(offline_token),
             auth_type=AuthType.BEARER,
+            api_key_org_id=validation_result.org_id,
+            api_key_id=validation_result.key_id,
+            api_key_name=validation_result.key_name,
         )
         await saas_user_auth.refresh()
         return saas_user_auth

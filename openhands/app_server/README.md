@@ -10,10 +10,18 @@ As of 2025-09-29, much of the code in the OpenHands repository can be regarded a
 
 The app server is organized into several key modules:
 
-- **conversation/**: Manages sandboxed conversations and their lifecycle
+- **app_conversation/**: Manages sandboxed conversations and their lifecycle
+- **app_lifespan/**: Application startup and shutdown lifecycle management
+- **config_api/**: Configuration API endpoints
 - **event/**: Handles event storage, retrieval, and streaming
 - **event_callback/**: Manages webhooks and event callbacks
+- **git/**: Git integration endpoints
+- **pending_messages/**: Server-side message queuing
 - **sandbox/**: Manages sandbox environments for agent execution
-- **user/**: User management and authentication
+- **secrets/**: Secrets management endpoints
 - **services/**: Core services like JWT authentication
+- **settings/**: User and application settings endpoints
+- **status/**: Server status and system stats
+- **user/**: User management and authentication
 - **utils/**: Utility functions for common operations
+- **web_client/**: Web client configuration and routing

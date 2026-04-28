@@ -27,12 +27,16 @@ import {
   isStatsConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
-  isConversationErrorEvent,
+  isDisplayableErrorEvent,
   isPlanningFileEditorObservationEvent,
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
 } from "#/types/v1/type-guards";
 import { ConversationStateUpdateEventStats } from "#/types/v1/core/events/conversation-state-event";
+import type {
+  ConversationErrorEvent,
+  ServerErrorEvent,
+} from "#/types/v1/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
 import { buildWebSocketUrl } from "#/utils/websocket-url";
 import type {
@@ -40,6 +44,7 @@ import type {
   V1SendMessageRequest,
 } from "#/api/conversation-service/v1-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
+import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
 import { isBudgetOrCreditError, trackError } from "#/utils/error-handler";
 import { useTracking } from "#/hooks/use-tracking";
@@ -47,6 +52,7 @@ import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-
 import useMetricsStore from "#/stores/metrics-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationHistory } from "#/hooks/query/use-conversation-history";
+import { setConversationState } from "#/utils/conversation-local-storage";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type V1_WebSocketConnectionState =
@@ -55,9 +61,13 @@ export type V1_WebSocketConnectionState =
   | "CLOSED"
   | "CLOSING";
 
+interface SendMessageResult {
+  queued: boolean; // true if message was queued for later delivery, false if sent immediately
+}
+
 interface ConversationWebSocketContextType {
   connectionState: V1_WebSocketConnectionState;
-  sendMessage: (message: V1SendMessageRequest) => Promise<void>;
+  sendMessage: (message: V1SendMessageRequest) => Promise<SendMessageResult>;
   isLoadingHistory: boolean;
 }
 
@@ -72,7 +82,6 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
-  onDisconnect,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -80,7 +89,6 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: V1AppConversation[];
   subConversationIds?: string[];
-  onDisconnect?: () => void;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -122,12 +130,33 @@ export function ConversationWebSocketProvider({
   const receivedEventCountRefMain = useRef(0);
   const receivedEventCountRefPlanning = useRef(0);
 
-  // Track the latest PlanningFileEditorObservation event during history replay
-  // We'll only call the API once after history loading completes
+  // Track the latest PlanningFileEditorObservation for Plan.md during history replay
   const latestPlanningFileEventRef = useRef<{
     path: string;
     conversationId: string;
   } | null>(null);
+
+  const isPlanFilePath = (path: string | null): boolean =>
+    path?.toUpperCase().endsWith("PLAN.MD") ?? false;
+
+  // Helper to handle error clearing logic for non-error events.
+  // Budget/credit errors persist until an agent event proves the LLM is working.
+  const handleNonErrorEvent = useCallback(
+    (event: { source?: string }) => {
+      const currentError = useErrorMessageStore.getState().errorMessage;
+      const isBudgetError =
+        currentError === I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS;
+      const isAgentEvent = event.source === "agent";
+
+      // Budget errors persist until agent proves LLM is working
+      if (isBudgetError && !isAgentEvent) {
+        return; // Keep budget error visible
+      }
+
+      removeErrorMessage();
+    },
+    [removeErrorMessage],
+  );
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -308,20 +337,29 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
-  const { data: preloadedEvents } = useConversationHistory(conversationId);
+  const { data: preloadedEvents, isFetched: isHistoryFetched } =
+    useConversationHistory(conversationId);
 
   useEffect(() => {
+    // Don't do anything until the history query has completed
+    // This prevents prematurely setting loading to false before data is available
+    if (!isHistoryFetched) {
+      return;
+    }
+
+    // If no events (empty conversation or query returned empty), just stop loading
     if (!preloadedEvents || preloadedEvents.length === 0) {
       setIsLoadingHistoryMain(false);
       return;
     }
 
+    // Add all preloaded events to the store
     for (const event of preloadedEvents) {
       addEvent(event);
     }
 
     setIsLoadingHistoryMain(false);
-  }, [preloadedEvents, addEvent]);
+  }, [preloadedEvents, isHistoryFetched, addEvent]);
 
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
@@ -346,29 +384,31 @@ export function ConversationWebSocketProvider({
         if (isV1Event(event)) {
           addEvent(event);
 
-          // Handle ConversationErrorEvent specifically - show error banner
+          // Handle displayable error events - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
-          if (isConversationErrorEvent(event)) {
+          if (isDisplayableErrorEvent(event)) {
+            const errorEvent = event as
+              | ConversationErrorEvent
+              | ServerErrorEvent;
             trackError({
-              message: event.detail,
+              message: errorEvent.detail,
               source: "conversation",
               metadata: {
-                eventId: event.id,
-                errorCode: event.code,
+                eventId: errorEvent.id,
+                errorCode: errorEvent.code,
               },
               posthog,
             });
-            if (isBudgetOrCreditError(event.detail)) {
+            if (isBudgetOrCreditError(errorEvent.detail)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
               trackCreditLimitReached({
                 conversationId: conversationId || "unknown",
               });
             } else {
-              setErrorMessage(event.detail);
+              setErrorMessage(errorEvent.detail);
             }
           } else {
-            // Clear error message on any non-ConversationErrorEvent
-            removeErrorMessage();
+            handleNonErrorEvent(event);
           }
 
           // Track credit limit reached if AgentErrorEvent has budget-related error
@@ -383,20 +423,16 @@ export function ConversationWebSocketProvider({
               },
               posthog,
             });
-            // Use friendly i18n message for budget/credit errors instead of raw error
-            if (isBudgetOrCreditError(event.error)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
-              trackCreditLimitReached({
-                conversationId: conversationId || "unknown",
-              });
-            } else {
-              setErrorMessage(event.error);
-            }
+            setErrorMessage(event.error);
           }
 
           // Clear optimistic user message when a user message is confirmed
           if (isUserMessageEvent(event)) {
             removeOptimisticUserMessage();
+            // Clear draft from localStorage - message was successfully delivered
+            if (conversationId) {
+              setConversationState(conversationId, { draftMessage: null });
+            }
           }
 
           // Handle cache invalidation for ActionEvent
@@ -505,29 +541,31 @@ export function ConversationWebSocketProvider({
           };
           addEvent(eventWithPlanningFlag);
 
-          // Handle ConversationErrorEvent specifically - show error banner
+          // Handle displayable error events - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
-          if (isConversationErrorEvent(event)) {
+          if (isDisplayableErrorEvent(event)) {
+            const errorEvent = event as
+              | ConversationErrorEvent
+              | ServerErrorEvent;
             trackError({
-              message: event.detail,
+              message: errorEvent.detail,
               source: "planning_conversation",
               metadata: {
-                eventId: event.id,
-                errorCode: event.code,
+                eventId: errorEvent.id,
+                errorCode: errorEvent.code,
               },
               posthog,
             });
-            if (isBudgetOrCreditError(event.detail)) {
+            if (isBudgetOrCreditError(errorEvent.detail)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
               trackCreditLimitReached({
                 conversationId: conversationId || "unknown",
               });
             } else {
-              setErrorMessage(event.detail);
+              setErrorMessage(errorEvent.detail);
             }
           } else {
-            // Clear error message on any non-ConversationErrorEvent
-            removeErrorMessage();
+            handleNonErrorEvent(event);
           }
 
           // Handle AgentErrorEvent specifically
@@ -542,20 +580,17 @@ export function ConversationWebSocketProvider({
               },
               posthog,
             });
-            // Use friendly i18n message for budget/credit errors instead of raw error
-            if (isBudgetOrCreditError(event.error)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
-              trackCreditLimitReached({
-                conversationId: conversationId || "unknown",
-              });
-            } else {
-              setErrorMessage(event.error);
-            }
+            setErrorMessage(event.error);
           }
 
           // Clear optimistic user message when a user message is confirmed
           if (isUserMessageEvent(event)) {
             removeOptimisticUserMessage();
+            // Clear draft from localStorage - message was successfully delivered
+            // Use main conversationId since user types in main conversation input
+            if (conversationId) {
+              setConversationState(conversationId, { draftMessage: null });
+            }
           }
 
           // Handle cache invalidation for ActionEvent
@@ -599,37 +634,39 @@ export function ConversationWebSocketProvider({
             appendOutput(textContent);
           }
 
-          // Handle PlanningFileEditorObservation events - read and update plan content
+          // Handle PlanningFileEditorObservation - only update plan for Plan.md
           if (isPlanningFileEditorObservationEvent(event)) {
-            const planningAgentConversation = subConversations?.[0];
-            const planningConversationId = planningAgentConversation?.id;
+            const { path } = event.observation;
+            if (isPlanFilePath(path)) {
+              const planningAgentConversation = subConversations?.[0];
+              const planningConversationId = planningAgentConversation?.id;
 
-            if (planningConversationId && event.observation.path) {
-              // During history replay, track the latest event but don't call API
-              // After history loading completes, we'll call the API once with the latest event
-              if (isLoadingHistoryPlanning) {
-                latestPlanningFileEventRef.current = {
-                  path: event.observation.path,
-                  conversationId: planningConversationId,
-                };
-              } else {
-                // History loading is complete - this is a new real-time event
-                // Call the API immediately for real-time updates
-                readConversationFile(
-                  {
+              if (planningConversationId && path) {
+                if (isLoadingHistoryPlanning) {
+                  latestPlanningFileEventRef.current = {
+                    path,
                     conversationId: planningConversationId,
-                    filePath: event.observation.path,
-                  },
-                  {
-                    onSuccess: (fileContent) => {
-                      setPlanContent(fileContent);
+                  };
+                } else {
+                  readConversationFile(
+                    {
+                      conversationId: planningConversationId,
+                      filePath: path,
                     },
-                    onError: (error) => {
-                      // eslint-disable-next-line no-console
-                      console.warn("Failed to read conversation file:", error);
+                    {
+                      onSuccess: (fileContent) => {
+                        setPlanContent(fileContent);
+                      },
+                      onError: (error) => {
+                        // eslint-disable-next-line no-console
+                        console.warn(
+                          "Failed to read conversation file:",
+                          error,
+                        );
+                      },
                     },
-                  },
-                );
+                  );
+                }
               }
             }
           }
@@ -699,13 +736,10 @@ export function ConversationWebSocketProvider({
           }
         }
       },
-      onClose: (event: CloseEvent) => {
+      onClose: () => {
         setMainConnectionState("CLOSED");
-        // Trigger silent recovery on unexpected disconnect
-        // Do NOT show error message - recovery happens automatically
-        if (event.code !== 1000 && hasConnectedRefMain.current) {
-          onDisconnect?.();
-        }
+        // Recovery is handled by useSandboxRecovery on tab focus/page refresh
+        // No error message needed - silent recovery provides better UX
       },
       onError: () => {
         setMainConnectionState("CLOSED");
@@ -723,7 +757,6 @@ export function ConversationWebSocketProvider({
     sessionApiKey,
     conversationId,
     conversationUrl,
-    onDisconnect,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -770,13 +803,10 @@ export function ConversationWebSocketProvider({
           }
         }
       },
-      onClose: (event: CloseEvent) => {
+      onClose: () => {
         setPlanningConnectionState("CLOSED");
-        // Trigger silent recovery on unexpected disconnect
-        // Do NOT show error message - recovery happens automatically
-        if (event.code !== 1000 && hasConnectedRefPlanning.current) {
-          onDisconnect?.();
-        }
+        // Recovery is handled by useSandboxRecovery on tab focus/page refresh
+        // No error message needed - silent recovery provides better UX
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
@@ -793,7 +823,6 @@ export function ConversationWebSocketProvider({
     removeErrorMessage,
     sessionApiKey,
     subConversations,
-    onDisconnect,
   ]);
 
   // Only attempt WebSocket connection when we have a valid URL
@@ -810,21 +839,44 @@ export function ConversationWebSocketProvider({
   );
 
   // V1 send message function via WebSocket
+  // Falls back to REST API queue when WebSocket is not connected
   const sendMessage = useCallback(
-    async (message: V1SendMessageRequest) => {
+    async (message: V1SendMessageRequest): Promise<SendMessageResult> => {
       const currentMode = useConversationStore.getState().conversationMode;
       const currentSocket =
         currentMode === "plan" ? planningAgentSocket : mainSocket;
 
       if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
-        const error = "WebSocket is not connected";
-        setErrorMessage(error);
-        throw new Error(error);
+        // WebSocket not connected - queue message via REST API
+        // Message will be delivered automatically when conversation becomes ready
+        if (!conversationId) {
+          const error = new Error("No conversation ID available");
+          setErrorMessage(error.message);
+          throw error;
+        }
+
+        try {
+          await PendingMessageService.queueMessage(conversationId, {
+            role: "user",
+            content: message.content,
+          });
+          // Message queued successfully - it will be delivered when ready
+          // Return queued: true so caller knows not to show optimistic UI
+          return { queued: true };
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to queue message for delivery";
+          setErrorMessage(errorMessage);
+          throw error;
+        }
       }
 
       try {
         // Send message through WebSocket as JSON
         currentSocket.send(JSON.stringify(message));
+        return { queued: false };
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to send message";
@@ -832,7 +884,7 @@ export function ConversationWebSocketProvider({
         throw error;
       }
     },
-    [mainSocket, planningAgentSocket, setErrorMessage],
+    [mainSocket, planningAgentSocket, setErrorMessage, conversationId],
   );
 
   // Track main socket state changes

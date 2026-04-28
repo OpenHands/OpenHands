@@ -9,7 +9,7 @@ This module tests the Docker sandbox service implementation, focusing on:
 - Edge cases with malformed container data
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -244,6 +244,61 @@ class TestDockerSandboxService:
         assert isinstance(result, SandboxPage)
         assert len(result.items) == 0
         assert result.next_page_id is None
+
+    async def test_search_sandboxes_skips_containers_with_no_image_tags(
+        self, service, mock_running_container
+    ):
+        """Test that containers with tagless images are skipped without crashing.
+
+        Regression test: when a container's image has been rebuilt with the same tag,
+        the old container's image loses its tags, causing container.image.tags to be
+        an empty list. Previously this caused an IndexError.
+        """
+        # Setup a container with no image tags (e.g. image was retagged/rebuilt)
+        tagless_container = MagicMock()
+        tagless_container.name = 'oh-test-tagless'
+        tagless_container.status = 'paused'
+        tagless_container.image.tags = []
+        tagless_container.image.id = 'sha256:abc123def456'
+        tagless_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {'Env': []},
+            'NetworkSettings': {'Ports': {}},
+        }
+
+        service.docker_client.containers.list.return_value = [
+            mock_running_container,
+            tagless_container,
+        ]
+        service.httpx_client.get.return_value.raise_for_status.return_value = None
+
+        # Execute - should not raise IndexError
+        result = await service.search_sandboxes()
+
+        # Verify - only the properly tagged container is returned
+        assert isinstance(result, SandboxPage)
+        assert len(result.items) == 1
+        assert result.items[0].id == 'oh-test-abc123'
+
+    async def test_get_sandbox_returns_none_for_tagless_image(self, service):
+        """Test that get_sandbox returns None for containers with tagless images."""
+        tagless_container = MagicMock()
+        tagless_container.name = 'oh-test-tagless'
+        tagless_container.status = 'paused'
+        tagless_container.image.tags = []
+        tagless_container.image.id = 'sha256:abc123def456'
+        tagless_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {'Env': []},
+            'NetworkSettings': {'Ports': {}},
+        }
+        service.docker_client.containers.get.return_value = tagless_container
+
+        # Execute - should not raise IndexError
+        result = await service.get_sandbox('oh-test-tagless')
+
+        # Verify - returns None for tagless container
+        assert result is None
 
     async def test_search_sandboxes_filters_by_prefix(self, service):
         """Test that search filters containers by name prefix."""
@@ -1199,6 +1254,59 @@ class TestDockerSandboxServiceInjector:
         injector = DockerSandboxServiceInjector(use_host_network=True)
         assert injector.use_host_network is True
 
+    def test_use_host_network_from_agent_server_env_var(self):
+        """Test that AGENT_SERVER_USE_HOST_NETWORK env var enables host network mode."""
+        import os
+        from unittest.mock import patch
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        env_vars = {
+            'AGENT_SERVER_USE_HOST_NETWORK': 'true',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            injector = DockerSandboxServiceInjector()
+            assert injector.use_host_network is True
+
+    def test_use_host_network_env_var_accepts_various_true_values(self):
+        """Test that use_host_network accepts various truthy values."""
+        import os
+        from unittest.mock import patch
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        for true_value in ['true', 'TRUE', 'True', '1', 'yes', 'YES', 'Yes']:
+            env_vars = {'AGENT_SERVER_USE_HOST_NETWORK': true_value}
+            with patch.dict(os.environ, env_vars, clear=True):
+                injector = DockerSandboxServiceInjector()
+                assert injector.use_host_network is True, (
+                    f'Failed for value: {true_value}'
+                )
+
+    def test_use_host_network_env_var_defaults_to_false(self):
+        """Test that unset or empty env var defaults to False."""
+        import os
+        from unittest.mock import patch
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        # Empty environment
+        with patch.dict(os.environ, {}, clear=True):
+            injector = DockerSandboxServiceInjector()
+            assert injector.use_host_network is False
+
+        # Empty string
+        with patch.dict(os.environ, {'AGENT_SERVER_USE_HOST_NETWORK': ''}, clear=True):
+            injector = DockerSandboxServiceInjector()
+            assert injector.use_host_network is False
+
 
 class TestDockerSandboxServiceInjectorFromEnv:
     """Test cases for DockerSandboxServiceInjector environment variable configuration."""
@@ -1541,3 +1649,60 @@ class TestDockerSandboxServiceHostNetwork:
 
         # Verify no warning was logged about port collision
         mock_logger.warning.assert_not_called()
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.utc_now')
+    async def test_container_to_checked_sandbox_info_uses_container_started_at(
+        self, mock_utc_now, service
+    ):
+        """Test that health check uses container's StartedAt for grace period calculation instead of sandbox created_at.
+
+        This tests the fix for the bug where resuming a stopped container incorrectly
+        marked the sandbox as ERROR instead of STARTING because it was using
+        sandbox_info.created_at (when the sandbox record was created) instead of
+        the actual container start time.
+        """
+        # Setup - create a fresh container with State that includes StartedAt
+        container = MagicMock()
+        container.name = 'oh-test-abc123'
+        container.status = 'running'
+        container.image.tags = ['spec456']
+        now = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_utc_now.return_value = now
+
+        # Container started 4 seconds ago (within 15s grace period)
+        container_started_within_grace_period = datetime(
+            2024, 1, 15, 11, 59, 56, tzinfo=timezone.utc
+        )
+        # Sandbox was created 5 days ago (way outside grace period)
+        sandbox_created_long_ago = datetime(2024, 1, 10, 10, 0, 0, tzinfo=timezone.utc)
+
+        container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'State': {'StartedAt': container_started_within_grace_period.isoformat()},
+            'Config': {
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=session_key_123',
+                    'OTHER_VAR=other_value',
+                ],
+                'WorkingDir': '/workspace',
+            },
+            'NetworkSettings': {
+                'Ports': {
+                    '8000/tcp': [{'HostPort': '12345'}],
+                    '8001/tcp': [{'HostPort': '12346'}],
+                }
+            },
+        }
+
+        # Create a sandbox_info with old created_at (simulates old sandbox record)
+        sandbox_info = await service._container_to_sandbox_info(container)
+        sandbox_info.created_at = sandbox_created_long_ago
+
+        # Health check fails but container was started recently (within 15s grace period)
+        service.httpx_client.get.side_effect = httpx.HTTPError('Health check failed')
+
+        result = await service._container_to_checked_sandbox_info(container)
+
+        # Verify - should be STARTING because container started within grace period
+        assert result is not None
+        assert result.status == SandboxStatus.STARTING

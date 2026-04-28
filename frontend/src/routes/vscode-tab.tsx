@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
 import { useUnifiedVSCodeUrl } from "#/hooks/query/use-unified-vscode-url";
+import { useAgentState } from "#/hooks/use-agent-state";
+import { RUNTIME_STARTING_STATES } from "#/types/agent-state";
 import { VSCODE_IN_NEW_TAB } from "#/utils/feature-flags";
 import { WaitingForRuntimeMessage } from "#/components/features/chat/waiting-for-runtime-message";
-import { useAgentState } from "#/hooks/use-agent-state";
 
 function VSCodeTab() {
   const { t } = useTranslation();
   const { data, isLoading, error } = useUnifiedVSCodeUrl();
-  const { curAgentState } = useAgentState();
-  const isRuntimeInactive = RUNTIME_INACTIVE_STATES.includes(curAgentState);
+  const { curAgentState, isArchived } = useAgentState();
+  // Don't show starting state for archived conversations
+  const isRuntimeStarting =
+    !isArchived && RUNTIME_STARTING_STATES.includes(curAgentState);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
   const [isCrossProtocol, setIsCrossProtocol] = useState(false);
   const [iframeError, setIframeError] = useState<string | null>(null);
@@ -39,7 +41,16 @@ function VSCodeTab() {
     }
   };
 
-  if (isRuntimeInactive) {
+  // For archived conversations, show the archived message instead of loading
+  if (isArchived) {
+    return (
+      <div className="w-full h-full flex items-center text-center justify-center text-2xl text-tertiary-light">
+        {t(I18nKey.CONVERSATION$ARCHIVED_READ_ONLY)}
+      </div>
+    );
+  }
+
+  if (isRuntimeStarting) {
     return <WaitingForRuntimeMessage />;
   }
 

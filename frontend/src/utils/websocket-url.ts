@@ -9,6 +9,19 @@ export function extractBaseHost(
   if (conversationUrl && !conversationUrl.startsWith("/")) {
     try {
       const url = new URL(conversationUrl);
+      // If the conversation URL points to localhost but we're accessing from external,
+      // use the browser's hostname with the conversation URL's port
+      const urlHostname = url.hostname;
+      const browserHostname =
+        window.location.hostname ?? window.location.host?.split(":")[0];
+      if (
+        browserHostname &&
+        (urlHostname === "localhost" || urlHostname === "127.0.0.1") &&
+        browserHostname !== "localhost" &&
+        browserHostname !== "127.0.0.1"
+      ) {
+        return `${browserHostname}:${url.port}`;
+      }
       return url.host; // e.g., "localhost:3000"
     } catch {
       return window.location.host;

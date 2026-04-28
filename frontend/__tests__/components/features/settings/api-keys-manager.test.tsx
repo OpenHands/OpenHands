@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiKeysManager } from "#/components/features/settings/api-keys-manager";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 // Mock the react-i18next
 vi.mock("react-i18next", async () => {
@@ -37,6 +38,10 @@ vi.mock("#/hooks/query/use-api-keys", () => ({
 }));
 
 describe("ApiKeysManager", () => {
+  beforeEach(() => {
+    useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
+  });
+
   const renderComponent = () => {
     const queryClient = new QueryClient();
     return render(

@@ -23,6 +23,7 @@ export interface ConversationState {
   unpinnedTabs: string[];
   conversationMode: ConversationMode;
   subConversationTaskId: string | null;
+  draftMessage: string | null;
 }
 
 const DEFAULT_CONVERSATION_STATE: ConversationState = {
@@ -31,6 +32,7 @@ const DEFAULT_CONVERSATION_STATE: ConversationState = {
   unpinnedTabs: [],
   conversationMode: "code",
   subConversationTaskId: null,
+  draftMessage: null,
 };
 
 /**
@@ -121,6 +123,7 @@ export function useConversationLocalStorageState(conversationId: string): {
   setRightPanelShown: (shown: boolean) => void;
   setUnpinnedTabs: (tabs: string[]) => void;
   setConversationMode: (mode: ConversationMode) => void;
+  setDraftMessage: (message: string | null) => void;
 } {
   const [state, setState] = useState<ConversationState>(() =>
     getConversationState(conversationId),
@@ -178,5 +181,6 @@ export function useConversationLocalStorageState(conversationId: string): {
     setRightPanelShown: (shown) => updateState({ rightPanelShown: shown }),
     setUnpinnedTabs: (tabs) => updateState({ unpinnedTabs: tabs }),
     setConversationMode: (mode) => updateState({ conversationMode: mode }),
+    setDraftMessage: (message) => updateState({ draftMessage: message }),
   };
 }

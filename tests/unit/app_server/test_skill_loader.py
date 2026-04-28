@@ -24,15 +24,15 @@ from openhands.app_server.app_conversation.skill_loader import (
     build_sandbox_config,
     load_skills_from_agent_server,
 )
+from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
     SandboxInfo,
     SandboxStatus,
 )
 from openhands.app_server.user.user_context import UserContext
-from openhands.integrations.provider import ProviderType
-from openhands.integrations.service_types import AuthenticationError
-from openhands.sdk.context.skills import KeywordTrigger, Skill, TaskTrigger
+from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 # ===== Test Fixtures =====
 

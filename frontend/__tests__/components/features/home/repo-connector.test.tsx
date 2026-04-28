@@ -4,12 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { createRoutesStub, Outlet } from "react-router";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import GitService from "#/api/git-service/git-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import { GitRepository } from "#/types/git";
 import { RepoConnector } from "#/components/features/home/repo-connector";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 const renderRepoConnector = () => {
   const mockRepoSelection = vi.fn();
@@ -65,6 +66,7 @@ const MOCK_RESPOSITORIES: GitRepository[] = [
 ];
 
 beforeEach(() => {
+  useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
   getSettingsSpy.mockResolvedValue({
     ...MOCK_DEFAULT_USER_SETTINGS,
@@ -88,14 +90,15 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     // Mock the search function that's used by the dropdown
-    vi.spyOn(GitService, "searchGitRepositories").mockResolvedValue(
-      MOCK_RESPOSITORIES,
-    );
+    vi.spyOn(GitService, "searchGitRepositories").mockResolvedValue({
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
+    });
 
     renderRepoConnector();
 
@@ -125,8 +128,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -136,14 +139,11 @@ describe("RepoConnector", () => {
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     // First select the provider
@@ -197,8 +197,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -244,8 +244,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -288,8 +288,8 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -312,30 +312,41 @@ describe("RepoConnector", () => {
   });
 
   it("should create a conversation and redirect with the selected repo when pressing the launch button", async () => {
-    const createConversationSpy = vi.spyOn(
-      ConversationService,
-      "createConversation",
-    );
-    createConversationSpy.mockResolvedValue({
-      conversation_id: "mock-conversation-id",
-      title: "Test Conversation",
-      selected_repository: "user/repo1",
-      selected_branch: "main",
-      git_provider: "github",
-      last_updated_at: "2023-01-01T00:00:00Z",
-      created_at: "2023-01-01T00:00:00Z",
-      status: "STARTING",
-      runtime_status: null,
-      url: null,
-      session_api_key: null,
-    });
+    const createConversationSpy = vi
+      .spyOn(V1ConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        created_by_user_id: null,
+        status: "READY",
+        detail: null,
+        app_conversation_id: "mock-conversation-id",
+        sandbox_id: null,
+        agent_server_url: "http://agent-server.local",
+        request: {
+          sandbox_id: null,
+          initial_message: null,
+          processors: [],
+          llm_model: null,
+          selected_repository: "rbren/polaris",
+          selected_branch: "main",
+          git_provider: "github",
+          suggested_task: null,
+          title: null,
+          trigger: null,
+          pr_number: [],
+          parent_conversation_id: null,
+          agent_type: "default",
+        },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
     const retrieveUserGitRepositoriesSpy = vi.spyOn(
       GitService,
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     renderRepoConnector();
@@ -350,14 +361,11 @@ describe("RepoConnector", () => {
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     // First select the provider
@@ -388,12 +396,16 @@ describe("RepoConnector", () => {
 
     await userEvent.click(launchButton);
 
-    expect(createConversationSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(createConversationSpy).toHaveBeenCalledOnce();
+    expect(createConversationSpy).toHaveBeenCalledWith(
       "rbren/polaris",
       "github",
       undefined,
-      undefined,
       "main",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
     );
@@ -401,7 +413,7 @@ describe("RepoConnector", () => {
 
   it("should change the launch button text to 'Loading...' when creating a conversation", async () => {
     const createConversationSpy = vi.spyOn(
-      ConversationService,
+      V1ConversationService,
       "createConversation",
     );
     createConversationSpy.mockImplementation(() => new Promise(() => { })); // Never resolves to keep loading state
@@ -410,20 +422,17 @@ describe("RepoConnector", () => {
       "retrieveUserGitRepositories",
     );
     retrieveUserGitRepositoriesSpy.mockResolvedValue({
-      data: MOCK_RESPOSITORIES,
-      nextPage: null,
+      items: MOCK_RESPOSITORIES,
+      next_page_id: null,
     });
 
     // Mock the repository branches API call
     vi.spyOn(GitService, "getRepositoryBranches").mockResolvedValue({
-      branches: [
+      items: [
         { name: "main", commit_sha: "123", protected: false },
         { name: "develop", commit_sha: "456", protected: false },
       ],
-      has_next_page: false,
-      current_page: 1,
-      per_page: 30,
-      total_count: 2,
+      next_page_id: null,
     });
 
     renderRepoConnector();

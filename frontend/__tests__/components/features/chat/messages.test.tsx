@@ -8,11 +8,12 @@ import {
   UserMessageAction,
 } from "#/types/core/actions";
 import { OpenHandsObservation } from "#/types/core/observations";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { Conversation } from "#/api/open-hands.types";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useParams: () => ({ conversationId: "123" }),
+  useRevalidator: () => ({ revalidate: vi.fn() }),
 }));
 
 let queryClient: QueryClient;
@@ -47,6 +48,7 @@ const renderMessages = ({
 describe("Messages", () => {
   beforeEach(() => {
     queryClient = new QueryClient();
+    useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
   });
 
   const assistantMessage: AssistantMessageAction = {
@@ -80,23 +82,6 @@ describe("Messages", () => {
   });
 
   it("should render a launch to microagent action button on chat messages only if it is a user message", () => {
-    const getConversationSpy = vi.spyOn(ConversationService, "getConversation");
-    const mockConversation: Conversation = {
-      conversation_id: "123",
-      title: "Test Conversation",
-      status: "RUNNING",
-      runtime_status: "STATUS$READY",
-      created_at: new Date().toISOString(),
-      last_updated_at: new Date().toISOString(),
-      selected_branch: null,
-      selected_repository: null,
-      git_provider: "github",
-      session_api_key: null,
-      url: null,
-    };
-
-    getConversationSpy.mockResolvedValue(mockConversation);
-
     renderMessages({
       messages: [userMessage, assistantMessage],
     });

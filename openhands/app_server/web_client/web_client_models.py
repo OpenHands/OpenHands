@@ -1,9 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from openhands.agent_server.env_parser import DiscriminatedUnionMixin
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.web_client.web_client_deployment_mode import (
+    DeploymentMode,
+    get_deployment_mode,
+)
 from openhands.server.types import AppMode
 
 
@@ -16,6 +20,14 @@ class WebClientFeatureFlags(BaseModel):
     hide_users_page: bool = False
     hide_billing_page: bool = False
     hide_integrations_page: bool = False
+    deployment_mode: DeploymentMode | None = None
+
+    # This can be removed / replaced when a DeploymentMode (or similar) env var is created.
+    @model_validator(mode='after')
+    def set_deployment_mode(self) -> 'WebClientFeatureFlags':
+        if self.deployment_mode is None:
+            self.deployment_mode = get_deployment_mode()
+        return self
 
 
 class WebClientConfig(DiscriminatedUnionMixin):
@@ -30,3 +42,6 @@ class WebClientConfig(DiscriminatedUnionMixin):
     error_message: str | None
     updated_at: datetime
     github_app_slug: str | None
+    gitlab_enabled: bool = False
+    provider_default_hosts: dict[str, str] = Field(default_factory=dict)
+    slack_enabled: bool = False

@@ -313,11 +313,22 @@ class OrgInvitationService:
             raise InvitationInvalidError('User not found')
 
         user_email = user.email
-        # Fallback: fetch email from Keycloak if not in database (for existing users)
+        # Fallback: fetch email from Keycloak if not in database (for existing users).
+        # When found, persist it back to User.email so the members list shows it
+        # without requiring the user to log out and log back in.
         if not user_email:
             token_manager = TokenManager()
             user_info = await token_manager.get_user_info_from_user_id(str(user_id))
-            user_email = user_info.get('email') if user_info else None
+            if user_info:
+                user_email = user_info.get('email')
+                if user_email:
+                    await UserStore.backfill_user_email(
+                        str(user_id),
+                        {
+                            'email': user_email,
+                            'email_verified': user_info.get('emailVerified', False),
+                        },
+                    )
 
         if not user_email:
             raise EmailMismatchError('Your account does not have an email address')
@@ -365,15 +376,17 @@ class OrgInvitationService:
                 'Failed to set up organization access. Please try again.'
             )
 
-        # Step 4.5: Fetch organization to get its LLM settings
+        # Step 4.5: Ensure the organization still exists before adding membership
         org = await OrgStore.get_org_by_id(invitation.org_id)
         if not org:
             raise InvitationInvalidError('Organization not found')
 
-        # Step 5: Add user to organization with inherited org LLM settings
-        # Get the llm_api_key as string (it's SecretStr | None in Settings)
+        # Step 5: Add user to organization. New members start with no
+        # personal agent-setting overrides so future org default changes
+        # continue to flow through automatically.
+        llm_api_key_secret = settings.agent_settings.llm.api_key
         llm_api_key = (
-            settings.llm_api_key.get_secret_value() if settings.llm_api_key else ''
+            llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''
         )
 
         await OrgMemberStore.add_user_to_org(
@@ -382,9 +395,8 @@ class OrgInvitationService:
             role_id=invitation.role_id,
             llm_api_key=llm_api_key,
             status='active',
-            llm_model=org.default_llm_model,
-            llm_base_url=org.default_llm_base_url,
-            max_iterations=org.default_max_iterations,
+            agent_settings_diff={},
+            conversation_settings_diff={},
         )
 
         # Step 6: Mark invitation as accepted
