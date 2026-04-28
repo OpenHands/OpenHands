@@ -26,17 +26,15 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import (
-    Boolean,
-    Column,
+    ColumnElement,
     DateTime,
-    Float,
-    Integer,
     Select,
     String,
     func,
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_info_service import (
@@ -55,54 +53,66 @@ from openhands.app_server.utils.sql_utils import (
     create_json_type_decorator,
 )
 from openhands.integrations.provider import ProviderType
-from openhands.sdk.conversation.conversation_stats import ConversationStats
+from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.sdk.llm import MetricsSnapshot
-from openhands.sdk.llm.utils.metrics import TokenUsage
+from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 logger = logging.getLogger(__name__)
 
 
-class StoredConversationMetadata(Base):  # type: ignore
+class StoredConversationMetadata(Base):
     __tablename__ = 'conversation_metadata'
-    conversation_id = Column(
+
+    conversation_id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    selected_repository = Column(String, nullable=True)
-    selected_branch = Column(String, nullable=True)
-    git_provider = Column(
+    selected_repository: Mapped[str | None] = mapped_column(String, nullable=True)
+    selected_branch: Mapped[str | None] = mapped_column(String, nullable=True)
+    git_provider: Mapped[str | None] = mapped_column(
         String, nullable=True
     )  # The git provider (GitHub, GitLab, etc.)
-    title = Column(String, nullable=True)
-    last_updated_at = Column(DateTime(timezone=True), default=utc_now)  # type: ignore[attr-defined]
-    created_at = Column(DateTime(timezone=True), default=utc_now)  # type: ignore[attr-defined]
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
 
-    trigger = Column(String, nullable=True)
-    pr_number = Column(create_json_type_decorator(list[int]))
+    trigger: Mapped[str | None] = mapped_column(String, nullable=True)
+    pr_number: Mapped[list[int] | None] = mapped_column(
+        create_json_type_decorator(list[int])
+    )
 
     # Cost and token metrics
-    accumulated_cost = Column(Float, default=0.0)
-    prompt_tokens = Column(Integer, default=0)
-    completion_tokens = Column(Integer, default=0)
-    total_tokens = Column(Integer, default=0)
-    max_budget_per_task = Column(Float, nullable=True)
-    cache_read_tokens = Column(Integer, default=0)
-    cache_write_tokens = Column(Integer, default=0)
-    reasoning_tokens = Column(Integer, default=0)
-    context_window = Column(Integer, default=0)
-    per_turn_token = Column(Integer, default=0)
+    accumulated_cost: Mapped[float | None] = mapped_column(default=0.0)
+    prompt_tokens: Mapped[int | None] = mapped_column(default=0)
+    completion_tokens: Mapped[int | None] = mapped_column(default=0)
+    total_tokens: Mapped[int | None] = mapped_column(default=0)
+    max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
+    cache_read_tokens: Mapped[int | None] = mapped_column(default=0)
+    cache_write_tokens: Mapped[int | None] = mapped_column(default=0)
+    reasoning_tokens: Mapped[int | None] = mapped_column(default=0)
+    context_window: Mapped[int | None] = mapped_column(default=0)
+    per_turn_token: Mapped[int | None] = mapped_column(default=0)
 
     # LLM model used for the conversation
-    llm_model = Column(String, nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    conversation_version = Column(String, nullable=False, default='V0', index=True)
-    sandbox_id = Column(String, nullable=True, index=True)
-    parent_conversation_id = Column(String, nullable=True, index=True)
-    public = Column(Boolean, nullable=True, index=True)
+    conversation_version: Mapped[str] = mapped_column(
+        String, nullable=False, default='V0', index=True
+    )
+    sandbox_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    parent_conversation_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    public: Mapped[bool | None] = mapped_column(nullable=True, index=True)
 
     # Tags for conversation metadata (e.g., automation context, skills used)
-    tags = Column(create_json_type_decorator(dict[str, str]), nullable=True)
+    tags: Mapped[dict[str, str] | None] = mapped_column(
+        create_json_type_decorator(dict[str, str]), nullable=True
+    )
 
 
 @dataclass
@@ -232,7 +242,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         sandbox_id__eq: str | None = None,
     ) -> Select:
         # Apply the same filters as search_app_conversations
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
                 StoredConversationMetadata.title.like(f'%{title__contains}%')
@@ -560,10 +570,15 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             updated_at=updated_at,
         )
 
-    def _fix_timezone(self, value: datetime) -> datetime:
-        """Sqlite does not stpre timezones - and since we can't update the existing models
-        we assume UTC if the timezone is missing.
+    def _fix_timezone(self, value: datetime | None) -> datetime:
+        """Sqlite does not store timezones - and since we can't update the existing models
+        we assume UTC if the timezone is missing. Returns current UTC time if value is None.
         """
+        if value is None:
+            # Fallback for legacy data: use current time to match model defaults.
+            # The DB columns have default=utc_now, so None only occurs in legacy records.
+            # Using utc_now() keeps the API model non-nullable and matches new record behavior.
+            return utc_now()
         if not value.tzinfo:
             value = value.replace(tzinfo=UTC)
         return value

@@ -5,9 +5,7 @@
 #   - V1 application server (in this repo): openhands/app_server/
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
-import os
 import re
-import tempfile
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -28,7 +26,6 @@ from openhands.events.observation import (
     FileWriteObservation,
     Observation,
 )
-from openhands.linter import DefaultLinter
 from openhands.llm.llm import LLM
 from openhands.llm.llm_registry import LLMRegistry
 from openhands.utils.chunk_localizer import Chunk, get_top_k_chunk_matches
@@ -187,63 +184,6 @@ class FileEditRuntimeMixin(FileEditRuntimeInterface):
             )
         return None
 
-    def _get_lint_error(
-        self,
-        suffix: str,
-        old_content: str,
-        new_content: str,
-        filepath: str,
-        diff: str,
-    ) -> ErrorObservation | None:
-        linter = DefaultLinter()
-        # Copy the original file to a temporary file (with the same ext) and lint it
-        with (
-            tempfile.NamedTemporaryFile(
-                suffix=suffix, mode='w+', encoding='utf-8'
-            ) as original_file_copy,
-            tempfile.NamedTemporaryFile(
-                suffix=suffix, mode='w+', encoding='utf-8'
-            ) as updated_file_copy,
-        ):
-            # Lint the original file
-            original_file_copy.write(old_content)
-            original_file_copy.flush()
-
-            # Lint the updated file
-            updated_file_copy.write(new_content)
-            updated_file_copy.flush()
-
-            updated_lint_error = linter.lint_file_diff(
-                original_file_copy.name, updated_file_copy.name
-            )
-
-            if len(updated_lint_error) > 0:
-                _obs = FileEditObservation(
-                    content=diff,
-                    path=filepath,
-                    prev_exist=True,
-                    old_content=old_content,
-                    new_content=new_content,
-                )
-                error_message = (
-                    (
-                        f'\n[Linting failed for edited file {filepath}. {len(updated_lint_error)} lint errors found.]\n'
-                        '[begin attempted changes]\n'
-                        f'{_obs.visualize_diff(change_applied=False)}\n'
-                        '[end attempted changes]\n'
-                    )
-                    + '-' * 40
-                    + '\n'
-                )
-                error_message += '-' * 20 + 'First 5 lint errors' + '-' * 20 + '\n'
-                for i, lint_error in enumerate(updated_lint_error[:5]):
-                    error_message += f'[begin lint error {i}]\n'
-                    error_message += lint_error.visualize().strip() + '\n'
-                    error_message += f'[end lint error {i}]\n'
-                    error_message += '-' * 40 + '\n'
-                return ErrorObservation(error_message)
-        return None
-
     def llm_based_edit(self, action: FileEditAction, retry_num: int = 0) -> Observation:
         obs = self.read(FileReadAction(path=action.path))
         if (
@@ -289,27 +229,6 @@ class FileEditRuntimeMixin(FileEditRuntimeInterface):
         if start == -1:
             updated_content = '\n'.join(old_file_lines + action.content.split('\n'))
             diff = get_diff(original_file_content, updated_content, action.path)
-            # Lint the updated content
-            if self.config.sandbox.enable_auto_lint:
-                suffix = os.path.splitext(action.path)[1]
-
-                error_obs = self._get_lint_error(
-                    suffix,
-                    original_file_content,
-                    updated_content,
-                    action.path,
-                    diff,
-                )
-                if error_obs is not None:
-                    self.write(
-                        FileWriteAction(path=action.path, content=updated_content)
-                    )
-                    return self.correct_edit(
-                        file_content=updated_content,
-                        error_obs=error_obs,
-                        retry_num=retry_num,
-                    )
-
             obs = self.write(FileWriteAction(path=action.path, content=updated_content))
             return FileEditObservation(
                 content=diff,
@@ -381,21 +300,6 @@ class FileEditRuntimeMixin(FileEditRuntimeInterface):
         updated_content = '\n'.join(updated_lines)
         diff = get_diff(original_file_content, updated_content, action.path)
 
-        # Lint the updated content
-        if self.config.sandbox.enable_auto_lint:
-            suffix = os.path.splitext(action.path)[1]
-            error_obs = self._get_lint_error(
-                suffix, original_file_content, updated_content, action.path, diff
-            )
-            if error_obs is not None:
-                error_obs.llm_metrics = self.draft_editor_llm.metrics
-                self.write(FileWriteAction(path=action.path, content=updated_content))
-                return self.correct_edit(
-                    file_content=updated_content,
-                    error_obs=error_obs,
-                    retry_num=retry_num,
-                )
-
         obs = self.write(FileWriteAction(path=action.path, content=updated_content))
         ret_obs = FileEditObservation(
             content=diff,
@@ -414,32 +318,4 @@ class FileEditRuntimeMixin(FileEditRuntimeInterface):
     def correct_edit(
         self, file_content: str, error_obs: ErrorObservation, retry_num: int = 0
     ) -> Observation:
-        import openhands.agenthub.codeact_agent.function_calling as codeact_function_calling
-        from openhands.agenthub.codeact_agent.tools import LLMBasedFileEditTool
-        from openhands.llm.llm_utils import check_tools
-
-        _retry_num = retry_num + 1
-        if self.check_retry_num(_retry_num):
-            return error_obs
-        tools = check_tools([LLMBasedFileEditTool], self.draft_editor_llm.config)
-        messages = [
-            {'role': 'system', 'content': CORRECT_SYS_MSG},
-            {
-                'role': 'user',
-                'content': CORRECT_USER_MSG.format(
-                    file_content=file_content, lint_error=error_obs.content
-                ),
-            },
-        ]
-        params: dict = {'messages': messages, 'tools': tools}
-        try:
-            response = self.draft_editor_llm.completion(**params)
-            actions = codeact_function_calling.response_to_actions(response)
-            if len(actions) != 1:
-                return error_obs
-            for action in actions:
-                if isinstance(action, FileEditAction):
-                    return self.llm_based_edit(action, _retry_num)
-        except Exception as e:
-            logger.error(f'correct lint error is failed: {e}')
         return error_obs

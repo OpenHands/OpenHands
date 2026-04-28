@@ -25,7 +25,10 @@ from zipfile import ZipFile
 import httpx
 
 from openhands.core.config import OpenHandsConfig, SandboxConfig
-from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
+from openhands.core.config.mcp_config import (
+    MCPConfig,
+    StdioMCPServer,
+)
 from openhands.core.exceptions import (
     AgentRuntimeDisconnectedError,
 )
@@ -76,7 +79,6 @@ from openhands.runtime.plugins import (
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.runtime.utils.edit import FileEditRuntimeMixin
 from openhands.runtime.utils.git_handler import CommandResult, GitHandler
-from openhands.security import SecurityAnalyzer, options
 from openhands.storage.locations import get_conversation_dir
 from openhands.utils.async_utils import (
     GENERAL_TIMEOUT,
@@ -139,7 +141,6 @@ class Runtime(FileEditRuntimeMixin):
     status_callback: Callable[[str, RuntimeStatus, str], None] | None
     runtime_status: RuntimeStatus | None
     _runtime_initialized: bool = False
-    security_analyzer: 'SecurityAnalyzer | None' = None
 
     def __init__(
         self,
@@ -210,18 +211,6 @@ class Runtime(FileEditRuntimeMixin):
         self.git_provider_tokens = git_provider_tokens
         self.runtime_status = None
 
-        # Initialize security analyzer
-        self.security_analyzer = None
-        if self.config.security.security_analyzer:
-            analyzer_cls = options.SecurityAnalyzers.get(
-                self.config.security.security_analyzer, SecurityAnalyzer
-            )
-            self.security_analyzer = analyzer_cls()
-            self.security_analyzer.set_event_stream(self.event_stream)
-            logger.debug(
-                f'Security analyzer {analyzer_cls.__name__} initialized for runtime {self.sid}'
-            )
-
     @property
     def runtime_initialized(self) -> bool:
         return self._runtime_initialized
@@ -255,7 +244,6 @@ class Runtime(FileEditRuntimeMixin):
         self, runtime_status: RuntimeStatus, msg: str = '', level: str = 'info'
     ):
         """Sends a status message if the callback function was provided."""
-
         self.runtime_status = runtime_status
         if self.status_callback:
             self.status_callback(level, runtime_status, msg)
@@ -276,7 +264,6 @@ class Runtime(FileEditRuntimeMixin):
         max_retries: int = CMD_RETRY_MAX_ATTEMPTS,
     ) -> CmdOutputObservation:
         """Run command with exponential backoff retry on bash session timeout."""
-
         if not cmd or not cmd.strip():
             raise ValueError('Command cannot be empty')
         if max_retries < 1:
@@ -1171,7 +1158,7 @@ fi
 
     @abstractmethod
     def get_mcp_config(
-        self, extra_stdio_servers: list[MCPStdioServerConfig] | None = None
+        self, extra_stdio_servers: dict[str, StdioMCPServer] | None = None
     ) -> MCPConfig:
         pass
 
@@ -1297,8 +1284,7 @@ fi
         return self.git_handler.get_git_diff(file_path)
 
     def get_workspace_branch(self, primary_repo_path: str | None = None) -> str | None:
-        """
-        Get the current branch of the workspace.
+        """Get the current branch of the workspace.
 
         Args:
             primary_repo_path: Path to the primary repository within the workspace.

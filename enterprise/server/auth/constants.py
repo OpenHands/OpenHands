@@ -56,6 +56,23 @@ RECAPTCHA_SITE_KEY = os.getenv('RECAPTCHA_SITE_KEY', '').strip()
 RECAPTCHA_HMAC_SECRET = os.getenv('RECAPTCHA_HMAC_SECRET', '').strip()
 RECAPTCHA_BLOCK_THRESHOLD = float(os.getenv('RECAPTCHA_BLOCK_THRESHOLD', '0.3'))
 
+# Automation Service
+AUTOMATION_SERVICE_URL = os.getenv('AUTOMATION_SERVICE_URL', '').strip()
+if AUTOMATION_SERVICE_URL and not AUTOMATION_SERVICE_URL.startswith(
+    ('http://', 'https://')
+):
+    raise ValueError(
+        f'AUTOMATION_SERVICE_URL must start with http:// or https://, '
+        f'got: {AUTOMATION_SERVICE_URL}'
+    )
+AUTOMATION_EVENT_FORWARDING_ENABLED = os.getenv(
+    'AUTOMATION_EVENT_FORWARDING_ENABLED', 'false'
+) in ('1', 'true')
+# Shared secret for signing payloads sent to automation service (separate from GitHub webhook secret)
+AUTOMATION_WEBHOOK_SECRET = os.getenv('AUTOMATION_WEBHOOK_SECRET', '').strip()
+# Default HTTP timeout for automation service requests (seconds)
+AUTOMATION_SERVICE_TIMEOUT = int(os.getenv('AUTOMATION_SERVICE_TIMEOUT', '30'))
+
 # Account Defender labels that indicate suspicious activity
 SUSPICIOUS_LABELS = {
     'SUSPICIOUS_LOGIN_ACTIVITY',

@@ -1,7 +1,12 @@
 import logging
 from unittest.mock import patch
 
-from openhands.core.logger import RedactURLParamsFilter, SensitiveDataFilter
+from openhands.core.logger import (
+    RedactURLParamsFilter,
+    SensitiveDataFilter,
+    _uvicorn_default_log_config,
+    _uvicorn_json_log_config,
+)
 
 
 @patch.dict(
@@ -258,7 +263,7 @@ def test_redact_url_params_filter_none_args():
 
 
 def test_redact_url_params_filter_dict_args():
-    """Test that records with dict args (used by some formatters) pass through."""
+    """Test that records with dict args have URL params redacted."""
     log_filter = RedactURLParamsFilter()
 
     record = logging.LogRecord(
@@ -273,6 +278,55 @@ def test_redact_url_params_filter_dict_args():
 
     result = log_filter.filter(record)
 
-    # Dict args should pass through (filter only handles tuple/list)
     assert result is True
-    assert record.args == {'method': 'GET', 'path': '/api?secret=test'}
+    assert record.args['method'] == 'GET'
+    assert 'test' not in record.args['path']
+    assert (
+        '<redacted>' in record.args['path'] or '%3Credacted%3E' in record.args['path']
+    )
+
+
+def test_redact_url_params_filter_msg_embedded_url():
+    """Test that URLs with query params embedded in record.msg are redacted."""
+    log_filter = RedactURLParamsFilter()
+
+    record = logging.LogRecord(
+        name='uvicorn.access',
+        level=logging.INFO,
+        pathname='',
+        lineno=0,
+        msg='10.0.0.1 - "GET /ws/abc?resend_all=true&session_api_key=secret-uuid-123" [accepted]',
+        args=None,
+        exc_info=None,
+    )
+
+    result = log_filter.filter(record)
+
+    assert result is True
+    assert 'secret-uuid-123' not in record.msg
+    assert 'resend_all=true' in record.msg
+    assert '<redacted>' in record.msg or '%3Credacted%3E' in record.msg
+
+
+def test_uvicorn_default_config_default_handler_has_redact_filter():
+    """The 'default' handler (used by uvicorn.error) must have the redact filter
+    so that WebSocket [accepted] logs don't leak session_api_key."""
+    config = _uvicorn_default_log_config()
+    assert 'redact_url_params' in config['handlers']['default']['filters']
+
+
+def test_uvicorn_json_config_default_handler_has_redact_filter():
+    """The 'default' handler in JSON config must also have the redact filter."""
+    config = _uvicorn_json_log_config()
+    assert 'redact_url_params' in config['handlers']['default']['filters']
+
+
+def test_uvicorn_configs_all_handlers_have_redact_filter():
+    """Every handler in both uvicorn configs must include the redact filter."""
+    for config_fn in (_uvicorn_default_log_config, _uvicorn_json_log_config):
+        config = config_fn()
+        for handler_name, handler in config['handlers'].items():
+            assert 'redact_url_params' in handler.get('filters', []), (
+                f"Handler '{handler_name}' in {config_fn.__name__} is missing "
+                f"the 'redact_url_params' filter"
+            )

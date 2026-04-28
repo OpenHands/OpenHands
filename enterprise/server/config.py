@@ -20,6 +20,7 @@ from server.auth.constants import (
     GITLAB_APP_CLIENT_ID,
     RECAPTCHA_SITE_KEY,
 )
+from server.constants import DEPLOYMENT_MODE
 
 from openhands.core.config.utils import load_openhands_config
 from openhands.integrations.service_types import ProviderType
@@ -73,10 +74,6 @@ class SaaSServerConfig(ServerConfig):
     secret_store_class: str = 'storage.saas_secrets_store.SaasSecretsStore'
     conversation_store_class: str = (
         'storage.saas_conversation_store.SaasConversationStore'
-    )
-    conversation_manager_class: str = os.environ.get(
-        'CONVERSATION_MANAGER_CLASS',
-        'server.clustered_conversation_manager.ClusteredConversationManager',
     )
     monitoring_listener_class: str = (
         'server.saas_monitoring_listener.SaaSMonitoringListener'
@@ -179,6 +176,7 @@ class SaaSServerConfig(ServerConfig):
                 'ENABLE_JIRA': self.enable_jira,
                 'ENABLE_JIRA_DC': self.enable_jira_dc,
                 'ENABLE_LINEAR': self.enable_linear,
+                'DEPLOYMENT_MODE': DEPLOYMENT_MODE,
             },
             'PROVIDERS_CONFIGURED': providers_configured,
         }

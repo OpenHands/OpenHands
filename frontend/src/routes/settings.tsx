@@ -6,6 +6,7 @@ import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
 import { SettingsLayout } from "#/components/features/settings";
 import { WebClientConfig } from "#/api/option-service/option.types";
+import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
 import { Organization } from "#/types/org";
 import { Typography } from "#/ui/typography";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
@@ -17,7 +18,6 @@ import {
   isSettingsPageHidden,
   getFirstAvailablePath,
 } from "#/utils/settings-utils";
-import { useMe } from "#/hooks/query/use-me";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { useConfig } from "#/hooks/query/use-config";
 import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
@@ -31,16 +31,22 @@ const SAAS_ONLY_PATHS = [
   "/settings/org",
 ];
 
+const ORG_WIDE_BADGE_PATHS = new Set<string>([
+  "/settings/org-defaults",
+  "/settings/org-defaults/condenser",
+  "/settings/org-defaults/verification",
+]);
+
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
   const { pathname } = url;
 
   // Step 1: Get config first (needed for all checks, no user data required)
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
-  if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
-  }
+  const config = await queryClient.fetchQuery<WebClientConfig>({
+    queryKey: QUERY_KEYS.WEB_CLIENT_CONFIG,
+    queryFn: OptionService.getConfig,
+    ...CONFIG_CACHE_OPTIONS,
+  });
 
   const isSaas = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;
@@ -123,17 +129,14 @@ function SettingsScreen() {
   const location = useLocation();
   const matches = useMatches();
   const navItems = useSettingsNavItems();
-  const { data: me } = useMe();
   const { data: config } = useConfig();
   const { isTeamOrg } = useOrgTypeAndAccess();
 
   // Determine if we should show the org-wide settings badge
-  // Only show for Admin/Owner roles on the LLM settings page in team orgs
-  const isLlmSettingsPage = location.pathname === "/settings";
-  const isAdminOrOwner = me?.role === "admin" || me?.role === "owner";
+  // Only show for Admin/Owner roles on LLM/org-defaults pages in team orgs
+  const isOrgWideBadgePath = ORG_WIDE_BADGE_PATHS.has(location.pathname);
   const isSaasMode = config?.app_mode === "saas";
-  const shouldShowOrgWideBadge =
-    isLlmSettingsPage && isAdminOrOwner && isTeamOrg && isSaasMode;
+  const shouldShowOrgWideBadge = isOrgWideBadgePath && isTeamOrg && isSaasMode;
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {

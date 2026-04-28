@@ -14,7 +14,6 @@ NOTE: this will be executed inside the docker sandbox.
 import argparse
 import asyncio
 import base64
-import json
 import mimetypes
 import os
 import shutil
@@ -44,7 +43,7 @@ from openhands.app_server.status.system_stats import (
     get_system_stats,
     update_last_execution_time,
 )
-from openhands.core.config.mcp_config import MCPStdioServerConfig
+from openhands.core.config.mcp_config import StdioMCPServer
 from openhands.core.exceptions import BrowserUnavailableException
 from openhands.core.logger import get_uvicorn_log_config
 from openhands.core.logger import openhands_logger as logger
@@ -82,6 +81,7 @@ from openhands.runtime.utils.bash import BashSession
 from openhands.runtime.utils.files import insert_lines, read_lines
 from openhands.runtime.utils.memory_monitor import MemoryMonitor
 from openhands.runtime.utils.runtime_init import init_user_and_working_directory
+from openhands.utils._redact_compat import redact_text_secrets
 from openhands.utils.async_utils import call_sync_from_async, wait_all
 
 if sys.platform == 'win32':
@@ -871,9 +871,9 @@ if __name__ == '__main__':
                 status_code=400, detail='Request must be a list of MCP tools to sync'
             )
         logger.info(
-            f'Updating MCP server with tools: {json.dumps(mcp_tools_to_sync, indent=2)}'
+            f'Updating MCP server with tools: {redact_text_secrets(str(mcp_tools_to_sync))}'
         )
-        mcp_tools_to_sync = [MCPStdioServerConfig(**tool) for tool in mcp_tools_to_sync]
+        mcp_tools_to_sync = [StdioMCPServer(**tool) for tool in mcp_tools_to_sync]
         try:
             await mcp_proxy_manager.update_and_remount(app, mcp_tools_to_sync, ['*'])
             logger.info('MCP Proxy Manager updated and remounted successfully')
