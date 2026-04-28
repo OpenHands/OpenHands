@@ -21,7 +21,7 @@ from storage.jira_workspace import JiraWorkspace
 from storage.redis import create_redis_client
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth.user_auth import get_user_auth
+from openhands.app_server.user_auth.user_auth import get_user_auth
 
 # Environment variable to disable Jira webhooks
 JIRA_WEBHOOKS_ENABLED = os.environ.get('JIRA_WEBHOOKS_ENABLED', '0') in (

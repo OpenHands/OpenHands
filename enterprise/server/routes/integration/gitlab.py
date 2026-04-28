@@ -22,7 +22,7 @@ from storage.gitlab_webhook_store import GitlabWebhookStore
 from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.shared import sio
-from openhands.server.user_auth import get_user_id
+from openhands.app_server.user_auth import get_user_id
 
 gitlab_integration_router = APIRouter(prefix='/integration')
 webhook_store = GitlabWebhookStore()

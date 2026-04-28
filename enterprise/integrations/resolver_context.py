@@ -8,7 +8,7 @@ from openhands.app_server.integrations.service_types import ProviderType, UserGi
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.sdk.secret import SecretSource, StaticSecret
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 class ResolverUserContext(UserContext):
