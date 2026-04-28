@@ -19,6 +19,7 @@ interface HooksModalProps {
 export function HooksModal({ onClose }: HooksModalProps) {
   const { t } = useTranslation();
   const { curAgentState } = useAgentState();
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>(
     {},
   );
@@ -41,6 +42,36 @@ export function HooksModal({ onClose }: HooksModalProps) {
     curAgentState,
   );
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredHooks = hooks?.filter((hookEvent) => {
+    if (!normalizedSearch) {
+      return true;
+    }
+
+    return hookEvent.event_type.toLowerCase().includes(normalizedSearch);
+  });
+
+  const allExpanded =
+    !!filteredHooks?.length &&
+    filteredHooks.every((hookEvent) => expandedEvents[hookEvent.event_type]);
+
+  const toggleAllFiltered = () => {
+    if (!filteredHooks?.length) {
+      return;
+    }
+
+    setExpandedEvents((prev) => {
+      const next = { ...prev };
+      const shouldExpand = !allExpanded;
+
+      filteredHooks.forEach((hookEvent) => {
+        next[hookEvent.event_type] = shouldExpand;
+      });
+
+      return next;
+    });
+  };
+
   return (
     <ModalBackdrop onClose={onClose}>
       <ModalBody
@@ -52,13 +83,25 @@ export function HooksModal({ onClose }: HooksModalProps) {
           isAgentReady={isAgentReady}
           isLoading={isLoading}
           isRefetching={isRefetching}
+          hookCount={filteredHooks?.length ?? 0}
+          allExpanded={allExpanded}
           onRefresh={refetch}
+          onToggleAll={toggleAllFiltered}
         />
 
         {isAgentReady && (
-          <Typography.Text className="text-sm text-gray-400">
-            {t(I18nKey.HOOKS_MODAL$WARNING)}
-          </Typography.Text>
+          <div className="w-full space-y-2">
+            <Typography.Text className="text-sm text-gray-400">
+              {t(I18nKey.HOOKS_MODAL$WARNING)}
+            </Typography.Text>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t(I18nKey.HOOKS_MODAL$SEARCH_PLACEHOLDER)}
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
         )}
 
         <div className="w-full h-[60vh] overflow-auto rounded-md custom-scrollbar-always">
@@ -78,9 +121,12 @@ export function HooksModal({ onClose }: HooksModalProps) {
               <HooksEmptyState isError={isError} />
             )}
 
-          {!isLoading && isAgentReady && hooks && hooks.length > 0 && (
+          {!isLoading &&
+            isAgentReady &&
+            filteredHooks &&
+            filteredHooks.length > 0 && (
             <div className="p-2 space-y-3">
-              {hooks.map((hookEvent) => {
+              {filteredHooks.map((hookEvent) => {
                 const isExpanded =
                   expandedEvents[hookEvent.event_type] || false;
 
@@ -95,6 +141,17 @@ export function HooksModal({ onClose }: HooksModalProps) {
               })}
             </div>
           )}
+
+          {!isLoading &&
+            isAgentReady &&
+            hooks &&
+            hooks.length > 0 &&
+            filteredHooks &&
+            filteredHooks.length === 0 && (
+              <div className="w-full h-full flex items-center text-center justify-center text-lg text-tertiary-light">
+                <Typography.Text>{t(I18nKey.COMMON$NO_RESULTS)}</Typography.Text>
+              </div>
+            )}
         </div>
       </ModalBody>
     </ModalBackdrop>

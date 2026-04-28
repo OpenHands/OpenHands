@@ -19,6 +19,7 @@ interface SkillsModalProps {
 export function SkillsModal({ onClose }: SkillsModalProps) {
   const { t } = useTranslation();
   const { curAgentState } = useAgentState();
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(
     {},
   );
@@ -41,6 +42,39 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
     curAgentState,
   );
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredSkills = skills?.filter((skill) => {
+    if (!normalizedSearch) {
+      return true;
+    }
+
+    return (
+      skill.name.toLowerCase().includes(normalizedSearch) ||
+      skill.type.toLowerCase().includes(normalizedSearch)
+    );
+  });
+
+  const allExpanded =
+    !!filteredSkills?.length &&
+    filteredSkills.every((skill) => expandedAgents[skill.name]);
+
+  const toggleAllFiltered = () => {
+    if (!filteredSkills?.length) {
+      return;
+    }
+
+    setExpandedAgents((prev) => {
+      const next = { ...prev };
+      const shouldExpand = !allExpanded;
+
+      filteredSkills.forEach((skill) => {
+        next[skill.name] = shouldExpand;
+      });
+
+      return next;
+    });
+  };
+
   return (
     <ModalBackdrop onClose={onClose}>
       <ModalBody
@@ -52,13 +86,25 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
           isAgentReady={isAgentReady}
           isLoading={isLoading}
           isRefetching={isRefetching}
+          skillCount={filteredSkills?.length ?? 0}
+          allExpanded={allExpanded}
           onRefresh={refetch}
+          onToggleAll={toggleAllFiltered}
         />
 
         {isAgentReady && (
-          <Typography.Text className="text-sm text-gray-400">
-            {t(I18nKey.SKILLS_MODAL$WARNING)}
-          </Typography.Text>
+          <div className="w-full space-y-2">
+            <Typography.Text className="text-sm text-gray-400">
+              {t(I18nKey.SKILLS_MODAL$WARNING)}
+            </Typography.Text>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t(I18nKey.SKILLS_MODAL$SEARCH_PLACEHOLDER)}
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
         )}
 
         <div className="w-full h-[60vh] overflow-auto rounded-md custom-scrollbar-always">
@@ -78,9 +124,9 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
               <SkillsEmptyState isError={isError} />
             )}
 
-          {!isLoading && isAgentReady && skills && skills.length > 0 && (
+          {!isLoading && isAgentReady && filteredSkills && filteredSkills.length > 0 && (
             <div className="p-2 space-y-3">
-              {skills.map((skill) => {
+              {filteredSkills.map((skill) => {
                 const isExpanded = expandedAgents[skill.name] || false;
 
                 return (
@@ -94,6 +140,17 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
               })}
             </div>
           )}
+
+          {!isLoading &&
+            isAgentReady &&
+            skills &&
+            skills.length > 0 &&
+            filteredSkills &&
+            filteredSkills.length === 0 && (
+              <div className="w-full h-full flex items-center text-center justify-center text-lg text-tertiary-light">
+                <Typography.Text>{t(I18nKey.COMMON$NO_RESULTS)}</Typography.Text>
+              </div>
+            )}
         </div>
       </ModalBody>
     </ModalBackdrop>

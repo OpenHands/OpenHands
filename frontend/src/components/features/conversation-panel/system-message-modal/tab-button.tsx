@@ -28,8 +28,6 @@ export function TabButton({
         className,
       )}
       onClick={onClick}
-      aria-selected={isActive}
-      role="tab"
     >
       {children}
     </button>

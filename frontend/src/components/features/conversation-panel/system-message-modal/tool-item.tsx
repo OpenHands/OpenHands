@@ -1,7 +1,8 @@
+import { MouseEvent, useEffect, useState } from "react";
 import { ToolParameters } from "./tool-parameters";
-import { ToggleButton } from "./toggle-button";
 import { ChatCompletionToolParam } from "#/types/v1/core";
 import { MarkdownRenderer } from "../../markdown/markdown-renderer";
+import { CopyToClipboardButton } from "#/components/shared/buttons/copy-to-clipboard-button";
 
 interface FunctionData {
   name?: string;
@@ -31,51 +32,100 @@ interface ToolItemProps {
   onToggle: (index: number) => void;
 }
 
-export function ToolItem({ tool, index, isExpanded, onToggle }: ToolItemProps) {
-  // Extract function data from the nested structure
+export interface ToolDisplayMetadata {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown> | null;
+  kind: string | null;
+}
+
+export function getToolDisplayMetadata(
+  tool: Record<string, unknown> | ChatCompletionToolParam,
+): ToolDisplayMetadata {
   const toolData = tool as ToolData;
   const functionData = toolData.function || toolData;
 
-  // Extract tool name/title - support both V0 and V1 formats
   const name =
-    // V1 format: check for title field (root level or in annotations)
     toolData.title ||
     toolData.annotations?.title ||
-    // V0 format: check for function.name or name
     functionData.name ||
     (toolData.type === "function" && toolData.function?.name) ||
     "";
 
-  // Extract description - support both V0 and V1 formats
   const description =
-    // V1 format: description at root level
     toolData.description ||
-    // V0 format: description in function object
     functionData.description ||
     (toolData.type === "function" && toolData.function?.description) ||
     "";
 
-  // Extract parameters - support both V0 and V1 formats
   const parameters =
-    // V0 format: parameters in function object
     functionData.parameters ||
     (toolData.type === "function" && toolData.function?.parameters) ||
-    // V1 format: parameters at root level (if present)
     toolData.parameters ||
     null;
 
+  const kind = toolData.kind || toolData.type || null;
+
+  return {
+    name: String(name),
+    description: String(description),
+    parameters,
+    kind,
+  };
+}
+
+export function ToolItem({ tool, index, isExpanded, onToggle }: ToolItemProps) {
+  const [copyMode, setCopyMode] = useState<"copy" | "copied">("copy");
+  const { name, description, parameters, kind } = getToolDisplayMetadata(tool);
+
+  useEffect(() => {
+    if (copyMode !== "copied") {
+      return undefined;
+    }
+
+    const timeoutId = setTimeout(() => setCopyMode("copy"), 2000);
+    return () => clearTimeout(timeoutId);
+  }, [copyMode]);
+
+  const onCopy = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    await navigator.clipboard.writeText(name);
+    setCopyMode("copied");
+  };
+
   return (
     <div className="rounded-md overflow-hidden">
-      <ToggleButton
-        title={String(name)}
-        isExpanded={isExpanded}
-        onClick={() => onToggle(index)}
-      />
+      <div className="flex items-stretch gap-2">
+        <button
+          type="button"
+          data-testid="toggle-button"
+          onClick={() => onToggle(index)}
+          className="w-full py-3 px-2 text-left flex items-center justify-between hover:bg-gray-700 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-100">{name}</span>
+            {kind && (
+              <span className="px-2 py-1 text-xs rounded-full bg-gray-800 text-gray-200">
+                {kind}
+              </span>
+            )}
+          </div>
+          <span className="text-gray-300">{isExpanded ? "v" : ">"}</span>
+        </button>
+        <div className="flex items-center">
+          <CopyToClipboardButton
+            isHidden={false}
+            isDisabled={copyMode === "copied"}
+            onClick={onCopy}
+            mode={copyMode}
+          />
+        </div>
+      </div>
 
       {isExpanded && (
         <div className="px-2 pb-3 pt-1">
           <div className="mt-2 mb-3 text-sm text-gray-300 leading-relaxed">
-            <MarkdownRenderer>{String(description)}</MarkdownRenderer>
+            <MarkdownRenderer>{description}</MarkdownRenderer>
           </div>
 
           {/* Parameters section */}

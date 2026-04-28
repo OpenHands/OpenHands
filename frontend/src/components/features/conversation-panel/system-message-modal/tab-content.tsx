@@ -10,6 +10,10 @@ interface TabContentProps {
     tools: Array<Record<string, unknown>> | ChatCompletionToolParam[] | null;
   };
   expandedTools: Record<number, boolean>;
+  filteredTools: Array<{
+    tool: Record<string, unknown> | ChatCompletionToolParam;
+    index: number;
+  }>;
   onToggleTool: (index: number) => void;
 }
 
@@ -17,6 +21,7 @@ export function TabContent({
   activeTab,
   systemMessage,
   expandedTools,
+  filteredTools,
   onToggleTool,
 }: TabContentProps) {
   if (activeTab === "system") {
@@ -27,7 +32,7 @@ export function TabContent({
     if (systemMessage.tools && systemMessage.tools.length > 0) {
       return (
         <ToolsList
-          tools={systemMessage.tools}
+          tools={filteredTools}
           expandedTools={expandedTools}
           onToggleTool={onToggleTool}
         />

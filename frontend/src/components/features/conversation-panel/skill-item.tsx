@@ -12,10 +12,13 @@ interface SkillItemProps {
 
 export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
   let skillTypeLabel: string;
+  let skillTypeClassName = "bg-gray-800 text-gray-200";
   if (skill.type === "repo") {
     skillTypeLabel = "Repository";
+    skillTypeClassName = "bg-blue-900 text-blue-200";
   } else if (skill.type === "knowledge") {
     skillTypeLabel = "Knowledge";
+    skillTypeClassName = "bg-green-900 text-green-200";
   } else {
     skillTypeLabel = "AgentSkills";
   }
@@ -33,7 +36,9 @@ export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
           </Typography.Text>
         </div>
         <div className="flex items-center">
-          <Typography.Text className="px-2 py-1 text-xs rounded-full bg-gray-800 mr-2">
+          <Typography.Text
+            className={`px-2 py-1 text-xs rounded-full mr-2 ${skillTypeClassName}`}
+          >
             {skillTypeLabel}
           </Typography.Text>
           <Typography.Text className="text-gray-300">

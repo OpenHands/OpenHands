@@ -11729,6 +11729,15 @@
     "uk": "Для цього агента немає доступних інструментів",
     "ca": "No hi ha eines disponibles per a aquest agent"
   },
+  "SYSTEM_MESSAGE_MODAL$SEARCH_TOOLS_PLACEHOLDER": {
+    "en": "Search tools by name, description, or type"
+  },
+  "SYSTEM_MESSAGE_MODAL$EXPAND_ALL": {
+    "en": "Expand all"
+  },
+  "SYSTEM_MESSAGE_MODAL$COLLAPSE_ALL": {
+    "en": "Collapse all"
+  },
   "TOS$ACCEPT_TERMS_OF_SERVICE": {
     "en": "Accept Terms of Service",
     "ja": "利用規約に同意する",
@@ -17115,8 +17124,7 @@
     "fr": "Nom de l'organisation",
     "tr": "Organizasyon Adı",
     "de": "Organisationsname",
-    "uk": "Назва організації"
-  ,
+    "uk": "Назва організації",
     "ca": "Nom de l'organització"
   },
   "ORG$NEXT": {
@@ -17849,6 +17857,15 @@
     "tr": "Kullanılabilir yetenekler",
     "uk": "Доступні навички",
     "ca": "Habilitats disponibles"
+  },
+  "SKILLS_MODAL$SEARCH_PLACEHOLDER": {
+    "en": "Search skills by name or source"
+  },
+  "SKILLS_MODAL$EXPAND_ALL": {
+    "en": "Expand all"
+  },
+  "SKILLS_MODAL$COLLAPSE_ALL": {
+    "en": "Collapse all"
   },
   "CONVERSATION$SHARE_PUBLICLY": {
     "en": "Public Share",
@@ -18615,6 +18632,15 @@
     "uk": "Доступні хуки",
     "ca": "Hooks disponibles"
   },
+  "HOOKS_MODAL$SEARCH_PLACEHOLDER": {
+    "en": "Search hooks by event type"
+  },
+  "HOOKS_MODAL$EXPAND_ALL": {
+    "en": "Expand all"
+  },
+  "HOOKS_MODAL$COLLAPSE_ALL": {
+    "en": "Collapse all"
+  },
   "HOOKS_MODAL$WARNING": {
     "en": "Hooks are loaded from your workspace. This view refreshes on demand and may differ from the hooks that were active when the conversation started. Stop and restart the conversation to apply changes.",
     "ja": "フックはワークスペースから読み込まれます。この表示は要求時にワークスペースから再読み込みするため、会話開始時に有効だったフックと異なる場合があります。変更を適用するには会話を停止して再開してください。",
@@ -18935,8 +18961,7 @@
     "pt": "Erro",
     "es": "Error",
     "tr": "Hata",
-    "uk": "Помилка"
-  ,
+    "uk": "Помилка",
     "ca": "Error"
   },
   "HOOK$OUTPUT": {
@@ -19293,8 +19318,7 @@
     "pt": "Nome da organização",
     "es": "Nombre de la organización",
     "tr": "Organizasyon adı",
-    "uk": "Назва організації"
-  ,
+    "uk": "Назва організації",
     "ca": "Nom de l'organització"
   },
   "ONBOARDING$ORG_NAME_INPUT_DOMAIN": {
@@ -20110,8 +20134,7 @@
     "pt": "Saiba mais",
     "es": "Más información",
     "tr": "Daha Fazla Bilgi",
-    "uk": "Дізнатися більше"
-  ,
+    "uk": "Дізнатися більше",
     "ca": "Més informació"
   },
   "ENTERPRISE$LEARN_MORE_ARIA": {
@@ -20162,8 +20185,7 @@
     "pt": "Erro",
     "es": "Error",
     "tr": "Hata",
-    "uk": "Помилка"
-  ,
+    "uk": "Помилка",
     "ca": "Error"
   },
   "DEVICE$SUCCESS_MESSAGE": {
@@ -20537,8 +20559,7 @@
     "fr": "En savoir plus",
     "tr": "Daha fazla bilgi",
     "de": "Mehr erfahren",
-    "uk": "Дізнатися більше"
-  ,
+    "uk": "Дізнатися більше",
     "ca": "Més informació"
   },
   "ENTERPRISE$GET_OPENHANDS_TITLE": {

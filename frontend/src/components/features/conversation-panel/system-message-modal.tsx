@@ -5,6 +5,10 @@ import { SystemMessageHeader } from "./system-message-modal/system-message-heade
 import { TabNavigation } from "./system-message-modal/tab-navigation";
 import { TabContent } from "./system-message-modal/tab-content";
 import { SystemMessageForModal } from "#/utils/system-message-adapter";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import { getToolDisplayMetadata } from "./system-message-modal/tool-item";
+import { BrandButton } from "../settings/brand-button";
 
 interface SystemMessageModalProps {
   isOpen: boolean;
@@ -17,7 +21,9 @@ export function SystemMessageModal({
   onClose,
   systemMessage,
 }: SystemMessageModalProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<"system" | "tools">("system");
+  const [toolSearchQuery, setToolSearchQuery] = useState("");
   const [expandedTools, setExpandedTools] = useState<Record<number, boolean>>(
     {},
   );
@@ -31,6 +37,48 @@ export function SystemMessageModal({
       ...prev,
       [index]: !prev[index],
     }));
+  };
+
+  const tools = systemMessage.tools ?? [];
+  const normalizedSearch = toolSearchQuery.trim().toLowerCase();
+  const filteredTools = tools
+    .map((tool, index) => ({
+      tool,
+      index,
+      metadata: getToolDisplayMetadata(tool),
+    }))
+    .filter(({ metadata }) => {
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      return (
+        metadata.name.toLowerCase().includes(normalizedSearch) ||
+        metadata.description.toLowerCase().includes(normalizedSearch) ||
+        (metadata.kind && metadata.kind.toLowerCase().includes(normalizedSearch))
+      );
+    })
+    .map(({ tool, index }) => ({ tool, index }));
+
+  const allExpanded =
+    filteredTools.length > 0 &&
+    filteredTools.every(({ index }) => expandedTools[index]);
+
+  const toggleAllTools = () => {
+    if (!filteredTools.length) {
+      return;
+    }
+
+    setExpandedTools((prev) => {
+      const next = { ...prev };
+      const shouldExpand = !allExpanded;
+
+      filteredTools.forEach(({ index }) => {
+        next[index] = shouldExpand;
+      });
+
+      return next;
+    });
   };
 
   return (
@@ -52,13 +100,37 @@ export function SystemMessageModal({
               hasTools={
                 !!(systemMessage.tools && systemMessage.tools.length > 0)
               }
+              toolCount={filteredTools.length}
             />
+
+            {activeTab === "tools" && tools.length > 0 && (
+              <div className="mb-3 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={toolSearchQuery}
+                  onChange={(event) => setToolSearchQuery(event.target.value)}
+                  placeholder={t(I18nKey.SYSTEM_MESSAGE_MODAL$SEARCH_TOOLS_PLACEHOLDER)}
+                  className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={toggleAllTools}
+                  isDisabled={filteredTools.length === 0}
+                >
+                  {allExpanded
+                    ? t(I18nKey.SYSTEM_MESSAGE_MODAL$COLLAPSE_ALL)
+                    : t(I18nKey.SYSTEM_MESSAGE_MODAL$EXPAND_ALL)}
+                </BrandButton>
+              </div>
+            )}
 
             <div className="max-h-[51vh] overflow-auto rounded-md custom-scrollbar-always">
               <TabContent
                 activeTab={activeTab}
                 systemMessage={systemMessage}
                 expandedTools={expandedTools}
+                filteredTools={filteredTools}
                 onToggleTool={toggleTool}
               />
             </div>
