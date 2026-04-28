@@ -113,6 +113,11 @@ function AgentSettingsScreen() {
     ) {
       setApiKey("");
     }
+    // Advanced tab doesn't apply to OpenHands; reset to basic to avoid showing
+    // a blank/stale advanced view.
+    if (newType === "openhands" && tab === "advanced") {
+      setTab("basic");
+    }
     setAgentType(newType);
     setIsDirty(true);
   };
@@ -123,7 +128,24 @@ function AgentSettingsScreen() {
     let parsedEnv: Record<string, string> = {};
     if (agentType !== "openhands" && envJson.trim()) {
       try {
-        parsedEnv = JSON.parse(envJson);
+        const parsed: unknown = JSON.parse(envJson);
+        if (
+          typeof parsed !== "object" ||
+          Array.isArray(parsed) ||
+          parsed === null
+        ) {
+          setEnvError(t(I18nKey.SETTINGS$AGENT_ENV_MUST_BE_OBJECT));
+          return;
+        }
+        if (
+          !Object.values(parsed as Record<string, unknown>).every(
+            (v) => typeof v === "string",
+          )
+        ) {
+          setEnvError(t(I18nKey.SETTINGS$AGENT_ENV_VALUES_MUST_BE_STRINGS));
+          return;
+        }
+        parsedEnv = parsed as Record<string, string>;
       } catch {
         setEnvError(t(I18nKey.SETTINGS$MCP_ERROR_INVALID_JSON));
         return;
@@ -306,7 +328,22 @@ function AgentSettingsScreen() {
                 setEnvError(null);
                 setIsDirty(true);
                 try {
-                  JSON.parse(e.target.value);
+                  const parsed: unknown = JSON.parse(e.target.value);
+                  if (
+                    typeof parsed !== "object" ||
+                    Array.isArray(parsed) ||
+                    parsed === null
+                  ) {
+                    setEnvError(t(I18nKey.SETTINGS$AGENT_ENV_MUST_BE_OBJECT));
+                  } else if (
+                    !Object.values(parsed as Record<string, unknown>).every(
+                      (v) => typeof v === "string",
+                    )
+                  ) {
+                    setEnvError(
+                      t(I18nKey.SETTINGS$AGENT_ENV_VALUES_MUST_BE_STRINGS),
+                    );
+                  }
                 } catch {
                   setEnvError(t(I18nKey.SETTINGS$MCP_ERROR_INVALID_JSON));
                 }

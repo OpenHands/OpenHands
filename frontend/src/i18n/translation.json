@@ -24495,5 +24495,39 @@
     "ca": "Un argument per línia. S'afegeixen després de la comanda.",
     "tr": "Satır başına bir argüman. Bunlar komuttan sonra eklenir.",
     "uk": "Один аргумент на рядок. Вони додаються після команди."
+  },
+  "SETTINGS$AGENT_ENV_MUST_BE_OBJECT": {
+    "en": "Environment variables must be a JSON object",
+    "ja": "Environment variables must be a JSON object",
+    "zh-CN": "Environment variables must be a JSON object",
+    "zh-TW": "Environment variables must be a JSON object",
+    "ko-KR": "Environment variables must be a JSON object",
+    "no": "Environment variables must be a JSON object",
+    "ar": "Environment variables must be a JSON object",
+    "de": "Environment variables must be a JSON object",
+    "fr": "Environment variables must be a JSON object",
+    "it": "Environment variables must be a JSON object",
+    "pt": "Environment variables must be a JSON object",
+    "es": "Environment variables must be a JSON object",
+    "ca": "Environment variables must be a JSON object",
+    "tr": "Environment variables must be a JSON object",
+    "uk": "Environment variables must be a JSON object"
+  },
+  "SETTINGS$AGENT_ENV_VALUES_MUST_BE_STRINGS": {
+    "en": "All environment variable values must be strings",
+    "ja": "All environment variable values must be strings",
+    "zh-CN": "All environment variable values must be strings",
+    "zh-TW": "All environment variable values must be strings",
+    "ko-KR": "All environment variable values must be strings",
+    "no": "All environment variable values must be strings",
+    "ar": "All environment variable values must be strings",
+    "de": "All environment variable values must be strings",
+    "fr": "All environment variable values must be strings",
+    "it": "All environment variable values must be strings",
+    "pt": "All environment variable values must be strings",
+    "es": "All environment variable values must be strings",
+    "ca": "All environment variable values must be strings",
+    "tr": "All environment variable values must be strings",
+    "uk": "All environment variable values must be strings"
   }
 }
