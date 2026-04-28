@@ -29,6 +29,7 @@ from server.constants import (
     SLACK_WEBHOOKS_ENABLED,
 )
 from server.logger import logger
+from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.signature import SignatureVerifier
 from slack_sdk.web.async_client import AsyncWebClient
@@ -46,7 +47,16 @@ slack_router = APIRouter(prefix='/slack')
 
 # Build https://slack.com/oauth/v2/authorize with sufficient query parameters
 authorize_url_generator = AuthorizeUrlGenerator(
-    client_id=SLACK_CLIENT_ID, scopes=['app_mentions:read', 'chat:write']
+    client_id=SLACK_CLIENT_ID,
+    scopes=[
+        'app_mentions:read',
+        'chat:write',
+        'users:read',
+        'channels:history',
+        'groups:history',
+        'mpim:history',
+        'im:history',
+    ],
 )
 token_manager = TokenManager()
 
@@ -232,7 +242,24 @@ async def keycloak_callback(
 
     # Retrieve the display_name from slack
     client = AsyncWebClient(token=bot_access_token)
-    slack_user_info = await client.users_info(user=slack_user_id)
+    try:
+        slack_user_info = await client.users_info(user=slack_user_id)
+    except SlackApiError as e:
+        if e.response.get('error') == 'missing_scope':
+            logger.warning(
+                'slack_missing_scope_during_install',
+                extra={'slack_user_id': slack_user_id, 'team_id': team_id},
+            )
+            return _html_response(
+                title='Re-installation Required',
+                description=(
+                    'The Slack app is missing required permissions. '
+                    f'Please <a href="{HOST_URL}/slack/install" style="color:#ecedee;text-decoration:underline;">re-install the OpenHands Slack App</a> '
+                    'to authorize the updated permissions.'
+                ),
+                status_code=400,
+            )
+        raise
     slack_display_name = slack_user_info.data['user']['profile']['display_name']
     slack_user = SlackUser(
         keycloak_user_id=keycloak_user_id,
@@ -366,7 +393,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     # Verify this is a block_suggestion payload
     if payload.get('type') != 'block_suggestion':
         logger.warning(
-            f"slack_on_options_load: Unexpected payload type: {payload.get('type')}"
+            f'slack_on_options_load: Unexpected payload type: {payload.get("type")}'
         )
         return JSONResponse({'options': []})
 
