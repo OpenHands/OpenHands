@@ -3361,33 +3361,21 @@ class TestAgentKindConversationUrl:
         )
 
     def test_agent_kind_to_router_path_known_kinds(self):
-        """``'llm'`` / ``None`` → legacy route, ``'acp'`` → ACP route."""
+        """``'llm'`` → ``'conversations'``, ``'acp'`` → ``'acp/conversations'``."""
         from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
             _agent_kind_to_router_path,
         )
 
-        assert _agent_kind_to_router_path('llm') == '/api/conversations'
-        assert _agent_kind_to_router_path(None) == '/api/conversations'
-        assert _agent_kind_to_router_path('acp') == '/api/acp/conversations'
+        assert _agent_kind_to_router_path('llm') == 'conversations'
+        assert _agent_kind_to_router_path('acp') == 'acp/conversations'
 
-    def test_agent_kind_to_router_path_unknown_warns_and_falls_back(self):
-        """Unknown variants warn and fall back to the LLM route.
-
-        Routing an unknown kind to ACP would 404 in more cases; the LLM
-        route at least returns a readable 4xx instead of a bare 404.
-        """
-        from unittest.mock import patch
-
-        from openhands.app_server.app_conversation import (  # noqa: E501
-            live_status_app_conversation_service as service_module,
+    def test_agent_kind_to_router_path_unknown_falls_back(self):
+        """Unknown variants fall back to the LLM route."""
+        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
+            _agent_kind_to_router_path,
         )
 
-        with patch.object(service_module._logger, 'warning') as mock_warning:
-            path = service_module._agent_kind_to_router_path('future-variant')
-
-        assert path == '/api/conversations'
-        mock_warning.assert_called_once()
-        assert 'future-variant' in str(mock_warning.call_args)
+        assert _agent_kind_to_router_path('future-variant') == 'conversations'
 
 
 class TestBuildAcpStartConversationRequestSecrets:
