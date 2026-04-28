@@ -125,6 +125,7 @@ describe("ExpandableMessage", () => {
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
     });
     const RouterStub = createRoutesStub([

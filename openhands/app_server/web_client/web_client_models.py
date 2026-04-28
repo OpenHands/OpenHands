@@ -21,6 +21,7 @@ class WebClientFeatureFlags(BaseModel):
     hide_billing_page: bool = False
     hide_integrations_page: bool = False
     deployment_mode: DeploymentMode | None = None
+    enable_onboarding: bool = False
 
     # This can be removed / replaced when a DeploymentMode (or similar) env var is created.
     @model_validator(mode='after')
