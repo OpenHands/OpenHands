@@ -34,10 +34,10 @@ from server.auth.constants import (
     AUTOMATION_WEBHOOK_SECRET,
 )
 from server.auth.token_manager import TokenManager
+from storage.redis import get_redis_client_async
 
 from openhands.app_server.integrations.provider import ProviderType
 from openhands.core.logger import openhands_logger as logger
-from storage.redis import get_redis_client_async
 
 # Cache TTL constants
 ORG_CLAIM_CACHE_TTL_SECONDS = 3600  # 1 hour for org claims (rarely change)

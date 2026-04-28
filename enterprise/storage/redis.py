@@ -1,8 +1,8 @@
 import os
 
+from redis import Redis
 from redis import asyncio as aioredis
 from redis import exceptions as redis_exceptions
-from redis import Redis
 
 # Redis configuration
 REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')

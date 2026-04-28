@@ -35,6 +35,7 @@ from slack_sdk.signature import SignatureVerifier
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import delete
 from storage.database import a_session_maker
+from storage.redis import get_redis_client_async
 from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
@@ -44,7 +45,6 @@ from openhands.app_server.integrations.service_types import (
     ProviderType,
 )
 from openhands.server.shared import config
-from storage.redis import get_redis_client_async
 
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
 slack_router = APIRouter(prefix='/slack')

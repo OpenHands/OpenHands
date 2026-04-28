@@ -28,6 +28,7 @@ from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import select
 from storage.database import a_session_maker
+from storage.redis import get_redis_client_async
 from storage.slack_user import SlackUser
 
 from openhands.app_server.integrations.provider import ProviderHandler
@@ -44,8 +45,6 @@ from openhands.server.types import (
     MissingSettingsError,
     SessionExpiredError,
 )
-
-from storage.redis import get_redis_client_async
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
