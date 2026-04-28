@@ -5,12 +5,11 @@ All conversations now use V1 app conversation system.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from integrations.gitlab.gitlab_view import GitlabIssue
 from integrations.types import UserData
-
-from openhands.storage.data_models.conversation_metadata import ConversationMetadata
 
 
 @pytest.fixture
@@ -56,12 +55,9 @@ def mock_saas_user_auth():
 
 
 @pytest.fixture
-def mock_convo_metadata():
-    """Create a mock ConversationMetadata."""
-    return ConversationMetadata(
-        conversation_id='test_conversation_id',
-        selected_repository='test-group/test-repo',
-    )
+def mock_conversation_id():
+    """Create a mock conversation UUID."""
+    return uuid4()
 
 
 class TestGitlabManagerJobCreation:
@@ -80,7 +76,7 @@ class TestGitlabManagerJobCreation:
         mock_token_manager,
         mock_gitlab_view,
         mock_saas_user_auth,
-        mock_convo_metadata,
+        mock_conversation_id,
     ):
         """Test that start_job creates a conversation and sends acknowledgment message."""
         from integrations.gitlab.gitlab_manager import GitlabManager
@@ -90,7 +86,7 @@ class TestGitlabManagerJobCreation:
 
         # Mock the view's methods
         mock_gitlab_view.initialize_new_conversation = AsyncMock(
-            return_value=mock_convo_metadata
+            return_value=mock_conversation_id
         )
         mock_gitlab_view.create_new_conversation = AsyncMock()
 

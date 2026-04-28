@@ -208,8 +208,8 @@ class GitlabManager(Manager[GitlabViewType]):
                     )
                 )
 
-                # Initialize conversation and get metadata (following GitHub pattern)
-                convo_metadata = await gitlab_view.initialize_new_conversation()
+                # Initialize conversation and get UUID
+                conversation_id = await gitlab_view.initialize_new_conversation()
 
                 saas_user_auth = await get_saas_user_auth(
                     gitlab_view.user_info.keycloak_user_id, self.token_manager
@@ -218,19 +218,19 @@ class GitlabManager(Manager[GitlabViewType]):
                 await gitlab_view.create_new_conversation(
                     self.jinja_env,
                     secret_store.provider_tokens,
-                    convo_metadata,
+                    conversation_id,
                     saas_user_auth,
                 )
 
-                conversation_id = gitlab_view.conversation_id
+                conversation_id_hex = gitlab_view.conversation_id
 
                 logger.info(
-                    f'[GitLab] Created conversation {conversation_id} for user {user_info.username}'
+                    f'[GitLab] Created conversation {conversation_id_hex} for user {user_info.username}'
                 )
 
                 # V1 callback processors are registered by the view during conversation creation
 
-                conversation_link = CONVERSATION_URL.format(conversation_id)
+                conversation_link = CONVERSATION_URL.format(conversation_id_hex)
                 msg_info = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
 
             except MissingSettingsError as e:
