@@ -109,10 +109,13 @@ const normalizeSettingsResponse = (settings: Partial<Settings>): Settings => {
 
 export const getSettingsQueryFn = async (
   scope: SettingsScope = "personal",
+  organizationId?: string | null,
 ): Promise<Settings> => {
   const settings =
     scope === "org"
-      ? await organizationService.getOrganizationAgentSettings()
+      ? await organizationService.getOrganizationSettings({
+          orgId: organizationId!,
+        })
       : await SettingsService.getSettings();
 
   return normalizeSettingsResponse(settings);
@@ -128,7 +131,7 @@ export const useSettings = (scope: SettingsScope = "personal") => {
 
   const query = useQuery({
     queryKey: ["settings", scope, organizationId],
-    queryFn: () => getSettingsQueryFn(scope),
+    queryFn: () => getSettingsQueryFn(scope, organizationId),
     retry: (_, error) => error.status !== 404,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5,

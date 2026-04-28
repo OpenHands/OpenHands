@@ -46,33 +46,11 @@ These files contain image tags that **must** be updated whenever the SDK version
 ### `openhands/version.py`
 - Reads version from `pyproject.toml` at runtime → `openhands.__version__`
 
-### `openhands/resolver/issue_resolver.py`
-- Builds `ghcr.io/openhands/runtime:{openhands.__version__}-nikolaik` dynamically
-
-### `openhands/runtime/utils/runtime_build.py`
-- Base repo URL `ghcr.io/openhands/runtime` is a constant; version comes from elsewhere
-
 ### `.github/scripts/update_pr_description.sh`
 - Uses `${SHORT_SHA}` variable at CI runtime, not hardcoded
 
 ### `enterprise/Dockerfile`
 - `ARG BASE="ghcr.io/openhands/openhands"` — base image, version supplied at build time
-
-## V0 Legacy Files (separate update cadence)
-
-These reference the V0 runtime image (`ghcr.io/openhands/runtime:X.Y-nikolaik`) for local Docker/Kubernetes paths. They are **not** updated as part of a V1 release but may be updated independently.
-
-### `Development.md`
-- `export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/openhands/runtime:X.Y-nikolaik`
-
-### `openhands/runtime/impl/kubernetes/README.md`
-- `runtime_container_image = "docker.openhands.dev/openhands/runtime:X.Y-nikolaik"`
-
-### `enterprise/enterprise_local/README.md`
-- Uses `ghcr.io/openhands/runtime:main-nikolaik` (points to `main`, not versioned)
-
-### `third_party/runtime/impl/daytona/README.md`
-- Uses `${OPENHANDS_VERSION}` variable, not hardcoded
 
 ## Image Registries
 
@@ -80,5 +58,4 @@ These reference the V0 runtime image (`ghcr.io/openhands/runtime:X.Y-nikolaik`) 
 |----------|-------|
 | `ghcr.io/openhands/agent-server` | V1 agent-server (sandbox) — built by SDK repo CI |
 | `ghcr.io/openhands/openhands` | Main app image — built by `ghcr-build.yml` |
-| `ghcr.io/openhands/runtime` | V0 runtime sandbox — built by `ghcr-build.yml` |
 | `docker.openhands.dev/openhands/*` | Mirror/CDN for the above images |

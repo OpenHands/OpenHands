@@ -295,6 +295,68 @@ class TestLLMAutoForwarding:
             assert 'Llm_Timeout' not in result
 
 
+class TestLMNRAutoForwarding:
+    """Test cases for automatic forwarding of LMNR_* environment variables."""
+
+    def test_auto_forward_prefixes_contains_lmnr(self):
+        """Test that LMNR_ is in the auto-forward prefixes."""
+        assert 'LMNR_' in AUTO_FORWARD_PREFIXES
+
+    def test_lmnr_project_api_key_auto_forwarded(self):
+        """Test that LMNR_PROJECT_API_KEY is automatically forwarded."""
+        env_vars = {
+            'LMNR_PROJECT_API_KEY': 'sk-test-key-12345',
+            'OTHER_VAR': 'should_not_be_included',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert 'LMNR_PROJECT_API_KEY' in result
+            assert result['LMNR_PROJECT_API_KEY'] == 'sk-test-key-12345'
+            assert 'OTHER_VAR' not in result
+
+    def test_lmnr_base_url_auto_forwarded(self):
+        """Test that LMNR_BASE_URL is automatically forwarded."""
+        env_vars = {
+            'LMNR_BASE_URL': 'https://app.lmnr.ai',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert 'LMNR_BASE_URL' in result
+            assert result['LMNR_BASE_URL'] == 'https://app.lmnr.ai'
+
+    def test_multiple_lmnr_vars_auto_forwarded(self):
+        """Test that multiple LMNR_* variables are automatically forwarded."""
+        env_vars = {
+            'LMNR_PROJECT_API_KEY': 'sk-test-key-12345',
+            'LMNR_BASE_URL': 'https://app.lmnr.ai',
+            'LMNR_VERBOSITY': 'debug',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert result['LMNR_PROJECT_API_KEY'] == 'sk-test-key-12345'
+            assert result['LMNR_BASE_URL'] == 'https://app.lmnr.ai'
+            assert result['LMNR_VERBOSITY'] == 'debug'
+
+    def test_lmnr_prefix_is_case_sensitive(self):
+        """Test that LMNR_ prefix matching is case-sensitive."""
+        env_vars = {
+            'LMNR_PROJECT_API_KEY': 'sk-test-key',  # Should be included
+            'lmnr_project_api_key': 'lowercase',  # Should NOT be included
+            'Lmnr_Project_Api_Key': 'mixed',  # Should NOT be included
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert 'LMNR_PROJECT_API_KEY' in result
+            assert result['LMNR_PROJECT_API_KEY'] == 'sk-test-key'
+            # Lowercase variants should not be included
+            assert 'lmnr_project_api_key' not in result
+            assert 'Lmnr_Project_Api_Key' not in result
+
+
 class TestDockerSandboxSpecEnvironmentOverride:
     """Test environment variable override integration in Docker sandbox specs."""
 

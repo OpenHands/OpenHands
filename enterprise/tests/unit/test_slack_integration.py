@@ -64,7 +64,6 @@ def slack_new_conversation_view(mock_slack_user, mock_user_auth):
         send_summary_instruction=True,
         conversation_id='',
         team_id='T1234567890',
-        v1_enabled=False,
     )
 
 

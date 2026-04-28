@@ -1,5 +1,6 @@
 import warnings
 
+import boto3
 import httpx
 from pydantic import BaseModel
 
@@ -10,7 +11,6 @@ with warnings.catch_warnings():
 
 from openhands.core.config import LLMConfig, OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
-from openhands.llm import bedrock
 
 # ---------------------------------------------------------------------------
 # The ``openhands-sdk`` package is the **single source of truth** for which
@@ -109,6 +109,59 @@ def is_openhands_model(model: str | None) -> bool:
     return bool(
         model and (model.startswith('openhands/') or model.startswith('litellm_proxy/'))
     )
+
+
+# Canonical masked placeholder for LLM API keys. Matches pydantic's
+# ``SecretStr`` default representation so request/response payloads that pass
+# through ``model_dump(mode='json')`` stay consistent with payloads that the
+# enterprise org-settings validator constructs by hand. Importers should treat
+# this as the single source of truth for "a key exists but its value is
+# intentionally hidden."
+MASKED_API_KEY = '**********'
+
+
+def resolve_llm_base_url(
+    model: str | None,
+    base_url: str | None,
+    *,
+    managed_proxy_url: str,
+) -> str | None:
+    """Resolve the ``base_url`` to persist for an LLM configuration.
+
+    Single source of truth for two code paths that otherwise duplicated the
+    same logic:
+
+    * ``openhands/app_server/settings/settings_router._post_merge_llm_fixups``
+      (personal-settings save path).
+    * ``enterprise/server/routes/org_models.OrgLLMSettingsUpdate._normalize_agent_settings``
+      (org-defaults save path).
+
+    Semantics:
+
+    * ``base_url == ''`` → ``None`` (explicit "clear" signal from the UI;
+      don't auto-infer on top of it).
+    * ``base_url`` non-empty → returned unchanged.
+    * ``base_url is None`` + known OpenHands / managed model → ``managed_proxy_url``.
+    * ``base_url is None`` + known BYOR provider → default from
+      :func:`get_provider_api_base`.
+    * Any other combination → ``None``.
+
+    Exceptions from ``litellm`` are logged and swallowed so a flaky provider
+    lookup can never break a settings save.
+    """
+    if base_url == '':
+        return None
+    if base_url is not None:
+        return base_url
+    if not model:
+        return None
+    if is_openhands_model(model):
+        return managed_proxy_url
+    try:
+        return get_provider_api_base(model)
+    except Exception as e:
+        logger.error(f'Failed to get api_base from litellm for model {model}: {e}')
+        return None
 
 
 def get_provider_api_base(model: str) -> str | None:
@@ -224,9 +277,7 @@ def get_supported_llm_models(
             hardcoded ``OPENHANDS_MODELS``.
     """
     litellm_model_list = litellm.model_list + list(litellm.model_cost.keys())
-    litellm_model_list_without_bedrock = bedrock.remove_error_modelId(
-        litellm_model_list
-    )
+    litellm_model_list_without_bedrock = remove_error_modelId(litellm_model_list)
     # TODO: for bedrock, this is using the default config
     llm_config: LLMConfig = config.get_llm_config()
     bedrock_model_list: list[str] = []
@@ -235,7 +286,7 @@ def get_supported_llm_models(
         and llm_config.aws_access_key_id
         and llm_config.aws_secret_access_key
     ):
-        bedrock_model_list = bedrock.list_foundation_models(
+        bedrock_model_list = list_foundation_models(
             llm_config.aws_region_name,
             llm_config.aws_access_key_id.get_secret_value(),
             llm_config.aws_secret_access_key.get_secret_value(),
@@ -270,3 +321,32 @@ def get_supported_llm_models(
         verified_providers=VERIFIED_PROVIDERS,
         default_model=DEFAULT_OPENHANDS_MODEL,
     )
+
+
+def list_foundation_models(
+    aws_region_name: str, aws_access_key_id: str, aws_secret_access_key: str
+) -> list[str]:
+    try:
+        # The AWS bedrock model id is not queried, if no AWS parameters are configured.
+        client = boto3.client(
+            service_name='bedrock',
+            region_name=aws_region_name,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+        )
+        foundation_models_list = client.list_foundation_models(
+            byOutputModality='TEXT', byInferenceType='ON_DEMAND'
+        )
+        model_summaries = foundation_models_list['modelSummaries']
+        return ['bedrock/' + model['modelId'] for model in model_summaries]
+    except Exception as err:
+        logger.warning(
+            '%s. Please config AWS_REGION_NAME AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY'
+            ' if you want use bedrock model.',
+            err,
+        )
+        return []
+
+
+def remove_error_modelId(model_list: list[str]) -> list[str]:
+    return list(filter(lambda m: not m.startswith('bedrock'), model_list))

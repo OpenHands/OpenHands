@@ -49,7 +49,7 @@ export const extractSettings = (
 
   return {
     ...(Object.keys(agentSettings).length > 0
-      ? { agent_settings: agentSettings }
+      ? { agent_settings_diff: agentSettings }
       : {}),
     ...(language ? { language } : {}),
   };

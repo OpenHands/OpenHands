@@ -8,7 +8,7 @@ from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from server.routes.org_models import OrgMemberLLMSettings
+from server.routes.org_models import OrgMemberSettingsUpdate
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
@@ -21,9 +21,9 @@ from storage.user import User
 from storage.user_settings import UserSettings
 from storage.user_store import UserStore
 
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.server.settings import Settings
-from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.jsonpatch_compat import deep_merge
 from openhands.utils.llm import is_openhands_model
 
@@ -148,6 +148,10 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
+        # Pre-migration rows read back as None; Settings.llm_profiles is
+        # non-nullable, so let the default_factory take over.
+        if kwargs.get('llm_profiles') is None:
+            kwargs.pop('llm_profiles', None)
 
         return Settings(**kwargs)
 
@@ -262,10 +266,10 @@ class SaasSettingsStore(SettingsStore):
                 else None
             )
 
-            await OrgMemberStore.update_all_members_llm_settings_async(
+            await OrgMemberStore.update_all_members_settings_async(
                 session,
                 org_id,
-                OrgMemberLLMSettings(
+                OrgMemberSettingsUpdate(
                     agent_settings_diff=effective_agent_settings_diff,
                     conversation_settings_diff=effective_conversation_diff,
                     llm_api_key=(

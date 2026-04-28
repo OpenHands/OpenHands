@@ -16,7 +16,7 @@ from server.verified_models.verified_model_service import (
 )
 
 from openhands.app_server.config import get_db_session
-from openhands.server.routes import public
+from openhands.app_server.config_api.config_router import get_llm_models_dependency
 from openhands.utils.llm import ModelsResponse, get_supported_llm_models
 
 api_router = APIRouter(prefix='/api/admin/verified-models', tags=['Verified Models'])
@@ -138,6 +138,4 @@ async def get_saas_llm_models_dependency(request: Request) -> ModelsResponse:
 # This must be called after the app is created in saas_server.py
 def override_llm_models_dependency(app):
     """Override the default LLM models implementation with SaaS version."""
-    app.dependency_overrides[public.get_llm_models_dependency] = (
-        get_saas_llm_models_dependency
-    )
+    app.dependency_overrides[get_llm_models_dependency] = get_saas_llm_models_dependency

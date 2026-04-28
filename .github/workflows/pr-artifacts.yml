@@ -35,7 +35,7 @@ jobs:
               if: steps.check-fork.outputs.is_fork == 'false'
               with:
                   ref: ${{ github.event.pull_request.head.ref }}
-                  token: ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}
+                  token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
 
             - name: Remove .pr/ directory
               id: remove
@@ -59,7 +59,7 @@ jobs:
 
             - name: Update PR comment after cleanup
               if: steps.check-fork.outputs.is_fork == 'false' && steps.remove.outputs.removed == 'true'
-              uses: actions/github-script@v7
+              uses: actions/github-script@v9
               with:
                   script: |
                       const marker = '<!-- pr-artifacts-notice -->';
@@ -107,7 +107,7 @@ jobs:
 
             - name: Post or update PR comment
               if: steps.check.outputs.exists == 'true'
-              uses: actions/github-script@v7
+              uses: actions/github-script@v9
               with:
                   script: |
                       const marker = '<!-- pr-artifacts-notice -->';

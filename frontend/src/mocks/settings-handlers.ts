@@ -62,6 +62,15 @@ export const createMockWebClientConfig = (
   error_message: null,
   updated_at: new Date().toISOString(),
   github_app_slug: null,
+  gitlab_enabled: false,
+  provider_default_hosts: {
+    github: "github.com",
+    gitlab: "gitlab.com",
+    bitbucket: "bitbucket.org",
+    azure_devops: "dev.azure.com",
+    forgejo: "codeberg.org",
+  },
+  slack_enabled: false,
   ...overrides,
 });
 
@@ -117,6 +126,20 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
           choices: [],
           depends_on: [],
           prominence: "critical",
+          secret: false,
+          required: false,
+        },
+        {
+          key: "llm.temperature",
+          label: "Temperature",
+          description: "Adjust randomness for non-deterministic model outputs.",
+          section: "llm",
+          section_label: "LLM",
+          value_type: "number",
+          default: null,
+          choices: [],
+          depends_on: [],
+          prominence: "minor",
           secret: false,
           required: false,
         },
@@ -208,7 +231,7 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
           default: false,
           choices: [],
           depends_on: [],
-          prominence: "major",
+          prominence: "critical",
           secret: false,
           required: true,
         },
@@ -411,6 +434,15 @@ export const SETTINGS_HANDLERS = [
       error_message: null,
       updated_at: new Date().toISOString(),
       github_app_slug: mockSaas ? "openhands" : null,
+      gitlab_enabled: false,
+      provider_default_hosts: {
+        github: "github.com",
+        gitlab: "gitlab.com",
+        bitbucket: "bitbucket.org",
+        azure_devops: "dev.azure.com",
+        forgejo: "codeberg.org",
+      },
+      slack_enabled: false,
     };
 
     return HttpResponse.json(config);
@@ -444,33 +476,46 @@ export const SETTINGS_HANDLERS = [
         MOCK_USER_PREFERENCES.settings ||
         structuredClone(MOCK_DEFAULT_USER_SETTINGS);
 
+      if ("agent_settings" in body || "conversation_settings" in body) {
+        return HttpResponse.json(
+          {
+            error: "Use *_diff nested settings payloads instead of legacy keys",
+            keys: ["agent_settings", "conversation_settings"].filter(
+              (key) => key in body,
+            ),
+          },
+          { status: 422 },
+        );
+      }
+
       const nextSettings: Settings = { ...current };
 
-      // Deep-merge nested agent_settings
-      if (body.agent_settings && typeof body.agent_settings === "object") {
+      const agentSettingsPatch = body.agent_settings_diff as
+        | Record<string, unknown>
+        | undefined;
+      if (agentSettingsPatch) {
         const merged = deepMerge(
           (current.agent_settings ?? {}) as Record<string, unknown>,
-          body.agent_settings as Record<string, unknown>,
+          agentSettingsPatch,
         );
         nextSettings.agent_settings = merged as Settings["agent_settings"];
       }
 
-      // Deep-merge nested conversation_settings
-      if (
-        body.conversation_settings &&
-        typeof body.conversation_settings === "object"
-      ) {
+      const conversationSettingsPatch = body.conversation_settings_diff as
+        | Record<string, SettingsValue>
+        | undefined;
+      if (conversationSettingsPatch) {
         nextSettings.conversation_settings = {
           ...(current.conversation_settings ?? {}),
-          ...(body.conversation_settings as Record<string, SettingsValue>),
+          ...conversationSettingsPatch,
         };
       }
 
       // Apply top-level fields (excluding nested settings)
       for (const [key, value] of Object.entries(body)) {
         if (
-          key !== "agent_settings" &&
-          key !== "conversation_settings" &&
+          key !== "agent_settings_diff" &&
+          key !== "conversation_settings_diff" &&
           key !== "agent_settings_schema" &&
           key !== "conversation_settings_schema"
         ) {

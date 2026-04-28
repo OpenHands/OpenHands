@@ -13,6 +13,14 @@ export RUNTIME=local
 make build && make run FRONTEND_PORT=12000 FRONTEND_HOST=0.0.0.0 BACKEND_HOST=0.0.0.0 &> /tmp/openhands-log.txt &
 ```
 
+Local run troubleshooting notes:
+- If the backend fails with `nc: command not found`, install `netcat-openbsd`.
+- If local runtime startup fails with `duplicate session: test-session`, clear the stale tmux session on the default socket: `tmux -S /tmp/tmux-$(id -u)/default kill-session -t test-session`.
+- Local runtime browser startup expects Playwright browsers under `~/.cache/playwright`; if needed run `PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/playwright poetry run playwright install chromium`.
+- In this sandbox environment, an inherited `SESSION_API_KEY` can make `/api/v1/settings` return 401 in the browser. Unset it before `make run` when you want to use the local web UI directly.
+- In this sandbox, `frontend`'s `npm run dev:mock` / `dev:mock:saas` can start but still be awkward to browse through the work-host proxy. For PR QA screenshots, a reliable fallback is to `npm run build` with the desired `VITE_MOCK_*` env, then serve `build/` with a tiny custom HTTP server that returns the minimal mock JSON endpoints needed by the settings page.
+
+
 IMPORTANT: Before making any changes to the codebase, ALWAYS run `make install-pre-commit-hooks` to ensure pre-commit hooks are properly installed.
 
 Before pushing any changes, you MUST ensure that any lint errors or simple test errors have been fixed.
@@ -138,6 +146,8 @@ Frontend:
   - Query hooks should follow the pattern use[Resource] (e.g., `useConversationSkills`)
   - Mutation hooks should follow the pattern use[Action] (e.g., `useDeleteConversation`)
   - Architecture rule: UI components → TanStack Query hooks → Data Access Layer (`frontend/src/api`) → API endpoints
+  - For SaaS organization management screens, prefer deriving the selected organization from `useOrganizations()` plus the selected org ID store instead of adding a dedicated single-org fetch when only list-level fields (for example `name`) are needed.
+
 
 VSCode Extension:
 - Located in the `openhands/integrations/vscode` directory
@@ -226,6 +236,7 @@ Each integration follows a consistent pattern with service classes, storage mode
 - Database changes require careful migration planning in `enterprise/migrations/`
 - Always test changes in both OpenHands and enterprise contexts
 - Use the enterprise-specific Makefile commands for development
+- When the `openhands-ai` package (root project) version has been updated, run `poetry lock` in the `enterprise/` folder to update the version in the enterprise poetry lockfile.
 
 **Enterprise Testing Best Practices:**
 
@@ -272,6 +283,32 @@ If you are starting a pull request (PR), please follow the template in `.github/
 ## Implementation Details
 
 These details may or may not be useful for your current task.
+
+### Conversation State Management
+
+#### Agent State and Sandbox Status:
+The frontend uses `useAgentState` hook (`frontend/src/hooks/use-agent-state.ts`) to determine the current conversation state. This hook:
+- Returns `curAgentState` (AgentState enum) for UI state determination
+- Returns `isArchived` flag when `sandbox_status === "MISSING"` (archived conversations)
+- Prioritizes live WebSocket execution status over cached API data
+
+#### Archived Conversations (sandbox_status === "MISSING"):
+When a conversation's sandbox is no longer available (archived):
+- `useAgentState` returns `AgentState.STOPPED` and `isArchived: true`
+- Chat input is replaced with an archived banner (`ArchivedBanner` component)
+- VS Code tab, Terminal, and Planner show read-only messages instead of loading states
+- All interactive elements that require a running sandbox are disabled
+
+#### Testing useAgentState:
+When mocking `useAgentState` in tests, always include the `isArchived` property:
+```typescript
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({
+    curAgentState: AgentState.AWAITING_USER_INPUT,
+    isArchived: false,
+  }),
+}));
+```
 
 ### Microagents
 
@@ -352,6 +389,7 @@ There are two main patterns for saving settings in the OpenHands frontend:
 **When to use each pattern:**
 - Use Pattern 1 (Immediate Save) for entity management where each item is independent
 - Use Pattern 2 (Manual Save) for configuration forms where settings are interdependent or need validation
+- Git provider tokens in the local/OSS integrations settings are managed through the V1 secrets endpoints (`POST`/`DELETE /api/v1/secrets/git-providers`). Do not reuse the logout flow for disconnecting tokens; `useLogout` is for actual app logout and still targets legacy OSS logout behavior.
 
 ### Adding New LLM Models
 

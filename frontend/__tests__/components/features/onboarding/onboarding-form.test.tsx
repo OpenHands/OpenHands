@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
 import OnboardingForm, { clientLoader } from "#/routes/onboarding-form";
+import AuthService from "#/api/auth-service/auth-service.api";
+import { onboardingService } from "#/api/onboarding-service/onboarding-service.api";
 
 const mockMutate = vi.fn();
 const mockNavigate = vi.fn();
@@ -54,6 +56,12 @@ vi.mock("#/api/option-service/option-service.api", () => ({
   default: {
     getConfig: () => mockGetConfig(),
   },
+}));
+
+// Mock feature flag - enable onboarding by default for tests
+const mockEnableOnboarding = vi.fn(() => true);
+vi.mock("#/utils/feature-flags", () => ({
+  ENABLE_ONBOARDING: () => mockEnableOnboarding(),
 }));
 
 const renderOnboardingForm = async () => {
@@ -555,14 +563,64 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
   });
 });
 
+describe("OnboardingForm - redirect when already onboarded", () => {
+  beforeEach(() => {
+    mockMutate.mockClear();
+    mockNavigate.mockClear();
+    mockUseMe.mockReturnValue({ data: { role: "member" } });
+    loaderData = {
+      config: {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud" },
+      },
+    };
+    mockGetConfig.mockResolvedValue({
+      app_mode: "saas",
+      feature_flags: { deployment_mode: "cloud" },
+    });
+    vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+  });
+
+  it("should navigate to / when the backend reports onboarding is already complete", async () => {
+    // Arrange
+    vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
+      should_complete_onboarding: false,
+    });
+
+    // Act
+    await renderOnboardingForm();
+
+    // Assert
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
+    });
+  });
+});
+
 describe("onboarding-form clientLoader", () => {
   beforeEach(() => {
     mockQueryClientGetData.mockReset();
     mockQueryClientSetData.mockReset();
     mockGetConfig.mockReset();
+    mockEnableOnboarding.mockReturnValue(true);
   });
 
   describe("redirect behavior", () => {
+    it("should redirect to / when ENABLE_ONBOARDING feature flag is false", async () => {
+      mockEnableOnboarding.mockReturnValue(false);
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud" },
+      };
+      mockQueryClientGetData.mockReturnValue(saasConfig);
+
+      const result = await clientLoader();
+
+      expect(result).toBeDefined();
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
     it("should redirect to / when app_mode is oss", async () => {
       const ossConfig = {
         app_mode: "oss",

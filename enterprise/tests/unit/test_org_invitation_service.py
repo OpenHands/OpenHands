@@ -136,6 +136,10 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
                 new_callable=AsyncMock,
             ) as mock_update_status,
+            patch(
+                'server.services.org_invitation_service.UserStore.backfill_user_email',
+                new_callable=AsyncMock,
+            ),
         ):
             mock_get_invitation.return_value = mock_invitation
             mock_is_expired.return_value = False
@@ -161,6 +165,98 @@ class TestAcceptInvitationEmailValidation:
             # Assert
             mock_token_manager.get_user_info_from_user_id.assert_called_once_with(
                 str(user_id)
+            )
+
+    @pytest.mark.asyncio
+    async def test_accept_invitation_user_no_email_keycloak_fallback_persists_email(
+        self, mock_invitation
+    ):
+        """When User.email is NULL and Keycloak returns an email, the email is
+        persisted back to the User record (normalized to snake_case) so the
+        members list shows it without requiring the user to log out and back in.
+        """
+        # Arrange
+        user_id = UUID('87654321-4321-8765-4321-876543218765')
+        token = 'inv-test-token-12345'
+
+        mock_user = MagicMock()
+        mock_user.id = user_id
+        mock_user.email = None
+
+        # Keycloak admin API returns camelCase `emailVerified`.
+        mock_keycloak_user_info = {
+            'email': 'alice@example.com',
+            'emailVerified': True,
+        }
+
+        mock_org = MagicMock()
+        mock_org.agent_settings = {'llm': {'model': 'test-model'}}
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
+                new_callable=AsyncMock,
+            ) as mock_get_invitation,
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
+            ) as mock_is_expired,
+            patch(
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_user,
+            patch(
+                'server.services.org_invitation_service.TokenManager'
+            ) as mock_token_manager_class,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+            patch(
+                'server.services.org_invitation_service.OrgService.create_litellm_integration',
+                new_callable=AsyncMock,
+            ) as mock_create_litellm,
+            patch(
+                'server.services.org_invitation_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org',
+                new_callable=AsyncMock,
+            ),
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
+                new_callable=AsyncMock,
+            ) as mock_update_status,
+            patch(
+                'server.services.org_invitation_service.UserStore.backfill_user_email',
+                new_callable=AsyncMock,
+            ) as mock_backfill,
+        ):
+            mock_get_invitation.return_value = mock_invitation
+            mock_is_expired.return_value = False
+            mock_get_user.return_value = mock_user
+
+            mock_token_manager = MagicMock()
+            mock_token_manager.get_user_info_from_user_id = AsyncMock(
+                return_value=mock_keycloak_user_info
+            )
+            mock_token_manager_class.return_value = mock_token_manager
+
+            mock_get_member.return_value = None
+            mock_settings = MagicMock()
+            mock_settings.llm_api_key = SecretStr('test-key')
+            mock_create_litellm.return_value = mock_settings
+            mock_get_org.return_value = mock_org
+            mock_update_status.return_value = mock_invitation
+
+            # Act
+            await OrgInvitationService.accept_invitation(token, user_id)
+
+            # Assert — persisted with snake_case `email_verified` derived from
+            # Keycloak's camelCase `emailVerified`.
+            mock_backfill.assert_awaited_once_with(
+                str(user_id),
+                {'email': 'alice@example.com', 'email_verified': True},
             )
 
     @pytest.mark.asyncio

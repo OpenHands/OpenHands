@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from openhands.agent_server.models import OpenHandsModel, SendMessageRequest
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
@@ -11,15 +11,29 @@ from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+
+# Import from new location and re-export for backward compatibility
+from openhands.app_server.settings.settings_models import SandboxGroupingStrategy
 from openhands.integrations.service_types import ProviderType, SuggestedTask
 from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
-from openhands.storage.data_models.settings import SandboxGroupingStrategy
 
-# Re-export SandboxGroupingStrategy for backward compatibility
 __all__ = ['SandboxGroupingStrategy']
+
+
+class ConversationTrigger(Enum):
+    RESOLVER = 'resolver'
+    GUI = 'gui'
+    SUGGESTED_TASK = 'suggested_task'
+    REMOTE_API_KEY = 'openhands_api'
+    SLACK = 'slack'
+    MICROAGENT_MANAGEMENT = 'microagent_management'
+    JIRA = 'jira'
+    JIRA_DC = 'jira_dc'
+    LINEAR = 'linear'
+    BITBUCKET = 'bitbucket'
+    AUTOMATION = 'automation'
 
 
 class AgentType(Enum):
@@ -83,6 +97,7 @@ class AppConversationInfo(BaseModel):
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
     llm_model: str | None = None
+    agent_kind: str = 'llm'
 
     metrics: MetricsSnapshot | None = None
 
@@ -172,6 +187,18 @@ class AppConversationStartRequest(OpenHandsModel):
         description=(
             'List of plugins to load for this conversation. Plugins are loaded '
             'and their skills/MCP config are merged into the agent.'
+        ),
+    )
+
+    # Secrets passed directly via API at conversation start time
+    secrets: dict[str, SecretStr] | None = Field(
+        default=None,
+        description=(
+            'Secrets to pass to the conversation. These are merged with any '
+            'existing secrets (from database or git providers), with API-provided '
+            'secrets taking precedence (overriding any existing secret with the same name). '
+            'Keys are secret names (e.g., "MY_API_KEY"), values are the secret values. '
+            'Warning: Providing a secret that already exists will silently override it.'
         ),
     )
 
