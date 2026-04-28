@@ -9,7 +9,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
+from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.settings.settings_models import (
+    GETSettingsModel,
+    Settings,
+)
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
@@ -18,9 +23,6 @@ from openhands.integrations.provider import (
     ProviderType,
 )
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.server.settings import (
-    GETSettingsModel,
-)
 from openhands.server.shared import config
 from openhands.server.user_auth import (
     get_provider_tokens,
@@ -28,8 +30,6 @@ from openhands.server.user_auth import (
     get_user_settings,
     get_user_settings_store,
 )
-from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.data_models.settings import Settings
 from openhands.utils.llm import (
     get_provider_api_base,
     is_openhands_model,

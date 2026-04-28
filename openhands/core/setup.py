@@ -11,6 +11,7 @@ import uuid
 
 from pydantic import SecretStr
 
+from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.core.config import (
     OpenHandsConfig,
 )
@@ -18,7 +19,6 @@ from openhands.integrations.provider import (
     ProviderToken,
     ProviderType,
 )
-from openhands.storage.data_models.secrets import Secrets
 
 
 def get_provider_tokens():

@@ -1,3 +1,13 @@
+"""Settings models for OpenHands App Server.
+
+This module contains:
+- Settings: Persisted settings for OpenHands sessions
+- SandboxGroupingStrategy: Strategy enum for grouping conversations
+- GETSettingsModel: Settings response model with additional token data
+- POSTProviderModel: Settings for POST requests
+- CustomSecretWithoutValueModel: Custom secret model without value (legacy)
+"""
+
 from __future__ import annotations
 
 from enum import Enum
@@ -15,9 +25,11 @@ from pydantic import (
 )
 
 from openhands.core.config.llm_config import LLMConfig
+from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.utils import load_openhands_config
+from openhands.integrations.provider import ProviderToken
+from openhands.integrations.service_types import ProviderType
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.jsonpatch_compat import deep_merge
 
 
@@ -102,10 +114,8 @@ class Settings(BaseModel):
     language: str | None = None
     user_version: int | None = None
     remote_runtime_resource_factor: int | None = None
-    # Planned to be removed from settings
-    secrets_store: Annotated[Secrets, Field(frozen=True)] = Field(
-        default_factory=Secrets
-    )
+    # Planned to be removed from settings - import Secrets lazily to avoid circular imports
+    secrets_store: Annotated[Any, Field(frozen=True)] = Field(default=None)
     enable_sound_notifications: bool = False
     enable_proactive_conversation_starters: bool = True
     user_consents_to_analytics: bool | None = None
@@ -129,6 +139,14 @@ class Settings(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True)
+
+    def __init__(self, **data: Any):
+        # Import Secrets here to avoid circular imports
+        from openhands.app_server.secrets.secrets_models import Secrets
+
+        if 'secrets_store' not in data or data['secrets_store'] is None:
+            data['secrets_store'] = Secrets()
+        super().__init__(**data)
 
     @property
     def llm_api_key_is_set(self) -> bool:
@@ -240,6 +258,9 @@ class Settings(BaseModel):
     @classmethod
     def _normalize_inputs(cls, data: dict | object) -> dict | object:
         """Normalize agent_settings and secrets_store inputs."""
+        # Import Secrets here to avoid circular imports
+        from openhands.app_server.secrets.secrets_models import Secrets
+
         if not isinstance(data, dict):
             return data
 
@@ -279,12 +300,12 @@ class Settings(BaseModel):
                 secret_store = secret_store.model_copy(
                     update={'custom_secrets': converted_store.custom_secrets}
                 )
-            data['secret_store'] = secret_store
+            data['secrets_store'] = secret_store
 
         return data
 
     @field_serializer('secrets_store')
-    def secrets_store_serializer(self, secrets: Secrets, info: SerializationInfo):
+    def secrets_store_serializer(self, secrets: Any, info: SerializationInfo):
         return {'provider_tokens': {}}
 
     # ── Factory methods ─────────────────────────────────────────────
@@ -379,3 +400,32 @@ class Settings(BaseModel):
                 if normalized_base == normalized_proxy:
                     llm['base_url'] = None
         return data
+
+
+# ── Legacy V0 Models (scheduled for removal April 1, 2026) ──────────
+
+
+class POSTProviderModel(BaseModel):
+    """Settings for POST requests"""
+
+    mcp_config: MCPConfig | None = None
+    provider_tokens: dict[ProviderType, ProviderToken] = {}
+
+
+class GETSettingsModel(Settings):
+    """Settings with additional token data for the frontend"""
+
+    provider_tokens_set: dict[ProviderType, str | None] | None = (
+        None  # provider + base_domain key-value pair
+    )
+    llm_api_key_set: bool
+    search_api_key_set: bool = False
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class CustomSecretWithoutValueModel(BaseModel):
+    """Custom secret model without value"""
+
+    name: str
+    description: str | None = None

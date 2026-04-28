@@ -5,6 +5,7 @@ import pytest
 from fastmcp.mcp_config import MCPConfig
 from pydantic import SecretStr
 
+from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -17,7 +18,6 @@ from openhands.sdk.settings import (
     ConversationSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
-from openhands.storage.data_models.settings import Settings
 
 
 def test_settings_from_config():
@@ -39,7 +39,7 @@ def test_settings_from_config():
     )
 
     with patch(
-        'openhands.storage.data_models.settings.load_openhands_config',
+        'openhands.app_server.settings.settings_models.load_openhands_config',
         return_value=mock_app_config,
     ):
         settings = Settings.from_config()
@@ -74,7 +74,7 @@ def test_settings_from_config_no_api_key():
     )
 
     with patch(
-        'openhands.storage.data_models.settings.load_openhands_config',
+        'openhands.app_server.settings.settings_models.load_openhands_config',
         return_value=mock_app_config,
     ):
         settings = Settings.from_config()
@@ -338,9 +338,9 @@ def test_settings_no_pydantic_frozen_field_warning():
 
         import importlib
 
-        import openhands.storage.data_models.settings
+        import openhands.app_server.settings.settings_models
 
-        importlib.reload(openhands.storage.data_models.settings)
+        importlib.reload(openhands.app_server.settings.settings_models)
 
         frozen_warnings = [
             warning for warning in w if 'frozen' in str(warning.message).lower()

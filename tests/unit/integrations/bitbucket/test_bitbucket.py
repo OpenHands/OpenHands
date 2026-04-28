@@ -6,12 +6,12 @@ import pytest
 from pydantic import SecretStr
 
 from openhands.app_server.secrets.secrets_router import check_provider_tokens
+from openhands.app_server.settings.settings_models import POSTProviderModel
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import OwnerType, Repository
 from openhands.integrations.service_types import ProviderType as ServiceProviderType
 from openhands.integrations.utils import validate_provider_token
-from openhands.server.settings import POSTProviderModel
 from openhands.server.types import AppMode
 
 
