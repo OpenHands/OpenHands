@@ -204,7 +204,10 @@ def settings_store(async_session_maker, mock_config):
                     await session.merge(existing)
                 else:
                     item_dict['keycloak_user_id'] = store.user_id
-                    settings = UserSettings(**item_dict)
+                    valid_keys = UserSettings.__table__.columns.keys()
+                    settings = UserSettings(
+                        **{k: v for k, v in item_dict.items() if k in valid_keys}
+                    )
                     session.add(settings)
                 await session.commit()
 
