@@ -94,9 +94,7 @@ def github_user_payload():
 
 def create_service(mock_token_manager):
     """Helper to create a service with mocked constants."""
-    with patch.dict(
-        'os.environ', {}, clear=False
-    ):
+    with patch.dict('os.environ', {}, clear=False):
         for key, value in CONSTANT_PATCHES.items():
             patch(key, value).start()
 
@@ -126,7 +124,6 @@ class TestResolveGitOrg:
             new_callable=AsyncMock,
             return_value=mock_org_git_claim.org_id,
         ), patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             result = await service._resolve_git_org(ProviderType.GITHUB, 'test-org')
 
@@ -149,7 +146,6 @@ class TestResolveGitOrg:
             'server.services.automation_event_service.resolve_org_for_repo',
             new_callable=AsyncMock,
         ) as mock_resolver, patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             result = await service._resolve_git_org(ProviderType.GITHUB, 'test-org')
 
@@ -173,7 +169,6 @@ class TestResolveGitOrg:
             new_callable=AsyncMock,
             return_value=None,
         ), patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             result = await service._resolve_git_org(
                 ProviderType.GITHUB, 'unclaimed-org'
@@ -200,7 +195,6 @@ class TestResolveGitOrg:
             'server.services.automation_event_service.resolve_org_for_repo',
             new_callable=AsyncMock,
         ) as mock_resolver, patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             result = await service._resolve_git_org(
                 ProviderType.GITHUB, 'unclaimed-org'
@@ -227,7 +221,6 @@ class TestResolveGitOrg:
             new_callable=AsyncMock,
             return_value=mock_org_git_claim.org_id,
         ), patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
 
             # Call for GitHub
@@ -258,7 +251,6 @@ class TestResolvePersonalOrg:
         mock_redis.setex = AsyncMock()
 
         with patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             result = await service._resolve_personal_org(ProviderType.GITHUB, 12345)
 
@@ -277,7 +269,6 @@ class TestResolvePersonalOrg:
         mock_redis.get = AsyncMock(return_value=keycloak_id.encode())
 
         with patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             result = await service._resolve_personal_org(ProviderType.GITHUB, 12345)
 
@@ -316,7 +307,6 @@ class TestResolvePersonalOrg:
         mock_redis.setex = AsyncMock()
 
         with patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
 
             # Call for GitHub
@@ -354,7 +344,6 @@ class TestForwardEvent:
             '_send_to_automation_service',
             new_callable=AsyncMock,
         ) as mock_send:
-
             service = AutomationEventService(mock_token_manager)
             await service.forward_event(
                 provider=ProviderType.GITHUB,
@@ -403,7 +392,6 @@ class TestForwardEvent:
             '_send_to_automation_service',
             new_callable=AsyncMock,
         ) as mock_send:
-
             service = AutomationEventService(mock_token_manager)
             await service.forward_event(
                 provider=ProviderType.GITHUB,
@@ -478,7 +466,6 @@ class TestForwardEvent:
             '_send_to_automation_service',
             new_callable=AsyncMock,
         ) as mock_send:
-
             service = AutomationEventService(mock_token_manager)
             await service.forward_event(
                 provider=ProviderType.GITHUB,
@@ -661,9 +648,7 @@ class TestSendToAutomationService:
 
         with patch(
             'server.services.automation_event_service.AUTOMATION_SERVICE_URL', None
-        ), patch(
-            'server.services.automation_event_service.logger'
-        ) as mock_logger:
+        ), patch('server.services.automation_event_service.logger') as mock_logger:
             service = create_service(mock_token_manager)
             await service._send_to_automation_service(
                 ProviderType.GITHUB, org_id, payload
@@ -738,7 +723,6 @@ class TestCacheHelpers:
         mock_redis.get = AsyncMock(return_value=b'cached-value')
 
         with patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             result = await service._get_cached_value('test-key')
 
@@ -755,7 +739,6 @@ class TestCacheHelpers:
         mock_redis.get = AsyncMock(return_value=None)
 
         with patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             result = await service._get_cached_value('test-key')
 
@@ -769,7 +752,6 @@ class TestCacheHelpers:
         THEN: None is returned (graceful degradation)
         """
         with patch(REDIS_PATCH, return_value=None):
-
             service = create_service(mock_token_manager)
             result = await service._get_cached_value('test-key')
 
@@ -786,7 +768,6 @@ class TestCacheHelpers:
         mock_redis.setex = AsyncMock()
 
         with patch(REDIS_PATCH, return_value=mock_redis):
-
             service = create_service(mock_token_manager)
             await service._set_cached_value('test-key', 'test-value', 3600)
 
@@ -800,7 +781,6 @@ class TestCacheHelpers:
         THEN: No error is raised (silent failure)
         """
         with patch(REDIS_PATCH, return_value=None):
-
             service = create_service(mock_token_manager)
             # Should not raise
             await service._set_cached_value('test-key', 'test-value', 3600)
