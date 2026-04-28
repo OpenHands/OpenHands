@@ -9,7 +9,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
+from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.settings.settings_models import (
+    GETSettingsModel,
+    Settings,
+)
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
@@ -18,9 +23,6 @@ from openhands.integrations.provider import (
     ProviderType,
 )
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.server.settings import (
-    GETSettingsModel,
-)
 from openhands.server.shared import config
 from openhands.server.user_auth import (
     get_provider_tokens,
@@ -28,8 +30,6 @@ from openhands.server.user_auth import (
     get_user_settings,
     get_user_settings_store,
 )
-from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.data_models.settings import Settings
 from openhands.utils.llm import (
     get_provider_api_base,
     is_openhands_model,
@@ -125,18 +125,22 @@ async def load_settings(
             provider_tokens_set=provider_tokens_set,
         )
 
-        # Convert litellm_proxy/ back to openhands/ for the frontend
+        # Convert litellm_proxy/ back to openhands/ for the frontend, but only
+        # if the base_url is the OpenHands proxy. Custom litellm_proxy endpoints
+        # should keep their litellm_proxy/ prefix.
         resp_llm = settings_with_token_data.agent_settings.llm
+        normalized_base = (llm.base_url or '').rstrip('/')
+        normalized_proxy = LITE_LLM_API_URL.rstrip('/')
+
         if resp_llm.model and resp_llm.model.startswith('litellm_proxy/'):
-            resp_llm.model = (
-                f'openhands/{resp_llm.model.removeprefix("litellm_proxy/")}'
-            )
+            # Only convert to openhands/ if using the OpenHands proxy URL
+            if normalized_base == normalized_proxy:
+                resp_llm.model = (
+                    f'openhands/{resp_llm.model.removeprefix("litellm_proxy/")}'
+                )
 
         # If the base url matches the default for the provider, we don't send it
         # So that the frontend can display basic mode.
-        # Normalize trailing slashes for comparison since the SDK may add one.
-        normalized_base = (llm.base_url or '').rstrip('/')
-        normalized_proxy = LITE_LLM_API_URL.rstrip('/')
         if is_openhands_model(llm.model):
             if normalized_base == normalized_proxy:
                 resp_llm.base_url = None

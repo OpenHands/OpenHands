@@ -3,8 +3,8 @@ from copy import deepcopy
 
 from pydantic import SecretStr
 
+from openhands.app_server.settings.settings_models import Settings
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.storage.data_models.settings import Settings
 from openhands.utils.environment import get_effective_llm_base_url
 
 

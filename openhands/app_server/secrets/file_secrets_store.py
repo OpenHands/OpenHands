@@ -6,8 +6,8 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
-from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.async_utils import call_sync_from_async
 
 

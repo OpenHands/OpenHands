@@ -5,10 +5,10 @@ import pytest
 from pydantic import SecretStr
 
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
+from openhands.app_server.settings.settings_models import Settings
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.data_models.settings import Settings
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +30,7 @@ def file_settings_store(temp_dir):
 @pytest.mark.asyncio
 async def test_load_nonexistent_data(file_settings_store):
     with patch(
-        'openhands.storage.data_models.settings.load_openhands_config',
+        'openhands.app_server.settings.settings_models.load_openhands_config',
         MagicMock(return_value=OpenHandsConfig()),
     ):
         assert await file_settings_store.load() is None

@@ -21,9 +21,9 @@ from storage.user import User
 from storage.user_settings import UserSettings
 from storage.user_store import UserStore
 
+from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.server.settings import Settings
 from openhands.utils.jsonpatch_compat import deep_merge
 from openhands.utils.llm import is_openhands_model
 

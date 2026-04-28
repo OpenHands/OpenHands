@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
 
 
 class SettingsStore(ABC):
