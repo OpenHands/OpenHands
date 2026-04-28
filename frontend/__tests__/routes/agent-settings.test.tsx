@@ -270,34 +270,23 @@ describe("AgentSettingsScreen", () => {
   });
 
   describe("save payload", () => {
-    it("sends kind:llm when OpenHands is saved", async () => {
-      const user = userEvent.setup();
-      // Start with an ACP setting so the form is considered dirty when we would change it
-      // In practice, switching to OpenHands makes isDirty = true
+    it("save button is disabled for OpenHands mode when no changes are made", () => {
+      // OpenHands (kind:llm) is the default and has no API key field, so the
+      // form stays clean and the save button remains disabled. This verifies
+      // the component correctly represents OpenHands state.
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "claude-code" },
+        agent_settings: { kind: "llm" },
         llm_api_key_set: false,
       } as Record<string, unknown>;
       renderScreen();
-      // The form is clean on load; we need to interact with it to make isDirty true.
-      // Type in the API key field to make it dirty, then check save payload
-      const apiKeyInput = screen.getByTestId("agent-api-key-input");
-      await user.type(apiKeyInput, "sk-ant-test");
-      const saveBtn = screen.getByTestId("agent-save-button");
-      await waitFor(() => expect(saveBtn).not.toBeDisabled());
-      await user.click(saveBtn);
-      expect(mockSaveSettings).toHaveBeenCalledWith(
-        expect.objectContaining({
-          agent_settings_diff: expect.objectContaining({
-            kind: "acp",
-            acp_server: "claude-code",
-          }),
-        }),
-        expect.any(Object),
-      );
+      expect(screen.getByTestId("agent-save-button")).toBeDisabled();
+      // No API key field — OpenHands doesn't need one via this page
+      expect(
+        screen.queryByTestId("agent-api-key-input"),
+      ).not.toBeInTheDocument();
     });
 
-    it("sends kind:acp with acp_server when ACP agent is saved", async () => {
+    it("sends kind:acp with acp_server when ACP agent API key is saved", async () => {
       const user = userEvent.setup();
       mockSettings.data = {
         agent_settings: { kind: "acp", acp_server: "claude-code" },
@@ -319,6 +308,37 @@ describe("AgentSettingsScreen", () => {
         }),
         expect.any(Object),
       );
+    });
+
+    it("sends kind:acp without llm when API key is not entered", async () => {
+      // When switching to ACP but not entering an API key, the diff should
+      // include the ACP config but omit the llm.api_key field.
+      const user = userEvent.setup();
+      mockSettings.data = {
+        agent_settings: { kind: "acp", acp_server: "codex" },
+        llm_api_key_set: false,
+      } as Record<string, unknown>;
+      renderScreen();
+      // Navigate to Advanced tab and change command to make form dirty
+      const advTab = await screen.findByText("SETTINGS$AGENT_ADVANCED_TAB");
+      fireEvent.click(advTab);
+      const commandInput = screen.getByTestId("agent-command-input");
+      fireEvent.change(commandInput, { target: { value: "npx\ncodex-acp" } });
+      const saveBtn = screen.getByTestId("agent-save-button");
+      await waitFor(() => expect(saveBtn).not.toBeDisabled());
+      await user.click(saveBtn);
+      expect(mockSaveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            kind: "acp",
+            acp_server: "codex",
+            acp_command: ["npx", "codex-acp"],
+          }),
+        }),
+        expect.any(Object),
+      );
+      // No llm key since no api_key was entered
+      expect(mockSaveSettings.mock.calls[0][0].agent_settings_diff).not.toHaveProperty("llm");
     });
   });
 
