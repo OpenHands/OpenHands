@@ -1611,7 +1611,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Pass user secrets via AgentContext so the SDK renders a
         # <CUSTOM_SECRETS> block in the ACP prompt and injects values into
         # the subprocess env at start time (SDK PR #2984).
-        if secrets:
+        # TODO: remove the _sdk_supports_acp_secrets guard once OpenHands pins
+        # to an SDK version that includes PR #2984 (secrets acp_compatible=True).
+        _sdk_supports_acp_secrets = (
+            AgentContext.model_fields.get('secrets') is not None
+            and isinstance(AgentContext.model_fields['secrets'].json_schema_extra, dict)
+            and AgentContext.model_fields['secrets'].json_schema_extra.get(
+                'acp_compatible'
+            )
+            is True
+        )
+        if secrets and _sdk_supports_acp_secrets:
             acp_agent.agent_context = AgentContext(secrets=secrets)
 
         sdk_plugins: list[PluginSource] | None = None
