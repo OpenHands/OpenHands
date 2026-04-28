@@ -45,13 +45,10 @@ const API_KEY_LABELS: Partial<Record<AgentType, string>> = {
 };
 
 // Default commands mirror ACPAgentSettings._DEFAULT_ACP_COMMANDS in the SDK.
-// Note: space-splitting is used to convert to/from the backend's string[]
-// format. Arguments containing spaces are not supported via this UI field;
-// use acp_env or a custom acp_command array via the API instead.
-const DEFAULT_COMMANDS: Partial<Record<AcpServerKind, string>> = {
-  "claude-code": "npx -y @agentclientprotocol/claude-agent-acp",
-  codex: "npx -y @zed-industries/codex-acp",
-  "gemini-cli": "npx -y @google/gemini-cli --acp",
+const DEFAULT_COMMANDS: Partial<Record<AcpServerKind, string[]>> = {
+  "claude-code": ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+  codex: ["npx", "-y", "@zed-industries/codex-acp"],
+  "gemini-cli": ["npx", "-y", "@google/gemini-cli", "--acp"],
 };
 
 function AgentSettingsScreen() {
@@ -62,8 +59,9 @@ function AgentSettingsScreen() {
   const [tab, setTab] = useState<TabType>("basic");
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [apiKey, setApiKey] = useState("");
-  const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
+  // command and args are stored as arrays; the textarea shows one token per line
+  const [command, setCommand] = useState<string[]>([]);
+  const [args, setArgs] = useState<string[]>([]);
   const [envJson, setEnvJson] = useState("{}");
   const [envError, setEnvError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
@@ -76,10 +74,18 @@ function AgentSettingsScreen() {
       setAgentType(isAcpServerKind(rawServer) ? rawServer : "claude-code");
 
       const acpCommand = settings.agent_settings?.acp_command;
-      setCommand(Array.isArray(acpCommand) ? acpCommand.join(" ") : "");
+      setCommand(
+        Array.isArray(acpCommand)
+          ? acpCommand.filter((v): v is string => typeof v === "string")
+          : [],
+      );
 
       const acpArgs = settings.agent_settings?.acp_args;
-      setArgs(Array.isArray(acpArgs) ? acpArgs.join(" ") : "");
+      setArgs(
+        Array.isArray(acpArgs)
+          ? acpArgs.filter((v): v is string => typeof v === "string")
+          : [],
+      );
 
       const acpEnv = settings.agent_settings?.acp_env;
       const envObj =
@@ -97,9 +103,17 @@ function AgentSettingsScreen() {
 
   const handleAgentTypeChange = (key: React.Key | null) => {
     if (!key) return;
-    // Don't clear the API key here — it's cleared after a successful save so
-    // users don't lose an entry they haven't saved yet when switching providers.
-    setAgentType(key as AgentType);
+    const newType = key as AgentType;
+    // Clear the API key when switching between different ACP providers to
+    // avoid showing an Anthropic key in the OpenAI key field, etc.
+    if (
+      newType !== agentType &&
+      isAcpServerKind(newType) &&
+      isAcpServerKind(agentType)
+    ) {
+      setApiKey("");
+    }
+    setAgentType(newType);
     setIsDirty(true);
   };
 
@@ -121,17 +135,13 @@ function AgentSettingsScreen() {
     if (agentType === "openhands") {
       agentSettingsDiff = { kind: "llm" };
     } else {
-      const commandParts = command.trim()
-        ? command.trim().split(/\s+/)
-        : (DEFAULT_COMMANDS[agentType] ?? "").split(/\s+/);
-
-      const argParts = args.trim() ? args.trim().split(/\s+/) : [];
-
+      const effectiveCommand =
+        command.length > 0 ? command : (DEFAULT_COMMANDS[agentType] ?? []);
       agentSettingsDiff = {
         kind: "acp",
         acp_server: agentType,
-        acp_command: commandParts,
-        acp_args: argParts,
+        acp_command: effectiveCommand,
+        acp_args: args,
         acp_env: parsedEnv,
         ...(apiKey.trim() ? { llm: { api_key: apiKey.trim() } } : {}),
       };
@@ -159,6 +169,10 @@ function AgentSettingsScreen() {
     isAcp &&
     settings?.llm_api_key_set &&
     settings?.agent_settings?.kind === "acp";
+
+  const defaultCommandPlaceholder = isAcpServerKind(agentType)
+    ? (DEFAULT_COMMANDS[agentType] ?? []).join("\n")
+    : "";
 
   const tabButtonClass = (active: boolean) =>
     `px-4 py-2 text-sm font-medium rounded-t transition-colors ${
@@ -230,31 +244,53 @@ function AgentSettingsScreen() {
 
       {tab === "advanced" && isAcp && (
         <div className="flex flex-col gap-6">
-          <SettingsInput
-            testId="agent-command-input"
-            label={t(I18nKey.SETTINGS$AGENT_ADVANCED_COMMAND)}
-            type="text"
-            className="w-full"
-            value={command}
-            placeholder={DEFAULT_COMMANDS[agentType] ?? ""}
-            onChange={(value) => {
-              setCommand(value);
-              setIsDirty(true);
-            }}
-          />
+          <div className="flex flex-col gap-2.5">
+            <span className="text-sm">
+              {t(I18nKey.SETTINGS$AGENT_ADVANCED_COMMAND)}
+            </span>
+            <textarea
+              data-testid="agent-command-input"
+              className="bg-tertiary border border-[#717888] rounded-sm p-2 text-sm font-mono text-white placeholder:italic placeholder:text-[#717888] min-h-[80px] resize-y focus:outline-none focus:border-white"
+              value={command.join("\n")}
+              placeholder={defaultCommandPlaceholder}
+              onChange={(e) => {
+                setCommand(
+                  e.target.value
+                    .split("\n")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                );
+                setIsDirty(true);
+              }}
+            />
+            <span className="text-xs text-[#717888]">
+              {t(I18nKey.SETTINGS$AGENT_ADVANCED_COMMAND_HINT)}
+            </span>
+          </div>
 
-          <SettingsInput
-            testId="agent-args-input"
-            label={t(I18nKey.SETTINGS$AGENT_ADVANCED_ARGS)}
-            type="text"
-            className="w-full"
-            value={args}
-            placeholder={t(I18nKey.SETTINGS$AGENT_ADVANCED_ARGS_PLACEHOLDER)}
-            onChange={(value) => {
-              setArgs(value);
-              setIsDirty(true);
-            }}
-          />
+          <div className="flex flex-col gap-2.5">
+            <span className="text-sm">
+              {t(I18nKey.SETTINGS$AGENT_ADVANCED_ARGS)}
+            </span>
+            <textarea
+              data-testid="agent-args-input"
+              className="bg-tertiary border border-[#717888] rounded-sm p-2 text-sm font-mono text-white placeholder:italic placeholder:text-[#717888] min-h-[80px] resize-y focus:outline-none focus:border-white"
+              value={args.join("\n")}
+              placeholder={t(I18nKey.SETTINGS$AGENT_ADVANCED_ARGS_PLACEHOLDER)}
+              onChange={(e) => {
+                setArgs(
+                  e.target.value
+                    .split("\n")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                );
+                setIsDirty(true);
+              }}
+            />
+            <span className="text-xs text-[#717888]">
+              {t(I18nKey.SETTINGS$AGENT_ADVANCED_ARGS_HINT)}
+            </span>
+          </div>
 
           <div className="flex flex-col gap-2.5">
             <span className="text-sm">

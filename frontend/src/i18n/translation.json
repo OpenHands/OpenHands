@@ -24461,5 +24461,39 @@
     "ca": "Canviar configuració de l'agent",
     "tr": "Ajan Ayarlarını Değiştir",
     "uk": "Змінити налаштування агента"
+  },
+  "SETTINGS$AGENT_ADVANCED_COMMAND_HINT": {
+    "en": "One token per line. Leave blank to use the default command for the selected agent.",
+    "ja": "1行に1トークン。選択したエージェントのデフォルトコマンドを使用するには空白のままにしてください。",
+    "zh-CN": "每行一个标记。留空将使用所选代理的默认命令。",
+    "zh-TW": "每行一個標記。留空將使用所選代理的預設命令。",
+    "ko-KR": "한 줄에 토큰 하나. 선택한 에이전트의 기본 명령을 사용하려면 비워 두세요.",
+    "no": "Én token per linje. La stå tomt for å bruke standardkommandoen for den valgte agenten.",
+    "ar": "رمز واحد في كل سطر. اتركه فارغًا لاستخدام الأمر الافتراضي للوكيل المحدد.",
+    "de": "Ein Token pro Zeile. Leer lassen, um den Standardbefehl für den ausgewählten Agenten zu verwenden.",
+    "fr": "Un token par ligne. Laissez vide pour utiliser la commande par défaut de l'agent sélectionné.",
+    "it": "Un token per riga. Lascia vuoto per usare il comando predefinito per l'agente selezionato.",
+    "pt": "Um token por linha. Deixe em branco para usar o comando padrão do agente selecionado.",
+    "es": "Un token por línea. Déjelo vacío para usar el comando predeterminado del agente seleccionado.",
+    "ca": "Un token per línia. Deixeu-lo buit per usar la comanda predeterminada de l'agent seleccionat.",
+    "tr": "Satır başına bir token. Seçili ajan için varsayılan komutu kullanmak için boş bırakın.",
+    "uk": "Один токен на рядок. Залиште порожнім для використання команди за замовчуванням для вибраного агента."
+  },
+  "SETTINGS$AGENT_ADVANCED_ARGS_HINT": {
+    "en": "One argument per line. These are appended after the command.",
+    "ja": "1行に1引数。これらはコマンドの後に追加されます。",
+    "zh-CN": "每行一个参数。这些参数将附加在命令之后。",
+    "zh-TW": "每行一個參數。這些參數將附加在命令之後。",
+    "ko-KR": "한 줄에 인수 하나. 이 인수들은 명령 뒤에 추가됩니다.",
+    "no": "Én argument per linje. Disse legges til etter kommandoen.",
+    "ar": "وسيطة واحدة في كل سطر. يتم إلحاقها بعد الأمر.",
+    "de": "Ein Argument pro Zeile. Diese werden nach dem Befehl angehängt.",
+    "fr": "Un argument par ligne. Ils sont ajoutés après la commande.",
+    "it": "Un argomento per riga. Vengono aggiunti dopo il comando.",
+    "pt": "Um argumento por linha. Eles são adicionados após o comando.",
+    "es": "Un argumento por línea. Se añaden después del comando.",
+    "ca": "Un argument per línia. S'afegeixen després de la comanda.",
+    "tr": "Satır başına bir argüman. Bunlar komuttan sonra eklenir.",
+    "uk": "Один аргумент на рядок. Вони додаються після команди."
   }
 }

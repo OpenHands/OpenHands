@@ -30,6 +30,15 @@ import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { ACP_SERVER_DISPLAY_NAMES } from "#/constants/acp-agents";
 
+// `agent_kind` stored in the DB is either "llm" (standard OpenHands agent) or
+// "acp" (ACP subprocess agent). It is NOT the specific server name
+// (e.g. "claude-code"). This map builds a human-readable label for the banner.
+const AGENT_KIND_DISPLAY: Record<string, string> = {
+  llm: "OpenHands",
+  acp: "an ACP agent",
+  ...ACP_SERVER_DISPLAY_NAMES,
+};
+
 function AgentIncompatibleBanner({
   conversationAgentKind,
 }: {
@@ -39,8 +48,7 @@ function AgentIncompatibleBanner({
   const navigate = useNavigate();
 
   const agentName =
-    ACP_SERVER_DISPLAY_NAMES[conversationAgentKind] ??
-    (conversationAgentKind === "acp" ? "ACP Agent" : conversationAgentKind);
+    AGENT_KIND_DISPLAY[conversationAgentKind] ?? conversationAgentKind;
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 bg-amber-900/40 border border-amber-600/50 rounded-lg text-sm">
