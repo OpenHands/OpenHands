@@ -22,7 +22,7 @@ from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
 )
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings
 from openhands.server.shared import config
 from openhands.server.user_auth import (
     get_provider_tokens,
@@ -34,6 +34,10 @@ from openhands.utils.llm import (
     get_provider_api_base,
     is_openhands_model,
     resolve_llm_base_url,
+)
+from openhands.utils.sdk_settings_compat import (
+    LLMAgentSettings,
+    export_agent_settings_schema,
 )
 
 LITE_LLM_API_URL = os.environ.get(
@@ -55,6 +59,8 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     rules to :func:`openhands.utils.llm.resolve_llm_base_url` so the
     personal-save and enterprise org-defaults paths stay in lockstep.
     """
+    if not isinstance(settings.agent_settings, LLMAgentSettings):
+        return
     llm = settings.agent_settings.llm
     llm.base_url = resolve_llm_base_url(
         model=llm.model,
@@ -256,7 +262,7 @@ async def store_settings(
 @router.get('/agent-schema')
 async def load_settings_schema() -> dict[str, Any]:
     """Load the schema for settings"""
-    return AgentSettings.export_schema().model_dump(mode='json')
+    return export_agent_settings_schema().model_dump(mode='json')
 
 
 @router.get('/conversation-schema')
