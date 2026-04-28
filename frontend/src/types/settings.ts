@@ -88,6 +88,7 @@ export type Settings = {
   v1_enabled?: boolean;
   sandbox_grouping_strategy?: SandboxGroupingStrategy;
   /** Legacy V0 sandbox: request GPU in the runtime and CUDA base when using the default CPU image */
+  include_git_context?: boolean;
   sandbox_enable_gpu?: boolean;
   /** Legacy V0: CUDA base image when sandbox_enable_gpu and default CPU base (optional) */
   sandbox_gpu_base_container_image?: string | null;
