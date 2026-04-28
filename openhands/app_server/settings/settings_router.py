@@ -35,7 +35,7 @@ from openhands.server.user_auth import (
     get_user_settings,
     get_user_settings_store,
 )
-from openhands.storage.data_models.llm_profiles import (
+from openhands.app_server.settings.llm_profiles import (
     ProfileAlreadyExistsError,
     ProfileLimitExceededError,
     ProfileNotFoundError,

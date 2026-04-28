@@ -8,7 +8,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from openhands.sdk.llm import LLM
-from openhands.storage.data_models.llm_profiles import (
+from openhands.app_server.settings.llm_profiles import (
     MAX_PROFILES_PER_USER,
     LLMProfiles,
     ProfileAlreadyExistsError,

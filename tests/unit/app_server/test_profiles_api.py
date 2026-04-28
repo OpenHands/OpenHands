@@ -27,7 +27,7 @@ from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
 from openhands.server.app import app
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.llm_profiles import MAX_PROFILES_PER_USER
+from openhands.app_server.settings.llm_profiles import MAX_PROFILES_PER_USER
 
 
 @pytest.fixture(autouse=True)

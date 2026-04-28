@@ -20,7 +20,7 @@ from openhands.sdk.settings import (
     ConversationSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
-from openhands.storage.data_models.llm_profiles import ProfileNotFoundError
+from openhands.app_server.settings.llm_profiles import ProfileNotFoundError
 
 
 def test_settings_from_config():
