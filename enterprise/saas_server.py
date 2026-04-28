@@ -40,7 +40,6 @@ from server.routes.integration.jira_dc import jira_dc_integration_router  # noqa
 from server.routes.integration.slack import slack_router  # noqa: E402
 from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
-from server.routes.onboarding import onboarding_router  # noqa: E402
 from server.routes.org_invitations import (  # noqa: E402
     accept_router as invitation_accept_router,
 )
