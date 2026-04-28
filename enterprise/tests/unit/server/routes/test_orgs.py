@@ -44,8 +44,8 @@ from server.routes.orgs import (
 )
 from storage.org import Org
 
-from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.app_server.user_auth import get_user_id
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 
 # Test user ID constant (must be a valid UUID string)
 TEST_USER_ID = str(uuid.uuid4())

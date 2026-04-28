@@ -48,11 +48,11 @@ from storage.user_store import UserStore
 
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
+from openhands.app_server.user_auth import get_access_token
+from openhands.app_server.user_auth.user_auth import get_user_auth
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.services.conversation_service import create_provider_tokens_object
 from openhands.server.shared import config
-from openhands.app_server.user_auth import get_access_token
-from openhands.app_server.user_auth.user_auth import get_user_auth
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
