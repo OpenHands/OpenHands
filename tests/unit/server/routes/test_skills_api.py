@@ -232,3 +232,37 @@ async def test_skills_search_pagination(test_client, tmp_path):
         assert len(data['items']) == 1
         assert data['items'][0]['name'] == 'skill_c'
         assert data['next_page_id'] is None
+
+
+def test_global_skills_dir_points_to_repo_root():
+    """Test that GLOBAL_SKILLS_DIR points to the correct location.
+
+    This test validates that GLOBAL_SKILLS_DIR is correctly configured to point
+    to the skills/ directory at the repo root. This prevents regressions like the
+    one introduced in fb98faf4a where an incorrect path caused no skills to load.
+    """
+    from openhands.app_server.user.skills_router import GLOBAL_SKILLS_DIR
+
+    # The directory should exist
+    assert GLOBAL_SKILLS_DIR.exists(), (
+        f'GLOBAL_SKILLS_DIR does not exist: {GLOBAL_SKILLS_DIR}'
+    )
+
+    # It should be named 'skills'
+    assert GLOBAL_SKILLS_DIR.name == 'skills', (
+        f"Expected directory name 'skills', got '{GLOBAL_SKILLS_DIR.name}'"
+    )
+
+    # It should contain at least one .md file (skill definition)
+    md_files = list(GLOBAL_SKILLS_DIR.glob('*.md'))
+    assert len(md_files) > 0, (
+        f'GLOBAL_SKILLS_DIR contains no .md files: {GLOBAL_SKILLS_DIR}'
+    )
+
+    # Verify it's at repo root by checking for known skill files
+    # (github.md is a core skill that should always exist)
+    expected_skill = GLOBAL_SKILLS_DIR / 'github.md'
+    assert expected_skill.exists(), (
+        f'Expected skill file not found: {expected_skill}. '
+        f'GLOBAL_SKILLS_DIR may be pointing to wrong location.'
+    )
