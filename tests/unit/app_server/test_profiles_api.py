@@ -18,6 +18,7 @@ from pydantic import SecretStr
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
+from openhands.app_server.settings.llm_profiles import MAX_PROFILES_PER_USER
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import _user_profile_locks
 from openhands.app_server.settings.settings_store import SettingsStore
@@ -27,7 +28,6 @@ from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
 from openhands.server.app import app
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.app_server.settings.llm_profiles import MAX_PROFILES_PER_USER
 
 
 @pytest.fixture(autouse=True)
