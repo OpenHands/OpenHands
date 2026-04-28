@@ -1488,7 +1488,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
     @staticmethod
     def _acp_provider_env(user: UserInfo) -> dict[str, str]:
-        """Translate user credentials into ACP provider environment variables.
+        """Translate UI-saved LLM credentials into provider-native env vars.
 
         The ACP subprocess reads provider credentials from environment variables.
         Maps the user's LLM API key to the env var expected by the active ACP
@@ -1496,22 +1496,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         ``None`` — users manage credentials entirely via ``acp_env``.
 
         Args:
-            user: User information containing credentials
+            user: User information containing ACP agent settings.
 
         Returns:
-            Dictionary of environment variable name -> value pairs for the ACP subprocess.
+            Dict of env var name → value to inject into the ACP subprocess.
         """
-        env: dict[str, str] = {}
-
         if not isinstance(user.agent_settings, ACPAgentSettings):
-            return env
+            return {}
 
         acp_settings = user.agent_settings
-
-        # Pass through any explicit per-key overrides first; the API-key
-        # injection below will not overwrite keys already set here.
-        if acp_settings.acp_env:
-            env.update(acp_settings.acp_env)
+        env: dict[str, str] = {}
 
         # Map the user's LLM API key to the env var expected by the ACP server.
         api_key_env = acp_settings.api_key_env_var
@@ -1585,7 +1579,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Merge provider env vars (API keys etc.) into acp_env
         provider_env = self._acp_provider_env(user)
-        merged_env = {**(acp_settings.acp_env or {}), **provider_env}
+        merged_env: dict[str, str] = {
+            **dict(acp_settings.acp_env or {}),
+            **provider_env,
+        }
 
         acp_agent = ACPAgent(
             acp_command=acp_settings.acp_command,
@@ -1602,10 +1599,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if secrets:
             acp_agent.agent_context = AgentContext(secrets=secrets)
 
-        final_initial_message = self._construct_initial_message_with_plugin_params(
-            initial_message, plugins
-        )
-
         sdk_plugins: list[PluginSource] | None = None
         if plugins:
             sdk_plugins = [
@@ -1616,7 +1609,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         return StartACPConversationRequest(
             workspace=workspace,
             conversation_id=conversation_id,
-            initial_message=initial_message,
+            initial_message=self._construct_initial_message_with_plugin_params(
+                initial_message, plugins
+            ),
             secrets=secrets,
             plugins=sdk_plugins,
             agent=acp_agent,
