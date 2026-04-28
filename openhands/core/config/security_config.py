@@ -16,7 +16,7 @@ class SecurityConfig(BaseModel):
         security_analyzer: The security analyzer to use.
     """
 
-    confirmation_mode: bool = Field(default=False)
+    confirmation_mode: bool = Field(default=True)
     security_analyzer: str | None = Field(default=None)
 
     model_config = ConfigDict(extra='forbid')

@@ -352,7 +352,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Start conversation...
             body_json = start_conversation_request.model_dump(
-                mode='json', context={'expose_secrets': True}
+                mode='json', context={'expose_secrets': False}
             )
             # Log hook_config to verify it's being passed
             hook_config_in_request = body_json.get('hook_config')
