@@ -59,7 +59,9 @@ class S3FileStore(FileStore):
             as_bytes = (
                 contents.encode('utf-8') if isinstance(contents, str) else contents
             )
-            self.client.put_object(Bucket=self._get_bucket_name(), Key=path, Body=as_bytes)
+            self.client.put_object(
+                Bucket=self._get_bucket_name(), Key=path, Body=as_bytes
+            )
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == 'AccessDenied':
                 raise FileNotFoundError(
@@ -144,7 +146,9 @@ class S3FileStore(FileStore):
                 Bucket=self._get_bucket_name(), Prefix=f'{path}/'
             )
             for content in response.get('Contents') or []:
-                self.client.delete_object(Bucket=self._get_bucket_name(), Key=content['Key'])
+                self.client.delete_object(
+                    Bucket=self._get_bucket_name(), Key=content['Key']
+                )
 
             # Next try to delete item as a file
             self.client.delete_object(Bucket=self._get_bucket_name(), Key=path)
