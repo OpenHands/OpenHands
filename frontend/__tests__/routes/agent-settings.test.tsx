@@ -148,6 +148,95 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
+  describe("base URL field", () => {
+    it("shows Anthropic Base URL for claude-code", () => {
+      mockSettings.data = {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+      } as Record<string, unknown>;
+      renderScreen();
+      expect(screen.getByText("Anthropic Base URL")).toBeInTheDocument();
+      expect(screen.getByTestId("agent-base-url-input")).toBeInTheDocument();
+    });
+
+    it("shows OpenAI Base URL for codex", () => {
+      mockSettings.data = {
+        agent_settings: { agent_kind: "acp", acp_server: "codex" },
+      } as Record<string, unknown>;
+      renderScreen();
+      expect(screen.getByText("OpenAI Base URL")).toBeInTheDocument();
+    });
+
+    it("shows Google Base URL for gemini-cli", () => {
+      mockSettings.data = {
+        agent_settings: { agent_kind: "acp", acp_server: "gemini-cli" },
+      } as Record<string, unknown>;
+      renderScreen();
+      expect(screen.getByText("Google Base URL")).toBeInTheDocument();
+    });
+
+    it("does not show base URL field for OpenHands", () => {
+      renderScreen();
+      expect(
+        screen.queryByTestId("agent-base-url-input"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("populates base URL from saved settings", async () => {
+      mockSettings.data = {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          llm: { base_url: "https://my-proxy.example.com" },
+        },
+      } as Record<string, unknown>;
+      renderScreen();
+      await waitFor(() => {
+        const input = screen.getByTestId(
+          "agent-base-url-input",
+        ) as HTMLInputElement;
+        expect(input.value).toBe("https://my-proxy.example.com");
+      });
+    });
+
+    it("includes base_url in save payload when entered", async () => {
+      const user = userEvent.setup();
+      mockSettings.data = {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+      } as Record<string, unknown>;
+      renderScreen();
+      const urlInput = screen.getByTestId("agent-base-url-input");
+      await user.type(urlInput, "https://proxy.example.com");
+      const saveBtn = screen.getByTestId("agent-save-button");
+      await waitFor(() => expect(saveBtn).not.toBeDisabled());
+      await user.click(saveBtn);
+      expect(mockSaveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({
+              base_url: "https://proxy.example.com",
+            }),
+          }),
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it("omits llm.base_url from payload when field is empty", async () => {
+      const user = userEvent.setup();
+      mockSettings.data = {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+      } as Record<string, unknown>;
+      renderScreen();
+      const apiKeyInput = screen.getByTestId("agent-api-key-input");
+      await user.type(apiKeyInput, "sk-ant-test");
+      const saveBtn = screen.getByTestId("agent-save-button");
+      await waitFor(() => expect(saveBtn).not.toBeDisabled());
+      await user.click(saveBtn);
+      const diff = mockSaveSettings.mock.calls[0][0].agent_settings_diff;
+      expect(diff.llm).not.toHaveProperty("base_url");
+    });
+  });
+
   describe("Advanced tab", () => {
     beforeEach(() => {
       mockSettings.data = {

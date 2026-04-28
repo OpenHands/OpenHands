@@ -18,6 +18,7 @@ import {
   AcpServerKind,
   ACP_SERVER_DISPLAY_NAMES,
   ACP_API_KEY_LABELS,
+  ACP_BASE_URL_LABELS,
   ACP_DEFAULT_COMMANDS,
   isAcpServerKind,
 } from "#/constants/acp-agents";
@@ -41,6 +42,7 @@ const AGENT_OPTIONS: AgentOption[] = [
 ];
 
 const API_KEY_LABELS = ACP_API_KEY_LABELS;
+const BASE_URL_LABELS = ACP_BASE_URL_LABELS;
 const DEFAULT_COMMANDS = ACP_DEFAULT_COMMANDS;
 
 function AgentSettingsScreen() {
@@ -51,6 +53,7 @@ function AgentSettingsScreen() {
   const [tab, setTab] = useState<TabType>("basic");
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
   // command and args are stored as arrays; the textarea shows one token per line
   const [command, setCommand] = useState<string[]>([]);
   const [args, setArgs] = useState<string[]>([]);
@@ -64,6 +67,12 @@ function AgentSettingsScreen() {
     if (kind === "acp") {
       const rawServer = settings.agent_settings?.acp_server;
       setAgentType(isAcpServerKind(rawServer) ? rawServer : "claude-code");
+
+      const savedLlm = settings.agent_settings?.llm as
+        | Record<string, unknown>
+        | undefined;
+      const savedBaseUrl = savedLlm?.base_url;
+      setBaseUrl(typeof savedBaseUrl === "string" ? savedBaseUrl : "");
 
       const acpCommand = settings.agent_settings?.acp_command;
       setCommand(
@@ -96,14 +105,15 @@ function AgentSettingsScreen() {
   const handleAgentTypeChange = (key: React.Key | null) => {
     if (!key) return;
     const newType = key as AgentType;
-    // Clear the API key when switching between different ACP providers to
-    // avoid showing an Anthropic key in the OpenAI key field, etc.
+    // Clear the API key and base URL when switching between different ACP
+    // providers to avoid showing an Anthropic key in the OpenAI key field, etc.
     if (
       newType !== agentType &&
       isAcpServerKind(newType) &&
       isAcpServerKind(agentType)
     ) {
       setApiKey("");
+      setBaseUrl("");
     }
     // Advanced tab doesn't apply to OpenHands; reset to basic to avoid showing
     // a blank/stale advanced view.
@@ -157,7 +167,14 @@ function AgentSettingsScreen() {
         acp_command: effectiveCommand,
         acp_args: args,
         acp_env: parsedEnv,
-        ...(apiKey.trim() ? { llm: { api_key: apiKey.trim() } } : {}),
+        ...(apiKey.trim() || baseUrl.trim()
+          ? {
+              llm: {
+                ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+                ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}),
+              },
+            }
+          : {}),
       };
     }
 
@@ -172,6 +189,7 @@ function AgentSettingsScreen() {
           displaySuccessToast(t(I18nKey.SETTINGS$AGENT_SAVED));
           setIsDirty(false);
           setApiKey("");
+          setBaseUrl("");
         },
       },
     );
@@ -180,6 +198,9 @@ function AgentSettingsScreen() {
   const isAcp = agentType !== "openhands";
   const apiKeyLabel = isAcp
     ? API_KEY_LABELS[agentType as AcpServerKind]
+    : undefined;
+  const baseUrlLabel = isAcp
+    ? BASE_URL_LABELS[agentType as AcpServerKind]
     : undefined;
   const apiKeyIsSet =
     isAcp &&
@@ -254,6 +275,26 @@ function AgentSettingsScreen() {
               }}
               startContent={apiKeyIsSet ? <KeyStatusIcon isSet /> : undefined}
             />
+          )}
+
+          {isAcp && baseUrlLabel && (
+            <div className="flex flex-col gap-1.5">
+              <SettingsInput
+                testId="agent-base-url-input"
+                label={baseUrlLabel}
+                type="text"
+                className="w-full"
+                value={baseUrl}
+                placeholder="https://llm-proxy.app.all-hands.dev"
+                onChange={(value) => {
+                  setBaseUrl(value);
+                  setIsDirty(true);
+                }}
+              />
+              <span className="text-xs text-[#717888]">
+                {t(I18nKey.SETTINGS$AGENT_BASE_URL_HINT)}
+              </span>
+            </div>
           )}
         </div>
       )}

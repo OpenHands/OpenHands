@@ -23,6 +23,13 @@ export const ACP_API_KEY_LABELS: Partial<Record<AcpServerKind, string>> = {
   "gemini-cli": "Google API Key",
 };
 
+/** Provider base URL label per ACP server, shown in the Basic tab alongside the API key. */
+export const ACP_BASE_URL_LABELS: Partial<Record<AcpServerKind, string>> = {
+  "claude-code": "Anthropic Base URL",
+  codex: "OpenAI Base URL",
+  "gemini-cli": "Google Base URL",
+};
+
 /** Default subprocess command per ACP server. Mirrors SDK's _DEFAULT_ACP_COMMANDS. */
 export const ACP_DEFAULT_COMMANDS: Partial<Record<AcpServerKind, string[]>> = {
   "claude-code": ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],

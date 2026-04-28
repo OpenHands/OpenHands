@@ -24529,5 +24529,22 @@
     "ca": "All environment variable values must be strings",
     "tr": "All environment variable values must be strings",
     "uk": "All environment variable values must be strings"
+  },
+  "SETTINGS$AGENT_BASE_URL_HINT": {
+    "en": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "ja": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "zh-CN": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "zh-TW": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "ko-KR": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "no": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "ar": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "de": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "fr": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "it": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "pt": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "es": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "ca": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "tr": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
+    "uk": "Override the API endpoint, e.g. to route through a LiteLLM proxy"
   }
 }
