@@ -1020,9 +1020,14 @@ def test_create_user_settings_from_entities_with_org_fallback():
 
 
 @pytest.mark.asyncio
-async def test_acquire_user_creation_lock_no_redis():
-    """Test that _acquire_user_creation_lock returns True when Redis is unavailable."""
-    with patch.object(UserStore, '_get_redis_client', return_value=None):
+async def test_acquire_user_creation_lock_redis_error():
+    """Test that _acquire_user_creation_lock returns True when Redis has an error."""
+    from redis import exceptions as redis_exceptions
+
+    mock_redis = AsyncMock()
+    mock_redis.set.side_effect = redis_exceptions.RedisError('Connection refused')
+
+    with patch.object(UserStore, '_get_redis_client', return_value=mock_redis):
         result = await UserStore._acquire_user_creation_lock('test-user-id')
 
     assert result is True
@@ -1054,9 +1059,14 @@ async def test_acquire_user_creation_lock_not_acquired():
 
 
 @pytest.mark.asyncio
-async def test_release_user_creation_lock_no_redis():
-    """Test that _release_user_creation_lock returns True when Redis is unavailable."""
-    with patch.object(UserStore, '_get_redis_client', return_value=None):
+async def test_release_user_creation_lock_redis_error():
+    """Test that _release_user_creation_lock returns True when Redis has an error."""
+    from redis import exceptions as redis_exceptions
+
+    mock_redis = AsyncMock()
+    mock_redis.delete.side_effect = redis_exceptions.RedisError('Connection refused')
+
+    with patch.object(UserStore, '_get_redis_client', return_value=mock_redis):
         result = await UserStore._release_user_creation_lock('test-user-id')
 
     assert result is True
