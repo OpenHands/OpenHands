@@ -13,11 +13,155 @@ from unittest.mock import patch
 import botocore.exceptions
 from google.api_core.exceptions import NotFound
 
-from openhands.storage.files import FileStore
-from openhands.storage.google_cloud import GoogleCloudFileStore
-from openhands.storage.local import LocalFileStore
-from openhands.storage.memory import InMemoryFileStore
-from openhands.storage.s3 import S3FileStore
+from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
+from openhands.app_server.file_store.local import LocalFileStore
+from openhands.app_server.file_store.memory import InMemoryFileStore
+from openhands.app_server.file_store.s3 import S3FileStore
+
+# =============================================================================
+# Mock classes for cloud storage tests
+# These must be defined before the test classes that use them in decorators
+# =============================================================================
+
+
+class _MockGoogleCloudClient:
+    def bucket(self, name: str):
+        assert name == 'dear-liza'
+        return _MockGoogleCloudBucket()
+
+
+@dataclass
+class _MockGoogleCloudBucket:
+    blobs_by_path: dict[str, '_MockGoogleCloudBlob'] = field(default_factory=dict)
+
+    def blob(self, path: str | None = None) -> '_MockGoogleCloudBlob':
+        return self.blobs_by_path.get(path) or _MockGoogleCloudBlob(self, path)
+
+    def list_blobs(self, prefix: str | None = None) -> list['_MockGoogleCloudBlob']:
+        blobs = list(self.blobs_by_path.values())
+        if prefix and prefix != '/':
+            blobs = [blob for blob in blobs if blob.name.startswith(prefix)]
+        return blobs
+
+
+@dataclass
+class _MockGoogleCloudBlob:
+    bucket: _MockGoogleCloudBucket
+    name: str
+    content: str | bytes | None = None
+
+    def open(self, op: str):
+        if op == 'r':
+            if self.content is None:
+                raise FileNotFoundError()
+            return StringIO(self.content)
+        if op == 'w':
+            return _MockGoogleCloudBlobWriter(self)
+
+    def delete(self):
+        if self.name not in self.bucket.blobs_by_path:
+            raise NotFound('Blob not found')
+        del self.bucket.blobs_by_path[self.name]
+
+
+@dataclass
+class _MockGoogleCloudBlobWriter:
+    blob: _MockGoogleCloudBlob
+    content: str | bytes = None
+
+    def __enter__(self):
+        return self
+
+    def write(self, __b):
+        assert (
+            self.content is None
+        )  # We don't support buffered writes in this mock for now, as it is not needed
+        self.content = __b
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        blob = self.blob
+        blob.content = self.content
+        blob.bucket.blobs_by_path[blob.name] = blob
+
+
+class _MockS3Client:
+    def __init__(self):
+        self.objects_by_bucket: dict[str, dict[str, '_MockS3Object']] = {}
+
+    def put_object(self, Bucket: str, Key: str, Body: str | bytes) -> None:
+        if Bucket not in self.objects_by_bucket:
+            self.objects_by_bucket[Bucket] = {}
+        self.objects_by_bucket[Bucket][Key] = _MockS3Object(Key, Body)
+
+    def get_object(self, Bucket: str, Key: str) -> dict:
+        if Bucket not in self.objects_by_bucket:
+            raise botocore.exceptions.ClientError(
+                {
+                    'Error': {
+                        'Code': 'NoSuchBucket',
+                        'Message': f"The bucket '{Bucket}' does not exist",
+                    }
+                },
+                'GetObject',
+            )
+        if Key not in self.objects_by_bucket[Bucket]:
+            raise botocore.exceptions.ClientError(
+                {
+                    'Error': {
+                        'Code': 'NoSuchKey',
+                        'Message': f"The specified key '{Key}' does not exist",
+                    }
+                },
+                'GetObject',
+            )
+        content = self.objects_by_bucket[Bucket][Key].content
+        if isinstance(content, bytes):
+            return {'Body': BytesIO(content)}
+        return {'Body': StringIO(content)}
+
+    def list_objects_v2(self, Bucket: str, Prefix: str = '') -> dict:
+        if Bucket not in self.objects_by_bucket:
+            raise botocore.exceptions.ClientError(
+                {
+                    'Error': {
+                        'Code': 'NoSuchBucket',
+                        'Message': f"The bucket '{Bucket}' does not exist",
+                    }
+                },
+                'ListObjectsV2',
+            )
+        objects = self.objects_by_bucket[Bucket]
+        contents = [
+            {'Key': key}
+            for key in objects.keys()
+            if not Prefix or key.startswith(Prefix)
+        ]
+        return {'Contents': contents} if contents else {}
+
+    def delete_object(self, Bucket: str, Key: str) -> None:
+        if Bucket not in self.objects_by_bucket:
+            raise botocore.exceptions.ClientError(
+                {
+                    'Error': {
+                        'Code': 'NoSuchBucket',
+                        'Message': f"The bucket '{Bucket}' does not exist",
+                    }
+                },
+                'DeleteObject',
+            )
+        self.objects_by_bucket[Bucket].pop(Key, None)
+
+
+@dataclass
+class _MockS3Object:
+    key: str
+    content: str | bytes
+
+
+# =============================================================================
+# Test base class and test implementations
+# =============================================================================
 
 
 class _StorageTest(ABC):
@@ -112,7 +256,7 @@ class TestLocalFileStore(TestCase, _StorageTest):
     def setUp(self):
         # Create a unique temporary directory for each test instance
         self.temp_dir = tempfile.mkdtemp(prefix='openhands_test_')
-        self.store = LocalFileStore(self.temp_dir)
+        self.store = LocalFileStore(root=self.temp_dir)
 
     def tearDown(self):
         try:
@@ -180,149 +324,16 @@ class TestInMemoryFileStore(TestCase, _StorageTest):
         self.store = InMemoryFileStore()
 
 
+@patch(
+    'openhands.app_server.file_store.google_cloud.storage.Client',
+    _MockGoogleCloudClient,
+)
 class TestGoogleCloudFileStore(TestCase, _StorageTest):
     def setUp(self):
-        with patch('google.cloud.storage.Client', _MockGoogleCloudClient):
-            self.store = GoogleCloudFileStore('dear-liza')
+        self.store = GoogleCloudFileStore(bucket_name='dear-liza')
 
 
+@patch('boto3.client', lambda service, **kwargs: _MockS3Client())
 class TestS3FileStore(TestCase, _StorageTest):
     def setUp(self):
-        with patch('boto3.client', lambda service, **kwargs: _MockS3Client()):
-            self.store = S3FileStore('dear-liza')
-
-
-# I would have liked to use cloud-storage-mocker here but the python versions were incompatible :(
-# If we write tests for the S3 storage class I would definitely recommend we use moto.
-class _MockGoogleCloudClient:
-    def bucket(self, name: str):
-        assert name == 'dear-liza'
-        return _MockGoogleCloudBucket()
-
-
-@dataclass
-class _MockGoogleCloudBucket:
-    blobs_by_path: dict[str, _MockGoogleCloudBlob] = field(default_factory=dict)
-
-    def blob(self, path: str | None = None) -> _MockGoogleCloudBlob:
-        return self.blobs_by_path.get(path) or _MockGoogleCloudBlob(self, path)
-
-    def list_blobs(self, prefix: str | None = None) -> list[_MockGoogleCloudBlob]:
-        blobs = list(self.blobs_by_path.values())
-        if prefix and prefix != '/':
-            blobs = [blob for blob in blobs if blob.name.startswith(prefix)]
-        return blobs
-
-
-@dataclass
-class _MockGoogleCloudBlob:
-    bucket: _MockGoogleCloudBucket
-    name: str
-    content: str | bytes | None = None
-
-    def open(self, op: str):
-        if op == 'r':
-            if self.content is None:
-                raise FileNotFoundError()
-            return StringIO(self.content)
-        if op == 'w':
-            return _MockGoogleCloudBlobWriter(self)
-
-    def delete(self):
-        if self.name not in self.bucket.blobs_by_path:
-            raise NotFound('Blob not found')
-        del self.bucket.blobs_by_path[self.name]
-
-
-@dataclass
-class _MockGoogleCloudBlobWriter:
-    blob: _MockGoogleCloudBlob
-    content: str | bytes = None
-
-    def __enter__(self):
-        return self
-
-    def write(self, __b):
-        assert (
-            self.content is None
-        )  # We don't support buffered writes in this mock for now, as it is not needed
-        self.content = __b
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        blob = self.blob
-        blob.content = self.content
-        blob.bucket.blobs_by_path[blob.name] = blob
-
-
-class _MockS3Client:
-    def __init__(self):
-        self.objects_by_bucket: dict[str, dict[str, _MockS3Object]] = {}
-
-    def put_object(self, Bucket: str, Key: str, Body: str | bytes) -> None:
-        if Bucket not in self.objects_by_bucket:
-            self.objects_by_bucket[Bucket] = {}
-        self.objects_by_bucket[Bucket][Key] = _MockS3Object(Key, Body)
-
-    def get_object(self, Bucket: str, Key: str) -> dict:
-        if Bucket not in self.objects_by_bucket:
-            raise botocore.exceptions.ClientError(
-                {
-                    'Error': {
-                        'Code': 'NoSuchBucket',
-                        'Message': f"The bucket '{Bucket}' does not exist",
-                    }
-                },
-                'GetObject',
-            )
-        if Key not in self.objects_by_bucket[Bucket]:
-            raise botocore.exceptions.ClientError(
-                {
-                    'Error': {
-                        'Code': 'NoSuchKey',
-                        'Message': f"The specified key '{Key}' does not exist",
-                    }
-                },
-                'GetObject',
-            )
-        content = self.objects_by_bucket[Bucket][Key].content
-        if isinstance(content, bytes):
-            return {'Body': BytesIO(content)}
-        return {'Body': StringIO(content)}
-
-    def list_objects_v2(self, Bucket: str, Prefix: str = '') -> dict:
-        if Bucket not in self.objects_by_bucket:
-            raise botocore.exceptions.ClientError(
-                {
-                    'Error': {
-                        'Code': 'NoSuchBucket',
-                        'Message': f"The bucket '{Bucket}' does not exist",
-                    }
-                },
-                'ListObjectsV2',
-            )
-        objects = self.objects_by_bucket[Bucket]
-        contents = [
-            {'Key': key}
-            for key in objects.keys()
-            if not Prefix or key.startswith(Prefix)
-        ]
-        return {'Contents': contents} if contents else {}
-
-    def delete_object(self, Bucket: str, Key: str) -> None:
-        if Bucket not in self.objects_by_bucket:
-            raise botocore.exceptions.ClientError(
-                {
-                    'Error': {
-                        'Code': 'NoSuchBucket',
-                        'Message': f"The bucket '{Bucket}' does not exist",
-                    }
-                },
-                'DeleteObject',
-            )
-        self.objects_by_bucket[Bucket].pop(Key, None)
-
-
-@dataclass
-class _MockS3Object:
-    key: str
-    content: str | bytes
+        self.store = S3FileStore(bucket_name='dear-liza')

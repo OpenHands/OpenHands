@@ -7,6 +7,7 @@ from fastmcp.mcp_config import MCPConfig
 from pydantic import SecretStr
 
 import openhands.app_server.settings.settings_models as settings_module
+from openhands.app_server.settings.llm_profiles import ProfileNotFoundError
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.core.config.llm_config import LLMConfig
@@ -20,7 +21,6 @@ from openhands.sdk.settings import (
     ConversationSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
-from openhands.storage.data_models.llm_profiles import ProfileNotFoundError
 
 
 def test_settings_from_config():

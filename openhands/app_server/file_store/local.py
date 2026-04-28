@@ -2,18 +2,21 @@ import os
 import shutil
 import threading
 
+from pydantic import model_validator
+
+from openhands.app_server.file_store.files import FileStore
 from openhands.core.logger import openhands_logger as logger
-from openhands.storage.files import FileStore
 
 
 class LocalFileStore(FileStore):
     root: str
 
-    def __init__(self, root: str):
-        if root.startswith('~'):
-            root = os.path.expanduser(root)
-        self.root = root
+    @model_validator(mode='after')
+    def _setup_root(self) -> 'LocalFileStore':
+        if self.root.startswith('~'):
+            self.root = os.path.expanduser(self.root)
         os.makedirs(self.root, exist_ok=True)
+        return self
 
     def get_full_path(self, path: str) -> str:
         if path.startswith('/'):

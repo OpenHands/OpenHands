@@ -5,21 +5,44 @@ from google.cloud import storage
 from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
+from pydantic import Field, PrivateAttr
 
-from openhands.storage.files import FileStore
+from openhands.app_server.file_store.files import FileStore
 
 
 class GoogleCloudFileStore(FileStore):
-    def __init__(self, bucket_name: str | None = None) -> None:
-        """Create a new FileStore.
+    """Google Cloud Storage file store.
 
-        If GOOGLE_APPLICATION_CREDENTIALS is defined in the environment it will be used
-        for authentication. Otherwise access will be anonymous.
-        """
-        if bucket_name is None:
-            bucket_name = os.environ['GOOGLE_CLOUD_BUCKET_NAME']
-        self.storage_client: Client = storage.Client()
-        self.bucket: Bucket = self.storage_client.bucket(bucket_name)
+    If GOOGLE_APPLICATION_CREDENTIALS is defined in the environment it will be used
+    for authentication. Otherwise access will be anonymous.
+
+    The storage client and bucket are initialized lazily on first access.
+    """
+
+    bucket_name: str = Field(default='')
+
+    _storage_client: Client | None = PrivateAttr(default=None)
+    _bucket: Bucket | None = PrivateAttr(default=None)
+
+    def _get_bucket_name(self) -> str:
+        """Get bucket name, falling back to environment variable if not set."""
+        if self.bucket_name:
+            return self.bucket_name
+        return os.environ['GOOGLE_CLOUD_BUCKET_NAME']
+
+    @property
+    def storage_client(self) -> Client:
+        """Get the storage client, initializing lazily on first access."""
+        if self._storage_client is None:
+            self._storage_client = storage.Client()
+        return self._storage_client
+
+    @property
+    def bucket(self) -> Bucket:
+        """Get the bucket, initializing lazily on first access."""
+        if self._bucket is None:
+            self._bucket = self.storage_client.bucket(self._get_bucket_name())
+        return self._bucket
 
     def write(self, path: str, contents: str | bytes) -> None:
         blob: Blob = self.bucket.blob(path)
