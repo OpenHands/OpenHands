@@ -15,3 +15,17 @@ export const VALID_ACP_SERVERS = new Set<string>(
 export function isAcpServerKind(value: unknown): value is AcpServerKind {
   return typeof value === "string" && VALID_ACP_SERVERS.has(value);
 }
+
+/** Provider API key label per ACP server, shown in the Basic tab. */
+export const ACP_API_KEY_LABELS: Partial<Record<AcpServerKind, string>> = {
+  "claude-code": "Anthropic API Key",
+  codex: "OpenAI API Key",
+  "gemini-cli": "Google API Key",
+};
+
+/** Default subprocess command per ACP server. Mirrors SDK's _DEFAULT_ACP_COMMANDS. */
+export const ACP_DEFAULT_COMMANDS: Partial<Record<AcpServerKind, string[]>> = {
+  "claude-code": ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+  codex: ["npx", "-y", "@zed-industries/codex-acp"],
+  "gemini-cli": ["npx", "-y", "@google/gemini-cli", "--acp"],
+};

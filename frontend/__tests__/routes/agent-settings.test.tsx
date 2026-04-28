@@ -321,4 +321,95 @@ describe("AgentSettingsScreen", () => {
       );
     });
   });
+
+  describe("provider switching", () => {
+    it("shows correct API key label for each provider after switching", async () => {
+      const user = userEvent.setup();
+      mockSettings.data = {
+        agent_settings: { kind: "acp", acp_server: "claude-code" },
+      } as Record<string, unknown>;
+      renderScreen();
+      // Claude Code starts with Anthropic key
+      expect(screen.getByText("Anthropic API Key")).toBeInTheDocument();
+
+      // Simulate switching to codex — the selector is an Autocomplete (HeroUI),
+      // so we check the label would change once the new settings are loaded.
+      // We verify by re-mounting with codex settings.
+      queryClient.clear();
+      mockSettings.data = {
+        agent_settings: { kind: "acp", acp_server: "codex" },
+      } as Record<string, unknown>;
+      const { unmount } = renderScreen();
+      expect(screen.getAllByText("OpenAI API Key")[0]).toBeInTheDocument();
+      unmount();
+    });
+
+    it("shows Google API key label for gemini-cli", () => {
+      mockSettings.data = {
+        agent_settings: { kind: "acp", acp_server: "gemini-cli" },
+      } as Record<string, unknown>;
+      renderScreen();
+      expect(screen.getByText("Google API Key")).toBeInTheDocument();
+    });
+  });
+
+  describe("advanced tab state restoration", () => {
+    it("populates command field from saved settings", async () => {
+      mockSettings.data = {
+        agent_settings: {
+          kind: "acp",
+          acp_server: "claude-code",
+          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+          acp_args: [],
+          acp_env: {},
+        },
+      } as Record<string, unknown>;
+      renderScreen();
+      const advTab = await screen.findByText("SETTINGS$AGENT_ADVANCED_TAB");
+      fireEvent.click(advTab);
+      await waitFor(() => {
+        const commandArea = screen.getByTestId(
+          "agent-command-input",
+        ) as HTMLTextAreaElement;
+        expect(commandArea.value).toBe(
+          "npx\n-y\n@agentclientprotocol/claude-agent-acp",
+        );
+      });
+    });
+
+    it("populates env field from saved acp_env settings", async () => {
+      mockSettings.data = {
+        agent_settings: {
+          kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [],
+          acp_args: [],
+          acp_env: { MY_VAR: "my_value" },
+        },
+      } as Record<string, unknown>;
+      renderScreen();
+      // Wait for the Advanced tab button to appear (confirming ACP state is set)
+      // before switching to it, so the useEffect has had a chance to run.
+      const advancedTab = await screen.findByText("SETTINGS$AGENT_ADVANCED_TAB");
+      fireEvent.click(advancedTab);
+      await waitFor(() => {
+        const envArea = screen.getByTestId(
+          "agent-env-input",
+        ) as HTMLTextAreaElement;
+        expect(envArea.value).toContain('"MY_VAR": "my_value"');
+      });
+    });
+
+    it("defaults to Basic tab on initial load", () => {
+      renderScreen();
+      // Basic tab button should be rendered
+      expect(
+        screen.getByText("SETTINGS$AGENT_BASIC_TAB"),
+      ).toBeInTheDocument();
+      // Advanced tab should not be visible when OpenHands is selected
+      expect(
+        screen.queryByText("SETTINGS$AGENT_ADVANCED_TAB"),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

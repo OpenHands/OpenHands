@@ -17,6 +17,8 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import {
   AcpServerKind,
   ACP_SERVER_DISPLAY_NAMES,
+  ACP_API_KEY_LABELS,
+  ACP_DEFAULT_COMMANDS,
   isAcpServerKind,
 } from "#/constants/acp-agents";
 
@@ -38,18 +40,8 @@ const AGENT_OPTIONS: AgentOption[] = [
   })),
 ];
 
-const API_KEY_LABELS: Partial<Record<AgentType, string>> = {
-  "claude-code": "Anthropic API Key",
-  codex: "OpenAI API Key",
-  "gemini-cli": "Google API Key",
-};
-
-// Default commands mirror ACPAgentSettings._DEFAULT_ACP_COMMANDS in the SDK.
-const DEFAULT_COMMANDS: Partial<Record<AcpServerKind, string[]>> = {
-  "claude-code": ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-  codex: ["npx", "-y", "@zed-industries/codex-acp"],
-  "gemini-cli": ["npx", "-y", "@google/gemini-cli", "--acp"],
-};
+const API_KEY_LABELS = ACP_API_KEY_LABELS;
+const DEFAULT_COMMANDS = ACP_DEFAULT_COMMANDS;
 
 function AgentSettingsScreen() {
   const { t } = useTranslation();
@@ -186,7 +178,9 @@ function AgentSettingsScreen() {
   };
 
   const isAcp = agentType !== "openhands";
-  const apiKeyLabel = API_KEY_LABELS[agentType];
+  const apiKeyLabel = isAcp
+    ? API_KEY_LABELS[agentType as AcpServerKind]
+    : undefined;
   const apiKeyIsSet =
     isAcp &&
     settings?.llm_api_key_set &&
