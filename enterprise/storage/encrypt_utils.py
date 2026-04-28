@@ -5,7 +5,7 @@ from base64 import b64decode, b64encode
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from server.config import get_config
 from sqlalchemy import String, TypeDecorator
 from sqlalchemy.engine.interfaces import Dialect
@@ -144,7 +144,13 @@ def model_to_kwargs(model_instance):
 class EncryptedJSON(TypeDecorator[dict[str, Any]]):
     """JSON column whose serialized payload is encrypted at rest.
 
-    Use for JSON dicts that may contain secrets (e.g. nested ``api_key``
+    Accepts either a plain ``dict`` or a pydantic ``BaseModel``. Pydantic
+    models are dumped via ``model_dump(mode='json', context={'expose_secrets': True})``
+    so nested ``SecretStr`` values keep their real payload — the column
+    itself is the encryption boundary, so masking on the way in would
+    corrupt round-trips.
+
+    Use for JSON payloads that may contain secrets (e.g. nested ``api_key``
     fields) where the existing ``_<field>`` String + property pattern is
     awkward — this keeps the column accessible as a normal ORM attribute
     while encrypting the entire JSON blob via the same JWE service used
@@ -155,10 +161,12 @@ class EncryptedJSON(TypeDecorator[dict[str, Any]]):
     cache_ok = True
 
     def process_bind_param(
-        self, value: dict[str, Any] | None, dialect: Dialect
+        self, value: BaseModel | dict[str, Any] | None, dialect: Dialect
     ) -> str | None:
         if value is None:
             return None
+        if isinstance(value, BaseModel):
+            value = value.model_dump(mode='json', context={'expose_secrets': True})
         return encrypt_value(json.dumps(value))
 
     def process_result_value(
