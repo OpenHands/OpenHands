@@ -5,7 +5,12 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, SecretStr
 
-from openhands.agent_server.models import OpenHandsModel, SendMessageRequest
+from openhands.agent_server.models import (
+    ImageContent,
+    OpenHandsModel,
+    SendMessageRequest,
+    TextContent,
+)
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
@@ -301,3 +306,40 @@ class GetHooksResponse(BaseModel):
     """Response model for hooks endpoint."""
 
     hooks: list[HookEventResponse] = []
+
+
+class AppSendMessageRequest(BaseModel):
+    """Request to send a follow-up message to a conversation.
+
+    This is used to send messages to an existing conversation via REST API,
+    as an alternative to WebSocket communication.
+    """
+
+    role: Literal['user'] = Field(
+        default='user',
+        description='The role of the message sender. Currently only "user" is supported.',
+    )
+    content: list[TextContent | ImageContent] = Field(
+        ...,
+        min_length=1,
+        description='The message content as a list of text and/or image content blocks.',
+    )
+    run: bool = Field(
+        default=True,
+        description='Whether to automatically run the agent after sending the message.',
+    )
+
+
+class AppSendMessageResponse(BaseModel):
+    """Response from sending a message to a conversation."""
+
+    success: bool = Field(
+        description='Whether the message was successfully sent to the agent.',
+    )
+    sandbox_status: SandboxStatus = Field(
+        description='The current status of the sandbox after the operation.',
+    )
+    message: str | None = Field(
+        default=None,
+        description='Optional message with additional details (e.g., if sandbox was resumed).',
+    )
