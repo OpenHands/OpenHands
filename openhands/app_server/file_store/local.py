@@ -13,7 +13,8 @@ class LocalFileStore(FileStore):
 
     @model_validator(mode='after')
     def _setup_root(self) -> 'LocalFileStore':
-        self.root = os.path.expanduser(self.root)
+        if self.root.startswith('~'):
+            self.root = os.path.expanduser(self.root)
         os.makedirs(self.root, exist_ok=True)
         return self
 

@@ -14,7 +14,7 @@ def get_file_store(
             raise ValueError('file_store_path is required for local file store')
         return LocalFileStore(root=file_store_path)
     elif file_store_type == 's3':
-        return S3FileStore(bucket=file_store_path or '')
+        return S3FileStore(bucket_name=file_store_path or '')
     elif file_store_type == 'google_cloud':
         return GoogleCloudFileStore(bucket_name=file_store_path or '')
     else:

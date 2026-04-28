@@ -49,4 +49,6 @@ class FileStoreMixin:
     @staticmethod
     def _resolve_root_dir(path: str) -> Path:
         """Resolve a path string to a Path, expanding ~ if present."""
-        return Path(path).expanduser()
+        if path.startswith('~'):
+            return Path(path).expanduser()
+        return Path(path)

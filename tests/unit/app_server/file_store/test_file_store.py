@@ -189,7 +189,7 @@ class TestGoogleCloudFileStore(TestCase, _StorageTest):
 class TestS3FileStore(TestCase, _StorageTest):
     def setUp(self):
         with patch('boto3.client', lambda service, **kwargs: _MockS3Client()):
-            self.store = S3FileStore(bucket='dear-liza')
+            self.store = S3FileStore(bucket_name='dear-liza')
 
 
 # I would have liked to use cloud-storage-mocker here but the python versions were incompatible :(
