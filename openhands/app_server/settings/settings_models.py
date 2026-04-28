@@ -29,8 +29,15 @@ from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.utils import load_openhands_config
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings
 from openhands.utils.jsonpatch_compat import deep_merge
+from openhands.utils.sdk_settings_compat import (
+    ACPAgentSettings,
+    AgentSettingsConfig,
+    LLMAgentSettings,
+    default_agent_settings,
+    validate_agent_settings,
+)
 
 
 def _coerce_value(value: Any) -> Any:
@@ -130,7 +137,7 @@ class Settings(BaseModel):
     git_user_name: str | None = None
     git_user_email: str | None = None
     v1_enabled: bool = True
-    agent_settings: AgentSettings = Field(default_factory=AgentSettings)
+    agent_settings: AgentSettingsConfig = Field(default_factory=default_agent_settings)
     conversation_settings: ConversationSettings = Field(
         default_factory=ConversationSettings
     )
@@ -198,9 +205,7 @@ class Settings(BaseModel):
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
-            object.__setattr__(
-                self, 'agent_settings', AgentSettings.model_validate(merged)
-            )
+            object.__setattr__(self, 'agent_settings', validate_agent_settings(merged))
 
         conv_update = payload.get('conversation_settings_diff')
         if isinstance(conv_update, dict):
@@ -245,7 +250,9 @@ class Settings(BaseModel):
 
     @field_serializer('agent_settings')
     def agent_settings_serializer(
-        self, agent_settings: AgentSettings, info: SerializationInfo
+        self,
+        agent_settings: LLMAgentSettings | ACPAgentSettings,
+        info: SerializationInfo,
     ) -> dict[str, Any]:
         context = info.context or {}
         if context.get('expose_secrets', False):
@@ -268,7 +275,7 @@ class Settings(BaseModel):
         agent_settings = data.get('agent_settings')
         if isinstance(agent_settings, dict):
             data['agent_settings'] = _coerce_dict_secrets(agent_settings)
-        elif isinstance(agent_settings, AgentSettings):
+        elif isinstance(agent_settings, (LLMAgentSettings, ACPAgentSettings)):
             data['agent_settings'] = agent_settings.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
@@ -337,7 +344,8 @@ class Settings(BaseModel):
             remote_runtime_resource_factor=app_config.sandbox.remote_runtime_resource_factor,
             search_api_key=app_config.search_api_key,
             max_budget_per_task=app_config.max_budget_per_task,
-            agent_settings=AgentSettings(**agent_settings_dict),
+            # Always LLM for config-file-sourced settings
+            agent_settings=LLMAgentSettings(**agent_settings_dict),
             conversation_settings=ConversationSettings.model_validate(
                 {
                     'confirmation_mode': bool(app_config.security.confirmation_mode),
@@ -349,6 +357,8 @@ class Settings(BaseModel):
 
     def merge_with_config_settings(self) -> 'Settings':
         """Merge config.toml MCP settings with stored SDK agent_settings."""
+        if not isinstance(self.agent_settings, LLMAgentSettings):
+            return self
         config_settings = Settings.from_config()
         if not config_settings:
             return self
@@ -363,7 +373,7 @@ class Settings(BaseModel):
         self.agent_settings.mcp_config = merged_mcp
         return self
 
-    def to_agent_settings(self) -> AgentSettings:
+    def to_agent_settings(self) -> LLMAgentSettings | ACPAgentSettings:
         return self.agent_settings
 
     def get_agent_settings_display(self) -> dict[str, Any]:

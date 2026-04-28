@@ -97,6 +97,7 @@ class AppConversationInfo(BaseModel):
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
     llm_model: str | None = None
+    agent_kind: str = 'llm'
 
     metrics: MetricsSnapshot | None = None
 
