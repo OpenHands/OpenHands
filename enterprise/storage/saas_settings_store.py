@@ -148,6 +148,10 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
+        # Pre-migration rows read back as None; Settings.llm_profiles is
+        # non-nullable, so let the default_factory take over.
+        if kwargs.get('llm_profiles') is None:
+            kwargs.pop('llm_profiles', None)
 
         return Settings(**kwargs)
 
