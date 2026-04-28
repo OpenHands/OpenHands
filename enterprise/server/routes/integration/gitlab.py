@@ -20,6 +20,7 @@ from storage.gitlab_webhook import GitlabWebhook
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
 from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.user_auth import get_user_id
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
 

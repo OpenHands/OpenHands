@@ -36,6 +36,7 @@ from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
     Repository,
 )
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.shared import config, server_config
 from openhands.server.types import (
@@ -43,7 +44,6 @@ from openhands.server.types import (
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.server.user_auth.user_auth import UserAuth
 
 from storage.redis import get_redis_client_async
 

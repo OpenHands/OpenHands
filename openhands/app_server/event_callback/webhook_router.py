@@ -44,13 +44,13 @@ from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
 )
+from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
+from openhands.app_server.user_auth.user_auth import (
+    get_for_user as get_user_auth_for_user,
+)
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.server.types import AppMode
-from openhands.server.user_auth.default_user_auth import DefaultUserAuth
-from openhands.server.user_auth.user_auth import (
-    get_for_user as get_user_auth_for_user,
-)
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()

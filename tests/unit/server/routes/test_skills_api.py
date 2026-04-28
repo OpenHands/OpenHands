@@ -14,8 +14,8 @@ from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.server.app import app
-from openhands.server.user_auth.user_auth import UserAuth
 
 
 class MockUserAuth(UserAuth):
@@ -71,7 +71,7 @@ def test_client():
         patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=MockUserAuth(),
         ),
         patch(

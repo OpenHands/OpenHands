@@ -68,7 +68,7 @@ class TestAcceptInvitationPostEndpoint:
     def auth_app(self):
         """Create a FastAPI app with dependency overrides for authenticated tests."""
 
-        from openhands.server.user_auth import get_user_id
+        from openhands.app_server.user_auth import get_user_id
 
         app = FastAPI()
         app.include_router(accept_router)
@@ -200,7 +200,7 @@ class TestCreateInvitationBatchEndpoint:
     @pytest.fixture
     def batch_app(self):
         """Create a FastAPI app with dependency overrides for batch tests."""
-        from openhands.server.user_auth import get_user_id
+        from openhands.app_server.user_auth import get_user_id
 
         app = FastAPI()
         app.include_router(invitation_router)

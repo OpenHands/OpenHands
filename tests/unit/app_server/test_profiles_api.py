@@ -25,10 +25,10 @@ from openhands.app_server.settings.llm_profiles import MAX_PROFILES_PER_USER
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import _user_profile_locks
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
 from openhands.server.app import app
-from openhands.server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture(autouse=True)
@@ -101,7 +101,7 @@ def test_client(settings_store):
         ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=auth,
         ),
         patch(
@@ -149,7 +149,7 @@ def _client_for_user(user_id: str, store: FileSettingsStore):
         ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=auth,
         ),
         patch(

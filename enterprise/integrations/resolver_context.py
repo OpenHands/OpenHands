@@ -7,8 +7,8 @@ from openhands.app_server.integrations.provider import (
 from openhands.app_server.integrations.service_types import ProviderType, UserGitInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.secret import SecretSource, StaticSecret
-from openhands.server.user_auth.user_auth import UserAuth
 
 
 class ResolverUserContext(UserContext):

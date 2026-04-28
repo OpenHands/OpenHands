@@ -6,10 +6,10 @@ import pytest
 
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
-from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 
 
 def _sdk_mcp_config(settings: Settings) -> MCPConfig | None:

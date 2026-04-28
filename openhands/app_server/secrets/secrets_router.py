@@ -22,13 +22,13 @@ from openhands.app_server.secrets.secrets_models import (
 )
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_models import POSTProviderModel
-from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.app_server.utils.models import EditResponse
-from openhands.server.user_auth import (
+from openhands.app_server.user_auth import (
     get_provider_tokens,
     get_secrets,
     get_secrets_store,
 )
+from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.app_server.utils.models import EditResponse
 
 # Create router with /api/v1/secrets prefix
 router = APIRouter(

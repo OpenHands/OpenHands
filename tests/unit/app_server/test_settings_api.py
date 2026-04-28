@@ -14,6 +14,7 @@ from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
     AgentSettings,
@@ -21,7 +22,6 @@ from openhands.sdk.settings import (
     VerificationSettings,
 )
 from openhands.server.app import app
-from openhands.server.user_auth.user_auth import UserAuth
 
 _EXPOSE = {'expose_secrets': True}
 
@@ -99,7 +99,7 @@ def test_client():
         ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=MockUserAuth(),
         ),
         patch(

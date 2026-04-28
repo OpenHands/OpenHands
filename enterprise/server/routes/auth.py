@@ -53,10 +53,10 @@ from openhands.app_server.integrations.provider import (
     ProviderToken,
 )
 from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
+from openhands.app_server.user_auth import get_access_token
+from openhands.app_server.user_auth.user_auth import get_user_auth
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.shared import config
-from openhands.server.user_auth import get_access_token
-from openhands.server.user_auth.user_auth import get_user_auth
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')

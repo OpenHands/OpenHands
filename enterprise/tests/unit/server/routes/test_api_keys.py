@@ -19,7 +19,7 @@ from server.routes.api_keys import (
 )
 from storage.lite_llm_manager import LiteLlmManager
 
-from openhands.server.user_auth.user_auth import AuthType
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 class TestVerifyByorKeyInLitellm:
