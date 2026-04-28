@@ -7,6 +7,8 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 
+import os
+
 from openhands.server.app import app as base_app
 from openhands.server.middleware import (
     CacheControlMiddleware,
@@ -15,7 +17,6 @@ from openhands.server.middleware import (
     RateLimitMiddleware,
 )
 from openhands.server.static import SPAStaticFiles
-import os
 
 if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':
     base_app.mount(

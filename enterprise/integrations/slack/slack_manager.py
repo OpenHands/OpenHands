@@ -45,7 +45,7 @@ from openhands.server.types import (
 )
 from openhands.server.user_auth.user_auth import UserAuth
 
-from storage.redis import create_redis_client_async
+from storage.redis import get_redis_client_async
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
@@ -116,7 +116,7 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
-            redis = await create_redis_client_async()
+            redis = get_redis_client_async()
             await redis.set(key, user_msg, ex=SLACK_USER_MSG_EXPIRATION)
             logger.info(
                 'slack_stored_user_msg',
@@ -159,7 +159,7 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
-            redis = await create_redis_client_async()
+            redis = get_redis_client_async()
             user_msg = await redis.get(key)
             if user_msg:
                 # Redis returns bytes, decode to string

@@ -44,7 +44,7 @@ from openhands.app_server.integrations.service_types import (
     ProviderType,
 )
 from openhands.server.shared import config
-from storage.redis import create_redis_client_async
+from storage.redis import get_redis_client_async
 
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
 slack_router = APIRouter(prefix='/slack')
@@ -328,7 +328,7 @@ async def on_event(request: Request, background_tasks: BackgroundTasks):
     team_id = payload['team_id']
 
     # Sometimes slack sends duplicates, so we need to make sure this is not a duplicate.
-    redis = await create_redis_client_async()
+    redis = get_redis_client_async()
     key = f'slack_msg:{client_msg_id}'
     created = await redis.set(key, 1, nx=True, ex=60)
     if not created:

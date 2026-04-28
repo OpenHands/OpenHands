@@ -102,9 +102,9 @@ async def gitlab_events(
             dedup_hash = hashlib.sha256(dedup_json.encode()).hexdigest()
             dedup_key = f'gitlab_msg: {dedup_hash}'
 
-        from storage.redis import create_redis_client_async
+        from storage.redis import get_redis_client_async
 
-        redis = await create_redis_client_async()
+        redis = get_redis_client_async()
         created = await redis.set(dedup_key, 1, nx=True, ex=60)
         if not created:
             logger.info('gitlab_is_duplicate')

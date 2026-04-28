@@ -37,7 +37,7 @@ from server.auth.token_manager import TokenManager
 
 from openhands.app_server.integrations.provider import ProviderType
 from openhands.core.logger import openhands_logger as logger
-from storage.redis import create_redis_client_async
+from storage.redis import get_redis_client_async
 
 # Cache TTL constants
 ORG_CLAIM_CACHE_TTL_SECONDS = 3600  # 1 hour for org claims (rarely change)
@@ -382,7 +382,7 @@ class AutomationEventService:
         Monitor logs for 'Redis unavailable' warnings to detect degradation.
         """
         try:
-            redis = await create_redis_client_async()
+            redis = get_redis_client_async()
             if not redis:
                 # Log at warning level - this is a significant degradation that
                 # will cause DB load. Monitor these logs for alerting.
@@ -415,7 +415,7 @@ class AutomationEventService:
         Fails silently if Redis is unavailable (graceful degradation).
         """
         try:
-            redis = await create_redis_client_async()
+            redis = get_redis_client_async()
             if not redis:
                 # Silent failure - read path already logs the warning
                 return

@@ -109,13 +109,10 @@ class UserStore:
 
     @staticmethod
     def _get_redis_client():
-        """Get the async Redis client from enterprise storage."""
-        from storage.redis import create_redis_client_async
+        """Get the shared async Redis client from enterprise storage."""
+        from storage.redis import get_redis_client_async
 
-        try:
-            return create_redis_client_async()
-        except Exception:
-            return None
+        return get_redis_client_async()
 
     @staticmethod
     async def _acquire_user_creation_lock(user_id: str) -> bool:
@@ -124,17 +121,7 @@ class UserStore:
         Returns True if the lock was acquired or if Redis is unavailable (fallback to no locking).
         Returns False if another process holds the lock.
         """
-        try:
-            redis_client = UserStore._get_redis_client()
-        except Exception:
-            redis_client = None
-        if redis_client is None:
-            logger.warning(
-                'user_store:_acquire_user_creation_lock:no_redis_client',
-                extra={'user_id': user_id},
-            )
-            return True  # Proceed without locking if Redis is unavailable
-
+        redis_client = UserStore._get_redis_client()
         try:
             user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
             lock_acquired = await redis_client.set(
@@ -155,17 +142,7 @@ class UserStore:
         Returns True if the lock was released or if Redis is unavailable.
         Returns False if the lock could not be released.
         """
-        try:
-            redis_client = UserStore._get_redis_client()
-        except Exception:
-            redis_client = None
-        if redis_client is None:
-            logger.warning(
-                'user_store:_release_user_creation_lock:no_redis_client',
-                extra={'user_id': user_id},
-            )
-            return True  # Nothing to release if Redis is unavailable
-
+        redis_client = UserStore._get_redis_client()
         try:
             user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
             deleted = await redis_client.delete(user_key)

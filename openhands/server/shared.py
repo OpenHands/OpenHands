@@ -7,7 +7,6 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 
-import os
 from dotenv import load_dotenv
 
 from openhands.app_server.file_store import get_file_store
@@ -34,7 +33,7 @@ file_store: FileStore = get_file_store(
 )
 
 # Note: socketio is no longer used. Redis access should use the standard redis package directly.
-# For enterprise code, use: from enterprise.storage.redis import create_redis_client
+# For enterprise code, use: from enterprise.storage.redis import get_redis_client
 
 SettingsStoreImpl = get_impl(SettingsStore, server_config.settings_store_class)
 
