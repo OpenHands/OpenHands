@@ -181,7 +181,7 @@ describe("useSettingsNavItems", () => {
     mockConfig("oss");
     mockMe.data = { role: "admin" };
     mockSettings.data = {
-      agent_settings: { kind: "acp", acp_server: "claude-code" },
+      agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
     };
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
@@ -201,7 +201,7 @@ describe("useSettingsNavItems", () => {
   it("should not disable Condenser and MCP when LLM agent is active", async () => {
     mockConfig("oss");
     mockMe.data = { role: "admin" };
-    mockSettings.data = { agent_settings: { kind: "llm" } };
+    mockSettings.data = { agent_settings: { agent_kind: "llm" } };
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {

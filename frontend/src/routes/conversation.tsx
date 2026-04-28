@@ -151,7 +151,8 @@ function AppContent() {
 
   // Check for agent kind mismatch between conversation and current settings
   const conversationAgentKind = conversation?.agent_kind ?? "llm";
-  const settingsAgentKind = (settings?.agent_settings?.kind as string) ?? "llm";
+  const settingsAgentKind =
+    (settings?.agent_settings?.agent_kind as string) ?? "llm";
   const isAgentIncompatible =
     isFetched && !!conversation && conversationAgentKind !== settingsAgentKind;
 

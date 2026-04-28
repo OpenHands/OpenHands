@@ -94,7 +94,7 @@ describe("AgentSettingsScreen", () => {
   describe("loading from saved ACP settings", () => {
     it("restores claude-code agent type from saved settings", () => {
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "claude-code" },
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
       } as Record<string, unknown>;
       renderScreen();
       // API key field should be visible for claude-code
@@ -104,7 +104,7 @@ describe("AgentSettingsScreen", () => {
 
     it("falls back to claude-code for unknown acp_server", () => {
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "unknown-server" },
+        agent_settings: { agent_kind: "acp", acp_server: "unknown-server" },
       } as Record<string, unknown>;
       renderScreen();
       // Should fall back to claude-code, showing Anthropic API key
@@ -113,7 +113,7 @@ describe("AgentSettingsScreen", () => {
 
     it("shows openhands when saved kind is llm", () => {
       mockSettings.data = {
-        agent_settings: { kind: "llm" },
+        agent_settings: { agent_kind: "llm" },
       } as Record<string, unknown>;
       renderScreen();
       expect(
@@ -125,7 +125,7 @@ describe("AgentSettingsScreen", () => {
   describe("API key field visibility per provider", () => {
     it("shows Anthropic API key for claude-code", async () => {
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "claude-code" },
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
       } as Record<string, unknown>;
       renderScreen();
       expect(screen.getByText("Anthropic API Key")).toBeInTheDocument();
@@ -133,7 +133,7 @@ describe("AgentSettingsScreen", () => {
 
     it("shows OpenAI API key for codex", () => {
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "codex" },
+        agent_settings: { agent_kind: "acp", acp_server: "codex" },
       } as Record<string, unknown>;
       renderScreen();
       expect(screen.getByText("OpenAI API Key")).toBeInTheDocument();
@@ -141,7 +141,7 @@ describe("AgentSettingsScreen", () => {
 
     it("shows Google API key for gemini-cli", () => {
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "gemini-cli" },
+        agent_settings: { agent_kind: "acp", acp_server: "gemini-cli" },
       } as Record<string, unknown>;
       renderScreen();
       expect(screen.getByText("Google API Key")).toBeInTheDocument();
@@ -151,7 +151,7 @@ describe("AgentSettingsScreen", () => {
   describe("Advanced tab", () => {
     beforeEach(() => {
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "claude-code" },
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
       } as Record<string, unknown>;
     });
 
@@ -175,7 +175,7 @@ describe("AgentSettingsScreen", () => {
   describe("env JSON validation", () => {
     beforeEach(async () => {
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "claude-code" },
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
       } as Record<string, unknown>;
     });
 
@@ -256,7 +256,7 @@ describe("AgentSettingsScreen", () => {
     it("save button is disabled when there is an env error", async () => {
       const user = userEvent.setup();
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "claude-code" },
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
       } as Record<string, unknown>;
       renderScreen();
       await user.click(screen.getByText("SETTINGS$AGENT_ADVANCED_TAB"));
@@ -275,7 +275,7 @@ describe("AgentSettingsScreen", () => {
       // form stays clean and the save button remains disabled. This verifies
       // the component correctly represents OpenHands state.
       mockSettings.data = {
-        agent_settings: { kind: "llm" },
+        agent_settings: { agent_kind: "llm" },
         llm_api_key_set: false,
       } as Record<string, unknown>;
       renderScreen();
@@ -289,7 +289,7 @@ describe("AgentSettingsScreen", () => {
     it("sends kind:acp with acp_server when ACP agent API key is saved", async () => {
       const user = userEvent.setup();
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "claude-code" },
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
         llm_api_key_set: false,
       } as Record<string, unknown>;
       renderScreen();
@@ -301,7 +301,7 @@ describe("AgentSettingsScreen", () => {
       expect(mockSaveSettings).toHaveBeenCalledWith(
         expect.objectContaining({
           agent_settings_diff: expect.objectContaining({
-            kind: "acp",
+            agent_kind: "acp",
             acp_server: "claude-code",
             llm: { api_key: "sk-ant-test" },
           }),
@@ -315,7 +315,7 @@ describe("AgentSettingsScreen", () => {
       // include the ACP config but omit the llm.api_key field.
       const user = userEvent.setup();
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "codex" },
+        agent_settings: { agent_kind: "acp", acp_server: "codex" },
         llm_api_key_set: false,
       } as Record<string, unknown>;
       renderScreen();
@@ -330,7 +330,7 @@ describe("AgentSettingsScreen", () => {
       expect(mockSaveSettings).toHaveBeenCalledWith(
         expect.objectContaining({
           agent_settings_diff: expect.objectContaining({
-            kind: "acp",
+            agent_kind: "acp",
             acp_server: "codex",
             acp_command: ["npx", "codex-acp"],
           }),
@@ -346,7 +346,7 @@ describe("AgentSettingsScreen", () => {
     it("shows correct API key label for each provider after switching", async () => {
       const user = userEvent.setup();
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "claude-code" },
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
       } as Record<string, unknown>;
       renderScreen();
       // Claude Code starts with Anthropic key
@@ -357,7 +357,7 @@ describe("AgentSettingsScreen", () => {
       // We verify by re-mounting with codex settings.
       queryClient.clear();
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "codex" },
+        agent_settings: { agent_kind: "acp", acp_server: "codex" },
       } as Record<string, unknown>;
       const { unmount } = renderScreen();
       expect(screen.getAllByText("OpenAI API Key")[0]).toBeInTheDocument();
@@ -366,7 +366,7 @@ describe("AgentSettingsScreen", () => {
 
     it("shows Google API key label for gemini-cli", () => {
       mockSettings.data = {
-        agent_settings: { kind: "acp", acp_server: "gemini-cli" },
+        agent_settings: { agent_kind: "acp", acp_server: "gemini-cli" },
       } as Record<string, unknown>;
       renderScreen();
       expect(screen.getByText("Google API Key")).toBeInTheDocument();
@@ -377,7 +377,7 @@ describe("AgentSettingsScreen", () => {
     it("populates command field from saved settings", async () => {
       mockSettings.data = {
         agent_settings: {
-          kind: "acp",
+          agent_kind: "acp",
           acp_server: "claude-code",
           acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
           acp_args: [],
@@ -400,7 +400,7 @@ describe("AgentSettingsScreen", () => {
     it("populates env field from saved acp_env settings", async () => {
       mockSettings.data = {
         agent_settings: {
-          kind: "acp",
+          agent_kind: "acp",
           acp_server: "claude-code",
           acp_command: [],
           acp_args: [],

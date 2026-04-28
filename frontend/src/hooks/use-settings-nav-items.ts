@@ -57,7 +57,7 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { hasPermission } = usePermission(userRole);
   const { isPersonalOrg, isTeamOrg, organizationId } = useOrgTypeAndAccess();
 
-  const isAcpAgent = settings?.agent_settings?.kind === "acp";
+  const isAcpAgent = settings?.agent_settings?.agent_kind === "acp";
   const acpServerName = isAcpAgent
     ? (ACP_SERVER_NAMES[
         (settings?.agent_settings?.acp_server as string) ?? ""

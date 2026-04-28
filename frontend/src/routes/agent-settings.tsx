@@ -60,7 +60,7 @@ function AgentSettingsScreen() {
 
   useEffect(() => {
     if (!settings) return;
-    const kind = settings.agent_settings?.kind;
+    const kind = settings.agent_settings?.agent_kind;
     if (kind === "acp") {
       const rawServer = settings.agent_settings?.acp_server;
       setAgentType(isAcpServerKind(rawServer) ? rawServer : "claude-code");
@@ -147,12 +147,12 @@ function AgentSettingsScreen() {
     let agentSettingsDiff: Record<string, unknown>;
 
     if (agentType === "openhands") {
-      agentSettingsDiff = { kind: "llm" };
+      agentSettingsDiff = { agent_kind: "llm" };
     } else {
       const effectiveCommand =
         command.length > 0 ? command : (DEFAULT_COMMANDS[agentType] ?? []);
       agentSettingsDiff = {
-        kind: "acp",
+        agent_kind: "acp",
         acp_server: agentType,
         acp_command: effectiveCommand,
         acp_args: args,
@@ -184,7 +184,7 @@ function AgentSettingsScreen() {
   const apiKeyIsSet =
     isAcp &&
     settings?.llm_api_key_set &&
-    settings?.agent_settings?.kind === "acp";
+    settings?.agent_settings?.agent_kind === "acp";
 
   const defaultCommandPlaceholder = isAcpServerKind(agentType)
     ? (DEFAULT_COMMANDS[agentType] ?? []).join("\n")
