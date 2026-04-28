@@ -1,4 +1,5 @@
 import os
+import threading
 
 from redis import Redis
 from redis import asyncio as aioredis
@@ -13,6 +14,7 @@ REDIS_SOCKET_TIMEOUT = 2
 
 _redis_client: Redis | None = None
 _redis_client_async: aioredis.Redis | None = None
+_redis_lock = threading.Lock()
 
 
 def _get_redis_kwargs():
@@ -29,24 +31,34 @@ def _get_redis_kwargs():
 def get_redis_client() -> Redis:
     """Get a shared synchronous Redis client, lazily initialized.
 
+    Thread-safe with double-checked locking pattern.
+
     Returns:
         A Redis client for synchronous operations.
     """
     global _redis_client
     if _redis_client is None:
-        _redis_client = Redis(**_get_redis_kwargs())
+        with _redis_lock:
+            if _redis_client is None:
+                _redis_client = Redis(**_get_redis_kwargs())
     return _redis_client
 
 
 def get_redis_client_async() -> aioredis.Redis:
     """Get a shared asynchronous Redis client, lazily initialized.
 
+    Note: This function is synchronous but returns an async client.
+    Thread-safe initialization is handled via a threading lock since
+    asyncio.Lock cannot be used in a sync context.
+
     Returns:
         An aioredis client for asynchronous operations.
     """
     global _redis_client_async
     if _redis_client_async is None:
-        _redis_client_async = aioredis.Redis(**_get_redis_kwargs())
+        with _redis_lock:
+            if _redis_client_async is None:
+                _redis_client_async = aioredis.Redis(**_get_redis_kwargs())
     return _redis_client_async
 
 

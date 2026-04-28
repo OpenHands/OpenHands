@@ -121,6 +121,8 @@ class UserStore:
         Returns True if the lock was acquired or if Redis is unavailable (fallback to no locking).
         Returns False if another process holds the lock.
         """
+        from storage.redis import redis_exceptions
+
         redis_client = UserStore._get_redis_client()
         try:
             user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
@@ -128,7 +130,7 @@ class UserStore:
                 user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
             )
             return bool(lock_acquired)
-        except Exception:
+        except redis_exceptions.RedisError:
             logger.warning(
                 'user_store:_acquire_user_creation_lock:redis_error',
                 extra={'user_id': user_id},
@@ -142,12 +144,14 @@ class UserStore:
         Returns True if the lock was released or if Redis is unavailable.
         Returns False if the lock could not be released.
         """
+        from storage.redis import redis_exceptions
+
         redis_client = UserStore._get_redis_client()
         try:
             user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
             deleted = await redis_client.delete(user_key)
             return bool(deleted)
-        except Exception:
+        except redis_exceptions.RedisError:
             logger.warning(
                 'user_store:_release_user_creation_lock:redis_error',
                 extra={'user_id': user_id},

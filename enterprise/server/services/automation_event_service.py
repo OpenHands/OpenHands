@@ -383,15 +383,6 @@ class AutomationEventService:
         """
         try:
             redis = get_redis_client_async()
-            if not redis:
-                # Log at warning level - this is a significant degradation that
-                # will cause DB load. Monitor these logs for alerting.
-                logger.warning(
-                    '[AutomationEventService] Redis unavailable for cache read, '
-                    'falling back to direct DB queries (this will increase DB load)'
-                )
-                return None
-
             cached = await redis.get(cache_key)
             if cached is None:
                 return None
@@ -416,10 +407,6 @@ class AutomationEventService:
         """
         try:
             redis = get_redis_client_async()
-            if not redis:
-                # Silent failure - read path already logs the warning
-                return
-
             await redis.setex(cache_key, ttl_seconds, value)
         except Exception as e:
             # Log at warning level for visibility
