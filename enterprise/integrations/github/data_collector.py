@@ -19,6 +19,7 @@ from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from storage.openhands_pr import OpenhandsPR
 from storage.openhands_pr_store import OpenhandsPRStore
 
+from openhands.app_server.conversation_paths import get_conversation_dir
 from openhands.app_server.file_store import get_file_store
 from openhands.core.config import load_openhands_config
 from openhands.core.logger import openhands_logger as logger
@@ -111,7 +112,7 @@ class GitHubDataCollector:
         suffix = path.format(repo_id, number)
 
         if conversation_id:
-            return f'sessions/{conversation_id}/{suffix}'
+            return f'{get_conversation_dir(conversation_id)}/{suffix}'
 
         return suffix
 
