@@ -19,7 +19,7 @@ from server.routes.auth import (
     set_response_cookie,
 )
 
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
 
 
 def create_mock_user_authorizer(success: bool = True, error_detail: str | None = None):
@@ -799,7 +799,7 @@ async def test_logout_without_refresh_token():
 
     with patch('server.routes.auth.token_manager') as mock_token_manager:
         with patch(
-            'openhands.server.user_auth.default_user_auth.DefaultUserAuth.get_instance'
+            'openhands.app_server.user_auth.default_user_auth.DefaultUserAuth.get_instance'
         ) as mock_get_instance:
             mock_get_instance.side_effect = AuthError()
             result = await logout(mock_request)

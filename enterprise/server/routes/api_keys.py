@@ -12,9 +12,9 @@ from storage.org_member_store import OrgMemberStore
 from storage.org_service import OrgService
 from storage.user_store import UserStore
 
+from openhands.app_server.user_auth import get_user_auth, get_user_id
+from openhands.app_server.user_auth.user_auth import AuthType
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_auth, get_user_id
-from openhands.server.user_auth.user_auth import AuthType
 
 
 # Helper functions for BYOR API key management

@@ -1,6 +1,6 @@
 import os
 
-from openhands.integrations.gitlab.constants import GITLAB_HOST
+from openhands.app_server.integrations.gitlab.constants import GITLAB_HOST
 
 GITHUB_APP_CLIENT_ID = os.getenv('GITHUB_APP_CLIENT_ID', '').strip()
 GITHUB_APP_CLIENT_SECRET = os.getenv('GITHUB_APP_CLIENT_SECRET', '').strip()

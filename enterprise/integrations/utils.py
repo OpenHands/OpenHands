@@ -6,7 +6,7 @@ import re
 from jinja2 import Environment, FileSystemLoader
 from server.constants import WEB_HOST
 
-from openhands.integrations.service_types import Repository
+from openhands.app_server.integrations.service_types import Repository
 
 # ---- DO NOT REMOVE ----
 # WARNING: Langfuse depends on the WEB_HOST environment variable being set to track events.
@@ -65,7 +65,7 @@ def get_user_not_found_message(username: str | None = None) -> str:
 
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
-    or 'openhands/integrations/templates/resolver/'
+    or 'openhands/app_server/integrations/templates/resolver/'
 )
 _jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
 

@@ -3,8 +3,8 @@ import asyncio
 from pydantic import SecretStr
 from sqlalchemy import select
 
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.service_types import ProviderType
 from openhands.server.types import AppMode
 
 
@@ -55,7 +55,7 @@ def schedule_gitlab_repo_sync(
 
             # Lazy import to avoid circular dependency:
             # middleware -> gitlab_sync -> integrations.gitlab.gitlab_service
-            # -> openhands.integrations.gitlab.gitlab_service -> get_impl
+            # -> openhands.app_server.integrations.gitlab.gitlab_service -> get_impl
             # -> integrations.gitlab.gitlab_service (circular)
             from integrations.gitlab.gitlab_service import SaaSGitLabService
 

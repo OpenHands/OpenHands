@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import Field
 
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
@@ -10,8 +12,6 @@ from openhands.app_server.web_client.web_client_models import (
     WebClientConfig,
     WebClientFeatureFlags,
 )
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import ProviderType
 
 
 def _get_recaptcha_site_key() -> str | None:

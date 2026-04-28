@@ -22,7 +22,7 @@ from server.routes.orgs import (
 from sqlalchemy.exc import IntegrityError
 from storage.org_git_claim import OrgGitClaim
 
-from openhands.server.user_auth import get_user_id
+from openhands.app_server.user_auth import get_user_id
 
 TEST_USER_ID = str(uuid.uuid4())
 

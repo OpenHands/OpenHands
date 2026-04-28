@@ -13,9 +13,9 @@ from server.utils.rate_limit_utils import check_rate_limit_by_user_id
 from server.utils.url_utils import get_web_url
 from storage.user_store import UserStore
 
+from openhands.app_server.user_auth import get_user_id
+from openhands.app_server.user_auth.user_auth import get_user_auth
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_id
-from openhands.server.user_auth.user_auth import get_user_auth
 
 # Email validation regex pattern
 EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')

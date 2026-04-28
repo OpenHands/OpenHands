@@ -5,13 +5,17 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import SecretStr
 
+from openhands.app_server.integrations.bitbucket.bitbucket_service import (
+    BitBucketService,
+)
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.integrations.service_types import OwnerType, Repository
+from openhands.app_server.integrations.service_types import (
+    ProviderType as ServiceProviderType,
+)
+from openhands.app_server.integrations.utils import validate_provider_token
 from openhands.app_server.secrets.secrets_router import check_provider_tokens
 from openhands.app_server.settings.settings_models import POSTProviderModel
-from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.integrations.service_types import OwnerType, Repository
-from openhands.integrations.service_types import ProviderType as ServiceProviderType
-from openhands.integrations.utils import validate_provider_token
 from openhands.server.types import AppMode
 
 
@@ -24,10 +28,14 @@ async def test_validate_provider_token_with_bitbucket_token():
     """
     # Mock the service classes to avoid actual API calls
     with (
-        patch('openhands.integrations.utils.GitHubService') as mock_github_service,
-        patch('openhands.integrations.utils.GitLabService') as mock_gitlab_service,
         patch(
-            'openhands.integrations.utils.BitBucketService'
+            'openhands.app_server.integrations.utils.GitHubService'
+        ) as mock_github_service,
+        patch(
+            'openhands.app_server.integrations.utils.GitLabService'
+        ) as mock_gitlab_service,
+        patch(
+            'openhands.app_server.integrations.utils.BitBucketService'
         ) as mock_bitbucket_service,
     ):
         # Set up the mocks
@@ -198,10 +206,14 @@ async def test_validate_provider_token_with_empty_tokens():
     """Test that validate_provider_token handles empty tokens correctly."""
     # Create a mock for each service
     with (
-        patch('openhands.integrations.utils.GitHubService') as mock_github_service,
-        patch('openhands.integrations.utils.GitLabService') as mock_gitlab_service,
         patch(
-            'openhands.integrations.utils.BitBucketService'
+            'openhands.app_server.integrations.utils.GitHubService'
+        ) as mock_github_service,
+        patch(
+            'openhands.app_server.integrations.utils.GitLabService'
+        ) as mock_gitlab_service,
+        patch(
+            'openhands.app_server.integrations.utils.BitBucketService'
         ) as mock_bitbucket_service,
     ):
         # Configure mocks to raise exceptions for invalid tokens
@@ -378,7 +390,9 @@ async def test_bitbucket_get_repositories_mixed_owner_types():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_selects_primary_confirmed():
     """_resolve_primary_email returns the email marked primary and confirmed."""
-    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        BitBucketMixinBase,
+    )
 
     emails = [
         {'email': 'secondary@example.com', 'is_primary': False, 'is_confirmed': True},
@@ -396,7 +410,9 @@ async def test_resolve_primary_email_selects_primary_confirmed():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_when_no_primary():
     """_resolve_primary_email returns None when no email is marked primary."""
-    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        BitBucketMixinBase,
+    )
 
     emails = [
         {'email': 'a@example.com', 'is_primary': False, 'is_confirmed': True},
@@ -409,7 +425,9 @@ async def test_resolve_primary_email_returns_none_when_no_primary():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_when_primary_not_confirmed():
     """_resolve_primary_email returns None when primary email is not confirmed."""
-    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        BitBucketMixinBase,
+    )
 
     emails = [
         {'email': 'primary@example.com', 'is_primary': True, 'is_confirmed': False},
@@ -422,7 +440,9 @@ async def test_resolve_primary_email_returns_none_when_primary_not_confirmed():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_for_empty_list():
     """_resolve_primary_email returns None for an empty list."""
-    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        BitBucketMixinBase,
+    )
 
     result = BitBucketMixinBase._resolve_primary_email([])
     assert result is None

@@ -35,8 +35,8 @@ from server.auth.constants import (
 )
 from server.auth.token_manager import TokenManager
 
+from openhands.app_server.integrations.provider import ProviderType
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderType
 from openhands.server.shared import sio
 
 # Cache TTL constants

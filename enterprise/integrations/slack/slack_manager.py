@@ -30,20 +30,20 @@ from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.slack_user import SlackUser
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import (
     AuthenticationError,
     ProviderTimeoutError,
     Repository,
 )
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.core.logger import openhands_logger as logger
 from openhands.server.shared import config, server_config, sio
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.server.user_auth.user_auth import UserAuth
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,

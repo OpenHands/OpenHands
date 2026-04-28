@@ -11,12 +11,12 @@ from integrations.slack.slack_manager import (
 from integrations.slack.slack_view import SlackNewConversationView
 from storage.slack_user import SlackUser
 
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
     ProviderType,
     Repository,
 )
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture

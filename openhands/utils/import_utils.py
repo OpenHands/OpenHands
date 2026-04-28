@@ -9,18 +9,18 @@ def import_from(qual_name: str):
     """Import a value from its fully qualified name.
 
     This function is a utility to dynamically import any Python value (class, function, variable)
-    from its fully qualified name. For example, 'openhands.server.user_auth.UserAuth' would
-    import the UserAuth class from the openhands.server.user_auth module.
+    from its fully qualified name. For example, 'openhands.app_server.user_auth.UserAuth' would
+    import the UserAuth class from the openhands.app_server.user_auth module.
 
     Args:
         qual_name: A fully qualified name in the format 'module.submodule.name'
-                  e.g. 'openhands.server.user_auth.UserAuth'
+                  e.g. 'openhands.app_server.user_auth.UserAuth'
 
     Returns:
         The imported value (class, function, or variable)
 
     Example:
-        >>> UserAuth = import_from('openhands.server.user_auth.UserAuth')
+        >>> UserAuth = import_from('openhands.app_server.user_auth.UserAuth')
         >>> auth = UserAuth()
     """
     parts = qual_name.split('.')

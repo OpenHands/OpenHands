@@ -2,22 +2,23 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 
+from openhands.app_server.file_store import get_file_store
+from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
-from openhands.app_server.utils.file_store_mixin import FileStoreMixin
 from openhands.core.config.openhands_config import OpenHandsConfig
+from openhands.utils.async_utils import call_sync_from_async
 
 
 @dataclass
-class FileSecretsStore(FileStoreMixin, SecretsStore):
-    root_dir: Path
-    filename: str = 'secrets.json'
+class FileSecretsStore(SecretsStore):
+    file_store: FileStore
+    path: str = 'secrets.json'
 
     async def load(self) -> Secrets | None:
         try:
-            json_str = await self._read_file_async()
+            json_str = await call_sync_from_async(self.file_store.read, self.path)
             kwargs = json.loads(json_str)
             provider_tokens = {
                 k: v
@@ -32,11 +33,14 @@ class FileSecretsStore(FileStoreMixin, SecretsStore):
 
     async def store(self, secrets: Secrets) -> None:
         json_str = secrets.model_dump_json(context={'expose_secrets': True})
-        await self._write_file_async(json_str)
+        await call_sync_from_async(self.file_store.write, self.path, json_str)
 
     @classmethod
     async def get_instance(
         cls, config: OpenHandsConfig, user_id: str | None
     ) -> FileSecretsStore:
-        root_dir = cls._resolve_root_dir(config.file_store_path)
-        return FileSecretsStore(root_dir=root_dir)
+        file_store = get_file_store(
+            file_store_type=config.file_store,
+            file_store_path=config.file_store_path,
+        )
+        return FileSecretsStore(file_store)

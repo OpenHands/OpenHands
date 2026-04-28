@@ -22,8 +22,8 @@ from server.auth.constants import (
 )
 from server.constants import DEPLOYMENT_MODE
 
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.core.config.utils import load_openhands_config
-from openhands.integrations.service_types import ProviderType
 from openhands.server.config.server_config import ServerConfig
 from openhands.server.types import AppMode
 
