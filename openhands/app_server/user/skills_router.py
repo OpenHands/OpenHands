@@ -12,7 +12,8 @@ from openhands.core.logger import openhands_logger as logger
 
 router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
 
-GLOBAL_SKILLS_DIR = Path(os.path.dirname(openhands.__file__)) / 'skills'
+# skills/ is at the repo root, one level above the openhands package
+GLOBAL_SKILLS_DIR = Path(os.path.dirname(os.path.dirname(openhands.__file__))) / 'skills'
 USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
 
 
