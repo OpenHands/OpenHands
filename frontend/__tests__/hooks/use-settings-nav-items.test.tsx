@@ -9,6 +9,17 @@ import {
 } from "#/hooks/use-settings-nav-items";
 import { WebClientFeatureFlags } from "#/api/option-service/option.types";
 
+// Mock useSettings so the hook doesn't make real API calls. Default returns
+// no agent_settings (LLM mode), which means ACP-disabled paths are never
+// marked as disabled.
+const mockSettings = vi.hoisted(() => ({
+  data: null as { agent_settings?: Record<string, unknown> | null } | null,
+}));
+
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => mockSettings,
+}));
+
 // Helper to find an item by path in rendered items
 const findItemByPath = (
   items: SettingsNavRenderedItem[],
@@ -99,6 +110,7 @@ describe("useSettingsNavItems", () => {
     mockOrgTypeAndAccess.selectedOrg = null;
     mockOrgTypeAndAccess.canViewOrgRoutes = false;
     mockMe.data = null;
+    mockSettings.data = null;
   });
 
   it("should return SAAS_NAV_ITEMS minus billing/org/org-members when userRole is 'member'", async () => {
@@ -129,13 +141,74 @@ describe("useSettingsNavItems", () => {
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {
-      // OSS mode should return items matching OSS_NAV_ITEMS paths
+      // ACP-gated items are filtered when enable_acp is not set
       const navItems = getNavItems(result.current);
-      const ossPaths = OSS_NAV_ITEMS.map((item) => item.to);
+      const ossPaths = OSS_NAV_ITEMS.filter((item) => !item.acpGated).map(
+        (item) => item.to,
+      );
       const resultPaths = navItems.map((item) =>
         item.type === "item" ? item.item.to : null,
       );
       expect(resultPaths).toEqual(ossPaths);
+    });
+  });
+
+  it("should show Agent item in OSS when enable_acp feature flag is on", async () => {
+    mockConfigWithFeatureFlags("oss", { enable_acp: true });
+    mockMe.data = { role: "admin" };
+    const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+    await waitFor(() => {
+      expect(
+        findItemByPath(result.current, "/settings/agent"),
+      ).toBeDefined();
+    });
+  });
+
+  it("should hide Agent item in OSS when enable_acp feature flag is off", async () => {
+    mockConfig("oss");
+    mockMe.data = { role: "admin" };
+    const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+    await waitFor(() => {
+      expect(
+        findItemByPath(result.current, "/settings/agent"),
+      ).toBeUndefined();
+    });
+  });
+
+  it("should disable Condenser and MCP when ACP agent is active", async () => {
+    mockConfig("oss");
+    mockMe.data = { role: "admin" };
+    mockSettings.data = {
+      agent_settings: { kind: "acp", acp_server: "claude-code" },
+    };
+    const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+    await waitFor(() => {
+      const condenserItem = result.current.find(
+        (item) => item.type === "item" && item.item.to === "/settings/condenser",
+      );
+      const mcpItem = result.current.find(
+        (item) => item.type === "item" && item.item.to === "/settings/mcp",
+      );
+      expect(condenserItem?.type === "item" && condenserItem.disabled).toBe(true);
+      expect(condenserItem?.type === "item" && condenserItem.disabledReason).toBe("Claude Code");
+      expect(mcpItem?.type === "item" && mcpItem.disabled).toBe(true);
+    });
+  });
+
+  it("should not disable Condenser and MCP when LLM agent is active", async () => {
+    mockConfig("oss");
+    mockMe.data = { role: "admin" };
+    mockSettings.data = { agent_settings: { kind: "llm" } };
+    const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+    await waitFor(() => {
+      const condenserItem = result.current.find(
+        (item) => item.type === "item" && item.item.to === "/settings/condenser",
+      );
+      expect(condenserItem?.type === "item" && condenserItem.disabled).toBeFalsy();
     });
   });
 

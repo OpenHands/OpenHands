@@ -207,7 +207,8 @@ describe("UserContextMenu", () => {
         item.to !== "/settings/org" &&
         item.to !== "/settings/billing" &&
         !item.to.startsWith("/settings/org-defaults") &&
-        !personalLlmPaths.has(item.to),
+        !personalLlmPaths.has(item.to) &&
+        !item.acpGated, // ACP-gated items are hidden when enable_acp is not set
     );
 
     await waitFor(() => {
@@ -242,7 +243,9 @@ describe("UserContextMenu", () => {
     // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
     const expectedItems = SAAS_NAV_ITEMS.filter(
       (item) =>
-        item.to !== "/settings/org-members" && item.to !== "/settings/org",
+        item.to !== "/settings/org-members" &&
+        item.to !== "/settings/org" &&
+        !item.acpGated, // ACP-gated items are hidden when enable_acp is not set
     );
 
     await waitFor(() => {
@@ -290,9 +293,10 @@ describe("UserContextMenu", () => {
     it("should render OSS_NAV_ITEMS when in OSS mode", async () => {
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for the config to load and OSS nav items to appear
+      // Wait for the config to load and OSS nav items to appear.
+      // ACP-gated items are excluded because enable_acp is not set in this test.
       await waitFor(() => {
-        OSS_NAV_ITEMS.forEach((item) => {
+        OSS_NAV_ITEMS.filter((item) => !item.acpGated).forEach((item) => {
           expect(screen.getByText(item.text)).toBeInTheDocument();
         });
       });
