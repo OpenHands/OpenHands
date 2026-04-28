@@ -50,9 +50,6 @@ class UserSettings(Base):
     search_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     sandbox_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
-    enable_solvability_analysis: Mapped[bool | None] = mapped_column(
-        nullable=True, default=False
-    )
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     email_verified: Mapped[bool | None] = mapped_column(nullable=True)
     git_user_name: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -88,8 +85,8 @@ class UserSettings(Base):
     )  # False = not migrated, True = migrated
 
     def to_settings(self):
+        from openhands.app_server.settings.settings_models import Settings
         from openhands.sdk.settings import AgentSettings, ConversationSettings
-        from openhands.storage.data_models.settings import Settings
 
         return Settings(
             agent_settings=AgentSettings.model_validate(self.agent_settings or {}),

@@ -444,10 +444,10 @@ class TestJiraV1Conversation:
     """Tests for V1 conversation creation and callback processor registration."""
 
     @pytest.mark.asyncio
-    async def test_create_v1_metadata_generates_conversation_id(
+    async def test_initialize_conversation_generates_conversation_id(
         self, new_conversation_view
     ):
-        """Test that _create_v1_metadata generates a new conversation ID."""
+        """Test that _initialize_conversation generates a new conversation ID."""
         new_conversation_view.conversation_id = ''
 
         with patch.object(
@@ -455,17 +455,19 @@ class TestJiraV1Conversation:
         ) as mock_get_org:
             mock_get_org.return_value = None
 
-            metadata = await new_conversation_view._create_v1_metadata()
+            conversation_id = await new_conversation_view._initialize_conversation()
 
             # Conversation ID should be generated
             assert new_conversation_view.conversation_id != ''
             assert len(new_conversation_view.conversation_id) == 32  # UUID hex format
-            assert metadata.conversation_id == new_conversation_view.conversation_id
+            assert conversation_id.hex == new_conversation_view.conversation_id
             mock_get_org.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_v1_metadata_sets_resolved_org(self, new_conversation_view):
-        """Test that _create_v1_metadata sets resolved_org_id."""
+    async def test_initialize_conversation_sets_resolved_org(
+        self, new_conversation_view
+    ):
+        """Test that _initialize_conversation sets resolved_org_id."""
         from uuid import UUID
 
         test_org_id = UUID('12345678-1234-5678-1234-567812345678')
@@ -475,7 +477,7 @@ class TestJiraV1Conversation:
         ) as mock_get_org:
             mock_get_org.return_value = test_org_id
 
-            await new_conversation_view._create_v1_metadata()
+            await new_conversation_view._initialize_conversation()
 
             assert new_conversation_view.resolved_org_id == test_org_id
 

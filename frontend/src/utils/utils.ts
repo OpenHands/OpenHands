@@ -182,32 +182,9 @@ export const shouldUseInstallationRepos = (
   }
 };
 
-export const getGitProviderBaseUrl = (
-  gitProvider: Provider,
-  host?: string | null,
-): string => {
-  // If custom host provided, use it (with https:// prefix if needed)
-  if (host && host.trim() !== "") {
-    return host.startsWith("http") ? host : `https://${host}`;
-  }
-
-  // Fall back to defaults
-  switch (gitProvider) {
-    case "github":
-      return "https://github.com";
-    case "gitlab":
-      return "https://gitlab.com";
-    case "bitbucket":
-      return "https://bitbucket.org";
-    case "azure_devops":
-      return "https://dev.azure.com";
-    case "forgejo":
-      // Default UI links to Codeberg unless a custom host is available in settings
-      // Note: UI link builders don't currently receive host; consider plumbing settings if needed
-      return "https://codeberg.org";
-    default:
-      return "";
-  }
+export const ensureHttpsPrefix = (host?: string | null): string => {
+  if (!host || host.trim() === "") return "";
+  return host.startsWith("http") ? host : `https://${host}`;
 };
 
 /**
@@ -258,7 +235,7 @@ export const constructPullRequestUrl = (
   repositoryName: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(provider, host);
+  const baseUrl = ensureHttpsPrefix(host);
 
   switch (provider) {
     case "github":
@@ -308,7 +285,7 @@ export const constructMicroagentUrl = (
   microagentPath: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(gitProvider, host);
+  const baseUrl = ensureHttpsPrefix(host);
 
   switch (gitProvider) {
     case "github":
@@ -372,7 +349,7 @@ export const constructRepositoryUrl = (
   repositoryName: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(provider, host);
+  const baseUrl = ensureHttpsPrefix(host);
   if (provider === "bitbucket_data_center") {
     const [project, repo] = repositoryName.split("/");
     return `${baseUrl}/projects/${project}/repos/${repo}`;
@@ -400,7 +377,7 @@ export const constructBranchUrl = (
   branchName: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(provider, host);
+  const baseUrl = ensureHttpsPrefix(host);
 
   switch (provider) {
     case "github":

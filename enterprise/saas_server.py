@@ -28,7 +28,6 @@ from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
-from server.routes.feedback import router as feedback_router  # noqa: E402
 from server.routes.github_proxy import add_github_proxy_routes  # noqa: E402
 from server.routes.integration.jira import jira_integration_router  # noqa: E402
 from server.routes.integration.jira_dc import jira_dc_integration_router  # noqa: E402
@@ -106,7 +105,14 @@ if GITHUB_APP_CLIENT_ID:
 
 # Add GitLab integration router only if GITLAB_APP_CLIENT_ID is set
 if GITLAB_APP_CLIENT_ID:
+    # Make sure that the callback processor is loaded here so we don't get an error when deserializing
+    from integrations.gitlab.gitlab_v1_callback_processor import (  # noqa: E402
+        GitlabV1CallbackProcessor,
+    )
     from server.routes.integration.gitlab import gitlab_integration_router  # noqa: E402
+
+    # Bludgeon mypy into not deleting my import
+    logger.debug(f'Loaded {GitlabV1CallbackProcessor.__name__}')
 
     base_app.include_router(gitlab_integration_router)
 
@@ -140,7 +146,6 @@ if BITBUCKET_DATA_CENTER_HOST:
 
     base_app.include_router(bitbucket_dc_proxy_router)
 base_app.include_router(email_router)  # Add routes for email management
-base_app.include_router(feedback_router)  # Add routes for conversation feedback
 
 
 base_app.add_middleware(

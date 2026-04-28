@@ -43,4 +43,7 @@ export interface WebClientConfig {
   error_message: string | null;
   updated_at: string;
   github_app_slug: string | null;
+  gitlab_enabled?: boolean;
+  provider_default_hosts?: Partial<Record<Provider, string>>;
+  slack_enabled?: boolean;
 }

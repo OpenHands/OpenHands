@@ -49,6 +49,10 @@ vi.mock("react-i18next", async () => {
           SETTINGS$NAV_BILLING: "Billing",
           SETTINGS$TITLE: "Settings",
           COMMON$LANGUAGE_MODEL_LLM: "LLM",
+          SETTINGS$ORG_WIDE_SETTING_BADGE:
+            "This setting affects the whole organization",
+          SETTINGS$ORG_MANAGED_BY_ADMIN_BADGE:
+            "This setting is managed by your organization administrator",
         };
         return translations[key] || key;
       },
@@ -274,6 +278,38 @@ describe("Settings Screen", () => {
 
     getConfigSpy.mockRestore();
   });
+
+  it.each([
+    {
+      path: "/settings/org-defaults",
+      testId: "org-default-llm-settings-screen",
+    },
+    {
+      path: "/settings/org-defaults/condenser",
+      testId: "org-default-condenser-settings-screen",
+    },
+    {
+      path: "/settings/org-defaults/verification",
+      testId: "org-default-verification-settings-screen",
+    },
+  ])(
+    "should redirect away from $path in OSS mode",
+    async ({ path, testId }) => {
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - only return app mode
+      getConfigSpy.mockResolvedValue({ app_mode: "oss" });
+      mockQueryClient.clear();
+
+      renderSettingsScreen(path);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
+
+      getConfigSpy.mockRestore();
+    },
+  );
 
   it.todo("should not be able to access oss-only routes in saas mode");
 
@@ -651,7 +687,10 @@ describe("Settings Screen", () => {
       });
       useSelectedOrganizationStore.setState({ organizationId: "1" });
       // Pre-populate user data in cache so useMe() returns admin role immediately
-      mockQueryClient.setQueryData(["organizations", "1", "me"], createMockUser({ role: "admin", org_id: "1" }));
+      mockQueryClient.setQueryData(
+        ["organizations", "1", "me"],
+        createMockUser({ role: "admin", org_id: "1" }),
+      );
 
       renderSettingsScreen();
 
@@ -729,7 +768,10 @@ describe("Settings Screen", () => {
       });
       useSelectedOrganizationStore.setState({ organizationId: "1" });
       // Pre-populate user data in cache so useMe() returns admin role immediately
-      mockQueryClient.setQueryData(["organizations", "1", "me"], createMockUser({ role: "admin", org_id: "1" }));
+      mockQueryClient.setQueryData(
+        ["organizations", "1", "me"],
+        createMockUser({ role: "admin", org_id: "1" }),
+      );
 
       renderSettingsScreen();
 
@@ -861,22 +903,33 @@ describe("Settings Screen", () => {
 
         renderSettingsScreen(path);
 
-        expect(
-          await screen.findByTestId("org-wide-settings-badge"),
-        ).toBeInTheDocument();
+        const badge = await screen.findByTestId("org-wide-settings-badge");
+        expect(badge).toBeInTheDocument();
+        expect(badge).toHaveTextContent(
+          "This setting affects the whole organization",
+        );
       },
     );
 
-    it("renders the badge on /settings/org-defaults for a non-admin member of a team org (read-only view)", async () => {
-      seedSaasOrgContext(MOCK_TEAM_ORG_ACME, { role: "member" });
+    it.each([
+      "/settings/org-defaults",
+      "/settings/org-defaults/condenser",
+      "/settings/org-defaults/verification",
+    ])(
+      "renders the managed-by-admin badge on %s for a member of a team org (read-only view)",
+      async (path) => {
+        seedSaasOrgContext(MOCK_TEAM_ORG_ACME, { role: "member" });
 
-      renderSettingsScreen("/settings/org-defaults");
+        renderSettingsScreen(path);
 
-      await screen.findByTestId("org-default-llm-settings-screen");
-      expect(
-        await screen.findByTestId("org-wide-settings-badge"),
-      ).toBeInTheDocument();
-    });
+        const badge = await screen.findByTestId("org-wide-settings-badge");
+        await waitFor(() => {
+          expect(badge).toHaveTextContent(
+            "This setting is managed by your organization administrator",
+          );
+        });
+      },
+    );
 
     it("does not render the badge on /settings/org-defaults when the selected organization is a personal org", async () => {
       seedSaasOrgContext(MOCK_PERSONAL_ORG, { role: "admin" });

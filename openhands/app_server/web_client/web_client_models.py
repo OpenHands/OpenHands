@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from openhands.agent_server.env_parser import DiscriminatedUnionMixin
 from openhands.app_server.web_client.web_client_deployment_mode import (
@@ -42,3 +42,6 @@ class WebClientConfig(DiscriminatedUnionMixin):
     error_message: str | None
     updated_at: datetime
     github_app_slug: str | None
+    gitlab_enabled: bool = False
+    provider_default_hosts: dict[str, str] = Field(default_factory=dict)
+    slack_enabled: bool = False

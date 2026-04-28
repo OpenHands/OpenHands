@@ -52,7 +52,7 @@ def get_impl(cls: type[T], impl_name: str | None) -> type[T]:
     Args:
         cls: The base class that defines the interface
         impl_name: Fully qualified name of the implementation class, or None to use the base class
-                  e.g. 'openhands.storage.settings.file_settings_store.FileSettingsStore'
+                  e.g. 'openhands.app_server.settings.file_settings_store.FileSettingsStore'
 
     Returns:
         The implementation class, which is guaranteed to be a subclass of cls
@@ -64,8 +64,8 @@ def get_impl(cls: type[T], impl_name: str | None) -> type[T]:
         >>> CustomStore = get_impl(SettingsStore, 'myapp.CustomSettingsStore')
 
     Common Use Cases:
-        - Server components (UserAuth, MonitoringListener, etc.)
-        - Storage implementations (ConversationStore, SettingsStore, SecretsStore, etc.)
+        - Server components (UserAuth, etc.)
+        - Storage implementations (SettingsStore, SecretsStore, etc.)
         - Service integrations (GitHub, GitLab, Bitbucket, Azure DevOps services)
 
     The implementation is cached to avoid repeated imports of the same class.

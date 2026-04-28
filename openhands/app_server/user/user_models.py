@@ -1,5 +1,5 @@
+from openhands.app_server.settings.settings_models import Settings
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
-from openhands.storage.data_models.settings import Settings
 
 
 class UserInfo(Settings):

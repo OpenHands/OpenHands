@@ -14,11 +14,9 @@ from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
     ENABLE_PROACTIVE_CONVERSATION_STARTERS,
-    ENABLE_V1_GITHUB_RESOLVER,
     HOST,
     HOST_URL,
     get_oh_labels,
-    get_user_v1_enabled_setting,
     has_exact_mention,
 )
 from jinja2 import Environment
@@ -27,13 +25,13 @@ from server.auth.token_manager import TokenManager
 from server.config import get_config
 from storage.org_store import OrgStore
 from storage.proactive_conversation_store import ProactiveConversationStore
-from storage.saas_conversation_store import SaasConversationStore
 from storage.saas_secrets_store import SaasSecretsStore
 
 from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
+    ConversationTrigger,
 )
 from openhands.app_server.config import get_app_conversation_service
 from openhands.app_server.services.injector import InjectorState
@@ -44,18 +42,9 @@ from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import Comment
 from openhands.sdk import TextContent
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import (
-    ConversationMetadata,
-    ConversationTrigger,
-)
 from openhands.utils.async_utils import call_sync_from_async
-from openhands.utils.conversation_summary import get_default_conversation_title
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
-
-
-async def is_v1_enabled_for_github_resolver(user_id: str) -> bool:
-    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_GITHUB_RESOLVER
 
 
 async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
@@ -105,7 +94,6 @@ class GithubIssue(ResolverViewInterface):
     title: str
     description: str
     previous_comments: list[Comment]
-    v1_enabled: bool
 
     def _get_branch_name(self) -> str | None:
         return getattr(self, 'branch_name', None)
@@ -152,11 +140,7 @@ class GithubIssue(ResolverViewInterface):
 
         return user_secrets.custom_secrets if user_secrets else None
 
-    async def initialize_new_conversation(self) -> ConversationMetadata:
-        self.v1_enabled = await is_v1_enabled_for_github_resolver(
-            self.user_info.keycloak_user_id
-        )
-
+    async def initialize_new_conversation(self) -> UUID:
         # Resolve target org based on claimed git organizations
         self.resolved_org_id = await resolve_org_for_repo(
             provider='github',
@@ -164,54 +148,20 @@ class GithubIssue(ResolverViewInterface):
             keycloak_user_id=self.user_info.keycloak_user_id,
         )
 
-        logger.info(
-            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'
-        )
-        if self.v1_enabled:
-            # Create dummy conversationm metadata
-            # Don't save to conversation store
-            # V1 conversations are stored in a separate table
-            self.conversation_id = uuid4().hex
-            return ConversationMetadata(
-                conversation_id=self.conversation_id,
-                selected_repository=self.full_repo_name,
-            )
-
-        # Create the conversation store with resolver org routing
-        # (bypasses initialize_conversation to avoid threading enterprise-only
-        # resolver_org_id through the generic OSS interface)
-        store = await SaasConversationStore.get_resolver_instance(
-            get_config(),
-            self.user_info.keycloak_user_id,
-            self.resolved_org_id,
-        )
-
-        conversation_id = uuid4().hex
-        conversation_metadata = ConversationMetadata(
-            trigger=ConversationTrigger.RESOLVER,
-            conversation_id=conversation_id,
-            title=get_default_conversation_title(conversation_id),
-            user_id=self.user_info.keycloak_user_id,
-            selected_repository=self.full_repo_name,
-            selected_branch=self._get_branch_name(),
-            git_provider=ProviderType.GITHUB,
-        )
-        await store.save_metadata(conversation_metadata)
-
-        self.conversation_id = conversation_id
-        return conversation_metadata
+        # All conversations use V1 app conversation service
+        conversation_id = uuid4()
+        self.conversation_id = conversation_id.hex
+        return conversation_id
 
     async def create_new_conversation(
         self,
         jinja_env: Environment,
         git_provider_tokens: PROVIDER_TOKEN_TYPE,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
         saas_user_auth: UserAuth,
     ):
         # V0 conversation path has been removed - all conversations use V1 app conversation service
-        await self._create_v1_conversation(
-            jinja_env, saas_user_auth, conversation_metadata
-        )
+        await self._create_v1_conversation(jinja_env, saas_user_auth, conversation_id)
 
     async def _get_v1_initial_user_message(self, jinja_env: Environment) -> str:
         """Build the initial user message for V1 resolver conversations.
@@ -239,7 +189,7 @@ class GithubIssue(ResolverViewInterface):
         self,
         jinja_env: Environment,
         saas_user_auth: UserAuth,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
     ):
         """Create conversation using the new V1 app conversation system."""
         logger.info('[GitHub V1]: Creating V1 conversation')
@@ -259,7 +209,7 @@ class GithubIssue(ResolverViewInterface):
 
         # Create the V1 conversation start request with the callback processor
         start_request = AppConversationStartRequest(
-            conversation_id=UUID(conversation_metadata.conversation_id),
+            conversation_id=conversation_id,
             # NOTE: Resolver instructions are intended to be lower priority than the
             # system prompt, so we inject them into the initial user message.
             system_message_suffix=None,
@@ -813,7 +763,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1_enabled=False,
             )
 
         elif GithubFactory.is_issue_comment(message):
@@ -839,7 +788,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1_enabled=False,
             )
 
         elif GithubFactory.is_pr_comment(message):
@@ -881,7 +829,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1_enabled=False,
             )
 
         elif GithubFactory.is_inline_pr_comment(message):
@@ -915,7 +862,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1_enabled=False,
             )
 
         else:

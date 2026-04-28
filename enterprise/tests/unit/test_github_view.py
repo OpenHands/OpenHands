@@ -118,44 +118,7 @@ class TestGithubV1ConversationRouting(TestCase):
             title='Test Issue',
             description='Test issue description',
             previous_comments=[],
-            v1_enabled=False,
         )
-
-    @pytest.mark.asyncio
-    @patch('integrations.github.github_view.initialize_conversation')
-    @patch('integrations.github.github_view.get_user_v1_enabled_setting')
-    async def test_initialize_sets_v1_enabled_from_setting_when_false(
-        self, mock_get_v1_setting, mock_initialize_conversation
-    ):
-        """Test that initialize_new_conversation sets v1_enabled from get_user_v1_enabled_setting."""
-        mock_get_v1_setting.return_value = False
-        mock_initialize_conversation.return_value = MagicMock(
-            conversation_id='new-conversation-id'
-        )
-
-        github_issue = self._create_github_issue()
-        await github_issue.initialize_new_conversation()
-
-        # Verify get_user_v1_enabled_setting was called with correct user ID
-        mock_get_v1_setting.assert_called_once_with('test-keycloak-id')
-        # Verify v1_enabled was set to False
-        self.assertFalse(github_issue.v1_enabled)
-
-    @pytest.mark.asyncio
-    @patch('integrations.github.github_view.get_user_v1_enabled_setting')
-    async def test_initialize_sets_v1_enabled_from_setting_when_true(
-        self, mock_get_v1_setting
-    ):
-        """Test that initialize_new_conversation sets v1_enabled to True when setting returns True."""
-        mock_get_v1_setting.return_value = True
-
-        github_issue = self._create_github_issue()
-        await github_issue.initialize_new_conversation()
-
-        # Verify get_user_v1_enabled_setting was called with correct user ID
-        mock_get_v1_setting.assert_called_once_with('test-keycloak-id')
-        # Verify v1_enabled was set to True
-        self.assertTrue(github_issue.v1_enabled)
 
     @pytest.mark.asyncio
     @patch.object(GithubIssue, '_create_v1_conversation')
@@ -164,7 +127,6 @@ class TestGithubV1ConversationRouting(TestCase):
         mock_create_v1.return_value = None
 
         github_issue = self._create_github_issue()
-        github_issue.v1_enabled = True
 
         # Mock parameters
         jinja_env = MagicMock()
@@ -216,24 +178,21 @@ class TestGithubOrgRouting(TestCase):
             title='',
             description='',
             previous_comments=[],
-            v1_enabled=True,
         )
 
     @pytest.mark.asyncio
     @patch('integrations.github.github_view.get_app_conversation_service')
     @patch('integrations.github.github_view.resolve_org_for_repo')
-    @patch('integrations.github.github_view.get_user_v1_enabled_setting')
     async def test_v1_passes_resolver_org_id_to_resolver_user_context(
-        self, mock_v1_setting, mock_resolve_org, mock_get_service
+        self, mock_resolve_org, mock_get_service
     ):
         """V1 path passes resolved org_id to ResolverUserContext."""
         # Arrange
-        mock_v1_setting.return_value = True
         mock_resolve_org.return_value = self.resolved_org_id
 
         github_issue = self._create_github_issue()
 
-        # Initialize to set resolved_org_id and v1_enabled
+        # Initialize to set resolved_org_id
         await github_issue.initialize_new_conversation()
 
         # Assert
@@ -242,13 +201,11 @@ class TestGithubOrgRouting(TestCase):
     @pytest.mark.asyncio
     @patch('integrations.github.github_view.get_app_conversation_service')
     @patch('integrations.github.github_view.resolve_org_for_repo')
-    @patch('integrations.github.github_view.get_user_v1_enabled_setting')
     async def test_no_claim_passes_none_resolver_org_id(
-        self, mock_v1_setting, mock_resolve_org, mock_get_service
+        self, mock_resolve_org, mock_get_service
     ):
         """When no claim exists, resolver_org_id is None (falls back to personal workspace)."""
         # Arrange
-        mock_v1_setting.return_value = True
         mock_resolve_org.return_value = None
 
         github_issue = self._create_github_issue()

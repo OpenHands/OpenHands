@@ -27,6 +27,7 @@ describe("useAgentState", () => {
     mockUseActiveConversation.mockReturnValue({
       data: {
         execution_status: V1ExecutionStatus.FINISHED,
+        sandbox_status: "RUNNING",
       },
     } as ReturnType<typeof useActiveConversation>);
 
@@ -40,12 +41,14 @@ describe("useAgentState", () => {
 
     expect(result.current.executionStatus).toBe(V1ExecutionStatus.RUNNING);
     expect(result.current.curAgentState).toBe(AgentState.RUNNING);
+    expect(result.current.isArchived).toBe(false);
   });
 
   it("falls back to cached conversation execution status when live state is empty", () => {
     mockUseActiveConversation.mockReturnValue({
       data: {
         execution_status: V1ExecutionStatus.WAITING_FOR_CONFIRMATION,
+        sandbox_status: "RUNNING",
       },
     } as ReturnType<typeof useActiveConversation>);
 
@@ -57,5 +60,42 @@ describe("useAgentState", () => {
     expect(result.current.curAgentState).toBe(
       AgentState.AWAITING_USER_CONFIRMATION,
     );
+    expect(result.current.isArchived).toBe(false);
+  });
+
+  it("returns STOPPED state and isArchived=true for archived conversations (sandbox MISSING)", () => {
+    mockUseActiveConversation.mockReturnValue({
+      data: {
+        execution_status: V1ExecutionStatus.FINISHED,
+        sandbox_status: "MISSING",
+      },
+    } as ReturnType<typeof useActiveConversation>);
+
+    const { result } = renderHook(() => useAgentState());
+
+    expect(result.current.curAgentState).toBe(AgentState.STOPPED);
+    expect(result.current.isArchived).toBe(true);
+  });
+
+  it("returns STOPPED state for archived conversations even with live execution status", () => {
+    mockUseActiveConversation.mockReturnValue({
+      data: {
+        execution_status: V1ExecutionStatus.IDLE,
+        sandbox_status: "MISSING",
+      },
+    } as ReturnType<typeof useActiveConversation>);
+
+    // Simulate live websocket status (shouldn't happen for archived, but test the priority)
+    act(() => {
+      useV1ConversationStateStore
+        .getState()
+        .setExecutionStatus(V1ExecutionStatus.RUNNING);
+    });
+
+    const { result } = renderHook(() => useAgentState());
+
+    // sandbox_status === MISSING should take priority
+    expect(result.current.curAgentState).toBe(AgentState.STOPPED);
+    expect(result.current.isArchived).toBe(true);
   });
 });

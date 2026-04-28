@@ -49,7 +49,7 @@ describe("useRuntimeIsReady", () => {
 
   it("treats agent errors as not ready by default", () => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.ERROR,
+      curAgentState: AgentState.ERROR, isArchived: false,
     });
 
     const { result } = renderHook(() => useRuntimeIsReady());
@@ -59,7 +59,7 @@ describe("useRuntimeIsReady", () => {
 
   it("allows runtime-backed tabs to stay ready when the agent errors", () => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.ERROR,
+      curAgentState: AgentState.ERROR, isArchived: false,
     });
 
     const { result } = renderHook(() =>

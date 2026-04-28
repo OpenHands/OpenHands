@@ -13,7 +13,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 # The version of the agent server to use for deployments.
 # Typically this will be the same as the values from the pyproject.toml
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.17.0-python'
+AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.18.1-python'
 
 
 class SandboxSpecService(ABC):
@@ -71,7 +71,7 @@ def get_agent_server_image() -> str:
 
 # Prefixes for environment variables that should be auto-forwarded to agent-server
 # These are typically configuration variables that affect the agent's behavior
-AUTO_FORWARD_PREFIXES = ('LLM_',)
+AUTO_FORWARD_PREFIXES = ('LLM_', 'LMNR_')
 
 
 def get_agent_server_env() -> dict[str, str]:
@@ -80,9 +80,10 @@ def get_agent_server_env() -> dict[str, str]:
     This function combines two sources of environment variables:
 
     1. **Auto-forwarded variables**: Environment variables with certain prefixes
-       (e.g., LLM_*) are automatically forwarded to the agent-server container.
+       (e.g., LLM_*, LMNR_*) are automatically forwarded to the agent-server container.
        This ensures that LLM configuration like timeouts and retry settings
-       work correctly in the two-container V1 architecture.
+       work correctly in the two-container V1 architecture, as well as
+       Laminar monitoring/analytics configuration.
 
     2. **Explicit overrides via OH_AGENT_SERVER_ENV**: A JSON string that allows
        setting arbitrary environment variables in the agent-server container.
@@ -90,11 +91,17 @@ def get_agent_server_env() -> dict[str, str]:
 
     Auto-forwarded prefixes:
         - LLM_* : LLM configuration (timeout, retries, model settings, etc.)
+        - LMNR_* : Laminar monitoring/analytics configuration
 
     Usage:
         # Auto-forwarding (no action needed):
         export LLM_TIMEOUT=3600
         export LLM_NUM_RETRIES=10
+        # These will automatically be available in the agent-server
+
+        # Auto-forwarding for Laminar:
+        export LMNR_PROJECT_API_KEY=your-api-key
+        export LMNR_BASE_URL=https://app.lmnr.ai
         # These will automatically be available in the agent-server
 
         # Explicit override via JSON:

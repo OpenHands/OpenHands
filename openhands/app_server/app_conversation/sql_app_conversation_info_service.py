@@ -21,7 +21,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
@@ -33,6 +33,7 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +46,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     AppConversationInfoPage,
     AppConversationSortOrder,
+    ConversationTrigger,
 )
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.user_context import UserContext
@@ -56,7 +58,6 @@ from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,7 @@ class StoredConversationMetadata(Base):
 
     # LLM model used for the conversation
     llm_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_kind: Mapped[str | None] = mapped_column(String, nullable=True)
 
     conversation_version: Mapped[str] = mapped_column(
         String, nullable=False, default='V0', index=True
@@ -369,6 +371,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             context_window=usage.context_window,
             per_turn_token=usage.per_turn_token,
             llm_model=info.llm_model,
+            agent_kind=info.agent_kind,
             conversation_version='V1',
             sandbox_id=info.sandbox_id,
             parent_conversation_id=(
@@ -523,19 +526,19 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         sandbox_id = stored.sandbox_id
         assert sandbox_id is not None
 
-        # Rebuild token usage
+        # Rebuild token usage (use 0 as default for nullable int columns)
         token_usage = TokenUsage(
-            prompt_tokens=stored.prompt_tokens,
-            completion_tokens=stored.completion_tokens,
-            cache_read_tokens=stored.cache_read_tokens,
-            cache_write_tokens=stored.cache_write_tokens,
-            context_window=stored.context_window,
-            per_turn_token=stored.per_turn_token,
+            prompt_tokens=stored.prompt_tokens or 0,
+            completion_tokens=stored.completion_tokens or 0,
+            cache_read_tokens=stored.cache_read_tokens or 0,
+            cache_write_tokens=stored.cache_write_tokens or 0,
+            context_window=stored.context_window or 0,
+            per_turn_token=stored.per_turn_token or 0,
         )
 
-        # Rebuild metrics object
+        # Rebuild metrics object (use 0.0 as default for nullable float columns)
         metrics = MetricsSnapshot(
-            accumulated_cost=stored.accumulated_cost,
+            accumulated_cost=stored.accumulated_cost or 0.0,
             max_budget_per_task=stored.max_budget_per_task,
             accumulated_token_usage=token_usage,
         )
@@ -547,7 +550,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         return AppConversationInfo(
             id=UUID(stored.conversation_id),
             created_by_user_id=None,  # User ID is now stored in ConversationMetadataSaas
-            sandbox_id=stored.sandbox_id,
+            sandbox_id=sandbox_id,  # Use the asserted non-None value
             selected_repository=stored.selected_repository,
             selected_branch=stored.selected_branch,
             git_provider=(
@@ -555,8 +558,9 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             ),
             title=stored.title,
             trigger=ConversationTrigger(stored.trigger) if stored.trigger else None,
-            pr_number=stored.pr_number,
+            pr_number=stored.pr_number or [],
             llm_model=stored.llm_model,
+            agent_kind=stored.agent_kind or 'llm',
             metrics=metrics,
             parent_conversation_id=(
                 UUID(stored.parent_conversation_id)
@@ -599,7 +603,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         )
 
         # Execute the secure delete query
-        result = await self.db_session.execute(delete_query)
+        result = cast(CursorResult, await self.db_session.execute(delete_query))
 
         return result.rowcount > 0
 

@@ -27,6 +27,7 @@ from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
+    ConversationTrigger,
 )
 from openhands.app_server.config import get_app_conversation_service
 from openhands.app_server.services.injector import InjectorState
@@ -35,9 +36,6 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler, ProviderType
 from openhands.sdk import TextContent
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import (
-    ConversationTrigger,
-)
 
 integration_store = JiraDcIntegrationStore.get_instance()
 

@@ -106,12 +106,6 @@ dependencies = [
   "zope-interface==7.2",
 ]
 
-optional-dependencies.third_party_runtimes = [
-  "daytona==0.24.2",
-  "e2b-code-interpreter>=2",
-  "modal>=0.66.26,<1.2",
-  "runloop-api-client==0.50",
-]
 urls.Homepage = "https://github.com/OpenHands/OpenHands"
 urls.Repository = "https://github.com/OpenHands/OpenHands"
 
@@ -153,7 +147,6 @@ readme = "README.md"
 repository = "https://github.com/OpenHands/OpenHands"
 packages = [
   { include = "openhands/**/*" },
-  { include = "third_party/**/*" },
   { include = "pyproject.toml", to = "openhands" },
   { include = "poetry.lock", to = "openhands" },
 ]
@@ -260,9 +253,6 @@ pg8000 = "^1.31.5"
 asyncpg = ">=0.30,<0.32"
 deprecation = "^2.1.0"
 lmnr = "^0.7.20"
-
-[tool.poetry.extras]
-third_party_runtimes = [ "e2b-code-interpreter", "modal", "runloop-api-client", "daytona" ]
 
 [tool.poetry.group.dev]
 optional = true

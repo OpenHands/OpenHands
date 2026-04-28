@@ -62,6 +62,15 @@ export const createMockWebClientConfig = (
   error_message: null,
   updated_at: new Date().toISOString(),
   github_app_slug: null,
+  gitlab_enabled: false,
+  provider_default_hosts: {
+    github: "github.com",
+    gitlab: "gitlab.com",
+    bitbucket: "bitbucket.org",
+    azure_devops: "dev.azure.com",
+    forgejo: "codeberg.org",
+  },
+  slack_enabled: false,
   ...overrides,
 });
 
@@ -222,7 +231,7 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
           default: false,
           choices: [],
           depends_on: [],
-          prominence: "major",
+          prominence: "critical",
           secret: false,
           required: true,
         },
@@ -425,6 +434,15 @@ export const SETTINGS_HANDLERS = [
       error_message: null,
       updated_at: new Date().toISOString(),
       github_app_slug: mockSaas ? "openhands" : null,
+      gitlab_enabled: false,
+      provider_default_hosts: {
+        github: "github.com",
+        gitlab: "gitlab.com",
+        bitbucket: "bitbucket.org",
+        azure_devops: "dev.azure.com",
+        forgejo: "codeberg.org",
+      },
+      slack_enabled: false,
     };
 
     return HttpResponse.json(config);
