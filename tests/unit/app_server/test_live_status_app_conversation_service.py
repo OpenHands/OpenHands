@@ -42,11 +42,21 @@ from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import SuggestedTask, TaskType
 from openhands.sdk import Agent, Event
+from openhands.sdk.context.agent_context import AgentContext as _AgentContext
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
+
+# True only on SDK versions that include PR #2984 (secrets acp_compatible=True).
+# When False, _build_acp_start_conversation_request skips the agent_context path.
+_SDK_SUPPORTS_ACP_SECRETS = (
+    _AgentContext.model_fields.get('secrets') is not None
+    and isinstance(_AgentContext.model_fields['secrets'].json_schema_extra, dict)
+    and _AgentContext.model_fields['secrets'].json_schema_extra.get('acp_compatible')
+    is True
+)
 
 
 def _build_test_user_agent_settings(user: SimpleNamespace) -> AgentSettings:
@@ -3464,10 +3474,14 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.agent_context is not None
-        ctx = request.agent.agent_context.secrets
-        assert ctx.get('GITHUB_TOKEN') is github_secret
-        assert ctx.get('MY_API_KEY') is api_secret
+        if _SDK_SUPPORTS_ACP_SECRETS:
+            assert request.agent.agent_context is not None
+            ctx = request.agent.agent_context.secrets
+            assert ctx.get('GITHUB_TOKEN') is github_secret
+            assert ctx.get('MY_API_KEY') is api_secret
+        else:
+            # Pinned SDK doesn't support ACP secrets yet; agent_context stays unset.
+            assert request.agent.agent_context is None
 
     @pytest.mark.asyncio
     async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
@@ -3480,8 +3494,11 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
+        if _SDK_SUPPORTS_ACP_SECRETS:
+            assert request.agent.agent_context is not None
+            assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
+        else:
+            assert request.agent.agent_context is None
 
     @pytest.mark.asyncio
     async def test_explicit_acp_env_preserved(self, service, tmp_path):
@@ -3509,10 +3526,14 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
-        )
+        if _SDK_SUPPORTS_ACP_SECRETS:
+            assert request.agent.agent_context is not None
+            assert (
+                request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY')
+                is panel_secret
+            )
+        else:
+            assert request.agent.agent_context is None
 
     @pytest.mark.asyncio
     async def test_no_secrets_no_agent_context(self, service, tmp_path):
