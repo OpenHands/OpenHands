@@ -534,7 +534,12 @@ class TestUserMsgStorage:
     )
     @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_store_user_msg_for_form(
-        self, mock_get_redis_client_async, slack_manager, message_ts, thread_ts, user_msg
+        self,
+        mock_get_redis_client_async,
+        slack_manager,
+        message_ts,
+        thread_ts,
+        user_msg,
     ):
         """Test storing user message in Redis with various timestamp combinations."""
         mock_redis = AsyncMock()
@@ -593,7 +598,11 @@ class TestUserMsgStorage:
     )
     @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_retrieve_user_msg_for_form(
-        self, mock_get_redis_client_async, slack_manager, redis_return_value, expected_result
+        self,
+        mock_get_redis_client_async,
+        slack_manager,
+        redis_return_value,
+        expected_result,
     ):
         """Test retrieving user message from Redis with various response types."""
         mock_redis = AsyncMock()
