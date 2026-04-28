@@ -175,6 +175,8 @@ def settings_store(async_session_maker, mock_config):
                 del item_dict['email_verified']
             if 'secrets_store' in item_dict:
                 del item_dict['secrets_store']
+            if 'llm_profiles' in item_dict:
+                del item_dict['llm_profiles']
 
             # Encrypt the data before storing
             for key in ('llm_api_key', 'search_api_key', 'sandbox_api_key'):
@@ -772,3 +774,181 @@ async def test_store_and_load_mcp_config_via_agent_settings(
         loaded.agent_settings.mcp_config.mcpServers['admin'].url
         == 'https://admin-private-server.com'
     )
+
+
+@pytest.mark.asyncio
+async def test_store_and_load_llm_profiles_round_trip(
+    async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """Saved llm_profiles must persist on the User row and round-trip through
+    store → load. Without the user.llm_profiles column they are silently
+    dropped on store and always default to empty on load."""
+    from openhands.sdk.llm import LLM
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = str(fixture['admin_user_id'])
+    admin_store = SaasSettingsStore(admin_user_id, mock_config)
+
+    settings = DataSettings()
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'base_url': 'https://api.anthropic.com/v1',
+                    'api_key': 'active-key',
+                },
+            },
+        }
+    )
+    settings.llm_profiles.save(
+        'work',
+        LLM(
+            model='anthropic/claude-sonnet-4-5-20250929',
+            base_url='https://api.anthropic.com/v1',
+            api_key=SecretStr('work-key'),
+        ),
+    )
+    settings.llm_profiles.save(
+        'personal',
+        LLM(
+            model='openai/gpt-5.2',
+            base_url='https://api.openai.com/v1',
+            api_key=SecretStr('personal-key'),
+        ),
+    )
+    settings.llm_profiles.active = 'work'
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await admin_store.store(settings)
+
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await admin_store.load()
+
+    assert loaded is not None
+    assert set(loaded.llm_profiles.profiles.keys()) == {'work', 'personal'}
+    assert loaded.llm_profiles.active == 'work'
+
+    work = loaded.llm_profiles.require('work')
+    assert work.model == 'anthropic/claude-sonnet-4-5-20250929'
+    assert work.base_url == 'https://api.anthropic.com/v1'
+    assert work.api_key is not None
+    assert work.api_key.get_secret_value() == 'work-key'
+
+    personal = loaded.llm_profiles.require('personal')
+    assert personal.model == 'openai/gpt-5.2'
+    assert personal.api_key.get_secret_value() == 'personal-key'
+
+
+@pytest.mark.asyncio
+async def test_load_with_null_llm_profiles_column_uses_default_factory(
+    async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """Rows predating the user.llm_profiles column read back as None.
+    Settings.llm_profiles is non-nullable (default_factory=LLMProfiles), so
+    load() must drop the None and let the factory produce an empty container
+    rather than crashing validation."""
+    from sqlalchemy import update
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    admin_store = SaasSettingsStore(str(admin_user_id), mock_config)
+
+    seed_settings = _make_settings(
+        model='anthropic/claude-sonnet-4-5-20250929',
+        api_key='seed-key',
+        base_url='https://api.anthropic.com/v1',
+    )
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await admin_store.store(seed_settings)
+
+    async with async_session_maker() as session:
+        await session.execute(
+            update(User).where(User.id == admin_user_id).values(llm_profiles=None)
+        )
+        await session.commit()
+
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await admin_store.load()
+
+    assert loaded is not None
+    assert loaded.llm_profiles.profiles == {}
+    assert loaded.llm_profiles.active is None
+
+
+@pytest.mark.asyncio
+async def test_llm_profiles_are_encrypted_at_rest(
+    async_session_maker, mock_config, org_with_multiple_members_fixture
+):
+    """The raw value in the user.llm_profiles column must be ciphertext, not
+    a JSON dict — profile api_keys would otherwise leak in DB dumps,
+    replicas, and backups. Mirrors the encryption invariant org and
+    org_member already enforce on _llm_api_key."""
+    from sqlalchemy import select, text
+    from storage.user import User
+
+    from openhands.sdk.llm import LLM
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    admin_store = SaasSettingsStore(str(admin_user_id), mock_config)
+
+    settings = DataSettings()
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'base_url': 'https://api.anthropic.com/v1',
+                    'api_key': 'active-key',
+                },
+            },
+        }
+    )
+    settings.llm_profiles.save(
+        'work',
+        LLM(
+            model='anthropic/claude-sonnet-4-5-20250929',
+            base_url='https://api.anthropic.com/v1',
+            api_key=SecretStr('super-secret-byok'),
+        ),
+    )
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await admin_store.store(settings)
+
+    async with async_session_maker() as session:
+        # Bypass the ORM-level TypeDecorator by reading the raw cell.
+        # SQLite stores UUIDs hyphen-stripped, so normalize both sides.
+        rows = (
+            await session.execute(text('SELECT id, llm_profiles FROM "user"'))
+        ).all()
+    raw = next(
+        (r[1] for r in rows if str(r[0]).replace('-', '') == admin_user_id.hex),
+        None,
+    )
+    assert raw is not None
+    # The plaintext secret must not appear anywhere in the at-rest payload.
+    assert 'super-secret-byok' not in raw
+    # And the raw payload must not be parseable as JSON — i.e. it's
+    # encrypted, not a serialized profiles dict.
+    import json as _json
+
+    with pytest.raises(_json.JSONDecodeError):
+        _json.loads(raw)
+
+    # Sanity: ORM read still decrypts correctly.
+    async with async_session_maker() as session:
+        user = (
+            await session.execute(select(User).where(User.id == admin_user_id))
+        ).scalar_one()
+    assert user.llm_profiles is not None
+    assert user.llm_profiles['profiles']['work']['api_key'] == 'super-secret-byok'
