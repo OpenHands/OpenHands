@@ -296,7 +296,17 @@ class BitbucketFactory:
         is_public_repo = not repository.get('is_private', True)
 
         pull_request = payload.get('pullrequest') or {}
-        pr_id = int(pull_request.get('id') or 0)
+        raw_pr_id = pull_request.get('id')
+        if not raw_pr_id:
+            # ``is_pr_comment`` already validated the event key, so a
+            # missing/zero PR id here means a malformed payload from the
+            # webhook sender — fail fast with a clear error rather than
+            # building a view with ``issue_number=0`` whose downstream
+            # API calls would 404 with a less helpful trace.
+            raise ValueError(
+                f'Invalid PR id in Bitbucket webhook payload: {pull_request}'
+            )
+        pr_id = int(raw_pr_id)
         branch_name = ((pull_request.get('source') or {}).get('branch') or {}).get(
             'name'
         )
