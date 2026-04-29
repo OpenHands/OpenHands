@@ -9,7 +9,7 @@ from typing import Union
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from openhands.server.user_auth import get_user_id
+from openhands.app_server.user_auth import get_user_id
 
 onboarding_router = APIRouter(prefix='/api', tags=['Onboarding'])
 

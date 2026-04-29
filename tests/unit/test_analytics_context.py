@@ -1,6 +1,6 @@
 """Tests for AnalyticsContext dataclass and resolve_analytics_context factory."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,7 +12,6 @@ from openhands.analytics.user_provider import (
     AnalyticsUserProvider,
     DefaultAnalyticsUserProvider,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
