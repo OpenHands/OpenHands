@@ -3273,13 +3273,13 @@ class TestAcpProviderEnv:
         env = LiveStatusAppConversationService._acp_provider_env(user)
         assert env == {}
 
-    def test_no_api_key_returns_empty(self, _user_factory):
-        """No api_key → nothing synthesized."""
+    def test_no_api_key_but_base_url_injects_base_url(self, _user_factory):
+        """No api_key + base_url → base_url is still injected independently."""
         user = _user_factory(
             acp_server='claude-code', base_url='https://api.anthropic.com'
         )
         env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {}
+        assert env == {'ANTHROPIC_BASE_URL': 'https://api.anthropic.com'}
 
 
 class TestAgentKindConversationUrl:
