@@ -499,6 +499,7 @@ describe("Settings Screen", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -554,6 +555,7 @@ describe("Settings Screen", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -675,6 +677,7 @@ describe("Settings Screen", () => {
           hide_users_page: true,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       };
 
@@ -719,6 +722,7 @@ describe("Settings Screen", () => {
           hide_users_page: false,
           hide_billing_page: true,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       };
 
@@ -972,6 +976,7 @@ describe("getFirstAvailablePath", () => {
     hide_users_page: false,
     hide_billing_page: false,
     hide_integrations_page: false,
+        enable_onboarding: false,
   };
 
   describe("SaaS mode", () => {
@@ -1076,6 +1081,7 @@ describe("clientLoader redirect behavior", () => {
         hide_users_page: true,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
     };
     mockQueryClient.setQueryData(["web-client-config"], config);
@@ -1101,6 +1107,7 @@ describe("clientLoader redirect behavior", () => {
         hide_users_page: false,
         hide_billing_page: true,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
     };
     mockQueryClient.setQueryData(["web-client-config"], config);
@@ -1174,6 +1181,7 @@ describe("clientLoader redirect behavior", () => {
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
     };
     mockQueryClient.setQueryData(["web-client-config"], config);
