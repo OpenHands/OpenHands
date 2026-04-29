@@ -38,6 +38,8 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     vi.clearAllMocks();
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.INIT,
+      executionStatus: null,
+      isArchived: false,
     });
   });
 
