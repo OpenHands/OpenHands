@@ -33,14 +33,17 @@ export function ContextMenuNavLink({
       ? t(I18nKey.SETTINGS$AGENT_DISABLED_TOOLTIP, {
           agentName: disabledReason,
         })
-      : "";
-    return (
-      <StyledTooltip content={tooltip}>
-        <div className="flex items-center gap-2 p-2 rounded w-full text-xs opacity-40 cursor-not-allowed">
-          {iconEl}
-          {t(text as I18nKey)}
-        </div>
-      </StyledTooltip>
+      : undefined;
+    const inner = (
+      <div className="flex items-center gap-2 p-2 rounded w-full text-xs opacity-40 cursor-not-allowed">
+        {iconEl}
+        {t(text as I18nKey)}
+      </div>
+    );
+    return tooltip ? (
+      <StyledTooltip content={tooltip}>{inner}</StyledTooltip>
+    ) : (
+      inner
     );
   }
 

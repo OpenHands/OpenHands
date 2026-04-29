@@ -48,7 +48,11 @@ function validateEnvJson(
   if (!value.trim()) return null;
   try {
     const parsed: unknown = JSON.parse(value);
-    if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
+    if (
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      parsed === null
+    ) {
       return t(I18nKey.SETTINGS$AGENT_ENV_MUST_BE_OBJECT);
     }
     if (
@@ -128,13 +132,10 @@ function AgentSettingsScreen() {
   const handleAgentTypeChange = (key: React.Key | null) => {
     if (!key) return;
     const newType = key as AgentType;
-    // Clear the API key and base URL when switching between different ACP
-    // providers to avoid showing an Anthropic key in the OpenAI key field, etc.
-    if (
-      newType !== agentType &&
-      isAcpServerKind(newType) &&
-      isAcpServerKind(agentType)
-    ) {
+    // Clear provider-specific credentials on any provider change so that
+    // e.g. an Anthropic key typed for Claude Code is not carried over to
+    // OpenHands or Codex.
+    if (newType !== agentType) {
       setApiKey("");
       setBaseUrl("");
       setAcpModel("");
@@ -166,12 +167,10 @@ function AgentSettingsScreen() {
     if (agentType === "openhands") {
       agentSettingsDiff = { agent_kind: "llm" };
     } else {
-      const effectiveCommand =
-        command.length > 0 ? command : (ACP_DEFAULT_COMMANDS[agentType] ?? []);
       agentSettingsDiff = {
         agent_kind: "acp",
         acp_server: agentType,
-        acp_command: effectiveCommand,
+        acp_command: command, // [] means "use backend default"; SDK resolves via resolve_acp_command()
         acp_args: args,
         acp_env: parsedEnv,
         ...(acpModel.trim() ? { acp_model: acpModel.trim() } : {}),
