@@ -9,7 +9,6 @@ from openhands.core.config.config_utils import (
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.core.config.sandbox_config import SandboxConfig
 from openhands.core.config.utils import (
     finalize_config,
     get_llm_config_arg,
@@ -26,7 +25,6 @@ __all__ = [
     'OpenHandsConfig',
     'MCPConfig',
     'LLMConfig',
-    'SandboxConfig',
     'load_openhands_config',
     'load_from_env',
     'load_from_toml',

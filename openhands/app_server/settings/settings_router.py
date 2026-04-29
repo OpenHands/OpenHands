@@ -237,12 +237,6 @@ async def store_settings(
             if settings.disabled_skills is None:
                 settings.disabled_skills = existing_settings.disabled_skills
 
-        # Update sandbox config with new settings
-        if settings.remote_runtime_resource_factor is not None:
-            config.sandbox.remote_runtime_resource_factor = (
-                settings.remote_runtime_resource_factor
-            )
-
         # Update git configuration with new settings
         git_config_updated = False
         if settings.git_user_name is not None:
