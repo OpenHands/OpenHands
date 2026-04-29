@@ -18,11 +18,11 @@ from pydantic import BaseModel
 from server.auth.token_manager import TokenManager
 from storage.gitlab_webhook import GitlabWebhook
 from storage.gitlab_webhook_store import GitlabWebhookStore
+from storage.redis import get_redis_client_async
 
 from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.app_server.user_auth import get_user_id
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.shared import sio
 
 gitlab_integration_router = APIRouter(prefix='/integration')
 webhook_store = GitlabWebhookStore()
@@ -103,7 +103,7 @@ async def gitlab_events(
             dedup_hash = hashlib.sha256(dedup_json.encode()).hexdigest()
             dedup_key = f'gitlab_msg: {dedup_hash}'
 
-        redis = sio.manager.redis
+        redis = get_redis_client_async()
         created = await redis.set(dedup_key, 1, nx=True, ex=60)
         if not created:
             logger.info('gitlab_is_duplicate')

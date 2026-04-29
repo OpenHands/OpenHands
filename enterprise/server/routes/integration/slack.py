@@ -35,6 +35,7 @@ from slack_sdk.signature import SignatureVerifier
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import delete
 from storage.database import a_session_maker
+from storage.redis import get_redis_client_async
 from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
@@ -43,7 +44,7 @@ from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
     ProviderType,
 )
-from openhands.server.shared import config, sio
+from openhands.server.shared import config
 
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
 slack_router = APIRouter(prefix='/slack')
@@ -327,7 +328,7 @@ async def on_event(request: Request, background_tasks: BackgroundTasks):
     team_id = payload['team_id']
 
     # Sometimes slack sends duplicates, so we need to make sure this is not a duplicate.
-    redis = sio.manager.redis
+    redis = get_redis_client_async()
     key = f'slack_msg:{client_msg_id}'
     created = await redis.set(key, 1, nx=True, ex=60)
     if not created:
