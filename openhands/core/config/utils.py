@@ -22,9 +22,7 @@ from pydantic import BaseModel, SecretStr, ValidationError
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
 from openhands.core import logger
-from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.arg_utils import get_headless_parser
-from openhands.core.config.extended_config import ExtendedConfig
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import mcp_config_from_toml
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -126,9 +124,6 @@ def load_from_env(
     # load default LLM config from env
     default_llm_config = cfg.get_llm_config()
     set_attr_from_env(default_llm_config, 'LLM_')
-    # load default agent config from env
-    default_agent_config = cfg.get_agent_config()
-    set_attr_from_env(default_agent_config, 'AGENT_')
 
 
 def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None:
@@ -188,17 +183,6 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
                 f'Unknown config key "{key}" in [core] section'
             )
 
-    # Process agent section if present
-    if 'agent' in toml_config:
-        try:
-            agent_mapping = AgentConfig.from_toml_section(toml_config['agent'])
-            for agent_key, agent_conf in agent_mapping.items():
-                cfg.set_agent_config(agent_conf, agent_key)
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [agent] config from toml, values have not been applied.\nError: {e}'
-            )
-
     # Process llm section if present
     if 'llm' in toml_config:
         try:
@@ -253,27 +237,19 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
         except ValueError:
             raise ValueError('Error in MCP sections in config.toml')
 
-    # Process extended section if present
-    if 'extended' in toml_config:
-        try:
-            cfg.extended = ExtendedConfig(toml_config['extended'])
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [extended] config from toml, values have not been applied.\nError: {e}'
-            )
-
     # Check for unknown sections
-    # Note: 'condenser', 'model_routing', and 'kubernetes' are kept for backwards
-    # compatibility with old config files - they are silently ignored
+    # Note: 'agent', 'extended', 'condenser', 'model_routing', and 'kubernetes'
+    # are kept for backwards compatibility with old config files - they are
+    # silently ignored
     known_sections = {
         'core',
-        'extended',
-        'agent',
         'llm',
         'security',
         'sandbox',
-        'condenser',  # Legacy, ignored
         'mcp',
+        'agent',  # Legacy, ignored
+        'extended',  # Legacy, ignored
+        'condenser',  # Legacy, ignored
         'kubernetes',  # Legacy, ignored
         'model_routing',  # Legacy, ignored
     }
@@ -368,72 +344,6 @@ def finalize_config(cfg: OpenHandsConfig) -> None:
                 get_file_store(cfg.file_store, cfg.file_store_path)
             )
         )
-
-    # If CLIRuntime is selected, disable Jupyter for all agents
-    # Assuming 'cli' is the identifier for CLIRuntime
-    if cfg.runtime and cfg.runtime.lower() == 'cli':
-        for age_nt_name, agent_config in cfg.agents.items():
-            if agent_config.enable_jupyter:
-                agent_config.enable_jupyter = False
-            if agent_config.enable_browsing:
-                agent_config.enable_browsing = False
-        logger.openhands_logger.debug(
-            'Automatically disabled Jupyter plugin and browsing for all agents '
-            'because CLIRuntime is selected and does not support IPython execution.'
-        )
-
-
-def get_agent_config_arg(
-    agent_config_arg: str, toml_file: str = 'config.toml'
-) -> AgentConfig | None:
-    """Get a group of agent settings from the config file.
-
-    A group in config.toml can look like this:
-
-    ```
-    [agent.default]
-    enable_prompt_extensions = false
-    ```
-
-    The user-defined group name, like "default", is the argument to this function. The function will load the AgentConfig object
-    with the settings of this group, from the config file, and set it as the AgentConfig object for the app.
-
-    Note that the group must be under "agent" group, or in other words, the group name must start with "agent.".
-
-    Args:
-        agent_config_arg: The group of agent settings to get from the config.toml file.
-        toml_file: Path to the configuration file to read from. Defaults to 'config.toml'.
-
-    Returns:
-        AgentConfig: The AgentConfig object with the settings from the config file.
-    """
-    # keep only the name, just in case
-    agent_config_arg = agent_config_arg.strip('[]')
-
-    # truncate the prefix, just in case
-    if agent_config_arg.startswith('agent.'):
-        agent_config_arg = agent_config_arg[6:]
-
-    logger.openhands_logger.debug(f'Loading agent config from {agent_config_arg}')
-
-    # load the toml file
-    try:
-        with open(toml_file, 'r', encoding='utf-8') as toml_contents:
-            toml_config = toml.load(toml_contents)
-    except FileNotFoundError as e:
-        logger.openhands_logger.info(f'Config file not found: {e}')
-        return None
-    except toml.TomlDecodeError as e:
-        logger.openhands_logger.error(
-            f'Cannot parse agent group from {agent_config_arg}. Exception: {e}'
-        )
-        return None
-
-    # update the agent config with the specified section
-    if 'agent' in toml_config and agent_config_arg in toml_config['agent']:
-        return AgentConfig(**toml_config['agent'][agent_config_arg])
-    logger.openhands_logger.debug(f'Loading from toml failed for {agent_config_arg}')
-    return None
 
 
 def get_llm_config_arg(

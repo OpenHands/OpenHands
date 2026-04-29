@@ -11,14 +11,12 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from openhands.core import logger
-from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.config_utils import (
     DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX,
     OH_DEFAULT_AGENT,
     OH_MAX_ITERATIONS,
     model_defaults_to_dict,
 )
-from openhands.core.config.extended_config import ExtendedConfig
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.sandbox_config import SandboxConfig
@@ -31,8 +29,6 @@ class OpenHandsConfig(BaseModel):
     Attributes:
         llms: Dictionary mapping LLM names to their configurations.
             The default configuration is stored under the 'llm' key.
-        agents: Dictionary mapping agent names to their configurations.
-            The default configuration is stored under the 'agent' key.
         default_agent: Name of the default agent to use.
         sandbox: Sandbox configuration settings.
         security: Security configuration settings.
@@ -66,11 +62,9 @@ class OpenHandsConfig(BaseModel):
     """
 
     llms: dict[str, LLMConfig] = Field(default_factory=dict)
-    agents: dict[str, AgentConfig] = Field(default_factory=dict)
     default_agent: str = Field(default=OH_DEFAULT_AGENT)
     sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
-    extended: ExtendedConfig = Field(default_factory=lambda: ExtendedConfig({}))
     runtime: str = Field(default='docker')
     file_store: str = Field(default='local')
     file_store_path: str = Field(default='~/.openhands')
@@ -144,34 +138,6 @@ class OpenHandsConfig(BaseModel):
 
     def set_llm_config(self, value: LLMConfig, name: str = 'llm') -> None:
         self.llms[name] = value
-
-    def get_agent_config(self, name: str = 'agent') -> AgentConfig:
-        """'agent' is the name for default config (for backward compatibility prior to 0.8)."""
-        if name in self.agents:
-            return self.agents[name]
-        if 'agent' not in self.agents:
-            self.agents['agent'] = AgentConfig()
-        return self.agents['agent']
-
-    def set_agent_config(self, value: AgentConfig, name: str = 'agent') -> None:
-        self.agents[name] = value
-
-    def get_agent_to_llm_config_map(self) -> dict[str, LLMConfig]:
-        """Get a map of agent names to llm configs."""
-        return {name: self.get_llm_config_from_agent(name) for name in self.agents}
-
-    def get_llm_config_from_agent_config(self, agent_config: AgentConfig):
-        llm_config_name = (
-            agent_config.llm_config if agent_config.llm_config is not None else 'llm'
-        )
-        return self.get_llm_config(llm_config_name)
-
-    def get_llm_config_from_agent(self, name: str = 'agent') -> LLMConfig:
-        agent_config: AgentConfig = self.get_agent_config(name)
-        return self.get_llm_config_from_agent_config(agent_config)
-
-    def get_agent_configs(self) -> dict[str, AgentConfig]:
-        return self.agents
 
     def model_post_init(self, __context: Any) -> None:
         """Post-initialization hook, called when the instance is created with only default values."""
