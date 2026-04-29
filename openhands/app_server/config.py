@@ -148,6 +148,17 @@ def get_critic_model_name() -> str | None:
     return os.getenv('CRITIC_MODEL_NAME') or None
 
 
+def get_critic_api_key() -> str | None:
+    """Return the deployment-level critic API key, if configured.
+
+    When set, this key is injected into the critic client *after* agent
+    creation, overriding the default behaviour of inheriting the user's
+    LLM proxy key.  This allows deployments to provide a service-level
+    key that is not subject to per-user budget limits.
+    """
+    return os.getenv('CRITIC_API_KEY') or None
+
+
 # The SDK auto-fills this URL as the default for openhands/ and litellm_proxy/
 # models.  Deployments (e.g. staging) may use a different LLM proxy, configured
 # via OPENHANDS_PROVIDER_BASE_URL.
@@ -239,6 +250,10 @@ class AppServerConfig(OpenHandsModel):
     critic_model_name: str | None = Field(
         default_factory=get_critic_model_name,
         description='Deployment-level critic model name.',
+    )
+    critic_api_key: str | None = Field(
+        default_factory=get_critic_api_key,
+        description='Deployment-level critic API key (bypasses per-user budget).',
     )
     # Dependency Injection Injectors
     llm_model: LLMModelServiceInjector | None = None

@@ -186,6 +186,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     tavily_api_key: str | None = None
     critic_server_url: str | None = None
     critic_model_name: str | None = None
+    critic_api_key: str | None = None
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
@@ -1405,6 +1406,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             }
         )
         agent = configured_agent_settings.create_agent()
+
+        # Override the critic API key with a deployment-level service key
+        # so that critic requests are not subject to per-user budget limits.
+        if agent.critic is not None and self.critic_api_key:
+            agent.critic.api_key = SecretStr(self.critic_api_key)
+
         agent = self._apply_server_agent_overrides(
             agent, agent_type, mcp_config, conversation_id, user.id
         )
@@ -2157,4 +2164,5 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 tavily_api_key=tavily_api_key,
                 critic_server_url=config.critic_server_url,
                 critic_model_name=config.critic_model_name,
+                critic_api_key=config.critic_api_key,
             )
