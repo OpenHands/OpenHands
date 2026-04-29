@@ -11,9 +11,9 @@ from integrations.models import Message, SourceType
 from integrations.utils import IS_LOCAL_DEPLOYMENT
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_webhook_store import BitbucketWebhookStore
+from storage.redis import get_redis_client_async
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.shared import sio
 
 bitbucket_integration_router = APIRouter(prefix='/integration')
 
@@ -95,7 +95,7 @@ async def bitbucket_events(
             dedup_hash = hashlib.sha256(body).hexdigest()
             dedup_key = f'bitbucket_msg:{dedup_hash}'
 
-        redis = sio.manager.redis
+        redis = get_redis_client_async()
         created = await redis.set(dedup_key, 1, nx=True, ex=60)
         if not created:
             logger.info('bitbucket_is_duplicate')
