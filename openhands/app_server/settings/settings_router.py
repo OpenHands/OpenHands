@@ -82,24 +82,23 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     )
 
 
-def _get_critic_sdk_defaults() -> tuple[str, str]:
-    """Return (server_url, model_name) SDK built-in defaults."""
+def _get_critic_sdk_defaults() -> tuple[str | None, str | None]:
+    """Return (server_url, model_name) SDK built-in defaults, or None if unavailable."""
+    from pydantic_core import PydanticUndefinedType
+
     from openhands.sdk.critic.impl.api.client import CriticClient
 
-    return (
-        CriticClient.model_fields['server_url'].default,
-        CriticClient.model_fields['model_name'].default,
-    )
+    def _default(field_name: str) -> str | None:
+        val = CriticClient.model_fields[field_name].default
+        return val if not isinstance(val, PydanticUndefinedType) else None
+
+    return _default('server_url'), _default('model_name')
 
 
 def _fill_critic_defaults(verification: Any) -> Any:
-    """Return a copy of *verification* with effective critic defaults filled.
+    """Return a copy of *verification* with effective critic URL/model filled.
 
-    When the user hasn't overridden ``critic_server_url`` or
-    ``critic_model_name``, we fill them with:
-    1. Deployment env var (``CRITIC_SERVER_URL`` / ``CRITIC_MODEL_NAME``),
-    2. SDK built-in default from :class:`CriticClient`.
-
+    Priority: user-set value → deployment env var → SDK built-in default.
     Returns a new object — does not mutate the original.
     """
     if verification is None:
@@ -109,10 +108,14 @@ def _fill_critic_defaults(verification: Any) -> Any:
     updates: dict[str, object] = {}
 
     if verification.critic_server_url is None:
-        updates['critic_server_url'] = get_critic_server_url() or sdk_url
+        effective = get_critic_server_url() or sdk_url
+        if effective is not None:
+            updates['critic_server_url'] = effective
 
     if verification.critic_model_name is None:
-        updates['critic_model_name'] = get_critic_model_name() or sdk_model
+        effective = get_critic_model_name() or sdk_model
+        if effective is not None:
+            updates['critic_model_name'] = effective
 
     if not updates:
         return verification

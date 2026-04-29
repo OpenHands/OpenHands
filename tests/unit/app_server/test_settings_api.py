@@ -398,6 +398,40 @@ async def test_critic_user_override_not_clobbered(test_client):
 
 
 @pytest.mark.asyncio
+async def test_critic_model_name_derived_to_litellm_alias(test_client):
+    """When critic is routed through the LiteLLM proxy via
+    OPENHANDS_PROVIDER_BASE_URL but CRITIC_MODEL_NAME is not set, the
+    derived model name should be ``"critic"`` — the LiteLLM alias used
+    by the OpenHands CLI — so LiteLLM rewrites the upstream model + auth.
+    """
+    response = test_client.post(
+        '/api/v1/settings',
+        json=_dump_update(
+            Settings(
+                agent_settings=AgentSettings(
+                    llm=LLM(model='test-model'),
+                    verification=VerificationSettings(critic_enabled=True),
+                ),
+            )
+        ),
+    )
+    assert response.status_code == 200
+
+    with patch.dict(
+        os.environ,
+        {'OPENHANDS_PROVIDER_BASE_URL': 'https://llm-proxy.example.com'},
+    ):
+        os.environ.pop('CRITIC_MODEL_NAME', None)
+        response = test_client.get('/api/v1/settings')
+        assert response.status_code == 200
+        verification = response.json()['agent_settings']['verification']
+        assert verification['critic_server_url'] == (
+            'https://llm-proxy.example.com/vllm'
+        )
+        assert verification['critic_model_name'] == 'critic'
+
+
+@pytest.mark.asyncio
 async def test_critic_sdk_defaults_used_when_no_env_vars(test_client):
     """When no deployment env vars are set, SDK CriticClient defaults
     should be used as the fallback for critic_server_url and critic_model_name."""

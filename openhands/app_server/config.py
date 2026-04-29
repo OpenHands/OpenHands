@@ -144,8 +144,21 @@ def get_critic_server_url() -> str | None:
 
 
 def get_critic_model_name() -> str | None:
-    """Return the deployment-level critic model name, if configured."""
-    return os.getenv('CRITIC_MODEL_NAME') or None
+    """Return the deployment-level critic model name, if configured.
+
+    Priority:
+    1. Explicit ``CRITIC_MODEL_NAME`` env var.
+    2. ``"critic"`` (LiteLLM model alias) when the critic is routed through
+       the LiteLLM proxy via ``OPENHANDS_PROVIDER_BASE_URL`` — matches the
+       OpenHands CLI behaviour, which uses the alias so LiteLLM rewrites
+       the upstream model + auth.
+    """
+    explicit = os.getenv('CRITIC_MODEL_NAME')
+    if explicit:
+        return explicit
+    if get_openhands_provider_base_url():
+        return 'critic'
+    return None
 
 
 def get_critic_api_key() -> str | None:

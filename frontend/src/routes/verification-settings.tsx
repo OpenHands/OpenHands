@@ -170,10 +170,7 @@ export function VerificationSettingsScreen({
       if (confirmationModeDirty) {
         conversationDiff.confirmation_mode = confirmationMode;
       }
-      if (
-        securityAnalyzerDirty ||
-        (confirmationMode && settings?.security_analyzer !== securityAnalyzer)
-      ) {
+      if (securityAnalyzerDirty) {
         conversationDiff.security_analyzer = securityAnalyzer;
       }
       if (Object.keys(conversationDiff).length > 0) {
@@ -182,13 +179,7 @@ export function VerificationSettingsScreen({
 
       return result;
     },
-    [
-      confirmationMode,
-      confirmationModeDirty,
-      securityAnalyzer,
-      securityAnalyzerDirty,
-      settings?.security_analyzer,
-    ],
+    [confirmationMode, confirmationModeDirty, securityAnalyzer, securityAnalyzerDirty],
   );
 
   return (
