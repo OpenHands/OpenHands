@@ -1,4 +1,3 @@
-from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.arg_utils import (
     get_evaluation_parser,
     get_headless_parser,
@@ -15,7 +14,6 @@ from openhands.core.config.sandbox_config import SandboxConfig
 from openhands.core.config.security_config import SecurityConfig
 from openhands.core.config.utils import (
     finalize_config,
-    get_agent_config_arg,
     get_llm_config_arg,
     load_from_env,
     load_from_toml,
@@ -27,7 +25,6 @@ from openhands.core.config.utils import (
 __all__ = [
     'OH_DEFAULT_AGENT',
     'OH_MAX_ITERATIONS',
-    'AgentConfig',
     'OpenHandsConfig',
     'MCPConfig',
     'LLMConfig',
@@ -38,7 +35,6 @@ __all__ = [
     'load_from_env',
     'load_from_toml',
     'finalize_config',
-    'get_agent_config_arg',
     'get_llm_config_arg',
     'get_headless_parser',
     'get_evaluation_parser',

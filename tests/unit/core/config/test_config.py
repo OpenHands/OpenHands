@@ -5,7 +5,6 @@ from io import StringIO
 import pytest
 
 from openhands.core.config import (
-    AgentConfig,
     LLMConfig,
     OpenHandsConfig,
     finalize_config,
@@ -65,7 +64,6 @@ def test_compat_env_to_config(monkeypatch, setup_env):
     assert isinstance(config.get_llm_config(), LLMConfig)
     assert config.get_llm_config().api_key.get_secret_value() == 'sk-proj-rgMV0...'
     assert config.get_llm_config().model == 'gpt-4o'
-    assert isinstance(config.get_agent_config(), AgentConfig)
     assert config.default_agent == 'CodeActAgent'
     assert config.sandbox.timeout == 10
 
@@ -102,13 +100,6 @@ api_key = "toml-api-key"
 model = "some-cheap-model"
 api_key = "cheap-model-api-key"
 
-[agent]
-enable_prompt_extensions = true
-
-[agent.BrowsingAgent]
-llm_config = "cheap"
-enable_prompt_extensions = false
-
 [sandbox]
 timeout = 1
 volumes = "/opt/files2/workspace:/workspace:rw"
@@ -120,17 +111,10 @@ default_agent = "TestAgent"
 
     load_from_toml(default_config, temp_toml_file)
 
-    # default llm & agent configs
+    # default llm config
     assert default_config.default_agent == 'TestAgent'
     assert default_config.get_llm_config().model == 'test-model'
     assert default_config.get_llm_config().api_key.get_secret_value() == 'toml-api-key'
-    assert default_config.get_agent_config().enable_prompt_extensions is True
-
-    # undefined agent config inherits default ones
-    assert (
-        default_config.get_llm_config_from_agent('CodeActAgent')
-        == default_config.get_llm_config()
-    )
 
     assert default_config.sandbox.volumes == '/opt/files2/workspace:/workspace:rw'
     assert default_config.sandbox.timeout == 1
@@ -222,7 +206,6 @@ user_id = 1001
     assert os.environ.get('LLM_MODEL') is None
     assert default_config.get_llm_config().model == 'test-model'
     assert default_config.get_llm_config('llm').model == 'test-model'
-    assert default_config.get_llm_config_from_agent().model == 'test-model'
     assert default_config.get_llm_config().api_key.get_secret_value() == 'env-api-key'
 
     # Environment variable should override TOML value
@@ -396,10 +379,6 @@ def test_defaults_dict_after_updates(default_config):
     updated_config = OpenHandsConfig()
     updated_config.get_llm_config().api_key = 'updated-api-key'
     updated_config.get_llm_config('llm').api_key = 'updated-api-key'
-    updated_config.get_llm_config_from_agent('agent').api_key = 'updated-api-key'
-    updated_config.get_llm_config_from_agent(
-        'BrowsingAgent'
-    ).api_key = 'updated-api-key'
     updated_config.default_agent = 'BrowsingAgent'
 
     defaults_after_updates = updated_config.defaults_dict
@@ -493,7 +472,6 @@ def test_load_from_toml_file_not_found(default_config):
 
     # Verify that config object maintains default values
     assert default_config.get_llm_config() is not None
-    assert default_config.get_agent_config() is not None
     assert default_config.sandbox is not None
 
 
@@ -507,9 +485,6 @@ def test_core_not_in_toml(default_config, temp_toml_file):
 [llm]
 model = "test-model"
 
-[agent]
-enable_prompt_extensions = true
-
 [sandbox]
 timeout = 1
 base_container_image = "custom_image"
@@ -521,7 +496,6 @@ security_analyzer = "semgrep"
 
     load_from_toml(default_config, temp_toml_file)
     assert default_config.get_llm_config().model == 'test-model'
-    assert default_config.get_agent_config().enable_prompt_extensions is True
     assert default_config.sandbox.base_container_image == 'custom_image'
     assert default_config.sandbox.user_id == 1001
     assert default_config.security.security_analyzer == 'semgrep'
@@ -721,22 +695,9 @@ def test_api_keys_repr_str():
                 f"Unexpected attribute '{attr_name}' contains 'token' in LLMConfig"
             )
 
-    # Test AgentConfig
-    # No attrs in AgentConfig have 'key' or 'token' in their name
-    agent_config = AgentConfig(enable_prompt_extensions=True, enable_browsing=False)
-    for attr_name in AgentConfig.model_fields.keys():
-        if not attr_name.startswith('__'):
-            assert 'key' not in attr_name.lower(), (
-                f"Unexpected attribute '{attr_name}' contains 'key' in AgentConfig"
-            )
-            assert 'token' not in attr_name.lower() or 'tokens' in attr_name.lower(), (
-                f"Unexpected attribute '{attr_name}' contains 'token' in AgentConfig"
-            )
-
     # Test OpenHandsConfig
     app_config = OpenHandsConfig(
         llms={'llm': llm_config},
-        agents={'agent': agent_config},
         search_api_key='my_search_api_key',
     )
 
