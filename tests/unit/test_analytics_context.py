@@ -1,7 +1,5 @@
 """Tests for AnalyticsContext dataclass and resolve_analytics_context factory."""
 
-import sys
-from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,27 +8,52 @@ from openhands.analytics.analytics_context import (
     AnalyticsContext,
     resolve_analytics_context,
 )
+from openhands.analytics.user_provider import (
+    AnalyticsUserProvider,
+    DefaultAnalyticsUserProvider,
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_user_store_module(get_user_by_id_mock: AsyncMock) -> dict[str, ModuleType]:
-    """Build a fake ``storage.user_store`` module containing a mock UserStore.
+class MockAnalyticsUserProvider(AnalyticsUserProvider):
+    """Mock provider for testing that returns a configurable user."""
 
-    Returns a dict suitable for ``patch.dict(sys.modules, ...)``.
-    """
-    mock_user_store_class = MagicMock()
-    mock_user_store_class.get_user_by_id = get_user_by_id_mock
+    def __init__(self, user=None, raise_exception=None):
+        self._user = user
+        self._raise_exception = raise_exception
 
-    user_store_mod = ModuleType('storage.user_store')
-    user_store_mod.UserStore = mock_user_store_class  # type: ignore[attr-defined]
+    async def get_user_by_id(self, user_id: str):
+        if self._raise_exception:
+            raise self._raise_exception
+        return self._user
 
-    # Ensure 'storage' parent package exists in sys.modules too.
-    storage_mod = sys.modules.get('storage') or ModuleType('storage')
 
-    return {'storage': storage_mod, 'storage.user_store': user_store_mod}
+def _patch_user_provider(provider: AnalyticsUserProvider):
+    """Create a patch context that makes _get_user_provider return the given provider."""
+    return patch(
+        'openhands.analytics.analytics_context._get_user_provider',
+        return_value=provider,
+    )
+
+
+# ---------------------------------------------------------------------------
+# AnalyticsUserProvider tests
+# ---------------------------------------------------------------------------
+
+
+class TestAnalyticsUserProvider:
+    """Tests for AnalyticsUserProvider base class and default implementation."""
+
+    @pytest.mark.asyncio
+    async def test_default_provider_returns_none(self):
+        """DefaultAnalyticsUserProvider.get_user_by_id returns None for any user_id."""
+        provider = DefaultAnalyticsUserProvider()
+        result = await provider.get_user_by_id('any-user-id')
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -84,8 +107,8 @@ class TestResolveContext:
         mock_user.user_consents_to_analytics = True
         mock_user.current_org_id = 'org-abc-123'
 
-        modules = _make_user_store_module(AsyncMock(return_value=mock_user))
-        with patch.dict(sys.modules, modules):
+        provider = MockAnalyticsUserProvider(user=mock_user)
+        with _patch_user_provider(provider):
             ctx = await resolve_analytics_context('user-42')
 
         assert ctx.user_id == 'user-42'
@@ -100,8 +123,8 @@ class TestResolveContext:
         mock_user.user_consents_to_analytics = None
         mock_user.current_org_id = 'org-1'
 
-        modules = _make_user_store_module(AsyncMock(return_value=mock_user))
-        with patch.dict(sys.modules, modules):
+        provider = MockAnalyticsUserProvider(user=mock_user)
+        with _patch_user_provider(provider):
             ctx = await resolve_analytics_context('user-42')
 
         assert ctx.consented is False
@@ -113,17 +136,17 @@ class TestResolveContext:
         mock_user.user_consents_to_analytics = True
         mock_user.current_org_id = None
 
-        modules = _make_user_store_module(AsyncMock(return_value=mock_user))
-        with patch.dict(sys.modules, modules):
+        provider = MockAnalyticsUserProvider(user=mock_user)
+        with _patch_user_provider(provider):
             ctx = await resolve_analytics_context('user-42')
 
         assert ctx.org_id is None
 
     @pytest.mark.asyncio
     async def test_resolve_analytics_context_user_not_found(self):
-        """resolve_analytics_context when UserStore returns None returns safe default."""
-        modules = _make_user_store_module(AsyncMock(return_value=None))
-        with patch.dict(sys.modules, modules):
+        """resolve_analytics_context when provider returns None returns safe default."""
+        provider = MockAnalyticsUserProvider(user=None)
+        with _patch_user_provider(provider):
             ctx = await resolve_analytics_context('nonexistent-user')
 
         assert ctx.user_id == 'nonexistent-user'
@@ -132,12 +155,12 @@ class TestResolveContext:
         assert ctx.user is None
 
     @pytest.mark.asyncio
-    async def test_resolve_analytics_context_user_store_raises_exception(self):
-        """resolve_analytics_context when UserStore raises Exception returns safe default (no exception leaks)."""
-        modules = _make_user_store_module(
-            AsyncMock(side_effect=RuntimeError('DB connection failed'))
+    async def test_resolve_analytics_context_provider_raises_exception(self):
+        """resolve_analytics_context when provider raises Exception returns safe default (no exception leaks)."""
+        provider = MockAnalyticsUserProvider(
+            raise_exception=RuntimeError('DB connection failed')
         )
-        with patch.dict(sys.modules, modules):
+        with _patch_user_provider(provider):
             ctx = await resolve_analytics_context('user-42')
 
         assert ctx.user_id == 'user-42'
@@ -148,11 +171,9 @@ class TestResolveContext:
     @pytest.mark.asyncio
     async def test_resolve_analytics_context_logs_warning_on_failure(self):
         """resolve_analytics_context logs a warning when user lookup fails."""
-        modules = _make_user_store_module(
-            AsyncMock(side_effect=RuntimeError('DB error'))
-        )
+        provider = MockAnalyticsUserProvider(raise_exception=RuntimeError('DB error'))
         with (
-            patch.dict(sys.modules, modules),
+            _patch_user_provider(provider),
             patch('openhands.analytics.analytics_context.logger') as mock_logger,
         ):
             await resolve_analytics_context('user-42')
@@ -160,3 +181,15 @@ class TestResolveContext:
         mock_logger.warning.assert_called_once()
         call_args = mock_logger.warning.call_args
         assert 'user-42' in str(call_args)
+
+    @pytest.mark.asyncio
+    async def test_resolve_analytics_context_with_default_provider(self):
+        """resolve_analytics_context with DefaultAnalyticsUserProvider returns safe defaults."""
+        provider = DefaultAnalyticsUserProvider()
+        with _patch_user_provider(provider):
+            ctx = await resolve_analytics_context('user-42')
+
+        assert ctx.user_id == 'user-42'
+        assert ctx.consented is False
+        assert ctx.org_id is None
+        assert ctx.user is None
