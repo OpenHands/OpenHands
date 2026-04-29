@@ -41,13 +41,9 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     return true;
   }
 
-  // Render user message events only. Assistant-role llm_message events are
-  // emitted by the ACP bridge as raw LLM history records; the same response
-  // text is already carried by the accompanying FinishAction, so rendering
-  // both would produce a visible duplicate. Standard (non-ACP) agents never
-  // emit assistant-role MessageEvents, so this filter has no effect on them.
+  // Render message events (user and assistant messages)
   if (isMessageEvent(event)) {
-    return event.llm_message.role === "user";
+    return true;
   }
 
   // Render agent error events
