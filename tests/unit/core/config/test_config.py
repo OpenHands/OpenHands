@@ -5,21 +5,12 @@ from io import StringIO
 import pytest
 
 from openhands.core.config import (
-    AgentConfig,
     LLMConfig,
     OpenHandsConfig,
     finalize_config,
-    get_agent_config_arg,
     get_llm_config_arg,
     load_from_env,
     load_from_toml,
-    load_openhands_config,
-)
-from openhands.core.config.condenser_config import (
-    ConversationWindowCondenserConfig,
-    LLMSummarizingCondenserConfig,
-    NoOpCondenserConfig,
-    RecentEventsCondenserConfig,
 )
 from openhands.core.logger import openhands_logger
 
@@ -73,7 +64,6 @@ def test_compat_env_to_config(monkeypatch, setup_env):
     assert isinstance(config.get_llm_config(), LLMConfig)
     assert config.get_llm_config().api_key.get_secret_value() == 'sk-proj-rgMV0...'
     assert config.get_llm_config().model == 'gpt-4o'
-    assert isinstance(config.get_agent_config(), AgentConfig)
     assert config.default_agent == 'CodeActAgent'
     assert config.sandbox.timeout == 10
 
@@ -110,13 +100,6 @@ api_key = "toml-api-key"
 model = "some-cheap-model"
 api_key = "cheap-model-api-key"
 
-[agent]
-enable_prompt_extensions = true
-
-[agent.BrowsingAgent]
-llm_config = "cheap"
-enable_prompt_extensions = false
-
 [sandbox]
 timeout = 1
 volumes = "/opt/files2/workspace:/workspace:rw"
@@ -128,33 +111,10 @@ default_agent = "TestAgent"
 
     load_from_toml(default_config, temp_toml_file)
 
-    # default llm & agent configs
+    # default llm config
     assert default_config.default_agent == 'TestAgent'
     assert default_config.get_llm_config().model == 'test-model'
     assert default_config.get_llm_config().api_key.get_secret_value() == 'toml-api-key'
-    assert default_config.get_agent_config().enable_prompt_extensions is True
-
-    # undefined agent config inherits default ones
-    assert (
-        default_config.get_llm_config_from_agent('CodeActAgent')
-        == default_config.get_llm_config()
-    )
-    assert (
-        default_config.get_agent_config('CodeActAgent').enable_prompt_extensions is True
-    )
-
-    # defined agent config overrides default ones
-    assert default_config.get_llm_config_from_agent(
-        'BrowsingAgent'
-    ) == default_config.get_llm_config('cheap')
-    assert (
-        default_config.get_llm_config_from_agent('BrowsingAgent').model
-        == 'some-cheap-model'
-    )
-    assert (
-        default_config.get_agent_config('BrowsingAgent').enable_prompt_extensions
-        is False
-    )
 
     assert default_config.sandbox.volumes == '/opt/files2/workspace:/workspace:rw'
     assert default_config.sandbox.timeout == 1
@@ -246,7 +206,6 @@ user_id = 1001
     assert os.environ.get('LLM_MODEL') is None
     assert default_config.get_llm_config().model == 'test-model'
     assert default_config.get_llm_config('llm').model == 'test-model'
-    assert default_config.get_llm_config_from_agent().model == 'test-model'
     assert default_config.get_llm_config().api_key.get_secret_value() == 'env-api-key'
 
     # Environment variable should override TOML value
@@ -372,12 +331,12 @@ def test_load_from_env_with_list(monkeypatch, default_config):
     )
 
 
-def test_security_config_from_toml(default_config, temp_toml_file):
-    """Test loading security specific configurations."""
+def test_security_section_in_toml_is_silently_ignored(default_config, temp_toml_file):
+    """Test that a legacy [security] section in TOML is silently ignored."""
     with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
         toml_file.write(
             """
-[core]  # make sure core is loaded first
+[core]
 workspace_base = "/opt/files/workspace"
 
 [llm]
@@ -390,25 +349,8 @@ security_analyzer = "semgrep"
         )
 
     load_from_toml(default_config, temp_toml_file)
-    assert default_config.security.confirmation_mode is False
-    assert default_config.security.security_analyzer == 'semgrep'
-
-
-def test_security_config_from_dict():
-    """Test creating SecurityConfig instance from dictionary."""
-    from openhands.core.config.security_config import SecurityConfig
-
-    # Test with all fields
-    config_dict = {
-        'confirmation_mode': True,
-        'security_analyzer': 'some_analyzer',
-    }
-
-    security_config = SecurityConfig(**config_dict)
-
-    # Verify all fields are correctly set
-    assert security_config.confirmation_mode is True
-    assert security_config.security_analyzer == 'some_analyzer'
+    # Security section is ignored; no error raised
+    assert default_config.get_llm_config().model == 'test-model'
 
 
 def test_defaults_dict_after_updates(default_config):
@@ -420,10 +362,6 @@ def test_defaults_dict_after_updates(default_config):
     updated_config = OpenHandsConfig()
     updated_config.get_llm_config().api_key = 'updated-api-key'
     updated_config.get_llm_config('llm').api_key = 'updated-api-key'
-    updated_config.get_llm_config_from_agent('agent').api_key = 'updated-api-key'
-    updated_config.get_llm_config_from_agent(
-        'BrowsingAgent'
-    ).api_key = 'updated-api-key'
     updated_config.default_agent = 'BrowsingAgent'
 
     defaults_after_updates = updated_config.defaults_dict
@@ -517,7 +455,6 @@ def test_load_from_toml_file_not_found(default_config):
 
     # Verify that config object maintains default values
     assert default_config.get_llm_config() is not None
-    assert default_config.get_agent_config() is not None
     assert default_config.sandbox is not None
 
 
@@ -531,24 +468,16 @@ def test_core_not_in_toml(default_config, temp_toml_file):
 [llm]
 model = "test-model"
 
-[agent]
-enable_prompt_extensions = true
-
 [sandbox]
 timeout = 1
 base_container_image = "custom_image"
 user_id = 1001
-
-[security]
-security_analyzer = "semgrep"
 """)
 
     load_from_toml(default_config, temp_toml_file)
     assert default_config.get_llm_config().model == 'test-model'
-    assert default_config.get_agent_config().enable_prompt_extensions is True
     assert default_config.sandbox.base_container_image == 'custom_image'
     assert default_config.sandbox.user_id == 1001
-    assert default_config.security.security_analyzer == 'semgrep'
 
 
 def test_load_from_toml_partial_invalid(default_config, temp_toml_file, caplog):
@@ -556,8 +485,8 @@ def test_load_from_toml_partial_invalid(default_config, temp_toml_file, caplog):
 
     This ensures that:
     1. Valid configuration sections are properly loaded
-    2. Invalid fields in security and sandbox sections raise ValueError
-    4. The config object maintains correct values for valid fields
+    2. Invalid fields in sandbox sections raise ValueError
+    3. The config object maintains correct values for valid fields
     """
     with open(temp_toml_file, 'w', encoding='utf-8') as f:
         f.write("""
@@ -565,7 +494,7 @@ def test_load_from_toml_partial_invalid(default_config, temp_toml_file, caplog):
 debug = true
 
 [llm]
-# Not set in `openhands/core/schema/config.py`
+# Not set in LLMConfig
 invalid_field = "test"
 model = "gpt-4"
 
@@ -602,23 +531,6 @@ invalid_field_in_sandbox = "test"
         assert default_config.debug is True
     finally:
         openhands_logger.removeHandler(handler)
-
-
-def test_load_from_toml_security_invalid(default_config, temp_toml_file):
-    """Test that invalid security configuration raises ValueError."""
-    with open(temp_toml_file, 'w', encoding='utf-8') as f:
-        f.write("""
-[core]
-debug = true
-
-[security]
-invalid_security_field = "test"
-""")
-
-    with pytest.raises(ValueError) as excinfo:
-        load_from_toml(default_config, temp_toml_file)
-
-    assert 'Error in [security] section in config.toml' in str(excinfo.value)
 
 
 def test_finalize_config(default_config):
@@ -684,13 +596,6 @@ def test_sandbox_volumes_with_workspace_not_first(default_config):
     assert default_config.workspace_base == '/home/user/mydir'
 
 
-def test_agent_config_condenser_with_no_enabled():
-    """Test default agent condenser with enable_default_condenser=False."""
-    config = OpenHandsConfig(enable_default_condenser=False)
-    agent_config = config.get_agent_config()
-    assert isinstance(agent_config.condenser, ConversationWindowCondenserConfig)
-
-
 def test_sandbox_volumes_toml(default_config, temp_toml_file):
     """Test that volumes configuration under [sandbox] works correctly."""
     with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
@@ -712,236 +617,6 @@ timeout = 1
     assert default_config.workspace_mount_path_in_sandbox == '/workspace'
     assert default_config.workspace_base == '/home/user/mydir'
     assert default_config.sandbox.timeout == 1
-
-
-def test_condenser_config_from_toml_basic(default_config, temp_toml_file):
-    """Test loading basic condenser configuration from TOML."""
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write("""
-[condenser]
-type = "recent"
-keep_first = 3
-max_events = 15
-""")
-
-    load_from_toml(default_config, temp_toml_file)
-
-    # Verify that the condenser config is correctly assigned to the default agent config
-    agent_config = default_config.get_agent_config()
-    assert isinstance(agent_config.condenser, RecentEventsCondenserConfig)
-    assert agent_config.condenser.keep_first == 3
-    assert agent_config.condenser.max_events == 15
-
-    # We can also verify the function works directly
-    from openhands.core.config.condenser_config import (
-        condenser_config_from_toml_section,
-    )
-
-    condenser_data = {'type': 'recent', 'keep_first': 3, 'max_events': 15}
-    condenser_mapping = condenser_config_from_toml_section(condenser_data)
-
-    assert 'condenser' in condenser_mapping
-    assert isinstance(condenser_mapping['condenser'], RecentEventsCondenserConfig)
-    assert condenser_mapping['condenser'].keep_first == 3
-    assert condenser_mapping['condenser'].max_events == 15
-
-
-def test_condenser_config_from_toml_with_llm_reference(default_config, temp_toml_file):
-    """Test loading condenser configuration with LLM reference from TOML."""
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write("""
-[llm.condenser_llm]
-model = "gpt-4"
-api_key = "test-key"
-
-[condenser]
-type = "llm"
-llm_config = "condenser_llm"
-keep_first = 2
-max_size = 50
-""")
-
-    load_from_toml(default_config, temp_toml_file)
-
-    # Verify that the LLM config was loaded
-    assert 'condenser_llm' in default_config.llms
-    assert default_config.llms['condenser_llm'].model == 'gpt-4'
-
-    # Verify that the condenser config is correctly assigned to the default agent config
-    agent_config = default_config.get_agent_config()
-    assert isinstance(agent_config.condenser, LLMSummarizingCondenserConfig)
-    assert agent_config.condenser.keep_first == 2
-    assert agent_config.condenser.max_size == 50
-    assert agent_config.condenser.llm_config.model == 'gpt-4'
-
-    # Test the condenser config with the LLM reference
-    from openhands.core.config.condenser_config import (
-        condenser_config_from_toml_section,
-    )
-
-    condenser_data = {
-        'type': 'llm',
-        'llm_config': 'condenser_llm',
-        'keep_first': 2,
-        'max_size': 50,
-    }
-    condenser_mapping = condenser_config_from_toml_section(
-        condenser_data, default_config.llms
-    )
-
-    assert 'condenser' in condenser_mapping
-    assert isinstance(condenser_mapping['condenser'], LLMSummarizingCondenserConfig)
-    assert condenser_mapping['condenser'].keep_first == 2
-    assert condenser_mapping['condenser'].max_size == 50
-    assert condenser_mapping['condenser'].llm_config.model == 'gpt-4'
-
-
-def test_condenser_config_from_toml_with_missing_llm_reference(
-    default_config, temp_toml_file
-):
-    """Test loading condenser configuration with missing LLM reference from TOML."""
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write("""
-[condenser]
-type = "llm"
-llm_config = "missing_llm"
-keep_first = 2
-max_size = 50
-""")
-
-    load_from_toml(default_config, temp_toml_file)
-
-    # Test the condenser config with a missing LLM reference
-    from openhands.core.config.condenser_config import (
-        condenser_config_from_toml_section,
-    )
-
-    condenser_data = {
-        'type': 'llm',
-        'llm_config': 'missing_llm',
-        'keep_first': 2,
-        'max_size': 50,
-    }
-    condenser_mapping = condenser_config_from_toml_section(
-        condenser_data, default_config.llms
-    )
-
-    assert 'condenser' in condenser_mapping
-    assert isinstance(condenser_mapping['condenser'], NoOpCondenserConfig)
-    # Should not have a default LLMConfig when the reference is missing
-    assert not hasattr(condenser_mapping['condenser'], 'llm_config')
-
-
-def test_condenser_config_from_toml_with_invalid_config(default_config, temp_toml_file):
-    """Test loading invalid condenser configuration from TOML."""
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write("""
-[condenser]
-type = "invalid_type"
-""")
-
-    load_from_toml(default_config, temp_toml_file)
-
-    # Test the condenser config with an invalid type
-    from openhands.core.config.condenser_config import (
-        condenser_config_from_toml_section,
-    )
-
-    condenser_data = {'type': 'invalid_type'}
-    condenser_mapping = condenser_config_from_toml_section(condenser_data)
-
-    # Should default to NoOpCondenserConfig when the type is invalid
-    assert 'condenser' in condenser_mapping
-    assert isinstance(condenser_mapping['condenser'], NoOpCondenserConfig)
-
-
-def test_condenser_config_from_toml_with_validation_error(
-    default_config, temp_toml_file
-):
-    """Test loading condenser configuration with validation error from TOML."""
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write("""
-[condenser]
-type = "recent"
-keep_first = -1  # Invalid: must be >= 0
-max_events = 0   # Invalid: must be >= 1
-""")
-
-    load_from_toml(default_config, temp_toml_file)
-
-    # Test the condenser config with validation errors
-    from openhands.core.config.condenser_config import (
-        condenser_config_from_toml_section,
-    )
-
-    condenser_data = {'type': 'recent', 'keep_first': -1, 'max_events': 0}
-    condenser_mapping = condenser_config_from_toml_section(condenser_data)
-
-    # Should default to NoOpCondenserConfig when validation fails
-    assert 'condenser' in condenser_mapping
-    assert isinstance(condenser_mapping['condenser'], NoOpCondenserConfig)
-
-
-def test_default_condenser_behavior_enabled(default_config, temp_toml_file):
-    """Test the default condenser behavior when enable_default_condenser is True."""
-    # Create a minimal TOML file with no condenser section
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write("""
-[core]
-# Empty core section, no condenser section
-""")
-
-    # Set enable_default_condenser to True
-    default_config.enable_default_condenser = True
-    load_from_toml(default_config, temp_toml_file)
-
-    # Verify the default agent config has LLMSummarizingCondenserConfig
-    agent_config = default_config.get_agent_config()
-    assert isinstance(agent_config.condenser, LLMSummarizingCondenserConfig)
-    assert agent_config.condenser.keep_first == 1
-    assert agent_config.condenser.max_size == 100
-
-
-def test_default_condenser_behavior_disabled(default_config, temp_toml_file):
-    """Test the default condenser behavior when enable_default_condenser is False."""
-    # Create a minimal TOML file with no condenser section
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write("""
-[core]
-# Empty core section, no condenser section
-""")
-
-    # Set enable_default_condenser to False
-    default_config.enable_default_condenser = False
-    load_from_toml(default_config, temp_toml_file)
-
-    # Verify the agent config uses ConversationWindowCondenserConfig
-    agent_config = default_config.get_agent_config()
-    assert isinstance(agent_config.condenser, ConversationWindowCondenserConfig)
-
-
-def test_default_condenser_explicit_toml_override(default_config, temp_toml_file):
-    """Test that explicit condenser in TOML takes precedence over the default."""
-    # Set enable_default_condenser to True
-    default_config.enable_default_condenser = True
-
-    # Create a TOML file with an explicit condenser section
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write("""
-[condenser]
-type = "recent"
-keep_first = 3
-max_events = 15
-""")
-
-    # Load the config
-    load_from_toml(default_config, temp_toml_file)
-
-    # Verify the explicit condenser from TOML takes precedence
-    agent_config = default_config.get_agent_config()
-    assert isinstance(agent_config.condenser, RecentEventsCondenserConfig)
-    assert agent_config.condenser.keep_first == 3
-    assert agent_config.condenser.max_events == 15
 
 
 def test_api_keys_repr_str():
@@ -982,22 +657,9 @@ def test_api_keys_repr_str():
                 f"Unexpected attribute '{attr_name}' contains 'token' in LLMConfig"
             )
 
-    # Test AgentConfig
-    # No attrs in AgentConfig have 'key' or 'token' in their name
-    agent_config = AgentConfig(enable_prompt_extensions=True, enable_browsing=False)
-    for attr_name in AgentConfig.model_fields.keys():
-        if not attr_name.startswith('__'):
-            assert 'key' not in attr_name.lower(), (
-                f"Unexpected attribute '{attr_name}' contains 'key' in AgentConfig"
-            )
-            assert 'token' not in attr_name.lower() or 'tokens' in attr_name.lower(), (
-                f"Unexpected attribute '{attr_name}' contains 'token' in AgentConfig"
-            )
-
     # Test OpenHandsConfig
     app_config = OpenHandsConfig(
         llms={'llm': llm_config},
-        agents={'agent': agent_config},
         search_api_key='my_search_api_key',
     )
 
@@ -1059,180 +721,3 @@ api_key="redacted"
 
     llm_config = get_llm_config_arg('gpt3', temp_toml_file)
     assert llm_config.model == 'gpt-3.5-turbo'
-
-
-def test_get_agent_configs(default_config, temp_toml_file):
-    temp_toml = """
-[core]
-max_iterations = 100
-max_budget_per_task = 4.0
-
-[agent.CodeActAgent]
-enable_prompt_extensions = true
-
-[agent.BrowsingAgent]
-enable_jupyter = false
-"""
-
-    with open(temp_toml_file, 'w') as f:
-        f.write(temp_toml)
-
-    load_from_toml(default_config, temp_toml_file)
-
-    codeact_config = default_config.get_agent_configs().get('CodeActAgent')
-    assert codeact_config.enable_prompt_extensions is True
-    browsing_config = default_config.get_agent_configs().get('BrowsingAgent')
-    assert browsing_config.enable_jupyter is False
-
-
-def test_get_agent_config_arg(temp_toml_file):
-    temp_toml = """
-[core]
-max_iterations = 100
-max_budget_per_task = 4.0
-
-[agent.CodeActAgent]
-enable_prompt_extensions = false
-enable_browsing = false
-
-[agent.BrowsingAgent]
-enable_prompt_extensions = true
-enable_jupyter = false
-"""
-
-    with open(temp_toml_file, 'w') as f:
-        f.write(temp_toml)
-
-    agent_config = get_agent_config_arg('CodeActAgent', temp_toml_file)
-    assert not agent_config.enable_prompt_extensions
-    assert not agent_config.enable_browsing
-
-    agent_config2 = get_agent_config_arg('BrowsingAgent', temp_toml_file)
-    assert agent_config2.enable_prompt_extensions
-    assert not agent_config2.enable_jupyter
-
-
-def test_agent_config_custom_group_name(temp_toml_file):
-    temp_toml = """
-[core]
-max_iterations = 99
-
-[agent.group1]
-enable_prompt_extensions = true
-
-[agent.group2]
-enable_prompt_extensions = false
-"""
-    with open(temp_toml_file, 'w') as f:
-        f.write(temp_toml)
-
-    # just a sanity check that load app config wouldn't fail
-    app_config = load_openhands_config(config_file=temp_toml_file)
-    assert app_config.max_iterations == 99
-
-    # run_infer in evaluation can use `get_agent_config_arg` to load custom
-    # agent configs with any group name (not just agent name)
-    agent_config1 = get_agent_config_arg('group1', temp_toml_file)
-    assert agent_config1.enable_prompt_extensions
-    agent_config2 = get_agent_config_arg('group2', temp_toml_file)
-    assert not agent_config2.enable_prompt_extensions
-
-
-def test_agent_config_from_toml_section():
-    """Test that AgentConfig.from_toml_section correctly parses agent configurations from TOML."""
-    from openhands.core.config.agent_config import AgentConfig
-
-    # Test with base config and custom configs
-    agent_section = {
-        'enable_prompt_extensions': True,
-        'enable_browsing': True,
-        'CustomAgent1': {'enable_browsing': False},
-        'CustomAgent2': {'enable_prompt_extensions': False},
-        'InvalidAgent': {
-            'invalid_field': 'some_value'  # This should be skipped but not affect others
-        },
-    }
-
-    # Parse the section
-    result = AgentConfig.from_toml_section(agent_section)
-
-    # Verify the base config was correctly parsed
-    assert 'agent' in result
-    assert result['agent'].enable_prompt_extensions is True
-    assert result['agent'].enable_browsing is True
-
-    # Verify custom configs were correctly parsed and inherit from base
-    assert 'CustomAgent1' in result
-    assert result['CustomAgent1'].enable_browsing is False  # Overridden
-    assert result['CustomAgent1'].enable_prompt_extensions is True  # Inherited
-
-    assert 'CustomAgent2' in result
-    assert result['CustomAgent2'].enable_browsing is True  # Inherited
-    assert result['CustomAgent2'].enable_prompt_extensions is False  # Overridden
-
-    # Verify the invalid config was skipped
-    assert 'InvalidAgent' not in result
-
-
-def test_agent_config_from_toml_section_with_invalid_base():
-    """Test that AgentConfig.from_toml_section handles invalid base configurations gracefully."""
-    from openhands.core.config.agent_config import AgentConfig
-
-    # Test with invalid base config but valid custom configs
-    agent_section = {
-        'invalid_field': 'some_value',  # This should be ignored in base config
-        'enable_jupyter': 'not_a_bool',  # This should cause validation error
-        'CustomAgent': {
-            'enable_browsing': False,
-            'enable_jupyter': True,
-        },
-    }
-
-    # Parse the section
-    result = AgentConfig.from_toml_section(agent_section)
-
-    # Verify a default base config was created despite the invalid fields
-    assert 'agent' in result
-    assert result['agent'].enable_browsing is True  # Default value
-    assert result['agent'].enable_jupyter is True  # Default value
-
-    # Verify custom config was still processed correctly
-    assert 'CustomAgent' in result
-    assert result['CustomAgent'].enable_browsing is False
-    assert result['CustomAgent'].enable_jupyter is True
-
-
-def test_agent_config_system_prompt_filename_default():
-    """Test that AgentConfig defaults to 'system_prompt.j2' for system_prompt_filename."""
-    config = AgentConfig()
-    assert config.system_prompt_filename == 'system_prompt.j2'
-
-
-def test_agent_config_system_prompt_filename_toml_integration(
-    default_config, temp_toml_file
-):
-    """Test that system_prompt_filename is correctly loaded from TOML configuration."""
-    with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
-        toml_file.write(
-            """
-[agent]
-enable_browsing = true
-system_prompt_filename = "custom_prompt.j2"
-
-[agent.CodeReviewAgent]
-system_prompt_filename = "code_review_prompt.j2"
-enable_browsing = false
-"""
-        )
-
-    load_from_toml(default_config, temp_toml_file)
-
-    # Check default agent config
-    default_agent_config = default_config.get_agent_config()
-    assert default_agent_config.system_prompt_filename == 'custom_prompt.j2'
-    assert default_agent_config.enable_browsing is True
-
-    # Check custom agent config
-    custom_agent_config = default_config.get_agent_config('CodeReviewAgent')
-    assert custom_agent_config.system_prompt_filename == 'code_review_prompt.j2'
-    assert custom_agent_config.enable_browsing is False

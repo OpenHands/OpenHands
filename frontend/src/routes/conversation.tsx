@@ -20,6 +20,7 @@ import { ConversationSubscriptionsProvider } from "#/context/conversation-subscr
 
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
 import { ConversationNameWithStatus } from "#/components/features/conversation/conversation-name-with-status";
+import { ArchivedConversationView } from "#/components/features/conversation/archived-conversation-view";
 
 import { ConversationTabs } from "#/components/features/conversation/conversation-tabs/conversation-tabs";
 import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
@@ -89,6 +90,25 @@ function AppContent() {
       navigate("/");
     }
   }, [conversation, isFetched, isAuthed, navigate, t]);
+
+  // Check if this is an archived conversation (sandbox no longer exists)
+  const isArchived = conversation?.sandbox_status === "MISSING";
+
+  // For archived conversations, show a simplified read-only view
+  // similar to the shared conversation view
+  if (isArchived) {
+    return (
+      <WebSocketProviderWrapper conversationId={conversationId}>
+        <ConversationSubscriptionsProvider>
+          <EventHandler>
+            <div data-testid="app-route" className="flex flex-col h-full gap-3">
+              <ArchivedConversationView />
+            </div>
+          </EventHandler>
+        </ConversationSubscriptionsProvider>
+      </WebSocketProviderWrapper>
+    );
+  }
 
   const content = (
     <ConversationSubscriptionsProvider>

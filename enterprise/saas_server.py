@@ -8,12 +8,12 @@ load_dotenv()
 if not os.getenv('OPENHANDS_CONFIG_CLS'):
     os.environ['OPENHANDS_CONFIG_CLS'] = 'server.config.SaaSServerConfig'
 
-import socketio  # noqa: E402
 from fastapi import Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
+    BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_DATA_CENTER_HOST,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
@@ -28,7 +28,6 @@ from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
-from server.routes.feedback import router as feedback_router  # noqa: E402
 from server.routes.github_proxy import add_github_proxy_routes  # noqa: E402
 from server.routes.integration.jira import jira_integration_router  # noqa: E402
 from server.routes.integration.jira_dc import jira_dc_integration_router  # noqa: E402
@@ -62,7 +61,6 @@ from server.verified_models.verified_model_router import (  # noqa: E402
 )
 
 from openhands.server.app import app as base_app  # noqa: E402
-from openhands.server.listen_socket import sio  # noqa: E402
 from openhands.server.middleware import (  # noqa: E402
     CacheControlMiddleware,
 )
@@ -106,9 +104,29 @@ if GITHUB_APP_CLIENT_ID:
 
 # Add GitLab integration router only if GITLAB_APP_CLIENT_ID is set
 if GITLAB_APP_CLIENT_ID:
+    # Make sure that the callback processor is loaded here so we don't get an error when deserializing
+    from integrations.gitlab.gitlab_v1_callback_processor import (  # noqa: E402
+        GitlabV1CallbackProcessor,
+    )
     from server.routes.integration.gitlab import gitlab_integration_router  # noqa: E402
 
+    # Bludgeon mypy into not deleting my import
+    logger.debug(f'Loaded {GitlabV1CallbackProcessor.__name__}')
+
     base_app.include_router(gitlab_integration_router)
+
+# Add Bitbucket Cloud integration router only if BITBUCKET_APP_CLIENT_ID is set
+if BITBUCKET_APP_CLIENT_ID:
+    from integrations.bitbucket.bitbucket_v1_callback_processor import (  # noqa: E402
+        BitbucketV1CallbackProcessor,
+    )
+    from server.routes.integration.bitbucket import (  # noqa: E402
+        bitbucket_integration_router,
+    )
+
+    logger.debug(f'Loaded {BitbucketV1CallbackProcessor.__name__}')
+
+    base_app.include_router(bitbucket_integration_router)
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(service_router)  # Add routes for internal service API
@@ -140,7 +158,6 @@ if BITBUCKET_DATA_CENTER_HOST:
 
     base_app.include_router(bitbucket_dc_proxy_router)
 base_app.include_router(email_router)  # Add routes for email management
-base_app.include_router(feedback_router)  # Add routes for conversation feedback
 
 
 base_app.add_middleware(
@@ -173,4 +190,5 @@ async def expired_exception_handler(request: Request, exc: ExpiredError):
     return JSONResponse({'error': ExpiredError.__name__}, status.HTTP_401_UNAUTHORIZED)
 
 
-app = socketio.ASGIApp(sio, other_asgi_app=base_app)
+# Note: socketio is no longer used for communication. The base FastAPI app is used directly.
+app = base_app

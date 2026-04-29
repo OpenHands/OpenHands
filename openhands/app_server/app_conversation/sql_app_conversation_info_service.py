@@ -46,18 +46,18 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     AppConversationInfoPage,
     AppConversationSortOrder,
+    ConversationTrigger,
 )
+from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import (
     Base,
     create_json_type_decorator,
 )
-from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,7 @@ class StoredConversationMetadata(Base):
 
     # LLM model used for the conversation
     llm_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_kind: Mapped[str | None] = mapped_column(String, nullable=True)
 
     conversation_version: Mapped[str] = mapped_column(
         String, nullable=False, default='V0', index=True
@@ -370,6 +371,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             context_window=usage.context_window,
             per_turn_token=usage.per_turn_token,
             llm_model=info.llm_model,
+            agent_kind=info.agent_kind,
             conversation_version='V1',
             sandbox_id=info.sandbox_id,
             parent_conversation_id=(
@@ -558,6 +560,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             trigger=ConversationTrigger(stored.trigger) if stored.trigger else None,
             pr_number=stored.pr_number or [],
             llm_model=stored.llm_model,
+            agent_kind=stored.agent_kind or 'llm',
             metrics=metrics,
             parent_conversation_id=(
                 UUID(stored.parent_conversation_id)

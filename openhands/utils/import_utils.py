@@ -9,18 +9,18 @@ def import_from(qual_name: str):
     """Import a value from its fully qualified name.
 
     This function is a utility to dynamically import any Python value (class, function, variable)
-    from its fully qualified name. For example, 'openhands.server.user_auth.UserAuth' would
-    import the UserAuth class from the openhands.server.user_auth module.
+    from its fully qualified name. For example, 'openhands.app_server.user_auth.UserAuth' would
+    import the UserAuth class from the openhands.app_server.user_auth module.
 
     Args:
         qual_name: A fully qualified name in the format 'module.submodule.name'
-                  e.g. 'openhands.server.user_auth.UserAuth'
+                  e.g. 'openhands.app_server.user_auth.UserAuth'
 
     Returns:
         The imported value (class, function, or variable)
 
     Example:
-        >>> UserAuth = import_from('openhands.server.user_auth.UserAuth')
+        >>> UserAuth = import_from('openhands.app_server.user_auth.UserAuth')
         >>> auth = UserAuth()
     """
     parts = qual_name.split('.')
@@ -52,7 +52,7 @@ def get_impl(cls: type[T], impl_name: str | None) -> type[T]:
     Args:
         cls: The base class that defines the interface
         impl_name: Fully qualified name of the implementation class, or None to use the base class
-                  e.g. 'openhands.storage.settings.file_settings_store.FileSettingsStore'
+                  e.g. 'openhands.app_server.settings.file_settings_store.FileSettingsStore'
 
     Returns:
         The implementation class, which is guaranteed to be a subclass of cls
@@ -64,8 +64,8 @@ def get_impl(cls: type[T], impl_name: str | None) -> type[T]:
         >>> CustomStore = get_impl(SettingsStore, 'myapp.CustomSettingsStore')
 
     Common Use Cases:
-        - Server components (UserAuth, MonitoringListener, etc.)
-        - Storage implementations (ConversationStore, SettingsStore, SecretsStore, etc.)
+        - Server components (UserAuth, etc.)
+        - Storage implementations (SettingsStore, SecretsStore, etc.)
         - Service integrations (GitHub, GitLab, Bitbucket, Azure DevOps services)
 
     The implementation is cached to avoid repeated imports of the same class.

@@ -57,9 +57,9 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.3",
-  "openhands-agent-server==1.17",
-  "openhands-sdk==1.17",
-  "openhands-tools==1.17",
+  "openhands-agent-server==1.19",
+  "openhands-sdk==1.19",
+  "openhands-tools==1.19",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "orjson>=3.11.6",
@@ -106,12 +106,6 @@ dependencies = [
   "zope-interface==7.2",
 ]
 
-optional-dependencies.third_party_runtimes = [
-  "daytona==0.24.2",
-  "e2b-code-interpreter>=2",
-  "modal>=0.66.26,<1.2",
-  "runloop-api-client==0.50",
-]
 urls.Homepage = "https://github.com/OpenHands/OpenHands"
 urls.Repository = "https://github.com/OpenHands/OpenHands"
 
@@ -153,7 +147,6 @@ readme = "README.md"
 repository = "https://github.com/OpenHands/OpenHands"
 packages = [
   { include = "openhands/**/*" },
-  { include = "third_party/**/*" },
   { include = "pyproject.toml", to = "openhands" },
   { include = "poetry.lock", to = "openhands" },
 ]
@@ -251,18 +244,15 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.17.0"
-openhands-agent-server = "1.17.0"
-openhands-tools = "1.17.0"
+openhands-sdk = "1.19.0"
+openhands-agent-server = "1.19.0"
+openhands-tools = "1.19.0"
 jwcrypto = ">=1.5.6"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
 asyncpg = ">=0.30,<0.32"
 deprecation = "^2.1.0"
 lmnr = "^0.7.20"
-
-[tool.poetry.extras]
-third_party_runtimes = [ "e2b-code-interpreter", "modal", "runloop-api-client", "daytona" ]
 
 [tool.poetry.group.dev]
 optional = true

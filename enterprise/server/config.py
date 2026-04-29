@@ -22,8 +22,8 @@ from server.auth.constants import (
 )
 from server.constants import DEPLOYMENT_MODE
 
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.core.config.utils import load_openhands_config
-from openhands.integrations.service_types import ProviderType
 from openhands.server.config.server_config import ServerConfig
 from openhands.server.types import AppMode
 
@@ -72,12 +72,6 @@ class SaaSServerConfig(ServerConfig):
     auth_url: str | None = os.environ.get('AUTH_URL')
     settings_store_class: str = 'storage.saas_settings_store.SaasSettingsStore'
     secret_store_class: str = 'storage.saas_secrets_store.SaasSecretsStore'
-    conversation_store_class: str = (
-        'storage.saas_conversation_store.SaasConversationStore'
-    )
-    monitoring_listener_class: str = (
-        'server.saas_monitoring_listener.SaaSMonitoringListener'
-    )
     user_auth_class: str = 'server.auth.saas_user_auth.SaasUserAuth'
     # Maintenance window configuration
     maintenance_start_time: str = os.environ.get(
@@ -86,6 +80,7 @@ class SaaSServerConfig(ServerConfig):
     enable_jira = ENABLE_JIRA
     enable_jira_dc = ENABLE_JIRA_DC
     enable_linear = ENABLE_LINEAR
+    enable_onboarding = os.environ.get('OH_ENABLE_ONBOARDING', 'false') == 'true'
 
     app_slug: None | str = None
 
@@ -177,6 +172,7 @@ class SaaSServerConfig(ServerConfig):
                 'ENABLE_JIRA_DC': self.enable_jira_dc,
                 'ENABLE_LINEAR': self.enable_linear,
                 'DEPLOYMENT_MODE': DEPLOYMENT_MODE,
+                'ENABLE_ONBOARDING': self.enable_onboarding,
             },
             'PROVIDERS_CONFIGURED': providers_configured,
         }

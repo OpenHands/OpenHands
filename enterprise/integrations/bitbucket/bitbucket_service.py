@@ -1,9 +1,11 @@
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 
+from openhands.app_server.integrations.bitbucket.bitbucket_service import (
+    BitBucketService,
+)
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
-from openhands.integrations.service_types import ProviderType
 
 
 class SaaSBitBucketService(BitBucketService):

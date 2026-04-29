@@ -17,12 +17,12 @@ from openhands.app_server.config import (
     depends_user_context,
     resolve_provider_llm_base_url,
 )
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.session_auth import validate_session_key_ownership
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import ProviderType
 
 _logger = logging.getLogger(__name__)
 

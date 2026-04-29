@@ -18,6 +18,13 @@ from openhands.app_server.git.git_models import (
     SortOrder,
     SuggestedTaskPage,
 )
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import (
+    Branch,
+    ProviderType,
+    Repository,
+    SuggestedTask,
+)
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.paging_utils import (
@@ -25,16 +32,9 @@ from openhands.app_server.utils.paging_utils import (
     encode_page_id,
     paginate_results,
 )
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import (
-    Branch,
-    ProviderType,
-    Repository,
-    SuggestedTask,
-)
 
 if TYPE_CHECKING:
-    from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
+    from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware

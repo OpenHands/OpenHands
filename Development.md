@@ -309,16 +309,6 @@ poetry run pytest ./tests/unit/test_*.py
 
 ---
 
-## Using Existing Docker Images
-
-To reduce build time, you can use an existing runtime image:
-
-```bash
-export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/openhands/runtime:1.2-nikolaik
-```
-
----
-
 ## Help
 
 ```bash
@@ -339,4 +329,3 @@ make help
 - [/tests/unit/README.md](./tests/unit/README.md): Guide to writing and running unit tests
 - [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks): Documentation for the evaluation framework and benchmarks
 - [/skills/README.md](./skills/README.md): Information about the skills architecture and implementation
-- [/openhands/runtime/README.md](./openhands/runtime/README.md): Documentation for the runtime environment and execution model

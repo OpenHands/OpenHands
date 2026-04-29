@@ -13,7 +13,7 @@ from storage.org import Org
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
 
 # --- Fixtures ---
 
@@ -71,6 +71,66 @@ def test_get_kwargs_from_settings():
     assert 'enable_sound_notifications' in kwargs
     # Should not include fields that don't exist in User model
     assert 'llm_api_key' not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_create_user_with_llm_profiles_does_not_crash_and_preserves_secrets(
+    async_session_maker,
+):
+    """Regression: User creation must not crash on a populated ``llm_profiles``.
+
+    ``UserStore.get_kwargs_from_settings`` hands ``settings.llm_profiles``
+    (an ``LLMProfiles`` pydantic model) straight to ``User(**kwargs)``.
+    Before ``EncryptedJSON`` accepted pydantic models, ``json.dumps`` in
+    ``process_bind_param`` raised
+    ``TypeError: Object of type LLMProfiles is not JSON serializable``,
+    crashing keycloak_callback → create_user for every new login —
+    default ``Settings`` already carries an empty ``LLMProfiles()`` via
+    ``default_factory``, so the path was hit even for users who never
+    saved a profile.
+
+    Also locks in that nested ``SecretStr`` api_keys keep their plaintext
+    through the column: the column itself is the encryption boundary, so
+    masking on the way in would corrupt round-trips.
+    """
+    from openhands.sdk.llm import LLM
+
+    user_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+
+    settings = Settings(language='en')
+    settings.llm_profiles.save(
+        'work',
+        LLM(
+            model='anthropic/claude-sonnet-4-5-20250929',
+            base_url='https://api.anthropic.com/v1',
+            api_key=SecretStr('work-secret-key'),
+        ),
+    )
+    settings.llm_profiles.active = 'work'
+
+    kwargs = UserStore.get_kwargs_from_settings(settings)
+    assert 'llm_profiles' in kwargs
+    # Caller hands the pydantic model straight to User; the column
+    # converts it on bind, so the kwarg is still the model here.
+    assert kwargs['llm_profiles'] is settings.llm_profiles
+
+    async with async_session_maker() as session:
+        session.add(Org(id=org_id, name='test-org'))
+        session.add(User(id=user_id, current_org_id=org_id, **kwargs))
+        # Would raise TypeError before the EncryptedJSON BaseModel branch.
+        await session.commit()
+
+    async with async_session_maker() as session:
+        user = (
+            await session.execute(select(User).where(User.id == user_id))
+        ).scalar_one()
+
+    assert user.llm_profiles is not None
+    assert user.llm_profiles['active'] == 'work'
+    # SecretStr would serialize as '**********' without
+    # context={'expose_secrets': True}; assert the real value survived.
+    assert user.llm_profiles['profiles']['work']['api_key'] == 'work-secret-key'
 
 
 # --- Tests for create_default_settings ---
@@ -695,6 +755,66 @@ async def test_list_users(async_session_maker):
     assert user_id2 in user_ids
 
 
+def test_get_org_kwargs_for_migration_preserves_existing_llm_when_not_custom():
+    from server.constants import ORG_SETTINGS_VERSION
+    from storage.user_settings import UserSettings
+
+    user_settings = UserSettings(
+        keycloak_user_id='test',
+        user_version=3,
+        agent_settings={
+            'schema_version': 1,
+            'llm': {
+                'model': 'anthropic/claude-sonnet-4-5-20250929',
+                'base_url': 'https://api.anthropic.com/v1',
+            },
+        },
+        conversation_settings={'max_iterations': 42},
+    )
+
+    org_kwargs = UserStore._get_org_kwargs_for_migration(
+        user_settings, custom_settings=False
+    )
+
+    assert org_kwargs['org_version'] == ORG_SETTINGS_VERSION
+    assert org_kwargs['agent_settings'] == user_settings.agent_settings
+    assert org_kwargs['conversation_settings'] == user_settings.conversation_settings
+
+
+def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm():
+    from server.constants import (
+        LITE_LLM_API_URL,
+        ORG_SETTINGS_VERSION,
+        get_default_litellm_model,
+    )
+    from storage.user_settings import UserSettings
+
+    user_settings = UserSettings(
+        keycloak_user_id='test',
+        user_version=3,
+        agent_settings={
+            'schema_version': 1,
+            'llm': {
+                'model': 'anthropic/claude-sonnet-4-5-20250929',
+                'base_url': 'https://api.anthropic.com/v1',
+            },
+        },
+    )
+
+    org_kwargs = UserStore._get_org_kwargs_for_migration(
+        user_settings, custom_settings=True
+    )
+
+    assert org_kwargs['org_version'] == ORG_SETTINGS_VERSION
+    assert org_kwargs['agent_settings'] == {
+        'schema_version': 1,
+        'llm': {
+            'model': get_default_litellm_model(),
+            'base_url': LITE_LLM_API_URL,
+        },
+    }
+
+
 # --- Tests for _has_custom_settings ---
 
 
@@ -817,7 +937,6 @@ def test_create_user_settings_from_entities():
     org.search_api_key = None
     org.sandbox_api_key = None
     org.max_budget_per_task = None
-    org.enable_solvability_analysis = False
     org.v1_enabled = True
 
     result = UserStore._create_user_settings_from_entities(
@@ -880,7 +999,6 @@ def test_create_user_settings_from_entities_with_org_fallback():
     org.search_api_key = SecretStr('search-key')
     org.sandbox_api_key = None
     org.max_budget_per_task = 10.0
-    org.enable_solvability_analysis = True
     org.v1_enabled = False
 
     result = UserStore._create_user_settings_from_entities(
@@ -902,9 +1020,14 @@ def test_create_user_settings_from_entities_with_org_fallback():
 
 
 @pytest.mark.asyncio
-async def test_acquire_user_creation_lock_no_redis():
-    """Test that _acquire_user_creation_lock returns True when Redis is unavailable."""
-    with patch.object(UserStore, '_get_redis_client', return_value=None):
+async def test_acquire_user_creation_lock_redis_error():
+    """Test that _acquire_user_creation_lock returns True when Redis has an error."""
+    from redis import exceptions as redis_exceptions
+
+    mock_redis = AsyncMock()
+    mock_redis.set.side_effect = redis_exceptions.RedisError('Connection refused')
+
+    with patch.object(UserStore, '_get_redis_client', return_value=mock_redis):
         result = await UserStore._acquire_user_creation_lock('test-user-id')
 
     assert result is True
@@ -936,9 +1059,14 @@ async def test_acquire_user_creation_lock_not_acquired():
 
 
 @pytest.mark.asyncio
-async def test_release_user_creation_lock_no_redis():
-    """Test that _release_user_creation_lock returns True when Redis is unavailable."""
-    with patch.object(UserStore, '_get_redis_client', return_value=None):
+async def test_release_user_creation_lock_redis_error():
+    """Test that _release_user_creation_lock returns True when Redis has an error."""
+    from redis import exceptions as redis_exceptions
+
+    mock_redis = AsyncMock()
+    mock_redis.delete.side_effect = redis_exceptions.RedisError('Connection refused')
+
+    with patch.object(UserStore, '_get_redis_client', return_value=mock_redis):
         result = await UserStore._release_user_creation_lock('test-user-id')
 
     assert result is True

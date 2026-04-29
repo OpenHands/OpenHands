@@ -24,9 +24,9 @@ from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
+from openhands.app_server.settings.settings_models import Settings
 from openhands.core.logger import openhands_logger as logger
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.data_models.settings import Settings
 
 
 class OrgService:

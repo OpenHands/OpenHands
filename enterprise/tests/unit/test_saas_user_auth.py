@@ -22,8 +22,8 @@ from server.auth.saas_user_auth import (
 from storage.api_key_store import ApiKeyValidationResult
 from storage.user_authorization import UserAuthorizationType
 
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.storage.data_models.secrets import Secrets
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.secrets.secrets_models import Secrets
 
 
 @pytest.fixture

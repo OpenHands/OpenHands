@@ -1,11 +1,19 @@
-import json
+from dataclasses import dataclass
 
 import pytest
 
-from openhands.storage.conversation.file_conversation_store import FileConversationStore
-from openhands.storage.locations import get_conversation_metadata_filename
-from openhands.storage.memory import InMemoryFileStore
 from openhands.utils.search_utils import iterate, offset_to_page_id, page_id_to_offset
+
+
+@dataclass
+class MockItem:
+    id: str
+
+
+@dataclass
+class MockResultSet:
+    results: list[MockItem]
+    next_page_id: str | None = None
 
 
 def test_offset_to_page_id():
@@ -33,112 +41,47 @@ def test_bidirectional_conversion():
 
 @pytest.mark.asyncio
 async def test_iterate_empty():
-    store = FileConversationStore(InMemoryFileStore({}))
+    async def mock_search(page_id=None, limit=20):
+        return MockResultSet(results=[])
+
     results = []
-    async for result in iterate(store.search):
+    async for result in iterate(mock_search):
         results.append(result)
     assert len(results) == 0
 
 
 @pytest.mark.asyncio
 async def test_iterate_single_page():
-    store = FileConversationStore(
-        InMemoryFileStore(
-            {
-                get_conversation_metadata_filename('conv1'): json.dumps(
-                    {
-                        'conversation_id': 'conv1',
-                        'github_user_id': '123',
-                        'user_id': '123',
-                        'selected_repository': 'repo1',
-                        'title': 'First conversation',
-                        'created_at': '2025-01-16T19:51:04Z',
-                    }
-                ),
-                get_conversation_metadata_filename('conv2'): json.dumps(
-                    {
-                        'conversation_id': 'conv2',
-                        'github_user_id': '123',
-                        'user_id': '123',
-                        'selected_repository': 'repo1',
-                        'title': 'Second conversation',
-                        'created_at': '2025-01-17T19:51:04Z',
-                    }
-                ),
-            }
-        )
-    )
+    items = [MockItem(id='item1'), MockItem(id='item2')]
+
+    async def mock_search(page_id=None, limit=20):
+        return MockResultSet(results=items, next_page_id=None)
 
     results = []
-    async for result in iterate(store.search):
+    async for result in iterate(mock_search):
         results.append(result)
 
     assert len(results) == 2
-    assert results[0].conversation_id == 'conv2'  # newest first
-    assert results[1].conversation_id == 'conv1'
+    assert results[0].id == 'item1'
+    assert results[1].id == 'item2'
 
 
 @pytest.mark.asyncio
 async def test_iterate_multiple_pages():
-    # Create test data with 5 conversations
-    store = FileConversationStore(
-        InMemoryFileStore(
-            {
-                get_conversation_metadata_filename(f'conv{i}'): json.dumps(
-                    {
-                        'conversation_id': f'conv{i}',
-                        'github_user_id': '123',
-                        'user_id': '123',
-                        'selected_repository': 'repo1',
-                        'title': f'ServerConversation {i}',
-                        'created_at': f'2025-01-{15 + i}T19:51:04Z',
-                    }
-                )
-                for i in range(1, 6)
-            }
-        )
-    )
+    # Create test data with 5 items split across pages
+    all_items = [MockItem(id=f'item{i}') for i in range(1, 6)]
+
+    async def mock_search(page_id=None, limit=2):
+        offset = page_id_to_offset(page_id)
+        end = min(offset + limit, len(all_items))
+        items = all_items[offset:end]
+        has_next = end < len(all_items)
+        next_page = offset_to_page_id(end, has_next)
+        return MockResultSet(results=items, next_page_id=next_page)
 
     results = []
-    async for result in iterate(store.search, limit=2):
+    async for result in iterate(mock_search, limit=2):
         results.append(result)
 
     assert len(results) == 5
-    # Should be sorted by date, newest first
-    assert [r.conversation_id for r in results] == [
-        'conv5',
-        'conv4',
-        'conv3',
-        'conv2',
-        'conv1',
-    ]
-
-
-@pytest.mark.asyncio
-async def test_iterate_with_invalid_conversation():
-    store = FileConversationStore(
-        InMemoryFileStore(
-            {
-                get_conversation_metadata_filename('conv1'): json.dumps(
-                    {
-                        'conversation_id': 'conv1',
-                        'github_user_id': '123',
-                        'user_id': '123',
-                        'selected_repository': 'repo1',
-                        'title': 'Valid conversation',
-                        'created_at': '2025-01-16T19:51:04Z',
-                    }
-                ),
-                get_conversation_metadata_filename(
-                    'conv2'
-                ): 'invalid json',  # Invalid conversation
-            }
-        )
-    )
-
-    results = []
-    async for result in iterate(store.search):
-        results.append(result)
-
-    assert len(results) == 1
-    assert results[0].conversation_id == 'conv1'
+    assert [r.id for r in results] == ['item1', 'item2', 'item3', 'item4', 'item5']

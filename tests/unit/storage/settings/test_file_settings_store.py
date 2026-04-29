@@ -4,23 +4,23 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
+from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.settings.file_settings_store import FileSettingsStore
+from openhands.app_server.settings.settings_models import Settings
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.data_models.settings import Settings
-from openhands.storage.files import FileStore
-from openhands.storage.settings.file_settings_store import FileSettingsStore
-
-
-@pytest.fixture
-def mock_file_store():
-    return MagicMock(spec=FileStore)
 
 
 @pytest.fixture(autouse=True)
 def allow_short_context_windows():
     with patch.dict(os.environ, {'ALLOW_SHORT_CONTEXT_WINDOWS': 'true'}, clear=False):
         yield
+
+
+@pytest.fixture
+def mock_file_store():
+    return MagicMock(spec=FileStore)
 
 
 @pytest.fixture
@@ -31,7 +31,7 @@ def file_settings_store(mock_file_store):
 @pytest.mark.asyncio
 async def test_load_nonexistent_data(file_settings_store):
     with patch(
-        'openhands.storage.data_models.settings.load_openhands_config',
+        'openhands.app_server.settings.settings_models.load_openhands_config',
         MagicMock(return_value=OpenHandsConfig()),
     ):
         file_settings_store.file_store.read.side_effect = FileNotFoundError()
@@ -106,7 +106,7 @@ async def test_get_instance():
     config = OpenHandsConfig(file_store='local', file_store_path='/test/path')
 
     with patch(
-        'openhands.storage.settings.file_settings_store.get_file_store'
+        'openhands.app_server.settings.file_settings_store.get_file_store'
     ) as mock_get_store:
         mock_store = MagicMock(spec=FileStore)
         mock_get_store.return_value = mock_store
@@ -118,7 +118,4 @@ async def test_get_instance():
         mock_get_store.assert_called_once_with(
             file_store_type='local',
             file_store_path='/test/path',
-            file_store_web_hook_url=None,
-            file_store_web_hook_headers=None,
-            file_store_web_hook_batch=False,
         )

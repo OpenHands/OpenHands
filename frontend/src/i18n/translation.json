@@ -4895,6 +4895,23 @@
     "uk": "Це налаштування впливає на всю організацію",
     "ca": "Aquesta configuració afecta tota l'organització"
   },
+  "SETTINGS$ORG_MANAGED_BY_ADMIN_BADGE": {
+    "en": "This setting is managed by your organization administrator",
+    "ja": "この設定は組織の管理者によって管理されています",
+    "zh-CN": "此设置由您的组织管理员管理",
+    "zh-TW": "此設定由您的組織管理員管理",
+    "ko-KR": "이 설정은 조직 관리자가 관리합니다",
+    "no": "Denne innstillingen administreres av organisasjonsadministratoren din",
+    "it": "Questa impostazione è gestita dall’amministratore della tua organizzazione",
+    "pt": "Esta configuração é gerida pelo administrador da sua organização",
+    "es": "Esta configuración está gestionada por el administrador de tu organización",
+    "ar": "يتم إدارة هذا الإعداد من قبل مسؤول مؤسستك",
+    "fr": "Ce paramètre est géré par l’administrateur de votre organisation",
+    "tr": "Bu ayar kuruluş yöneticiniz tarafından yönetilmektedir",
+    "de": "Diese Einstellung wird von Ihrem Organisationsadministrator verwaltet",
+    "uk": "Це налаштування керується адміністратором вашої організації",
+    "ca": "Aquesta configuració està gestionada per l'administrador de la teva organització"
+  },
   "SETTINGS$ORG_DEFAULTS_INFO": {
     "en": "These organization defaults are applied first. Members can still add their own credentials or personal overrides where allowed.",
     "ja": "これらの組織のデフォルト設定が最初に適用されます。メンバーは許可されている範囲で、自分の認証情報や個人設定を追加できます。",
@@ -22591,6 +22608,23 @@
     "de": "Neue Konversation wird erstellt...",
     "uk": "Створення нової розмови...",
     "ca": "S'està creant una nova conversa..."
+  },
+  "CONVERSATION$ARCHIVED_READ_ONLY": {
+    "en": "This conversation is archived and read-only",
+    "ja": "この会話はアーカイブされており、読み取り専用です",
+    "zh-CN": "此对话已归档，只读",
+    "zh-TW": "此對話已歸檔，只讀",
+    "ko-KR": "이 대화는 보관되었으며 읽기 전용입니다",
+    "no": "Denne samtalen er arkivert og skrivebeskyttet",
+    "it": "Questa conversazione è archiviata e di sola lettura",
+    "pt": "Esta conversa está arquivada e é somente leitura",
+    "es": "Esta conversación está archivada y es de solo lectura",
+    "ar": "هذه المحادثة مؤرشفة وللقراءة فقط",
+    "fr": "Cette conversation est archivée et en lecture seule",
+    "tr": "Bu konuşma arşivlenmiş ve salt okunurdur",
+    "de": "Diese Konversation ist archiviert und schreibgeschützt",
+    "uk": "Ця розмова заархівована та доступна лише для читання",
+    "ca": "Aquesta conversa està arxivada i és de només lectura"
   },
   "CTA$ENTERPRISE": {
     "en": "Enterprise",
