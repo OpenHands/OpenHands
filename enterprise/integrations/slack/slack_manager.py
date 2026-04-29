@@ -28,6 +28,7 @@ from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import select
 from storage.database import a_session_maker
+from storage.redis import get_redis_client_async
 from storage.slack_user import SlackUser
 
 from openhands.app_server.integrations.provider import ProviderHandler
@@ -38,7 +39,7 @@ from openhands.app_server.integrations.service_types import (
 )
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.shared import config, server_config, sio
+from openhands.server.shared import config, server_config
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -114,7 +115,7 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
-            redis = sio.manager.redis
+            redis = get_redis_client_async()
             await redis.set(key, user_msg, ex=SLACK_USER_MSG_EXPIRATION)
             logger.info(
                 'slack_stored_user_msg',
@@ -157,7 +158,7 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
-            redis = sio.manager.redis
+            redis = get_redis_client_async()
             user_msg = await redis.get(key)
             if user_msg:
                 # Redis returns bytes, decode to string

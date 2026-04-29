@@ -8,7 +8,6 @@ load_dotenv()
 if not os.getenv('OPENHANDS_CONFIG_CLS'):
     os.environ['OPENHANDS_CONFIG_CLS'] = 'server.config.SaaSServerConfig'
 
-import socketio  # noqa: E402
 from fastapi import Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
@@ -61,7 +60,6 @@ from server.verified_models.verified_model_router import (  # noqa: E402
 )
 
 from openhands.server.app import app as base_app  # noqa: E402
-from openhands.server.listen_socket import sio  # noqa: E402
 from openhands.server.middleware import (  # noqa: E402
     CacheControlMiddleware,
 )
@@ -178,4 +176,5 @@ async def expired_exception_handler(request: Request, exc: ExpiredError):
     return JSONResponse({'error': ExpiredError.__name__}, status.HTTP_401_UNAUTHORIZED)
 
 
-app = socketio.ASGIApp(sio, other_asgi_app=base_app)
+# Note: socketio is no longer used for communication. The base FastAPI app is used directly.
+app = base_app
