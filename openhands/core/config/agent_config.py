@@ -9,12 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from openhands.core.config.condenser_config import (
-    CondenserConfig,
-    ConversationWindowCondenserConfig,
-)
 from openhands.core.config.extended_config import ExtendedConfig
-from openhands.core.config.model_routing_config import ModelRoutingConfig
 from openhands.core.logger import openhands_logger as logger
 
 
@@ -59,21 +54,14 @@ class AgentConfig(BaseModel):
     """Whether to enable plan mode, which uses the long horizon system message and add the new tool - task_tracker - for planning, tracking and executing complex tasks."""
     enable_stuck_detection: bool = Field(default=True)
     """Whether to enable stuck/loop detection. When disabled, the agent will not automatically detect and recover from loops."""
-    condenser: CondenserConfig = Field(
-        # The default condenser is set to the conversation window condenser -- if
-        # we use NoOp and the conversation hits the LLM context length limit,
-        # the agent will generate a condensation request which will never be
-        # handled.
-        default_factory=lambda: ConversationWindowCondenserConfig()
-    )
-    model_routing: ModelRoutingConfig = Field(default_factory=ModelRoutingConfig)
-    """Model routing configuration settings."""
     extended: ExtendedConfig = Field(default_factory=lambda: ExtendedConfig({}))
     """Extended configuration for the agent."""
     runtime: str | None = Field(default=None)
     """Runtime type (e.g., 'docker', 'local', 'cli') used for runtime-specific tool behavior."""
 
-    model_config = ConfigDict(extra='forbid')
+    # Allow extra fields for backwards compatibility with old config.toml files
+    # that may have condenser or model_routing sections
+    model_config = ConfigDict(extra='ignore')
 
     @property
     def resolved_system_prompt_filename(self) -> str:
