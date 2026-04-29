@@ -392,7 +392,6 @@ class Settings(BaseModel):
 
         return Settings(
             language='en',
-            remote_runtime_resource_factor=app_config.sandbox.remote_runtime_resource_factor,
             search_api_key=app_config.search_api_key,
             max_budget_per_task=app_config.max_budget_per_task,
             # Always LLM for config-file-sourced settings
