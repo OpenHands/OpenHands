@@ -188,8 +188,6 @@ function AgentSettingsScreen() {
         onSuccess: () => {
           displaySuccessToast(t(I18nKey.SETTINGS$AGENT_SAVED));
           setIsDirty(false);
-          setApiKey("");
-          setBaseUrl("");
         },
       },
     );
