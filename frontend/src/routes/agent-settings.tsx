@@ -73,6 +73,7 @@ function AgentSettingsScreen() {
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [acpModel, setAcpModel] = useState("");
   // command and args are stored as arrays; the textarea shows one token per line
   const [command, setCommand] = useState<string[]>([]);
   const [args, setArgs] = useState<string[]>([]);
@@ -92,6 +93,9 @@ function AgentSettingsScreen() {
         | undefined;
       const savedBaseUrl = savedLlm?.base_url;
       setBaseUrl(typeof savedBaseUrl === "string" ? savedBaseUrl : "");
+
+      const savedAcpModel = settings.agent_settings?.acp_model;
+      setAcpModel(typeof savedAcpModel === "string" ? savedAcpModel : "");
 
       const acpCommand = settings.agent_settings?.acp_command;
       setCommand(
@@ -133,6 +137,7 @@ function AgentSettingsScreen() {
     ) {
       setApiKey("");
       setBaseUrl("");
+      setAcpModel("");
     }
     // Advanced tab doesn't apply to OpenHands; reset to basic to avoid showing
     // a blank/stale advanced view.
@@ -169,6 +174,7 @@ function AgentSettingsScreen() {
         acp_command: effectiveCommand,
         acp_args: args,
         acp_env: parsedEnv,
+        ...(acpModel.trim() ? { acp_model: acpModel.trim() } : {}),
         ...(apiKey.trim() || baseUrl.trim()
           ? {
               llm: {
@@ -202,7 +208,11 @@ function AgentSettingsScreen() {
   const baseUrlLabel = isAcp
     ? ACP_BASE_URL_LABELS[agentType as AcpServerKind]
     : undefined;
-  const apiKeyIsSet = isAcp && !!settings?.llm_api_key_set;
+  const apiKeyIsSet =
+    isAcp &&
+    settings?.llm_api_key_set &&
+    settings?.agent_settings?.agent_kind === "acp" &&
+    agentType === (settings?.agent_settings?.acp_server as string | undefined);
 
   const defaultCommandPlaceholder = isAcpServerKind(agentType)
     ? (ACP_DEFAULT_COMMANDS[agentType] ?? []).join("\n")
@@ -290,6 +300,25 @@ function AgentSettingsScreen() {
               />
               <span className="text-xs text-[#717888]">
                 {t(I18nKey.SETTINGS$AGENT_BASE_URL_HINT)}
+              </span>
+            </div>
+          )}
+
+          {isAcp && (
+            <div className="flex flex-col gap-1.5">
+              <SettingsInput
+                testId="agent-model-input"
+                label={t(I18nKey.SETTINGS$AGENT_MODEL_LABEL)}
+                type="text"
+                className="w-full"
+                value={acpModel}
+                onChange={(value) => {
+                  setAcpModel(value);
+                  setIsDirty(true);
+                }}
+              />
+              <span className="text-xs text-[#717888]">
+                {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
               </span>
             </div>
           )}

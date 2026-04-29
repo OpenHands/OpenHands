@@ -151,6 +151,13 @@ function AppContent() {
   const isAgentIncompatible =
     isFetched && !!settings && !!conversation && conversationAgentKind !== settingsAgentKind;
 
+  // When the conversation was started with a specific ACP provider, prefer that
+  // name (e.g. "claude-code" → "Claude Code") over the generic "acp" fallback.
+  const bannerAgentKey =
+    conversationAgentKind === "acp" && conversation?.acp_server
+      ? conversation.acp_server
+      : conversationAgentKind;
+
   const content = (
     <ConversationSubscriptionsProvider>
       <EventHandler>
@@ -159,9 +166,7 @@ function AppContent() {
           className="p-3 md:p-0 flex flex-col h-full gap-3"
         >
           {isAgentIncompatible && (
-            <AgentIncompatibleBanner
-              conversationAgentKind={conversationAgentKind}
-            />
+            <AgentIncompatibleBanner conversationAgentKind={bannerAgentKey} />
           )}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4.5 pt-2 lg:pt-0">
             <ConversationNameWithStatus />

@@ -112,6 +112,7 @@ export interface V1AppConversation {
   pr_number: number[];
   llm_model: string | null;
   agent_kind?: string | null;
+  acp_server?: string | null;
   metrics: V1MetricsSnapshot | null;
   created_at: string;
   updated_at: string;

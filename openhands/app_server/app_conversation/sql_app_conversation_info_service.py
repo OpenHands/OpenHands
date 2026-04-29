@@ -101,6 +101,7 @@ class StoredConversationMetadata(Base):
     # LLM model used for the conversation
     llm_model: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_kind: Mapped[str | None] = mapped_column(String, nullable=True)
+    acp_server: Mapped[str | None] = mapped_column(String, nullable=True)
 
     conversation_version: Mapped[str] = mapped_column(
         String, nullable=False, default='V0', index=True
@@ -372,6 +373,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             per_turn_token=usage.per_turn_token,
             llm_model=info.llm_model,
             agent_kind=info.agent_kind,
+            acp_server=info.acp_server,
             conversation_version='V1',
             sandbox_id=info.sandbox_id,
             parent_conversation_id=(
@@ -561,6 +563,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             pr_number=stored.pr_number or [],
             llm_model=stored.llm_model,
             agent_kind=stored.agent_kind or 'llm',
+            acp_server=stored.acp_server,
             metrics=metrics,
             parent_conversation_id=(
                 UUID(stored.parent_conversation_id)

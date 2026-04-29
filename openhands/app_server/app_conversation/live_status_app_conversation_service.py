@@ -379,10 +379,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 info = ACPConversationInfo.model_validate(response.json())
                 agent_kind = 'acp'
                 display_model = start_conversation_request.agent.acp_model
+                user_info = await self.user_context.get_user_info()
+                acp_server = (
+                    user_info.agent_settings.acp_server
+                    if isinstance(user_info.agent_settings, ACPAgentSettings)
+                    else None
+                )
             else:
                 info = ConversationInfo.model_validate(response.json())
                 agent_kind = 'llm'
                 display_model = start_conversation_request.agent.llm.model
+                acp_server = None
 
             # Store info...
             user_id = await self.user_context.get_user_id()
@@ -393,6 +400,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 created_by_user_id=user_id,
                 llm_model=display_model,
                 agent_kind=agent_kind,
+                acp_server=acp_server,
                 # Git parameters
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,

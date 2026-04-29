@@ -103,6 +103,7 @@ class AppConversationInfo(BaseModel):
     pr_number: list[int] = Field(default_factory=list)
     llm_model: str | None = None
     agent_kind: str = 'llm'
+    acp_server: str | None = None
 
     metrics: MetricsSnapshot | None = None
 
