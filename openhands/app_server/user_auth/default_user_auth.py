@@ -60,11 +60,6 @@ class DefaultUserAuth(UserAuth):
             return settings
         settings_store = await self.get_user_settings_store()
         settings = await settings_store.load()
-
-        # Merge config.toml settings with stored settings
-        if settings:
-            settings = settings.merge_with_config_settings()
-
         self._settings = settings
         return settings
 
