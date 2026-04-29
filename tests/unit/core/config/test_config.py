@@ -541,7 +541,7 @@ def test_load_from_toml_partial_invalid(default_config, temp_toml_file, caplog):
 debug = true
 
 [llm]
-# Not set in `openhands/core/schema/config.py`
+# Not set in LLMConfig
 invalid_field = "test"
 model = "gpt-4"
 
