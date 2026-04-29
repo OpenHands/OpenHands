@@ -23,7 +23,6 @@ from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
 from openhands.core import logger
 from openhands.core.config.arg_utils import get_headless_parser
-from openhands.core.config.extended_config import ExtendedConfig
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import mcp_config_from_toml
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -238,26 +237,18 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
         except ValueError:
             raise ValueError('Error in MCP sections in config.toml')
 
-    # Process extended section if present
-    if 'extended' in toml_config:
-        try:
-            cfg.extended = ExtendedConfig(toml_config['extended'])
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [extended] config from toml, values have not been applied.\nError: {e}'
-            )
-
     # Check for unknown sections
-    # Note: 'agent', 'condenser', 'model_routing', and 'kubernetes' are kept for
-    # backwards compatibility with old config files - they are silently ignored
+    # Note: 'agent', 'extended', 'condenser', 'model_routing', and 'kubernetes'
+    # are kept for backwards compatibility with old config files - they are
+    # silently ignored
     known_sections = {
         'core',
-        'extended',
         'llm',
         'security',
         'sandbox',
         'mcp',
         'agent',  # Legacy, ignored
+        'extended',  # Legacy, ignored
         'condenser',  # Legacy, ignored
         'kubernetes',  # Legacy, ignored
         'model_routing',  # Legacy, ignored

@@ -17,7 +17,6 @@ from openhands.core.config.config_utils import (
     OH_MAX_ITERATIONS,
     model_defaults_to_dict,
 )
-from openhands.core.config.extended_config import ExtendedConfig
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.sandbox_config import SandboxConfig
@@ -66,7 +65,6 @@ class OpenHandsConfig(BaseModel):
     default_agent: str = Field(default=OH_DEFAULT_AGENT)
     sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
-    extended: ExtendedConfig = Field(default_factory=lambda: ExtendedConfig({}))
     runtime: str = Field(default='docker')
     file_store: str = Field(default='local')
     file_store_path: str = Field(default='~/.openhands')

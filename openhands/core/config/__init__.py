@@ -6,7 +6,6 @@ from openhands.core.config.config_utils import (
     OH_DEFAULT_AGENT,
     OH_MAX_ITERATIONS,
 )
-from openhands.core.config.extended_config import ExtendedConfig
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -30,7 +29,6 @@ __all__ = [
     'LLMConfig',
     'SandboxConfig',
     'SecurityConfig',
-    'ExtendedConfig',
     'load_openhands_config',
     'load_from_env',
     'load_from_toml',
