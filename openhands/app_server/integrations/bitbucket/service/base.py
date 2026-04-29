@@ -62,7 +62,19 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         return status_code == 401
 
     async def _get_headers(self) -> dict[str, str]:
-        """Get headers for Bitbucket API requests."""
+        """Get headers for Bitbucket API requests.
+
+        Mirrors the GitLab base: when ``self.token`` is empty (the default
+        for services constructed only with ``external_auth_id``), resolve
+        the latest token before building the header. Without this, the
+        header would be ``Authorization: Bearer `` and httpx rejects it
+        as ``Illegal header value``.
+        """
+        if not self.token or not self.token.get_secret_value():
+            latest_token = await self.get_latest_token()
+            if latest_token:
+                self.token = latest_token
+
         token_value = self.token.get_secret_value()
 
         # Check if the token contains a colon, which indicates it's in username:password format
