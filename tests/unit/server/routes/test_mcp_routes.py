@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from openhands.app_server.integrations.service_types import GitService
 from openhands.app_server.mcp.mcp_router import get_conversation_link
-from openhands.integrations.service_types import GitService
 from openhands.server.types import AppMode
 
 

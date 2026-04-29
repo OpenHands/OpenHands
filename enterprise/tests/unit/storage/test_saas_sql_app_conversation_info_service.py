@@ -24,8 +24,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     ConversationTrigger,
 )
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
-from openhands.integrations.service_types import ProviderType
 
 # Test UUIDs
 USER1_ID = UUID('a1111111-1111-1111-1111-111111111111')

@@ -1,7 +1,7 @@
 from fastapi import HTTPException, Request, status
+from storage.redis import get_redis_client_async
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.shared import sio
 
 # Rate limiting constants
 RATE_LIMIT_USER_SECONDS = 120  # 2 minutes per user_id
@@ -32,7 +32,7 @@ async def check_rate_limit_by_user_id(
         HTTPException: If rate limit is exceeded (429 status code)
     """
     try:
-        redis = sio.manager.redis
+        redis = get_redis_client_async()
         if not redis:
             # If Redis is unavailable, log warning and allow request (fail open)
             logger.warning('Redis unavailable for rate limiting, allowing request')

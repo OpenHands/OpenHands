@@ -6,11 +6,17 @@ from unittest.mock import patch
 import pytest
 from pydantic import SecretStr
 
-from openhands.integrations import provider as provider_module
-from openhands.integrations.gitlab import constants as gitlab_constants_module
-from openhands.integrations.gitlab.constants import GITLAB_HOST
-from openhands.integrations.gitlab.gitlab_service import GitLabService
-from openhands.integrations.service_types import OwnerType, ProviderType, Repository
+from openhands.app_server.integrations import provider as provider_module
+from openhands.app_server.integrations.gitlab import (
+    constants as gitlab_constants_module,
+)
+from openhands.app_server.integrations.gitlab.constants import GITLAB_HOST
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabService
+from openhands.app_server.integrations.service_types import (
+    OwnerType,
+    ProviderType,
+    Repository,
+)
 from openhands.server.types import AppMode
 
 

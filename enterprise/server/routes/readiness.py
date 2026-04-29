@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.sql import text
 from storage.database import a_session_maker
-from storage.redis import create_redis_client
+from storage.redis import get_redis_client
 
 from openhands.core.logger import openhands_logger as logger
 
@@ -23,7 +23,7 @@ async def is_ready():
 
     # Check Redis connection
     try:
-        redis_client = create_redis_client()
+        redis_client = get_redis_client()
         redis_client.ping()
     except Exception as e:
         logger.error(f'Redis check failed: {str(e)}')

@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import Annotated
 
@@ -12,7 +11,8 @@ from openhands.core.logger import openhands_logger as logger
 
 router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
 
-GLOBAL_SKILLS_DIR = Path(os.path.dirname(openhands.__file__)) / 'skills'
+# skills/ is at the repo root, two levels above the openhands package __file__
+GLOBAL_SKILLS_DIR = Path(openhands.__file__).parent.parent / 'skills'
 USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
 
 

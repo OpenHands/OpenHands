@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 
+from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.services.injector import Injector
 from openhands.app_server.user.user_models import (
     UserInfo,
 )
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 

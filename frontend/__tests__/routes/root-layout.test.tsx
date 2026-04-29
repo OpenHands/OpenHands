@@ -52,9 +52,8 @@ vi.mock("#/hooks/use-invitation", () => ({
   }),
 }));
 
-// Mock feature flags - enable onboarding for tests that need it
+// Mock feature flags - keep ENABLE_AUTOMATIONS for other tests
 vi.mock("#/utils/feature-flags", () => ({
-  ENABLE_ONBOARDING: () => true,
   ENABLE_AUTOMATIONS: () => false,
 }));
 
@@ -208,6 +207,7 @@ describe("MainApp", () => {
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: true,
       },
     });
 

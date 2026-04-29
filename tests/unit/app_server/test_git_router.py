@@ -18,17 +18,17 @@ from openhands.app_server.git.git_router import (
     search_suggested_tasks,
     search_user_installations,
 )
-from openhands.app_server.user.user_context import UserContext
-from openhands.app_server.utils.dependencies import check_session_api_key
-from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
-from openhands.integrations.provider import ProviderToken
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.provider import ProviderToken
+from openhands.app_server.integrations.service_types import (
     Branch,
     ProviderType,
     Repository,
     SuggestedTask,
     TaskType,
 )
+from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.dependencies import check_session_api_key
+from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
 
 
 class TestPagination:

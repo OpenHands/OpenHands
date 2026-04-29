@@ -28,7 +28,7 @@ class ServerConfig(ServerConfigInterface):
         'openhands.app_server.secrets.file_secrets_store.FileSecretsStore'
     )
     user_auth_class: str = (
-        'openhands.server.user_auth.default_user_auth.DefaultUserAuth'
+        'openhands.app_server.user_auth.default_user_auth.DefaultUserAuth'
     )
     enable_v1: bool = os.getenv('ENABLE_V1') != '0'
 

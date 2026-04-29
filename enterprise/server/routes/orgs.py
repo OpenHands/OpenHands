@@ -51,8 +51,8 @@ from storage.org_store import OrgStore
 from storage.user_store import UserStore
 
 from openhands.analytics import get_analytics_service
+from openhands.app_server.user_auth import get_user_id
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_id
 
 # Initialize API router
 org_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])

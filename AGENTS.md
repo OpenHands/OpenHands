@@ -27,7 +27,7 @@ Before pushing any changes, you MUST ensure that any lint errors or simple test 
 
 * If you've made changes to the backend, you should run `pre-commit run --config ./dev_config/python/.pre-commit-config.yaml` (this will run on staged files).
 * If you've made changes to the frontend, you should run `cd frontend && npm run lint:fix && npm run build ; cd ..`
-* If you've made changes to the VSCode extension, you should run `cd openhands/integrations/vscode && npm run lint:fix && npm run compile ; cd ../../..`
+* If you've made changes to the VSCode extension, you should run `cd openhands/app_server/integrations/vscode && npm run lint:fix && npm run compile ; cd ../../..`
 
 The pre-commit hooks MUST pass successfully before pushing any changes to the repository. This is a mandatory requirement to maintain code quality and consistency.
 
@@ -150,7 +150,7 @@ Frontend:
 
 
 VSCode Extension:
-- Located in the `openhands/integrations/vscode` directory
+- Located in the `openhands/app_server/integrations/vscode` directory
 - Setup: Run `npm install` in the extension directory
 - Linting:
   - Run linting with fixes: `npm run lint:fix`

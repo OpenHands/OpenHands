@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.settings.settings_models import Settings
-from openhands.integrations.provider import (
+from openhands.app_server.integrations.provider import (
     ProviderHandler,
     ProviderToken,
     ProviderType,
 )
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.settings.settings_models import Settings
 
 
 def test_provider_token_immutability():

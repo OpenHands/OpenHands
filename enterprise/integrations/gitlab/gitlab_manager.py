@@ -25,10 +25,10 @@ from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
-from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,

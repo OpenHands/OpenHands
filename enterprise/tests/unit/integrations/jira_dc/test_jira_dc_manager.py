@@ -17,7 +17,7 @@ from integrations.jira_dc.jira_dc_view import (
 )
 from integrations.models import Message, SourceType
 
-from openhands.integrations.service_types import ProviderType, Repository
+from openhands.app_server.integrations.service_types import ProviderType, Repository
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,

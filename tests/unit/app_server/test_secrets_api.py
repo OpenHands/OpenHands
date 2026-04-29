@@ -2,7 +2,6 @@
 # flake8: noqa: E501
 
 import os
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,15 +9,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.file_store import get_file_store
+from openhands.app_server.integrations.provider import (
+    CustomSecret,
+    ProviderToken,
+    ProviderType,
+)
 from openhands.app_server.secrets.file_secrets_store import FileSecretsStore
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_router import (
     router as secrets_router,
-)
-from openhands.integrations.provider import (
-    CustomSecret,
-    ProviderToken,
-    ProviderType,
 )
 
 
@@ -36,13 +36,14 @@ def test_client():
 
 
 @pytest.fixture
-def temp_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    return tmp_path_factory.mktemp('secrets_store')
+def temp_dir(tmp_path_factory: pytest.TempPathFactory) -> str:
+    return str(tmp_path_factory.mktemp('secrets_store'))
 
 
 @pytest.fixture
 def file_secrets_store(temp_dir):
-    store = FileSecretsStore(root_dir=temp_dir)
+    file_store = get_file_store('local', temp_dir)
+    store = FileSecretsStore(file_store)
     with patch(
         'openhands.app_server.secrets.file_secrets_store.FileSecretsStore.get_instance',
         AsyncMock(return_value=store),
@@ -505,7 +506,7 @@ async def test_add_git_providers_invalid_token_with_host(
 
     # Mock validate_provider_token to return None (invalid token)
     with patch(
-        'openhands.integrations.utils.validate_provider_token',
+        'openhands.app_server.integrations.utils.validate_provider_token',
         AsyncMock(return_value=None),
     ):
         # Try to add an invalid GitHub provider with a host
