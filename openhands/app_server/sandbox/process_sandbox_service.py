@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 import socket
-import subprocess
+
 import sys
 import time
 from dataclasses import dataclass
@@ -112,7 +112,7 @@ class ProcessSandboxService(SandboxService):
         working_dir: str,
         session_api_key: str,
         sandbox_spec: SandboxSpecInfo,
-    ) -> subprocess.Popen:
+    ) -> asyncio.subprocess.Process:
         """Start the agent server process."""
 
         # Prepare environment variables
@@ -137,15 +137,15 @@ class ProcessSandboxService(SandboxService):
             # Start the process, directing output to a log file to avoid pipe-buffer deadlocks
             log_path = os.path.join(working_dir, '.openhands-agent-server.log')
             with open(log_path, 'a', buffering=1) as log_handle:
-                process = subprocess.Popen(
-                    cmd, env=env, cwd=working_dir, stdout=log_handle, stderr=log_handle
+                process = await asyncio.create_subprocess_exec(
+                    *cmd, env=env, cwd=working_dir, stdout=log_handle, stderr=log_handle
                 )
 
             # Wait a moment for the process to start
             await asyncio.sleep(1)
 
             # Check if process is still running
-            if process.poll() is not None:
+            if process.returncode is not None:
                 raise SandboxError(
                     f'Agent process failed to start (exit code {process.returncode}). '
                     f'See {log_path} for details.'

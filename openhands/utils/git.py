@@ -16,6 +16,7 @@ def is_valid_git_branch_name(branch_name: str) -> bool:
             check=False,
             capture_output=True,
             text=True,
+            shell=False,
         ).returncode
         == 0
     )
