@@ -9,8 +9,8 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from integrations.models import Message
 
-    from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
-    from openhands.server.user_auth.user_auth import UserAuth
+    from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
+    from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 class GitLabResourceType(Enum):
@@ -25,7 +25,9 @@ class PRStatus(Enum):
 
 
 class UserData(BaseModel):
-    user_id: int
+    # int for GitHub/GitLab numeric user ids; str for providers like Bitbucket
+    # whose user identifier is a UUID. Always pass through ``str()`` at use sites.
+    user_id: int | str
     username: str
     keycloak_user_id: str
 

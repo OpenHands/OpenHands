@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from fastapi import Request
 
 from openhands.app_server.errors import OpenHandsError
+from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource
 
 

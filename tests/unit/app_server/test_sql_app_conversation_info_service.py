@@ -21,9 +21,9 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
-from openhands.integrations.service_types import ProviderType
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 
 # Note: org_id column exists but foreign key constraint is not enforced in tests

@@ -4,8 +4,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from openhands.integrations.github.github_service import GitHubService
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.github.github_service import GitHubService
+from openhands.app_server.integrations.service_types import (
     AuthenticationError,
     OwnerType,
     ProviderType,
@@ -408,7 +408,7 @@ async def test_github_service_graphql_url_enterprise_server():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_selects_primary_verified():
     """_resolve_primary_email returns the email marked primary and verified."""
-    from openhands.integrations.github.service.base import GitHubMixinBase
+    from openhands.app_server.integrations.github.service.base import GitHubMixinBase
 
     emails = [
         {'email': 'secondary@example.com', 'primary': False, 'verified': True},
@@ -422,7 +422,7 @@ async def test_resolve_primary_email_selects_primary_verified():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_when_no_primary():
     """_resolve_primary_email returns None when no email is marked primary."""
-    from openhands.integrations.github.service.base import GitHubMixinBase
+    from openhands.app_server.integrations.github.service.base import GitHubMixinBase
 
     emails = [
         {'email': 'a@example.com', 'primary': False, 'verified': True},
@@ -435,7 +435,7 @@ async def test_resolve_primary_email_returns_none_when_no_primary():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_when_primary_not_verified():
     """_resolve_primary_email returns None when primary email is not verified."""
-    from openhands.integrations.github.service.base import GitHubMixinBase
+    from openhands.app_server.integrations.github.service.base import GitHubMixinBase
 
     emails = [
         {'email': 'primary@example.com', 'primary': True, 'verified': False},
@@ -448,7 +448,7 @@ async def test_resolve_primary_email_returns_none_when_primary_not_verified():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_for_empty_list():
     """_resolve_primary_email returns None for an empty list."""
-    from openhands.integrations.github.service.base import GitHubMixinBase
+    from openhands.app_server.integrations.github.service.base import GitHubMixinBase
 
     result = GitHubMixinBase._resolve_primary_email([])
     assert result is None

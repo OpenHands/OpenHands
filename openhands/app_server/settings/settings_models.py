@@ -24,13 +24,13 @@ from pydantic import (
     model_validator,
 )
 
+from openhands.app_server.integrations.provider import ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.utils import load_openhands_config
-from openhands.integrations.provider import ProviderToken
-from openhands.integrations.service_types import ProviderType
 from openhands.sdk.settings import ConversationSettings
-from openhands.storage.data_models.llm_profiles import LLMProfiles
 from openhands.utils.jsonpatch_compat import deep_merge
 from openhands.utils.sdk_settings_compat import (
     ACPAgentSettings,
@@ -392,15 +392,14 @@ class Settings(BaseModel):
 
         return Settings(
             language='en',
-            remote_runtime_resource_factor=app_config.sandbox.remote_runtime_resource_factor,
             search_api_key=app_config.search_api_key,
             max_budget_per_task=app_config.max_budget_per_task,
             # Always LLM for config-file-sourced settings
             agent_settings=LLMAgentSettings(**agent_settings_dict),
             conversation_settings=ConversationSettings.model_validate(
                 {
-                    'confirmation_mode': bool(app_config.security.confirmation_mode),
-                    'security_analyzer': app_config.security.security_analyzer,
+                    'confirmation_mode': False,
+                    'security_analyzer': None,
                     'max_iterations': app_config.max_iterations,
                 }
             ),

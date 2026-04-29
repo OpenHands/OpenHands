@@ -58,11 +58,7 @@ vi.mock("#/api/option-service/option-service.api", () => ({
   },
 }));
 
-// Mock feature flag - enable onboarding by default for tests
-const mockEnableOnboarding = vi.fn(() => true);
-vi.mock("#/utils/feature-flags", () => ({
-  ENABLE_ONBOARDING: () => mockEnableOnboarding(),
-}));
+
 
 const renderOnboardingForm = async () => {
   const queryClient = new QueryClient({
@@ -602,15 +598,13 @@ describe("onboarding-form clientLoader", () => {
     mockQueryClientGetData.mockReset();
     mockQueryClientSetData.mockReset();
     mockGetConfig.mockReset();
-    mockEnableOnboarding.mockReturnValue(true);
   });
 
   describe("redirect behavior", () => {
-    it("should redirect to / when ENABLE_ONBOARDING feature flag is false", async () => {
-      mockEnableOnboarding.mockReturnValue(false);
+    it("should redirect to / when enable_onboarding feature flag is false", async () => {
       const saasConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: false },
       };
       mockQueryClientGetData.mockReturnValue(saasConfig);
 
@@ -624,7 +618,7 @@ describe("onboarding-form clientLoader", () => {
     it("should redirect to / when app_mode is oss", async () => {
       const ossConfig = {
         app_mode: "oss",
-        feature_flags: { deployment_mode: undefined },
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(ossConfig);
 
@@ -638,7 +632,7 @@ describe("onboarding-form clientLoader", () => {
     it("should redirect to / when app_mode is undefined", async () => {
       const undefinedConfig = {
         app_mode: undefined,
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(undefinedConfig);
 
@@ -660,10 +654,10 @@ describe("onboarding-form clientLoader", () => {
       expect((result as Response).headers.get("Location")).toBe("/");
     });
 
-    it("should allow access and return config when app_mode is saas with cloud deployment", async () => {
+    it("should allow access and return config when app_mode is saas with cloud deployment and enable_onboarding is true", async () => {
       const saasCloudConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(saasCloudConfig);
 
@@ -672,10 +666,10 @@ describe("onboarding-form clientLoader", () => {
       expect(result).toEqual({ config: saasCloudConfig });
     });
 
-    it("should allow access and return config when app_mode is saas with self_hosted deployment", async () => {
+    it("should allow access and return config when app_mode is saas with self_hosted deployment and enable_onboarding is true", async () => {
       const saasSelfHostedConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "self_hosted" },
+        feature_flags: { deployment_mode: "self_hosted", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(saasSelfHostedConfig);
 
@@ -689,7 +683,7 @@ describe("onboarding-form clientLoader", () => {
     it("should use cached config from queryClient when available", async () => {
       const cachedConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(cachedConfig);
 
@@ -702,7 +696,7 @@ describe("onboarding-form clientLoader", () => {
     it("should fetch config from OptionService when not cached", async () => {
       const fetchedConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(null);
       mockGetConfig.mockResolvedValue(fetchedConfig);

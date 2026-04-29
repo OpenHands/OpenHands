@@ -15,19 +15,20 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.file_store import get_file_store
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
+from openhands.app_server.settings.llm_profiles import MAX_PROFILES_PER_USER
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import _user_profile_locks
 from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.integrations.service_types import UserGitInfo
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
 from openhands.server.app import app
-from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.llm_profiles import MAX_PROFILES_PER_USER
 
 
 @pytest.fixture(autouse=True)
@@ -85,7 +86,7 @@ class _MockUserAuth(UserAuth):
 
 @pytest.fixture
 def settings_store(tmp_path: Path) -> FileSettingsStore:
-    return FileSettingsStore(root_dir=tmp_path)
+    return FileSettingsStore(get_file_store('local', str(tmp_path)))
 
 
 @pytest.fixture
@@ -100,7 +101,7 @@ def test_client(settings_store):
         ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=auth,
         ),
         patch(
@@ -148,7 +149,7 @@ def _client_for_user(user_id: str, store: FileSettingsStore):
         ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=auth,
         ),
         patch(
@@ -888,8 +889,12 @@ async def test_profiles_are_isolated_between_users(tmp_path_factory):
     don't key on user_id, or settings stores that accidentally share
     data).
     """
-    store_a = FileSettingsStore(root_dir=tmp_path_factory.mktemp('alice'))
-    store_b = FileSettingsStore(root_dir=tmp_path_factory.mktemp('bob'))
+    store_a = FileSettingsStore(
+        get_file_store('local', str(tmp_path_factory.mktemp('alice')))
+    )
+    store_b = FileSettingsStore(
+        get_file_store('local', str(tmp_path_factory.mktemp('bob')))
+    )
     await store_a.store(_base_settings())
     await store_b.store(_base_settings())
 
@@ -958,7 +963,7 @@ async def test_concurrent_writes_all_persist(tmp_path: Path):
         save_profile,
     )
 
-    store = FileSettingsStore(root_dir=tmp_path)
+    store = FileSettingsStore(get_file_store('local', str(tmp_path)))
     await store.store(_base_settings())
 
     async def _save_one(i: int) -> None:

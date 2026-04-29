@@ -8,9 +8,9 @@ from pydantic import SecretStr
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.stored_custom_secrets import StoredCustomSecrets
 
+from openhands.app_server.integrations.provider import CustomSecret
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.integrations.provider import CustomSecret
 
 
 @pytest.fixture

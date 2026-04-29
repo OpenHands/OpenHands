@@ -1,11 +1,11 @@
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.bitbucket_data_center.bitbucket_dc_service import (
+from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_service import (
     BitbucketDCService,
 )
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.core.logger import openhands_logger as logger
 
 
 class SaaSBitbucketDCService(BitbucketDCService):

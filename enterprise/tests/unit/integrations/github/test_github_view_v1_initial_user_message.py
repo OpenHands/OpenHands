@@ -24,7 +24,10 @@ def jinja_env() -> Environment:
     repo_root = Path(__file__).resolve().parents[5]
     return Environment(
         loader=FileSystemLoader(
-            str(repo_root / 'openhands/integrations/templates/resolver/github')
+            str(
+                repo_root
+                / 'openhands/app_server/integrations/templates/resolver/github'
+            )
         )
     )
 

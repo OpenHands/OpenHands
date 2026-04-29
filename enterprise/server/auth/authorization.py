@@ -40,8 +40,8 @@ from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.role_store import RoleStore
 
+from openhands.app_server.user_auth import get_user_auth, get_user_id
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_auth, get_user_id
 
 
 class Permission(str, Enum):
