@@ -1030,6 +1030,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             mcp_servers: Dictionary to add servers to
             user: User information containing custom MCP config
         """
+        if isinstance(user.agent_settings, ACPAgentSettings):
+            return
+
         sdk_mcp = user.agent_settings.mcp_config
         if not sdk_mcp or not sdk_mcp.mcpServers:
             return
