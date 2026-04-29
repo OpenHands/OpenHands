@@ -29,6 +29,7 @@ export interface WebClientFeatureFlags {
   hide_billing_page: boolean;
   hide_integrations_page: boolean;
   deployment_mode?: DeploymentMode;
+  enable_onboarding: boolean;
 }
 
 export interface WebClientConfig {

@@ -26,7 +26,7 @@ from server.auth.constants import (
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from server.constants import WEB_HOST
-from storage.redis import create_redis_client
+from storage.redis import get_redis_client
 
 from openhands.app_server.user_auth.user_auth import get_user_auth
 from openhands.core.logger import openhands_logger as logger
@@ -129,7 +129,7 @@ class JiraDcValidateWorkspaceResponse(BaseModel):
 jira_dc_integration_router = APIRouter(prefix='/integration/jira-dc')
 token_manager = TokenManager()
 jira_dc_manager = JiraDcManager(token_manager)
-redis_client = create_redis_client()
+redis_client = get_redis_client()
 
 
 async def _handle_workspace_link_creation(
