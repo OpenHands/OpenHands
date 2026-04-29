@@ -88,6 +88,24 @@ describe("websocket-url utilities", () => {
       expect(extractPathPrefix(undefined)).toBe("");
       expect(extractPathPrefix("not-a-valid-url")).toBe("");
     });
+
+    it("should return empty string for ACP conversation URLs", () => {
+      // ACP conversations have /api/acp/conversations in the path — no proxy prefix
+      expect(
+        extractPathPrefix(
+          "http://localhost:52255/api/acp/conversations/342d7717",
+        ),
+      ).toBe("");
+    });
+
+    it("should not treat /api/acp as a path prefix for ACP URLs", () => {
+      const result = extractPathPrefix(
+        "http://localhost:52255/api/acp/conversations/342d7717-8463-4af7-84ab-f3bb5de26d4f",
+      );
+      // Must be empty, not "/api/acp"
+      expect(result).not.toBe("/api/acp");
+      expect(result).toBe("");
+    });
   });
 
   describe("buildHttpBaseUrl", () => {

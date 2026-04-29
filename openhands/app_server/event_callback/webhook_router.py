@@ -12,7 +12,7 @@ from jwt import InvalidTokenError
 from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
-from openhands.agent_server.models import ConversationInfo, Success
+from openhands.agent_server.models import ACPConversationInfo, Success
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -193,7 +193,7 @@ async def valid_conversation(
 
 @router.post('/conversations')
 async def on_conversation_update(
-    conversation_info: ConversationInfo,
+    conversation_info: ACPConversationInfo,
     sandbox_info: SandboxInfo = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> Success:
@@ -222,12 +222,14 @@ async def on_conversation_update(
         sandbox_id=sandbox_info.id,
     )
 
+    agent_kind = 'acp' if hasattr(conversation_info.agent, 'acp_command') else 'llm'
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
         sandbox_id=sandbox_info.id,
         created_by_user_id=sandbox_info.created_by_user_id,
         llm_model=conversation_info.agent.llm.model,
+        agent_kind=agent_kind,
         # Git parameters
         selected_repository=existing.selected_repository,
         selected_branch=existing.selected_branch,

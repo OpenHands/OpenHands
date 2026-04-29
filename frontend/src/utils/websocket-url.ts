@@ -42,8 +42,12 @@ export function extractPathPrefix(
   if (conversationUrl && !conversationUrl.startsWith("/")) {
     try {
       const url = new URL(conversationUrl);
-      const pathBeforeApi = url.pathname.split("/api/conversations")[0] || "";
-      return pathBeforeApi.replace(/\/$/, ""); // Remove trailing slash
+      // Split on the most-specific pattern first (/api/acp/conversations) so that
+      // ACP conversation URLs don't accidentally produce "/api/acp" as a prefix.
+      const pathBeforeApi = url.pathname.includes("/api/acp/conversations")
+        ? url.pathname.split("/api/acp/conversations")[0]
+        : url.pathname.split("/api/conversations")[0];
+      return (pathBeforeApi || "").replace(/\/$/, ""); // Remove trailing slash
     } catch {
       return "";
     }
