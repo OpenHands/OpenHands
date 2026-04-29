@@ -331,12 +331,12 @@ def test_load_from_env_with_list(monkeypatch, default_config):
     )
 
 
-def test_security_config_from_toml(default_config, temp_toml_file):
-    """Test loading security specific configurations."""
+def test_security_section_in_toml_is_silently_ignored(default_config, temp_toml_file):
+    """Test that a legacy [security] section in TOML is silently ignored."""
     with open(temp_toml_file, 'w', encoding='utf-8') as toml_file:
         toml_file.write(
             """
-[core]  # make sure core is loaded first
+[core]
 workspace_base = "/opt/files/workspace"
 
 [llm]
@@ -349,25 +349,8 @@ security_analyzer = "semgrep"
         )
 
     load_from_toml(default_config, temp_toml_file)
-    assert default_config.security.confirmation_mode is False
-    assert default_config.security.security_analyzer == 'semgrep'
-
-
-def test_security_config_from_dict():
-    """Test creating SecurityConfig instance from dictionary."""
-    from openhands.core.config.security_config import SecurityConfig
-
-    # Test with all fields
-    config_dict = {
-        'confirmation_mode': True,
-        'security_analyzer': 'some_analyzer',
-    }
-
-    security_config = SecurityConfig(**config_dict)
-
-    # Verify all fields are correctly set
-    assert security_config.confirmation_mode is True
-    assert security_config.security_analyzer == 'some_analyzer'
+    # Security section is ignored; no error raised
+    assert default_config.get_llm_config().model == 'test-model'
 
 
 def test_defaults_dict_after_updates(default_config):
@@ -489,16 +472,12 @@ model = "test-model"
 timeout = 1
 base_container_image = "custom_image"
 user_id = 1001
-
-[security]
-security_analyzer = "semgrep"
 """)
 
     load_from_toml(default_config, temp_toml_file)
     assert default_config.get_llm_config().model == 'test-model'
     assert default_config.sandbox.base_container_image == 'custom_image'
     assert default_config.sandbox.user_id == 1001
-    assert default_config.security.security_analyzer == 'semgrep'
 
 
 def test_load_from_toml_partial_invalid(default_config, temp_toml_file, caplog):
@@ -506,8 +485,8 @@ def test_load_from_toml_partial_invalid(default_config, temp_toml_file, caplog):
 
     This ensures that:
     1. Valid configuration sections are properly loaded
-    2. Invalid fields in security and sandbox sections raise ValueError
-    4. The config object maintains correct values for valid fields
+    2. Invalid fields in sandbox sections raise ValueError
+    3. The config object maintains correct values for valid fields
     """
     with open(temp_toml_file, 'w', encoding='utf-8') as f:
         f.write("""
@@ -552,23 +531,6 @@ invalid_field_in_sandbox = "test"
         assert default_config.debug is True
     finally:
         openhands_logger.removeHandler(handler)
-
-
-def test_load_from_toml_security_invalid(default_config, temp_toml_file):
-    """Test that invalid security configuration raises ValueError."""
-    with open(temp_toml_file, 'w', encoding='utf-8') as f:
-        f.write("""
-[core]
-debug = true
-
-[security]
-invalid_security_field = "test"
-""")
-
-    with pytest.raises(ValueError) as excinfo:
-        load_from_toml(default_config, temp_toml_file)
-
-    assert 'Error in [security] section in config.toml' in str(excinfo.value)
 
 
 def test_finalize_config(default_config):

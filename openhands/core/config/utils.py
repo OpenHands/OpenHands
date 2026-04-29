@@ -27,7 +27,6 @@ from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import mcp_config_from_toml
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.config.sandbox_config import SandboxConfig
-from openhands.core.config.security_config import SecurityConfig
 
 JWT_SECRET = '.jwt_secret'
 load_dotenv()
@@ -194,21 +193,6 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
                 f'Cannot parse [llm] config from toml, values have not been applied.\nError: {e}'
             )
 
-    # Process security section if present
-    if 'security' in toml_config:
-        try:
-            security_mapping = SecurityConfig.from_toml_section(toml_config['security'])
-            # We only use the base security config for now
-            if 'security' in security_mapping:
-                cfg.security = security_mapping['security']
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [security] config from toml, values have not been applied.\nError: {e}'
-            )
-        except ValueError:
-            # Re-raise ValueError from SecurityConfig.from_toml_section
-            raise ValueError('Error in [security] section in config.toml')
-
     # Process sandbox section if present
     if 'sandbox' in toml_config:
         try:
@@ -238,13 +222,12 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
             raise ValueError('Error in MCP sections in config.toml')
 
     # Check for unknown sections
-    # Note: 'agent', 'extended', 'condenser', 'model_routing', and 'kubernetes'
-    # are kept for backwards compatibility with old config files - they are
-    # silently ignored
+    # Note: 'agent', 'extended', 'condenser', 'model_routing', 'kubernetes',
+    # and 'security' are kept for backwards compatibility with old config
+    # files - they are silently ignored
     known_sections = {
         'core',
         'llm',
-        'security',
         'sandbox',
         'mcp',
         'agent',  # Legacy, ignored
@@ -252,6 +235,7 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
         'condenser',  # Legacy, ignored
         'kubernetes',  # Legacy, ignored
         'model_routing',  # Legacy, ignored
+        'security',  # Legacy, ignored
     }
     for key in toml_config:
         if key.lower() not in known_sections:
