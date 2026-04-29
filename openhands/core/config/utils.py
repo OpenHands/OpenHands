@@ -25,7 +25,6 @@ from openhands.core import logger
 from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.arg_utils import get_headless_parser
 from openhands.core.config.extended_config import ExtendedConfig
-from openhands.core.config.kubernetes_config import KubernetesConfig
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import mcp_config_from_toml
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -254,19 +253,6 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
         except ValueError:
             raise ValueError('Error in MCP sections in config.toml')
 
-    # Process kubernetes section if present
-    if 'kubernetes' in toml_config:
-        try:
-            kubernetes_mapping = KubernetesConfig.from_toml_section(
-                toml_config['kubernetes']
-            )
-            if 'kubernetes' in kubernetes_mapping:
-                cfg.kubernetes = kubernetes_mapping['kubernetes']
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [kubernetes] config from toml, values have not been applied.\nError: {e}'
-            )
-
     # Process extended section if present
     if 'extended' in toml_config:
         try:
@@ -277,8 +263,8 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
             )
 
     # Check for unknown sections
-    # Note: 'condenser' and 'model_routing' are kept for backwards compatibility
-    # with old config files - they are silently ignored
+    # Note: 'condenser', 'model_routing', and 'kubernetes' are kept for backwards
+    # compatibility with old config files - they are silently ignored
     known_sections = {
         'core',
         'extended',
@@ -288,7 +274,7 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
         'sandbox',
         'condenser',  # Legacy, ignored
         'mcp',
-        'kubernetes',
+        'kubernetes',  # Legacy, ignored
         'model_routing',  # Legacy, ignored
     }
     for key in toml_config:
