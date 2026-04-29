@@ -47,8 +47,6 @@ const SECTION_HEADERS: Partial<Record<SettingsNavSection, I18nKey>> = {
 // discoverability and explains why they are unavailable.
 const ACP_DISABLED_PATHS = new Set(["/settings/condenser", "/settings/mcp"]);
 
-const ACP_SERVER_NAMES: Record<string, string> = ACP_SERVER_DISPLAY_NAMES;
-
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
   const { data: user } = useMe();
@@ -59,7 +57,7 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
 
   const isAcpAgent = settings?.agent_settings?.agent_kind === "acp";
   const acpServerName = isAcpAgent
-    ? (ACP_SERVER_NAMES[
+    ? (ACP_SERVER_DISPLAY_NAMES[
         (settings?.agent_settings?.acp_server as string) ?? ""
       ] ?? "ACP Agent")
     : null;

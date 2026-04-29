@@ -41,9 +41,28 @@ const AGENT_OPTIONS: AgentOption[] = [
   })),
 ];
 
-const API_KEY_LABELS = ACP_API_KEY_LABELS;
-const BASE_URL_LABELS = ACP_BASE_URL_LABELS;
-const DEFAULT_COMMANDS = ACP_DEFAULT_COMMANDS;
+function validateEnvJson(
+  value: string,
+  t: (key: I18nKey) => string,
+): string | null {
+  if (!value.trim()) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
+      return t(I18nKey.SETTINGS$AGENT_ENV_MUST_BE_OBJECT);
+    }
+    if (
+      !Object.values(parsed as Record<string, unknown>).every(
+        (v) => typeof v === "string",
+      )
+    ) {
+      return t(I18nKey.SETTINGS$AGENT_ENV_VALUES_MUST_BE_STRINGS);
+    }
+    return null;
+  } catch {
+    return t(I18nKey.SETTINGS$MCP_ERROR_INVALID_JSON);
+  }
+}
 
 function AgentSettingsScreen() {
   const { t } = useTranslation();
@@ -129,29 +148,12 @@ function AgentSettingsScreen() {
 
     let parsedEnv: Record<string, string> = {};
     if (agentType !== "openhands" && envJson.trim()) {
-      try {
-        const parsed: unknown = JSON.parse(envJson);
-        if (
-          typeof parsed !== "object" ||
-          Array.isArray(parsed) ||
-          parsed === null
-        ) {
-          setEnvError(t(I18nKey.SETTINGS$AGENT_ENV_MUST_BE_OBJECT));
-          return;
-        }
-        if (
-          !Object.values(parsed as Record<string, unknown>).every(
-            (v) => typeof v === "string",
-          )
-        ) {
-          setEnvError(t(I18nKey.SETTINGS$AGENT_ENV_VALUES_MUST_BE_STRINGS));
-          return;
-        }
-        parsedEnv = parsed as Record<string, string>;
-      } catch {
-        setEnvError(t(I18nKey.SETTINGS$MCP_ERROR_INVALID_JSON));
+      const err = validateEnvJson(envJson, t);
+      if (err) {
+        setEnvError(err);
         return;
       }
+      parsedEnv = JSON.parse(envJson) as Record<string, string>;
     }
 
     let agentSettingsDiff: Record<string, unknown>;
@@ -160,7 +162,7 @@ function AgentSettingsScreen() {
       agentSettingsDiff = { agent_kind: "llm" };
     } else {
       const effectiveCommand =
-        command.length > 0 ? command : (DEFAULT_COMMANDS[agentType] ?? []);
+        command.length > 0 ? command : (ACP_DEFAULT_COMMANDS[agentType] ?? []);
       agentSettingsDiff = {
         agent_kind: "acp",
         acp_server: agentType,
@@ -195,18 +197,15 @@ function AgentSettingsScreen() {
 
   const isAcp = agentType !== "openhands";
   const apiKeyLabel = isAcp
-    ? API_KEY_LABELS[agentType as AcpServerKind]
+    ? ACP_API_KEY_LABELS[agentType as AcpServerKind]
     : undefined;
   const baseUrlLabel = isAcp
-    ? BASE_URL_LABELS[agentType as AcpServerKind]
+    ? ACP_BASE_URL_LABELS[agentType as AcpServerKind]
     : undefined;
-  const apiKeyIsSet =
-    isAcp &&
-    settings?.llm_api_key_set &&
-    settings?.agent_settings?.agent_kind === "acp";
+  const apiKeyIsSet = isAcp && !!settings?.llm_api_key_set;
 
   const defaultCommandPlaceholder = isAcpServerKind(agentType)
-    ? (DEFAULT_COMMANDS[agentType] ?? []).join("\n")
+    ? (ACP_DEFAULT_COMMANDS[agentType] ?? []).join("\n")
     : "";
 
   const tabButtonClass = (active: boolean) =>
@@ -358,28 +357,8 @@ function AgentSettingsScreen() {
               placeholder={t(I18nKey.SETTINGS$AGENT_ADVANCED_ENV_PLACEHOLDER)}
               onChange={(e) => {
                 setEnvJson(e.target.value);
-                setEnvError(null);
+                setEnvError(validateEnvJson(e.target.value, t));
                 setIsDirty(true);
-                try {
-                  const parsed: unknown = JSON.parse(e.target.value);
-                  if (
-                    typeof parsed !== "object" ||
-                    Array.isArray(parsed) ||
-                    parsed === null
-                  ) {
-                    setEnvError(t(I18nKey.SETTINGS$AGENT_ENV_MUST_BE_OBJECT));
-                  } else if (
-                    !Object.values(parsed as Record<string, unknown>).every(
-                      (v) => typeof v === "string",
-                    )
-                  ) {
-                    setEnvError(
-                      t(I18nKey.SETTINGS$AGENT_ENV_VALUES_MUST_BE_STRINGS),
-                    );
-                  }
-                } catch {
-                  setEnvError(t(I18nKey.SETTINGS$MCP_ERROR_INVALID_JSON));
-                }
               }}
             />
             {envError && (

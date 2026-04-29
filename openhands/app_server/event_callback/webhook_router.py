@@ -13,6 +13,7 @@ from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ACPConversationInfo, Success
+from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -222,7 +223,7 @@ async def on_conversation_update(
         sandbox_id=sandbox_info.id,
     )
 
-    agent_kind = 'acp' if hasattr(conversation_info.agent, 'acp_command') else 'llm'
+    agent_kind = 'acp' if isinstance(conversation_info.agent, ACPAgent) else 'llm'
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',

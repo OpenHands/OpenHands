@@ -28,15 +28,10 @@ import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
-import { ACP_SERVER_DISPLAY_NAMES } from "#/constants/acp-agents";
 
-// `agent_kind` stored in the DB is either "llm" (standard OpenHands agent) or
-// "acp" (ACP subprocess agent). It is NOT the specific server name
-// (e.g. "claude-code"). This map builds a human-readable label for the banner.
 const AGENT_KIND_DISPLAY: Record<string, string> = {
   llm: "OpenHands",
   acp: "an ACP agent",
-  ...ACP_SERVER_DISPLAY_NAMES,
 };
 
 function AgentIncompatibleBanner({
@@ -154,7 +149,7 @@ function AppContent() {
   const settingsAgentKind =
     (settings?.agent_settings?.agent_kind as string) ?? "llm";
   const isAgentIncompatible =
-    isFetched && !!conversation && conversationAgentKind !== settingsAgentKind;
+    isFetched && !!settings && !!conversation && conversationAgentKind !== settingsAgentKind;
 
   const content = (
     <ConversationSubscriptionsProvider>

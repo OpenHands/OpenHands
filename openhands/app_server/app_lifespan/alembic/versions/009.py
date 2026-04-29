@@ -18,10 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    existing = [
-        row[1]
-        for row in bind.execute(sa.text('PRAGMA table_info(conversation_metadata)'))
-    ]
+    existing = [col['name'] for col in sa.inspect(bind).get_columns('conversation_metadata')]
     if 'agent_kind' not in existing:
         op.add_column(
             'conversation_metadata', sa.Column('agent_kind', sa.String, nullable=True)
