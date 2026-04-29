@@ -20,7 +20,6 @@ from openhands.core.config.config_utils import (
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.sandbox_config import SandboxConfig
-from openhands.core.config.security_config import SecurityConfig
 
 
 class OpenHandsConfig(BaseModel):
@@ -31,7 +30,6 @@ class OpenHandsConfig(BaseModel):
             The default configuration is stored under the 'llm' key.
         default_agent: Name of the default agent to use.
         sandbox: Sandbox configuration settings.
-        security: Security configuration settings.
         runtime: Runtime environment identifier.
         file_store: Type of file store to use.
         file_store_path: Path to the file store.
@@ -64,7 +62,6 @@ class OpenHandsConfig(BaseModel):
     llms: dict[str, LLMConfig] = Field(default_factory=dict)
     default_agent: str = Field(default=OH_DEFAULT_AGENT)
     sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
-    security: SecurityConfig = Field(default_factory=SecurityConfig)
     runtime: str = Field(default='docker')
     file_store: str = Field(default='local')
     file_store_path: str = Field(default='~/.openhands')

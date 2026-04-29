@@ -399,8 +399,8 @@ class Settings(BaseModel):
             agent_settings=LLMAgentSettings(**agent_settings_dict),
             conversation_settings=ConversationSettings.model_validate(
                 {
-                    'confirmation_mode': bool(app_config.security.confirmation_mode),
-                    'security_analyzer': app_config.security.security_analyzer,
+                    'confirmation_mode': False,
+                    'security_analyzer': None,
                     'max_iterations': app_config.max_iterations,
                 }
             ),
