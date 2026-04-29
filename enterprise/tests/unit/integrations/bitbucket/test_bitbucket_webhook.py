@@ -24,13 +24,13 @@ def _request_with_body(body: bytes) -> MagicMock:
 @patch('server.routes.integration.bitbucket.IS_LOCAL_DEPLOYMENT', False)
 @patch('server.routes.integration.bitbucket.webhook_store')
 @patch('server.routes.integration.bitbucket.bitbucket_manager')
-@patch('server.routes.integration.bitbucket.sio')
+@patch('server.routes.integration.bitbucket.get_redis_client_async')
 async def test_missing_hook_uuid_header_rejected_with_403(
-    mock_sio, mock_manager, mock_store
+    mock_get_redis_client_async, mock_manager, mock_store
 ):
     mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
     mock_manager.receive_message = AsyncMock()
-    mock_sio.manager.redis = AsyncMock()
+    mock_get_redis_client_async.return_value = AsyncMock()
     body = json.dumps({'pullrequest': {'id': 1}}).encode()
 
     with pytest.raises(HTTPException) as exc:
@@ -50,13 +50,13 @@ async def test_missing_hook_uuid_header_rejected_with_403(
 @patch('server.routes.integration.bitbucket.IS_LOCAL_DEPLOYMENT', False)
 @patch('server.routes.integration.bitbucket.webhook_store')
 @patch('server.routes.integration.bitbucket.bitbucket_manager')
-@patch('server.routes.integration.bitbucket.sio')
+@patch('server.routes.integration.bitbucket.get_redis_client_async')
 async def test_signature_verification_rejects_bad_signature_with_403(
-    mock_sio, mock_manager, mock_store
+    mock_get_redis_client_async, mock_manager, mock_store
 ):
     mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
     mock_manager.receive_message = AsyncMock()
-    mock_sio.manager.redis = AsyncMock()
+    mock_get_redis_client_async.return_value = AsyncMock()
     body = json.dumps({'pullrequest': {'id': 1}}).encode()
 
     with pytest.raises(HTTPException) as exc:
@@ -76,15 +76,15 @@ async def test_signature_verification_rejects_bad_signature_with_403(
 @patch('server.routes.integration.bitbucket.IS_LOCAL_DEPLOYMENT', False)
 @patch('server.routes.integration.bitbucket.webhook_store')
 @patch('server.routes.integration.bitbucket.bitbucket_manager')
-@patch('server.routes.integration.bitbucket.sio')
+@patch('server.routes.integration.bitbucket.get_redis_client_async')
 async def test_duplicate_event_returns_200_and_skips_dispatch(
-    mock_sio, mock_manager, mock_store
+    mock_get_redis_client_async, mock_manager, mock_store
 ):
     mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
     mock_manager.receive_message = AsyncMock()
     redis = AsyncMock()
     redis.set = AsyncMock(return_value=False)  # duplicate
-    mock_sio.manager.redis = redis
+    mock_get_redis_client_async.return_value = redis
 
     body = json.dumps({'pullrequest': {'id': 1}, 'comment': {'id': 99}}).encode()
 
@@ -105,15 +105,15 @@ async def test_duplicate_event_returns_200_and_skips_dispatch(
 @patch('server.routes.integration.bitbucket.IS_LOCAL_DEPLOYMENT', False)
 @patch('server.routes.integration.bitbucket.webhook_store')
 @patch('server.routes.integration.bitbucket.bitbucket_manager')
-@patch('server.routes.integration.bitbucket.sio')
+@patch('server.routes.integration.bitbucket.get_redis_client_async')
 async def test_valid_event_dispatches_to_manager_and_returns_200(
-    mock_sio, mock_manager, mock_store
+    mock_get_redis_client_async, mock_manager, mock_store
 ):
     mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
     mock_manager.receive_message = AsyncMock()
     redis = AsyncMock()
     redis.set = AsyncMock(return_value=True)
-    mock_sio.manager.redis = redis
+    mock_get_redis_client_async.return_value = redis
 
     body = json.dumps({'pullrequest': {'id': 1}, 'comment': {'id': 99}}).encode()
 
