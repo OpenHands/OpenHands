@@ -43,12 +43,12 @@ from openhands.app_server.utils.llm import (
     resolve_llm_base_url,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
+    ConversationSettings,
     OpenHandsAgentSettings,
     export_agent_settings_schema,
 )
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import ConversationSettings
 from openhands.server.shared import config
 
 LITE_LLM_API_URL = os.environ.get(
