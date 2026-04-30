@@ -1,6 +1,14 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { MemoryRouter } from "react-router";
 import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-box";
 import { renderWithProviders } from "../../test-utils";
@@ -57,7 +65,8 @@ describe("InteractiveChatBox", () => {
 
   const mockStores = (agentState: AgentState = AgentState.INIT) => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: agentState, isArchived: false,
+      curAgentState: agentState,
+      isArchived: false,
     });
 
     useConversationStore.setState({
@@ -199,6 +208,27 @@ describe("InteractiveChatBox", () => {
     await user.click(submitButton);
 
     expect(onSubmitMock).toHaveBeenCalledWith("Hello, world!", [], []);
+  });
+
+  it("should submit attachments when the text input is empty", async () => {
+    const user = userEvent.setup();
+    const image = new File(["image-content"], "screenshot.png", {
+      type: "image/png",
+    });
+
+    mockStores(AgentState.AWAITING_USER_INPUT);
+    useConversationStore.setState({ images: [image], files: [] });
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+    });
+
+    const submitButton = screen.getByTestId("submit-button");
+    expect(submitButton).not.toBeDisabled();
+
+    await user.click(submitButton);
+
+    expect(onSubmitMock).toHaveBeenCalledWith("", [image], []);
   });
 
   it("should disable the submit button when awaiting user confirmation", async () => {

@@ -13,13 +13,14 @@ export const useChatSubmission = (
   smartResize: () => void,
   onSubmit: (message: string) => void,
   resetManualResize?: () => void,
+  hasAttachments = false,
 ) => {
   // Send button click handler
   const handleSubmit = useCallback(() => {
     const message = chatInputRef.current?.innerText || "";
     const trimmedMessage = message.trim();
 
-    if (!trimmedMessage) {
+    if (!trimmedMessage && !hasAttachments) {
       return;
     }
 
@@ -34,7 +35,14 @@ export const useChatSubmission = (
 
     // Reset manual resize state for next message
     resetManualResize?.();
-  }, [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize]);
+  }, [
+    chatInputRef,
+    fileInputRef,
+    smartResize,
+    onSubmit,
+    resetManualResize,
+    hasAttachments,
+  ]);
 
   // Handle stop button click
   const handleStop = useCallback((onStop?: () => void) => {

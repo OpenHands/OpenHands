@@ -16,6 +16,7 @@ export const useChatInputEvents = (
   clearEmptyContentHandler: () => void,
   onFocus?: () => void,
   onBlur?: () => void,
+  hasAttachments = false,
 ) => {
   // Handle input events
   const handleInput = useCallback(() => {
@@ -74,7 +75,7 @@ export const useChatInputEvents = (
         return;
       }
 
-      if (checkIsContentEmpty()) {
+      if (checkIsContentEmpty() && !hasAttachments) {
         e.preventDefault();
         increaseHeightForEmptyContent();
         return;
@@ -86,7 +87,7 @@ export const useChatInputEvents = (
         handleSubmit();
       }
     },
-    [checkIsContentEmpty, increaseHeightForEmptyContent],
+    [checkIsContentEmpty, increaseHeightForEmptyContent, hasAttachments],
   );
 
   // Handle blur events to ensure placeholder shows when empty

@@ -38,10 +38,14 @@ export function CustomChatInput({
 }: CustomChatInputProps) {
   const {
     submittedMessage,
+    images,
+    files,
     clearAllFiles,
     setShouldHideSuggestions,
     setSubmittedMessage,
   } = useConversationStore();
+
+  const hasAttachments = images.length > 0 || files.length > 0;
 
   // Disable input when conversation is stopped
   const isConversationStopped = sandboxStatus === "MISSING";
@@ -96,6 +100,7 @@ export function CustomChatInput({
     smartResize,
     onSubmit,
     resetManualResize,
+    hasAttachments,
   );
 
   const { handleInput, handlePaste, handleKeyDown, handleBlur, handleFocus } =
@@ -107,6 +112,7 @@ export function CustomChatInput({
       clearEmptyContentHandler,
       onFocus,
       onBlur,
+      hasAttachments,
     );
 
   const {
