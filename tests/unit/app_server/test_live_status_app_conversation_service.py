@@ -3380,11 +3380,17 @@ class TestAgentKindConversationUrl:
         assert _agent_kind_to_router_path('acp') == 'acp/conversations'
 
     def test_agent_kind_to_router_path_unknown_falls_back(self):
-        """Unknown variants fall back to the LLM route."""
+        """Any value that is not 'acp' routes to 'conversations'.
+
+        This includes the legacy ``'llm'`` value that the old default emitted
+        before the rename, so rows stored with ``agent_kind='llm'`` continue to
+        route correctly without a migration.
+        """
         from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
             _agent_kind_to_router_path,
         )
 
+        assert _agent_kind_to_router_path('llm') == 'conversations'
         assert _agent_kind_to_router_path('future-variant') == 'conversations'
 
 
