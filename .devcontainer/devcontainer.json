@@ -1,5 +1,6 @@
 // For format details, see: https://aka.ms/devcontainer.json
 {
+  "$schema": "./devcontainer.schema.json",
   "name": "Python 3",
   // Documentation for this image:
   // - https://github.com/devcontainers/templates/tree/main/src/python

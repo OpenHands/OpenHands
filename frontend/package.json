@@ -111,7 +111,6 @@
     "husky": "^9.1.7",
     "jsdom": "^27.4.0",
     "lint-staged": "^16.2.7",
-    "lodash": "^4.17.21",
     "msw": "^2.6.6",
     "prettier": "^3.8.0",
     "tailwindcss": "^4.1.8",

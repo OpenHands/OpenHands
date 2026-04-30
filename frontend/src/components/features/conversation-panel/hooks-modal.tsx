@@ -125,22 +125,22 @@ export function HooksModal({ onClose }: HooksModalProps) {
             isAgentReady &&
             filteredHooks &&
             filteredHooks.length > 0 && (
-            <div className="p-2 space-y-3">
-              {filteredHooks.map((hookEvent) => {
-                const isExpanded =
-                  expandedEvents[hookEvent.event_type] || false;
+              <div className="p-2 space-y-3">
+                {filteredHooks.map((hookEvent) => {
+                  const isExpanded =
+                    expandedEvents[hookEvent.event_type] || false;
 
-                return (
-                  <HookEventItem
-                    key={hookEvent.event_type}
-                    hookEvent={hookEvent}
-                    isExpanded={isExpanded}
-                    onToggle={toggleEvent}
-                  />
-                );
-              })}
-            </div>
-          )}
+                  return (
+                    <HookEventItem
+                      key={hookEvent.event_type}
+                      hookEvent={hookEvent}
+                      isExpanded={isExpanded}
+                      onToggle={toggleEvent}
+                    />
+                  );
+                })}
+              </div>
+            )}
 
           {!isLoading &&
             isAgentReady &&
@@ -149,7 +149,9 @@ export function HooksModal({ onClose }: HooksModalProps) {
             filteredHooks &&
             filteredHooks.length === 0 && (
               <div className="w-full h-full flex items-center text-center justify-center text-lg text-tertiary-light">
-                <Typography.Text>{t(I18nKey.COMMON$NO_RESULTS)}</Typography.Text>
+                <Typography.Text>
+                  {t(I18nKey.GITHUB$NO_RESULTS)}
+                </Typography.Text>
               </div>
             )}
         </div>

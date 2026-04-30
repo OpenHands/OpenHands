@@ -27,10 +27,9 @@ from zipfile import ZipFile
 
 import puremagic
 from binaryornot.check import is_binary
-from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.security import APIKeyHeader
 from openhands_aci.editor.editor import OHEditor
 from openhands_aci.editor.exceptions import ToolError
 from openhands_aci.editor.results import ToolResult
@@ -95,13 +94,6 @@ class ActionRequest(BaseModel):
 ROOT_GID = 0
 
 SESSION_API_KEY = os.environ.get('SESSION_API_KEY')
-api_key_header = APIKeyHeader(name='X-Session-API-Key', auto_error=False)
-
-
-def verify_api_key(api_key: str = Depends(api_key_header)):
-    if SESSION_API_KEY and api_key != SESSION_API_KEY:
-        raise HTTPException(status_code=403, detail='Invalid API Key')
-    return api_key
 
 
 def _execute_file_editor(

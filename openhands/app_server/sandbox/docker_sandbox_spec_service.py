@@ -69,10 +69,19 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[SandboxSpecService, None]:
         if self.pull_if_missing:
-            await self.pull_missing_specs()
-            # Prevent repeated checks - more efficient but it does mean if you
-            # delete a docker image outside the app you need to restart
-            self.pull_if_missing = False
+            try:
+                await self.pull_missing_specs()
+            except BaseException as exc:
+                # Degrade gracefully when Docker is unavailable so read-only APIs
+                # (e.g. conversation search) are not blocked by image preflight.
+                _logger.warning(
+                    'Skipping Docker sandbox image preflight because Docker is unavailable: %s',
+                    exc,
+                )
+            finally:
+                # Prevent repeated checks - more efficient but it does mean if you
+                # delete a docker image outside the app you need to restart.
+                self.pull_if_missing = False
         yield PresetSandboxSpecService(specs=self.specs)
 
     async def pull_missing_specs(self):
@@ -88,7 +97,7 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
                 _logger.info(f'⬇️  Pulling Docker Image: {spec.id}')
                 await self._pull_with_progress_logging(docker_client, spec.id)
                 _logger.info(f'⬇️  Finished Pulling Docker Image: {spec.id}')
-        except docker.errors.APIError as exc:
+        except docker.errors.DockerException as exc:
             raise SandboxError(f'Error Getting Docker Image: {spec.id}') from exc
 
     async def _pull_with_progress_logging(

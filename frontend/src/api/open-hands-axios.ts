@@ -5,7 +5,7 @@ import axios, { AxiosError, AxiosResponse } from "axios";
  * (some local .env files). Prepend protocol only for the host:port form; a full URL
  * must be used as-is to avoid `http://http://...` and broken MSW/test requests.
  */
-function resolveBackendBaseURL(): string {
+export function resolveBackendBaseURL(): string {
   const fromEnv = import.meta.env.VITE_BACKEND_BASE_URL?.trim();
   if (!fromEnv) {
     return `${window.location.protocol}//${window?.location.host}`;

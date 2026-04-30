@@ -1,11 +1,11 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { SystemMessageHeader } from "./system-message-modal/system-message-header";
 import { TabNavigation } from "./system-message-modal/tab-navigation";
 import { TabContent } from "./system-message-modal/tab-content";
 import { SystemMessageForModal } from "#/utils/system-message-adapter";
-import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { getToolDisplayMetadata } from "./system-message-modal/tool-item";
 import { BrandButton } from "../settings/brand-button";
@@ -55,7 +55,7 @@ export function SystemMessageModal({
       return (
         metadata.name.toLowerCase().includes(normalizedSearch) ||
         metadata.description.toLowerCase().includes(normalizedSearch) ||
-        (metadata.kind && metadata.kind.toLowerCase().includes(normalizedSearch))
+        metadata.kind?.toLowerCase().includes(normalizedSearch)
       );
     })
     .map(({ tool, index }) => ({ tool, index }));
@@ -97,9 +97,7 @@ export function SystemMessageModal({
             <TabNavigation
               activeTab={activeTab}
               onTabChange={setActiveTab}
-              hasTools={
-                !!(systemMessage.tools && systemMessage.tools.length > 0)
-              }
+              hasTools={(systemMessage.tools?.length ?? 0) > 0}
               toolCount={filteredTools.length}
             />
 
@@ -109,7 +107,9 @@ export function SystemMessageModal({
                   type="text"
                   value={toolSearchQuery}
                   onChange={(event) => setToolSearchQuery(event.target.value)}
-                  placeholder={t(I18nKey.SYSTEM_MESSAGE_MODAL$SEARCH_TOOLS_PLACEHOLDER)}
+                  placeholder={t(
+                    I18nKey.SYSTEM_MESSAGE_MODAL$SEARCH_TOOLS_PLACEHOLDER,
+                  )}
                   className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <BrandButton

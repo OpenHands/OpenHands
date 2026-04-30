@@ -89,47 +89,47 @@ class RetryMixin:
         # Timeout errors
         if 'Timeout' in exception_type or 'timeout' in str(exception).lower():
             return (
-                "Connection timeout - possible causes: slow network, service overload, or local server not running. "
+                'Connection timeout - possible causes: slow network, service overload, or local server not running. '
                 "Check base_url is accessible. For Ollama: ensure 'ollama serve' is running."
             )
 
         # Connection errors
         if 'Connection' in exception_type or 'ECONNREFUSED' in str(exception):
             return (
-                "Cannot connect to LLM service - verify base_url is correct and service is running. "
-                "For local models (Ollama, LM Studio): check if server is listening on the configured port."
+                'Cannot connect to LLM service - verify base_url is correct and service is running. '
+                'For local models (Ollama, LM Studio): check if server is listening on the configured port.'
             )
 
         # Rate limit errors
         if 'RateLimit' in exception_type or '429' in str(exception):
             return (
-                "Rate limit exceeded - too many requests. Try increasing retry wait times in configuration "
-                "or reduce request frequency."
+                'Rate limit exceeded - too many requests. Try increasing retry wait times in configuration '
+                'or reduce request frequency.'
             )
 
         # Service unavailable errors
         if 'ServiceUnavailable' in exception_type or '503' in str(exception):
             return (
-                "LLM service temporarily unavailable. Server may be restarting, out of capacity, or under maintenance. "
-                "Retries will be attempted with exponential backoff."
+                'LLM service temporarily unavailable. Server may be restarting, out of capacity, or under maintenance. '
+                'Retries will be attempted with exponential backoff.'
             )
 
         # No response errors
         if 'NoResponse' in exception_type:
             return (
-                "LLM returned no response - may be an API issue or service overload. "
-                "Temperature will be adjusted to add randomness for next attempt."
+                'LLM returned no response - may be an API issue or service overload. '
+                'Temperature will be adjusted to add randomness for next attempt.'
             )
 
         # Malformed/invalid response
         if 'Malformed' in exception_type or 'Invalid' in exception_type:
             return (
-                "LLM returned malformed response - possible API change or internal server error. "
-                "Check server logs and ensure model is compatible."
+                'LLM returned malformed response - possible API change or internal server error. '
+                'Check server logs and ensure model is compatible.'
             )
 
         # Default hint
-        return "Check your LLM configuration and network connectivity. Retrying with exponential backoff."
+        return 'Check your LLM configuration and network connectivity. Retrying with exponential backoff.'
 
     def log_retry_attempt(self, retry_state: Any) -> None:
         """Log retry attempts with diagnostic hints."""

@@ -1,4 +1,4 @@
-import { MouseEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ToolParameters } from "./tool-parameters";
 import { ChatCompletionToolParam } from "#/types/v1/core";
 import { MarkdownRenderer } from "../../markdown/markdown-renderer";
@@ -87,8 +87,7 @@ export function ToolItem({ tool, index, isExpanded, onToggle }: ToolItemProps) {
     return () => clearTimeout(timeoutId);
   }, [copyMode]);
 
-  const onCopy = async (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
+  const onCopy = async () => {
     await navigator.clipboard.writeText(name);
     setCopyMode("copied");
   };

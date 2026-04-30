@@ -8,6 +8,7 @@ import { useConversationSubscriptions } from "#/context/conversation-subscriptio
 import { Provider } from "#/types/settings";
 import { Conversation } from "#/api/open-hands.types";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
+import { resolveBackendBaseURL } from "#/api/open-hands-axios";
 import { renderConversationStartingToast } from "#/components/shared/conversation-toast";
 
 interface ConversationData {
@@ -74,7 +75,7 @@ export const useCreateConversationAndSubscribeMultiple = () => {
 
       let { baseUrl } = conversationData;
       if (url && !url.startsWith("/")) {
-        baseUrl = new URL(url).host;
+        baseUrl = new URL(url).origin;
       }
 
       if (status === "RUNNING") {
@@ -154,14 +155,12 @@ export const useCreateConversationAndSubscribeMultiple = () => {
             let socketPath: string;
             if (data?.url && !data.url.startsWith("/")) {
               const u = new URL(data.url);
-              baseUrl = u.host;
+              baseUrl = u.origin;
               const pathBeforeApi =
                 u.pathname.split("/api/conversations")[0] || "/";
               socketPath = `${pathBeforeApi.replace(/\/$/, "")}/socket.io`;
             } else {
-              baseUrl =
-                (import.meta.env.VITE_BACKEND_BASE_URL as string | undefined) ||
-                window?.location.host;
+              baseUrl = resolveBackendBaseURL();
               socketPath = "/socket.io";
             }
 

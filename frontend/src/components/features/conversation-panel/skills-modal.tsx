@@ -124,22 +124,25 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
               <SkillsEmptyState isError={isError} />
             )}
 
-          {!isLoading && isAgentReady && filteredSkills && filteredSkills.length > 0 && (
-            <div className="p-2 space-y-3">
-              {filteredSkills.map((skill) => {
-                const isExpanded = expandedAgents[skill.name] || false;
+          {!isLoading &&
+            isAgentReady &&
+            filteredSkills &&
+            filteredSkills.length > 0 && (
+              <div className="p-2 space-y-3">
+                {filteredSkills.map((skill) => {
+                  const isExpanded = expandedAgents[skill.name] || false;
 
-                return (
-                  <SkillItem
-                    key={skill.name}
-                    skill={skill}
-                    isExpanded={isExpanded}
-                    onToggle={toggleAgent}
-                  />
-                );
-              })}
-            </div>
-          )}
+                  return (
+                    <SkillItem
+                      key={skill.name}
+                      skill={skill}
+                      isExpanded={isExpanded}
+                      onToggle={toggleAgent}
+                    />
+                  );
+                })}
+              </div>
+            )}
 
           {!isLoading &&
             isAgentReady &&
@@ -148,7 +151,9 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
             filteredSkills &&
             filteredSkills.length === 0 && (
               <div className="w-full h-full flex items-center text-center justify-center text-lg text-tertiary-light">
-                <Typography.Text>{t(I18nKey.COMMON$NO_RESULTS)}</Typography.Text>
+                <Typography.Text>
+                  {t(I18nKey.GITHUB$NO_RESULTS)}
+                </Typography.Text>
               </div>
             )}
         </div>

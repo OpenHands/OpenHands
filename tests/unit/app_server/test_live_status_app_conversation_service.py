@@ -3686,7 +3686,7 @@ class TestVolatileOllamaUrlHelpers:
     """Pure-function tests for volatile Ollama URL detection and rewrite."""
 
     @pytest.mark.parametrize(
-        'model,base_url,expected',
+        'model,llm_base_url,expected',
         [
             # Volatile prefixed ollama model
             ('ollama/qwen2.5-coder:14b', 'http://172.28.174.246:11434', True),
@@ -3709,8 +3709,8 @@ class TestVolatileOllamaUrlHelpers:
             ('', '', False),
         ],
     )
-    def test_is_volatile_ollama_container_url(self, model, base_url, expected):
-        assert _is_volatile_ollama_container_url(model, base_url) is expected
+    def test_is_volatile_ollama_container_url(self, model, llm_base_url, expected):
+        assert _is_volatile_ollama_container_url(model, llm_base_url) is expected
 
     def test_rewrite_preserves_stable_url(self):
         stable = 'http://host.docker.internal:11434'

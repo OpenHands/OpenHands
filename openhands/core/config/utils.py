@@ -436,7 +436,7 @@ def finalize_config(cfg: OpenHandsConfig) -> None:
 
         if cfg.workspace_mount_rewrite:
             base = cfg.workspace_base or os.getcwd()
-            parts = cfg.workspace_mount_rewrite.split(':', 1)
+            parts = cfg.workspace_mount_rewrite.rsplit(':', 1)
             if len(parts) == 2:
                 old_seg, new_seg = parts
                 # Normalize slashes so Unix-style rewrites apply on Windows paths

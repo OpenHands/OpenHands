@@ -21,6 +21,7 @@ export const useUnifiedVSCodeUrl = () => {
   const { t } = useTranslation();
   const { conversationId } = useConversationId();
   const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
+  const urlNotAvailableText = t(I18nKey.VSCODE$URL_NOT_AVAILABLE);
 
   // Fetch V1 app conversation to get sandbox_id
   const appConversationsQuery = useBatchAppConversations(
@@ -34,7 +35,13 @@ export const useUnifiedVSCodeUrl = () => {
   const sandbox = sandboxesQuery?.data?.[0];
 
   const mainQuery = useQuery<VSCodeUrlResult>({
-    queryKey: ["unified", "vscode_url", conversationId, sandbox],
+    queryKey: [
+      "unified",
+      "vscode_url",
+      conversationId,
+      sandbox,
+      urlNotAvailableText,
+    ],
     queryFn: async () => {
       if (!conversationId) throw new Error("No conversation ID");
 
@@ -42,7 +49,7 @@ export const useUnifiedVSCodeUrl = () => {
       if (!sandbox) {
         return {
           url: null,
-          error: t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
+          error: urlNotAvailableText,
         };
       }
 
@@ -53,7 +60,7 @@ export const useUnifiedVSCodeUrl = () => {
       if (!vscodeUrl) {
         return {
           url: null,
-          error: t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
+          error: urlNotAvailableText,
         };
       }
 

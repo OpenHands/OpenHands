@@ -27,6 +27,7 @@ Fix applied at conftest.py collection time (before any test module is imported):
 4. Pre-stub openhands.storage.google_cloud so it can never be accidentally
    imported through the stub's __path__.
 """
+
 from __future__ import annotations
 
 import pathlib

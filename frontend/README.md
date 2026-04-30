@@ -83,8 +83,8 @@ The frontend application uses the following environment variables:
 
 | Variable                    | Description                                                            | Default Value    |
 | --------------------------- | ---------------------------------------------------------------------- | ---------------- |
-| `VITE_BACKEND_BASE_URL`     | The backend hostname without protocol (used for WebSocket connections) | `localhost:3000` |
-| `VITE_BACKEND_HOST`         | The backend host with port for API connections                         | `127.0.0.1:3000` |
+| `VITE_BACKEND_BASE_URL`     | Backend base URL for axios and conversation fallback resolution        | `localhost:3000` |
+| `VITE_BACKEND_HOST`         | Backend host with port for Vite proxy and WebSocket dev connections    | `localhost:3000` |
 | `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                    | `false`          |
 | `VITE_MOCK_SAAS`            | Simulate SaaS mode in development                                      | `false`          |
 | `VITE_USE_TLS`              | Use HTTPS/WSS for backend connections                                  | `false`          |

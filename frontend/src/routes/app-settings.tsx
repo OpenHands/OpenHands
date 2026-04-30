@@ -1,3 +1,6 @@
+import { usePostHog } from "posthog-js/react";
+import React from "react";
+import { useTranslation } from "react-i18next";
 import { AppSettingsInputsSkeleton } from "#/components/features/settings/app-settings/app-settings-inputs-skeleton";
 import { LanguageInput } from "#/components/features/settings/app-settings/language-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -23,9 +26,6 @@ import { handleCaptureConsent } from "#/utils/handle-capture-consent";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { parseMaxBudgetPerTask } from "#/utils/settings-utils";
-import { usePostHog } from "posthog-js/react";
-import React from "react";
-import { useTranslation } from "react-i18next";
 
 export const clientLoader = createPermissionGuard(
   "manage_application_settings",

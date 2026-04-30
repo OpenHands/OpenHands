@@ -245,7 +245,9 @@ def get_supported_llm_models(
             try:
                 # Get timeout from environment variable, default to 10 seconds
                 ollama_timeout = int(os.getenv('OLLAMA_DISCOVERY_TIMEOUT', '10'))
-                ollama_models_list = httpx.get(ollama_url, timeout=ollama_timeout).json()['models']  # noqa: ASYNC100
+                ollama_models_list = httpx.get(
+                    ollama_url, timeout=ollama_timeout
+                ).json()['models']  # noqa: ASYNC100
                 for model in ollama_models_list:
                     model_list.append('ollama/' + model['name'])
                 break

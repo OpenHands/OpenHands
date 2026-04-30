@@ -10,7 +10,7 @@ import "./tailwind.css";
 import "./index.css";
 import React from "react";
 import { Toaster } from "react-hot-toast";
-import { useInvitation } from "#/hooks/use-invitation";
+import { RouteHydrateFallback } from "#/components/shared/route-hydrate-fallback";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -37,10 +37,8 @@ export const meta: MetaFunction = () => [
   { name: "description", content: "Let's Start Building!" },
 ];
 
-export default function App() {
-  // Handle invitation token cleanup when invitation flow completes
-  // This runs on all pages to catch redirects from auth callback
-  useInvitation();
+export const HydrateFallback = RouteHydrateFallback;
 
+export default function App() {
   return <Outlet />;
 }

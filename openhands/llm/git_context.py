@@ -94,9 +94,15 @@ class GitContextProvider:
                 timeout=5,
             )
             if result.returncode == 0:
-                modified = sum(1 for line in result.stdout.split('\n') if line.startswith(' M'))
-                added = sum(1 for line in result.stdout.split('\n') if line.startswith('??'))
-                deleted = sum(1 for line in result.stdout.split('\n') if line.startswith(' D'))
+                modified = sum(
+                    1 for line in result.stdout.split('\n') if line.startswith(' M')
+                )
+                added = sum(
+                    1 for line in result.stdout.split('\n') if line.startswith('??')
+                )
+                deleted = sum(
+                    1 for line in result.stdout.split('\n') if line.startswith(' D')
+                )
                 return {'modified': modified, 'added': added, 'deleted': deleted}
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
             logger.debug(f'Failed to get uncommitted changes: {e}')
@@ -158,9 +164,7 @@ class GitContextProvider:
             # Uncommitted changes
             changes = self.get_uncommitted_changes()
             if changes and sum(changes.values()) > 0:
-                changes_list = [
-                    f'{k}: {v}' for k, v in changes.items() if v > 0
-                ]
+                changes_list = [f'{k}: {v}' for k, v in changes.items() if v > 0]
                 context_parts.append(f'Uncommitted changes: {", ".join(changes_list)}')
 
             # Recent commits

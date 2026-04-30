@@ -59,11 +59,9 @@ repos:
             types-Markdown,
             pydantic,
             lxml,
-            "openhands-sdk==1.14",
-            "openhands-tools==1.14",
           ]
         # To see gaps add `--html-report mypy-report/`
         # Assume Linux so Windows dev machines match CI (avoids win32-only unreachable / POSIX stubs noise).
-        entry: mypy --config-file dev_config/python/mypy.ini --platform linux openhands/
+        entry: mypy --config-file dev_config/python/mypy.ini --platform linux --no-incremental --cache-dir .mypy_cache/precommit openhands/
         always_run: true
         pass_filenames: false

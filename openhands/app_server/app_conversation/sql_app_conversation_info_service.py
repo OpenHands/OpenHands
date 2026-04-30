@@ -35,6 +35,7 @@ from sqlalchemy import (
     String,
     func,
     select,
+    text,
 )
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -116,6 +117,71 @@ class SQLAppConversationInfoService(AppConversationInfoService):
 
     db_session: AsyncSession
     user_context: UserContext
+    _schema_compatibility_checked: bool = False
+
+    async def _ensure_schema_compatibility(self) -> None:
+        """Apply lightweight schema compatibility fixes for legacy local SQLite DBs."""
+        if self._schema_compatibility_checked:
+            return
+
+        bind = self.db_session.bind
+        if bind is None or bind.dialect.name != 'sqlite':
+            self._schema_compatibility_checked = True
+            return
+
+        result = await self.db_session.execute(
+            text('PRAGMA table_info(conversation_metadata)')
+        )
+        columns = {str(row[1]) for row in result.fetchall()}
+
+        required_columns: dict[str, str] = {
+            'selected_repository': 'TEXT',
+            'selected_branch': 'TEXT',
+            'git_provider': 'TEXT',
+            'title': 'TEXT',
+            'last_updated_at': 'DATETIME',
+            'created_at': 'DATETIME',
+            'trigger': 'TEXT',
+            'pr_number': 'TEXT',
+            'accumulated_cost': 'FLOAT DEFAULT 0.0',
+            'prompt_tokens': 'INTEGER DEFAULT 0',
+            'completion_tokens': 'INTEGER DEFAULT 0',
+            'total_tokens': 'INTEGER DEFAULT 0',
+            'max_budget_per_task': 'FLOAT',
+            'cache_read_tokens': 'INTEGER DEFAULT 0',
+            'cache_write_tokens': 'INTEGER DEFAULT 0',
+            'reasoning_tokens': 'INTEGER DEFAULT 0',
+            'context_window': 'INTEGER DEFAULT 0',
+            'per_turn_token': 'INTEGER DEFAULT 0',
+            'llm_model': 'TEXT',
+            'llm_base_url': 'TEXT',
+            'conversation_version': "TEXT DEFAULT 'V1'",
+            'sandbox_id': 'TEXT',
+            'parent_conversation_id': 'TEXT',
+            'public': 'BOOLEAN',
+            'tags': 'TEXT',
+        }
+
+        schema_changed = False
+        for column_name, column_definition in required_columns.items():
+            if column_name in columns:
+                continue
+            logger.warning(
+                'Adding missing conversation_metadata.%s column for legacy SQLite schema',
+                column_name,
+            )
+            await self.db_session.execute(
+                text(
+                    f'ALTER TABLE conversation_metadata '
+                    f'ADD COLUMN {column_name} {column_definition}'
+                )
+            )
+            schema_changed = True
+
+        if schema_changed:
+            await self.db_session.commit()
+
+        self._schema_compatibility_checked = True
 
     async def search_app_conversation_info(
         self,
@@ -131,6 +197,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         include_sub_conversations: bool = False,
     ) -> AppConversationInfoPage:
         """Search for sandboxed conversations without permission checks."""
+        await self._ensure_schema_compatibility()
         query = await self._secure_select()
 
         # Conditionally exclude sub-conversations based on the parameter
@@ -186,7 +253,15 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         if has_more:
             rows = rows[:limit]
 
-        items = [self._to_info(row) for row in rows]
+        items: list[AppConversationInfo] = []
+        for row in rows:
+            try:
+                items.append(self._to_info(row))
+            except Exception:
+                logger.exception(
+                    'Skipping malformed conversation metadata row during search: %s',
+                    getattr(row, 'conversation_id', '<unknown>'),
+                )
 
         # Calculate next page ID
         next_page_id = None
@@ -205,6 +280,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         sandbox_id__eq: str | None = None,
     ) -> int:
         """Count sandboxed conversations matching the given filters."""
+        await self._ensure_schema_compatibility()
         query = select(func.count(StoredConversationMetadata.conversation_id)).where(
             StoredConversationMetadata.conversation_version == 'V1'
         )
@@ -274,6 +350,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         Returns:
             List of sub-conversation IDs
         """
+        await self._ensure_schema_compatibility()
         query = await self._secure_select()
         query = query.where(
             StoredConversationMetadata.parent_conversation_id
@@ -284,6 +361,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         return [UUID(row.conversation_id) for row in rows]
 
     async def count_conversations_by_sandbox_id(self, sandbox_id: str) -> int:
+        await self._ensure_schema_compatibility()
         query = await self._secure_select()
         query = query.where(StoredConversationMetadata.sandbox_id == sandbox_id)
         count_query = select(func.count()).select_from(query.subquery())
@@ -294,6 +372,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
     async def get_app_conversation_info(
         self, conversation_id: UUID
     ) -> AppConversationInfo | None:
+        await self._ensure_schema_compatibility()
         query = await self._secure_select()
         query = query.where(
             StoredConversationMetadata.conversation_id == str(conversation_id)
@@ -303,12 +382,20 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         if result:
             # Fetch sub-conversation IDs
             sub_conversation_ids = await self.get_sub_conversation_ids(conversation_id)
-            return self._to_info(result, sub_conversation_ids=sub_conversation_ids)
+            try:
+                return self._to_info(result, sub_conversation_ids=sub_conversation_ids)
+            except Exception:
+                logger.exception(
+                    'Skipping malformed conversation metadata row for get: %s',
+                    conversation_id,
+                )
+                return None
         return None
 
     async def batch_get_app_conversation_info(
         self, conversation_ids: list[UUID]
     ) -> list[AppConversationInfo | None]:
+        await self._ensure_schema_compatibility()
         conversation_id_strs = [
             str(conversation_id) for conversation_id in conversation_ids
         ]
@@ -326,9 +413,16 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 UUID(conversation_id)
             )
             if info:
-                results.append(
-                    self._to_info(info, sub_conversation_ids=sub_conversation_ids)
-                )
+                try:
+                    results.append(
+                        self._to_info(info, sub_conversation_ids=sub_conversation_ids)
+                    )
+                except Exception:
+                    logger.exception(
+                        'Skipping malformed conversation metadata row for batch_get: %s',
+                        conversation_id,
+                    )
+                    results.append(None)
             else:
                 results.append(None)
 
@@ -337,6 +431,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
     async def save_app_conversation_info(
         self, info: AppConversationInfo
     ) -> AppConversationInfo:
+        await self._ensure_schema_compatibility()
         metrics = info.metrics or MetricsSnapshot()
         usage = metrics.accumulated_token_usage or TokenUsage()
 
@@ -358,6 +453,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             max_budget_per_task=metrics.max_budget_per_task,
             cache_read_tokens=usage.cache_read_tokens,
             cache_write_tokens=usage.cache_write_tokens,
+            reasoning_tokens=usage.reasoning_tokens,
             context_window=usage.context_window,
             per_turn_token=usage.per_turn_token,
             llm_model=info.llm_model,
@@ -522,6 +618,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             completion_tokens=cast(int, stored.completion_tokens),
             cache_read_tokens=cast(int, stored.cache_read_tokens),
             cache_write_tokens=cast(int, stored.cache_write_tokens),
+            reasoning_tokens=cast(int, stored.reasoning_tokens),
             context_window=cast(int, stored.context_window),
             per_turn_token=cast(int, stored.per_turn_token),
         )

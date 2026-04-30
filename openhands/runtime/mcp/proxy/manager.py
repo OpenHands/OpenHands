@@ -128,7 +128,7 @@ class MCPProxyManager:
         app.mount('/mcp', mcp_app)
 
         app.mount('/', mcp_app)
-        logger.info('Mounted FastMCP Proxy app at /mcp')
+        logger.info('Mounted FastMCP Proxy app at /mcp and /')
 
     async def update_and_remount(
         self,

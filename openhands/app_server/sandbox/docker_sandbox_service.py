@@ -98,10 +98,22 @@ class DockerSandboxService(SandboxService):
     web_url: str | None = None
     permitted_cors_origins: list[str] = field(default_factory=list)
     extra_hosts: dict[str, str] = field(default_factory=dict)
-    docker_client: docker.DockerClient = field(default_factory=get_docker_client)
+    docker_client: docker.DockerClient | None = None
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
     kvm_enabled: bool = False
+
+    def __post_init__(self):
+        if self.docker_client is not None:
+            return
+        try:
+            self.docker_client = get_docker_client()
+        except docker.errors.DockerException as exc:
+            _logger.warning(
+                'Docker client is unavailable during sandbox service initialization: %s',
+                exc,
+            )
+            self.docker_client = None
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -285,6 +297,8 @@ class DockerSandboxService(SandboxService):
         limit: int = 100,
     ) -> SandboxPage:
         """Search for sandboxes."""
+        if self.docker_client is None:
+            return SandboxPage(items=[], next_page_id=None)
         try:
             # Get all containers with our prefix
             all_containers = self.docker_client.containers.list(all=True)
@@ -321,23 +335,27 @@ class DockerSandboxService(SandboxService):
 
             return SandboxPage(items=paginated_containers, next_page_id=next_page_id)
 
-        except APIError:
+        except (APIError, docker.errors.DockerException, OSError, Exception):
             return SandboxPage(items=[], next_page_id=None)
 
     async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
         """Get a single sandbox info."""
+        if self.docker_client is None:
+            return None
         try:
             if not sandbox_id.startswith(self.container_name_prefix):
                 return None
             container = self.docker_client.containers.get(sandbox_id)
             return await self._container_to_checked_sandbox_info(container)
-        except (NotFound, APIError, OSError):
+        except (NotFound, APIError, docker.errors.DockerException, OSError, Exception):
             return None
 
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str
     ) -> SandboxInfo | None:
         """Get a single sandbox by session API key."""
+        if self.docker_client is None:
+            return None
         try:
             # Get all containers with our prefix
             all_containers = self.docker_client.containers.list(all=True)
@@ -354,13 +372,17 @@ class DockerSandboxService(SandboxService):
                         return await self._container_to_checked_sandbox_info(container)
 
             return None
-        except (NotFound, APIError, OSError):
+        except (NotFound, APIError, docker.errors.DockerException, OSError, Exception):
             return None
 
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
         """Start a new sandbox."""
+        if self.docker_client is None:
+            raise SandboxError(
+                'Docker client is unavailable. Ensure Docker is running.'
+            )
         # Warn about port collision risk when using host network mode with multiple sandboxes
         if self.use_host_network and self.max_num_sandboxes > 1:
             _logger.warning(
@@ -495,6 +517,8 @@ class DockerSandboxService(SandboxService):
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox."""
+        if self.docker_client is None:
+            return False
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
@@ -514,6 +538,8 @@ class DockerSandboxService(SandboxService):
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
         """Pause a running sandbox."""
+        if self.docker_client is None:
+            return False
         try:
             if not sandbox_id.startswith(self.container_name_prefix):
                 return False
@@ -528,6 +554,8 @@ class DockerSandboxService(SandboxService):
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
         """Delete a sandbox."""
+        if self.docker_client is None:
+            return False
         try:
             if not sandbox_id.startswith(self.container_name_prefix):
                 return False

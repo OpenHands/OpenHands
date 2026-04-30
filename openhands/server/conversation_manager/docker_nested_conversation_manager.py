@@ -62,7 +62,7 @@ class DockerNestedConversationManager(ConversationManager):
     config: OpenHandsConfig
     server_config: ServerConfig
     file_store: FileStore
-    docker_client: docker.DockerClient = field(default_factory=docker.from_env)
+    docker_client: docker.DockerClient | None = field(default_factory=docker.from_env)
     _conversation_store_class: type[ConversationStore] | None = None
     _starting_conversation_ids: set[str] = field(default_factory=set)
     _runtime_container_image: str | None = None
@@ -100,7 +100,7 @@ class DockerNestedConversationManager(ConversationManager):
         self, user_id: str | None = None, filter_to_sids: set[str] | None = None
     ) -> set[str]:
         """Get the running agent loops directly from docker."""
-        containers: list[Container] = self.docker_client.containers.list()
+        containers: list[Container] = self._get_docker_client().containers.list()
         names = (container.name or '' for container in containers)
         conversation_ids = {
             name[len('openhands-runtime-') :]
@@ -323,7 +323,9 @@ class DockerNestedConversationManager(ConversationManager):
     async def close_session(self, sid: str):
         # First try to graceful stop server.
         try:
-            container = self.docker_client.containers.get(f'openhands-runtime-{sid}')
+            container = self._get_docker_client().containers.get(
+                f'openhands-runtime-{sid}'
+            )
         except docker.errors.NotFound:
             return
         try:
@@ -398,7 +400,7 @@ class DockerNestedConversationManager(ConversationManager):
         self, user_id: str | None = None, filter_to_sids: set[str] | None = None
     ) -> list[AgentLoopInfo]:
         results = []
-        containers: list[Container] = self.docker_client.containers.list()
+        containers: list[Container] = self._get_docker_client().containers.list()
         for container in containers:
             if not container.name or not container.name.startswith(
                 'openhands-runtime-'
@@ -479,8 +481,14 @@ class DockerNestedConversationManager(ConversationManager):
         return store
 
     def _get_nested_url(self, sid: str) -> str:
-        container = self.docker_client.containers.get(f'openhands-runtime-{sid}')
+        container = self._get_docker_client().containers.get(f'openhands-runtime-{sid}')
         return self.get_nested_url_for_container(container)
+
+    def _get_docker_client(self) -> docker.DockerClient:
+        if self.docker_client is None:
+            logger.warning('docker_client_was_none_reinitializing_from_env')
+            self.docker_client = docker.from_env()
+        return self.docker_client
 
     def get_nested_url_for_container(self, container: Container) -> str:
         env = container.attrs['Config']['Env']
@@ -629,7 +637,7 @@ class DockerNestedConversationManager(ConversationManager):
 
     async def _start_existing_container(self, runtime: DockerRuntime) -> bool:
         try:
-            container = self.docker_client.containers.get(runtime.container_name)
+            container = self._get_docker_client().containers.get(runtime.container_name)
             if container:
                 status = container.status
                 if status == 'exited':

@@ -8,7 +8,7 @@ import httpx
 from fastapi import APIRouter, Depends
 
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.core.config import config
+from openhands.core.config import load_openhands_config
 from openhands.core.config.llm_config import LLMConfig
 from openhands.server.user_auth import get_user_settings
 from openhands.storage.data_models.settings import Settings
@@ -63,14 +63,12 @@ async def _test_llm_connection(llm_config: LLMConfig) -> LLMHealthCheckResponse:
     provider = llm_config.custom_llm_provider or model.split('/', maxsplit=1)[0]
 
     # Determine if local model
-    is_local = False
     if llm_config.base_url:
         for substring in ['localhost', '127.0.0.1', '0.0.0.0', 'host.docker.internal']:
             if substring in llm_config.base_url:
-                is_local = True
                 break
     elif model.startswith('ollama/'):
-        is_local = True
+        pass
 
     # Special handling for Ollama
     if model.startswith('ollama/'):
@@ -176,14 +174,14 @@ async def llm_health_check(
         Health status with latency and error details
     """
     try:
-        # Get LLM config
-        llm_config = config.llm
+        # Load app config for default LLM settings when user overrides are absent.
+        llm_config = load_openhands_config().get_llm_config()
 
         # If model is set in settings, use that
         if settings.llm_model:
             llm_config = LLMConfig(
                 model=settings.llm_model,
-                api_key=settings.llm_api_key.get_secret_value() if settings.llm_api_key else None,
+                api_key=settings.llm_api_key,
                 base_url=settings.llm_base_url or llm_config.base_url,
                 custom_llm_provider=llm_config.custom_llm_provider,
                 ollama_base_url=llm_config.ollama_base_url,

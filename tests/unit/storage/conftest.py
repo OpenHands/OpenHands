@@ -19,6 +19,7 @@ package initialises normally.
 This conftest is loaded at session start for all ``tests/unit/storage/`` tests,
 making the shim available in time for collection.
 """
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -31,7 +32,7 @@ from unittest.mock import patch
 _backport_present = 'importlib_metadata' in sys.modules or any(
     'importlib_metadata' in str(p) for p in sys.path
 )
-print(f"[conftest] sys.platform={sys.platform!r} _backport_present={_backport_present}")
+print(f'[conftest] sys.platform={sys.platform!r} _backport_present={_backport_present}')
 
 if sys.platform == 'win32' and _backport_present:
     _patcher = patch.object(

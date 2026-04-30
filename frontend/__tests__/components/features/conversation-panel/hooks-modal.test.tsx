@@ -67,7 +67,10 @@ describe("HooksModalHeader", () => {
     isAgentReady: true,
     isLoading: false,
     isRefetching: false,
+    hookCount: 2,
+    allExpanded: false,
     onRefresh: vi.fn(),
+    onToggleAll: vi.fn(),
   };
 
   beforeEach(() => {

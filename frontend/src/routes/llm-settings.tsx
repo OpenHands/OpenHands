@@ -238,26 +238,33 @@ function LlmSettingsScreen() {
       const result = await testConnection();
 
       if (result.data) {
-        const { status, error_message, model, latency_ms } = result.data;
+        const {
+          status,
+          error_message: errorMessage,
+          model,
+          latency_ms: latencyMs,
+        } = result.data;
 
-        if (status === 'connected') {
-          displaySuccessToast(`Connected to ${model} (${latency_ms.toFixed(0)}ms)`);
-        } else if (status === 'timeout') {
-          displayErrorToast(`Connection timeout: ${error_message}`);
-        } else if (status === 'model_not_found') {
-          displayErrorToast(`Model not found: ${error_message}`);
-        } else if (status === 'connection_error') {
-          displayErrorToast(`Cannot connect: ${error_message}`);
-        } else if (status === 'error') {
-          displayErrorToast(`Error: ${error_message}`);
-        } else if (status === 'configured') {
+        if (status === "connected") {
           displaySuccessToast(
-            'Settings configured. Remote models cannot be tested offline.',
+            `Connected to ${model} (${latencyMs.toFixed(0)}ms)`,
+          );
+        } else if (status === "timeout") {
+          displayErrorToast(`Connection timeout: ${errorMessage}`);
+        } else if (status === "model_not_found") {
+          displayErrorToast(`Model not found: ${errorMessage}`);
+        } else if (status === "connection_error") {
+          displayErrorToast(`Cannot connect: ${errorMessage}`);
+        } else if (status === "error") {
+          displayErrorToast(`Error: ${errorMessage}`);
+        } else if (status === "configured") {
+          displaySuccessToast(
+            "Settings configured. Remote models cannot be tested offline.",
           );
         }
       }
     } catch {
-      displayErrorToast('Failed to test connection');
+      displayErrorToast("Failed to test connection");
     } finally {
       setTestingConnection(false);
     }
@@ -796,7 +803,7 @@ function LlmSettingsScreen() {
               isDisabled={testingConnection || isPending}
               onClick={handleTestConnection}
             >
-              {testingConnection ? 'Testing...' : 'Test Connection'}
+              {testingConnection ? "Testing..." : "Test Connection"}
             </BrandButton>
             <BrandButton
               testId="submit-button"
