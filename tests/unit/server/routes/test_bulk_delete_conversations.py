@@ -5,7 +5,6 @@ import pytest
 
 from openhands.app_server.app_conversation.app_conversation_router import (
     BulkDeleteRequest,
-    BulkDeleteResponse,
     bulk_delete_conversations,
 )
 
@@ -60,9 +59,7 @@ async def test_bulk_delete_reports_not_found_as_failure():
     app_conversation_info_service = AsyncMock()
     app_conversation_info_service.get_app_conversation_info.return_value = None
 
-    with patch(
-        'openhands.app_server.app_conversation.app_conversation_router.asyncio'
-    ):
+    with patch('openhands.app_server.app_conversation.app_conversation_router.asyncio'):
         result = await bulk_delete_conversations(
             request=_make_request(),
             body=BulkDeleteRequest(conversation_ids=[conv_id]),
@@ -80,9 +77,7 @@ async def test_bulk_delete_reports_not_found_as_failure():
 @pytest.mark.asyncio
 async def test_bulk_delete_reports_invalid_uuid_as_failure():
     """Test that invalid UUIDs are reported as failures."""
-    with patch(
-        'openhands.app_server.app_conversation.app_conversation_router.asyncio'
-    ):
+    with patch('openhands.app_server.app_conversation.app_conversation_router.asyncio'):
         result = await bulk_delete_conversations(
             request=_make_request(),
             body=BulkDeleteRequest(conversation_ids=['not-a-uuid']),
@@ -139,9 +134,7 @@ async def test_bulk_delete_reports_exceptions_as_failures():
         'boom'
     )
 
-    with patch(
-        'openhands.app_server.app_conversation.app_conversation_router.asyncio'
-    ):
+    with patch('openhands.app_server.app_conversation.app_conversation_router.asyncio'):
         result = await bulk_delete_conversations(
             request=_make_request(),
             body=BulkDeleteRequest(conversation_ids=[conv_id]),

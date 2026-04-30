@@ -69,7 +69,7 @@ class ConversationService {
     const { data } = await openHands.post<{
       succeeded: string[];
       failed: string[];
-    }>("/api/conversations/bulk-delete", {
+    }>("/api/v1/app-conversations/bulk-delete", {
       conversation_ids: conversationIds,
     });
     return data;
