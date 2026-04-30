@@ -452,7 +452,7 @@ class DockerSandboxService(SandboxService):
 
         if self.kvm_enabled:
             _logger.info(
-                f'Starting sandbox {container_name} with KVM device passthrough'
+                'Starting sandbox %s with KVM device passthrough', container_name
             )
 
         try:

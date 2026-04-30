@@ -28,7 +28,15 @@ _logger = logging.getLogger(__name__)
 def get_docker_client() -> docker.DockerClient:
     global _global_docker_client
     if _global_docker_client is None:
-        _global_docker_client = docker.from_env()
+        try:
+            _global_docker_client = docker.from_env()
+        except docker.errors.DockerException as exc:
+            _logger.error(
+                'Failed to connect to Docker daemon. '
+                'Ensure Docker Desktop or the Docker daemon is running: %s',
+                exc,
+            )
+            raise
     return _global_docker_client
 
 
