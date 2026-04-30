@@ -164,7 +164,7 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
-authlib = ">=1.7.0"                                # CVE-2026-27962 (fixed in 1.6.9)
+authlib = ">=1.7"                                  # CVE-2026-27962 (fixed in 1.6.9)
 orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
 litellm = ">=1.83.14, !=1.64.4, !=1.67.*"          # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
 openai = "2.8.0"                                   # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
@@ -238,7 +238,7 @@ redis = ">=5.2,<8.0"
 google-cloud-aiplatform = "*"
 anthropic = { extras = [ "vertex" ], version = "*" }
 boto3 = "*"
-kubernetes = ">=35.0,<36.0"
+kubernetes = ">=35,<36"
 pyyaml = "^6.0.2"
 memory-profiler = "^0.61.0"
 jupyter_kernel_gateway = "*"
