@@ -165,7 +165,7 @@ class SaasUserAuth(UserAuth):
         user_secrets = await secrets_store.load()
 
         # Inject OPENHANDS_API_KEY (system-level, lazily generated)
-        openhands_api_key = await self.get_openhands_api_key()
+        openhands_api_key = await self._get_openhands_api_key()
         if openhands_api_key:
             custom_secrets = dict(user_secrets.custom_secrets) if user_secrets else {}
             custom_secrets['OPENHANDS_API_KEY'] = CustomSecret(
@@ -269,7 +269,7 @@ class SaasUserAuth(UserAuth):
             )
         return mcp_api_key
 
-    async def get_openhands_api_key(self) -> str:
+    async def _get_openhands_api_key(self) -> str:
         """Get or create the user's OPENHANDS_API_KEY (system-level, non-deletable).
 
         This key is automatically generated on first access and stored as a system
