@@ -3312,7 +3312,7 @@ class TestAgentKindConversationUrl:
             id=UUID('11111111-1111-1111-1111-111111111111'),
             created_by_user_id=None,
             sandbox_id='sandbox-a',
-            agent_kind='llm',
+            agent_kind='openhands',
         )
         sandbox = SandboxInfo(
             id='sandbox-a',
@@ -3371,12 +3371,12 @@ class TestAgentKindConversationUrl:
         )
 
     def test_agent_kind_to_router_path_known_kinds(self):
-        """``'llm'`` → ``'conversations'``, ``'acp'`` → ``'acp/conversations'``."""
+        """``'openhands'`` routes to standard conversations; ``'acp'`` to ACP."""
         from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
             _agent_kind_to_router_path,
         )
 
-        assert _agent_kind_to_router_path('llm') == 'conversations'
+        assert _agent_kind_to_router_path('openhands') == 'conversations'
         assert _agent_kind_to_router_path('acp') == 'acp/conversations'
 
     def test_agent_kind_to_router_path_unknown_falls_back(self):
