@@ -8,7 +8,6 @@
 import argparse
 import os
 import pathlib
-import platform
 import sys
 from ast import literal_eval
 from types import UnionType
@@ -26,7 +25,6 @@ from openhands.core.config.arg_utils import get_headless_parser
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import mcp_config_from_toml
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.core.config.sandbox_config import SandboxConfig
 
 JWT_SECRET = '.jwt_secret'
 load_dotenv()
@@ -193,21 +191,6 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
                 f'Cannot parse [llm] config from toml, values have not been applied.\nError: {e}'
             )
 
-    # Process sandbox section if present
-    if 'sandbox' in toml_config:
-        try:
-            sandbox_mapping = SandboxConfig.from_toml_section(toml_config['sandbox'])
-            # We only use the base sandbox config for now
-            if 'sandbox' in sandbox_mapping:
-                cfg.sandbox = sandbox_mapping['sandbox']
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [sandbox] config from toml, values have not been applied.\nError: {e}'
-            )
-        except ValueError as e:
-            # Re-raise ValueError from SandboxConfig.from_toml_section
-            raise ValueError('Error in [sandbox] section in config.toml') from e
-
     # Process MCP sections if present
     if 'mcp' in toml_config:
         try:
@@ -222,20 +205,19 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
             raise ValueError('Error in MCP sections in config.toml')
 
     # Check for unknown sections
-    # Note: 'agent', 'extended', 'condenser', 'model_routing', 'kubernetes',
-    # and 'security' are kept for backwards compatibility with old config
+    # Note: legacy sections are kept for backwards compatibility with old config
     # files - they are silently ignored
     known_sections = {
         'core',
         'llm',
-        'sandbox',
         'mcp',
+        'sandbox',  # Legacy, ignored
+        'security',  # Legacy, ignored
         'agent',  # Legacy, ignored
         'extended',  # Legacy, ignored
         'condenser',  # Legacy, ignored
         'kubernetes',  # Legacy, ignored
         'model_routing',  # Legacy, ignored
-        'security',  # Legacy, ignored
     }
     for key in toml_config:
         if key.lower() not in known_sections:
@@ -254,50 +236,8 @@ def get_or_create_jwt_secret(file_store: FileStore) -> str:
 
 def finalize_config(cfg: OpenHandsConfig) -> None:
     """More tweaks to the config after it's been loaded."""
-    # Handle the sandbox.volumes parameter
-    if cfg.sandbox.volumes is not None:
-        # Split by commas to handle multiple mounts
-        mounts = cfg.sandbox.volumes.split(',')
-
-        # Check if any mount explicitly targets /workspace
-        workspace_mount_found = False
-        for mount in mounts:
-            parts = mount.split(':')
-            if len(parts) >= 2 and parts[1] == '/workspace':
-                workspace_mount_found = True
-                host_path = os.path.abspath(parts[0])
-
-                # Set the workspace_mount_path and workspace_mount_path_in_sandbox
-                cfg.workspace_mount_path = host_path
-                cfg.workspace_mount_path_in_sandbox = '/workspace'
-
-                # Also set workspace_base
-                cfg.workspace_base = host_path
-                break
-
-        # If no explicit /workspace mount was found, don't set any workspace mount
-        # This allows users to mount volumes without affecting the workspace
-        if not workspace_mount_found:
-            logger.openhands_logger.debug(
-                'No explicit /workspace mount found in SANDBOX_VOLUMES. '
-                'Using default workspace path in sandbox.'
-            )
-            # Ensure workspace_mount_path and workspace_base are None to avoid
-            # unintended mounting behavior
-            cfg.workspace_mount_path = None
-            cfg.workspace_base = None
-
-        # Validate all mounts
-        for mount in mounts:
-            parts = mount.split(':')
-            if len(parts) < 2 or len(parts) > 3:
-                raise ValueError(
-                    f'Invalid mount format in sandbox.volumes: {mount}. '
-                    f"Expected format: 'host_path:container_path[:mode]', e.g. '/my/host/dir:/workspace:rw'"
-                )
-
     # Handle the deprecated workspace_* parameters
-    elif cfg.workspace_base is not None or cfg.workspace_mount_path is not None:
+    if cfg.workspace_base is not None or cfg.workspace_mount_path is not None:
         if cfg.workspace_base is not None:
             cfg.workspace_base = os.path.abspath(cfg.workspace_base)
             if cfg.workspace_mount_path is None:
@@ -311,12 +251,6 @@ def finalize_config(cfg: OpenHandsConfig) -> None:
     # make sure log_completions_folder is an absolute path
     for llm in cfg.llms.values():
         llm.log_completions_folder = os.path.abspath(llm.log_completions_folder)
-
-    if cfg.sandbox.use_host_network and platform.system() == 'Darwin':
-        logger.openhands_logger.warning(
-            'Please upgrade to Docker Desktop 4.29.0 or later to use host network mode on macOS. '
-            'See https://github.com/docker/roadmap/issues/238#issuecomment-2044688144 for more information.'
-        )
 
     # make sure cache dir exists
     if cfg.cache_dir:
@@ -489,9 +423,5 @@ def setup_config_from_args(args: argparse.Namespace) -> OpenHandsConfig:
         config.max_iterations = args.max_iterations
     if hasattr(args, 'max_budget_per_task') and args.max_budget_per_task is not None:
         config.max_budget_per_task = args.max_budget_per_task
-
-    # Read selected repository in config for use by CLI and main.py
-    if hasattr(args, 'selected_repo') and args.selected_repo is not None:
-        config.sandbox.selected_repo = args.selected_repo
 
     return config
