@@ -10,14 +10,12 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from openhands.app_server.utils import logger
 from openhands.core.config.config_utils import (
     DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX,
     OH_DEFAULT_AGENT,
     OH_MAX_ITERATIONS,
     model_defaults_to_dict,
 )
-from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 
 
@@ -25,8 +23,6 @@ class OpenHandsConfig(BaseModel):
     """Configuration for the app.
 
     Attributes:
-        llms: Dictionary mapping LLM names to their configurations.
-            The default configuration is stored under the 'llm' key.
         default_agent: Name of the default agent to use.
         runtime: Runtime environment identifier.
         file_store: Type of file store to use.
@@ -57,7 +53,6 @@ class OpenHandsConfig(BaseModel):
         git_user_email: Git user email for commits made by the agent.
     """
 
-    llms: dict[str, LLMConfig] = Field(default_factory=dict)
     default_agent: str = Field(default=OH_DEFAULT_AGENT)
     runtime: str = Field(default='docker')
     file_store: str = Field(default='local')
@@ -117,21 +112,6 @@ class OpenHandsConfig(BaseModel):
     defaults_dict: ClassVar[dict] = {}
 
     model_config = ConfigDict(extra='forbid')
-
-    def get_llm_config(self, name: str = 'llm') -> LLMConfig:
-        """'llm' is the name for default config (for backward compatibility prior to 0.8)."""
-        if name in self.llms:
-            return self.llms[name]
-        if name is not None and name != 'llm':
-            logger.openhands_logger.warning(
-                f'llm config group {name} not found, using default config'
-            )
-        if 'llm' not in self.llms:
-            self.llms['llm'] = LLMConfig()
-        return self.llms['llm']
-
-    def set_llm_config(self, value: LLMConfig, name: str = 'llm') -> None:
-        self.llms[name] = value
 
     def model_post_init(self, __context: Any) -> None:
         """Post-initialization hook, called when the instance is created with only default values."""
