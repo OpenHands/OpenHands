@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
-from openhands.utils.import_utils import get_impl
+from openhands.app_server.utils.import_utils import get_impl
 
 
 class MaintenanceTaskProcessor(BaseModel, ABC):

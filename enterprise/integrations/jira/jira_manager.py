@@ -49,7 +49,7 @@ from openhands.server.types import (
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 

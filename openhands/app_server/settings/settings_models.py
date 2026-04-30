@@ -27,18 +27,18 @@ from pydantic import (
 from openhands.app_server.integrations.provider import ProviderToken
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.settings.llm_profiles import LLMProfiles
-from openhands.core.config.llm_config import LLMConfig
-from openhands.core.config.mcp_config import MCPConfig
-from openhands.core.config.utils import load_openhands_config
-from openhands.sdk.settings import ConversationSettings
-from openhands.utils.jsonpatch_compat import deep_merge
-from openhands.utils.sdk_settings_compat import (
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.app_server.utils.sdk_settings_compat import (
     ACPAgentSettings,
     AgentSettingsConfig,
     LLMAgentSettings,
     default_agent_settings,
     validate_agent_settings,
 )
+from openhands.core.config.llm_config import LLMConfig
+from openhands.core.config.mcp_config import MCPConfig
+from openhands.core.config.utils import load_openhands_config
+from openhands.sdk.settings import ConversationSettings
 
 
 def _coerce_value(value: Any) -> Any:
@@ -437,7 +437,7 @@ class Settings(BaseModel):
         Secrets are masked by Pydantic's default serialiser.
         """
         from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
-        from openhands.utils.llm import is_openhands_model
+        from openhands.app_server.utils.llm import is_openhands_model
 
         data = self.agent_settings.model_dump(mode='json')
         llm = data.get('llm')

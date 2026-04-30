@@ -42,7 +42,7 @@ from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.core.logger import openhands_logger as logger
 from openhands.sdk import TextContent
-from openhands.utils.async_utils import call_sync_from_async
+from openhands.app_server.utils.async_utils import call_sync_from_async
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 

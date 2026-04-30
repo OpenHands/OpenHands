@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse
 from server.logger import logger
 
 from openhands.server.shared import config
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 GITHUB_PROXY_ENDPOINTS = bool(os.environ.get('GITHUB_PROXY_ENDPOINTS'))
 

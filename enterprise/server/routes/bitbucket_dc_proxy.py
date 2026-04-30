@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 router = APIRouter(prefix='/bitbucket-dc-proxy')
 

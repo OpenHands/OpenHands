@@ -37,19 +37,19 @@ from openhands.app_server.user_auth import (
     get_user_settings_store,
 )
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.core.logger import openhands_logger as logger
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import ConversationSettings
-from openhands.server.shared import config
-from openhands.utils.llm import (
+from openhands.app_server.utils.llm import (
     get_provider_api_base,
     is_openhands_model,
     resolve_llm_base_url,
 )
-from openhands.utils.sdk_settings_compat import (
+from openhands.app_server.utils.sdk_settings_compat import (
     LLMAgentSettings,
     export_agent_settings_schema,
 )
+from openhands.core.logger import openhands_logger as logger
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import ConversationSettings
+from openhands.server.shared import config
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -67,7 +67,7 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     """Apply LLM-specific fixups after merging settings.
 
     Delegates the empty-string → cleared and provider-default inference
-    rules to :func:`openhands.utils.llm.resolve_llm_base_url` so the
+    rules to :func:`openhands.app_server.utils.llm.resolve_llm_base_url` so the
     personal-save and enterprise org-defaults paths stay in lockstep.
     """
     if not isinstance(settings.agent_settings, LLMAgentSettings):

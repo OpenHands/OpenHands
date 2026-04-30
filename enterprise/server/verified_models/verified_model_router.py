@@ -17,7 +17,7 @@ from server.verified_models.verified_model_service import (
 
 from openhands.app_server.config import get_db_session
 from openhands.app_server.config_api.config_router import get_llm_models_dependency
-from openhands.utils.llm import ModelsResponse, get_supported_llm_models
+from openhands.app_server.utils.llm import ModelsResponse, get_supported_llm_models
 
 api_router = APIRouter(prefix='/api/admin/verified-models', tags=['Verified Models'])
 

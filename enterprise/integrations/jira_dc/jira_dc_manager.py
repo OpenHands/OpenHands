@@ -39,7 +39,7 @@ from openhands.server.types import (
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 
 class JiraDcManager(Manager[JiraDcViewInterface]):
