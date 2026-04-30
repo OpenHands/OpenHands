@@ -23,7 +23,7 @@ from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 
 from openhands.app_server.user_auth import get_user_id
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Router for invitation operations on an organization (requires org_id)
 invitation_router = APIRouter(prefix='/api/organizations/{org_id}/members')

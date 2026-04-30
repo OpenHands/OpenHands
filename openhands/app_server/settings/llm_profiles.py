@@ -13,7 +13,7 @@ from pydantic import (
     model_validator,
 )
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
 
 # Soft cap — keeps Settings payload bounded and blocks per-user storage

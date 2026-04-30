@@ -44,7 +44,7 @@ from storage.jira_workspace import JiraWorkspace
 
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.http_session import httpx_verify_option
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,

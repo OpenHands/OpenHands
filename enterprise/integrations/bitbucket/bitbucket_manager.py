@@ -25,7 +25,7 @@ from storage.bitbucket_webhook_store import BitbucketWebhookStore
 
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,

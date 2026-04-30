@@ -13,7 +13,7 @@ from server.auth.token_manager import TokenManager
 from storage.bitbucket_webhook_store import BitbucketWebhookStore
 from storage.redis import get_redis_client_async
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 bitbucket_integration_router = APIRouter(prefix='/integration')
 
