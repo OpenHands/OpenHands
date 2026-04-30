@@ -6,31 +6,24 @@ provider search with pagination support.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Query
 
+from openhands.app_server.config import depends_llm_model_service
 from openhands.app_server.config_api.config_models import (
     LLMModel,
     LLMModelPage,
     Provider,
     ProviderPage,
 )
+from openhands.app_server.config_api.llm_model_service import LLMModelService
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.app_server.utils.llm import ModelsResponse, get_supported_llm_models
+from openhands.app_server.utils.llm import ModelsResponse
 from openhands.app_server.utils.paging_utils import (
     paginate_results,
 )
 from openhands.sdk.llm.utils.verified_models import VERIFIED_MODELS
-from openhands.server.shared import config
 
-
-async def get_llm_models_dependency(request: Request) -> ModelsResponse:
-    """Returns a callable that provides the LLM models implementation.
-
-    Returns a factory that produces the actual implementation function.
-    Override this in enterprise/saas mode via app.dependency_overrides.
-    """
-    return get_supported_llm_models(config)
-
+llm_model_service_dependency = depends_llm_model_service()
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
@@ -63,13 +56,14 @@ async def search_models(
         str | None,
         Query(title='Filter by provider name (exact match)'),
     ] = None,
-    models: ModelsResponse = Depends(get_llm_models_dependency),
+    llm_model_service: LLMModelService = llm_model_service_dependency,
 ) -> LLMModelPage:
     """Search for LLM models with pagination and filtering.
 
     Returns a paginated list of models that can be filtered by name
     (contains), verified status, and provider.
     """
+    models = await llm_model_service.search_llm_models()
     filtered_models = _get_all_models_with_verified(models)
 
     if query is not None:
@@ -106,13 +100,14 @@ async def search_providers(
         bool | None,
         Query(title='Filter by verified status (true/false, omit for all)'),
     ] = None,
-    models: ModelsResponse = Depends(get_llm_models_dependency),
+    llm_model_service: LLMModelService = llm_model_service_dependency,
 ) -> ProviderPage:
     """Search for LLM providers with pagination and filtering.
 
     Returns a paginated list of providers extracted from the available models.
     Each provider indicates whether it is verified by OpenHands.
     """
+    models = await llm_model_service.search_llm_models()
     providers = _get_all_providers(models)
 
     if query is not None:

@@ -57,7 +57,7 @@ from server.verified_models.verified_model_router import (  # noqa: E402
     api_router as verified_models_router,
 )
 from server.verified_models.verified_model_router import (  # noqa: E402
-    override_llm_models_dependency,
+    override_llm_model_service,
 )
 
 from openhands.server.app import app as base_app  # noqa: E402
@@ -135,9 +135,10 @@ base_app.include_router(
     verified_models_router
 )  # Add routes for verified models management
 
-# Override the default LLM models implementation with SaaS version
-# This must happen after all routers are included
-override_llm_models_dependency(base_app)
+# Override the default LLM model service with SaaS version
+from openhands.app_server.config import get_global_config as _get_global_config  # noqa: E402
+
+override_llm_model_service(_get_global_config())
 
 # Override the /api/v1/users/me endpoint to include organization info
 # This replaces the OSS endpoint with a SAAS version that adds org_id, org_name, role, permissions
