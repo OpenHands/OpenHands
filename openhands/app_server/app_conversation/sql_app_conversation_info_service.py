@@ -560,7 +560,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             trigger=ConversationTrigger(stored.trigger) if stored.trigger else None,
             pr_number=stored.pr_number or [],
             llm_model=stored.llm_model,
-            agent_kind=stored.agent_kind or 'llm',
+            agent_kind=stored.agent_kind or 'openhands',
             metrics=metrics,
             parent_conversation_id=(
                 UUID(stored.parent_conversation_id)
