@@ -1,22 +1,22 @@
-"""Base class for User models across OSS and Enterprise.
+"""Protocol for User models across OSS and Enterprise.
 
-This module provides a shared abstract base class that defines the minimal
-interface required for analytics user lookup. Both the enterprise SQLAlchemy
-User model and any OSS user representations should inherit from this class.
+This module provides a Protocol that defines the minimal interface required
+for analytics user lookup. Any object with matching attributes satisfies
+the protocol — no inheritance required (structural typing).
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 
-class UserBase(ABC):
-    """Abstract base class defining the user interface for analytics.
+@runtime_checkable
+class UserBase(Protocol):
+    """Protocol defining the user interface for analytics.
 
-    This class defines the minimal set of attributes required for analytics
-    functionality. Enterprise User models (SQLAlchemy) and OSS user models
-    should inherit from this class.
+    This protocol defines the minimal set of attributes required for analytics
+    functionality. Any object with these attributes satisfies the protocol,
+    including SQLAlchemy models and mock objects in tests.
 
     Attributes:
         id: The user's unique identifier (UUID or string).
@@ -26,17 +26,6 @@ class UserBase(ABC):
             applicable (e.g., in OSS mode).
     """
 
-    @property
-    @abstractmethod
-    def id(self) -> Any:
-        """The user's unique identifier."""
-
-    @property
-    @abstractmethod
-    def user_consents_to_analytics(self) -> bool | None:
-        """Whether the user has consented to analytics."""
-
-    @property
-    @abstractmethod
-    def current_org_id(self) -> Any | None:
-        """The user's current organization ID."""
+    id: Any
+    user_consents_to_analytics: bool | None
+    current_org_id: Any | None
