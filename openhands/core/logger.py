@@ -548,7 +548,7 @@ class RedactURLParamsFilter(logging.Filter):
     _URL_WITH_QS_RE = re.compile(r'\S+\?\S+')
 
     def filter(self, record: logging.LogRecord) -> bool:
-        from openhands.utils._redact_compat import redact_url_params
+        from openhands.app_server.utils._redact_compat import redact_url_params
 
         if record.args:
             if isinstance(record.args, (tuple, list)):

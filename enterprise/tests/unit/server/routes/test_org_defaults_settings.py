@@ -112,7 +112,7 @@ def test_from_org_denormalizes_litellm_proxy_prefix_and_returns_base_url_as_stor
 
 def test_from_org_returns_provider_default_base_url_as_stored_for_non_managed_models():
     """BYOR provider-default base URLs should round-trip unchanged."""
-    from openhands.utils.llm import get_provider_api_base as _provider_base
+    from openhands.app_server.utils.llm import get_provider_api_base as _provider_base
 
     anthropic_default = _provider_base('anthropic/claude-3-opus-20240229')
     assert anthropic_default is not None

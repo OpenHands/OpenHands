@@ -14,8 +14,8 @@ from openhands.app_server.integrations.service_types import (
     RequestMethod,
     User,
 )
+from openhands.app_server.utils.http_session import httpx_verify_option
 from openhands.core.logger import openhands_logger as logger
-from openhands.utils.http_session import httpx_verify_option
 
 
 class BitbucketDCMixinBase(BaseGitService, HTTPClient):

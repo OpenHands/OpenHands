@@ -25,10 +25,10 @@ from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.app_server.utils.llm import is_openhands_model
 from openhands.core.logger import openhands_logger as logger
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.utils.jsonpatch_compat import deep_merge
-from openhands.utils.llm import is_openhands_model
 
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
     'id',

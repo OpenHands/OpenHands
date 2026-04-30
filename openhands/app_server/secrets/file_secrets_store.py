@@ -7,8 +7,8 @@ from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.utils.async_utils import call_sync_from_async
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.utils.async_utils import call_sync_from_async
 
 
 @dataclass

@@ -15,9 +15,9 @@ from openhands.app_server.config_api.config_router import (
     router,
 )
 from openhands.app_server.utils.dependencies import check_session_api_key
+from openhands.app_server.utils.llm import get_supported_llm_models
 from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
 from openhands.server.shared import config
-from openhands.utils.llm import get_supported_llm_models
 
 
 class TestLLMModel:

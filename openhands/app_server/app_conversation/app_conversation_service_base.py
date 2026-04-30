@@ -28,6 +28,7 @@ from openhands.app_server.app_conversation.skill_loader import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.git import ensure_valid_git_branch_name
 from openhands.sdk import Agent, LLMSummarizingCondenser
 from openhands.sdk.context import AgentContext
 from openhands.sdk.context.skills import Skill
@@ -41,7 +42,6 @@ from openhands.sdk.security import (
     SecurityAnalyzerBase,
 )
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.utils.git import ensure_valid_git_branch_name
 
 _logger = logging.getLogger(__name__)
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'

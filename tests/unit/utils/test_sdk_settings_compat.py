@@ -2,7 +2,7 @@
 
 import pytest
 
-from openhands.utils.sdk_settings_compat import (
+from openhands.app_server.utils.sdk_settings_compat import (
     _HAS_DISCRIMINATED_UNION,
     ACPAgentSettings,
     AgentSettingsConfig,
