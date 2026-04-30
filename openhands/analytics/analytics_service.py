@@ -35,7 +35,7 @@ from openhands.analytics.analytics_constants import (
     USER_SIGNED_UP,
 )
 from openhands.analytics.analytics_context import AnalyticsContext
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.server.types import AppMode
 
 

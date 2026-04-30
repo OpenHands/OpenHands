@@ -18,8 +18,8 @@ from typing import Any
 
 from openhands.analytics.user_base import UserBase
 from openhands.analytics.user_provider import AnalyticsUserProvider
-from openhands.core.logger import openhands_logger as logger
-from openhands.utils.import_utils import get_impl
+from openhands.app_server.utils.import_utils import get_impl
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Sentinel reused by resolve_analytics_context for the safe-default path.
 _SAFE_DEFAULT_KWARGS: dict[str, Any] = {

@@ -12,7 +12,7 @@ from server.constants import IS_FEATURE_ENV
 
 from openhands.analytics import get_analytics_service, init_analytics_service
 from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanService
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.server.types import AppMode
 
 
