@@ -16,13 +16,12 @@ from uuid import uuid4
 
 import toml
 from dotenv import load_dotenv
-from pydantic import BaseModel, SecretStr, ValidationError
+from pydantic import BaseModel, SecretStr
 
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.utils import logger
 from openhands.core.config.arg_utils import get_headless_parser
-from openhands.core.config.mcp_config import mcp_config_from_toml
 from openhands.core.config.openhands_config import OpenHandsConfig
 
 JWT_SECRET = '.jwt_secret'
@@ -175,25 +174,12 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
                 f'Unknown config key "{key}" in [core] section'
             )
 
-    # Process MCP sections if present
-    if 'mcp' in toml_config:
-        try:
-            mcp_mapping = mcp_config_from_toml(toml_config['mcp'])
-            if 'mcp' in mcp_mapping:
-                cfg.mcp = mcp_mapping['mcp']
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse MCP config from toml, values have not been applied.\nError: {e}'
-            )
-        except ValueError:
-            raise ValueError('Error in MCP sections in config.toml')
-
     # Check for unknown sections
     # Note: legacy sections are kept for backwards compatibility with old config
     # files - they are silently ignored
     known_sections = {
         'core',
-        'mcp',
+        'mcp',  # Legacy, ignored
         'llm',  # Legacy, ignored
         'sandbox',  # Legacy, ignored
         'security',  # Legacy, ignored

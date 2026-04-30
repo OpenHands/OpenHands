@@ -16,7 +16,6 @@ from openhands.core.config.config_utils import (
     OH_MAX_ITERATIONS,
     model_defaults_to_dict,
 )
-from openhands.core.config.mcp_config import MCPConfig
 
 
 class OpenHandsConfig(BaseModel):
@@ -48,7 +47,6 @@ class OpenHandsConfig(BaseModel):
         cli_multiline_input: Whether to enable multiline input in CLI. When disabled,
             input is read line by line. When enabled, input continues until /exit command.
         mcp_host: Host for OpenHands' default MCP server
-        mcp: MCP configuration settings.
         git_user_name: Git user name for commits made by the agent.
         git_user_email: Git user email for commits made by the agent.
     """
@@ -100,7 +98,6 @@ class OpenHandsConfig(BaseModel):
         description='Timeout in seconds for waiting for websocket client connection during initialization',
     )
     mcp_host: str = Field(default=f'localhost:{os.getenv("port", 3000)}')
-    mcp: MCPConfig = Field(default_factory=MCPConfig)
     git_user_name: str = Field(
         default='openhands', description='Git user name for commits made by the agent'
     )
