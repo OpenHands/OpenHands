@@ -486,7 +486,7 @@ class TestDockerSandboxSpecServiceInjector:
             progress_calls = [
                 call
                 for call in mock_logger.info.call_args_list
-                if '🔄 Downloading Docker Image:' in str(call)
+                if 'Downloading Docker Image:' in str(call)
             ]
 
             # Should have at least 2 progress log messages (every 5 seconds for 12 seconds)
@@ -494,7 +494,8 @@ class TestDockerSandboxSpecServiceInjector:
 
             # Verify the progress message format
             for call in progress_calls:
-                assert '🔄 Downloading Docker Image: test-image:latest...' in str(call)
+                assert 'Downloading Docker Image:' in str(call)
+                assert 'test-image:latest' in str(call)
 
     @patch('openhands.app_server.sandbox.docker_sandbox_spec_service.get_docker_client')
     @patch('openhands.app_server.sandbox.docker_sandbox_spec_service._logger')
@@ -524,7 +525,7 @@ class TestDockerSandboxSpecServiceInjector:
             progress_calls = [
                 call
                 for call in mock_logger.info.call_args_list
-                if '🔄 Downloading Docker Image:' in str(call)
+                if 'Downloading Docker Image:' in str(call)
             ]
 
             # Should have no progress log messages for fast pulls

@@ -101,7 +101,7 @@ async def resume_sandbox(
     return Success()
 
 
-@router.delete('/{id}', responses={404: {'description': 'Item not found'}})
+@router.delete('/{sandbox_id}', responses={404: {'description': 'Item not found'}})
 async def delete_sandbox(
     sandbox_id: str,
     sandbox_service: SandboxService = sandbox_service_dependency,

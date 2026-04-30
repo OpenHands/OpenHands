@@ -119,10 +119,10 @@ class RemoteSandboxService(SandboxService):
                 method, url, headers={'X-API-Key': self.api_key}, **kwargs
             )
         except httpx.TimeoutException:
-            _logger.error(f'No response received within timeout for URL: {url}')
+            _logger.error('No response received within timeout for URL: %s', url)
             raise
-        except httpx.HTTPError as e:
-            _logger.error(f'HTTP error for URL {url}: {e}')
+        except httpx.HTTPError as exc:
+            _logger.error('HTTP error for URL %s: %s', url, exc)
             raise
 
     def _to_sandbox_info(
@@ -506,13 +506,15 @@ class RemoteSandboxService(SandboxService):
 
             # Log runtime assignment for observability
             runtime_id = runtime_data.get('runtime_id', 'unknown')
-            _logger.info(f'Started sandbox {sandbox_id} with runtime_id={runtime_id}')
+            _logger.info(
+                'Started sandbox %s with runtime_id=%s', sandbox_id, runtime_id
+            )
 
             return self._to_sandbox_info(stored_sandbox, runtime_data)
 
-        except httpx.HTTPError as e:
-            _logger.error(f'Failed to start sandbox: {e}')
-            raise SandboxError(f'Failed to start sandbox: {e}')
+        except httpx.HTTPError as exc:
+            _logger.error('Failed to start sandbox: %s', exc)
+            raise SandboxError(f'Failed to start sandbox: {exc}') from exc
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox."""
@@ -532,8 +534,8 @@ class RemoteSandboxService(SandboxService):
                 return False
             response.raise_for_status()
             return True
-        except httpx.HTTPError as e:
-            _logger.error(f'Error resuming sandbox {sandbox_id}: {e}')
+        except httpx.HTTPError as exc:
+            _logger.error('Error resuming sandbox %s: %s', sandbox_id, exc)
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
@@ -552,8 +554,8 @@ class RemoteSandboxService(SandboxService):
             response.raise_for_status()
             return True
 
-        except httpx.HTTPError as e:
-            _logger.error(f'Error pausing sandbox {sandbox_id}: {e}')
+        except httpx.HTTPError as exc:
+            _logger.error('Error pausing sandbox %s: %s', sandbox_id, exc)
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
@@ -572,8 +574,8 @@ class RemoteSandboxService(SandboxService):
             if response.status_code != 404:
                 response.raise_for_status()
             return True
-        except httpx.HTTPError as e:
-            _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
+        except httpx.HTTPError as exc:
+            _logger.error('Error deleting sandbox %s: %s', sandbox_id, exc)
             return False
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
@@ -760,7 +762,7 @@ async def refresh_conversation(
     Grab ConversationInfo and all events from the agent server and make sure they
     exist in the app server.
     """
-    _logger.debug(f'Started Refreshing Conversation {app_conversation_info.id}')
+    _logger.debug('Started Refreshing Conversation %s', app_conversation_info.id)
     try:
         url = runtime['url']
 
@@ -822,10 +824,10 @@ async def refresh_conversation(
                     app_conversation_info.id, event
                 )
 
-        _logger.debug(f'Finished Refreshing Conversation {app_conversation_info.id}')
+        _logger.debug('Finished Refreshing Conversation %s', app_conversation_info.id)
 
     except Exception as exc:
-        _logger.exception(f'Error Refreshing Conversation: {exc}', stack_info=True)
+        _logger.exception('Error Refreshing Conversation: %s', exc, stack_info=True)
 
 
 class RemoteSandboxServiceInjector(SandboxServiceInjector):

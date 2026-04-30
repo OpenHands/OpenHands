@@ -7,6 +7,7 @@ each running within a dedicated directory.
 import asyncio
 import logging
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -129,7 +130,7 @@ class ProcessSandboxService(SandboxService):
         ]
 
         _logger.info(
-            f'Starting agent process for sandbox {sandbox_id}: {" ".join(cmd)}'
+            'Starting agent process for sandbox %s: %s', sandbox_id, ' '.join(cmd)
         )
 
         try:
@@ -152,8 +153,8 @@ class ProcessSandboxService(SandboxService):
 
             return process
 
-        except Exception as e:
-            raise SandboxError(f'Failed to start agent process: {e}')
+        except Exception as exc:
+            raise SandboxError(f'Failed to start agent process: {exc}') from exc
 
     async def _wait_for_server_ready(self, port: int, timeout: int = 30) -> bool:
         """Wait for the agent server to be ready."""
@@ -389,8 +390,6 @@ class ProcessSandboxService(SandboxService):
                     process.wait(timeout=5)
 
             # Clean up the working directory
-            import shutil
-
             if os.path.exists(process_info.working_dir):
                 shutil.rmtree(process_info.working_dir, ignore_errors=True)
 
@@ -399,8 +398,8 @@ class ProcessSandboxService(SandboxService):
 
             return True
 
-        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError) as e:
-            _logger.warning(f'Error deleting sandbox {sandbox_id}: {e}')
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError) as exc:
+            _logger.warning('Error deleting sandbox %s: %s', sandbox_id, exc)
             # Still remove from tracking even if cleanup failed
             if sandbox_id in _processes:
                 del _processes[sandbox_id]
