@@ -11,7 +11,7 @@ from openhands.app_server.utils.logger import (
     json_log_handler,
 )
 from openhands.app_server.utils.logger import openhands_logger as openhands_logger
-from openhands.core.config import LLMConfig, OpenHandsConfig
+from openhands.core.config import OpenHandsConfig
 
 
 @pytest.fixture
@@ -70,20 +70,6 @@ def test_anthropic_api_key_masking(test_handler):
     logger.info(message)
     log_output = stream.getvalue()
     assert api_key not in log_output
-
-
-def test_llm_config_attributes_masking(test_handler):
-    logger, stream = test_handler
-    llm_config = LLMConfig(
-        api_key='sk-abc123',
-        aws_access_key_id='AKIAIOSFODNN7EXAMPLE',
-        aws_secret_access_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
-    )
-    logger.info(f'LLM Config: {llm_config}')
-    log_output = stream.getvalue()
-    assert 'sk-abc123' not in log_output
-    assert 'AKIAIOSFODNN7EXAMPLE' not in log_output
-    assert 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' not in log_output
 
 
 def test_app_config_attributes_masking(test_handler):

@@ -6,15 +6,11 @@ OpenHands uses a flexible configuration system that allows settings to be define
 
 ## Configuration Classes
 
-The main configuration classes are:
+The main configuration class is:
 
-- `AppConfig`: The root configuration class
-- `LLMConfig`: Configuration for the Language Model
-- `AgentConfig`: Configuration for the agent
-- `SandboxConfig`: Configuration for the sandbox environment
-- `SecurityConfig`: Configuration for security settings
+- `OpenHandsConfig`: The root configuration class
 
-These classes are defined as dataclasses, with class attributes holding default values for all fields.
+This class is defined as a Pydantic model, with field defaults for all settings.
 
 ## Loading Configuration from Environment Variables
 
@@ -22,19 +18,8 @@ The `load_from_env` function in the config package is responsible for loading co
 
 ### Naming Convention for Environment Variables
 
-- Prefix: uppercase name of the configuration class followed by an underscore (e.g., `LLM_`, `AGENT_`)
 - Field Names: all uppercase
-- Full Variable Name: Prefix + Field Name (e.g., `LLM_API_KEY`, `AGENT_MEMORY_ENABLED`)
-
-### Examples
-
-```bash
-export LLM_API_KEY='your_api_key_here'
-export LLM_MODEL='gpt-4'
-export AGENT_MEMORY_ENABLED='true'
-export AGENT_ENABLE_STUCK_DETECTION='false'  # Disable loop detection
-export SANDBOX_TIMEOUT='300'
-```
+- Full Variable Name: Field Name (e.g., `DEFAULT_AGENT`, `WORKSPACE_BASE`)
 
 ## Type Handling
 
@@ -56,9 +41,9 @@ Be cautious when setting sensitive information like API keys in environment vari
 
 ## Usage
 
-The `load_app_config()` function is the recommended way to initialize your configuration. It performs the following steps:
+The `load_openhands_config()` function is the recommended way to initialize your configuration. It performs the following steps:
 
-1. Creates an instance of `AppConfig`
+1. Creates an instance of `OpenHandsConfig`
 2. Loads settings from the `config.toml` file (if present)
 3. Loads settings from environment variables, overriding TOML settings if applicable
 4. Applies final tweaks and validations to the configuration, falling back to the default values specified in the code
@@ -66,26 +51,20 @@ The `load_app_config()` function is the recommended way to initialize your confi
 
 There are also command line args, which may work to override other sources.
 
-Here's an example of how to use `load_app_config()`:
+Here's an example of how to use `load_openhands_config()`:
 
 ````python
-from openhands.core.config import load_app_config
+from openhands.core.config import load_openhands_config
 
 # Load all configuration settings
-config = load_app_config()
+config = load_openhands_config()
 
 # Now you can access your configuration
-llm_config = config.get_llm_config()
-agent_config = config.get_agent_config()
-sandbox_config = config.sandbox
-
-# Use the configuration in your application
-print(f"Using LLM model: {llm_config.model}")
-print(f"Agent memory enabled: {agent_config.memory_enabled}")
-print(f"Sandbox timeout: {sandbox_config.timeout}")
+print(f"Default agent: {config.default_agent}")
+print(f"Max iterations: {config.max_iterations}")
 ````
 
-By using `load_app_config()`, you ensure that all configuration sources are properly loaded and processed, providing a consistent and fully initialized configuration for your application.
+By using `load_openhands_config()`, you ensure that all configuration sources are properly loaded and processed, providing a consistent and fully initialized configuration for your application.
 
 ## Additional Configuration Methods
 
