@@ -14,8 +14,6 @@ from pydantic import SecretStr
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
-from openhands.analytics.analytics_context import AnalyticsContext
-from openhands.analytics.analytics_service import AnalyticsService
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -104,55 +102,6 @@ def merge_conversation_tags(
     return {**existing, **incoming}
 
 
-async def _track_user_activated(
-    analytics: AnalyticsService,
-    ctx: AnalyticsContext,
-    conversation_id: UUID,
-    app_conversation_info: AppConversationInfo,
-) -> None:
-    """Track user activation (first finished conversation).
-
-    Fires ACTV-01 event if this is the user's first completed conversation.
-    """
-    import uuid as _uuid
-    from datetime import datetime, timezone
-
-    from sqlalchemy import func
-    from sqlalchemy import select as sa_select
-    from storage.database import a_session_maker
-    from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
-
-    user_uuid = _uuid.UUID(app_conversation_info.created_by_user_id)
-    async with a_session_maker() as session:
-        count_result = await session.execute(
-            sa_select(func.count()).where(
-                StoredConversationMetadataSaas.user_id == user_uuid,
-                StoredConversationMetadataSaas.conversation_id != str(conversation_id),
-            )
-        )
-        prior_count = count_result.scalar()
-
-    if prior_count != 0:
-        return
-
-    tos_ts = ctx.user.accepted_tos if ctx.user else None
-    time_to_activate_seconds = None
-    if tos_ts is not None:
-        if tos_ts.tzinfo is None:
-            tos_ts = tos_ts.replace(tzinfo=timezone.utc)
-        time_to_activate_seconds = (datetime.now(timezone.utc) - tos_ts).total_seconds()
-
-    analytics.track_user_activated(
-        ctx=ctx,
-        conversation_id=str(conversation_id),
-        time_to_activate_seconds=time_to_activate_seconds,
-        llm_model=app_conversation_info.llm_model,
-        trigger=app_conversation_info.trigger.value
-        if app_conversation_info.trigger
-        else None,
-    )
-
-
 async def _track_conversation_terminal(
     conversation_id: UUID,
     app_conversation_info: AppConversationInfo,
@@ -161,8 +110,7 @@ async def _track_conversation_terminal(
 ) -> None:
     """Track analytics for terminal conversation states.
 
-    Handles BIZZ-03 (credit limit), BIZZ-05 (finished), BIZZ-06 (errored),
-    and ACTV-01 (user activated) events.
+    Handles BIZZ-03 (credit limit), BIZZ-05 (finished), and BIZZ-06 (errored) events.
     """
     analytics = get_analytics_service()
     if not analytics or not app_conversation_info.created_by_user_id:
@@ -232,15 +180,6 @@ async def _track_conversation_terminal(
         if app_conversation_info.trigger
         else None,
     )
-
-    # ACTV-01: user activated (first finished conversation)
-    if exec_status == ConversationExecutionStatus.FINISHED:
-        try:
-            await _track_user_activated(
-                analytics, ctx, conversation_id, app_conversation_info
-            )
-        except Exception:
-            _logger.exception('analytics:user_activated:failed')
 
 
 def detect_automation_trigger(

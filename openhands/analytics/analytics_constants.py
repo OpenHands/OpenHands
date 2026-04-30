@@ -16,7 +16,6 @@ CREDIT_PURCHASED = 'credit purchased'
 CREDIT_LIMIT_REACHED = 'credit limit reached'
 
 # Phase 4 events
-USER_ACTIVATED = 'user activated'
 GIT_PROVIDER_CONNECTED = 'git provider connected'
 ONBOARDING_COMPLETED = 'onboarding completed'
 SETTINGS_SAVED = 'settings saved'

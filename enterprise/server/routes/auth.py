@@ -360,9 +360,16 @@ async def keycloak_callback(
                     org_id=org_id_str,
                     user=user,
                 )
+                idp: str = user_info.identity_provider or ProviderType.GITHUB.value
+                logger.info(f'Full IDP is {idp}')
+                idp_type = 'oidc'
+                if ':' in idp:
+                    idp, idp_type = idp.rsplit(':', 1)
+                    idp_type = idp_type.lower()
+
                 analytics.track_user_signed_up(
                     ctx=ctx,
-                    idp=user_info.get('identity_provider', 'keycloak'),
+                    idp=idp,
                     email_domain=email.split('@')[1]
                     if email and '@' in email
                     else None,

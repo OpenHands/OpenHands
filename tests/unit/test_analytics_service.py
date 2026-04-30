@@ -23,7 +23,6 @@ from openhands.analytics.analytics_constants import (
     SETTINGS_SAVED,
     TEAM_MEMBERS_INVITED,
     TRAJECTORY_DOWNLOADED,
-    USER_ACTIVATED,
     USER_LOGGED_IN,
     USER_SIGNED_UP,
 )
@@ -447,7 +446,6 @@ class TestEventConstants:
             CONVERSATION_ERRORED,
             CREDIT_PURCHASED,
             CREDIT_LIMIT_REACHED,
-            USER_ACTIVATED,
             GIT_PROVIDER_CONNECTED,
             ONBOARDING_COMPLETED,
         ]:
@@ -758,26 +756,6 @@ class TestTypedEventMethods:
         assert props['conversation_id'] == 'conv-abc'
         assert props['credit_balance'] == 0.0
         assert props['llm_model'] == 'gpt-4'
-
-    def test_track_user_activated(self, saas_service):
-        """track_user_activated calls capture with USER_ACTIVATED and correct properties."""
-        service, mock_client = saas_service
-        ctx = make_ctx(user_id='user-1')
-        service.track_user_activated(
-            ctx=ctx,
-            conversation_id='conv-abc',
-            time_to_activate_seconds=120.5,
-            llm_model='gpt-4',
-            trigger='webhook',
-        )
-        mock_client.capture.assert_called_once()
-        _, kwargs = mock_client.capture.call_args
-        assert kwargs['event'] == USER_ACTIVATED
-        props = kwargs['properties']
-        assert props['conversation_id'] == 'conv-abc'
-        assert props['time_to_activate_seconds'] == 120.5
-        assert props['llm_model'] == 'gpt-4'
-        assert props['trigger'] == 'webhook'
 
     def test_track_git_provider_connected(self, saas_service):
         """track_git_provider_connected calls capture with GIT_PROVIDER_CONNECTED and correct properties."""

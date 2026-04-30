@@ -30,7 +30,6 @@ from openhands.analytics.analytics_constants import (
     SETTINGS_SAVED,
     TEAM_MEMBERS_INVITED,
     TRAJECTORY_DOWNLOADED,
-    USER_ACTIVATED,
     USER_LOGGED_IN,
     USER_SIGNED_UP,
 )
@@ -350,32 +349,6 @@ class AnalyticsService:
                 'conversation_id': conversation_id,
                 'credit_balance': credit_balance,
                 'llm_model': llm_model,
-            },
-            session_id=session_id,
-        )
-
-    def track_user_activated(
-        self,
-        ctx: AnalyticsContext,
-        *,
-        conversation_id: str,
-        time_to_activate_seconds: float | None = None,
-        llm_model: str | None = None,
-        trigger: str | None = None,
-        session_id: str | None = None,
-    ) -> None:
-        """Track 'user activated' event.
-
-        Fired when a user completes their first successful conversation.
-        """
-        self.capture(
-            ctx=ctx,
-            event=USER_ACTIVATED,
-            properties={
-                'conversation_id': conversation_id,
-                'time_to_activate_seconds': time_to_activate_seconds,
-                'llm_model': llm_model,
-                'trigger': trigger,
             },
             session_id=session_id,
         )
