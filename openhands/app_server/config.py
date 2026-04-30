@@ -28,6 +28,10 @@ from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanSe
 from openhands.app_server.app_lifespan.oss_app_lifespan_service import (
     OssAppLifespanService,
 )
+from openhands.app_server.config_api.llm_model_service import (
+    LLMModelService,
+    LLMModelServiceInjector,
+)
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
 from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
@@ -183,6 +187,7 @@ class AppServerConfig(OpenHandsModel):
         description='Base URL for the OpenHands provider',
     )
     # Dependency Injection Injectors
+    llm_model: LLMModelServiceInjector | None = None
     event: EventServiceInjector | None = None
     event_callback: EventCallbackServiceInjector | None = None
     sandbox: SandboxServiceInjector | None = None
@@ -253,6 +258,26 @@ def config_from_env() -> AppServerConfig:
     )
 
     config: AppServerConfig = from_env(AppServerConfig, 'OH')  # type: ignore
+
+    if config.llm_model is None:
+        from openhands.app_server.config_api.default_llm_model_service import (
+            DefaultLLMModelServiceInjector,
+        )
+
+        llm_model_kwargs: dict = {}
+        aws_region = os.getenv('AWS_REGION_NAME')
+        aws_key = os.getenv('AWS_ACCESS_KEY_ID')
+        aws_secret = os.getenv('AWS_SECRET_ACCESS_KEY')
+        if aws_region and aws_key and aws_secret:
+            llm_model_kwargs['aws_region_name'] = aws_region
+            llm_model_kwargs['aws_access_key_id'] = SecretStr(aws_key)
+            llm_model_kwargs['aws_secret_access_key'] = SecretStr(aws_secret)
+
+        ollama_url = os.getenv('OLLAMA_BASE_URL')
+        if ollama_url:
+            llm_model_kwargs['ollama_base_url'] = ollama_url
+
+        config.llm_model = DefaultLLMModelServiceInjector(**llm_model_kwargs)
 
     if config.event is None:
         provider = get_storage_provider()
@@ -552,3 +577,17 @@ def depends_jwt_service():
 
 def depends_db_session():
     return Depends(get_global_config().db_session.depends)
+
+
+def get_llm_model_service(
+    state: InjectorState, request: Request | None = None
+) -> AsyncContextManager[LLMModelService]:
+    injector = get_global_config().llm_model
+    assert injector is not None
+    return injector.context(state, request)
+
+
+def depends_llm_model_service():
+    injector = get_global_config().llm_model
+    assert injector is not None
+    return Depends(injector.depends)

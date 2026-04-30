@@ -35,9 +35,7 @@ from openhands.app_server.utils.sdk_settings_compat import (
     default_agent_settings,
     validate_agent_settings,
 )
-from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
-from openhands.core.config.utils import load_openhands_config
 from openhands.sdk.settings import ConversationSettings
 
 
@@ -59,38 +57,6 @@ def _coerce_dict_secrets(d: dict[str, Any]) -> dict[str, Any]:
         else:
             out[k] = _coerce_value(v)
     return out
-
-
-def _merge_sdk_mcp_configs(
-    base_config: SDKMCPConfig | None, extra_config: SDKMCPConfig | None
-) -> SDKMCPConfig | None:
-    if base_config is None:
-        return extra_config
-    if extra_config is None:
-        return base_config
-
-    merged_servers: dict[str, Any] = {}
-
-    def _add_server(server_name: str, server_config: dict[str, Any]) -> None:
-        candidate = server_name or 'server'
-        if candidate not in merged_servers:
-            merged_servers[candidate] = server_config
-            return
-
-        suffix = 1
-        while f'{candidate}_{suffix}' in merged_servers:
-            suffix += 1
-        merged_servers[f'{candidate}_{suffix}'] = server_config
-
-    for config in (base_config, extra_config):
-        raw_config = config.model_dump(exclude_none=True)
-        for server_name, server_config in raw_config.get('mcpServers', {}).items():
-            _add_server(server_name, server_config)
-
-    if not merged_servers:
-        return None
-
-    return SDKMCPConfig.model_validate({'mcpServers': merged_servers})
 
 
 class SandboxGroupingStrategy(str, Enum):
@@ -365,63 +331,6 @@ class Settings(BaseModel):
     @field_serializer('secrets_store')
     def secrets_store_serializer(self, secrets: Any, info: SerializationInfo):
         return {'provider_tokens': {}}
-
-    # ── Factory methods ─────────────────────────────────────────────
-
-    @staticmethod
-    def from_config() -> Settings | None:
-        app_config = load_openhands_config()
-        llm_config: LLMConfig = app_config.get_llm_config()
-        if llm_config.api_key is None:
-            return None
-
-        agent_settings_dict: dict[str, Any] = {
-            'agent': app_config.default_agent,
-            'llm': {
-                'model': llm_config.model,
-                'api_key': (
-                    llm_config.api_key.get_secret_value()
-                    if isinstance(llm_config.api_key, SecretStr)
-                    else llm_config.api_key
-                ),
-                'base_url': llm_config.base_url,
-            },
-        }
-        if hasattr(app_config, 'mcp') and app_config.mcp:
-            agent_settings_dict['mcp_config'] = _coerce_value(app_config.mcp)
-
-        return Settings(
-            language='en',
-            search_api_key=app_config.search_api_key,
-            max_budget_per_task=app_config.max_budget_per_task,
-            # Always LLM for config-file-sourced settings
-            agent_settings=LLMAgentSettings(**agent_settings_dict),
-            conversation_settings=ConversationSettings.model_validate(
-                {
-                    'confirmation_mode': False,
-                    'security_analyzer': None,
-                    'max_iterations': app_config.max_iterations,
-                }
-            ),
-        )
-
-    def merge_with_config_settings(self) -> 'Settings':
-        """Merge config.toml MCP settings with stored SDK agent_settings."""
-        if not isinstance(self.agent_settings, LLMAgentSettings):
-            return self
-        config_settings = Settings.from_config()
-        if not config_settings:
-            return self
-
-        merged_mcp = _merge_sdk_mcp_configs(
-            config_settings.agent_settings.mcp_config,
-            self.agent_settings.mcp_config,
-        )
-        if merged_mcp is None:
-            return self
-
-        self.agent_settings.mcp_config = merged_mcp
-        return self
 
     def to_agent_settings(self) -> LLMAgentSettings | ACPAgentSettings:
         return self.agent_settings

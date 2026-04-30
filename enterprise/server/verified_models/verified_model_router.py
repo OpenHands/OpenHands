@@ -1,6 +1,7 @@
 """API routes for managing verified LLM models (admin only)."""
 
-from typing import Annotated
+import logging
+from typing import Annotated, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from server.email_validation import get_admin_user_id
@@ -16,8 +17,17 @@ from server.verified_models.verified_model_service import (
 )
 
 from openhands.app_server.config import get_db_session
-from openhands.app_server.config_api.config_router import get_llm_models_dependency
+from openhands.app_server.config_api.default_llm_model_service import (
+    DefaultLLMModelService,
+)
+from openhands.app_server.config_api.llm_model_service import (
+    LLMModelService,
+    LLMModelServiceInjector,
+)
+from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.llm import ModelsResponse, get_supported_llm_models
+
+_logger = logging.getLogger(__name__)
 
 api_router = APIRouter(prefix='/api/admin/verified-models', tags=['Verified Models'])
 
@@ -117,25 +127,46 @@ async def delete_verified_model(
         )
 
 
-async def get_saas_llm_models_dependency(request: Request) -> ModelsResponse:
-    """SaaS implementation for the LLM models endpoint."""
-    async with get_db_session(request.state, request) as db_session:
-        # Prevent circular import
-        from openhands.server.shared import config
+class SaaSLLMModelService(DefaultLLMModelService):
+    """SaaS implementation that reads verified models from the database.
 
-        verified_model_service = VerifiedModelService(db_session)
+    Inherits filtering, pagination, and provider logic from
+    ``DefaultLLMModelService`` — only the verified-model list is different.
+    """
+
+    def __init__(self, db_session) -> None:
+        super().__init__()
+        self._db_session = db_session
+
+    async def _get_models_response(
+        self,
+        verified_models: list[str] | None = None,
+    ) -> ModelsResponse:
+        if self._cached_response is not None:
+            return self._cached_response
+
+        verified_model_service = VerifiedModelService(self._db_session)
         page = await verified_model_service.search_verified_models(enabled_only=True)
         if page.next_page_id:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail='Too many models defined in database',
             )
-        verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
-        return get_supported_llm_models(config, verified_models)
+        db_verified = [f'{m.provider}/{m.model_name}' for m in page.items]
+        self._cached_response = get_supported_llm_models(db_verified)
+        return self._cached_response
 
 
-# Override the default implementation with SaaS implementation
-# This must be called after the app is created in saas_server.py
-def override_llm_models_dependency(app):
-    """Override the default LLM models implementation with SaaS version."""
-    app.dependency_overrides[get_llm_models_dependency] = get_saas_llm_models_dependency
+class SaaSLLMModelServiceInjector(LLMModelServiceInjector):
+    """Injector that provides the SaaS LLM model service.
+
+    Activate via the environment variable::
+
+        OH_LLM_MODEL_KIND=server.verified_models.verified_model_router.SaaSLLMModelServiceInjector
+    """
+
+    async def inject(
+        self, state: InjectorState, request: Request | None = None
+    ) -> AsyncGenerator[LLMModelService, None]:
+        async with get_db_session(state, request) as db_session:
+            yield SaaSLLMModelService(db_session)

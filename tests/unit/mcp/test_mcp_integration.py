@@ -1,4 +1,4 @@
-"""Integration test for MCP settings merging in the full flow."""
+"""Integration test for user auth settings flow."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -12,26 +12,9 @@ from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
 
 
-def _sdk_mcp_config(settings: Settings) -> MCPConfig | None:
-    return settings.agent_settings.mcp_config
-
-
 @pytest.mark.asyncio
-async def test_user_auth_mcp_merging_integration():
-    """Test that MCP merging works in the user auth flow."""
-    config_settings = Settings(
-        agent_settings=AgentSettings(
-            llm=LLM(model='config-model'),
-            mcp_config=MCPConfig(
-                mcpServers={
-                    'config': RemoteMCPServer(
-                        url='http://config-server.com', transport='sse'
-                    )
-                }
-            ),
-        ),
-    )
-
+async def test_user_auth_returns_stored_settings():
+    """Test that user auth returns stored settings."""
     stored_settings = Settings(
         agent_settings=AgentSettings(
             llm=LLM(model='anthropic/claude-sonnet-4-5-20250929'),
@@ -53,37 +36,19 @@ async def test_user_auth_mcp_merging_integration():
     with patch.object(
         user_auth, 'get_user_settings_store', return_value=mock_settings_store
     ):
-        with patch.object(Settings, 'from_config', return_value=config_settings):
-            merged_settings = await user_auth.get_user_settings()
+        settings = await user_auth.get_user_settings()
 
-    assert merged_settings is not None
-    merged_mcp = _sdk_mcp_config(merged_settings)
-    assert (
-        merged_settings.agent_settings.llm.model
-        == 'anthropic/claude-sonnet-4-5-20250929'
-    )
-    assert merged_mcp is not None
-    assert len(merged_mcp.mcpServers) == 2
-    assert 'config' in merged_mcp.mcpServers
-    assert 'frontend' in merged_mcp.mcpServers
+    assert settings is not None
+    assert settings.agent_settings.llm.model == 'anthropic/claude-sonnet-4-5-20250929'
+    mcp = settings.agent_settings.mcp_config
+    assert mcp is not None
+    assert len(mcp.mcpServers) == 1
+    assert 'frontend' in mcp.mcpServers
 
 
 @pytest.mark.asyncio
 async def test_user_auth_caching_behavior():
-    """Test that user auth caches the merged settings correctly."""
-    config_settings = Settings(
-        agent_settings=AgentSettings(
-            llm=LLM(model='config-model'),
-            mcp_config=MCPConfig(
-                mcpServers={
-                    'config': RemoteMCPServer(
-                        url='http://config-server.com', transport='sse'
-                    )
-                }
-            ),
-        ),
-    )
-
+    """Test that user auth caches settings correctly."""
     stored_settings = Settings(
         agent_settings=AgentSettings(
             llm=LLM(model='anthropic/claude-sonnet-4-5-20250929'),
@@ -105,16 +70,11 @@ async def test_user_auth_caching_behavior():
     with patch.object(
         user_auth, 'get_user_settings_store', return_value=mock_settings_store
     ):
-        with patch.object(
-            Settings, 'from_config', return_value=config_settings
-        ) as mock_from_config:
-            settings1 = await user_auth.get_user_settings()
-            settings2 = await user_auth.get_user_settings()
+        settings1 = await user_auth.get_user_settings()
+        settings2 = await user_auth.get_user_settings()
 
     assert settings1 is settings2
-    assert len(_sdk_mcp_config(settings1).mcpServers) == 2
     mock_settings_store.load.assert_called_once()
-    mock_from_config.assert_called_once()
 
 
 @pytest.mark.asyncio
