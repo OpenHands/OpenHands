@@ -6,7 +6,6 @@ from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, SecretStr
-from server.config import get_config
 from sqlalchemy import String, TypeDecorator
 from sqlalchemy.engine.interfaces import Dialect
 
@@ -51,16 +50,13 @@ def decrypt_kwargs(encrypt_keys: list, kwargs: dict) -> dict:
 
 
 def encrypt_value(value: str | SecretStr) -> str:
-    return get_jwt_service().create_jwe_token(
-        {'v': value.get_secret_value() if isinstance(value, SecretStr) else value}
-    )
+    raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+    return get_jwt_service().encrypt_value(raw)
 
 
 def decrypt_value(value: str | SecretStr) -> str:
-    token = get_jwt_service().decrypt_jwe_token(
-        value.get_secret_value() if isinstance(value, SecretStr) else value
-    )
-    return token['v']
+    raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+    return get_jwt_service().decrypt_value(raw)
 
 
 def get_jwt_service():
@@ -128,8 +124,10 @@ def encrypt_legacy_value(value: str | SecretStr) -> str:
 def get_fernet():
     global _fernet
     if _fernet is None:
-        jwt_secret = get_config().jwt_secret.get_secret_value()
-        fernet_key = b64encode(hashlib.sha256(jwt_secret.encode()).digest())
+        jwt_svc = get_jwt_service()
+        default_key = jwt_svc._keys[jwt_svc._default_key_id]
+        secret = default_key.key.get_secret_value()
+        fernet_key = b64encode(hashlib.sha256(secret.encode()).digest())
         _fernet = Fernet(fernet_key)
     return _fernet
 

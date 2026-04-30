@@ -1,6 +1,5 @@
 from typing import Any
 
-import jwt
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
 from integrations.slack.slack_errors import SlackError, SlackErrorCode
@@ -39,7 +38,7 @@ from openhands.app_server.integrations.service_types import (
 )
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.shared import config, server_config
+from openhands.server.shared import server_config
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -499,12 +498,9 @@ class SlackManager(Manager[SlackViewInterface]):
 
     def _generate_login_link_with_state(self, message: Message) -> str:
         """Generate OAuth login link with message state encoded."""
-        jwt_secret = config.jwt_secret
-        if not jwt_secret:
-            raise ValueError('Must configure jwt_secret')
-        state = jwt.encode(
-            message.message, jwt_secret.get_secret_value(), algorithm='HS256'
-        )
+        from storage.encrypt_utils import get_jwt_service
+
+        state = get_jwt_service().create_jws_token(message.message)
         return authorize_url_generator.generate(state)
 
     async def handle_slack_error(self, payload: dict, error: SlackError) -> None:

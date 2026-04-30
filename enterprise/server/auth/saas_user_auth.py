@@ -153,7 +153,7 @@ class SaasUserAuth(UserAuth):
         secrets_store = self.secrets_store
         if secrets_store:
             return secrets_store
-        secrets_store = SaasSecretsStore(self.user_id, get_config())
+        secrets_store = await SaasSecretsStore.get_instance(None, self.user_id)
         self.secrets_store = secrets_store
         return secrets_store
 
@@ -443,8 +443,9 @@ async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
 
 async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     logger.debug('saas_user_auth_from_signed_token')
-    jwt_secret = get_config().jwt_secret.get_secret_value()
-    decoded = jwt.decode(signed_token, jwt_secret, algorithms=['HS256'])
+    from storage.encrypt_utils import get_jwt_service
+
+    decoded = get_jwt_service().verify_jws_token(signed_token)
     logger.debug('saas_user_auth_from_signed_token:decoded')
     access_token = decoded['access_token']
     refresh_token = decoded['refresh_token']

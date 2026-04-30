@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import zlib
@@ -6,13 +5,11 @@ from base64 import b64decode, b64encode
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
-from cryptography.fernet import Fernet
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
 from server.logger import logger
 
 from openhands.app_server.utils.http_session import httpx_verify_option
-from openhands.server.shared import config
 
 GITHUB_PROXY_ENDPOINTS = bool(os.environ.get('GITHUB_PROXY_ENDPOINTS'))
 
@@ -39,11 +36,9 @@ def add_github_proxy_routes(app: FastAPI):
         return
 
     def _fernet():
-        if not config.jwt_secret:
-            raise ValueError('jwt_secret must be defined on config')
-        jwt_secret = config.jwt_secret.get_secret_value()
-        fernet_key = b64encode(hashlib.sha256(jwt_secret.encode()).digest())
-        return Fernet(fernet_key)
+        from storage.encrypt_utils import get_fernet
+
+        return get_fernet()
 
     @app.get('/github-proxy/{subdomain}/login/oauth/authorize')
     def github_proxy_start(request: Request):
