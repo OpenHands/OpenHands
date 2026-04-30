@@ -153,7 +153,6 @@ class AnalyticsService:
         self,
         ctx: AnalyticsContext,
         *,
-        idp: str,
         email_domain: str | None = None,
         invitation_source: str = 'self_signup',
         session_id: str | None = None,
@@ -166,7 +165,6 @@ class AnalyticsService:
             ctx=ctx,
             event=USER_SIGNED_UP,
             properties={
-                'idp': idp,
                 'email_domain': email_domain,
                 'invitation_source': invitation_source,
             },

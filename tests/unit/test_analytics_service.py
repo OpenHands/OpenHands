@@ -621,7 +621,6 @@ class TestTypedEventMethods:
         ctx = make_ctx(user_id='user-1')
         service.track_user_signed_up(
             ctx=ctx,
-            idp='github',
             email_domain='example.com',
             invitation_source='invite_link',
         )
@@ -629,7 +628,6 @@ class TestTypedEventMethods:
         _, kwargs = mock_client.capture.call_args
         assert kwargs['event'] == USER_SIGNED_UP
         props = kwargs['properties']
-        assert props['idp'] == 'github'
         assert props['email_domain'] == 'example.com'
         assert props['invitation_source'] == 'invite_link'
 
