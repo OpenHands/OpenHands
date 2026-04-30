@@ -157,6 +157,18 @@ if BITBUCKET_DATA_CENTER_HOST:
     )
 
     base_app.include_router(bitbucket_dc_proxy_router)
+
+    # Bitbucket Data Center resolver webhook (PR comment trigger).
+    from integrations.bitbucket_data_center.bitbucket_dc_v1_callback_processor import (  # noqa: E402
+        BitbucketDCV1CallbackProcessor,
+    )
+    from server.routes.integration.bitbucket_dc import (  # noqa: E402
+        bitbucket_dc_integration_router,
+    )
+
+    logger.debug(f'Loaded {BitbucketDCV1CallbackProcessor.__name__}')
+
+    base_app.include_router(bitbucket_dc_integration_router)
 base_app.include_router(email_router)  # Add routes for email management
 
 
