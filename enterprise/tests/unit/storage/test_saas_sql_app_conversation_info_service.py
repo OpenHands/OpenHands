@@ -281,6 +281,7 @@ class TestSaasSQLAppConversationInfoService:
         stored_metadata.public = None
         stored_metadata.tags = {}
         stored_metadata.agent_kind = None
+        stored_metadata.acp_server = None
 
         saas_metadata = MagicMock(spec=StoredConversationMetadataSaas)
         saas_metadata.user_id = UUID('a1111111-1111-1111-1111-111111111111')
