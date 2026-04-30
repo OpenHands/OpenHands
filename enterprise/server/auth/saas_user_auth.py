@@ -279,6 +279,8 @@ class SaasUserAuth(UserAuth):
         user = await UserStore.get_user_by_id(self.user_id)
         if user is None:
             raise ValueError(f'User not found: {self.user_id}')
+        if user.current_org_id is None:
+            raise ValueError(f'User {self.user_id} has no current organization')
 
         api_key_store = ApiKeyStore.get_instance()
         openhands_api_key = await api_key_store.get_or_create_system_api_key(

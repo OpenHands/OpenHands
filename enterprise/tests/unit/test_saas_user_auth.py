@@ -978,6 +978,27 @@ class TestOpenHandsApiKey:
                 await user_auth._get_openhands_api_key()
 
     @pytest.mark.asyncio
+    async def test_get_openhands_api_key_raises_for_user_without_org(self):
+        """Test that _get_openhands_api_key raises ValueError if user has no org."""
+        user_id = 'test_user_id'
+
+        # Create mock user with no current organization
+        mock_user = MagicMock()
+        mock_user.current_org_id = None
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            # Act & Assert
+            with pytest.raises(ValueError, match='has no current organization'):
+                await user_auth._get_openhands_api_key()
+
+    @pytest.mark.asyncio
     async def test_get_secrets_includes_openhands_api_key(self):
         """Test that get_secrets injects OPENHANDS_API_KEY into custom_secrets."""
         user_id = 'test_user_id'
