@@ -8,7 +8,6 @@
 import argparse
 import os
 import pathlib
-import platform
 import sys
 from ast import literal_eval
 from types import UnionType
@@ -22,14 +21,10 @@ from pydantic import BaseModel, SecretStr, ValidationError
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
 from openhands.core import logger
-from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.arg_utils import get_headless_parser
-from openhands.core.config.extended_config import ExtendedConfig
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import mcp_config_from_toml
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.core.config.sandbox_config import SandboxConfig
-from openhands.core.config.security_config import SecurityConfig
 
 JWT_SECRET = '.jwt_secret'
 load_dotenv()
@@ -126,9 +121,6 @@ def load_from_env(
     # load default LLM config from env
     default_llm_config = cfg.get_llm_config()
     set_attr_from_env(default_llm_config, 'LLM_')
-    # load default agent config from env
-    default_agent_config = cfg.get_agent_config()
-    set_attr_from_env(default_agent_config, 'AGENT_')
 
 
 def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None:
@@ -188,17 +180,6 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
                 f'Unknown config key "{key}" in [core] section'
             )
 
-    # Process agent section if present
-    if 'agent' in toml_config:
-        try:
-            agent_mapping = AgentConfig.from_toml_section(toml_config['agent'])
-            for agent_key, agent_conf in agent_mapping.items():
-                cfg.set_agent_config(agent_conf, agent_key)
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [agent] config from toml, values have not been applied.\nError: {e}'
-            )
-
     # Process llm section if present
     if 'llm' in toml_config:
         try:
@@ -209,36 +190,6 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
             logger.openhands_logger.warning(
                 f'Cannot parse [llm] config from toml, values have not been applied.\nError: {e}'
             )
-
-    # Process security section if present
-    if 'security' in toml_config:
-        try:
-            security_mapping = SecurityConfig.from_toml_section(toml_config['security'])
-            # We only use the base security config for now
-            if 'security' in security_mapping:
-                cfg.security = security_mapping['security']
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [security] config from toml, values have not been applied.\nError: {e}'
-            )
-        except ValueError:
-            # Re-raise ValueError from SecurityConfig.from_toml_section
-            raise ValueError('Error in [security] section in config.toml')
-
-    # Process sandbox section if present
-    if 'sandbox' in toml_config:
-        try:
-            sandbox_mapping = SandboxConfig.from_toml_section(toml_config['sandbox'])
-            # We only use the base sandbox config for now
-            if 'sandbox' in sandbox_mapping:
-                cfg.sandbox = sandbox_mapping['sandbox']
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [sandbox] config from toml, values have not been applied.\nError: {e}'
-            )
-        except ValueError as e:
-            # Re-raise ValueError from SandboxConfig.from_toml_section
-            raise ValueError('Error in [sandbox] section in config.toml') from e
 
     # Process MCP sections if present
     if 'mcp' in toml_config:
@@ -253,27 +204,18 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
         except ValueError:
             raise ValueError('Error in MCP sections in config.toml')
 
-    # Process extended section if present
-    if 'extended' in toml_config:
-        try:
-            cfg.extended = ExtendedConfig(toml_config['extended'])
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [extended] config from toml, values have not been applied.\nError: {e}'
-            )
-
     # Check for unknown sections
-    # Note: 'condenser', 'model_routing', and 'kubernetes' are kept for backwards
-    # compatibility with old config files - they are silently ignored
+    # Note: legacy sections are kept for backwards compatibility with old config
+    # files - they are silently ignored
     known_sections = {
         'core',
-        'extended',
-        'agent',
         'llm',
-        'security',
-        'sandbox',
-        'condenser',  # Legacy, ignored
         'mcp',
+        'sandbox',  # Legacy, ignored
+        'security',  # Legacy, ignored
+        'agent',  # Legacy, ignored
+        'extended',  # Legacy, ignored
+        'condenser',  # Legacy, ignored
         'kubernetes',  # Legacy, ignored
         'model_routing',  # Legacy, ignored
     }
@@ -294,50 +236,8 @@ def get_or_create_jwt_secret(file_store: FileStore) -> str:
 
 def finalize_config(cfg: OpenHandsConfig) -> None:
     """More tweaks to the config after it's been loaded."""
-    # Handle the sandbox.volumes parameter
-    if cfg.sandbox.volumes is not None:
-        # Split by commas to handle multiple mounts
-        mounts = cfg.sandbox.volumes.split(',')
-
-        # Check if any mount explicitly targets /workspace
-        workspace_mount_found = False
-        for mount in mounts:
-            parts = mount.split(':')
-            if len(parts) >= 2 and parts[1] == '/workspace':
-                workspace_mount_found = True
-                host_path = os.path.abspath(parts[0])
-
-                # Set the workspace_mount_path and workspace_mount_path_in_sandbox
-                cfg.workspace_mount_path = host_path
-                cfg.workspace_mount_path_in_sandbox = '/workspace'
-
-                # Also set workspace_base
-                cfg.workspace_base = host_path
-                break
-
-        # If no explicit /workspace mount was found, don't set any workspace mount
-        # This allows users to mount volumes without affecting the workspace
-        if not workspace_mount_found:
-            logger.openhands_logger.debug(
-                'No explicit /workspace mount found in SANDBOX_VOLUMES. '
-                'Using default workspace path in sandbox.'
-            )
-            # Ensure workspace_mount_path and workspace_base are None to avoid
-            # unintended mounting behavior
-            cfg.workspace_mount_path = None
-            cfg.workspace_base = None
-
-        # Validate all mounts
-        for mount in mounts:
-            parts = mount.split(':')
-            if len(parts) < 2 or len(parts) > 3:
-                raise ValueError(
-                    f'Invalid mount format in sandbox.volumes: {mount}. '
-                    f"Expected format: 'host_path:container_path[:mode]', e.g. '/my/host/dir:/workspace:rw'"
-                )
-
     # Handle the deprecated workspace_* parameters
-    elif cfg.workspace_base is not None or cfg.workspace_mount_path is not None:
+    if cfg.workspace_base is not None or cfg.workspace_mount_path is not None:
         if cfg.workspace_base is not None:
             cfg.workspace_base = os.path.abspath(cfg.workspace_base)
             if cfg.workspace_mount_path is None:
@@ -352,12 +252,6 @@ def finalize_config(cfg: OpenHandsConfig) -> None:
     for llm in cfg.llms.values():
         llm.log_completions_folder = os.path.abspath(llm.log_completions_folder)
 
-    if cfg.sandbox.use_host_network and platform.system() == 'Darwin':
-        logger.openhands_logger.warning(
-            'Please upgrade to Docker Desktop 4.29.0 or later to use host network mode on macOS. '
-            'See https://github.com/docker/roadmap/issues/238#issuecomment-2044688144 for more information.'
-        )
-
     # make sure cache dir exists
     if cfg.cache_dir:
         pathlib.Path(cfg.cache_dir).mkdir(parents=True, exist_ok=True)
@@ -368,72 +262,6 @@ def finalize_config(cfg: OpenHandsConfig) -> None:
                 get_file_store(cfg.file_store, cfg.file_store_path)
             )
         )
-
-    # If CLIRuntime is selected, disable Jupyter for all agents
-    # Assuming 'cli' is the identifier for CLIRuntime
-    if cfg.runtime and cfg.runtime.lower() == 'cli':
-        for age_nt_name, agent_config in cfg.agents.items():
-            if agent_config.enable_jupyter:
-                agent_config.enable_jupyter = False
-            if agent_config.enable_browsing:
-                agent_config.enable_browsing = False
-        logger.openhands_logger.debug(
-            'Automatically disabled Jupyter plugin and browsing for all agents '
-            'because CLIRuntime is selected and does not support IPython execution.'
-        )
-
-
-def get_agent_config_arg(
-    agent_config_arg: str, toml_file: str = 'config.toml'
-) -> AgentConfig | None:
-    """Get a group of agent settings from the config file.
-
-    A group in config.toml can look like this:
-
-    ```
-    [agent.default]
-    enable_prompt_extensions = false
-    ```
-
-    The user-defined group name, like "default", is the argument to this function. The function will load the AgentConfig object
-    with the settings of this group, from the config file, and set it as the AgentConfig object for the app.
-
-    Note that the group must be under "agent" group, or in other words, the group name must start with "agent.".
-
-    Args:
-        agent_config_arg: The group of agent settings to get from the config.toml file.
-        toml_file: Path to the configuration file to read from. Defaults to 'config.toml'.
-
-    Returns:
-        AgentConfig: The AgentConfig object with the settings from the config file.
-    """
-    # keep only the name, just in case
-    agent_config_arg = agent_config_arg.strip('[]')
-
-    # truncate the prefix, just in case
-    if agent_config_arg.startswith('agent.'):
-        agent_config_arg = agent_config_arg[6:]
-
-    logger.openhands_logger.debug(f'Loading agent config from {agent_config_arg}')
-
-    # load the toml file
-    try:
-        with open(toml_file, 'r', encoding='utf-8') as toml_contents:
-            toml_config = toml.load(toml_contents)
-    except FileNotFoundError as e:
-        logger.openhands_logger.info(f'Config file not found: {e}')
-        return None
-    except toml.TomlDecodeError as e:
-        logger.openhands_logger.error(
-            f'Cannot parse agent group from {agent_config_arg}. Exception: {e}'
-        )
-        return None
-
-    # update the agent config with the specified section
-    if 'agent' in toml_config and agent_config_arg in toml_config['agent']:
-        return AgentConfig(**toml_config['agent'][agent_config_arg])
-    logger.openhands_logger.debug(f'Loading from toml failed for {agent_config_arg}')
-    return None
 
 
 def get_llm_config_arg(
@@ -595,9 +423,5 @@ def setup_config_from_args(args: argparse.Namespace) -> OpenHandsConfig:
         config.max_iterations = args.max_iterations
     if hasattr(args, 'max_budget_per_task') and args.max_budget_per_task is not None:
         config.max_budget_per_task = args.max_budget_per_task
-
-    # Read selected repository in config for use by CLI and main.py
-    if hasattr(args, 'selected_repo') and args.selected_repo is not None:
-        config.sandbox.selected_repo = args.selected_repo
 
     return config

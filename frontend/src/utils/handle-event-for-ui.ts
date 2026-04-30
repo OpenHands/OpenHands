@@ -1,16 +1,34 @@
 import { OpenHandsEvent } from "#/types/v1/core";
-import { isObservationEvent } from "#/types/v1/type-guards";
+import { isACPToolCallEvent, isObservationEvent } from "#/types/v1/type-guards";
 
 /**
  * Handles adding an event to the UI events array
  * Replaces actions with observations when they arrive (so UI shows observation instead of action)
  * Exception: ThinkAction is NOT replaced because the thought content is in the action, not in the observation
+ *
+ * ACPToolCallEvent dedup: multiple events share a ``tool_call_id`` as an ACP
+ * tool call progresses (in_progress → completed / failed). Collapse them to
+ * the latest state at the original position so the card updates in place.
  */
 export const handleEventForUI = (
   event: OpenHandsEvent,
   uiEvents: OpenHandsEvent[],
 ): OpenHandsEvent[] => {
   const newUiEvents = [...uiEvents];
+
+  if (isACPToolCallEvent(event)) {
+    const existingIndex = newUiEvents.findIndex(
+      (uiEvent) =>
+        isACPToolCallEvent(uiEvent) &&
+        uiEvent.tool_call_id === event.tool_call_id,
+    );
+    if (existingIndex !== -1) {
+      newUiEvents[existingIndex] = event;
+    } else {
+      newUiEvents.push(event);
+    }
+    return newUiEvents;
+  }
 
   if (isObservationEvent(event)) {
     // Don't add ThinkObservation at all - we keep the ThinkAction instead
