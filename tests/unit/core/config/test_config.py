@@ -4,6 +4,7 @@ from io import StringIO
 
 import pytest
 
+from openhands.app_server.utils.logger import openhands_logger
 from openhands.core.config import (
     LLMConfig,
     OpenHandsConfig,
@@ -12,7 +13,6 @@ from openhands.core.config import (
     load_from_env,
     load_from_toml,
 )
-from openhands.core.logger import openhands_logger
 
 
 @pytest.fixture

@@ -20,7 +20,7 @@ from pydantic import BaseModel, SecretStr, ValidationError
 
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
-from openhands.core import logger
+from openhands.app_server.utils import logger
 from openhands.core.config.arg_utils import get_headless_parser
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import mcp_config_from_toml

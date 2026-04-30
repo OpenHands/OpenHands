@@ -35,7 +35,7 @@ from openhands.app_server.user_auth import (
     get_provider_tokens,
     get_user_id,
 )
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.server.types import AppMode
 
 mcp_server = FastMCP('mcp', mask_error_details=True)

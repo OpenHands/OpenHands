@@ -5,13 +5,13 @@ from unittest.mock import patch
 
 import pytest
 
-from openhands.core.config import LLMConfig, OpenHandsConfig
-from openhands.core.logger import (
+from openhands.app_server.utils.logger import (
     LOG_JSON_LEVEL_KEY,
     OpenHandsLoggerAdapter,
     json_log_handler,
 )
-from openhands.core.logger import openhands_logger as openhands_logger
+from openhands.app_server.utils.logger import openhands_logger as openhands_logger
+from openhands.core.config import LLMConfig, OpenHandsConfig
 
 
 @pytest.fixture
@@ -107,7 +107,9 @@ def test_sensitive_env_vars_masking(test_handler):
         'JWT_SECRET': 'JWT_SECRET_VALUE',
     }
 
-    with patch.dict('openhands.core.logger.os.environ', environ, clear=True):
+    with patch.dict(
+        'openhands.app_server.utils.logger.os.environ', environ, clear=True
+    ):
         log_message = ' '.join(f"{attr}='{value}'" for attr, value in environ.items())
         logger.info(log_message)
 
@@ -123,7 +125,9 @@ def test_special_cases_masking(test_handler):
         'SANDBOX_ENV_GITHUB_TOKEN': 'SANDBOX_ENV_GITHUB_TOKEN_VALUE',
     }
 
-    with patch.dict('openhands.core.logger.os.environ', environ, clear=True):
+    with patch.dict(
+        'openhands.app_server.utils.logger.os.environ', environ, clear=True
+    ):
         log_message = ' '.join(
             f"{attr}={value} with no single quotes' and something"
             for attr, value in environ.items()

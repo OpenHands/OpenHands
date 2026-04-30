@@ -9,8 +9,8 @@ with warnings.catch_warnings():
     import litellm
     from litellm import LlmProviders, ProviderConfigManager, get_llm_provider
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.core.config import LLMConfig, OpenHandsConfig
-from openhands.core.logger import openhands_logger as logger
 
 # ---------------------------------------------------------------------------
 # The ``openhands-sdk`` package is the **single source of truth** for which

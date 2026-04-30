@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import patch
 
-from openhands.core.logger import (
+from openhands.app_server.utils.logger import (
     RedactURLParamsFilter,
     SensitiveDataFilter,
     _uvicorn_default_log_config,

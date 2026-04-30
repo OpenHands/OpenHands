@@ -12,8 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
-from openhands.core.logger import LOG_DIR
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import LOG_DIR
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class LLMConfig(BaseModel):

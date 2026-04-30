@@ -10,7 +10,7 @@ import os
 
 import uvicorn
 
-from openhands.core.logger import LOG_JSON, get_uvicorn_log_config
+from openhands.app_server.utils.logger import LOG_JSON, get_uvicorn_log_config
 
 
 def main():

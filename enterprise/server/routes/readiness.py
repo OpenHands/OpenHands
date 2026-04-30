@@ -3,7 +3,7 @@ from sqlalchemy.sql import text
 from storage.database import a_session_maker
 from storage.redis import get_redis_client
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 readiness_router = APIRouter()
 

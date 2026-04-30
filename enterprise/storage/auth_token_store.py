@@ -11,7 +11,7 @@ from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
 
 from openhands.app_server.integrations.service_types import ProviderType
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Time buffer (in seconds) before actual expiration to consider token expired
 # This ensures tokens are refreshed before they actually expire. The

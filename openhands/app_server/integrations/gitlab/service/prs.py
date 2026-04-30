@@ -1,6 +1,6 @@
 from openhands.app_server.integrations.gitlab.service.base import GitLabMixinBase
 from openhands.app_server.integrations.service_types import RequestMethod
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class GitLabPRsMixin(GitLabMixinBase):

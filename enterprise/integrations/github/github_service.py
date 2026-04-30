@@ -6,7 +6,7 @@ from server.auth.token_manager import TokenManager
 
 from openhands.app_server.integrations.github.github_service import GitHubService
 from openhands.app_server.integrations.service_types import ProviderType, Repository
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.server.types import AppMode
 
 

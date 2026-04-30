@@ -6,8 +6,8 @@ from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.stored_offline_token import StoredOfflineToken
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.core.logger import openhands_logger as logger
 
 
 @dataclass

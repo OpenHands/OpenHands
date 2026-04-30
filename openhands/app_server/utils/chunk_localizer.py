@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from rapidfuzz.distance import LCSseq
 from tree_sitter_language_pack import get_parser
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class Chunk(BaseModel):

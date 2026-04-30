@@ -4,7 +4,7 @@ from storage.user_repo_map import UserRepositoryMap
 from storage.user_repo_map_store import UserRepositoryMapStore
 
 from openhands.app_server.integrations.service_types import Repository
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 async def store_repositories_in_db(repos: list[Repository], user_id: str) -> None:

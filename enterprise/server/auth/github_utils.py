@@ -3,7 +3,7 @@ from pydantic import SecretStr
 from server.auth.auth_utils import user_verifier
 
 from openhands.app_server.integrations.github.github_types import GitHubUser
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 def is_user_allowed(user_login: str):

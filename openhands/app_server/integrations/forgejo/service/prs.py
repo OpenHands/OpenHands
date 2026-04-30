@@ -7,7 +7,7 @@ from openhands.app_server.integrations.service_types import (
     RequestMethod,
     UnknownException,
 )
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class ForgejoPRsMixin(ForgejoMixinBase):

@@ -42,11 +42,11 @@ from openhands.app_server.utils.llm import (
     is_openhands_model,
     resolve_llm_base_url,
 )
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.app_server.utils.sdk_settings_compat import (
     LLMAgentSettings,
     export_agent_settings_schema,
 )
-from openhands.core.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import ConversationSettings
 from openhands.server.shared import config
