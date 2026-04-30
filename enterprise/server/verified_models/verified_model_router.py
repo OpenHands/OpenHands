@@ -154,19 +154,15 @@ class SaaSLLMModelService(DefaultLLMModelService):
 
 
 class SaaSLLMModelServiceInjector(LLMModelServiceInjector):
-    """Injector that provides the SaaS LLM model service."""
+    """Injector that provides the SaaS LLM model service.
+
+    Activate via the environment variable::
+
+        OH_LLM_MODEL_KIND=server.verified_models.verified_model_router.SaaSLLMModelServiceInjector
+    """
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[LLMModelService, None]:
         async with get_db_session(state, request) as db_session:
             yield SaaSLLMModelService(db_session)
-
-
-def override_llm_model_service(app_config) -> None:
-    """Override the default LLM model service with the SaaS version.
-
-    Call this during SaaS server setup to replace the default injector
-    on the ``AppServerConfig`` instance.
-    """
-    app_config.llm_model = SaaSLLMModelServiceInjector()
