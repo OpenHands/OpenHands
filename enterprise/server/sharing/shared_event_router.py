@@ -20,9 +20,9 @@ from server.sharing.shared_event_service import (
 
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
+from openhands.app_server.utils.environment import StorageProvider, get_storage_provider
 from openhands.sdk import Event
 from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
-from openhands.app_server.utils.environment import StorageProvider, get_storage_provider
 
 
 def _is_viewable(event: Event) -> bool:
