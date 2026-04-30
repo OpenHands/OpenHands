@@ -35,9 +35,7 @@ from openhands.app_server.utils.sdk_settings_compat import (
     default_agent_settings,
     validate_agent_settings,
 )
-from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
-from openhands.core.config.utils import load_openhands_config
 from openhands.sdk.settings import ConversationSettings
 
 
