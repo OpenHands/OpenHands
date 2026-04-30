@@ -389,6 +389,33 @@ class TestDockerSandboxService:
         # Verify
         assert result is None
 
+    async def test_get_sandbox_by_session_api_key_skips_health_check(
+        self, service, mock_running_container
+    ):
+        """Test that get_sandbox_by_session_api_key uses fast path without health check.
+
+        Session key validation only needs to identify the container — it should not
+        incur an HTTP health check round-trip.
+        """
+        # Setup: container with matching session key
+        service.docker_client.containers.list.return_value = [mock_running_container]
+
+        # Execute
+        result = await service.get_sandbox_by_session_api_key('session_key_123')
+
+        # Verify: sandbox found without invoking the httpx health check
+        assert result is not None
+        assert result.id == 'oh-test-abc123'
+        service.httpx_client.get.assert_not_called()
+
+    async def test_get_sandbox_by_session_api_key_not_found(self, service):
+        """Test that get_sandbox_by_session_api_key returns None when no match."""
+        service.docker_client.containers.list.return_value = []
+
+        result = await service.get_sandbox_by_session_api_key('no-such-key')
+
+        assert result is None
+
     @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
     @patch('os.urandom')
     async def test_start_sandbox_success(self, mock_urandom, mock_encodebytes, service):
@@ -412,7 +439,6 @@ class TestDockerSandboxService:
         service.docker_client.containers.run.return_value = mock_container
 
         with (
-            patch.object(service, '_find_unused_port', side_effect=[12345, 12346]),
             patch.object(
                 service, 'pause_old_sandboxes', return_value=[]
             ) as mock_cleanup,
@@ -437,7 +463,8 @@ class TestDockerSandboxService:
         assert (
             call_args[1]['environment']['OH_SESSION_API_KEYS_0'] == 'test_session_key'
         )
-        assert call_args[1]['ports'] == {8000: 12345, 8001: 12346}
+        # Docker auto-assigns host ports (None = let Docker pick a free port)
+        assert call_args[1]['ports'] == {8000: None, 8001: None}
         assert call_args[1]['working_dir'] == '/workspace'
         assert call_args[1]['detach'] is True
 
@@ -461,7 +488,6 @@ class TestDockerSandboxService:
         service.docker_client.containers.run.return_value = mock_container
 
         with (
-            patch.object(service, '_find_unused_port', return_value=12345),
             patch.object(service, 'pause_old_sandboxes', return_value=[]),
         ):
             # Execute
@@ -511,7 +537,6 @@ class TestDockerSandboxService:
         service.docker_client.containers.run.return_value = mock_container
 
         with (
-            patch.object(service, '_find_unused_port', side_effect=[12345, 12346]),
             patch.object(service, 'pause_old_sandboxes', return_value=[]),
         ):
             # Execute with custom sandbox_id
@@ -533,7 +558,6 @@ class TestDockerSandboxService:
         )
 
         with (
-            patch.object(service, '_find_unused_port', return_value=12345),
             patch.object(service, 'pause_old_sandboxes', return_value=[]),
             pytest.raises(SandboxError, match='Failed to start container'),
         ):
@@ -590,9 +614,6 @@ class TestDockerSandboxService:
         )
 
         with (
-            patch.object(
-                service_with_extra_hosts, '_find_unused_port', return_value=12345
-            ),
             patch.object(
                 service_with_extra_hosts, 'pause_old_sandboxes', return_value=[]
             ),
@@ -657,9 +678,6 @@ class TestDockerSandboxService:
 
         with (
             patch.object(
-                service_without_extra_hosts, '_find_unused_port', return_value=12345
-            ),
-            patch.object(
                 service_without_extra_hosts, 'pause_old_sandboxes', return_value=[]
             ),
         ):
@@ -719,7 +737,6 @@ class TestDockerSandboxService:
         )
 
         with (
-            patch.object(service_with_cors, '_find_unused_port', return_value=12345),
             patch.object(service_with_cors, 'pause_old_sandboxes', return_value=[]),
         ):
             # Execute
@@ -780,7 +797,6 @@ class TestDockerSandboxService:
         )
 
         with (
-            patch.object(service_without_cors, '_find_unused_port', return_value=12345),
             patch.object(service_without_cors, 'pause_old_sandboxes', return_value=[]),
         ):
             # Execute
@@ -908,7 +924,7 @@ class TestDockerSandboxService:
         # Verify
         assert result is True
         mock_container.stop.assert_called_once_with(timeout=10)
-        mock_container.remove.assert_called_once()
+        mock_container.remove.assert_called_once_with(force=True)
         service.docker_client.volumes.get.assert_called_once_with(
             'openhands-workspace-oh-test-abc123'
         )
@@ -928,16 +944,28 @@ class TestDockerSandboxService:
         # Verify
         assert result is True
         mock_container.stop.assert_not_called()  # Already stopped
-        mock_container.remove.assert_called_once()
+        mock_container.remove.assert_called_once_with(force=True)
 
-    def test_find_unused_port(self, service):
-        """Test finding an unused port."""
+    async def test_delete_sandbox_force_remove_after_stop_failure(self, service):
+        """Test that the container is force-removed even when graceful stop fails.
+
+        If container.stop() raises (e.g., Docker daemon hiccup), we must still
+        call remove(force=True) so the container is never left in a dangling state.
+        """
+        # Setup: running container whose stop() raises an APIError
+        mock_container = MagicMock()
+        mock_container.status = 'running'
+        mock_container.stop.side_effect = APIError('daemon hiccup')
+        service.docker_client.containers.get.return_value = mock_container
+        service.docker_client.volumes.get.side_effect = NotFound('no volume')
+
         # Execute
-        port = service._find_unused_port()
+        result = await service.delete_sandbox('oh-test-abc123')
 
-        # Verify
-        assert isinstance(port, int)
-        assert 1024 <= port <= 65535
+        # Verify: deletion still reported successful and force-remove was called
+        assert result is True
+        mock_container.stop.assert_called_once_with(timeout=10)
+        mock_container.remove.assert_called_once_with(force=True)
 
     def test_docker_status_to_sandbox_status(self, service):
         """Test Docker status to SandboxStatus conversion."""

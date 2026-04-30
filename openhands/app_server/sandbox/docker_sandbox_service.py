@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import socket
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import AsyncGenerator
@@ -102,14 +101,6 @@ class DockerSandboxService(SandboxService):
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
     kvm_enabled: bool = False
-
-    def _find_unused_port(self) -> int:
-        """Find an unused port on the host machine."""
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(('', 0))
-            s.listen(1)
-            port = s.getsockname()[1]
-        return port
 
     def _docker_status_to_sandbox_status(self, docker_status: str) -> SandboxStatus:
         """Convert Docker container status to SandboxStatus."""
@@ -354,7 +345,9 @@ class DockerSandboxService(SandboxService):
                     container_session_key = env_vars.get(SESSION_API_KEY_VARIABLE)
 
                     if container_session_key == session_api_key:
-                        return await self._container_to_checked_sandbox_info(container)
+                        # Skip health check: session key validation only needs
+                        # container identity, not live health status.
+                        return await self._container_to_sandbox_info(container)
 
             return None
         except (NotFound, APIError):
@@ -414,17 +407,17 @@ class DockerSandboxService(SandboxService):
         # Prepare port mappings and add port environment variables
         # When using host network, container ports are directly accessible on the host
         # so we use the container ports directly instead of mapping to random host ports
-        port_mappings: dict[int, int] | None = None
+        port_mappings: dict[int, int | None] | None = None
         if self.use_host_network:
             # Host network mode: container ports are directly accessible
             for exposed_port in self.exposed_ports:
                 env_vars[exposed_port.name] = str(exposed_port.container_port)
         else:
-            # Bridge network mode: map container ports to random host ports
+            # Bridge network mode: let Docker assign free host ports automatically,
+            # avoiding the TOCTOU race condition of pre-allocating ports ourselves.
             port_mappings = {}
             for exposed_port in self.exposed_ports:
-                host_port = self._find_unused_port()
-                port_mappings[exposed_port.container_port] = host_port
+                port_mappings[exposed_port.container_port] = None
                 env_vars[exposed_port.name] = str(exposed_port.container_port)
 
         # Prepare labels
@@ -536,12 +529,20 @@ class DockerSandboxService(SandboxService):
                 return False
             container = self.docker_client.containers.get(sandbox_id)
 
-            # Stop the container if it's running
+            # Stop the container if it's running; if stop fails, proceed to
+            # force-remove so the container is never left in a dangling state.
             if container.status in ['running', 'paused']:
-                container.stop(timeout=10)
+                try:
+                    container.stop(timeout=10)
+                except (APIError, OSError) as stop_exc:
+                    _logger.warning(
+                        'Failed to stop sandbox %s gracefully, forcing removal: %s',
+                        sandbox_id,
+                        stop_exc,
+                    )
 
-            # Remove the container
-            container.remove()
+            # Remove the container; force=True handles the case where stop failed.
+            container.remove(force=True)
 
             # Remove associated volume
             try:
