@@ -1308,6 +1308,30 @@ class TestDockerSandboxServiceInjector:
             injector = DockerSandboxServiceInjector()
             assert injector.use_host_network is False
 
+    @patch('openhands.app_server.sandbox.docker_sandbox_service._logger')
+    def test_warn_host_network_multiple_sandboxes_logs_warning(self, mock_logger):
+        """Test that a warning is logged when host network + max_num_sandboxes > 1."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        DockerSandboxServiceInjector(use_host_network=True, max_num_sandboxes=2)
+
+        mock_logger.warning.assert_called_once()
+        warning_msg = str(mock_logger.warning.call_args)
+        assert 'Host network mode' in warning_msg
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service._logger')
+    def test_warn_host_network_single_sandbox_no_warning(self, mock_logger):
+        """Test that no warning is logged when host network + max_num_sandboxes == 1."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        DockerSandboxServiceInjector(use_host_network=True, max_num_sandboxes=1)
+
+        mock_logger.warning.assert_not_called()
+
 
 class TestDockerSandboxServiceInjectorFromEnv:
     """Test cases for DockerSandboxServiceInjector environment variable configuration."""

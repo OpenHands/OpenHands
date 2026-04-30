@@ -156,15 +156,14 @@ class Settings(BaseModel):
 
     @model_validator(mode='after')
     def _rewrite_volatile_ollama_url_in_settings(self) -> 'Settings':
-        """Clear ephemeral 172.x / host.docker.internal Ollama base URLs at load time.
+        """Rewrite ephemeral 172.16.0.0/12 Docker-bridge IPs in Ollama base URLs.
 
-        Docker bridge IPs in the 172.16.0.0/12 range and host.docker.internal
-        are ephemeral and may change on every container rebuild, or may resolve
-        to an unreachable address (e.g. the WSL2 bridge rather than the actual
-        Ollama VM). This validator clears any such stored llm_base_url so the
-        LLM falls back to its own default rather than attempting a connection to
-        an unreachable host. Users with a stable external Ollama URL (e.g.
-        10.x.x.x) are unaffected.
+        Docker bridge IPs in the 172.16.0.0/12 range are ephemeral and may change
+        on every container rebuild or may be unreachable from different network
+        namespaces. This validator rewrites any such stored llm_base_url to use
+        host.docker.internal (preserving scheme, port and path) so the LLM can
+        reach the host's Ollama endpoint from inside a container. Users with a
+        stable external Ollama URL (e.g. 10.x.x.x or a hostname) are unaffected.
         """
         url = self.llm_base_url
         if not url:
@@ -177,25 +176,30 @@ class Settings(BaseModel):
             return self
         try:
             import ipaddress
-            from urllib.parse import urlparse
+            from urllib.parse import urlparse, urlunparse
 
             parsed = urlparse(url)
             host = parsed.hostname or ''
             port = parsed.port
 
-            # Check for host.docker.internal
-            if host == 'host.docker.internal' and port == 11434:
-                object.__setattr__(self, 'llm_base_url', None)
+            if port != 11434:
                 return self
 
-            # Check for 172.16.0.0/12 bridge IPs
-            addr = ipaddress.ip_address(host)
-            in_172 = isinstance(
-                addr, ipaddress.IPv4Address
-            ) and addr in ipaddress.IPv4Network('172.16.0.0/12')
-            if in_172 and port == 11434:
-                object.__setattr__(self, 'llm_base_url', None)
-        except ValueError:
+            # Check for 172.16.0.0/12 bridge IPs — rewrite to host.docker.internal
+            try:
+                addr = ipaddress.ip_address(host)
+                in_172 = isinstance(
+                    addr, ipaddress.IPv4Address
+                ) and addr in ipaddress.IPv4Network('172.16.0.0/12')
+            except ValueError:
+                in_172 = False
+
+            if in_172:
+                rewritten = urlunparse(
+                    parsed._replace(netloc=f'host.docker.internal:{port}')
+                )
+                object.__setattr__(self, 'llm_base_url', rewritten)
+        except Exception:
             pass
         return self
 
