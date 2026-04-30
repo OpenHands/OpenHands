@@ -45,24 +45,34 @@ if sys.platform == 'win32':
         sys.path.insert(0, _root_str)
 
     if 'openhands.storage' not in sys.modules:
-        from unittest.mock import MagicMock
+        # 2) Try the real import first.  On most Windows machines this works
+        #    fine.  The stub is only needed on specific environments where
+        #    google.api_core.__init__ calls packages_distributions() via pathlib
+        #    and that function raises KeyboardInterrupt, crashing the import.
+        #    Applying the stub unconditionally poisons sys.modules for every
+        #    other test collected in the same pytest session (e.g. app_server
+        #    tests that rely on the real get_file_store).
+        try:
+            import openhands.storage  # noqa: F401  # triggers real __init__.py
 
-        # 2) Stub openhands.storage — prevents __init__.py from running and
-        #    triggering the google.api_core KeyboardInterrupt crash.
-        _stub = types.ModuleType('openhands.storage')
-        _stub.__path__ = [  # type: ignore[attr-defined]
-            str(_root / 'openhands' / 'storage')
-        ]
-        _stub.__package__ = 'openhands.storage'
+        except (KeyboardInterrupt, SystemExit, ImportError):
+            # Real import failed – fall back to the stub so that data_models
+            # tests can still be collected and run.
+            from unittest.mock import MagicMock
 
-        # 3) Re-export the two symbols that the real __init__.py provides and
-        #    that are imported at module level elsewhere in the dependency chain.
-        _stub.get_file_store = MagicMock()  # type: ignore[attr-defined]
-        _stub.FileStore = MagicMock  # type: ignore[attr-defined]
+            _stub = types.ModuleType('openhands.storage')
+            _stub.__path__ = [  # type: ignore[attr-defined]
+                str(_root / 'openhands' / 'storage')
+            ]
+            _stub.__package__ = 'openhands.storage'
 
-        sys.modules['openhands.storage'] = _stub
+            # Re-export the two symbols imported at module level elsewhere.
+            _stub.get_file_store = MagicMock()  # type: ignore[attr-defined]
+            _stub.FileStore = MagicMock  # type: ignore[attr-defined]
 
-        # 4) Pre-stub google_cloud to prevent accidental import via __path__.
-        _gc_stub = types.ModuleType('openhands.storage.google_cloud')
-        _gc_stub.GoogleCloudFileStore = MagicMock  # type: ignore[attr-defined]
-        sys.modules['openhands.storage.google_cloud'] = _gc_stub
+            sys.modules['openhands.storage'] = _stub
+
+            # Pre-stub google_cloud to prevent accidental import via __path__.
+            _gc_stub = types.ModuleType('openhands.storage.google_cloud')
+            _gc_stub.GoogleCloudFileStore = MagicMock  # type: ignore[attr-defined]
+            sys.modules['openhands.storage.google_cloud'] = _gc_stub
