@@ -44,6 +44,12 @@ class BitbucketDCService(
         external_token_manager: bool = False,
         base_domain: str | None = None,
     ) -> None:
+        # Fall back to the BITBUCKET_DATA_CENTER_HOST env var when no domain
+        # is passed explicitly — call sites in the SaaS resolver path
+        # construct this service without base_domain, and an empty BASE_URL
+        # silently produces schemeless API URLs that httpx rejects.
+        if not base_domain:
+            base_domain = os.environ.get('BITBUCKET_DATA_CENTER_HOST') or None
         self.user_id = user_id
         self.external_token_manager = external_token_manager
         self.external_auth_id = external_auth_id

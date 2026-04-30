@@ -67,12 +67,34 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         return False  # DC tokens cannot be refreshed programmatically
 
     async def _get_headers(self) -> dict[str, str]:
-        """Get headers for Bitbucket data center API requests."""
+        """Get headers for Bitbucket data center API requests.
+
+        Mirrors the Bitbucket Cloud base: when ``self.token`` is empty
+        (the default for services constructed only with ``external_auth_id``),
+        resolve the latest token before building the header. Without this,
+        the header would be ``Authorization: Basic `` with an empty base64
+        payload and httpx rejects it as ``Illegal header value``.
+
+        Tokens in ``username:secret`` form (e.g. ``x-token-auth:<PAT>`` or
+        ``user:pass``) use HTTP Basic auth. Raw OAuth 2.0 access tokens
+        (no colon) use Bearer per RFC 6750 — this is the format the SaaS
+        broker flow returns from Keycloak.
+        """
+        if not self.token or not self.token.get_secret_value():
+            latest_token = await self.get_latest_token()
+            if latest_token:
+                self.token = latest_token
+
         token_value = self.token.get_secret_value()
 
-        auth_str = base64.b64encode(token_value.encode()).decode()
+        if ':' in token_value:
+            auth_str = base64.b64encode(token_value.encode()).decode()
+            return {
+                'Authorization': f'Basic {auth_str}',
+                'Accept': 'application/json',
+            }
         return {
-            'Authorization': f'Basic {auth_str}',
+            'Authorization': f'Bearer {token_value}',
             'Accept': 'application/json',
         }
 
