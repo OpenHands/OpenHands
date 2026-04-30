@@ -292,37 +292,35 @@ async def update_custom_secret(
         500: Error updating secret
     """
     existing_secrets = await secrets_store.load()
-    if existing_secrets:
-        # Check if the secret to update exists
-        if secret_id not in existing_secrets.custom_secrets:
-            return HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Secret with ID {secret_id} not found',
-            )
-
-        secret_name = incoming_secret.name
-        secret_description = incoming_secret.description
-
-        custom_secrets = dict(existing_secrets.custom_secrets)
-        existing_secret = custom_secrets.pop(secret_id)
-
-        if secret_name != secret_id and secret_name in custom_secrets:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f'Secret {secret_name} already exists',
-            )
-
-        custom_secrets[secret_name] = CustomSecret(
-            secret=existing_secret.secret,
-            description=secret_description or '',
+    if not existing_secrets or secret_id not in existing_secrets.custom_secrets:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Secret with ID {secret_id} not found',
         )
 
-        updated_secrets = Secrets(
-            custom_secrets=custom_secrets,  # type: ignore[arg-type]
-            provider_tokens=existing_secrets.provider_tokens,
+    secret_name = incoming_secret.name
+    secret_description = incoming_secret.description
+
+    custom_secrets = dict(existing_secrets.custom_secrets)
+    existing_secret = custom_secrets.pop(secret_id)
+
+    if secret_name != secret_id and secret_name in custom_secrets:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Secret {secret_name} already exists',
         )
 
-        await secrets_store.store(updated_secrets)
+    custom_secrets[secret_name] = CustomSecret(
+        secret=existing_secret.secret,
+        description=secret_description or '',
+    )
+
+    updated_secrets = Secrets(
+        custom_secrets=custom_secrets,  # type: ignore[arg-type]
+        provider_tokens=existing_secrets.provider_tokens,
+    )
+
+    await secrets_store.store(updated_secrets)
 
     return EditResponse(
         message='Secret updated successfully',
@@ -344,27 +342,21 @@ async def delete_custom_secret(
         500: Error deleting secret
     """
     existing_secrets = await secrets_store.load()
-    if existing_secrets:
-        # Get existing custom secrets
-        custom_secrets = dict(existing_secrets.custom_secrets)
-
-        # Check if the secret to delete exists
-        if secret_id not in custom_secrets:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Secret with ID {secret_id} not found',
-            )
-
-        # Remove the secret
-        custom_secrets.pop(secret_id)
-
-        # Create a new Secrets that preserves provider tokens and remaining secrets
-        updated_secrets = Secrets(
-            custom_secrets=custom_secrets,  # type: ignore[arg-type]
-            provider_tokens=existing_secrets.provider_tokens,
+    if not existing_secrets or secret_id not in existing_secrets.custom_secrets:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Secret with ID {secret_id} not found',
         )
 
-        await secrets_store.store(updated_secrets)
+    custom_secrets = dict(existing_secrets.custom_secrets)
+    custom_secrets.pop(secret_id)
+
+    updated_secrets = Secrets(
+        custom_secrets=custom_secrets,  # type: ignore[arg-type]
+        provider_tokens=existing_secrets.provider_tokens,
+    )
+
+    await secrets_store.store(updated_secrets)
 
     return EditResponse(
         message='Secret deleted successfully',
