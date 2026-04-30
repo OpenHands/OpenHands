@@ -25,15 +25,13 @@ class ModelRoutingConfig(BaseModel):
 
     @classmethod
     def from_toml_section(cls, data: dict) -> dict[str, 'ModelRoutingConfig']:
-        """
-        Create a mapping of ModelRoutingConfig instances from a toml dictionary representing the [model_routing] section.
+        """Create a mapping of ModelRoutingConfig instances from a toml dictionary representing the [model_routing] section.
 
         The configuration is built from all keys in data.
 
         Returns:
             dict[str, ModelRoutingConfig]: A mapping where the key "model_routing" corresponds to the [model_routing] configuration
         """
-
         # Initialize the result mapping
         model_routing_mapping: dict[str, ModelRoutingConfig] = {}
 

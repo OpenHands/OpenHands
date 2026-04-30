@@ -5,9 +5,7 @@ from openhands.integrations.service_types import Comment
 
 
 class GitLabResolverMixin(GitLabMixinBase):
-    """
-    Helper methods used for the GitLab Resolver
-    """
+    """Helper methods used for the GitLab Resolver"""
 
     async def get_review_thread_comments(
         self, project_id: str, issue_iid: int, discussion_id: str

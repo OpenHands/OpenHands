@@ -712,8 +712,7 @@ class StandaloneConversationManager(ConversationManager):
         await conversation_store.save_metadata(conversation)
 
     def _is_git_related_event(self, event) -> bool:
-        """
-        Determine if an event is related to git operations that could change the branch.
+        """Determine if an event is related to git operations that could change the branch.
 
         Args:
             event: The event to check
@@ -757,8 +756,7 @@ class StandaloneConversationManager(ConversationManager):
         return False
 
     async def _update_conversation_branch(self, conversation: ConversationMetadata):
-        """
-        Update the conversation's current branch if it has changed.
+        """Update the conversation's current branch if it has changed.
 
         Args:
             conversation: The conversation metadata to update
@@ -790,8 +788,7 @@ class StandaloneConversationManager(ConversationManager):
     def _get_session_and_runtime(
         self, conversation_id: str
     ) -> tuple[Session | None, Any | None]:
-        """
-        Get the session and runtime for a conversation.
+        """Get the session and runtime for a conversation.
 
         Args:
             conversation_id: The conversation ID
@@ -807,8 +804,7 @@ class StandaloneConversationManager(ConversationManager):
     def _get_current_workspace_branch(
         self, runtime: Any, selected_repository: str | None
     ) -> str | None:
-        """
-        Get the current branch from the workspace.
+        """Get the current branch from the workspace.
 
         Args:
             runtime: The runtime instance
@@ -829,8 +825,7 @@ class StandaloneConversationManager(ConversationManager):
     def _should_update_branch(
         self, current_branch: str | None, new_branch: str | None
     ) -> bool:
-        """
-        Determine if the branch should be updated.
+        """Determine if the branch should be updated.
 
         Args:
             current_branch: The current branch in conversation metadata
@@ -844,8 +839,7 @@ class StandaloneConversationManager(ConversationManager):
     def _update_branch_in_conversation(
         self, conversation: ConversationMetadata, new_branch: str | None
     ):
-        """
-        Update the branch in the conversation metadata.
+        """Update the branch in the conversation metadata.
 
         Args:
             conversation: The conversation metadata to update

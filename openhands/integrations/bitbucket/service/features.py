@@ -5,9 +5,7 @@ from openhands.microagent.types import MicroagentContentResponse
 
 
 class BitBucketFeaturesMixin(BitBucketMixinBase):
-    """
-    Mixin for BitBucket feature operations (microagents, cursor rules, etc.)
-    """
+    """Mixin for BitBucket feature operations (microagents, cursor rules, etc.)"""
 
     async def get_microagent_content(
         self, repository: str, file_path: str

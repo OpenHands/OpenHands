@@ -8,9 +8,7 @@ from openhands.integrations.service_types import RequestMethod
 
 
 class BitbucketDCPRsMixin(BitbucketDCMixinBase):
-    """
-    Mixin for BitBucket data center pull request operations
-    """
+    """Mixin for BitBucket data center pull request operations"""
 
     async def create_pr(
         self,

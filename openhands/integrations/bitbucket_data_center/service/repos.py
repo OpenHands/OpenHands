@@ -9,9 +9,7 @@ from openhands.server.types import AppMode
 
 
 class BitbucketDCReposMixin(BitbucketDCMixinBase):
-    """
-    Mixin for BitBucket data center repository-related operations
-    """
+    """Mixin for BitBucket data center repository-related operations"""
 
     async def search_repositories(
         self,

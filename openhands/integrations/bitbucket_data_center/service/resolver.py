@@ -7,9 +7,7 @@ from openhands.integrations.service_types import Comment
 
 
 class BitbucketDCResolverMixin(BitbucketDCMixinBase):
-    """
-    Helper methods used for the Bitbucket Data Center Resolver
-    """
+    """Helper methods used for the Bitbucket Data Center Resolver"""
 
     async def get_pr_title_and_body(
         self, owner: str, repo_slug: str, pr_id: int

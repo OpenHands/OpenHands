@@ -3,7 +3,7 @@ echo "Running frontend checks..."
 cd frontend
 npx lint-staged
 
-# Run backend pre-commit
+# Run backend pre-commit (staged files only - avoids Windows cmd line length limit)
 echo "Running backend pre-commit..."
 cd ..
-poetry run pre-commit run --files openhands/**/* evaluation/**/* tests/**/* --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
+poetry run pre-commit run --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml

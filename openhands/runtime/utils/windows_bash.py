@@ -61,8 +61,7 @@ def find_latest_pwsh_sdk_path(
     min_version=(7, 0, 0),
     env_var='PWSH_DIR',
 ):
-    """
-    Checks PWSH_DIR environment variable first to find pwsh and DLL.
+    """Checks PWSH_DIR environment variable first to find pwsh and DLL.
     If not found or not suitable, scans all pwsh executables in PATH, runs --version to find latest >= min_version.
     Returns full DLL path if found, else None.
     """

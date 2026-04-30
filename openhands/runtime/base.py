@@ -255,7 +255,6 @@ class Runtime(FileEditRuntimeMixin):
         self, runtime_status: RuntimeStatus, msg: str = '', level: str = 'info'
     ):
         """Sends a status message if the callback function was provided."""
-
         self.runtime_status = runtime_status
         if self.status_callback:
             self.status_callback(level, runtime_status, msg)
@@ -276,7 +275,6 @@ class Runtime(FileEditRuntimeMixin):
         max_retries: int = CMD_RETRY_MAX_ATTEMPTS,
     ) -> CmdOutputObservation:
         """Run command with exponential backoff retry on bash session timeout."""
-
         if not cmd or not cmd.strip():
             raise ValueError('Command cannot be empty')
         if max_retries < 1:
@@ -1297,8 +1295,7 @@ fi
         return self.git_handler.get_git_diff(file_path)
 
     def get_workspace_branch(self, primary_repo_path: str | None = None) -> str | None:
-        """
-        Get the current branch of the workspace.
+        """Get the current branch of the workspace.
 
         Args:
             primary_repo_path: Path to the primary repository within the workspace.

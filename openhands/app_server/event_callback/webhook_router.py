@@ -125,7 +125,8 @@ async def valid_sandbox(
     ),
 ) -> SandboxInfo:
     """Use a session api key for validation, and get a sandbox. Subsequent actions
-    are executed in the context of the owner of the sandbox"""
+    are executed in the context of the owner of the sandbox
+    """
     if not session_api_key:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail='X-Session-API-Key header is required'
@@ -282,7 +283,8 @@ async def get_secret(
 ) -> Response:
     """Given an access token, retrieve a user secret. The access token
     is limited by user and provider type, and may include a timeout, limiting
-    the damage in the event that a token is ever leaked"""
+    the damage in the event that a token is ever leaked
+    """
     try:
         payload = jwt_service.verify_jws_token(access_token)
         user_id = payload['user_id']

@@ -184,8 +184,7 @@ class BatchedWebHookFileStore(FileStore):
             self._enqueue_batch_from_lock()
 
     def _enqueue_batch_from_lock(self, background=True) -> None:
-        """
-        Must have lock before calling. Will reset the batch state and send the current one.
+        """Must have lock before calling. Will reset the batch state and send the current one.
         Uses executor by default, but can perform synchronously by setting background=False
         """
         batch_to_send = self._batch

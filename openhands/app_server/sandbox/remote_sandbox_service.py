@@ -78,7 +78,8 @@ class StoredRemoteSandbox(Base):  # type: ignore
     The remote runtime API does not return some variables we need, and does not
     return stopped runtimes in list operations, so we need a local copy. We use
     the remote api as a source of truth on what is currently running, not what was
-    run historicallly."""
+    run historicallly.
+    """
 
     __tablename__ = 'v1_remote_sandbox'
     id = Column(String, primary_key=True)
@@ -672,7 +673,8 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
     """When the app server does not have a public facing url, we poll the agent
     servers for the most recent data.
 
-    This is because webhook callbacks cannot be invoked."""
+    This is because webhook callbacks cannot be invoked.
+    """
     from openhands.app_server.config import (
         get_app_conversation_info_service,
         get_event_callback_service,
@@ -756,7 +758,8 @@ async def refresh_conversation(
     """Refresh a conversation.
 
     Grab ConversationInfo and all events from the agent server and make sure they
-    exist in the app server."""
+    exist in the app server.
+    """
     _logger.debug(f'Started Refreshing Conversation {app_conversation_info.id}')
     try:
         url = runtime['url']

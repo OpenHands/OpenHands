@@ -8,8 +8,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
-    """
-    Base class for all SQLAlchemy models.
+    """Base class for all SQLAlchemy models.
 
     Uses SQLAlchemy 2.0 DeclarativeBase for proper type inference with Mapped types.
     This is backward compatible with existing Column() definitions while enabling
@@ -72,7 +71,8 @@ class StoredSecretStr(TypeDecorator):
 
 class UtcDateTime(TypeDecorator):
     """TypeDecorator for datetime - stores all datetimes in utc. Assumes datetime without
-    a specified timezone are utc. (Sqlite doesn't always return these)"""
+    a specified timezone are utc. (Sqlite doesn't always return these)
+    """
 
     impl = DateTime(timezone=True)
     cache_ok = True

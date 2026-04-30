@@ -20,9 +20,7 @@ from openhands.utils.http_session import httpx_verify_option
 
 
 class BitbucketDCMixinBase(BaseGitService, HTTPClient):
-    """
-    Base mixin for BitBucket data center service containing common functionality
-    """
+    """Base mixin for BitBucket data center service containing common functionality"""
 
     BASE_URL: str = ''  # Set dynamically from domain in __init__
     user_id: str | None
@@ -177,7 +175,6 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
 
     async def get_user(self) -> User:
         """Get the authenticated user's information."""
-
         if not self.user_id:
             # HTTP Access tokens (x-token-auth) don't have user info.
             # For OAuth, the user_id should be set.
