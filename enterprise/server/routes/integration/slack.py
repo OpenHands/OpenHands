@@ -43,6 +43,7 @@ from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
     ProviderType,
 )
+
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
 slack_router = APIRouter(prefix='/slack')
 
