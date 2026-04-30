@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openhands.local/schemas/devcontainer.schema.json",
+  "title": "Dev Container Configuration",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "image": {
+      "type": "string"
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "postCreateCommand": {
+      "type": ["string", "array"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "runArgs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "containerEnv": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["name"]
+}

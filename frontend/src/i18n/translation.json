@@ -11730,13 +11730,55 @@
     "ca": "No hi ha eines disponibles per a aquest agent"
   },
   "SYSTEM_MESSAGE_MODAL$SEARCH_TOOLS_PLACEHOLDER": {
-    "en": "Search tools by name, description, or type"
+    "en": "Search tools by name, description, or type",
+    "ja": "Search tools by name, description, or type",
+    "zh-CN": "Search tools by name, description, or type",
+    "zh-TW": "Search tools by name, description, or type",
+    "ko-KR": "Search tools by name, description, or type",
+    "no": "Search tools by name, description, or type",
+    "ar": "Search tools by name, description, or type",
+    "de": "Search tools by name, description, or type",
+    "fr": "Search tools by name, description, or type",
+    "it": "Search tools by name, description, or type",
+    "pt": "Search tools by name, description, or type",
+    "es": "Search tools by name, description, or type",
+    "ca": "Search tools by name, description, or type",
+    "tr": "Search tools by name, description, or type",
+    "uk": "Search tools by name, description, or type"
   },
   "SYSTEM_MESSAGE_MODAL$EXPAND_ALL": {
-    "en": "Expand all"
+    "en": "Expand all",
+    "ja": "Expand all",
+    "zh-CN": "Expand all",
+    "zh-TW": "Expand all",
+    "ko-KR": "Expand all",
+    "no": "Expand all",
+    "ar": "Expand all",
+    "de": "Expand all",
+    "fr": "Expand all",
+    "it": "Expand all",
+    "pt": "Expand all",
+    "es": "Expand all",
+    "ca": "Expand all",
+    "tr": "Expand all",
+    "uk": "Expand all"
   },
   "SYSTEM_MESSAGE_MODAL$COLLAPSE_ALL": {
-    "en": "Collapse all"
+    "en": "Collapse all",
+    "ja": "Collapse all",
+    "zh-CN": "Collapse all",
+    "zh-TW": "Collapse all",
+    "ko-KR": "Collapse all",
+    "no": "Collapse all",
+    "ar": "Collapse all",
+    "de": "Collapse all",
+    "fr": "Collapse all",
+    "it": "Collapse all",
+    "pt": "Collapse all",
+    "es": "Collapse all",
+    "ca": "Collapse all",
+    "tr": "Collapse all",
+    "uk": "Collapse all"
   },
   "TOS$ACCEPT_TERMS_OF_SERVICE": {
     "en": "Accept Terms of Service",
@@ -17859,13 +17901,55 @@
     "ca": "Habilitats disponibles"
   },
   "SKILLS_MODAL$SEARCH_PLACEHOLDER": {
-    "en": "Search skills by name or source"
+    "en": "Search skills by name or source",
+    "ja": "Search skills by name or source",
+    "zh-CN": "Search skills by name or source",
+    "zh-TW": "Search skills by name or source",
+    "ko-KR": "Search skills by name or source",
+    "no": "Search skills by name or source",
+    "ar": "Search skills by name or source",
+    "de": "Search skills by name or source",
+    "fr": "Search skills by name or source",
+    "it": "Search skills by name or source",
+    "pt": "Search skills by name or source",
+    "es": "Search skills by name or source",
+    "ca": "Search skills by name or source",
+    "tr": "Search skills by name or source",
+    "uk": "Search skills by name or source"
   },
   "SKILLS_MODAL$EXPAND_ALL": {
-    "en": "Expand all"
+    "en": "Expand all",
+    "ja": "Expand all",
+    "zh-CN": "Expand all",
+    "zh-TW": "Expand all",
+    "ko-KR": "Expand all",
+    "no": "Expand all",
+    "ar": "Expand all",
+    "de": "Expand all",
+    "fr": "Expand all",
+    "it": "Expand all",
+    "pt": "Expand all",
+    "es": "Expand all",
+    "ca": "Expand all",
+    "tr": "Expand all",
+    "uk": "Expand all"
   },
   "SKILLS_MODAL$COLLAPSE_ALL": {
-    "en": "Collapse all"
+    "en": "Collapse all",
+    "ja": "Collapse all",
+    "zh-CN": "Collapse all",
+    "zh-TW": "Collapse all",
+    "ko-KR": "Collapse all",
+    "no": "Collapse all",
+    "ar": "Collapse all",
+    "de": "Collapse all",
+    "fr": "Collapse all",
+    "it": "Collapse all",
+    "pt": "Collapse all",
+    "es": "Collapse all",
+    "ca": "Collapse all",
+    "tr": "Collapse all",
+    "uk": "Collapse all"
   },
   "CONVERSATION$SHARE_PUBLICLY": {
     "en": "Public Share",
@@ -18633,13 +18717,55 @@
     "ca": "Hooks disponibles"
   },
   "HOOKS_MODAL$SEARCH_PLACEHOLDER": {
-    "en": "Search hooks by event type"
+    "en": "Search hooks by event type",
+    "ja": "Search hooks by event type",
+    "zh-CN": "Search hooks by event type",
+    "zh-TW": "Search hooks by event type",
+    "ko-KR": "Search hooks by event type",
+    "no": "Search hooks by event type",
+    "ar": "Search hooks by event type",
+    "de": "Search hooks by event type",
+    "fr": "Search hooks by event type",
+    "it": "Search hooks by event type",
+    "pt": "Search hooks by event type",
+    "es": "Search hooks by event type",
+    "ca": "Search hooks by event type",
+    "tr": "Search hooks by event type",
+    "uk": "Search hooks by event type"
   },
   "HOOKS_MODAL$EXPAND_ALL": {
-    "en": "Expand all"
+    "en": "Expand all",
+    "ja": "Expand all",
+    "zh-CN": "Expand all",
+    "zh-TW": "Expand all",
+    "ko-KR": "Expand all",
+    "no": "Expand all",
+    "ar": "Expand all",
+    "de": "Expand all",
+    "fr": "Expand all",
+    "it": "Expand all",
+    "pt": "Expand all",
+    "es": "Expand all",
+    "ca": "Expand all",
+    "tr": "Expand all",
+    "uk": "Expand all"
   },
   "HOOKS_MODAL$COLLAPSE_ALL": {
-    "en": "Collapse all"
+    "en": "Collapse all",
+    "ja": "Collapse all",
+    "zh-CN": "Collapse all",
+    "zh-TW": "Collapse all",
+    "ko-KR": "Collapse all",
+    "no": "Collapse all",
+    "ar": "Collapse all",
+    "de": "Collapse all",
+    "fr": "Collapse all",
+    "it": "Collapse all",
+    "pt": "Collapse all",
+    "es": "Collapse all",
+    "ca": "Collapse all",
+    "tr": "Collapse all",
+    "uk": "Collapse all"
   },
   "HOOKS_MODAL$WARNING": {
     "en": "Hooks are loaded from your workspace. This view refreshes on demand and may differ from the hooks that were active when the conversation started. Stop and restart the conversation to apply changes.",
