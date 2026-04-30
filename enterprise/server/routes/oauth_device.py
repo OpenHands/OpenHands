@@ -12,7 +12,7 @@ from storage.device_code_store import DeviceCodeStore
 
 from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.user_auth import get_user_id
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # ---------------------------------------------------------------------------
 # Constants

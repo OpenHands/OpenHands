@@ -23,8 +23,8 @@ from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.utils.import_utils import get_impl
 from openhands.server.shared import server_config
-from openhands.utils.import_utils import get_impl
 
 
 class AuthType(Enum):

@@ -8,7 +8,7 @@ from typing import TextIO
 
 from pythonjsonlogger.json import JsonFormatter
 
-from openhands.core.logger import openhands_logger
+from openhands.app_server.utils.logger import openhands_logger
 
 LOG_JSON = os.getenv('LOG_JSON', '1') == '1'
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()

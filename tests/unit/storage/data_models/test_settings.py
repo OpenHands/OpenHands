@@ -12,8 +12,6 @@ from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.core.config.sandbox_config import SandboxConfig
-from openhands.core.config.security_config import SecurityConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
     AGENT_SETTINGS_SCHEMA_VERSION,
@@ -27,10 +25,6 @@ def test_settings_from_config():
     mock_app_config = OpenHandsConfig(
         default_agent='test-agent',
         max_iterations=100,
-        security=SecurityConfig(
-            security_analyzer='llm',
-            confirmation_mode=True,
-        ),
         llms={
             'llm': LLMConfig(
                 model='test-model',
@@ -38,7 +32,6 @@ def test_settings_from_config():
                 base_url='https://test.example.com',
             )
         },
-        sandbox=SandboxConfig(remote_runtime_resource_factor=2),
     )
 
     with patch(
@@ -51,12 +44,11 @@ def test_settings_from_config():
         assert settings.language == 'en'
         assert settings.agent_settings.agent == 'test-agent'
         assert settings.conversation_settings.max_iterations == 100
-        assert settings.conversation_settings.security_analyzer == 'llm'
-        assert settings.conversation_settings.confirmation_mode is True
+        assert settings.conversation_settings.security_analyzer is None
+        assert settings.conversation_settings.confirmation_mode is False
         assert settings.agent_settings.llm.model == 'test-model'
         assert settings.agent_settings.llm.api_key.get_secret_value() == 'test-key'
         assert settings.agent_settings.llm.base_url == 'https://test.example.com'
-        assert settings.remote_runtime_resource_factor == 2
         assert not settings.secrets_store.provider_tokens
 
 
@@ -64,16 +56,11 @@ def test_settings_from_config_no_api_key():
     mock_app_config = OpenHandsConfig(
         default_agent='test-agent',
         max_iterations=100,
-        security=SecurityConfig(
-            security_analyzer='llm',
-            confirmation_mode=True,
-        ),
         llms={
             'llm': LLMConfig(
                 model='test-model', api_key=None, base_url='https://test.example.com'
             )
         },
-        sandbox=SandboxConfig(remote_runtime_resource_factor=2),
     )
 
     with patch(

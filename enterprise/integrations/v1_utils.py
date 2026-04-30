@@ -8,7 +8,7 @@ from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 
 from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 def is_budget_exceeded_error(error_message: str) -> bool:

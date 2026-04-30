@@ -37,6 +37,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fi
 
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
+    CustomSecret,
     ProviderToken,
     ProviderType,
 )
@@ -162,6 +163,20 @@ class SaasUserAuth(UserAuth):
             return user_secrets
         secrets_store = await self.get_secrets_store()
         user_secrets = await secrets_store.load()
+
+        # Inject OPENHANDS_API_KEY (system-level, lazily generated)
+        openhands_api_key = await self._get_openhands_api_key()
+        if openhands_api_key:
+            custom_secrets = dict(user_secrets.custom_secrets) if user_secrets else {}
+            custom_secrets['OPENHANDS_API_KEY'] = CustomSecret(
+                secret=SecretStr(openhands_api_key),
+                description='OpenHands Cloud API Key for automations and integrations (system-managed)',
+            )
+            user_secrets = Secrets(
+                custom_secrets=custom_secrets,
+                provider_tokens=user_secrets.provider_tokens if user_secrets else {},
+            )
+
         self._secrets = user_secrets
         return user_secrets
 
@@ -253,6 +268,27 @@ class SaasUserAuth(UserAuth):
                 self.user_id, 'MCP_API_KEY', None
             )
         return mcp_api_key
+
+    async def _get_openhands_api_key(self) -> str:
+        """Get or create the user's OPENHANDS_API_KEY (system-level, non-deletable).
+
+        This key is automatically generated on first access and stored as a system
+        key that users cannot delete or modify. It is used for automations and
+        integrations.
+        """
+        user = await UserStore.get_user_by_id(self.user_id)
+        if user is None:
+            raise ValueError(f'User not found: {self.user_id}')
+        if user.current_org_id is None:
+            raise ValueError(f'User {self.user_id} has no current organization')
+
+        api_key_store = ApiKeyStore.get_instance()
+        openhands_api_key = await api_key_store.get_or_create_system_api_key(
+            user_id=self.user_id,
+            org_id=user.current_org_id,
+            name='OPENHANDS_API_KEY',
+        )
+        return openhands_api_key
 
     async def get_org_info(self) -> dict | None:
         """Get organization info for the current user.

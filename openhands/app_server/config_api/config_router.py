@@ -15,12 +15,12 @@ from openhands.app_server.config_api.config_models import (
     ProviderPage,
 )
 from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.app_server.utils.llm import ModelsResponse, get_supported_llm_models
 from openhands.app_server.utils.paging_utils import (
     paginate_results,
 )
 from openhands.sdk.llm.utils.verified_models import VERIFIED_MODELS
 from openhands.server.shared import config
-from openhands.utils.llm import ModelsResponse, get_supported_llm_models
 
 
 async def get_llm_models_dependency(request: Request) -> ModelsResponse:

@@ -9,8 +9,8 @@ with warnings.catch_warnings():
     import litellm
     from litellm import LlmProviders, ProviderConfigManager, get_llm_provider
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.core.config import LLMConfig, OpenHandsConfig
-from openhands.core.logger import openhands_logger as logger
 
 # ---------------------------------------------------------------------------
 # The ``openhands-sdk`` package is the **single source of truth** for which
@@ -230,8 +230,10 @@ def _assign_provider(model: str) -> str:
     """Prefix a bare model name with its canonical provider.
 
     Models that already contain a ``/`` provider separator are returned
-    unchanged. Only well-known bare names (OpenAI, Anthropic, Mistral)
-    are prefixed.
+    unchanged. Bare names are first checked against the SDK's verified
+    sets (cheap, no network), then fall back to LiteLLM's own routing
+    tables so that unverified names like ``claude-opus-4-7`` or
+    ``gemini-2.0-flash`` still reach the provider-keyed dropdown.
     """
     if '/' in model:
         return model
@@ -244,7 +246,12 @@ def _assign_provider(model: str) -> str:
         return f'anthropic/{model}'
     if model in _BARE_MISTRAL_MODELS:
         return f'mistral/{model}'
-    return model
+
+    try:
+        _, provider, _, _ = get_llm_provider(model)
+    except Exception:
+        return model
+    return f'{provider}/{model}' if provider else model
 
 
 def _derive_verified_models(openhands_models: list[str]) -> list[str]:

@@ -10,7 +10,7 @@ from openhands.app_server.integrations.service_types import (
     UnknownException,
     User,
 )
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 
 class GitLabMixinBase(BaseGitService, HTTPClient):

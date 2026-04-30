@@ -4,7 +4,7 @@ from openhands.app_server.integrations.bitbucket_data_center.service.base import
     BitbucketDCMixinBase,
 )
 from openhands.app_server.integrations.service_types import RequestMethod
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class BitbucketDCPRsMixin(BitbucketDCMixinBase):

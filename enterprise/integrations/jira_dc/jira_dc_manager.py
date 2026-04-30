@@ -32,14 +32,14 @@ from storage.jira_dc_workspace import JiraDcWorkspace
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import Repository
 from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.server.shared import server_config
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.utils.http_session import httpx_verify_option
 
 
 class JiraDcManager(Manager[JiraDcViewInterface]):

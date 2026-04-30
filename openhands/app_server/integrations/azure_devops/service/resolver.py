@@ -4,7 +4,7 @@ from openhands.app_server.integrations.azure_devops.service.base import (
     AzureDevOpsMixinBase,
 )
 from openhands.app_server.integrations.service_types import Comment
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):

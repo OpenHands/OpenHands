@@ -1,6 +1,23 @@
 import { ObservationEvent } from "#/types/v1/core";
+import { ACPToolCallEvent } from "#/types/v1/core/events/acp-tool-call-event";
 
 export type ObservationResultStatus = "success" | "error" | "timeout";
+
+/**
+ * Map an ACPToolCallEvent's lifecycle + error flags to the same
+ * success/error status the rest of the UI uses. An ``in_progress`` call
+ * returns ``undefined`` so the SuccessIndicator renders nothing — the
+ * card shows as "running" via the absence of a check mark, matching how
+ * regular ActionEvents are displayed before their ObservationEvent
+ * arrives.
+ */
+export const getACPToolCallResult = (
+  event: ACPToolCallEvent,
+): ObservationResultStatus | undefined => {
+  if (event.is_error || event.status === "failed") return "error";
+  if (event.status === "completed") return "success";
+  return undefined;
+};
 
 export const getObservationResult = (
   event: ObservationEvent,

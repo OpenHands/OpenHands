@@ -13,7 +13,7 @@ from openhands.app_server.integrations.forgejo.forgejo_service import ForgejoSer
 from openhands.app_server.integrations.github.github_service import GitHubService
 from openhands.app_server.integrations.gitlab.gitlab_service import GitLabService
 from openhands.app_server.integrations.provider import ProviderType
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 async def validate_provider_token(

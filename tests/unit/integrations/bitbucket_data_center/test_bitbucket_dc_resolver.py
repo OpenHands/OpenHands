@@ -1,4 +1,5 @@
-"""Tests for BitbucketDCResolverMixin: get_pr_title_and_body, get_pr_comments, _process_raw_comments."""
+"""Tests for BitbucketDCResolverMixin: get_pr_title_and_body, get_pr_comments,
+_process_raw_comments, reply_to_pr_comment, and user_has_write_access_for."""
 
 from unittest.mock import patch
 
@@ -8,7 +9,7 @@ from pydantic import SecretStr
 from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_service import (
     BitbucketDCService,
 )
-from openhands.app_server.integrations.service_types import Comment
+from openhands.app_server.integrations.service_types import Comment, RequestMethod
 
 
 @pytest.fixture
@@ -154,6 +155,84 @@ def test_process_raw_comments_missing_timestamps(svc):
     comments = svc._process_raw_comments(raw)
     assert len(comments) == 1
     assert comments[0].id == '5'
+
+
+# ── reply_to_pr_comment ───────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_reply_to_pr_comment_posts_to_dc_pr_comments_endpoint_with_text_field(
+    svc,
+):
+    with patch.object(svc, '_make_request', return_value=({}, {})) as mock_req:
+        await svc.reply_to_pr_comment(
+            owner='PROJ',
+            repo_slug='myrepo',
+            pr_id=7,
+            body='Working on it',
+            parent_comment_id=99,
+        )
+
+    args, kwargs = mock_req.call_args
+    assert args[0].endswith('/projects/PROJ/repos/myrepo/pull-requests/7/comments')
+    assert kwargs['method'] == RequestMethod.POST
+    payload = kwargs['params']
+    assert payload == {'text': 'Working on it', 'parent': {'id': 99}}
+
+
+@pytest.mark.asyncio
+async def test_reply_to_pr_comment_includes_anchor_when_provided(svc):
+    anchor = {
+        'path': 'src/x.py',
+        'line': 12,
+        'lineType': 'ADDED',
+        'fileType': 'TO',
+    }
+    with patch.object(svc, '_make_request', return_value=({}, {})) as mock_req:
+        await svc.reply_to_pr_comment(
+            owner='PROJ',
+            repo_slug='myrepo',
+            pr_id=7,
+            body='Inline note',
+            anchor=anchor,
+        )
+
+    payload = mock_req.call_args.kwargs['params']
+    assert payload == {'text': 'Inline note', 'anchor': anchor}
+
+
+# ── user_has_write_access_for ─────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_user_has_write_access_for_returns_true_for_identified_user(svc):
+    """Bitbucket Data Center has no OAuth 2.0 endpoint that introspects
+    permissions without REPO_ADMIN scope. The resolver downgrades to
+    "any identifiable actor is allowed" — webhook signature verification
+    plus the actor coming through in the payload is the gate.
+    """
+    assert await svc.user_has_write_access_for('PROJ', 'myrepo', 'alice') is True
+
+
+@pytest.mark.asyncio
+async def test_user_has_write_access_for_returns_false_for_empty_user(svc):
+    """An empty actor identity means we couldn't extract a user from the
+    payload — treat as a parse failure and reject.
+    """
+    assert await svc.user_has_write_access_for('PROJ', 'myrepo', '') is False
+
+
+@pytest.mark.asyncio
+async def test_user_has_write_access_for_does_not_call_admin_endpoint(svc):
+    """Regression guard: the previous implementation hit
+    ``/permissions/users``, which requires REPO_ADMIN scope and 401s for
+    every install that doesn't grant it. The current implementation must
+    not make that call.
+    """
+    with patch.object(svc, '_make_request') as mock_req:
+        await svc.user_has_write_access_for('PROJ', 'myrepo', 'alice')
+
+    mock_req.assert_not_called()
 
 
 # ── MRO check ─────────────────────────────────────────────────────────────────

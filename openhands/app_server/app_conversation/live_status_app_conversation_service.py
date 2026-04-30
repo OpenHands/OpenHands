@@ -87,13 +87,16 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
+from openhands.app_server.utils._redact_compat import sanitize_config
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.app_server.utils.git import ensure_valid_git_branch_name
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
+from openhands.app_server.utils.sdk_settings_compat import ACPAgentSettings
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.sdk.hooks import HookConfig
@@ -110,9 +113,6 @@ from openhands.tools.preset.planning import (
     format_plan_structure,
     get_planning_tools,
 )
-from openhands.utils._redact_compat import sanitize_config
-from openhands.utils.git import ensure_valid_git_branch_name
-from openhands.utils.sdk_settings_compat import ACPAgentSettings
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _acp_conversation_info_type_adapter = TypeAdapter(list[ACPConversationInfo | None])

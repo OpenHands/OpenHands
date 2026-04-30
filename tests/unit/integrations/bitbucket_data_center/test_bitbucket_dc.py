@@ -25,6 +25,18 @@ def test_init_no_domain():
     assert svc.BASE_URL == ''
 
 
+def test_init_falls_back_to_env_var_when_base_domain_missing(monkeypatch):
+    monkeypatch.setenv('BITBUCKET_DATA_CENTER_HOST', 'env.example.com')
+    svc = BitbucketDCService(token=SecretStr('tok'))
+    assert svc.BASE_URL == 'https://env.example.com/rest/api/1.0'
+
+
+def test_init_explicit_base_domain_overrides_env_var(monkeypatch):
+    monkeypatch.setenv('BITBUCKET_DATA_CENTER_HOST', 'env.example.com')
+    svc = BitbucketDCService(token=SecretStr('tok'), base_domain='explicit.example.com')
+    assert svc.BASE_URL == 'https://explicit.example.com/rest/api/1.0'
+
+
 # ── token wrapping ────────────────────────────────────────────────────────────
 
 
@@ -78,6 +90,38 @@ async def test_get_headers_xtoken_auth():
     headers = await svc._get_headers()
     expected = 'Basic ' + base64.b64encode(b'x-token-auth:plaintoken').decode()
     assert headers['Authorization'] == expected
+
+
+@pytest.mark.asyncio
+async def test_get_headers_lazy_loads_token_when_empty():
+    """When the service is constructed without a token (SaaS path with
+    external_auth_id only), _get_headers must resolve the latest token via
+    get_latest_token() instead of producing an empty 'Basic ' header that
+    httpx rejects with LocalProtocolError.
+    """
+    svc = BitbucketDCService(base_domain='host.example.com')
+    assert svc.token.get_secret_value() == ''  # confirm starting state
+
+    async def fake_get_latest_token():
+        return SecretStr('oauth-access-token')
+
+    svc.get_latest_token = fake_get_latest_token  # type: ignore[method-assign]
+
+    headers = await svc._get_headers()
+    assert headers['Authorization'] == 'Bearer oauth-access-token'
+
+
+@pytest.mark.asyncio
+async def test_get_headers_uses_bearer_for_raw_oauth_token():
+    """OAuth 2.0 access tokens (no colon) must be sent as Bearer per RFC 6750,
+    not as Basic auth — Bitbucket Data Center's OAuth provider expects this
+    format for tokens issued via /rest/oauth2/latest/token.
+    """
+    svc = BitbucketDCService(base_domain='host.example.com')
+    svc.token = SecretStr('eyJraWQiOiJyYXctb2F1dGgyLXRva2VuIn0')
+
+    headers = await svc._get_headers()
+    assert headers['Authorization'] == 'Bearer eyJraWQiOiJyYXctb2F1dGgyLXRva2VuIn0'
 
 
 # ── get_user ──────────────────────────────────────────────────────────────────
