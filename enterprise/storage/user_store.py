@@ -85,6 +85,8 @@ class UserStore:
             )
             user.email = user_info.get('email')
             user.email_verified = user_info.get('email_verified')
+            # SaaS users consent to analytics via Terms of Service acceptance
+            user.user_consents_to_analytics = True
             session.add(user)
 
             role = await RoleStore.get_role_by_name('owner')
@@ -106,38 +108,6 @@ class UserStore:
             await session.refresh(user)
             await session.refresh(user, ['org_members'])  # load org_members
             return user
-
-    @staticmethod
-    async def consent_to_analytics(user_id: str) -> bool:
-        """Grant analytics consent for a user.
-
-        Should be called after the user has accepted Terms of Service.
-
-        Args:
-            user_id: The user's ID string.
-
-        Returns:
-            True if consent was successfully recorded, False otherwise.
-        """
-        async with a_session_maker() as session:
-            result = await session.execute(
-                select(User).where(User.id == uuid.UUID(user_id))
-            )
-            user = result.scalar_one_or_none()
-            if not user:
-                logger.error(
-                    'user_store:consent_to_analytics:user_not_found',
-                    extra={'user_id': user_id},
-                )
-                return False
-
-            user.user_consents_to_analytics = True
-            await session.commit()
-            logger.info(
-                'user_store:consent_to_analytics:success',
-                extra={'user_id': user_id},
-            )
-            return True
 
     @staticmethod
     def _get_redis_client():
