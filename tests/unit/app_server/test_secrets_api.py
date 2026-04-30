@@ -282,6 +282,31 @@ async def test_update_existing_custom_secret(test_client, file_secrets_store):
 
 
 @pytest.mark.asyncio
+async def test_update_nonexistent_custom_secret(test_client, file_secrets_store):
+    """Test updating a custom secret that doesn't exist."""
+    custom_secrets = {'API_KEY': CustomSecret(secret=SecretStr('old-api-key'))}
+    await file_secrets_store.store(Secrets(custom_secrets=custom_secrets))
+
+    response = test_client.put(
+        '/secrets/MISSING_KEY',
+        json={'name': 'MISSING_KEY', 'description': None},
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_custom_secret_with_empty_store(test_client, file_secrets_store):
+    """Test updating a custom secret when the store is empty."""
+    response = test_client.put(
+        '/secrets/MISSING_KEY',
+        json={'name': 'MISSING_KEY', 'description': None},
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_add_multiple_custom_secrets(test_client, file_secrets_store):
     """Test adding multiple custom secrets at once."""
     # Create initial settings with one custom secret
