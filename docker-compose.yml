@@ -10,8 +10,8 @@ services:
       # that adds networking & dev CLIs the minimal base is missing
       # (ip/ifconfig/ss/netstat/lsof/nmap/jq/rg/fd/tcpdump/dig/traceroute/...).
       # See containers/sandbox-tools/Dockerfile.
-      - AGENT_SERVER_IMAGE_REPOSITORY=${AGENT_SERVER_IMAGE_REPOSITORY:-openhands-sandbox-tools}
-      - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-1.18.0}
+      - AGENT_SERVER_IMAGE_REPOSITORY=${AGENT_SERVER_IMAGE_REPOSITORY:-ghcr.io/openhands/agent-server}
+      - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-1.18.0-python}
       #- SANDBOX_USER_ID=${SANDBOX_USER_ID:-1234} # enable this only if you want a specific non-root sandbox user but you will have to manually adjust permissions of ~/.openhands for this user
       - WORKSPACE_MOUNT_PATH=${WORKSPACE_BASE:-$PWD/workspace}
       # Give the sandbox agent-server enough time to finish startup (WSL2 / slow hosts need >15s).
