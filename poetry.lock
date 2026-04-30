@@ -6580,14 +6580,14 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.18.0"
+version = "1.19.0"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.18.0-py3-none-any.whl", hash = "sha256:48b090b0592f1e384248ac7a3542d6ccea260faf00baca6873cf3f399f3b93c5"},
-    {file = "openhands_agent_server-1.18.0.tar.gz", hash = "sha256:e23eaa1995d2bb7ed27b7b837c717cf5a11cd21f0be247fb5373f30135562c0b"},
+    {file = "openhands_agent_server-1.19.0-py3-none-any.whl", hash = "sha256:132902dc918f446e3b0f5cda9f4da36a4881fc73fe509eb177959afe988c38bb"},
+    {file = "openhands_agent_server-1.19.0.tar.gz", hash = "sha256:4f81b5ec550881706b361c51a422b6daad2a33c73b94d2f3088c84ed32ce049e"},
 ]
 
 [package.dependencies]
@@ -6604,14 +6604,14 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-sdk"
-version = "1.18.0"
+version = "1.19.0"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.18.0-py3-none-any.whl", hash = "sha256:4a6b8ddfd3b376a84acc775c93f75eec1af9ae1ad963c7bf3795330e19e97f32"},
-    {file = "openhands_sdk-1.18.0.tar.gz", hash = "sha256:f904a4ebb9d19f1930598e43377dd50e5df609ce28b260c5f28a37723695b757"},
+    {file = "openhands_sdk-1.19.0-py3-none-any.whl", hash = "sha256:704906533da50f2d0e93bf28609b1a36a4aa4ce578bfac13a3d1a76609d87db8"},
+    {file = "openhands_sdk-1.19.0.tar.gz", hash = "sha256:5611d877e6495a712725569f6bca3de8fabefd9e44c61dc30bd39f8883371508"},
 ]
 
 [package.dependencies]
@@ -6634,14 +6634,14 @@ boto3 = ["boto3 (>=1.35.0)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.18.0"
+version = "1.19.0"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.18.0-py3-none-any.whl", hash = "sha256:b3e31c27205ab00449a064a92ea83e7cdd12e1478c4c3e0dd2cff11e5c156d5b"},
-    {file = "openhands_tools-1.18.0.tar.gz", hash = "sha256:a0f477926e494812d8f6fb67686933c35b6441af9467648222883c7224650356"},
+    {file = "openhands_tools-1.19.0-py3-none-any.whl", hash = "sha256:ff5ddb40d628a468eda4488b2c0045470c88e396bab43330b6b468f3ada47b9e"},
+    {file = "openhands_tools-1.19.0.tar.gz", hash = "sha256:b4dc59a813fe1fe7bda519979498a7bdf07dd8f83ea3f0aad78c154f5fcb9a32"},
 ]
 
 [package.dependencies]

@@ -1,4 +1,4 @@
-FROM ghcr.io/openhands/agent-server:1.18.0-python
+FROM ghcr.io/openhands/agent-server:1.19.0-python
 
 USER root
 
