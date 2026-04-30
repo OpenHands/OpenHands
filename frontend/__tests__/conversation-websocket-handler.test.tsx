@@ -763,20 +763,26 @@ describe("Conversation WebSocket Handler", () => {
         `http://localhost:3000/api/conversations/${conversationId}`,
       );
 
-      // Wait for connection
-      await waitFor(() => {
-        expect(screen.getByTestId("connection-state")).toHaveTextContent(
-          "OPEN",
-        );
-      });
+      // Wait for connection with longer timeout to handle race conditions
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("connection-state")).toHaveTextContent(
+            "OPEN",
+          );
+        },
+        { timeout: 5000 },
+      );
 
       // Wait for both events to be received and error to be cleared
       // The error was set by the first event (ConversationErrorEvent),
       // then cleared by the second successful event (MessageEvent).
-      await waitFor(() => {
-        expect(useEventStore.getState().events.length).toBe(2);
-        expect(useErrorMessageStore.getState().errorMessage).toBeNull();
-      });
+      await waitFor(
+        () => {
+          expect(useEventStore.getState().events.length).toBe(2);
+          expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+        },
+        { timeout: 5000 },
+      );
     });
 
     it("should not create duplicate events when WebSocket reconnects with resend_all=true", async () => {

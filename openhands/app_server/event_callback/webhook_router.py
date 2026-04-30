@@ -13,7 +13,6 @@ from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ACPConversationInfo, Success
-from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -50,6 +49,7 @@ from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
 from openhands.sdk import ConversationExecutionStatus, Event
+from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.server.types import AppMode
 
