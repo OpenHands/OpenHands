@@ -222,13 +222,6 @@ class OrgStore:
     ) -> AgentSettings | ConversationSettings:
         """Deep-merge a sparse settings diff and validate the merged result."""
         merged_settings = deep_merge(current_settings or {}, settings_diff)
-        # Normalize legacy agent_kind value: 'openhands' -> 'llm'
-        # The SDK deprecated 'openhands' in favor of 'llm' as the discriminator.
-        if (
-            settings_type is AgentSettings
-            and merged_settings.get('agent_kind') == 'openhands'
-        ):
-            merged_settings['agent_kind'] = 'llm'
         return settings_type.model_validate(merged_settings)
 
     @staticmethod
