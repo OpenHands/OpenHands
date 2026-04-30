@@ -14,6 +14,7 @@ user store, while the default implementation returns None for local/OSS mode.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from openhands.analytics.user_base import UserBase
 from openhands.analytics.user_provider import AnalyticsUserProvider
@@ -21,7 +22,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.utils.import_utils import get_impl
 
 # Sentinel reused by resolve_analytics_context for the safe-default path.
-_SAFE_DEFAULT_KWARGS: dict[str, UserBase | str | bool | None] = {
+_SAFE_DEFAULT_KWARGS: dict[str, Any] = {
     'consented': False,
     'org_id': None,
     'user': None,
