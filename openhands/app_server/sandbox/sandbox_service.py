@@ -222,9 +222,9 @@ class SandboxService(ABC):
                 success = await self.pause_sandbox(sandbox.id)
                 if success:
                     paused_sandbox_ids.append(sandbox.id)
-            except Exception:
+            except Exception as exc:
                 # Continue trying to pause other sandboxes even if one fails
-                pass
+                _logger.warning('Failed to pause old sandbox %s: %s', sandbox.id, exc)
 
         return paused_sandbox_ids
 

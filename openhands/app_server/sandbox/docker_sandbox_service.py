@@ -216,7 +216,9 @@ class DockerSandboxService(SandboxService):
 
         if not container.image.tags:
             _logger.debug(
-                f'Skipping container {container.name!r}: image has no tags (image id: {container.image.id})'
+                'Skipping container %r: image has no tags (image id: %s)',
+                container.name,
+                container.image.id,
             )
             return None
 
@@ -266,13 +268,14 @@ class DockerSandboxService(SandboxService):
                     seconds=self.startup_grace_seconds
                 ):
                     _logger.info(
-                        f'Sandbox server not running: {app_server_url} : {exc}'
+                        'Sandbox server not running: %s : %s', app_server_url, exc
                     )
                     sandbox_info.status = SandboxStatus.ERROR
                 else:
                     _logger.debug(
-                        f'Sandbox server not yet available (still starting): '
-                        f'{app_server_url} : {exc}'
+                        'Sandbox server not yet available (still starting): %s : %s',
+                        app_server_url,
+                        exc,
                     )
                     sandbox_info.status = SandboxStatus.STARTING
                 sandbox_info.exposed_urls = None
@@ -442,7 +445,7 @@ class DockerSandboxService(SandboxService):
         network_mode = 'host' if self.use_host_network else None
 
         if self.use_host_network:
-            _logger.info(f'Starting sandbox {container_name} with host network mode')
+            _logger.info('Starting sandbox %s with host network mode', container_name)
 
         # Determine devices to pass through (e.g., /dev/kvm for hardware virtualization)
         devices = ['/dev/kvm:/dev/kvm:rwm'] if self.kvm_enabled else None
@@ -503,7 +506,10 @@ class DockerSandboxService(SandboxService):
                 container.start()
 
             return True
-        except (NotFound, APIError, OSError):
+        except NotFound:
+            return False
+        except (APIError, OSError) as exc:
+            _logger.warning('Failed to resume sandbox %s: %s', sandbox_id, exc)
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
@@ -517,7 +523,10 @@ class DockerSandboxService(SandboxService):
                 container.pause()
 
             return True
-        except (NotFound, APIError, OSError):
+        except NotFound:
+            return False
+        except (APIError, OSError) as exc:
+            _logger.warning('Failed to pause sandbox %s: %s', sandbox_id, exc)
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
@@ -546,7 +555,7 @@ class DockerSandboxService(SandboxService):
 
             return True
         except (NotFound, APIError, OSError) as exc:
-            _logger.warning('Failed to resume sandbox %s: %s', sandbox_id, exc)
+            _logger.warning('Failed to delete sandbox %s: %s', sandbox_id, exc)
             return False
 
 
