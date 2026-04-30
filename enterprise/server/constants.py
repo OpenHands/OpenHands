@@ -6,9 +6,12 @@ HOST = os.getenv('WEB_HOST', 'app.all-hands.dev').strip()
 
 # Check if this is a feature environment
 # Feature environments have a host format like {some-text}.staging.all-hands.dev
+# or {some-text}.ohe-staging.platform-team.all-hands.dev (for platform-team sandbox)
 # Just staging.all-hands.dev doesn't count as a feature environment
 IS_STAGING_ENV = bool(
-    re.match(r'^.+\.staging\.all-hands\.dev$', HOST) or HOST == 'staging.all-hands.dev'
+    re.match(r'^.+\.staging\.all-hands\.dev$', HOST)
+    or re.match(r'^.+\.ohe-staging\.platform-team\.all-hands\.dev$', HOST)
+    or HOST == 'staging.all-hands.dev'
 )  # Includes the staging deployment + feature deployments
 IS_FEATURE_ENV = (
     IS_STAGING_ENV and HOST != 'staging.all-hands.dev'
