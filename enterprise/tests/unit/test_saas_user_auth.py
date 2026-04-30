@@ -1050,7 +1050,9 @@ class TestOpenHandsApiKey:
 
             mock_secrets_store = MagicMock()
             mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
-            mock_secrets_store_cls.get_instance = AsyncMock(return_value=mock_secrets_store)
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
 
             mock_get_config.return_value = MagicMock()
 
@@ -1106,7 +1108,9 @@ class TestOpenHandsApiKey:
 
             mock_secrets_store = MagicMock()
             mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
-            mock_secrets_store_cls.get_instance = AsyncMock(return_value=mock_secrets_store)
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
 
             mock_get_config.return_value = MagicMock()
 
@@ -1154,7 +1158,9 @@ class TestOpenHandsApiKey:
 
             mock_secrets_store = MagicMock()
             mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
-            mock_secrets_store_cls.get_instance = AsyncMock(return_value=mock_secrets_store)
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
 
             mock_get_config.return_value = MagicMock()
 
