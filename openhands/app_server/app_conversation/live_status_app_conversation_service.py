@@ -1599,15 +1599,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             **dict(acp_settings.acp_env or {}),
         }
 
-        acp_agent = ACPAgent(
-            acp_command=acp_settings.acp_command,
-            acp_args=acp_settings.acp_args,
-            acp_env=merged_env,
-            acp_model=acp_settings.acp_model,
-            acp_session_mode=acp_settings.acp_session_mode,
-            acp_prompt_timeout=acp_settings.acp_prompt_timeout,
-        )
-
         # Pass user secrets via AgentContext so the SDK renders a
         # <CUSTOM_SECRETS> block in the ACP prompt and injects values into
         # the subprocess env at start time (SDK PR #2984).
@@ -1621,8 +1612,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
             is True
         )
-        if secrets and _sdk_supports_acp_secrets:
-            acp_agent.agent_context = AgentContext(secrets=secrets)
+        agent_context = (
+            AgentContext(secrets=secrets)
+            if secrets and _sdk_supports_acp_secrets
+            else None
+        )
+
+        acp_agent = ACPAgent(
+            acp_command=acp_settings.acp_command,
+            acp_args=acp_settings.acp_args,
+            acp_env=merged_env,
+            acp_model=acp_settings.acp_model,
+            acp_session_mode=acp_settings.acp_session_mode,
+            acp_prompt_timeout=acp_settings.acp_prompt_timeout,
+            agent_context=agent_context,
+        )
 
         sdk_plugins: list[PluginSource] | None = None
         if plugins:

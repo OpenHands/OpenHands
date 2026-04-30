@@ -14,7 +14,7 @@ from storage.role import Role
 from storage.user import User
 
 from openhands.app_server.settings.settings_models import Settings
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ async def test_update_org(async_session_maker, mock_litellm_api):
         # Create a test org
         org = Org(
             name='test-org',
-            agent_settings=AgentSettings(agent='CodeActAgent'),
+            agent_settings=OpenHandsAgentSettings(agent='CodeActAgent'),
         )
         session.add(org)
         await session.commit()
@@ -155,7 +155,7 @@ async def test_create_org(async_session_maker, mock_litellm_api):
         org = await OrgStore.create_org(
             kwargs={
                 'name': 'new-org',
-                'agent_settings': AgentSettings(agent='CodeActAgent'),
+                'agent_settings': OpenHandsAgentSettings(agent='CodeActAgent'),
             }
         )
 
@@ -411,7 +411,7 @@ async def test_persist_org_with_owner_returns_refreshed_org(
         name='Test Org',
         contact_name='Jane Doe',
         contact_email='jane@example.com',
-        agent_settings=AgentSettings(agent='CodeActAgent'),
+        agent_settings=OpenHandsAgentSettings(agent='CodeActAgent'),
     )
 
     org_member = OrgMember(
@@ -512,7 +512,7 @@ async def test_persist_org_with_owner_with_multiple_fields(
         name='Complex Org',
         contact_name='Alice Smith',
         contact_email='alice@example.com',
-        agent_settings=AgentSettings(agent='CodeActAgent'),
+        agent_settings=OpenHandsAgentSettings(agent='CodeActAgent'),
         billing_margin=0.15,
     )
 
@@ -1059,7 +1059,7 @@ async def test_update_org_defaults_async_with_llm_api_key():
     mock_org = Org(
         id=org_id,
         name='Test Organization',
-        agent_settings=AgentSettings(llm={'model': 'old-model'}),
+        agent_settings=OpenHandsAgentSettings(llm={'model': 'old-model'}),
     )
 
     llm_settings = OrgUpdate(
@@ -1118,7 +1118,7 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
     mock_org = Org(
         id=org_id,
         name='Test Organization',
-        agent_settings=AgentSettings(llm={'model': 'openhands/claude-3'}),
+        agent_settings=OpenHandsAgentSettings(llm={'model': 'openhands/claude-3'}),
     )
     update_data = OrgUpdate(
         agent_settings_diff={'llm': {'model': 'openhands/claude-3'}}
@@ -1170,7 +1170,7 @@ async def test_update_org_defaults_async_non_key_changes_keep_custom_key_flags()
     mock_org = Org(
         id=org_id,
         name='Test Organization',
-        agent_settings=AgentSettings(llm={'model': 'openhands/claude-3'}),
+        agent_settings=OpenHandsAgentSettings(llm={'model': 'openhands/claude-3'}),
         conversation_settings=ConversationSettings(),
     )
     update_data = OrgUpdate(conversation_settings_diff={'max_iterations': 42})
