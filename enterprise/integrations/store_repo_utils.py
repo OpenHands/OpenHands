@@ -4,7 +4,6 @@ from storage.user_repo_map import UserRepositoryMap
 from storage.user_repo_map_store import UserRepositoryMapStore
 
 from openhands.app_server.integrations.service_types import Repository
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
 
 
@@ -36,16 +35,13 @@ async def store_repositories_in_db(repos: list[Repository], user_id: str) -> Non
 
         user_repos.append(user_repo_map)
 
-    # Get config instance
-    config = OpenHandsConfig()
-
     try:
         # Store repositories in the repos table
-        repo_store = RepositoryStore.get_instance(config)
+        repo_store = RepositoryStore.get_instance()
         await repo_store.store_projects(stored_repos)
 
         # Store user-repository mappings in the user-repos table
-        user_repo_store = UserRepositoryMapStore.get_instance(config)
+        user_repo_store = UserRepositoryMapStore.get_instance()
         await user_repo_store.store_user_repo_mappings(user_repos)
 
         logger.info(f'Saved repos for user {user_id}')
