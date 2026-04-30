@@ -290,7 +290,7 @@ class TokenManager:
                 raise ValueError(
                     f'No tokens for user: {username}, identity provider: {idp}'
                 )
-            access_token = self.decrypt_text(token_info['access_token'])
+            access_token = self.decrypt_text(str(token_info['access_token']))
             logger.info(f'Got {idp} token: {access_token[0:5]}')
             return access_token
         except httpx.HTTPStatusError as e:
@@ -336,8 +336,8 @@ class TokenManager:
         logger.info(f'Access token expired for {identity_provider}. Refreshing token.')
         refresh_token = self.decrypt_text(encrypted_refresh_token)
         token_data = await self._refresh_token(identity_provider, refresh_token)
-        access_token = token_data['access_token']
-        refresh_token = token_data['refresh_token']
+        access_token = str(token_data['access_token'])
+        refresh_token = str(token_data['refresh_token'])
         access_expiration = token_data['access_token_expires_at']
         refresh_expiration = token_data['refresh_token_expires_at']
 
