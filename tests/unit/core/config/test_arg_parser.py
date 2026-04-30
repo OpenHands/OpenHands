@@ -16,7 +16,6 @@ def test_headless_parser_default_values():
     assert args.agent_cls is None
     assert args.max_iterations is None
     assert args.max_budget_per_task is None
-    assert args.llm_config is None
     assert args.name == ''
     assert not args.no_auto_continue
     assert args.selected_repo is None
@@ -36,7 +35,6 @@ def test_evaluation_parser_default_values():
     assert args.eval_n_limit is None
     assert args.eval_num_workers == 4
     assert args.eval_note is None
-    assert args.llm_config is None
     assert args.name == ''
     assert not args.no_auto_continue
     assert args.selected_repo is None
@@ -67,8 +65,6 @@ def test_evaluation_parser_custom_values():
             '8',
             '--eval-note',
             'Test run',
-            '-l',
-            'gpt4',
             '-n',
             'test_session',
             '--no-auto-continue',
@@ -87,7 +83,6 @@ def test_evaluation_parser_custom_values():
     assert args.eval_n_limit == 10
     assert args.eval_num_workers == 8
     assert args.eval_note == 'Test run'
-    assert args.llm_config == 'gpt4'
     assert args.name == 'test_session'
     assert args.no_auto_continue
     assert args.version
@@ -145,7 +140,6 @@ def test_headless_parser_help_message(capsys):
         '-c AGENT_CLS, --agent-cls AGENT_CLS',
         '-i MAX_ITERATIONS, --max-iterations MAX_ITERATIONS',
         '-b MAX_BUDGET_PER_TASK, --max-budget-per-task MAX_BUDGET_PER_TASK',
-        '-l LLM_CONFIG, --llm-config LLM_CONFIG',
         '--agent-config AGENT_CONFIG',
         '-n NAME, --name NAME',
         '--config-file CONFIG_FILE',
@@ -158,7 +152,7 @@ def test_headless_parser_help_message(capsys):
         assert element in help_output, f"Expected '{element}' to be in the help message"
 
     option_count = help_output.count('  -')
-    assert option_count == 15, f'Expected 15 options, found {option_count}'
+    assert option_count == 14, f'Expected 14 options, found {option_count}'
 
 
 def test_evaluation_parser_help_message(capsys):
@@ -185,7 +179,6 @@ def test_evaluation_parser_help_message(capsys):
         '--eval-num-workers EVAL_NUM_WORKERS',
         '--eval-note EVAL_NOTE',
         '--eval-ids EVAL_IDS',
-        '-l LLM_CONFIG, --llm-config LLM_CONFIG',
         '--agent-config AGENT_CONFIG',
         '-n NAME, --name NAME',
         '--config-file CONFIG_FILE',
@@ -198,7 +191,7 @@ def test_evaluation_parser_help_message(capsys):
         assert element in help_output, f"Expected '{element}' to be in the help message"
 
     option_count = help_output.count('  -')
-    assert option_count == 20, f'Expected 20 options, found {option_count}'
+    assert option_count == 19, f'Expected 19 options, found {option_count}'
 
 
 def test_selected_repo_format():

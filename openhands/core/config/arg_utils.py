@@ -45,13 +45,6 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
     )
     parser.add_argument(
-        '-l',
-        '--llm-config',
-        default=None,
-        type=str,
-        help='Replace default LLM ([llm] section in config.toml) config with the specified LLM config, e.g. "llama3" for [llm.llama3] section in config.toml',
-    )
-    parser.add_argument(
         '--agent-config',
         default=None,
         type=str,

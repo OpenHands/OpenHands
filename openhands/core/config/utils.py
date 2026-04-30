@@ -22,7 +22,6 @@ from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.utils import logger
 from openhands.core.config.arg_utils import get_headless_parser
-from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import mcp_config_from_toml
 from openhands.core.config.openhands_config import OpenHandsConfig
 
@@ -118,10 +117,6 @@ def load_from_env(
     # Start processing from the root of the config object
     set_attr_from_env(cfg)
 
-    # load default LLM config from env
-    default_llm_config = cfg.get_llm_config()
-    set_attr_from_env(default_llm_config, 'LLM_')
-
 
 def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None:
     """Load the config from the toml file. Supports both styles of config vars.
@@ -180,17 +175,6 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
                 f'Unknown config key "{key}" in [core] section'
             )
 
-    # Process llm section if present
-    if 'llm' in toml_config:
-        try:
-            llm_mapping = LLMConfig.from_toml_section(toml_config['llm'])
-            for llm_key, llm_conf in llm_mapping.items():
-                cfg.set_llm_config(llm_conf, llm_key)
-        except (TypeError, KeyError, ValidationError) as e:
-            logger.openhands_logger.warning(
-                f'Cannot parse [llm] config from toml, values have not been applied.\nError: {e}'
-            )
-
     # Process MCP sections if present
     if 'mcp' in toml_config:
         try:
@@ -209,8 +193,8 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
     # files - they are silently ignored
     known_sections = {
         'core',
-        'llm',
         'mcp',
+        'llm',  # Legacy, ignored
         'sandbox',  # Legacy, ignored
         'security',  # Legacy, ignored
         'agent',  # Legacy, ignored
@@ -248,10 +232,6 @@ def finalize_config(cfg: OpenHandsConfig) -> None:
             parts = cfg.workspace_mount_rewrite.split(':')
             cfg.workspace_mount_path = base.replace(parts[0], parts[1])
 
-    # make sure log_completions_folder is an absolute path
-    for llm in cfg.llms.values():
-        llm.log_completions_folder = os.path.abspath(llm.log_completions_folder)
-
     # make sure cache dir exists
     if cfg.cache_dir:
         pathlib.Path(cfg.cache_dir).mkdir(parents=True, exist_ok=True)
@@ -262,73 +242,6 @@ def finalize_config(cfg: OpenHandsConfig) -> None:
                 get_file_store(cfg.file_store, cfg.file_store_path)
             )
         )
-
-
-def get_llm_config_arg(
-    llm_config_arg: str, toml_file: str = 'config.toml'
-) -> LLMConfig | None:
-    """Get a group of llm settings from the config file.
-
-    A group in config.toml can look like this:
-
-    ```
-    [llm.gpt-3.5-for-eval]
-    model = 'gpt-3.5-turbo'
-    api_key = '...'
-    temperature = 0.5
-    num_retries = 8
-    ...
-    ```
-
-    The user-defined group name, like "gpt-3.5-for-eval", is the argument to this function. The function will load the LLMConfig object
-    with the settings of this group, from the config file, and set it as the LLMConfig object for the app.
-
-    Note that the group must be under "llm" group, or in other words, the group name must start with "llm.".
-
-    Args:
-        llm_config_arg: The group of llm settings to get from the config.toml file.
-        toml_file: Path to the configuration file to read from. Defaults to 'config.toml'.
-
-    Returns:
-        LLMConfig: The LLMConfig object with the settings from the config file.
-    """
-    # keep only the name, just in case
-    llm_config_arg = llm_config_arg.strip('[]')
-
-    # truncate the prefix, just in case
-    if llm_config_arg.startswith('llm.'):
-        llm_config_arg = llm_config_arg[4:]
-
-    logger.openhands_logger.debug(
-        f'Loading llm config "{llm_config_arg}" from {toml_file}'
-    )
-
-    # Check if the file exists
-    if not os.path.exists(toml_file):
-        logger.openhands_logger.debug(f'Config file not found: {toml_file}')
-        return None
-
-    # load the toml file
-    try:
-        with open(toml_file, 'r', encoding='utf-8') as toml_contents:
-            toml_config = toml.load(toml_contents)
-    except FileNotFoundError as e:
-        logger.openhands_logger.info(f'Config file not found: {e}')
-        return None
-    except toml.TomlDecodeError as e:
-        logger.openhands_logger.error(
-            f'Cannot parse llm group from {llm_config_arg}. Exception: {e}'
-        )
-        return None
-
-    # update the llm config with the specified section
-    if 'llm' in toml_config and llm_config_arg in toml_config['llm']:
-        return LLMConfig(**toml_config['llm'][llm_config_arg])
-
-    logger.openhands_logger.debug(
-        f'LLM config "{llm_config_arg}" not found in {toml_file}'
-    )
-    return None
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -369,50 +282,12 @@ def setup_config_from_args(args: argparse.Namespace) -> OpenHandsConfig:
     Common setup used by both CLI and main.py entry points.
 
     Configuration precedence (from highest to lowest):
-    1. CLI parameters (e.g., -l for LLM config)
+    1. CLI parameters
     2. config.toml in current directory (or --config-file location if specified)
     3. ~/.openhands/settings.json and ~/.openhands/config.toml
     """
     # Load base config from toml and env vars
     config = load_openhands_config(config_file=args.config_file)
-
-    # Override with command line arguments if provided
-    if args.llm_config:
-        logger.openhands_logger.debug(f'CLI specified LLM config: {args.llm_config}')
-
-        # Check if the LLM config is NOT in the loaded configs
-        if args.llm_config not in config.llms:
-            # Try to load from the specified config file
-            llm_config = get_llm_config_arg(args.llm_config, args.config_file)
-
-            # If not found in the specified config file, try the user's config.toml
-            if llm_config is None and args.config_file != os.path.join(
-                os.path.expanduser('~'), '.openhands', 'config.toml'
-            ):
-                user_config = os.path.join(
-                    os.path.expanduser('~'), '.openhands', 'config.toml'
-                )
-                if os.path.exists(user_config):
-                    logger.openhands_logger.debug(
-                        f"Trying to load LLM config '{args.llm_config}' from user config: {user_config}"
-                    )
-                    llm_config = get_llm_config_arg(args.llm_config, user_config)
-        else:
-            # If it's already in the loaded configs, use that
-            llm_config = config.llms[args.llm_config]
-            logger.openhands_logger.debug(
-                f"Using LLM config '{args.llm_config}' from loaded configuration"
-            )
-        if llm_config is None:
-            raise ValueError(
-                f"Cannot find LLM configuration '{args.llm_config}' in any config file"
-            )
-
-        # Set this as the default LLM config (highest precedence)
-        config.set_llm_config(llm_config)
-        logger.openhands_logger.debug(
-            f'Set LLM config from CLI parameter: {args.llm_config}'
-        )
 
     # Override default agent if provided
     if hasattr(args, 'agent_cls') and args.agent_cls:
