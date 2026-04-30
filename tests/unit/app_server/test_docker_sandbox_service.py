@@ -19,6 +19,7 @@ from docker.errors import APIError, NotFound
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.docker_sandbox_service import (
     DockerSandboxService,
+    DockerSandboxServiceInjector,
     ExposedPort,
     VolumeMount,
 )
@@ -1534,118 +1535,40 @@ class TestDockerSandboxServiceHostNetwork:
         assert vscode_url.port == 8001
 
     @patch('openhands.app_server.sandbox.docker_sandbox_service._logger')
-    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
-    @patch('os.urandom')
     async def test_start_sandbox_host_network_warns_multiple_sandboxes(
         self,
-        mock_urandom,
-        mock_encodebytes,
         mock_logger,
         mock_sandbox_spec_service,
         mock_httpx_client,
         mock_docker_client,
     ):
-        """Test that warning is logged when use_host_network=True and max_num_sandboxes > 1."""
-        mock_urandom.side_effect = [b'container_id', b'session_key']
-        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
-
-        mock_container = MagicMock()
-        mock_container.name = 'oh-test-test_container_id'
-        mock_container.status = 'running'
-        mock_container.image.tags = ['test-image:latest']
-        mock_container.attrs = {
-            'Created': '2024-01-15T10:30:00.000000000Z',
-            'Config': {
-                'Env': ['OH_SESSION_API_KEYS_0=test_session_key'],
-                'WorkingDir': '/workspace',
-            },
-            'HostConfig': {'NetworkMode': 'host'},
-            'NetworkSettings': {'Ports': None},
-        }
-        mock_docker_client.containers.run.return_value = mock_container
-
-        # Create service with host network AND max_num_sandboxes > 1
-        service = DockerSandboxService(
-            sandbox_spec_service=mock_sandbox_spec_service,
-            container_name_prefix='oh-test-',
-            host_port=3000,
-            container_url_pattern='http://localhost:{port}',
-            mounts=[],
-            exposed_ports=[
-                ExposedPort(
-                    name=AGENT_SERVER, description='Agent server', container_port=8000
-                ),
-            ],
-            health_check_path='/health',
-            httpx_client=mock_httpx_client,
+        """Test that warning is logged when DockerSandboxServiceInjector is created with use_host_network=True and max_num_sandboxes > 1."""
+        # Warning fires at injector construction time (model_validator)
+        DockerSandboxServiceInjector(
             max_num_sandboxes=3,  # > 1
-            docker_client=mock_docker_client,
             use_host_network=True,
         )
-
-        with patch.object(service, 'pause_old_sandboxes', return_value=[]):
-            await service.start_sandbox()
 
         # Verify warning was logged about port collision risk
         mock_logger.warning.assert_called_once()
         warning_message = mock_logger.warning.call_args[0][0]
-        assert (
-            'Host network mode is enabled with max_num_sandboxes > 1' in warning_message
-        )
+        assert 'Host network mode is enabled' in warning_message
         assert 'port collision' in warning_message.lower()
 
     @patch('openhands.app_server.sandbox.docker_sandbox_service._logger')
-    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
-    @patch('os.urandom')
     async def test_start_sandbox_host_network_no_warning_single_sandbox(
         self,
-        mock_urandom,
-        mock_encodebytes,
         mock_logger,
         mock_sandbox_spec_service,
         mock_httpx_client,
         mock_docker_client,
     ):
         """Test that no warning is logged when use_host_network=True and max_num_sandboxes=1."""
-        mock_urandom.side_effect = [b'container_id', b'session_key']
-        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
-
-        mock_container = MagicMock()
-        mock_container.name = 'oh-test-test_container_id'
-        mock_container.status = 'running'
-        mock_container.image.tags = ['test-image:latest']
-        mock_container.attrs = {
-            'Created': '2024-01-15T10:30:00.000000000Z',
-            'Config': {
-                'Env': ['OH_SESSION_API_KEYS_0=test_session_key'],
-                'WorkingDir': '/workspace',
-            },
-            'HostConfig': {'NetworkMode': 'host'},
-            'NetworkSettings': {'Ports': None},
-        }
-        mock_docker_client.containers.run.return_value = mock_container
-
-        # Create service with host network AND max_num_sandboxes = 1
-        service = DockerSandboxService(
-            sandbox_spec_service=mock_sandbox_spec_service,
-            container_name_prefix='oh-test-',
-            host_port=3000,
-            container_url_pattern='http://localhost:{port}',
-            mounts=[],
-            exposed_ports=[
-                ExposedPort(
-                    name=AGENT_SERVER, description='Agent server', container_port=8000
-                ),
-            ],
-            health_check_path='/health',
-            httpx_client=mock_httpx_client,
+        # Warning only fires when max_num_sandboxes > 1
+        DockerSandboxServiceInjector(
             max_num_sandboxes=1,  # = 1, no warning expected
-            docker_client=mock_docker_client,
             use_host_network=True,
         )
-
-        with patch.object(service, 'pause_old_sandboxes', return_value=[]):
-            await service.start_sandbox()
 
         # Verify no warning was logged about port collision
         mock_logger.warning.assert_not_called()

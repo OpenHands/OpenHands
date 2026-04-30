@@ -11,7 +11,7 @@ import docker
 import httpx
 from docker.errors import APIError, NotFound
 from fastapi import Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.errors import SandboxError
@@ -361,15 +361,9 @@ class DockerSandboxService(SandboxService):
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
         """Start a new sandbox."""
-        # Warn about port collision risk when using host network mode with multiple sandboxes
-        if self.use_host_network and self.max_num_sandboxes > 1:
-            _logger.warning(
-                'Host network mode is enabled with max_num_sandboxes > 1. '
-                'Multiple sandboxes will attempt to bind to the same ports, '
-                'which may cause port collision errors. Consider setting '
-                'max_num_sandboxes=1 when using host network mode.'
-            )
-
+        _logger.info(
+            'Starting sandbox: spec_id=%s requested_id=%s', sandbox_spec_id, sandbox_id
+        )
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
@@ -545,12 +539,14 @@ class DockerSandboxService(SandboxService):
                 volume_name = f'openhands-workspace-{sandbox_id}'
                 volume = self.docker_client.volumes.get(volume_name)
                 volume.remove()
-            except (NotFound, APIError, OSError):
-                # Volume might not exist or already removed
-                pass
+            except NotFound:
+                pass  # Volume might not exist or already removed
+            except (APIError, OSError) as exc:
+                _logger.debug('Failed to remove volume %s: %s', volume_name, exc)
 
             return True
-        except (NotFound, APIError, OSError):
+        except (NotFound, APIError, OSError) as exc:
+            _logger.warning('Failed to resume sandbox %s: %s', sandbox_id, exc)
             return False
 
 
@@ -655,6 +651,18 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Configure via SANDBOX_KVM_ENABLED environment variable.'
         ),
     )
+
+    @model_validator(mode='after')
+    def _warn_host_network_config(self) -> 'DockerSandboxServiceInjector':
+        if self.use_host_network and self.max_num_sandboxes > 1:
+            _logger.warning(
+                'Host network mode is enabled with max_num_sandboxes=%d. '
+                'Multiple sandboxes will attempt to bind to the same ports, '
+                'which may cause port collision errors. Consider setting '
+                'max_num_sandboxes=1 when using host network mode.',
+                self.max_num_sandboxes,
+            )
+        return self
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
