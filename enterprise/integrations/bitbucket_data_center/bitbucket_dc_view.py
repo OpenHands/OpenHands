@@ -38,6 +38,19 @@ from openhands.sdk import TextContent
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 
+
+def extract_actor_slug(actor: dict) -> str:
+    """Extract a stable user identifier from a Bitbucket DC ``actor`` block.
+
+    DC's stable identifier is the user ``slug`` (lowercase username); ``id``
+    is the numeric DB id and ``name`` is also the username on most
+    installations. Prefer ``slug`` for downstream API filters and dedup,
+    fall back to ``name``, and finally to the numeric ``id`` as a string.
+    Returns an empty string when none are present.
+    """
+    return actor.get('slug') or actor.get('name') or str(actor.get('id') or '') or ''
+
+
 PR_COMMENT_EVENTS = ('pr:comment:added', 'pr:comment:edited')
 
 
@@ -280,12 +293,7 @@ class BitbucketDCFactory:
         installation_id = cast(str, message.message.get('installation_id') or '')
 
         actor = payload.get('actor') or {}
-        # DC's stable identifier is the user ``slug`` (lowercase username);
-        # ``id`` is the numeric DB id and ``name`` is also the username on
-        # most installations. Prefer ``slug`` for downstream API filters.
-        actor_slug = (
-            actor.get('slug') or actor.get('name') or str(actor.get('id') or '') or ''
-        )
+        actor_slug = extract_actor_slug(actor)
         username = actor.get('displayName') or actor.get('name') or 'unknown'
 
         pull_request = payload.get('pullRequest') or {}

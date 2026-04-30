@@ -7,6 +7,7 @@ from integrations.bitbucket_data_center.bitbucket_dc_view import (
     BitbucketDCInlinePRComment,
     BitbucketDCPRComment,
     BitbucketDCViewType,
+    extract_actor_slug,
 )
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
@@ -75,9 +76,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
 
         project_key, repo_slug = self._extract_repo_identity(message)
         actor = (message.message.get('payload') or {}).get('actor') or {}
-        actor_slug = (
-            actor.get('slug') or actor.get('name') or str(actor.get('id') or '') or ''
-        )
+        actor_slug = extract_actor_slug(actor)
         if not actor_slug:
             return False
 

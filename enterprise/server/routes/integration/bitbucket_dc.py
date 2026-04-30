@@ -124,7 +124,7 @@ async def bitbucket_dc_events(
             dedup_key = f'bbdc:{x_event_key}:{pr_id}:{comment_id}:{x_request_id}'
         else:
             dedup_hash = hashlib.sha256(body).hexdigest()
-            dedup_key = f'bitbucket_dc_msg:{dedup_hash}'
+            dedup_key = f'bbdc:msg:{dedup_hash}'
 
         redis = get_redis_client_async()
         created = await redis.set(dedup_key, 1, nx=True, ex=60)
@@ -156,4 +156,10 @@ async def bitbucket_dc_events(
         raise
     except Exception as e:
         logger.exception(f'Error processing Bitbucket DC event: {e}')
-        return JSONResponse(status_code=400, content={'error': 'Invalid payload.'})
+        # Surface the exception class name so admins reading DC's webhook
+        # delivery UI can correlate with server logs without leaking a full
+        # message (which may contain sensitive payload fragments).
+        return JSONResponse(
+            status_code=400,
+            content={'error': 'Invalid payload.', 'error_type': type(e).__name__},
+        )
