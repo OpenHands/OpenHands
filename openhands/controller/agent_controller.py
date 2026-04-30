@@ -473,7 +473,7 @@ class AgentController:
                 in self.delegate.state.last_error
             ):
                 # Forward the event to delegate and skip parent processing
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.get_running_loop().run_until_complete(
                     self.delegate._on_event(event)
                 )
                 return
@@ -483,7 +483,7 @@ class AgentController:
                 return
 
         # continue parent processing only if there's no active delegate
-        asyncio.get_event_loop().run_until_complete(self._on_event(event))
+        asyncio.get_running_loop().run_until_complete(self._on_event(event))
 
     async def _on_event(self, event: Event) -> None:
         if hasattr(event, 'hidden') and event.hidden:
@@ -813,7 +813,7 @@ class AgentController:
         logger.info(f'Local metrics for delegate: {delegate_metrics}')
 
         # close the delegate controller before adding new events
-        asyncio.get_event_loop().run_until_complete(self.delegate.close())
+        asyncio.get_running_loop().run_until_complete(self.delegate.close())
 
         if delegate_state in (AgentState.FINISHED, AgentState.REJECTED):
             # retrieve delegate result
