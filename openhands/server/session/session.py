@@ -316,7 +316,7 @@ class WebSession:
         )
 
     def on_event(self, event: Event) -> None:
-        asyncio.get_event_loop().run_until_complete(self._on_event(event))
+        asyncio.get_running_loop().run_until_complete(self._on_event(event))
 
     async def _on_event(self, event: Event) -> None:
         """Callback function for events that mainly come from the agent.
