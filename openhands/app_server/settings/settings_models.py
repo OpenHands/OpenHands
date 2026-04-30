@@ -13,6 +13,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Any
 
+from fastmcp.mcp_config import MCPConfig
 from fastmcp.mcp_config import MCPConfig as SDKMCPConfig
 from pydantic import (
     BaseModel,
@@ -35,7 +36,6 @@ from openhands.app_server.utils.sdk_settings_compat import (
     default_agent_settings,
     validate_agent_settings,
 )
-from openhands.core.config.mcp_config import MCPConfig
 from openhands.sdk.settings import ConversationSettings
 
 

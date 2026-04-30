@@ -1746,7 +1746,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_remote_servers(self):
         """Test _configure_llm_and_mcp merges custom remote servers."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1775,7 +1775,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_http_servers(self):
         """Test _configure_llm_and_mcp merges custom HTTP servers with timeout."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1800,7 +1800,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_stdio_servers(self):
         """Test _configure_llm_and_mcp merges custom STDIO servers with explicit names."""
-        from openhands.core.config.mcp_config import MCPConfig, StdioMCPServer
+        from fastmcp.mcp_config import MCPConfig, StdioMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1829,7 +1829,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_merges_system_and_custom_servers(self):
         """Test _configure_llm_and_mcp merges both system and custom MCP servers."""
-        from openhands.core.config.mcp_config import (
+        from fastmcp.mcp_config import (
             MCPConfig,
             RemoteMCPServer,
             StdioMCPServer,
@@ -1906,7 +1906,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_empty_custom_config(self):
         """Test _configure_llm_and_mcp handles empty custom MCP config."""
-        from openhands.core.config.mcp_config import MCPConfig
+        from fastmcp.mcp_config import MCPConfig
 
         self.mock_user.mcp_config = MCPConfig(mcpServers={})
         self.mock_user_context.get_mcp_api_key.return_value = None
@@ -1922,7 +1922,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_remote_server_without_auth(self):
         """Test _configure_llm_and_mcp handles remote servers without auth."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1941,7 +1941,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_http_server_default_timeout(self):
         """Test _configure_llm_and_mcp handles HTTP servers with default timeout."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1962,7 +1962,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_stdio_server_without_env(self):
         """Test _configure_llm_and_mcp handles STDIO servers without environment variables."""
-        from openhands.core.config.mcp_config import MCPConfig, StdioMCPServer
+        from fastmcp.mcp_config import MCPConfig, StdioMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1984,7 +1984,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_multiple_servers_same_type(self):
         """Test _configure_llm_and_mcp handles multiple custom servers of the same type."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -2014,7 +2014,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_mixed_server_types(self):
         """Test _configure_llm_and_mcp handles all server types together."""
-        from openhands.core.config.mcp_config import (
+        from fastmcp.mcp_config import (
             MCPConfig,
             RemoteMCPServer,
             StdioMCPServer,
