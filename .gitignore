@@ -274,7 +274,7 @@ _mypy_agent_out.txt
 .mypy_precommit_run.log
 .precommit_mypy.log
 .pytest-mcp-out.txt
-.pr/pytest-out.txt
+.pr/
 .pre-commit-home/
 .pre-commit-home/.lock
 .pre-commit-home/db.db
