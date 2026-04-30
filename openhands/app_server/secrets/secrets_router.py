@@ -189,6 +189,8 @@ async def search_custom_secrets(
     Retrieves the names and descriptions of custom secrets for the authenticated user.
     Results are paginated and can be filtered by name.
 
+    In SaaS mode, includes the system-generated OPENHANDS_API_KEY which cannot be deleted.
+
     Returns:
         CustomSecretPage: Paginated list of custom secrets (without values)
     """

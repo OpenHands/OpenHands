@@ -910,3 +910,250 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
         mock_user_auth_store.get_authorization_type.assert_called_once_with(
             'user@colsch.us', None
         )
+
+
+# =============================================================================
+# Tests for OPENHANDS_API_KEY injection
+# =============================================================================
+
+
+class TestOpenHandsApiKey:
+    """Tests for OPENHANDS_API_KEY system secret generation and injection."""
+
+    @pytest.mark.asyncio
+    async def test_get_openhands_api_key_creates_system_key(self):
+        """Test that _get_openhands_api_key creates a system key via ApiKeyStore."""
+        user_id = 'test_user_id'
+        org_id = uuid.uuid4()
+        expected_api_key = 'sk-oh-test-key-12345'
+
+        # Create mock user
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            mock_api_key_store = MagicMock()
+            mock_api_key_store.get_or_create_system_api_key = AsyncMock(
+                return_value=expected_api_key
+            )
+            mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+            # Act
+            result = await user_auth._get_openhands_api_key()
+
+            # Assert
+            assert result == expected_api_key
+            mock_user_store.get_user_by_id.assert_called_once_with(user_id)
+            mock_api_key_store.get_or_create_system_api_key.assert_called_once_with(
+                user_id=user_id,
+                org_id=org_id,
+                name='OPENHANDS_API_KEY',
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_openhands_api_key_raises_for_missing_user(self):
+        """Test that _get_openhands_api_key raises ValueError if user not found."""
+        user_id = 'nonexistent_user'
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+            mock_user_store.get_user_by_id = AsyncMock(return_value=None)
+
+            # Act & Assert
+            with pytest.raises(ValueError, match=f'User not found: {user_id}'):
+                await user_auth._get_openhands_api_key()
+
+    @pytest.mark.asyncio
+    async def test_get_openhands_api_key_raises_for_user_without_org(self):
+        """Test that _get_openhands_api_key raises ValueError if user has no org."""
+        user_id = 'test_user_id'
+
+        # Create mock user with no current organization
+        mock_user = MagicMock()
+        mock_user.current_org_id = None
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            # Act & Assert
+            with pytest.raises(ValueError, match='has no current organization'):
+                await user_auth._get_openhands_api_key()
+
+    @pytest.mark.asyncio
+    async def test_get_secrets_includes_openhands_api_key(self):
+        """Test that get_secrets injects OPENHANDS_API_KEY into custom_secrets."""
+        user_id = 'test_user_id'
+        org_id = uuid.uuid4()
+        expected_api_key = 'sk-oh-test-key-12345'
+
+        # Create mock user
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+
+        # Create mock secrets from store (without OPENHANDS_API_KEY)
+        mock_stored_secrets = Secrets(
+            custom_secrets={
+                'MY_SECRET': {
+                    'secret': 'my-secret-value',
+                    'description': 'My custom secret',
+                }
+            }
+        )
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
+            patch(
+                'server.auth.saas_user_auth.SaasSecretsStore'
+            ) as mock_secrets_store_cls,
+            patch('server.auth.saas_user_auth.get_config') as mock_get_config,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            mock_api_key_store = MagicMock()
+            mock_api_key_store.get_or_create_system_api_key = AsyncMock(
+                return_value=expected_api_key
+            )
+            mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+            mock_secrets_store = MagicMock()
+            mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
+            mock_secrets_store_cls.return_value = mock_secrets_store
+
+            mock_get_config.return_value = MagicMock()
+
+            # Act
+            result = await user_auth.get_secrets()
+
+            # Assert
+            assert result is not None
+            assert 'OPENHANDS_API_KEY' in result.custom_secrets
+            assert (
+                result.custom_secrets['OPENHANDS_API_KEY'].secret.get_secret_value()
+                == expected_api_key
+            )
+            assert (
+                'system-managed'
+                in result.custom_secrets['OPENHANDS_API_KEY'].description
+            )
+            # Original secret should still be present
+            assert 'MY_SECRET' in result.custom_secrets
+
+    @pytest.mark.asyncio
+    async def test_get_secrets_caches_result(self):
+        """Test that get_secrets caches the result and doesn't call store again."""
+        user_id = 'test_user_id'
+        org_id = uuid.uuid4()
+        expected_api_key = 'sk-oh-test-key-12345'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+
+        mock_stored_secrets = Secrets()
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
+            patch(
+                'server.auth.saas_user_auth.SaasSecretsStore'
+            ) as mock_secrets_store_cls,
+            patch('server.auth.saas_user_auth.get_config') as mock_get_config,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            mock_api_key_store = MagicMock()
+            mock_api_key_store.get_or_create_system_api_key = AsyncMock(
+                return_value=expected_api_key
+            )
+            mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+            mock_secrets_store = MagicMock()
+            mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
+            mock_secrets_store_cls.return_value = mock_secrets_store
+
+            mock_get_config.return_value = MagicMock()
+
+            # Act - call get_secrets twice
+            result1 = await user_auth.get_secrets()
+            result2 = await user_auth.get_secrets()
+
+            # Assert - store.load should only be called once (caching)
+            assert result1 is result2
+            mock_secrets_store.load.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_secrets_handles_empty_stored_secrets(self):
+        """Test that get_secrets works when store returns empty Secrets."""
+        user_id = 'test_user_id'
+        org_id = uuid.uuid4()
+        expected_api_key = 'sk-oh-test-key-12345'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+
+        # Empty secrets from store
+        mock_stored_secrets = Secrets()
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
+            patch(
+                'server.auth.saas_user_auth.SaasSecretsStore'
+            ) as mock_secrets_store_cls,
+            patch('server.auth.saas_user_auth.get_config') as mock_get_config,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            mock_api_key_store = MagicMock()
+            mock_api_key_store.get_or_create_system_api_key = AsyncMock(
+                return_value=expected_api_key
+            )
+            mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+            mock_secrets_store = MagicMock()
+            mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
+            mock_secrets_store_cls.return_value = mock_secrets_store
+
+            mock_get_config.return_value = MagicMock()
+
+            # Act
+            result = await user_auth.get_secrets()
+
+            # Assert - should have only OPENHANDS_API_KEY
+            assert result is not None
+            assert 'OPENHANDS_API_KEY' in result.custom_secrets
+            assert len(result.custom_secrets) == 1
