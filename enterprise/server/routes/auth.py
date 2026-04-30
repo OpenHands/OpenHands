@@ -360,7 +360,7 @@ async def keycloak_callback(
                     org_id=org_id_str,
                     user=user,
                 )
-                idp: str = user_info.identity_provider or ProviderType.GITHUB.value
+                idp = user_info.identity_provider or ProviderType.GITHUB.value
                 logger.info(f'Full IDP is {idp}')
                 idp_type = 'oidc'
                 if ':' in idp:
