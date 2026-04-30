@@ -1,46 +1,89 @@
 """Unit tests for the LLM model service."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from openhands.app_server.config_api.config_models import (
+    LLMModelPage,
+    ProviderPage,
+)
 from openhands.app_server.config_api.default_llm_model_service import (
     DefaultLLMModelService,
     DefaultLLMModelServiceInjector,
 )
 from openhands.app_server.config_api.llm_model_service import LLMModelService
-from openhands.app_server.utils.llm import ModelsResponse
 
 
-class TestDefaultLLMModelService:
-    """Test suite for DefaultLLMModelService."""
+class TestDefaultLLMModelServiceSearchModels:
+    """Test suite for DefaultLLMModelService.search_llm_models."""
 
     @pytest.mark.asyncio
-    async def test_returns_models_response(self):
+    async def test_returns_model_page(self):
         service = DefaultLLMModelService()
         result = await service.search_llm_models()
 
-        assert isinstance(result, ModelsResponse)
-        assert len(result.models) > 0
-        assert len(result.verified_models) > 0
-        assert len(result.verified_providers) > 0
-        assert result.default_model.startswith('openhands/')
+        assert isinstance(result, LLMModelPage)
+        assert len(result.items) > 0
 
     @pytest.mark.asyncio
     async def test_includes_openhands_models(self):
         service = DefaultLLMModelService()
-        result = await service.search_llm_models()
+        result = await service.search_llm_models(limit=10000)
 
-        openhands_models = [m for m in result.models if m.startswith('openhands/')]
-        assert len(openhands_models) > 0
+        providers = {m.provider for m in result.items}
+        assert 'openhands' in providers
 
     @pytest.mark.asyncio
     async def test_includes_clarifai_models(self):
         service = DefaultLLMModelService()
-        result = await service.search_llm_models()
+        result = await service.search_llm_models(limit=10000)
 
-        clarifai_models = [m for m in result.models if m.startswith('clarifai/')]
-        assert len(clarifai_models) > 0
+        providers = {m.provider for m in result.items}
+        assert 'clarifai' in providers
+
+    @pytest.mark.asyncio
+    async def test_filters_by_query(self):
+        service = DefaultLLMModelService()
+        result = await service.search_llm_models(query='gpt', limit=10000)
+
+        assert len(result.items) > 0
+        for m in result.items:
+            assert 'gpt' in m.name.lower()
+
+    @pytest.mark.asyncio
+    async def test_filters_by_verified_eq(self):
+        service = DefaultLLMModelService()
+
+        verified = await service.search_llm_models(verified_eq=True, limit=10000)
+        assert all(m.verified for m in verified.items)
+
+        unverified = await service.search_llm_models(verified_eq=False, limit=10000)
+        assert all(not m.verified for m in unverified.items)
+
+    @pytest.mark.asyncio
+    async def test_filters_by_provider_eq(self):
+        service = DefaultLLMModelService()
+        result = await service.search_llm_models(provider_eq='openai', limit=10000)
+
+        assert len(result.items) > 0
+        for m in result.items:
+            assert m.provider == 'openai'
+
+    @pytest.mark.asyncio
+    async def test_pagination(self):
+        service = DefaultLLMModelService()
+
+        page1 = await service.search_llm_models(limit=2)
+        assert len(page1.items) == 2
+        assert page1.next_page_id is not None
+
+        page2 = await service.search_llm_models(limit=2, page_id=page1.next_page_id)
+        assert len(page2.items) == 2
+        # Pages should not overlap
+        names1 = {m.name for m in page1.items}
+        names2 = {m.name for m in page2.items}
+        assert names1.isdisjoint(names2)
 
     @pytest.mark.asyncio
     async def test_no_extra_bedrock_without_credentials(self):
@@ -68,15 +111,14 @@ class TestDefaultLLMModelService:
                 aws_access_key_id='AKIAIOSFODNN7EXAMPLE',
                 aws_secret_access_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
             )
-            result = await service.search_llm_models()
+            result = await service.search_llm_models(provider_eq='bedrock', limit=10000)
 
-        assert 'bedrock/anthropic.claude-v2' in result.models
-        assert 'bedrock/amazon.titan-text' in result.models
+        model_names = [m.name for m in result.items]
+        assert 'anthropic.claude-v2' in model_names
+        assert 'amazon.titan-text' in model_names
 
     @pytest.mark.asyncio
     async def test_ollama_models_with_url(self):
-        from unittest.mock import MagicMock
-
         # resp.json() is synchronous on httpx.Response
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -92,10 +134,11 @@ class TestDefaultLLMModelService:
             service = DefaultLLMModelService(
                 ollama_base_url='http://localhost:11434',
             )
-            result = await service.search_llm_models()
+            result = await service.search_llm_models(provider_eq='ollama', limit=10000)
 
-        assert 'ollama/llama3' in result.models
-        assert 'ollama/codellama' in result.models
+        model_names = [m.name for m in result.items]
+        assert 'llama3' in model_names
+        assert 'codellama' in model_names
 
     @pytest.mark.asyncio
     async def test_ollama_error_handled_gracefully(self):
@@ -113,15 +156,48 @@ class TestDefaultLLMModelService:
             result = await service.search_llm_models()
 
         # Should still return models even if ollama fails
-        assert isinstance(result, ModelsResponse)
-        assert len(result.models) > 0
+        assert isinstance(result, LLMModelPage)
+        assert len(result.items) > 0
+
+
+class TestDefaultLLMModelServiceSearchProviders:
+    """Test suite for DefaultLLMModelService.search_providers."""
 
     @pytest.mark.asyncio
-    async def test_models_are_sorted_and_unique(self):
+    async def test_returns_provider_page(self):
         service = DefaultLLMModelService()
-        result = await service.search_llm_models()
+        result = await service.search_providers()
 
-        assert result.models == sorted(set(result.models))
+        assert isinstance(result, ProviderPage)
+        assert len(result.items) > 0
+
+    @pytest.mark.asyncio
+    async def test_filters_by_query(self):
+        service = DefaultLLMModelService()
+        result = await service.search_providers(query='openai', limit=10000)
+
+        assert len(result.items) > 0
+        for p in result.items:
+            assert 'openai' in p.name.lower()
+
+    @pytest.mark.asyncio
+    async def test_filters_by_verified_eq(self):
+        service = DefaultLLMModelService()
+        verified = await service.search_providers(verified_eq=True, limit=10000)
+        assert all(p.verified for p in verified.items)
+
+    @pytest.mark.asyncio
+    async def test_pagination(self):
+        service = DefaultLLMModelService()
+
+        page1 = await service.search_providers(limit=2)
+        assert len(page1.items) == 2
+        assert page1.next_page_id is not None
+
+        page2 = await service.search_providers(limit=2, page_id=page1.next_page_id)
+        names1 = {p.name for p in page1.items}
+        names2 = {p.name for p in page2.items}
+        assert names1.isdisjoint(names2)
 
 
 class TestDefaultLLMModelServiceInjector:

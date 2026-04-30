@@ -17,6 +17,9 @@ from server.verified_models.verified_model_service import (
 )
 
 from openhands.app_server.config import get_db_session
+from openhands.app_server.config_api.default_llm_model_service import (
+    DefaultLLMModelService,
+)
 from openhands.app_server.config_api.llm_model_service import (
     LLMModelService,
     LLMModelServiceInjector,
@@ -124,13 +127,21 @@ async def delete_verified_model(
         )
 
 
-class SaaSLLMModelService(LLMModelService):
-    """SaaS implementation that reads verified models from the database."""
+class SaaSLLMModelService(DefaultLLMModelService):
+    """SaaS implementation that reads verified models from the database.
+
+    Inherits filtering, pagination, and provider logic from
+    ``DefaultLLMModelService`` — only the verified-model list is different.
+    """
 
     def __init__(self, db_session) -> None:
+        super().__init__()
         self._db_session = db_session
 
-    async def search_llm_models(self) -> ModelsResponse:
+    async def _get_models_response(
+        self,
+        verified_models: list[str] | None = None,
+    ) -> ModelsResponse:
         verified_model_service = VerifiedModelService(self._db_session)
         page = await verified_model_service.search_verified_models(enabled_only=True)
         if page.next_page_id:
@@ -138,8 +149,8 @@ class SaaSLLMModelService(LLMModelService):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail='Too many models defined in database',
             )
-        verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
-        return get_supported_llm_models(verified_models)
+        db_verified = [f'{m.provider}/{m.model_name}' for m in page.items]
+        return get_supported_llm_models(db_verified)
 
 
 class SaaSLLMModelServiceInjector(LLMModelServiceInjector):
