@@ -2,7 +2,6 @@ import html
 import json
 from urllib.parse import quote
 
-import jwt
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -44,8 +43,6 @@ from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
     ProviderType,
 )
-from openhands.server.shared import config
-
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
 slack_router = APIRouter(prefix='/slack')
 
@@ -95,7 +92,11 @@ async def install_callback(
             status_code=400,
         )
 
-    if not config.jwt_secret:
+    try:
+        from storage.encrypt_utils import get_jwt_service
+
+        jwt_svc = get_jwt_service()
+    except Exception:
         logger.error('slack_install_callback_error JWT not configured.')
         return _html_response(
             title='Error',
@@ -119,16 +120,12 @@ async def install_callback(
         # Create a state variable for keycloak oauth
         payload = {}
         if state:
-            payload = jwt.decode(
-                state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
-            )
+            payload = jwt_svc.verify_jws_token(state)
         payload['slack_user_id'] = authed_user.get('id')
         payload['bot_access_token'] = bot_access_token
         payload['team_id'] = team_id
 
-        state = jwt.encode(
-            payload, config.jwt_secret.get_secret_value(), algorithm='HS256'
-        )
+        state = jwt_svc.create_jws_token(payload)
 
         # Redirect into keycloak
         scope = quote('openid email profile offline_access')
@@ -174,7 +171,11 @@ async def keycloak_callback(
             status_code=400,
         )
 
-    if not config.jwt_secret:
+    try:
+        from storage.encrypt_utils import get_jwt_service
+
+        jwt_svc = get_jwt_service()
+    except Exception:
         logger.error('problem_retrieving_keycloak_tokens JWT not configured.')
         return _html_response(
             title='Error',
@@ -182,9 +183,7 @@ async def keycloak_callback(
             status_code=500,
         )
 
-    payload: dict[str, str] = jwt.decode(
-        state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
-    )
+    payload: dict[str, str] = jwt_svc.verify_jws_token(state)
     slack_user_id = payload['slack_user_id']
     bot_access_token: str | None = payload['bot_access_token']
     team_id = payload['team_id']

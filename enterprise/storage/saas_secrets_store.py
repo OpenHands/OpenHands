@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import hashlib
-from base64 import b64decode, b64encode
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from cryptography.fernet import Fernet
 from sqlalchemy import delete, select
 from storage.database import a_session_maker
 from storage.stored_custom_secrets import StoredCustomSecrets
@@ -12,14 +9,14 @@ from storage.user_store import UserStore
 
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.core.config.openhands_config import OpenHandsConfig
 
 
 @dataclass
 class SaasSecretsStore(SecretsStore):
     user_id: str
-    config: OpenHandsConfig
+    _jwt_svc: JwtService = field(repr=False)
 
     async def load(self) -> Secrets | None:
         if not self.user_id:
@@ -98,7 +95,6 @@ class SaasSecretsStore(SecretsStore):
             await session.commit()
 
     def _decrypt_kwargs(self, kwargs: dict):
-        fernet = self._fernet()
         for key, value in kwargs.items():
             if isinstance(value, dict):
                 self._decrypt_kwargs(value)
@@ -107,11 +103,9 @@ class SaasSecretsStore(SecretsStore):
             if value is None:
                 kwargs[key] = value
             else:
-                value = fernet.decrypt(b64decode(value.encode())).decode()
-                kwargs[key] = value
+                kwargs[key] = self._jwt_svc.decrypt_value(value)
 
     def _encrypt_kwargs(self, kwargs: dict):
-        fernet = self._fernet()
         for key, value in kwargs.items():
             if isinstance(value, dict):
                 self._encrypt_kwargs(value)
@@ -120,21 +114,15 @@ class SaasSecretsStore(SecretsStore):
             if value is None:
                 kwargs[key] = value
             else:
-                encrypted_value = b64encode(fernet.encrypt(value.encode())).decode()
-                kwargs[key] = encrypted_value
-
-    def _fernet(self):
-        if not self.config.jwt_secret:
-            raise Exception('config.jwt_secret must be set')
-        jwt_secret = self.config.jwt_secret.get_secret_value()
-        fernet_key = b64encode(hashlib.sha256(jwt_secret.encode()).digest())
-        return Fernet(fernet_key)
+                kwargs[key] = self._jwt_svc.encrypt_value(value)
 
     @classmethod
     async def get_instance(
         cls,
-        config: OpenHandsConfig,
+        config: object,
         user_id: str,  # type: ignore[override]
     ) -> SaasSecretsStore:
         logger.debug(f'saas_secrets_store.get_instance::{user_id}')
-        return SaasSecretsStore(user_id, config)
+        from storage.encrypt_utils import get_jwt_service
+
+        return SaasSecretsStore(user_id, get_jwt_service())
