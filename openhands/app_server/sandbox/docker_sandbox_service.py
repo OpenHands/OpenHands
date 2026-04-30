@@ -250,8 +250,17 @@ class DockerSandboxService(SandboxService):
                 try:
                     state = container.attrs['State']
                     started_at = datetime.fromisoformat(state['StartedAt'])
-                except Exception:
-                    _logger.debug('Error getting container start time')
+                except (
+                    KeyError,
+                    ValueError,
+                    AttributeError,
+                    TypeError,
+                ) as start_time_exc:
+                    _logger.debug(
+                        'Error getting container start time for %s: %s',
+                        container.name,
+                        start_time_exc,
+                    )
                     started_at = sandbox_info.created_at
 
                 # If the server has exceeded the startup grace period, it's an error
@@ -365,6 +374,11 @@ class DockerSandboxService(SandboxService):
 
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
+            if sandbox_spec is None:
+                raise ValueError(
+                    'No default sandbox spec is configured. '
+                    'Set the sandbox spec explicitly or configure a default.'
+                )
         else:
             sandbox_spec_maybe = await self.sandbox_spec_service.get_sandbox_spec(
                 sandbox_spec_id
@@ -481,6 +495,17 @@ class DockerSandboxService(SandboxService):
             return sandbox_info
 
         except APIError as e:
+            # Attempt to clean up any partially-created container so it does not
+            # linger as an orphan consuming resources (e.g. created but not started).
+            try:
+                orphan = self.docker_client.containers.get(container_name)
+                orphan.remove(force=True)
+                _logger.info(
+                    'Cleaned up orphaned container after failed start: %s',
+                    container_name,
+                )
+            except (NotFound, APIError, OSError):
+                pass  # Already gone or truly never created
             raise SandboxError(f'Failed to start container: {e}')
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
@@ -552,7 +577,7 @@ class DockerSandboxService(SandboxService):
             except NotFound:
                 pass  # Volume might not exist or already removed
             except (APIError, OSError) as exc:
-                _logger.debug('Failed to remove volume %s: %s', volume_name, exc)
+                _logger.warning('Failed to remove volume %s: %s', volume_name, exc)
 
             return True
         except (NotFound, APIError, OSError) as exc:

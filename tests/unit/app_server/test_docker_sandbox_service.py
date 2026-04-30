@@ -512,6 +512,38 @@ class TestDockerSandboxService:
         ):
             await service.start_sandbox(sandbox_spec_id='nonexistent')
 
+    async def test_start_sandbox_default_spec_none(
+        self, service, mock_sandbox_spec_service
+    ):
+        """Test that a clear ValueError is raised when no default spec is configured."""
+        mock_sandbox_spec_service.get_default_sandbox_spec.return_value = None
+
+        with (
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+            pytest.raises(ValueError, match='No default sandbox spec is configured'),
+        ):
+            await service.start_sandbox()
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_cleanup_on_api_error(
+        self, mock_urandom, mock_encodebytes, service, mock_sandbox_spec_service
+    ):
+        """Test that orphaned containers are removed when Docker raises APIError."""
+        mock_urandom.return_value = b'rand'
+        mock_encodebytes.return_value = 'test_id'
+        service.docker_client.containers.run.side_effect = APIError('daemon error')
+        orphan = MagicMock()
+        service.docker_client.containers.get.return_value = orphan
+
+        with (
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+            pytest.raises(SandboxError, match='Failed to start container'),
+        ):
+            await service.start_sandbox()
+
+        orphan.remove.assert_called_once_with(force=True)
+
     @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
     @patch('os.urandom')
     async def test_start_sandbox_with_sandbox_id(
