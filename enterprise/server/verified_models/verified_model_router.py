@@ -142,6 +142,9 @@ class SaaSLLMModelService(DefaultLLMModelService):
         self,
         verified_models: list[str] | None = None,
     ) -> ModelsResponse:
+        if self._cached_response is not None:
+            return self._cached_response
+
         verified_model_service = VerifiedModelService(self._db_session)
         page = await verified_model_service.search_verified_models(enabled_only=True)
         if page.next_page_id:
@@ -150,7 +153,8 @@ class SaaSLLMModelService(DefaultLLMModelService):
                 detail='Too many models defined in database',
             )
         db_verified = [f'{m.provider}/{m.model_name}' for m in page.items]
-        return get_supported_llm_models(db_verified)
+        self._cached_response = get_supported_llm_models(db_verified)
+        return self._cached_response
 
 
 class SaaSLLMModelServiceInjector(LLMModelServiceInjector):

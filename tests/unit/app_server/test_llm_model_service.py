@@ -86,40 +86,41 @@ class TestDefaultLLMModelServiceSearchModels:
         assert names1.isdisjoint(names2)
 
     @pytest.mark.asyncio
-    async def test_no_extra_bedrock_without_credentials(self):
-        """Without AWS credentials, list_foundation_models should not be called."""
-        with patch(
-            'openhands.app_server.config_api.default_llm_model_service.list_foundation_models',
-        ) as mock_list:
-            service = DefaultLLMModelService()
-            await service.search_llm_models()
-
-        mock_list.assert_not_called()
+    async def test_no_bedrock_without_client(self):
+        """Without a bedrock client, _list_foundation_models returns empty."""
+        service = DefaultLLMModelService()
+        assert service._list_foundation_models() == []
 
     @pytest.mark.asyncio
-    async def test_bedrock_models_with_credentials(self):
-        fake_bedrock_models = [
-            'bedrock/anthropic.claude-v2',
-            'bedrock/amazon.titan-text',
-        ]
-        with patch(
-            'openhands.app_server.config_api.default_llm_model_service.list_foundation_models',
-            return_value=fake_bedrock_models,
-        ):
-            service = DefaultLLMModelService(
-                aws_region_name='us-east-1',
-                aws_access_key_id='AKIAIOSFODNN7EXAMPLE',
-                aws_secret_access_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
-            )
-            result = await service.search_llm_models(provider_eq='bedrock', limit=10000)
+    async def test_bedrock_models_with_client(self):
+        mock_client = MagicMock()
+        mock_client.list_foundation_models.return_value = {
+            'modelSummaries': [
+                {'modelId': 'anthropic.claude-v2'},
+                {'modelId': 'amazon.titan-text'},
+            ]
+        }
+
+        service = DefaultLLMModelService(bedrock_client=mock_client)
+        result = await service.search_llm_models(provider_eq='bedrock', limit=10000)
 
         model_names = [m.name for m in result.items]
         assert 'anthropic.claude-v2' in model_names
         assert 'amazon.titan-text' in model_names
 
     @pytest.mark.asyncio
+    async def test_bedrock_error_handled_gracefully(self):
+        mock_client = MagicMock()
+        mock_client.list_foundation_models.side_effect = Exception('AWS error')
+
+        service = DefaultLLMModelService(bedrock_client=mock_client)
+        result = await service.search_llm_models()
+
+        assert isinstance(result, LLMModelPage)
+        assert len(result.items) > 0
+
+    @pytest.mark.asyncio
     async def test_ollama_models_with_url(self):
-        # resp.json() is synchronous on httpx.Response
         mock_response = MagicMock()
         mock_response.json.return_value = {
             'models': [{'name': 'llama3'}, {'name': 'codellama'}]
@@ -155,9 +156,21 @@ class TestDefaultLLMModelServiceSearchModels:
             )
             result = await service.search_llm_models()
 
-        # Should still return models even if ollama fails
         assert isinstance(result, LLMModelPage)
         assert len(result.items) > 0
+
+    @pytest.mark.asyncio
+    async def test_response_is_cached(self):
+        service = DefaultLLMModelService()
+
+        result1 = await service.search_llm_models()
+        await service.search_providers()
+
+        # Both calls should have populated the same cached response
+        assert service._cached_response is not None
+        assert result1.items[0].name in [
+            m.split('/', 1)[-1] for m in service._cached_response.models
+        ]
 
 
 class TestDefaultLLMModelServiceSearchProviders:
@@ -215,13 +228,8 @@ class TestDefaultLLMModelServiceInjector:
             assert isinstance(service, LLMModelService)
 
     @pytest.mark.asyncio
-    async def test_inject_passes_credentials(self):
-        from pydantic import SecretStr
-
+    async def test_inject_passes_ollama_url(self):
         injector = DefaultLLMModelServiceInjector(
-            aws_region_name='us-west-2',
-            aws_access_key_id=SecretStr('AKIATEST'),
-            aws_secret_access_key=SecretStr('secret123'),
             ollama_base_url='http://ollama:11434',
         )
 
@@ -229,7 +237,53 @@ class TestDefaultLLMModelServiceInjector:
 
         state = State()
         async for service in injector.inject(state):
-            assert service._aws_region_name == 'us-west-2'
-            assert service._aws_access_key_id == 'AKIATEST'
-            assert service._aws_secret_access_key == 'secret123'
             assert service._ollama_base_url == 'http://ollama:11434'
+            assert service._bedrock_client is None
+
+    @pytest.mark.asyncio
+    async def test_inject_creates_bedrock_client(self):
+        from pydantic import SecretStr
+
+        injector = DefaultLLMModelServiceInjector(
+            aws_region_name='us-west-2',
+            aws_access_key_id=SecretStr('AKIATEST'),
+            aws_secret_access_key=SecretStr('secret123'),
+        )
+
+        mock_client = MagicMock()
+        with patch('boto3.client', return_value=mock_client) as mock_boto3:
+            from starlette.datastructures import State
+
+            state = State()
+            async for service in injector.inject(state):
+                assert service._bedrock_client is mock_client
+
+        mock_boto3.assert_called_once_with(
+            service_name='bedrock',
+            region_name='us-west-2',
+            aws_access_key_id='AKIATEST',
+            aws_secret_access_key='secret123',
+        )
+
+    @pytest.mark.asyncio
+    async def test_inject_reuses_bedrock_client(self):
+        from pydantic import SecretStr
+
+        injector = DefaultLLMModelServiceInjector(
+            aws_region_name='us-west-2',
+            aws_access_key_id=SecretStr('AKIATEST'),
+            aws_secret_access_key=SecretStr('secret123'),
+        )
+
+        mock_client = MagicMock()
+        with patch('boto3.client', return_value=mock_client) as mock_boto3:
+            from starlette.datastructures import State
+
+            state = State()
+            # Inject twice — boto3.client should only be called once
+            async for service in injector.inject(state):
+                assert service._bedrock_client is mock_client
+            async for service in injector.inject(state):
+                assert service._bedrock_client is mock_client
+
+        mock_boto3.assert_called_once()

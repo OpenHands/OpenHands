@@ -6,7 +6,7 @@ in-memory so that the router stays thin.
 """
 
 import logging
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 import httpx
 from fastapi import Request
@@ -23,29 +23,25 @@ from openhands.app_server.config_api.llm_model_service import (
     LLMModelServiceInjector,
 )
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.utils.async_utils import call_sync_from_async
 from openhands.app_server.utils.llm import (
     ModelsResponse,
     get_supported_llm_models,
-    list_foundation_models,
 )
 from openhands.app_server.utils.paging_utils import paginate_results
 from openhands.sdk.llm.utils.verified_models import VERIFIED_MODELS
 
 _logger = logging.getLogger(__name__)
 
-
-def _verified_model_set() -> set[str]:
-    """Build the set of ``provider/name`` strings that are verified."""
-    result: set[str] = set()
-    for provider, models in VERIFIED_MODELS.items():
-        for name in models:
-            result.add(f'{provider}/{name}')
-    return result
+_VERIFIED_MODEL_SET: set[str] = {
+    f'{provider}/{name}'
+    for provider, models in VERIFIED_MODELS.items()
+    for name in models
+}
 
 
 def _to_llm_models(models_response: ModelsResponse) -> list[LLMModel]:
     """Convert raw model strings into ``LLMModel`` objects with verified flags."""
-    verified = _verified_model_set()
     results: list[LLMModel] = []
     for model_name in models_response.models:
         parts = model_name.split('/', 1)
@@ -55,7 +51,11 @@ def _to_llm_models(models_response: ModelsResponse) -> list[LLMModel]:
             provider = None
             name = parts[0]
         results.append(
-            LLMModel(provider=provider, name=name, verified=model_name in verified)
+            LLMModel(
+                provider=provider,
+                name=name,
+                verified=model_name in _VERIFIED_MODEL_SET,
+            )
         )
     return results
 
@@ -83,35 +83,54 @@ class DefaultLLMModelService(LLMModelService):
     def __init__(
         self,
         *,
-        aws_region_name: str | None = None,
-        aws_access_key_id: str | None = None,
-        aws_secret_access_key: str | None = None,
+        bedrock_client: Any | None = None,
         ollama_base_url: str | None = None,
     ) -> None:
-        self._aws_region_name = aws_region_name
-        self._aws_access_key_id = aws_access_key_id
-        self._aws_secret_access_key = aws_secret_access_key
+        self._bedrock_client = bedrock_client
         self._ollama_base_url = ollama_base_url
+        self._cached_response: ModelsResponse | None = None
+
+    def _list_foundation_models(self) -> list[str]:
+        """Query AWS Bedrock for available foundation models.
+
+        This is a synchronous boto3 call; callers should run it via
+        ``call_sync_from_async`` to avoid blocking the event loop.
+        """
+        if self._bedrock_client is None:
+            return []
+        try:
+            response = self._bedrock_client.list_foundation_models(
+                byOutputModality='TEXT', byInferenceType='ON_DEMAND'
+            )
+            return ['bedrock/' + m['modelId'] for m in response['modelSummaries']]
+        except Exception as e:
+            _logger.warning(
+                '%s. Please config AWS_REGION_NAME AWS_ACCESS_KEY_ID'
+                ' AWS_SECRET_ACCESS_KEY if you want use bedrock model.',
+                e,
+            )
+            return []
 
     async def _get_models_response(
         self,
         verified_models: list[str] | None = None,
     ) -> ModelsResponse:
-        """Fetch the raw ``ModelsResponse`` from all configured sources."""
+        """Fetch the raw ``ModelsResponse`` from all configured sources.
+
+        The result is cached on the service instance so that multiple
+        calls (e.g. ``search_llm_models`` + ``search_providers``) within
+        the same request do not repeat expensive discovery work.
+        """
+        if self._cached_response is not None:
+            return self._cached_response
+
         extra_models: list[str] = []
 
-        if (
-            self._aws_region_name
-            and self._aws_access_key_id
-            and self._aws_secret_access_key
-        ):
-            extra_models.extend(
-                list_foundation_models(
-                    self._aws_region_name,
-                    self._aws_access_key_id,
-                    self._aws_secret_access_key,
-                )
+        if self._bedrock_client is not None:
+            bedrock_models: list[str] = await call_sync_from_async(
+                self._list_foundation_models
             )
+            extra_models.extend(bedrock_models)
 
         if self._ollama_base_url:
             ollama_url = self._ollama_base_url.strip('/') + '/api/tags'
@@ -123,10 +142,11 @@ class DefaultLLMModelService(LLMModelService):
             except httpx.HTTPError as e:
                 _logger.error(f'Error getting OLLAMA models: {e}')
 
-        return get_supported_llm_models(
+        self._cached_response = get_supported_llm_models(
             verified_models=verified_models,
             extra_models=extra_models or None,
         )
+        return self._cached_response
 
     # ------------------------------------------------------------------
     # LLMModelService interface
@@ -177,7 +197,12 @@ class DefaultLLMModelService(LLMModelService):
 
 
 class DefaultLLMModelServiceInjector(LLMModelServiceInjector):
-    """Injector that reads AWS / Ollama credentials from its own fields."""
+    """Injector that reads AWS / Ollama credentials from its own fields.
+
+    When AWS credentials are provided, a ``boto3`` Bedrock client is created
+    once and passed to every service instance, avoiding repeated credential
+    negotiation.
+    """
 
     aws_region_name: str | None = None
     aws_access_key_id: SecretStr | None = None
@@ -187,20 +212,30 @@ class DefaultLLMModelServiceInjector(LLMModelServiceInjector):
         description='Base URL for a local Ollama instance (e.g. http://localhost:11434)',
     )
 
+    _bedrock_client: Any | None = None
+
+    def _get_bedrock_client(self) -> Any | None:
+        if self._bedrock_client is not None:
+            return self._bedrock_client
+        if (
+            self.aws_region_name
+            and self.aws_access_key_id
+            and self.aws_secret_access_key
+        ):
+            import boto3
+
+            self._bedrock_client = boto3.client(
+                service_name='bedrock',
+                region_name=self.aws_region_name,
+                aws_access_key_id=self.aws_access_key_id.get_secret_value(),
+                aws_secret_access_key=self.aws_secret_access_key.get_secret_value(),
+            )
+        return self._bedrock_client
+
     async def inject(
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[LLMModelService, None]:
         yield DefaultLLMModelService(
-            aws_region_name=self.aws_region_name,
-            aws_access_key_id=(
-                self.aws_access_key_id.get_secret_value()
-                if self.aws_access_key_id
-                else None
-            ),
-            aws_secret_access_key=(
-                self.aws_secret_access_key.get_secret_value()
-                if self.aws_secret_access_key
-                else None
-            ),
+            bedrock_client=self._get_bedrock_client(),
             ollama_base_url=self.ollama_base_url,
         )
