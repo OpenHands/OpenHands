@@ -117,7 +117,7 @@ class DockerSandboxService(SandboxService):
         return status_mapping.get(docker_status.lower(), SandboxStatus.ERROR)
 
     def _get_container_env_vars(self, container) -> dict[str, str | None]:
-        env_vars_list = container.attrs['Config']['Env']
+        env_vars_list = container.attrs.get('Config', {}).get('Env') or []
         result = {}
         for env_var in env_vars_list:
             if '=' in env_var:
@@ -158,13 +158,14 @@ class DockerSandboxService(SandboxService):
 
             if is_host_network:
                 # Host network mode: container ports are directly accessible on host
+                working_dir = container.attrs.get('Config', {}).get('WorkingDir', '')
                 for exposed_port in self.exposed_ports:
                     host_port = exposed_port.container_port
                     url = self.container_url_pattern.format(port=host_port)
 
                     # VSCode URLs require the api_key and working dir
                     if exposed_port.name == VSCODE:
-                        url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+                        url += f'/?tkn={session_api_key}&folder={working_dir}'
 
                     exposed_urls.append(
                         ExposedUrl(
@@ -195,7 +196,10 @@ class DockerSandboxService(SandboxService):
 
                                 # VSCode URLs require the api_key and working dir
                                 if matching_port.name == VSCODE:
-                                    url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+                                    bridge_working_dir = container.attrs.get(
+                                        'Config', {}
+                                    ).get('WorkingDir', '')
+                                    url += f'/?tkn={session_api_key}&folder={bridge_working_dir}'
 
                                 exposed_urls.append(
                                     ExposedUrl(
@@ -205,11 +209,11 @@ class DockerSandboxService(SandboxService):
                                     )
                                 )
 
-        if not container.image.tags:
+        if not container.image or not container.image.tags:
             _logger.debug(
                 'Skipping container %r: image has no tags (image id: %s)',
                 container.name,
-                container.image.id,
+                container.image.id if container.image else 'N/A',
             )
             return None
 
@@ -230,11 +234,17 @@ class DockerSandboxService(SandboxService):
             and self.health_check_path is not None
             and sandbox_info.exposed_urls
         ):
-            app_server_url = next(
-                exposed_url.url
-                for exposed_url in sandbox_info.exposed_urls
-                if exposed_url.name == AGENT_SERVER
+            _agent_server_entry = next(
+                (
+                    exposed_url
+                    for exposed_url in sandbox_info.exposed_urls
+                    if exposed_url.name == AGENT_SERVER
+                ),
+                None,
             )
+            if _agent_server_entry is None:
+                return sandbox_info
+            app_server_url = _agent_server_entry.url
             try:
                 # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
                 app_server_url = replace_localhost_hostname_for_docker(app_server_url)
@@ -324,7 +334,8 @@ class DockerSandboxService(SandboxService):
 
             return SandboxPage(items=paginated_containers, next_page_id=next_page_id)
 
-        except APIError:
+        except APIError as exc:
+            _logger.warning('Docker API error while searching sandboxes: %s', exc)
             return SandboxPage(items=[], next_page_id=None)
 
     async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
@@ -334,7 +345,12 @@ class DockerSandboxService(SandboxService):
                 return None
             container = self.docker_client.containers.get(sandbox_id)
             return await self._container_to_checked_sandbox_info(container)
-        except (NotFound, APIError):
+        except NotFound:
+            return None
+        except APIError as exc:
+            _logger.warning(
+                'Docker API error while getting sandbox %s: %s', sandbox_id, exc
+            )
             return None
 
     async def get_sandbox_by_session_api_key(
@@ -359,7 +375,12 @@ class DockerSandboxService(SandboxService):
                         return await self._container_to_sandbox_info(container)
 
             return None
-        except (NotFound, APIError):
+        except NotFound:
+            return None
+        except APIError as exc:
+            _logger.warning(
+                'Docker API error while looking up sandbox by session key: %s', exc
+            )
             return None
 
     async def start_sandbox(

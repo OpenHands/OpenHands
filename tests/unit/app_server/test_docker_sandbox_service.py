@@ -1054,6 +1054,75 @@ class TestDockerSandboxService:
             'VAR3': 'value=with=equals',
         }
 
+    def test_get_container_env_vars_missing_config_key(self, service):
+        """Guard against containers with no 'Config' key in attrs (e.g. minimal inspect)."""
+        mock_container = MagicMock()
+        mock_container.attrs = {}  # No 'Config' key at all
+
+        result = service._get_container_env_vars(mock_container)
+
+        assert result == {}
+
+    def test_get_container_env_vars_missing_env_key(self, service):
+        """Guard against containers whose 'Config' has no 'Env' entry."""
+        mock_container = MagicMock()
+        mock_container.attrs = {'Config': {}}  # 'Env' key absent
+
+        result = service._get_container_env_vars(mock_container)
+
+        assert result == {}
+
+    async def test_container_to_sandbox_info_none_image(self, service):
+        """Guard against containers whose image object is None (image deleted from host)."""
+        container = MagicMock()
+        container.name = 'oh-test-deleted-image'
+        container.status = 'paused'
+        container.image = None  # Image has been removed from host
+        container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {'Env': []},
+            'NetworkSettings': {'Ports': {}},
+        }
+
+        # Should return None rather than raising AttributeError
+        result = await service._container_to_sandbox_info(container)
+
+        assert result is None
+
+    async def test_container_to_checked_sandbox_info_no_agent_server_url(self, service):
+        """Guard against containers whose exposed_urls contain no AGENT_SERVER entry.
+
+        Previously raised StopIteration because next() had no default value.
+        """
+        container = MagicMock()
+        container.name = 'oh-test-no-agent-server'
+        container.status = 'running'
+        container.image.tags = ['spec456']
+        container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': [
+                    'OH_SESSION_API_KEY=somekey',
+                ],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'bridge'},
+            'NetworkSettings': {
+                'Ports': {
+                    # Only VSCODE port is bound — no AGENT_SERVER port
+                    '8001/tcp': [{'HostPort': '12346'}],
+                }
+            },
+        }
+        service.health_check_path = '/health'
+
+        # Should return sandbox_info without crashing (StopIteration was raised before fix)
+        result = await service._container_to_checked_sandbox_info(container)
+
+        assert result is not None
+        # Health check was skipped because there is no AGENT_SERVER URL
+        service.httpx_client.get.assert_not_called()
+
     async def test_container_to_sandbox_info_running(
         self, service, mock_running_container
     ):
