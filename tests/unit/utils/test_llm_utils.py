@@ -1,7 +1,7 @@
-"""Tests for openhands.utils.llm module."""
+"""Tests for openhands.app_server.utils.llm module."""
 
-from openhands.utils import llm as llm_utils
-from openhands.utils.llm import (
+from openhands.app_server.utils import llm as llm_utils
+from openhands.app_server.utils.llm import (
     _assign_provider,
     _derive_verified_models,
     get_provider_api_base,

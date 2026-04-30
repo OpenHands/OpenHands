@@ -20,7 +20,7 @@ from server.logger import logger
 from storage.user_settings import UserSettings
 
 from openhands.app_server.settings.settings_models import Settings
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 # Timeout in seconds for key verification requests to LiteLLM
 KEY_VERIFICATION_TIMEOUT = 5.0

@@ -13,7 +13,7 @@ from openhands.app_server.integrations.forgejo.service import (
     ForgejoResolverMixin,
 )
 from openhands.app_server.integrations.service_types import GitService
-from openhands.utils.import_utils import get_impl
+from openhands.app_server.utils.import_utils import get_impl
 
 
 class ForgejoService(
