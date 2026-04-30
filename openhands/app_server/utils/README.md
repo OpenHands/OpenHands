@@ -98,3 +98,23 @@ The mechanism is implemented through two key functions:
    ```
 
 The `get_impl` function ensures type safety by validating that the imported class is either the same as or a subclass of the specified base class. It also caches results to avoid repeated imports.
+
+## Migration Guide
+
+If upgrading from a version where these utilities were in `openhands.utils`, update your imports:
+
+```python
+# Before
+from openhands.utils.async_utils import call_sync_from_async
+from openhands.utils.llm import get_supported_llm_models
+from openhands.utils.import_utils import get_impl
+from openhands.utils.environment import is_running_in_docker
+
+# After
+from openhands.app_server.utils.async_utils import call_sync_from_async
+from openhands.app_server.utils.llm import get_supported_llm_models
+from openhands.app_server.utils.import_utils import get_impl
+from openhands.app_server.utils.environment import is_running_in_docker
+```
+
+All utilities previously in `openhands.utils.*` are now available at `openhands.app_server.utils.*`.
