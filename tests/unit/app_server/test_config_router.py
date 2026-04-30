@@ -9,15 +9,14 @@ from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
 from openhands.app_server.config_api.config_models import LLMModel, Provider
-from openhands.app_server.config_api.config_router import (
-    _get_all_models_with_verified,
-    _get_all_providers,
-    router,
+from openhands.app_server.config_api.config_router import router
+from openhands.app_server.config_api.default_llm_model_service import (
+    _to_llm_models,
+    _to_providers,
 )
 from openhands.app_server.utils.dependencies import check_session_api_key
 from openhands.app_server.utils.llm import get_supported_llm_models
 from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
-from openhands.server.shared import config
 
 
 class TestLLMModel:
@@ -85,39 +84,39 @@ class TestPagination:
         assert next_page_id is None
 
 
-class TestGetAllModelsWithVerified:
-    """Test suite for _get_all_models_with_verified function."""
+class TestToLLMModels:
+    """Test suite for _to_llm_models conversion function."""
 
     def test_returns_list_of_llm_models(self):
-        models = _get_all_models_with_verified(get_supported_llm_models(config))
+        models = _to_llm_models(get_supported_llm_models())
 
         assert isinstance(models, list)
         assert all(isinstance(m, LLMModel) for m in models)
 
     def test_models_verified_mix(self):
-        models = _get_all_models_with_verified(get_supported_llm_models(config))
+        models = _to_llm_models(get_supported_llm_models())
 
         assert any(m.verified is True for m in models)
         assert any(m.verified is False for m in models)
 
 
-class TestGetAllProviders:
-    """Test suite for _get_all_providers function."""
+class TestToProviders:
+    """Test suite for _to_providers conversion function."""
 
     def test_returns_list_of_providers(self):
-        providers = _get_all_providers(get_supported_llm_models(config))
+        providers = _to_providers(get_supported_llm_models())
 
         assert isinstance(providers, list)
         assert all(isinstance(p, Provider) for p in providers)
 
     def test_providers_are_unique(self):
-        providers = _get_all_providers(get_supported_llm_models(config))
+        providers = _to_providers(get_supported_llm_models())
         names = [p.name for p in providers]
 
         assert len(names) == len(set(names))
 
     def test_verified_providers_sorted_first(self):
-        providers = _get_all_providers(get_supported_llm_models(config))
+        providers = _to_providers(get_supported_llm_models())
         # Find the boundary between verified and unverified
         found_unverified = False
         for p in providers:
@@ -127,7 +126,7 @@ class TestGetAllProviders:
                 pytest.fail('Verified provider found after unverified provider')
 
     def test_contains_verified_and_unverified(self):
-        providers = _get_all_providers(get_supported_llm_models(config))
+        providers = _to_providers(get_supported_llm_models())
 
         assert any(p.verified for p in providers)
         assert any(not p.verified for p in providers)
