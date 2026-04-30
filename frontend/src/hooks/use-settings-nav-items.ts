@@ -14,7 +14,7 @@ import { useOrgTypeAndAccess } from "./use-org-type-and-access";
 import { useSettings } from "./query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
 import { ENABLE_ACP } from "#/utils/feature-flags";
-import { ACP_SERVER_DISPLAY_NAMES } from "#/constants/acp-agents";
+import { getAcpServerDisplayName } from "#/constants/acp-agents";
 
 // Rendered navigation item types
 export type SettingsNavRenderedItem =
@@ -41,11 +41,14 @@ const SECTION_HEADERS: Partial<Record<SettingsNavSection, I18nKey>> = {
  * - org type (personal vs team)
  * @returns Settings Nav Rendered Items (items, headers, dividers)
  */
-// Condenser and MCP are managed internally by ACP agents (Claude Code, Codex,
-// Gemini CLI) and cannot be configured through OpenHands settings when an ACP
-// agent is active. Showing them as disabled (rather than hidden) preserves
-// discoverability and explains why they are unavailable.
-const ACP_DISABLED_PATHS = new Set(["/settings/condenser", "/settings/mcp"]);
+// These settings pages are disabled when an ACP agent is active.
+// "/settings" is the LLM settings index route (see routes.ts).
+// Condenser and MCP are managed by the ACP server itself.
+const ACP_DISABLED_PATHS = new Set([
+  "/settings", // LLM settings — credentials live on the Agent page instead
+  "/settings/condenser",
+  "/settings/mcp",
+]);
 
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
@@ -57,9 +60,8 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
 
   const isAcpAgent = settings?.agent_settings?.agent_kind === "acp";
   const acpServerName = isAcpAgent
-    ? (ACP_SERVER_DISPLAY_NAMES[
-        (settings?.agent_settings?.acp_server as string) ?? ""
-      ] ?? "ACP Agent")
+    ? (getAcpServerDisplayName(settings?.agent_settings?.acp_server) ??
+      "ACP Agent")
     : null;
 
   const shouldHideBilling = isBillingHidden(

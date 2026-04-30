@@ -28,6 +28,7 @@ import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
+import { getAcpServerDisplayName } from "#/constants/acp-agents";
 
 const AGENT_KIND_DISPLAY: Record<string, string> = {
   llm: "OpenHands",
@@ -43,7 +44,9 @@ function AgentIncompatibleBanner({
   const navigate = useNavigate();
 
   const agentName =
-    AGENT_KIND_DISPLAY[conversationAgentKind] ?? conversationAgentKind;
+    getAcpServerDisplayName(conversationAgentKind) ??
+    AGENT_KIND_DISPLAY[conversationAgentKind] ??
+    conversationAgentKind;
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 bg-amber-900/40 border border-amber-600/50 rounded-lg text-sm">
@@ -149,7 +152,10 @@ function AppContent() {
   const settingsAgentKind =
     (settings?.agent_settings?.agent_kind as string) ?? "llm";
   const isAgentIncompatible =
-    isFetched && !!settings && !!conversation && conversationAgentKind !== settingsAgentKind;
+    isFetched &&
+    !!settings &&
+    !!conversation &&
+    conversationAgentKind !== settingsAgentKind;
 
   // When the conversation was started with a specific ACP provider, prefer that
   // name (e.g. "claude-code" → "Claude Code") over the generic "acp" fallback.

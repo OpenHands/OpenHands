@@ -224,12 +224,17 @@ async def on_conversation_update(
     )
 
     agent_kind = 'acp' if isinstance(conversation_info.agent, ACPAgent) else 'llm'
+    display_model = (
+        conversation_info.agent.acp_model
+        if agent_kind == 'acp'
+        else conversation_info.agent.llm.model
+    )
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
         sandbox_id=sandbox_info.id,
         created_by_user_id=sandbox_info.created_by_user_id,
-        llm_model=conversation_info.agent.llm.model,
+        llm_model=display_model,
         agent_kind=agent_kind,
         acp_server=existing.acp_server,
         # Git parameters

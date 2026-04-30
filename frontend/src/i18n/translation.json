@@ -24546,5 +24546,39 @@
     "ca": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
     "tr": "Override the API endpoint, e.g. to route through a LiteLLM proxy",
     "uk": "Override the API endpoint, e.g. to route through a LiteLLM proxy"
+  },
+  "SETTINGS$AGENT_MODEL_LABEL": {
+    "en": "Model",
+    "ja": "モデル",
+    "zh-CN": "模型",
+    "zh-TW": "模型",
+    "ko-KR": "모델",
+    "no": "Modell",
+    "ar": "النموذج",
+    "de": "Modell",
+    "fr": "Modèle",
+    "it": "Modello",
+    "pt": "Modelo",
+    "es": "Modelo",
+    "ca": "Model",
+    "tr": "Model",
+    "uk": "Модель"
+  },
+  "SETTINGS$AGENT_MODEL_HINT": {
+    "en": "Override the model used by the agent. Leave blank to use the server's default.",
+    "ja": "Override the model used by the agent. Leave blank to use the server's default.",
+    "zh-CN": "Override the model used by the agent. Leave blank to use the server's default.",
+    "zh-TW": "Override the model used by the agent. Leave blank to use the server's default.",
+    "ko-KR": "Override the model used by the agent. Leave blank to use the server's default.",
+    "no": "Override the model used by the agent. Leave blank to use the server's default.",
+    "ar": "Override the model used by the agent. Leave blank to use the server's default.",
+    "de": "Override the model used by the agent. Leave blank to use the server's default.",
+    "fr": "Override the model used by the agent. Leave blank to use the server's default.",
+    "it": "Override the model used by the agent. Leave blank to use the server's default.",
+    "pt": "Override the model used by the agent. Leave blank to use the server's default.",
+    "es": "Override the model used by the agent. Leave blank to use the server's default.",
+    "ca": "Override the model used by the agent. Leave blank to use the server's default.",
+    "tr": "Override the model used by the agent. Leave blank to use the server's default.",
+    "uk": "Override the model used by the agent. Leave blank to use the server's default."
   }
 }

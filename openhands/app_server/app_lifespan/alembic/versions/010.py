@@ -1,4 +1,4 @@
-"""Add acp_server column to conversation_metadata table
+"""Add acp_server column to conversation_metadata table.
 
 Revision ID: 010
 Revises: 009
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '010'
-down_revision: Union[str, None] = '009'
+revision: str = "010"
+down_revision: Union[str, None] = "009"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -19,14 +19,18 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     bind = op.get_bind()
     existing = [
-        row[1]
-        for row in bind.execute(sa.text('PRAGMA table_info(conversation_metadata)'))
+        col["name"] for col in sa.inspect(bind).get_columns("conversation_metadata")
     ]
-    if 'acp_server' not in existing:
+    if "acp_server" not in existing:
         op.add_column(
-            'conversation_metadata', sa.Column('acp_server', sa.String, nullable=True)
+            "conversation_metadata", sa.Column("acp_server", sa.String, nullable=True)
         )
 
 
 def downgrade() -> None:
-    op.drop_column('conversation_metadata', 'acp_server')
+    bind = op.get_bind()
+    existing = [
+        col["name"] for col in sa.inspect(bind).get_columns("conversation_metadata")
+    ]
+    if "acp_server" in existing:
+        op.drop_column("conversation_metadata", "acp_server")

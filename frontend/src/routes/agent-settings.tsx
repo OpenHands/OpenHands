@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AxiosError } from "axios";
+import { useNavigate } from "react-router";
 import { useSettings } from "#/hooks/query/use-settings";
+import { useConfig } from "#/hooks/query/use-config";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -22,6 +24,7 @@ import {
   ACP_DEFAULT_COMMANDS,
   isAcpServerKind,
 } from "#/constants/acp-agents";
+import { ENABLE_ACP } from "#/utils/feature-flags";
 
 export const handle = { hideTitle: true };
 
@@ -68,16 +71,96 @@ function validateEnvJson(
   }
 }
 
+interface BuildAgentSettingsDiffArgs {
+  agentType: AgentType;
+  initialAgentType: AgentType;
+  command: string[];
+  args: string[];
+  parsedEnv: Record<string, string>;
+  acpModel: string;
+  initialAcpModel: string;
+  apiKey: string;
+  apiKeyTouched: boolean;
+  baseUrl: string;
+  initialBaseUrl: string;
+}
+
+export function buildAgentSettingsDiff({
+  agentType,
+  initialAgentType,
+  command,
+  args,
+  parsedEnv,
+  acpModel,
+  initialAcpModel,
+  apiKey,
+  apiKeyTouched,
+  baseUrl,
+  initialBaseUrl,
+}: BuildAgentSettingsDiffArgs): Record<string, unknown> {
+  if (agentType === "openhands") {
+    return {
+      agent_kind: "llm",
+      acp_server: null,
+      acp_command: null,
+      acp_args: null,
+      acp_env: null,
+      acp_model: null,
+      ...(initialAgentType !== "openhands"
+        ? { llm: { api_key: null, base_url: null } }
+        : {}),
+    };
+  }
+
+  const providerChanged = agentType !== initialAgentType;
+  const llmDiff: Record<string, string | null> = {};
+  if (apiKey.trim()) {
+    llmDiff.api_key = apiKey.trim();
+  } else if (apiKeyTouched || providerChanged) {
+    llmDiff.api_key = null;
+  }
+
+  if (baseUrl.trim()) {
+    llmDiff.base_url = baseUrl.trim();
+  } else if (baseUrl !== initialBaseUrl || providerChanged) {
+    llmDiff.base_url = null;
+  }
+
+  const acpModelDiff: Record<string, string | null> = {};
+  if (acpModel.trim()) {
+    acpModelDiff.acp_model = acpModel.trim();
+  } else if (acpModel !== initialAcpModel || providerChanged) {
+    acpModelDiff.acp_model = null;
+  }
+
+  return {
+    agent_kind: "acp",
+    acp_server: agentType,
+    acp_command: command, // [] means "use backend default"; SDK resolves via resolve_acp_command()
+    acp_args: args,
+    acp_env: parsedEnv,
+    ...acpModelDiff,
+    ...(Object.keys(llmDiff).length > 0 ? { llm: llmDiff } : {}),
+  };
+}
+
 function AgentSettingsScreen() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { data: settings, isLoading } = useSettings();
+  const { data: config, isLoading: isConfigLoading } = useConfig();
   const { mutate: saveSettings, isPending: isSaving } = useSaveSettings();
 
   const [tab, setTab] = useState<TabType>("basic");
   const [agentType, setAgentType] = useState<AgentType>("openhands");
+  const [initialAgentType, setInitialAgentType] =
+    useState<AgentType>("openhands");
   const [apiKey, setApiKey] = useState("");
+  const [apiKeyTouched, setApiKeyTouched] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
+  const [initialBaseUrl, setInitialBaseUrl] = useState("");
   const [acpModel, setAcpModel] = useState("");
+  const [initialAcpModel, setInitialAcpModel] = useState("");
   // command and args are stored as arrays; the textarea shows one token per line
   const [command, setCommand] = useState<string[]>([]);
   const [args, setArgs] = useState<string[]>([]);
@@ -90,16 +173,26 @@ function AgentSettingsScreen() {
     const kind = settings.agent_settings?.agent_kind;
     if (kind === "acp") {
       const rawServer = settings.agent_settings?.acp_server;
-      setAgentType(isAcpServerKind(rawServer) ? rawServer : "claude-code");
+      const savedAgentType = isAcpServerKind(rawServer)
+        ? rawServer
+        : "claude-code";
+      setAgentType(savedAgentType);
+      setInitialAgentType(savedAgentType);
 
       const savedLlm = settings.agent_settings?.llm as
         | Record<string, unknown>
         | undefined;
       const savedBaseUrl = savedLlm?.base_url;
-      setBaseUrl(typeof savedBaseUrl === "string" ? savedBaseUrl : "");
+      const normalizedBaseUrl =
+        typeof savedBaseUrl === "string" ? savedBaseUrl : "";
+      setBaseUrl(normalizedBaseUrl);
+      setInitialBaseUrl(normalizedBaseUrl);
 
       const savedAcpModel = settings.agent_settings?.acp_model;
-      setAcpModel(typeof savedAcpModel === "string" ? savedAcpModel : "");
+      const normalizedAcpModel =
+        typeof savedAcpModel === "string" ? savedAcpModel : "";
+      setAcpModel(normalizedAcpModel);
+      setInitialAcpModel(normalizedAcpModel);
 
       const acpCommand = settings.agent_settings?.acp_command;
       setCommand(
@@ -125,9 +218,24 @@ function AgentSettingsScreen() {
       );
     } else {
       setAgentType("openhands");
+      setInitialAgentType("openhands");
+      setBaseUrl("");
+      setInitialBaseUrl("");
+      setAcpModel("");
+      setInitialAcpModel("");
     }
+    setApiKey("");
+    setApiKeyTouched(false);
     setIsDirty(false);
   }, [settings]);
+
+  const isAcpFeatureEnabled = config?.feature_flags?.enable_acp || ENABLE_ACP();
+
+  useEffect(() => {
+    if (config && !isAcpFeatureEnabled) {
+      navigate("/settings", { replace: true });
+    }
+  }, [config, isAcpFeatureEnabled, navigate]);
 
   const handleAgentTypeChange = (key: React.Key | null) => {
     if (!key) return;
@@ -137,6 +245,7 @@ function AgentSettingsScreen() {
     // OpenHands or Codex.
     if (newType !== agentType) {
       setApiKey("");
+      setApiKeyTouched(false);
       setBaseUrl("");
       setAcpModel("");
     }
@@ -162,28 +271,19 @@ function AgentSettingsScreen() {
       parsedEnv = JSON.parse(envJson) as Record<string, string>;
     }
 
-    let agentSettingsDiff: Record<string, unknown>;
-
-    if (agentType === "openhands") {
-      agentSettingsDiff = { agent_kind: "llm" };
-    } else {
-      agentSettingsDiff = {
-        agent_kind: "acp",
-        acp_server: agentType,
-        acp_command: command, // [] means "use backend default"; SDK resolves via resolve_acp_command()
-        acp_args: args,
-        acp_env: parsedEnv,
-        ...(acpModel.trim() ? { acp_model: acpModel.trim() } : {}),
-        ...(apiKey.trim() || baseUrl.trim()
-          ? {
-              llm: {
-                ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
-                ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}),
-              },
-            }
-          : {}),
-      };
-    }
+    const agentSettingsDiff = buildAgentSettingsDiff({
+      agentType,
+      initialAgentType,
+      command,
+      args,
+      parsedEnv,
+      acpModel,
+      initialAcpModel,
+      apiKey,
+      apiKeyTouched,
+      baseUrl,
+      initialBaseUrl,
+    });
 
     saveSettings(
       { agent_settings_diff: agentSettingsDiff },
@@ -224,7 +324,7 @@ function AgentSettingsScreen() {
         : "text-[#8C8C8C] hover:text-white"
     }`;
 
-  if (isLoading) return null;
+  if (isLoading || isConfigLoading || !isAcpFeatureEnabled) return null;
 
   return (
     <div className="flex flex-col gap-6 pb-8 max-w-2xl">
@@ -277,6 +377,7 @@ function AgentSettingsScreen() {
               placeholder={apiKeyIsSet ? "<hidden>" : ""}
               onChange={(value) => {
                 setApiKey(value);
+                setApiKeyTouched(true);
                 setIsDirty(true);
               }}
               startContent={apiKeyIsSet ? <KeyStatusIcon isSet /> : undefined}

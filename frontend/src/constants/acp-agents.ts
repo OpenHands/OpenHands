@@ -1,12 +1,11 @@
 /** Known ACP backend servers the GUI can select from. Mirrors SDK's ACPServerKind. */
 export type AcpServerKind = "claude-code" | "codex" | "gemini-cli";
 
-export const ACP_SERVER_DISPLAY_NAMES: Record<AcpServerKind | string, string> =
-  {
-    "claude-code": "Claude Code",
-    codex: "Codex",
-    "gemini-cli": "Gemini CLI",
-  };
+export const ACP_SERVER_DISPLAY_NAMES = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "gemini-cli": "Gemini CLI",
+} satisfies Record<AcpServerKind, string>;
 
 export const VALID_ACP_SERVERS = new Set<string>(
   Object.keys(ACP_SERVER_DISPLAY_NAMES),
@@ -14,6 +13,10 @@ export const VALID_ACP_SERVERS = new Set<string>(
 
 export function isAcpServerKind(value: unknown): value is AcpServerKind {
   return typeof value === "string" && VALID_ACP_SERVERS.has(value);
+}
+
+export function getAcpServerDisplayName(value: unknown): string | undefined {
+  return isAcpServerKind(value) ? ACP_SERVER_DISPLAY_NAMES[value] : undefined;
 }
 
 /** Provider API key label per ACP server, shown in the Basic tab. */

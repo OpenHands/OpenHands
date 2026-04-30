@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import AgentSettingsScreen from "#/routes/agent-settings";
+import AgentSettingsScreen, {
+  buildAgentSettingsDiff,
+} from "#/routes/agent-settings";
 
 const mockSettings = vi.hoisted(() => ({
   data: null as Record<string, unknown> | null,
@@ -11,9 +13,20 @@ const mockSettings = vi.hoisted(() => ({
 
 const mockSaveSettings = vi.hoisted(() => vi.fn());
 const mockIsPending = vi.hoisted(() => ({ value: false }));
+const mockConfig = vi.hoisted(() => ({
+  data: {
+    feature_flags: { enable_acp: true },
+  },
+  isLoading: false,
+}));
+const mockNavigate = vi.hoisted(() => vi.fn());
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => mockSettings,
+}));
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => mockConfig,
 }));
 
 vi.mock("#/hooks/mutation/use-save-settings", () => ({
@@ -28,6 +41,7 @@ vi.mock("react-router", async () => {
     await vi.importActual<typeof import("react-router")>("react-router");
   return {
     ...actual,
+    useNavigate: () => mockNavigate,
     useRevalidator: () => ({ revalidate: vi.fn() }),
   };
 });
@@ -47,22 +61,20 @@ describe("AgentSettingsScreen", () => {
     vi.clearAllMocks();
     mockSettings.data = null;
     mockSettings.isLoading = false;
+    mockConfig.data = { feature_flags: { enable_acp: true } };
+    mockConfig.isLoading = false;
     mockIsPending.value = false;
   });
 
   describe("initial state", () => {
     it("renders the page title", () => {
       renderScreen();
-      expect(
-        screen.getByText("SETTINGS$AGENT_PAGE_TITLE"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("SETTINGS$AGENT_PAGE_TITLE")).toBeInTheDocument();
     });
 
     it("shows Basic tab by default", () => {
       renderScreen();
-      expect(
-        screen.getByText("SETTINGS$AGENT_BASIC_TAB"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("SETTINGS$AGENT_BASIC_TAB")).toBeInTheDocument();
     });
 
     it("does not show Advanced tab when OpenHands is selected", () => {
@@ -88,6 +100,15 @@ describe("AgentSettingsScreen", () => {
       mockSettings.isLoading = true;
       const { container } = renderScreen();
       expect(container.firstChild).toBeNull();
+    });
+
+    it("returns null when ACP feature flag is disabled", () => {
+      mockConfig.data = { feature_flags: { enable_acp: false } };
+      const { container } = renderScreen();
+      expect(container.firstChild).toBeNull();
+      expect(mockNavigate).toHaveBeenCalledWith("/settings", {
+        replace: true,
+      });
     });
   });
 
@@ -427,7 +448,9 @@ describe("AgentSettingsScreen", () => {
         expect.any(Object),
       );
       // No llm key since no api_key was entered
-      expect(mockSaveSettings.mock.calls[0][0].agent_settings_diff).not.toHaveProperty("llm");
+      expect(
+        mockSaveSettings.mock.calls[0][0].agent_settings_diff,
+      ).not.toHaveProperty("llm");
     });
   });
 
@@ -499,7 +522,9 @@ describe("AgentSettingsScreen", () => {
       renderScreen();
       // Wait for the Advanced tab button to appear (confirming ACP state is set)
       // before switching to it, so the useEffect has had a chance to run.
-      const advancedTab = await screen.findByText("SETTINGS$AGENT_ADVANCED_TAB");
+      const advancedTab = await screen.findByText(
+        "SETTINGS$AGENT_ADVANCED_TAB",
+      );
       fireEvent.click(advancedTab);
       await waitFor(() => {
         const envArea = screen.getByTestId(
@@ -512,13 +537,106 @@ describe("AgentSettingsScreen", () => {
     it("defaults to Basic tab on initial load", () => {
       renderScreen();
       // Basic tab button should be rendered
-      expect(
-        screen.getByText("SETTINGS$AGENT_BASIC_TAB"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("SETTINGS$AGENT_BASIC_TAB")).toBeInTheDocument();
       // Advanced tab should not be visible when OpenHands is selected
       expect(
         screen.queryByText("SETTINGS$AGENT_ADVANCED_TAB"),
       ).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("buildAgentSettingsDiff", () => {
+  const baseArgs = {
+    command: [],
+    args: [],
+    parsedEnv: {},
+    acpModel: "",
+    initialAcpModel: "",
+    apiKey: "",
+    apiKeyTouched: false,
+    baseUrl: "",
+    initialBaseUrl: "",
+  };
+
+  it("preserves existing ACP credentials when saving unrelated changes for the same provider", () => {
+    expect(
+      buildAgentSettingsDiff({
+        ...baseArgs,
+        agentType: "claude-code",
+        initialAgentType: "claude-code",
+        command: ["npx", "custom"],
+      }),
+    ).toEqual({
+      agent_kind: "acp",
+      acp_server: "claude-code",
+      acp_command: ["npx", "custom"],
+      acp_args: [],
+      acp_env: {},
+    });
+  });
+
+  it("clears stale provider credentials when switching ACP providers", () => {
+    expect(
+      buildAgentSettingsDiff({
+        ...baseArgs,
+        agentType: "codex",
+        initialAgentType: "claude-code",
+      }),
+    ).toEqual({
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_command: [],
+      acp_args: [],
+      acp_env: {},
+      acp_model: null,
+      llm: {
+        api_key: null,
+        base_url: null,
+      },
+    });
+  });
+
+  it("clears stale ACP-only fields when switching back to OpenHands", () => {
+    expect(
+      buildAgentSettingsDiff({
+        ...baseArgs,
+        agentType: "openhands",
+        initialAgentType: "gemini-cli",
+      }),
+    ).toEqual({
+      agent_kind: "llm",
+      acp_server: null,
+      acp_command: null,
+      acp_args: null,
+      acp_env: null,
+      acp_model: null,
+      llm: {
+        api_key: null,
+        base_url: null,
+      },
+    });
+  });
+
+  it("sends null for cleared base URL and model fields", () => {
+    expect(
+      buildAgentSettingsDiff({
+        ...baseArgs,
+        agentType: "claude-code",
+        initialAgentType: "claude-code",
+        initialBaseUrl: "https://proxy.example.com",
+        initialAcpModel: "claude-sonnet",
+      }),
+    ).toEqual({
+      agent_kind: "acp",
+      acp_server: "claude-code",
+      acp_command: [],
+      acp_args: [],
+      acp_env: {},
+      acp_model: null,
+      llm: {
+        base_url: null,
+      },
     });
   });
 });
