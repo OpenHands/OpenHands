@@ -2,7 +2,6 @@ import base64
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import jwt
 import pytest
 from fastapi import HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
