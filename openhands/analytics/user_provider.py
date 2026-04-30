@@ -12,7 +12,8 @@ and loaded via get_impl() at runtime.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+
+from openhands.analytics.user_base import UserBase
 
 
 class AnalyticsUserProvider(ABC):
@@ -27,16 +28,16 @@ class AnalyticsUserProvider(ABC):
     """
 
     @abstractmethod
-    async def get_user_by_id(self, user_id: str) -> Any | None:
+    async def get_user_by_id(self, user_id: str) -> UserBase | None:
         """Look up a user by their ID.
 
         Args:
             user_id: The user's unique identifier.
 
         Returns:
-            A user object with `user_consents_to_analytics` and `current_org_id`
-            attributes, or None if the user cannot be found or user lookup is
-            not available.
+            A UserBase instance with `user_consents_to_analytics` and
+            `current_org_id` attributes, or None if the user cannot be found
+            or user lookup is not available.
         """
 
 
@@ -48,6 +49,6 @@ class DefaultAnalyticsUserProvider(AnalyticsUserProvider):
     org_id=None, user=None).
     """
 
-    async def get_user_by_id(self, user_id: str) -> Any | None:
+    async def get_user_by_id(self, user_id: str) -> UserBase | None:
         """Return None since no user store is available in local mode."""
         return None

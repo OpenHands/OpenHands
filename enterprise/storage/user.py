@@ -12,6 +12,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
 from storage.encrypt_utils import EncryptedJSON
 
+from openhands.analytics.user_base import UserBase
+
 if TYPE_CHECKING:
     from storage.org import Org
     from storage.org_member import OrgMember
@@ -19,7 +21,7 @@ if TYPE_CHECKING:
     from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
 
-class User(Base):
+class User(Base, UserBase):
     """User model with organizational relationships."""
 
     __tablename__ = 'user'
