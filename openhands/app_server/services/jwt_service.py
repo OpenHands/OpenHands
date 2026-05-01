@@ -2,7 +2,7 @@ import binascii
 import hashlib
 import json
 import logging
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, AsyncGenerator
@@ -294,6 +294,9 @@ class JwtService:
         ``b64encode(sha256(secret).digest())``, matching the convention
         previously used by enterprise code.
 
+        Some values were base64 encoded after encryption, and some were not,
+        so we accommodate both cases.
+
         Raises ``ValueError`` if no key can decrypt the value.
         """
         last_error: Exception | None = None
@@ -302,9 +305,10 @@ class JwtService:
                 secret = key.key.get_secret_value()
                 fernet_key = b64encode(hashlib.sha256(secret.encode()).digest())
                 f = Fernet(fernet_key)
-                # Fernet.encrypt() returns base64-encoded bytes, so we just need
-                # to encode the string back to bytes - no extra b64decode needed
-                return f.decrypt(ciphertext.encode()).decode()
+                try:
+                    return f.decrypt(ciphertext.encode()).decode()
+                except InvalidToken:
+                    return f.decrypt(b64decode(ciphertext.encode())).decode()
             except (InvalidToken, binascii.Error, Exception) as exc:
                 last_error = exc
                 continue
