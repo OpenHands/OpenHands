@@ -312,8 +312,13 @@ class DockerSandboxService(SandboxService):
     ) -> SandboxPage:
         """Search for sandboxes."""
         try:
-            # Get all containers with our prefix
-            all_containers = self.docker_client.containers.list(all=True)
+            # Offload blocking Docker API call to a thread so we do not stall
+            # the event loop, and enforce a timeout so a hung Docker daemon
+            # does not freeze the entire server.
+            all_containers = await asyncio.wait_for(
+                asyncio.to_thread(self.docker_client.containers.list, all=True),
+                timeout=30.0,
+            )
             sandboxes = []
 
             for container in all_containers:
@@ -347,6 +352,11 @@ class DockerSandboxService(SandboxService):
 
             return SandboxPage(items=paginated_containers, next_page_id=next_page_id)
 
+        except asyncio.TimeoutError:
+            _logger.warning(
+                'Docker API timed out while listing containers for search_sandboxes'
+            )
+            return SandboxPage(items=[], next_page_id=None)
         except APIError as exc:
             _logger.warning('Docker API error while searching sandboxes: %s', exc)
             return SandboxPage(items=[], next_page_id=None)
@@ -371,8 +381,11 @@ class DockerSandboxService(SandboxService):
     ) -> SandboxInfo | None:
         """Get a single sandbox by session API key."""
         try:
-            # Get all containers with our prefix
-            all_containers = self.docker_client.containers.list(all=True)
+            # Offload blocking Docker API call to a thread so we do not stall
+            # the event loop.
+            all_containers = await asyncio.to_thread(
+                self.docker_client.containers.list, all=True
+            )
 
             for container in all_containers:
                 if container.name and container.name.startswith(
