@@ -135,7 +135,7 @@ class TestValidateSessionKey:
             mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
             mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            from openhands.app_server.config_api.config_models import AppMode
+            from openhands.app_server.types import AppMode
 
             mock_cfg.return_value.app_mode = AppMode.SAAS
 

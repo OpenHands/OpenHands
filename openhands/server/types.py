@@ -1,40 +1,20 @@
-# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
-# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
-# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
-#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
-#   - V1 application server (in this repo): openhands/app_server/
-# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
-# Tag: Legacy-V0
-# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
-from abc import ABC, abstractmethod
-from typing import Any
+# DEPRECATED: This module is deprecated and will be removed in a future release.
+# Please use openhands.app_server.types instead.
+#
+# For backward compatibility, this module re-exports all types from openhands.app_server.types.
 
+from openhands.app_server.types import (
+    AppMode,
+    LLMAuthenticationError,
+    MissingSettingsError,
+    ServerConfigInterface,
+    SessionExpiredError,
+)
 
-class ServerConfigInterface(ABC):
-    @abstractmethod
-    def verify_config(self) -> None:
-        """Verify configuration settings."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_config(self) -> dict[str, Any]:
-        """Configure attributes for frontend"""
-        raise NotImplementedError
-
-
-class MissingSettingsError(ValueError):
-    """Raised when settings are missing or not found."""
-
-    pass
-
-
-class LLMAuthenticationError(ValueError):
-    """Raised when there is an issue with LLM authentication."""
-
-    pass
-
-
-class SessionExpiredError(ValueError):
-    """Raised when the user's authentication session has expired."""
-
-    pass
+__all__ = [
+    'AppMode',
+    'ServerConfigInterface',
+    'MissingSettingsError',
+    'LLMAuthenticationError',
+    'SessionExpiredError',
+]

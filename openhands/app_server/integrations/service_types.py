@@ -6,7 +6,7 @@ from typing import Any, Protocol
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel, SecretStr
 
-from openhands.app_server.config_api.config_models import AppMode
+from openhands.app_server.types import AppMode
 
 
 class TokenResponse(BaseModel):

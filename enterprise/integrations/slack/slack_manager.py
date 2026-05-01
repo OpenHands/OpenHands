@@ -36,14 +36,14 @@ from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
     Repository,
 )
-from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.shared import server_config
-from openhands.server.types import (
+from openhands.app_server.shared import server_config
+from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
 )
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
