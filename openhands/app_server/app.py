@@ -25,7 +25,7 @@ from openhands.app_server.middleware import (
 )
 from openhands.app_server.static import SPAStaticFiles
 from openhands.app_server.status.status_router import router as health_router
-from openhands.version import get_version
+from openhands.app_server.version import get_version
 
 mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
 
