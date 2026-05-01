@@ -77,12 +77,8 @@ def mock_config():
     jwt_svc = JwtService(
         keys=[EncryptionKey(kid='test', key=SecretStr('test_secret'), active=True)]
     )
-    with (
-        patch('server.auth.saas_user_auth.get_config') as mock_get_config,
-        patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc),
-    ):
-        mock_cfg = mock_get_config.return_value
-        yield mock_cfg
+    with patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc):
+        yield
 
 
 @pytest.mark.asyncio
@@ -1038,7 +1034,6 @@ class TestOpenHandsApiKey:
             patch(
                 'server.auth.saas_user_auth.SaasSecretsStore'
             ) as mock_secrets_store_cls,
-            patch('server.auth.saas_user_auth.get_config') as mock_get_config,
         ):
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
@@ -1053,8 +1048,6 @@ class TestOpenHandsApiKey:
             mock_secrets_store_cls.get_instance = AsyncMock(
                 return_value=mock_secrets_store
             )
-
-            mock_get_config.return_value = MagicMock()
 
             # Act
             result = await user_auth.get_secrets()
@@ -1096,7 +1089,6 @@ class TestOpenHandsApiKey:
             patch(
                 'server.auth.saas_user_auth.SaasSecretsStore'
             ) as mock_secrets_store_cls,
-            patch('server.auth.saas_user_auth.get_config') as mock_get_config,
         ):
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
@@ -1111,8 +1103,6 @@ class TestOpenHandsApiKey:
             mock_secrets_store_cls.get_instance = AsyncMock(
                 return_value=mock_secrets_store
             )
-
-            mock_get_config.return_value = MagicMock()
 
             # Act - call get_secrets twice
             result1 = await user_auth.get_secrets()
@@ -1146,7 +1136,6 @@ class TestOpenHandsApiKey:
             patch(
                 'server.auth.saas_user_auth.SaasSecretsStore'
             ) as mock_secrets_store_cls,
-            patch('server.auth.saas_user_auth.get_config') as mock_get_config,
         ):
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
@@ -1161,8 +1150,6 @@ class TestOpenHandsApiKey:
             mock_secrets_store_cls.get_instance = AsyncMock(
                 return_value=mock_secrets_store
             )
-
-            mock_get_config.return_value = MagicMock()
 
             # Act
             result = await user_auth.get_secrets()

@@ -7,7 +7,6 @@ from pydantic import SecretStr
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings, ConversationSettings
 
@@ -99,19 +98,15 @@ async def test_store_and_load_data(file_settings_store):
 
 @pytest.mark.asyncio
 async def test_get_instance():
-    config = OpenHandsConfig(file_store='local', file_store_path='/test/path')
+    mock_store = MagicMock(spec=FileStore)
 
-    with patch(
-        'openhands.app_server.settings.file_settings_store.get_file_store'
-    ) as mock_get_store:
-        mock_store = MagicMock(spec=FileStore)
-        mock_get_store.return_value = mock_store
+    with patch('openhands.app_server.config.get_global_config') as mock_get_config:
+        mock_config = MagicMock()
+        mock_config.file_store = mock_store
+        mock_get_config.return_value = mock_config
 
-        store = await FileSettingsStore.get_instance(config, None)
+        store = await FileSettingsStore.get_instance(None)
 
         assert isinstance(store, FileSettingsStore)
         assert store.file_store == mock_store
-        mock_get_store.assert_called_once_with(
-            file_store_type='local',
-            file_store_path='/test/path',
-        )
+        mock_get_config.assert_called_once()

@@ -247,7 +247,7 @@ class TestSaasSecretsStore:
     async def test_get_instance(self, jwt_svc):
         # Test the get_instance class method
         with patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc):
-            store = await SaasSecretsStore.get_instance(None, 'test-user-id')
+            store = await SaasSecretsStore.get_instance('test-user-id')
         assert isinstance(store, SaasSecretsStore)
         assert store.user_id == 'test-user-id'
         assert store._jwt_svc is jwt_svc

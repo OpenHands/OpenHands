@@ -20,7 +20,6 @@ from server.auth.authorization import (
 )
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 from server.auth.token_manager import TokenManager
-from server.config import get_config
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
 from sqlalchemy import delete, select
@@ -153,7 +152,7 @@ class SaasUserAuth(UserAuth):
         secrets_store = self.secrets_store
         if secrets_store:
             return secrets_store
-        secrets_store = await SaasSecretsStore.get_instance(None, self.user_id)
+        secrets_store = await SaasSecretsStore.get_instance(self.user_id)
         self.secrets_store = secrets_store
         return secrets_store
 
@@ -256,7 +255,7 @@ class SaasUserAuth(UserAuth):
         settings_store = self.settings_store
         if settings_store:
             return settings_store
-        settings_store = SaasSettingsStore(self.user_id, get_config())
+        settings_store = SaasSettingsStore(self.user_id)
         self.settings_store = settings_store
         return settings_store
 
