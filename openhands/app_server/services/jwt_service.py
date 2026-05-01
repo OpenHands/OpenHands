@@ -305,10 +305,12 @@ class JwtService:
                 secret = key.key.get_secret_value()
                 fernet_key = b64encode(hashlib.sha256(secret.encode()).digest())
                 f = Fernet(fernet_key)
+                # There are multiple legacy formats - some cases have base64 encoded
+                # after encryption and some have not. We try both
                 try:
-                    return f.decrypt(ciphertext.encode()).decode()
-                except InvalidToken:
                     return f.decrypt(b64decode(ciphertext.encode())).decode()
+                except Exception:
+                    return f.decrypt(ciphertext.encode()).decode()
             except (InvalidToken, binascii.Error, Exception) as exc:
                 last_error = exc
                 continue
