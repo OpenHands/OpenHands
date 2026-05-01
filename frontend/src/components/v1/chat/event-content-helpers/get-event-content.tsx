@@ -273,7 +273,7 @@ export const getEventContent = (
     }
   } else if (isACPToolCallEvent(event)) {
     // ACP sub-agent tool calls reuse the same card shape as observations:
-    // title is "ACP · Running/Editing/Reading …" via a translation key that
+    // title is "Running/Editing/Reading …" via a translation key that
     // mirrors ACTION_MESSAGE$RUN etc.; details are markdown built from
     // raw_input + raw_output the same way getTerminalObservationContent
     // builds "Command: / Output:" blocks.

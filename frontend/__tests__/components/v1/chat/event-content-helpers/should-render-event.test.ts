@@ -6,6 +6,25 @@ import {
   createPlanningObservationEvent,
   createUserMessageEvent,
 } from "test-utils";
+import { ACPToolCallEvent } from "#/types/v1/core/events/acp-tool-call-event";
+
+const makeACPEvent = (
+  overrides: Partial<ACPToolCallEvent> = {},
+): ACPToolCallEvent => ({
+  id: "acp-1",
+  kind: "ACPToolCallEvent",
+  timestamp: "2024-01-01T00:00:00Z",
+  source: "agent",
+  tool_call_id: "tc-1",
+  title: "Run command",
+  status: "completed",
+  tool_kind: "execute",
+  raw_input: { command: "ls" },
+  raw_output: "file.txt",
+  content: null,
+  is_error: false,
+  ...overrides,
+});
 
 describe("shouldRenderEvent - PlanningFileEditorAction", () => {
   it("should return false for PlanningFileEditorAction", () => {
@@ -29,6 +48,32 @@ describe("shouldRenderEvent - PlanningFileEditorAction", () => {
 
   it("should return true for user message events", () => {
     const event = createUserMessageEvent("msg-1");
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+});
+
+describe("shouldRenderEvent - ACPToolCallEvent", () => {
+  it("should return false for in_progress events (suppress empty-args flash)", () => {
+    const event = makeACPEvent({ status: "in_progress", raw_input: {} });
+
+    expect(shouldRenderEvent(event)).toBe(false);
+  });
+
+  it("should return true for completed events", () => {
+    const event = makeACPEvent({ status: "completed" });
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+
+  it("should return true for failed events", () => {
+    const event = makeACPEvent({ status: "failed", is_error: true });
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+
+  it("should return true for null status (backwards compat)", () => {
+    const event = makeACPEvent({ status: null });
 
     expect(shouldRenderEvent(event)).toBe(true);
   });

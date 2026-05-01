@@ -57,9 +57,10 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     return true;
   }
 
-  // Render ACP sub-agent tool call events
+  // Render ACP sub-agent tool call events — suppress in_progress (empty args)
+  // so the card only appears once fully populated.
   if (isACPToolCallEvent(event)) {
-    return true;
+    return event.status !== "in_progress";
   }
 
   // Don't render any other event types (system events, etc.)

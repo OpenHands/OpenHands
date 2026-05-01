@@ -4,8 +4,7 @@ import { MAX_CONTENT_LENGTH } from "./shared";
 
 /**
  * Pick the translation key used for the ACP tool call title row. Mirrors
- * ACTION_MESSAGE$RUN / $EDIT / $READ etc. but with an ``ACP · `` prefix so
- * the card is visually distinguishable from regular OpenHands actions.
+ * ACTION_MESSAGE$RUN / $EDIT / $READ etc.
  */
 export const getACPToolCallTitleKey = (event: ACPToolCallEvent): string => {
   switch (event.tool_kind) {
