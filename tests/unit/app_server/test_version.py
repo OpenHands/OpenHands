@@ -3,7 +3,7 @@ import sys
 import textwrap
 import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from openhands.app_server.version import get_version
 
@@ -37,7 +37,9 @@ class TestGetVersionFromPyproject:
         fake_file.parent.mkdir(parents=True)
         fake_file.touch()
 
-        with patch('openhands.app_server.version.os.path.abspath', return_value=str(fake_file)):
+        with patch(
+            'openhands.app_server.version.os.path.abspath', return_value=str(fake_file)
+        ):
             assert get_version() == '1.2.3'
 
     def test_reads_second_candidate_path(self, tmp_path):
@@ -50,7 +52,9 @@ class TestGetVersionFromPyproject:
         fake_file.parent.mkdir(parents=True, exist_ok=True)
         fake_file.touch()
 
-        with patch('openhands.app_server.version.os.path.abspath', return_value=str(fake_file)):
+        with patch(
+            'openhands.app_server.version.os.path.abspath', return_value=str(fake_file)
+        ):
             assert get_version() == '4.5.6'
 
     def test_strips_quotes(self, tmp_path):
@@ -61,7 +65,9 @@ class TestGetVersionFromPyproject:
         fake_file.parent.mkdir(parents=True)
         fake_file.touch()
 
-        with patch('openhands.app_server.version.os.path.abspath', return_value=str(fake_file)):
+        with patch(
+            'openhands.app_server.version.os.path.abspath', return_value=str(fake_file)
+        ):
             assert get_version() == '9.8.7'
 
 
@@ -88,7 +94,9 @@ class TestGetVersionFallbacks:
         # Create a fake pkg_resources module so the import inside get_version succeeds
         fake_pkg = types.ModuleType('pkg_resources')
         fake_pkg.DistributionNotFound = type('DistributionNotFound', (Exception,), {})
-        fake_pkg.get_distribution = lambda name: type('D', (), {'version': '13.14.15'})()
+        fake_pkg.get_distribution = lambda name: type(
+            'D', (), {'version': '13.14.15'}
+        )()
 
         with (
             self._patch_no_pyproject(),
