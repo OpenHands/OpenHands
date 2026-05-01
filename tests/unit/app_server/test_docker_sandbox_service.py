@@ -232,6 +232,21 @@ class TestDockerSandboxService:
         # Verify - should start from beginning
         assert len(result.items) == 1
 
+    @pytest.mark.asyncio
+    async def test_search_sandboxes_negative_page_id_clamped(
+        self, service, mock_running_container
+    ):
+        """Test that a negative page_id is clamped to 0 (returns from beginning)."""
+        # Setup
+        service.docker_client.containers.list.return_value = [mock_running_container]
+        service.httpx_client.get.return_value.raise_for_status.return_value = None
+
+        # Execute with negative page_id
+        result = await service.search_sandboxes(page_id='-5')
+
+        # Verify - negative offset must be clamped to 0, so the item is returned
+        assert len(result.items) == 1
+
     async def test_search_sandboxes_docker_api_error(self, service):
         """Test handling of Docker API errors."""
         # Setup

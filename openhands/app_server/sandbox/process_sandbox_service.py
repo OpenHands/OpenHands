@@ -247,7 +247,7 @@ class ProcessSandboxService(SandboxService):
         start_idx = 0
         if page_id:
             try:
-                start_idx = int(page_id)
+                start_idx = max(0, int(page_id))
             except ValueError:
                 start_idx = 0
 

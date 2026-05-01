@@ -773,6 +773,26 @@ class TestSandboxSearch:
         remote_sandbox_service.db_session.execute.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_search_sandboxes_negative_page_id_clamped(
+        self, remote_sandbox_service
+    ):
+        """Test that a negative page_id is clamped to 0 (no undefined SQL offset)."""
+        # Setup - empty result set
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result = MagicMock()
+        mock_result.scalars.return_value = mock_scalars
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        # Execute with a negative page_id; must not raise and must start from 0
+        result = await remote_sandbox_service.search_sandboxes(page_id='-20', limit=5)
+
+        assert len(result.items) == 0
+        assert result.next_page_id is None
+        # The DB query must have been executed (not short-circuited)
+        remote_sandbox_service.db_session.execute.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_get_runtimes_batch_success(self, remote_sandbox_service):
         """Test successful batch runtime retrieval."""
         # Setup

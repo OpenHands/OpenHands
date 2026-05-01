@@ -162,6 +162,17 @@ class TestProcessSandboxService:
         assert result.next_page_id is None
 
     @pytest.mark.asyncio
+    async def test_search_sandboxes_negative_page_id_clamped(
+        self, process_sandbox_service
+    ):
+        """Test that a negative page_id is clamped to 0 (returns from beginning)."""
+        result = await process_sandbox_service.search_sandboxes(page_id='-10')
+
+        # Negative page_id must be clamped to 0; empty service returns nothing
+        assert len(result.items) == 0
+        assert result.next_page_id is None
+
+    @pytest.mark.asyncio
     async def test_get_sandbox_not_found(self, process_sandbox_service):
         """Test getting a sandbox that doesn't exist."""
         result = await process_sandbox_service.get_sandbox('nonexistent')

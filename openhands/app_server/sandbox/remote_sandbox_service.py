@@ -288,7 +288,7 @@ class RemoteSandboxService(SandboxService):
         if page_id is not None:
             # Parse page_id to get offset or cursor
             try:
-                offset = int(page_id)
+                offset = max(0, int(page_id))
                 stmt = stmt.offset(offset)
             except ValueError:
                 # If page_id is not a valid integer, start from beginning
