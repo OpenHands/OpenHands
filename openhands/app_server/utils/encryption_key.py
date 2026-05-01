@@ -1,7 +1,6 @@
-from base64 import b64encode
+import datetime
 import hashlib
 import os
-import datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,13 +57,17 @@ def get_default_encryption_keys(workspace_dir: Path) -> list[EncryptionKey]:
     jwt_secret_file = workspace_dir / '.jwt_secret'
     if jwt_secret_file.exists():
         jwt_secret = jwt_secret_file.read_text().strip()
-        encryption_keys.append(EncryptionKey(
-            id=base62.encodebytes(hashlib.sha256(jwt_secret.encode()).digest()),
-            key=SecretStr(jwt_secret),
-            active=True,
-            notes='jwt secret master key',
-            created_at=datetime.datetime.fromtimestamp(jwt_secret_file.stat().st_mtime, tz=datetime.UTC),
-        ))
+        encryption_keys.append(
+            EncryptionKey(
+                id=base62.encodebytes(hashlib.sha256(jwt_secret.encode()).digest()),
+                key=SecretStr(jwt_secret),
+                active=True,
+                notes='jwt secret master key',
+                created_at=datetime.datetime.fromtimestamp(
+                    jwt_secret_file.stat().st_mtime, tz=datetime.UTC
+                ),
+            )
+        )
 
     if encryption_keys:
         return encryption_keys

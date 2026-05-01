@@ -49,8 +49,6 @@ from openhands.sdk.settings import (
     OpenHandsAgentSettings,
     export_agent_settings_schema,
 )
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import ConversationSettings
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'

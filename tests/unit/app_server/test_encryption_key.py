@@ -115,7 +115,9 @@ class TestGetDefaultEncryptionKeys:
         assert keys[1].key.get_secret_value() == 'secret-2'
         assert keys[1].active is False
 
-    def test_loads_keys_from_jwt_secret_file(self, temp_workspace, clear_jwt_secret_env):
+    def test_loads_keys_from_jwt_secret_file(
+        self, temp_workspace, clear_jwt_secret_env
+    ):
         """When only .jwt_secret file exists, loads key from it."""
         jwt_secret_file = temp_workspace / '.jwt_secret'
         jwt_secret = 'legacy-jwt-secret-value'
