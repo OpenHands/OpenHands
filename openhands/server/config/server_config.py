@@ -8,9 +8,10 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import os
 
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.utils.import_utils import get_impl
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.types import AppMode, ServerConfigInterface
+from openhands.server.types import ServerConfigInterface
 
 
 class ServerConfig(ServerConfigInterface):

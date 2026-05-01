@@ -28,6 +28,7 @@ from openhands.app_server.config import (
     get_global_config,
     get_sandbox_service,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
@@ -50,7 +51,6 @@ from openhands.app_server.user_auth.user_auth import (
 )
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.server.types import AppMode
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()

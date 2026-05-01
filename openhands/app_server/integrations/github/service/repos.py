@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.github.service.base import GitHubMixinBase
 from openhands.app_server.integrations.service_types import (
     OwnerType,
@@ -7,7 +8,6 @@ from openhands.app_server.integrations.service_types import (
     Repository,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.types import AppMode
 
 
 class GitHubReposMixin(GitHubMixinBase):
