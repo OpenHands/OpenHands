@@ -1,6 +1,6 @@
 # PostHog Analytics — Event Catalog
 
-*Last updated: 2026-04-21*
+*Last updated: 2026-05-01*
 
 ## Architecture Overview
 
@@ -26,15 +26,15 @@ Every event respects user consent.
 | 6 | **conversation deleted** | User deletes a conversation | `conversation_id` |
 | 7 | **credit purchased** | Stripe checkout completes successfully | `amount_usd`, `credit_balance_before`, `credit_balance_after` |
 | 8 | **credit limit reached** | Conversation fails due to insufficient credits (fires alongside #5) | `conversation_id`, `credit_balance`, `llm_model` |
-| 9 | **user activated** | User's first conversation finishes successfully (once per user) | `conversation_id`, `time_to_activate_seconds`, `llm_model`, `trigger` |
-| 10 | **git provider connected** | User connects a git provider (GitHub, GitLab, etc.) | `provider_type` |
-| 11 | **onboarding completed** | User submits the onboarding form | (form selections passed as properties) |
-| 12 | **settings saved** | User saves their settings | `settings_changed` |
-| 13 | **mcp config updated** | User updates their MCP server configuration | `has_mcp_config`, `sse_servers_count`, `stdio_servers_count` |
-| 14 | **trajectory downloaded** | User downloads a conversation trajectory | `conversation_id` |
-| 15 | **team members invited** | User invites team members to their organization | `invited_count`, `successful_count`, `failed_count`, `role` |
+| 9 | **git provider connected** | User connects a git provider (GitHub, GitLab, etc.) | `provider_type` |
+| 10 | **onboarding completed** | User submits the onboarding form | (form selections passed as properties) |
+| 11 | **settings saved** | User saves their settings | `settings_changed`\*\* |
+| 12 | **trajectory downloaded** | User downloads a conversation trajectory | `conversation_id` |
+| 13 | **team members invited** | User invites team members to their organization | `invited_count`, `successful_count`, `failed_count`, `role` |
 
 \*Error types: `budget_exceeded`, `model_error`, `runtime_error`, `timeout`, `user_cancelled`, `unknown`
+
+\*\*`settings_changed` is a list of payload keys that were modified (e.g., `['llm_model']`, `['agent_settings_diff']`, etc.)
 
 Every event also carries: `app_mode` (saas/oss), `is_feature_env`, and `org_id` when available.
 
@@ -86,10 +86,10 @@ User signs up       →  user signed up  +  identify
 User logs in        →  user logged in  +  identify
 Onboarding          →  onboarding completed
 Git connect         →  git provider connected
-Settings change     →  settings saved / mcp config updated
+Settings change     →  settings saved
 
 Conversation starts →  conversation created
-  ├─ Finishes OK    →  conversation finished  (+ user activated if first ever)
+  ├─ Finishes OK    →  conversation finished
   ├─ Errors         →  conversation errored   (+ credit limit reached if budget)
   ├─ Stopped        →  conversation finished
   └─ Deleted        →  conversation deleted
