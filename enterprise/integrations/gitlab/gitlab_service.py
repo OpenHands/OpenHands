@@ -15,7 +15,7 @@ from openhands.app_server.integrations.service_types import (
     RequestMethod,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.types import AppMode
+from openhands.app_server.config_api.config_models import AppMode
 
 
 class SaaSGitLabService(GitLabService):

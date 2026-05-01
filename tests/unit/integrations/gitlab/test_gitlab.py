@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import SecretStr
 
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations import provider as provider_module
 from openhands.app_server.integrations.gitlab import (
     constants as gitlab_constants_module,
@@ -17,7 +18,6 @@ from openhands.app_server.integrations.service_types import (
     ProviderType,
     Repository,
 )
-from openhands.server.types import AppMode
 
 
 @pytest.mark.asyncio

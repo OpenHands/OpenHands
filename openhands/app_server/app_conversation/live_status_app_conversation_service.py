@@ -61,6 +61,7 @@ from openhands.app_server.config import (
     get_event_callback_service,
     resolve_provider_llm_base_url,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
@@ -105,7 +106,6 @@ from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.server.types import AppMode
 from openhands.tools.preset.default import (
     get_default_tools,
 )

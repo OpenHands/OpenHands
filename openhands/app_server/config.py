@@ -28,6 +28,7 @@ from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanSe
 from openhands.app_server.app_lifespan.oss_app_lifespan_service import (
     OssAppLifespanService,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.config_api.llm_model_service import (
     LLMModelService,
     LLMModelServiceInjector,
@@ -66,7 +67,6 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.sdk.utils.models import OpenHandsModel
-from openhands.server.types import AppMode
 
 
 def get_default_persistence_dir() -> Path:

@@ -7,13 +7,7 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import Any
-
-
-class AppMode(Enum):
-    OPENHANDS = 'oss'
-    SAAS = 'saas'
 
 
 class ServerConfigInterface(ABC):

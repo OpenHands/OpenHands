@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
 
 from openhands.app_server.config import get_global_config
-from openhands.server.types import AppMode
+from openhands.app_server.config_api.config_models import AppMode
 
 _SESSION_API_KEY = os.getenv('SESSION_API_KEY')
 _SESSION_API_KEY_HEADER = APIKeyHeader(name='X-Session-API-Key', auto_error=False)

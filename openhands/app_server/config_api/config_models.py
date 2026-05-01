@@ -1,6 +1,13 @@
 """Config-related models for OpenHands App Server V1 API."""
 
+from enum import Enum
+
 from pydantic import BaseModel, Field
+
+
+class AppMode(Enum):
+    OPENHANDS = 'oss'
+    SAAS = 'saas'
 
 
 class LLMModel(BaseModel):
