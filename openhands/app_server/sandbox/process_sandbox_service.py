@@ -139,8 +139,8 @@ class ProcessSandboxService(SandboxService):
                 cmd,
                 env=env,
                 cwd=working_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
 
             # Wait a moment for the process to start
@@ -148,8 +148,9 @@ class ProcessSandboxService(SandboxService):
 
             # Check if process is still running
             if process.poll() is not None:
-                stdout, stderr = process.communicate()
-                raise SandboxError(f'Agent process failed to start: {stderr.decode()}')
+                raise SandboxError(
+                    f'Agent process failed to start with exit code {process.returncode}'
+                )
 
             return process
 

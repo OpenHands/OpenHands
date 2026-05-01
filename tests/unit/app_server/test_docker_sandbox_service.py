@@ -1547,6 +1547,33 @@ class TestDockerSandboxServiceInjector:
 
         mock_logger.warning.assert_not_called()
 
+    def test_container_url_pattern_without_port_placeholder_raises(self):
+        """Test that container_url_pattern without {port} placeholder raises ValueError."""
+        import pytest
+        from pydantic import ValidationError
+
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        with pytest.raises(ValidationError) as exc_info:
+            DockerSandboxServiceInjector(
+                container_url_pattern='http://192.168.1.100:3000'
+            )
+
+        assert 'port' in str(exc_info.value).lower()
+
+    def test_container_url_pattern_with_port_placeholder_succeeds(self):
+        """Test that container_url_pattern with {port} placeholder is accepted."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(
+            container_url_pattern='http://192.168.1.100:{port}'
+        )
+        assert injector.container_url_pattern == 'http://192.168.1.100:{port}'
+
 
 class TestDockerSandboxServiceInjectorFromEnv:
     """Test cases for DockerSandboxServiceInjector environment variable configuration."""

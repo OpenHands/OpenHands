@@ -731,6 +731,15 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
     )
 
     @model_validator(mode='after')
+    def _validate_container_url_pattern(self) -> 'DockerSandboxServiceInjector':
+        if '{port}' not in self.container_url_pattern:
+            raise ValueError(
+                f'container_url_pattern must contain "{{port}}" placeholder, '
+                f'got: {self.container_url_pattern!r}'
+            )
+        return self
+
+    @model_validator(mode='after')
     def _warn_host_network_config(self) -> 'DockerSandboxServiceInjector':
         if self.use_host_network and self.max_num_sandboxes > 1:
             _logger.warning(

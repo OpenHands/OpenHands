@@ -663,6 +663,56 @@ class TestSandboxLifecycle:
         # Verify
         assert result is True  # 404 should be ignored for delete operations
 
+    @pytest.mark.asyncio
+    async def test_pause_old_sandboxes_pauses_oldest_first(
+        self, remote_sandbox_service
+    ):
+        """Test that pause_old_sandboxes pauses the oldest sandboxes first (asc order).
+
+        With max_num_sandboxes=2 and 3 running sandboxes, the 1 oldest sandbox
+        should be paused, not the newest.
+        """
+        # Create sandboxes with distinct timestamps (oldest first)
+        oldest = create_stored_sandbox(
+            'sb-old', created_at=datetime(2020, 1, 1, tzinfo=timezone.utc)
+        )
+        middle = create_stored_sandbox(
+            'sb-mid', created_at=datetime(2021, 1, 1, tzinfo=timezone.utc)
+        )
+        newest = create_stored_sandbox(
+            'sb-new', created_at=datetime(2022, 1, 1, tzinfo=timezone.utc)
+        )
+
+        # Mock /list returning all three sandboxes as running
+        mock_list_response = MagicMock()
+        mock_list_response.json.return_value = {
+            'runtimes': [
+                create_runtime_data('sb-old'),
+                create_runtime_data('sb-mid'),
+                create_runtime_data('sb-new'),
+            ]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_list_response
+        )
+
+        # DB returns sandboxes in ascending (oldest-first) order — as the fixed code does
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = [oldest, middle, newest]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value = mock_scalars
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        # Mock pause_sandbox to succeed
+        remote_sandbox_service.pause_sandbox = AsyncMock(return_value=True)
+
+        # Execute: max_num_sandboxes=2, so 1 (the oldest) should be paused
+        paused = await remote_sandbox_service.pause_old_sandboxes(2)
+
+        # Only the oldest sandbox should have been paused
+        assert paused == ['sb-old']
+        remote_sandbox_service.pause_sandbox.assert_called_once_with('sb-old')
+
 
 class TestSandboxSearch:
     """Test cases for sandbox search and retrieval."""
