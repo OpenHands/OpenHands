@@ -379,6 +379,31 @@ class TestSandboxInfoConversion:
         # Verify
         assert sandbox_info.status == SandboxStatus.MISSING
 
+    @pytest.mark.asyncio
+    async def test_to_sandbox_info_missing_session_api_key(
+        self, remote_sandbox_service
+    ):
+        """Fix A: runtime dict without session_api_key must not raise KeyError.
+
+        Before the fix, ``runtime['session_api_key']`` would raise KeyError when
+        the remote service returns a partial response.  After the fix, `.get()` is
+        used so the field defaults to None gracefully.
+        """
+        stored_sandbox = create_stored_sandbox()
+        # Build a runtime dict that deliberately omits 'session_api_key'
+        runtime_without_key = {
+            'session_id': 'test-sandbox-123',
+            'status': 'starting',
+            'url': None,
+        }
+
+        # Should not raise KeyError
+        sandbox_info = remote_sandbox_service._to_sandbox_info(
+            stored_sandbox, runtime_without_key
+        )
+
+        assert sandbox_info.session_api_key is None
+
 
 class TestSandboxLifecycle:
     """Test cases for sandbox lifecycle operations."""

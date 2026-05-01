@@ -1125,6 +1125,21 @@ class TestDockerSandboxService:
 
         assert result == {}
 
+    def test_get_container_env_vars_skips_empty_key(self, service):
+        """Fix C: env vars with an empty key (e.g. '=value') must be skipped.
+
+        Before the fix, ``result[''] = value`` silently injected an empty-string
+        key into the dict.  After the fix such entries are skipped with
+        ``if not key: continue``.
+        """
+        mock_container = MagicMock()
+        mock_container.attrs = {'Config': {'Env': ['=should_be_skipped', 'NORMAL=ok']}}
+
+        result = service._get_container_env_vars(mock_container)
+
+        assert result == {'NORMAL': 'ok'}
+        assert '' not in result
+
     async def test_container_to_sandbox_info_none_image(self, service):
         """Guard against containers whose image object is None (image deleted from host)."""
         container = MagicMock()

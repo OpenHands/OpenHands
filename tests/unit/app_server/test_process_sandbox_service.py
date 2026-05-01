@@ -9,6 +9,7 @@ import httpx
 import psutil
 import pytest
 
+from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.process_sandbox_service import (
     ProcessInfo,
     ProcessSandboxService,
@@ -236,6 +237,45 @@ class TestProcessSandboxService:
             assert sandbox_id not in pss_module._processes
         finally:
             pss_module._processes.pop(sandbox_id, None)
+
+    @pytest.mark.asyncio
+    async def test_start_agent_process_does_not_double_wrap_sandbox_error(
+        self, process_sandbox_service
+    ):
+        """Fix D: SandboxError raised by process.poll() must not be re-wrapped.
+
+        Before the fix, the inner ``SandboxError('Agent process failed to start …')``
+        was caught by ``except Exception`` and wrapped in another
+        ``SandboxError('Failed to start agent process: Agent process failed to start …')``.
+        After the fix, an existing SandboxError is re-raised as-is.
+        """
+        mock_popen = MagicMock()
+        mock_popen.returncode = 1
+        mock_popen.poll.return_value = 1  # non-zero → inner SandboxError
+
+        mock_spec = MockSandboxSpec()
+
+        with (
+            patch('subprocess.Popen', return_value=mock_popen),
+            patch('asyncio.sleep', new_callable=AsyncMock),
+        ):
+            with pytest.raises(SandboxError) as exc_info:
+                await process_sandbox_service._start_agent_process(
+                    sandbox_id='test-sandbox',
+                    port=9000,
+                    working_dir='/tmp/test',
+                    session_api_key='test-key',
+                    sandbox_spec=mock_spec,
+                )
+
+        message = str(exc_info.value)
+        # The original inner message must be present
+        assert 'exit code 1' in message
+        # The double-wrapped form must NOT appear
+        assert (
+            'Failed to start agent process: Agent process failed to start'
+            not in message
+        )
 
     @pytest.mark.asyncio
     async def test_start_sandbox_with_sandbox_id(self, process_sandbox_service):

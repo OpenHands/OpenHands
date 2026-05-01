@@ -10,9 +10,9 @@ import docker
 import httpx
 from docker.errors import APIError, NotFound
 from fastapi import Request
+from openhands.agent_server.utils import utc_now
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from openhands.agent_server.utils import utc_now
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.docker_sandbox_spec_service import get_docker_client
 from openhands.app_server.sandbox.sandbox_models import (
@@ -122,6 +122,8 @@ class DockerSandboxService(SandboxService):
         for env_var in env_vars_list:
             if '=' in env_var:
                 key, value = env_var.split('=', 1)
+                if not key:
+                    continue
                 result[key] = value
             else:
                 # Handle cases where an environment variable might not have a value

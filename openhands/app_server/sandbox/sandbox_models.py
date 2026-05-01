@@ -1,9 +1,8 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
-
 from openhands.agent_server.utils import utc_now
+from pydantic import BaseModel, Field
 
 
 class SandboxStatus(Enum):
@@ -46,7 +45,7 @@ class SandboxInfo(BaseModel):
         )
     )
     exposed_urls: list[ExposedUrl] | None = Field(
-        default_factory=lambda: [],
+        default=None,
         description=(
             'URLs exposed by the sandbox (App server, Vscode, etc...)'
             'Sandboxes with a status STARTING / PAUSED / ERROR may '
