@@ -1,6 +1,6 @@
 """Test MCP remote server timeout configuration."""
 
-from openhands.core.config.mcp_config import RemoteMCPServer
+from fastmcp.mcp_config import RemoteMCPServer
 
 
 class TestRemoteMCPServer:
