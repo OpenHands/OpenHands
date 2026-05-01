@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_spec_models import (
     SandboxSpecInfo,
     SandboxSpecInfoPage,
@@ -23,7 +24,7 @@ class PresetSandboxSpecService(SandboxSpecService):
         start_idx = 0
         if page_id:
             try:
-                start_idx = int(page_id)
+                start_idx = max(0, int(page_id))
             except ValueError:
                 start_idx = 0
 
@@ -45,4 +46,6 @@ class PresetSandboxSpecService(SandboxSpecService):
         return None
 
     async def get_default_sandbox_spec(self) -> SandboxSpecInfo:
+        if not self.specs:
+            raise SandboxError('No sandbox specs configured')
         return self.specs[0]

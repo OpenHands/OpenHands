@@ -103,9 +103,7 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
         _logger.debug('Checking Docker Image: %s', spec.id)
         # Acquire a per-image lock so that if two coroutines race here, only
         # one of them performs the actual pull while the other waits.
-        if spec.id not in self._pull_locks:
-            self._pull_locks[spec.id] = asyncio.Lock()
-        async with self._pull_locks[spec.id]:
+        async with self._pull_locks.setdefault(spec.id, asyncio.Lock()):
             try:
                 docker_client = get_docker_client()
                 loop = asyncio.get_running_loop()

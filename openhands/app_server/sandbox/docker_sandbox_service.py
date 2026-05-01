@@ -331,7 +331,7 @@ class DockerSandboxService(SandboxService):
             start_idx = 0
             if page_id:
                 try:
-                    start_idx = int(page_id)
+                    start_idx = max(0, int(page_id))
                 except ValueError:
                     start_idx = 0
 
@@ -619,7 +619,7 @@ class DockerSandboxService(SandboxService):
             except NotFound:
                 pass  # Volume might not exist or already removed
             except (APIError, OSError) as exc:
-                _logger.warning('Failed to remove volume %s: %s', volume_name, exc)
+                _logger.error('Failed to remove volume %s: %s', volume_name, exc)
 
             return True
         except (NotFound, APIError, OSError) as exc:
