@@ -255,7 +255,7 @@ async def store_settings(
 
         await settings_store.store(settings)
 
-        # Analytics: track settings saved and MCP config updates
+        # Analytics: track settings saved
         try:
             analytics = get_analytics_service()
             if analytics and user_id:
@@ -268,36 +268,11 @@ async def store_settings(
                     user=None,
                 )
 
-                # Track settings saved
                 settings_changed = list(payload.keys())
                 analytics.track_settings_saved(
                     ctx=ctx,
                     settings_changed=settings_changed,
                 )
-
-                # Track MCP config update if MCP settings changed
-                agent_settings = payload.get('agent_settings', {})
-                if isinstance(agent_settings, dict):
-                    mcp_config = agent_settings.get('mcp_config')
-                    if mcp_config:
-                        mcp_servers = mcp_config.get('mcpServers', {})
-                        # Count SSE vs stdio servers
-                        sse_count = sum(
-                            1
-                            for s in mcp_servers.values()
-                            if isinstance(s, dict) and s.get('url')
-                        )
-                        stdio_count = sum(
-                            1
-                            for s in mcp_servers.values()
-                            if isinstance(s, dict) and s.get('command')
-                        )
-                        analytics.track_mcp_config_updated(
-                            ctx=ctx,
-                            has_mcp_config=bool(mcp_servers),
-                            sse_servers_count=sse_count,
-                            stdio_servers_count=stdio_count,
-                        )
         except Exception:
             logger.exception('analytics:settings_saved:failed')
 

@@ -18,7 +18,6 @@ from openhands.analytics.analytics_constants import (
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
     GIT_PROVIDER_CONNECTED,
-    MCP_CONFIG_UPDATED,
     ONBOARDING_COMPLETED,
     SETTINGS_SAVED,
     TEAM_MEMBERS_INVITED,
@@ -816,24 +815,6 @@ class TestTypedEventMethods:
         assert kwargs['event'] == SETTINGS_SAVED
         props = kwargs['properties']
         assert props['settings_changed'] == ['llm_model', 'agent_type']
-
-    def test_track_mcp_config_updated(self, saas_service):
-        """track_mcp_config_updated calls capture with MCP_CONFIG_UPDATED and correct properties."""
-        service, mock_client = saas_service
-        ctx = make_ctx(user_id='user-1')
-        service.track_mcp_config_updated(
-            ctx=ctx,
-            has_mcp_config=True,
-            sse_servers_count=2,
-            stdio_servers_count=1,
-        )
-        mock_client.capture.assert_called_once()
-        _, kwargs = mock_client.capture.call_args
-        assert kwargs['event'] == MCP_CONFIG_UPDATED
-        props = kwargs['properties']
-        assert props['has_mcp_config'] is True
-        assert props['sse_servers_count'] == 2
-        assert props['stdio_servers_count'] == 1
 
     def test_track_trajectory_downloaded(self, saas_service):
         """track_trajectory_downloaded calls capture with TRAJECTORY_DOWNLOADED and correct properties."""

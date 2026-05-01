@@ -25,7 +25,6 @@ from openhands.analytics.analytics_constants import (
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
     GIT_PROVIDER_CONNECTED,
-    MCP_CONFIG_UPDATED,
     ONBOARDING_COMPLETED,
     SETTINGS_SAVED,
     TEAM_MEMBERS_INVITED,
@@ -411,30 +410,6 @@ class AnalyticsService:
             event=SETTINGS_SAVED,
             properties={
                 'settings_changed': settings_changed,
-            },
-            session_id=session_id,
-        )
-
-    def track_mcp_config_updated(
-        self,
-        ctx: AnalyticsContext,
-        *,
-        has_mcp_config: bool = True,
-        sse_servers_count: int = 0,
-        stdio_servers_count: int = 0,
-        session_id: str | None = None,
-    ) -> None:
-        """Track 'mcp config updated' event.
-
-        Fired when a user updates their MCP server configuration.
-        """
-        self.capture(
-            ctx=ctx,
-            event=MCP_CONFIG_UPDATED,
-            properties={
-                'has_mcp_config': has_mcp_config,
-                'sse_servers_count': sse_servers_count,
-                'stdio_servers_count': stdio_servers_count,
             },
             session_id=session_id,
         )
