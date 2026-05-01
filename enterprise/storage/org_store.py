@@ -50,7 +50,11 @@ class OrgStore:
 
     @staticmethod
     def get_agent_settings_from_org(org: Org) -> OpenHandsAgentSettings:
-        return OpenHandsAgentSettings.model_validate(dict(org.agent_settings))
+        kwargs = dict(org.agent_settings)
+
+        # Some saved entries have 'llm' in here which is invalid.
+        kwargs['agent_kind'] = 'openhands'
+        return OpenHandsAgentSettings.model_validate(kwargs)
 
     @staticmethod
     def get_conversation_settings_from_org(org: Org) -> ConversationSettings:
