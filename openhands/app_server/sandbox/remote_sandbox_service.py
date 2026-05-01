@@ -55,11 +55,11 @@ from openhands.app_server.utils.sql_utils import Base, UtcDateTime
 _logger = logging.getLogger(__name__)
 polling_task: asyncio.Task | None = None
 STATUS_MAPPING = {
-    'running': SandboxStatus.RUNNING,
-    'paused': SandboxStatus.PAUSED,
-    'stopped': SandboxStatus.MISSING,
-    'starting': SandboxStatus.STARTING,
-    'error': SandboxStatus.ERROR,
+    "running": SandboxStatus.RUNNING,
+    "paused": SandboxStatus.PAUSED,
+    "stopped": SandboxStatus.MISSING,
+    "starting": SandboxStatus.STARTING,
+    "error": SandboxStatus.ERROR,
 }
 AGENT_SERVER_PORT = 60000
 VSCODE_PORT = 60001
@@ -81,7 +81,7 @@ class StoredRemoteSandbox(Base):  # type: ignore
     run historicallly.
     """
 
-    __tablename__ = 'v1_remote_sandbox'
+    __tablename__ = "v1_remote_sandbox"
     id = Column(String, primary_key=True)
     created_by_user_id = Column(String, nullable=True, index=True)
     sandbox_spec_id = Column(String, index=True)  # shadows runtime['image']
@@ -116,13 +116,13 @@ class RemoteSandboxService(SandboxService):
         try:
             url = self.api_url + path
             return await self.httpx_client.request(
-                method, url, headers={'X-API-Key': self.api_key}, **kwargs
+                method, url, headers={"X-API-Key": self.api_key}, **kwargs
             )
         except httpx.TimeoutException:
-            _logger.error('No response received within timeout for URL: %s', url)
+            _logger.error("No response received within timeout for URL: %s", url)
             raise
         except httpx.HTTPError as exc:
-            _logger.error('HTTP error for URL %s: %s', url, exc)
+            _logger.error("HTTP error for URL %s: %s", url, exc)
             raise
 
     def _to_sandbox_info(
@@ -132,18 +132,18 @@ class RemoteSandboxService(SandboxService):
 
         # Get session_api_key and exposed urls
         if runtime:
-            session_api_key = runtime['session_api_key']
+            session_api_key = runtime["session_api_key"]
             if status == SandboxStatus.RUNNING:
                 exposed_urls = []
-                url = runtime.get('url', None)
+                url = runtime.get("url", None)
                 if url:
-                    runtime_id = runtime['runtime_id']
+                    runtime_id = runtime["runtime_id"]
                     exposed_urls.append(
                         ExposedUrl(name=AGENT_SERVER, url=url, port=AGENT_SERVER_PORT)
                     )
                     vscode_url = (
-                        _build_service_url(url, 'vscode', runtime_id)
-                        + f'?tkn={session_api_key}&folder=%2Fworkspace%2Fproject'
+                        _build_service_url(url, "vscode", runtime_id)
+                        + f"?tkn={session_api_key}&folder=%2Fworkspace%2Fproject"
                     )
                     exposed_urls.append(
                         ExposedUrl(name=VSCODE, url=vscode_url, port=VSCODE_PORT)
@@ -151,14 +151,14 @@ class RemoteSandboxService(SandboxService):
                     exposed_urls.append(
                         ExposedUrl(
                             name=WORKER_1,
-                            url=_build_service_url(url, 'work-1', runtime_id),
+                            url=_build_service_url(url, "work-1", runtime_id),
                             port=WORKER_1_PORT,
                         )
                     )
                     exposed_urls.append(
                         ExposedUrl(
                             name=WORKER_2,
-                            url=_build_service_url(url, 'work-2', runtime_id),
+                            url=_build_service_url(url, "work-2", runtime_id),
                             port=WORKER_2_PORT,
                         )
                     )
@@ -191,7 +191,7 @@ class RemoteSandboxService(SandboxService):
         if not runtime:
             return SandboxStatus.MISSING
 
-        runtime_status = runtime.get('status')
+        runtime_status = runtime.get("status")
         if runtime_status:
             status = STATUS_MAPPING.get(runtime_status.lower(), None)
             if status is not None:
@@ -215,8 +215,8 @@ class RemoteSandboxService(SandboxService):
 
     async def _get_runtime(self, sandbox_id: str) -> dict[str, Any]:
         response = await self._send_runtime_api_request(
-            'GET',
-            f'/sessions/{sandbox_id}',
+            "GET",
+            f"/sessions/{sandbox_id}",
         )
         response.raise_for_status()
         runtime_data = response.json()
@@ -237,11 +237,11 @@ class RemoteSandboxService(SandboxService):
             return {}
 
         # Build query parameters for the batch endpoint
-        params = [('ids', sandbox_id) for sandbox_id in sandbox_ids]
+        params = [("ids", sandbox_id) for sandbox_id in sandbox_ids]
 
         response = await self._send_runtime_api_request(
-            'GET',
-            '/sessions/batch',
+            "GET",
+            "/sessions/batch",
             params=params,
         )
         response.raise_for_status()
@@ -252,11 +252,11 @@ class RemoteSandboxService(SandboxService):
         runtimes_by_id = {}
         if isinstance(batch_data, list):
             for runtime in batch_data:
-                if runtime and isinstance(runtime, dict) and 'session_id' in runtime:
-                    runtimes_by_id[runtime['session_id']] = runtime
+                if runtime and isinstance(runtime, dict) and "session_id" in runtime:
+                    runtimes_by_id[runtime["session_id"]] = runtime
         else:
             _logger.warning(
-                'Unexpected batch response type %s; expected list',
+                "Unexpected batch response type %s; expected list",
                 type(batch_data).__name__,
             )
 
@@ -270,7 +270,7 @@ class RemoteSandboxService(SandboxService):
 
         # If a public facing url is defined, add a callback to the agent server environment.
         if self.web_url:
-            environment[WEBHOOK_CALLBACK_VARIABLE] = f'{self.web_url}/api/v1/webhooks'
+            environment[WEBHOOK_CALLBACK_VARIABLE] = f"{self.web_url}/api/v1/webhooks"
             # We specify CORS settings only if there is a public facing url - otherwise
             # we are probably in local development and the only url in use is localhost
             environment[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
@@ -343,7 +343,7 @@ class RemoteSandboxService(SandboxService):
             runtime = await self._get_runtime(cast(str, stored_sandbox.id))
         except Exception:
             _logger.exception(
-                f'Error getting runtime: {stored_sandbox.id}', stack_info=True
+                f"Error getting runtime: {stored_sandbox.id}", stack_info=True
             )
 
         return self._to_sandbox_info(stored_sandbox, runtime)
@@ -358,21 +358,21 @@ class RemoteSandboxService(SandboxService):
         """
         try:
             response = await self._send_runtime_api_request(
-                'GET',
-                '/list',
+                "GET",
+                "/list",
             )
             response.raise_for_status()
             content = response.json()
-            for runtime in content['runtimes']:
-                if session_api_key == runtime['session_api_key']:
+            for runtime in content["runtimes"]:
+                if session_api_key == runtime["session_api_key"]:
                     query = await self._secure_select()
                     query = query.filter(
-                        StoredRemoteSandbox.id == runtime.get('session_id')
+                        StoredRemoteSandbox.id == runtime.get("session_id")
                     )
                     result = await self.db_session.execute(query)
                     sandbox = result.scalar_one_or_none()
                     if sandbox is None:
-                        raise ValueError('sandbox_not_found')
+                        raise ValueError("sandbox_not_found")
                     # Backfill the hash for future lookups (Auto committed at end of request)
                     sandbox.session_api_key_hash = _hash_session_api_key(
                         session_api_key
@@ -380,7 +380,7 @@ class RemoteSandboxService(SandboxService):
                     return self._to_sandbox_info(sandbox, runtime)
         except Exception:
             _logger.exception(
-                'Error getting sandbox from session_api_key', stack_info=True
+                "Error getting sandbox from session_api_key", stack_info=True
             )
 
         # Get all stored sandboxes for the current user
@@ -392,7 +392,7 @@ class RemoteSandboxService(SandboxService):
         for stored_sandbox in stored_sandboxes:
             try:
                 runtime = await self._get_runtime(cast(str, stored_sandbox.id))
-                if runtime and runtime.get('session_api_key') == session_api_key:
+                if runtime and runtime.get("session_api_key") == session_api_key:
                     # Backfill the hash for future lookups (Auto committed at end of request)
                     stored_sandbox.session_api_key_hash = _hash_session_api_key(
                         session_api_key
@@ -429,7 +429,7 @@ class RemoteSandboxService(SandboxService):
                 return self._to_sandbox_info(stored_sandbox, runtime)
             except Exception:
                 _logger.exception(
-                    f'Error getting runtime for sandbox {stored_sandbox.id}',
+                    f"Error getting runtime for sandbox {stored_sandbox.id}",
                     stack_info=True,
                 )
                 return self._to_sandbox_info(stored_sandbox, None)
@@ -455,7 +455,7 @@ class RemoteSandboxService(SandboxService):
                     sandbox_spec_id
                 )
                 if sandbox_spec_maybe is None:
-                    raise ValueError('Sandbox Spec not found')
+                    raise ValueError("Sandbox Spec not found")
                 sandbox_spec = sandbox_spec_maybe
 
             # Create a unique id, use provided sandbox_id if available
@@ -479,48 +479,48 @@ class RemoteSandboxService(SandboxService):
 
             # Prepare start request
             start_request: dict[str, Any] = {
-                'image': sandbox_spec.id,  # Use sandbox_spec.id as the container image
-                'command': sandbox_spec.command,
-                'working_dir': '/workspace',
-                'environment': environment,
-                'session_id': sandbox_id,  # Use sandbox_id as session_id
-                'resource_factor': self.resource_factor,
-                'run_as_user': 10001,
-                'run_as_group': 10001,
-                'fs_group': 10001,
+                "image": sandbox_spec.id,  # Use sandbox_spec.id as the container image
+                "command": sandbox_spec.command,
+                "working_dir": "/workspace",
+                "environment": environment,
+                "session_id": sandbox_id,  # Use sandbox_id as session_id
+                "resource_factor": self.resource_factor,
+                "run_as_user": 10001,
+                "run_as_group": 10001,
+                "fs_group": 10001,
             }
 
             # Add runtime class if specified
-            if self.runtime_class == 'sysbox':
-                start_request['runtime_class'] = 'sysbox-runc'
+            if self.runtime_class == "sysbox":
+                start_request["runtime_class"] = "sysbox-runc"
 
             # Start the runtime
             response = await self._send_runtime_api_request(
-                'POST',
-                '/start',
+                "POST",
+                "/start",
                 json=start_request,
             )
             response.raise_for_status()
             runtime_data = response.json()
 
             # Store the session_api_key hash for efficient lookups
-            session_api_key = runtime_data.get('session_api_key')
+            session_api_key = runtime_data.get("session_api_key")
             if session_api_key:
                 stored_sandbox.session_api_key_hash = _hash_session_api_key(  # type: ignore[assignment]
                     session_api_key
                 )
 
             # Log runtime assignment for observability
-            runtime_id = runtime_data.get('runtime_id', 'unknown')
+            runtime_id = runtime_data.get("runtime_id", "unknown")
             _logger.info(
-                'Started sandbox %s with runtime_id=%s', sandbox_id, runtime_id
+                "Started sandbox %s with runtime_id=%s", sandbox_id, runtime_id
             )
 
             return self._to_sandbox_info(stored_sandbox, runtime_data)
 
         except httpx.HTTPError as exc:
-            _logger.error('Failed to start sandbox: %s', exc)
-            raise SandboxError(f'Failed to start sandbox: {exc}') from exc
+            _logger.error("Failed to start sandbox: %s", exc)
+            raise SandboxError(f"Failed to start sandbox: {exc}") from exc
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox."""
@@ -532,16 +532,16 @@ class RemoteSandboxService(SandboxService):
                 return False
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
-                'POST',
-                '/resume',
-                json={'runtime_id': runtime_data['runtime_id']},
+                "POST",
+                "/resume",
+                json={"runtime_id": runtime_data["runtime_id"]},
             )
             if response.status_code == 404:
                 return False
             response.raise_for_status()
             return True
         except httpx.HTTPError as exc:
-            _logger.error('Error resuming sandbox %s: %s', sandbox_id, exc)
+            _logger.error("Error resuming sandbox %s: %s", sandbox_id, exc)
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
@@ -551,9 +551,9 @@ class RemoteSandboxService(SandboxService):
                 return False
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
-                'POST',
-                '/pause',
-                json={'runtime_id': runtime_data['runtime_id']},
+                "POST",
+                "/pause",
+                json={"runtime_id": runtime_data["runtime_id"]},
             )
             if response.status_code == 404:
                 return False
@@ -561,7 +561,7 @@ class RemoteSandboxService(SandboxService):
             return True
 
         except httpx.HTTPError as exc:
-            _logger.error('Error pausing sandbox %s: %s', sandbox_id, exc)
+            _logger.error("Error pausing sandbox %s: %s", sandbox_id, exc)
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
@@ -572,9 +572,9 @@ class RemoteSandboxService(SandboxService):
                 return False
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
-                'POST',
-                '/stop',
-                json={'runtime_id': runtime_data['runtime_id']},
+                "POST",
+                "/stop",
+                json={"runtime_id": runtime_data["runtime_id"]},
             )
             if response.status_code != 404:
                 response.raise_for_status()
@@ -582,11 +582,12 @@ class RemoteSandboxService(SandboxService):
             await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as exc:
-            _logger.error('Error deleting sandbox %s: %s', sandbox_id, exc)
+            _logger.error("Error deleting sandbox %s: %s", sandbox_id, exc)
             return False
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
         """Pause the oldest sandboxes if there are more than max_num_sandboxes running.
+
         In a multi user environment, this will pause sandboxes only for the current user.
 
         Args:
@@ -596,17 +597,17 @@ class RemoteSandboxService(SandboxService):
             List of sandbox IDs that were paused
         """
         if max_num_sandboxes <= 0:
-            raise ValueError('max_num_sandboxes must be greater than 0')
+            raise ValueError("max_num_sandboxes must be greater than 0")
 
         response = await self._send_runtime_api_request(
-            'GET',
-            '/list',
+            "GET",
+            "/list",
         )
         content = response.json()
         running_session_ids = [
-            runtime.get('session_id')
-            for runtime in content['runtimes']
-            if runtime.get('session_id')
+            runtime.get("session_id")
+            for runtime in content["runtimes"]
+            if runtime.get("session_id")
         ]
 
         query = await self._secure_select()
@@ -633,7 +634,7 @@ class RemoteSandboxService(SandboxService):
                     paused_sandbox_ids.append(sandbox.id)
             except Exception as exc:
                 # Continue trying to pause other sandboxes even if one fails
-                _logger.warning('Failed to pause sandbox %s: %s', sandbox.id, exc)
+                _logger.warning("Failed to pause sandbox %s: %s", sandbox.id, exc)
 
         return paused_sandbox_ids
 
@@ -670,20 +671,20 @@ def _build_service_url(url: str, service_name: str, runtime_id: str) -> str:
     - Subdomain mode: returns {scheme}://{service_name}-{netloc}{path}
     """
     parsed = urlparse(url)
-    scheme, netloc, path = parsed.scheme, parsed.netloc, parsed.path or '/'
+    scheme, netloc, path = parsed.scheme, parsed.netloc, parsed.path or "/"
     # Path mode if runtime_url path starts with /{id}
-    path_mode = path.startswith(f'/{runtime_id}')
+    path_mode = path.startswith(f"/{runtime_id}")
     if path_mode:
-        return f'{scheme}://{netloc}/{runtime_id}/{service_name}'
+        return f"{scheme}://{netloc}/{runtime_id}/{service_name}"
     else:
-        return f'{scheme}://{service_name}-{netloc}{path}'
+        return f"{scheme}://{service_name}-{netloc}{path}"
 
 
 async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
-    """When the app server does not have a public facing url, we poll the agent
-    servers for the most recent data.
+    """When the app server does not have a public facing url, poll the agent servers.
 
-    This is because webhook callbacks cannot be invoked.
+    Polls agent servers for the most recent data, because webhook callbacks cannot
+    be invoked.
     """
     from openhands.app_server.config import (
         get_app_conversation_info_service,
@@ -702,16 +703,16 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
                 # (This will not return runtimes that have been stopped for a while)
                 async with get_httpx_client(state) as httpx_client:
                     response = await httpx_client.get(
-                        f'{api_url}/list', headers={'X-API-Key': api_key}
+                        f"{api_url}/list", headers={"X-API-Key": api_key}
                     )
                     response.raise_for_status()
-                    runtimes = response.json()['runtimes']
+                    runtimes = response.json()["runtimes"]
                     runtimes_by_sandbox_id = {
-                        runtime['session_id']: runtime
+                        runtime["session_id"]: runtime
                         for runtime in runtimes
                         # The runtime API currently reports a running status when
                         # pods are still starting. Resync can tolerate this.
-                        if runtime['status'] == 'running'
+                        if runtime["status"] == "running"
                     }
 
                 # We allow access to all items here
@@ -742,11 +743,11 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
                                 httpx_client=httpx_client,
                             )
                     _logger.debug(
-                        f'Matched {len(runtimes_by_sandbox_id)} Runtimes with {matches} Conversations.'
+                        f"Matched {len(runtimes_by_sandbox_id)} Runtimes with {matches} Conversations."
                     )
 
             except Exception:
-                _logger.exception('Error when polling agent servers', stack_info=True)
+                _logger.exception("Error when polling agent servers", stack_info=True)
 
             # Sleep between retries
             await asyncio.sleep(sleep_interval)
@@ -768,16 +769,16 @@ async def refresh_conversation(
     Grab ConversationInfo and all events from the agent server and make sure they
     exist in the app server.
     """
-    _logger.debug('Started Refreshing Conversation %s', app_conversation_info.id)
+    _logger.debug("Started Refreshing Conversation %s", app_conversation_info.id)
     try:
-        url = runtime['url']
+        url = runtime["url"]
 
         # TODO: Maybe we can use RemoteConversation here?
 
         # First get conversation...
-        conversation_url = f'{url}/api/conversations/{app_conversation_info.id.hex}'
+        conversation_url = f"{url}/api/conversations/{app_conversation_info.id.hex}"
         response = await httpx_client.get(
-            conversation_url, headers={'X-Session-API-Key': runtime['session_api_key']}
+            conversation_url, headers={"X-Session-API-Key": runtime["session_api_key"]}
         )
         response.raise_for_status()
 
@@ -793,7 +794,7 @@ async def refresh_conversation(
                 updated_conversation_info.stats.get_combined_metrics()
             )
         except Exception:
-            _logger.exception('error_updating_conversation_metrics', stack_info=True)
+            _logger.exception("error_updating_conversation_metrics", stack_info=True)
 
         # TODO: Update other appropriate attributes...
 
@@ -804,18 +805,18 @@ async def refresh_conversation(
         # TODO: It would be nice to have an updated_at__gte filter parameter in the
         # agent server so that we don't pull the full event list each time
         event_url = (
-            f'{url}/api/conversations/{app_conversation_info.id.hex}/events/search'
+            f"{url}/api/conversations/{app_conversation_info.id.hex}/events/search"
         )
 
         async def fetch_events_page(page_id: str | None = None) -> EventPage:
             """Helper function to fetch a page of events from the agent server."""
             params: dict[str, str] = {}
             if page_id:
-                params['page_id'] = page_id
+                params["page_id"] = page_id
             response = await httpx_client.get(
                 event_url,
                 params=params,
-                headers={'X-Session-API-Key': runtime['session_api_key']},
+                headers={"X-Session-API-Key": runtime["session_api_key"]},
             )
             response.raise_for_status()
             return EventPage.model_validate(response.json())
@@ -830,42 +831,42 @@ async def refresh_conversation(
                     app_conversation_info.id, event
                 )
 
-        _logger.debug('Finished Refreshing Conversation %s', app_conversation_info.id)
+        _logger.debug("Finished Refreshing Conversation %s", app_conversation_info.id)
 
     except Exception as exc:
-        _logger.exception('Error Refreshing Conversation: %s', exc, stack_info=True)
+        _logger.exception("Error Refreshing Conversation: %s", exc, stack_info=True)
 
 
 class RemoteSandboxServiceInjector(SandboxServiceInjector):
     """Dependency injector for remote sandbox services."""
 
-    api_url: str = Field(description='The API URL for remote runtimes')
-    api_key: str = Field(description='The API Key for remote runtimes')
+    api_url: str = Field(description="The API URL for remote runtimes")
+    api_key: str = Field(description="The API Key for remote runtimes")
     polling_interval: int = Field(
         default=15,
         description=(
-            'The sleep time between poll operations against agent servers when there is '
-            'no public facing web_url'
+            "The sleep time between poll operations against agent servers when there is "
+            "no public facing web_url"
         ),
     )
     resource_factor: int = Field(
         default=1,
-        description='Factor by which to scale resources in sandbox: 1, 2, 4, or 8',
+        description="Factor by which to scale resources in sandbox: 1, 2, 4, or 8",
     )
     runtime_class: str = Field(
-        default='gvisor',
+        default="gvisor",
         description='can be "gvisor" or "sysbox" (support docker inside runtime + more stable)',
     )
     start_sandbox_timeout: int = Field(
         default=120,
         description=(
-            'The max time to wait for a sandbox to start before considering it to '
-            'be in an error state.'
+            "The max time to wait for a sandbox to start before considering it to "
+            "be in an error state."
         ),
     )
     max_num_sandboxes: int = Field(
         default=10,
-        description='Maximum number of sandboxes allowed to run simultaneously',
+        description="Maximum number of sandboxes allowed to run simultaneously",
     )
 
     async def inject(
@@ -884,7 +885,7 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
         # This is primarily used for local development rather than production
         config = get_global_config()
         web_url = config.web_url
-        if web_url is None or 'localhost' in web_url:
+        if web_url is None or "localhost" in web_url:
             global polling_task
             if polling_task is None:
                 polling_task = asyncio.create_task(
