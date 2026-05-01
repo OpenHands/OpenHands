@@ -135,7 +135,7 @@ class GithubIssue(ResolverViewInterface):
 
     async def _get_user_secrets(self):
         secrets_store = await SaasSecretsStore.get_instance(
-            None, self.user_info.keycloak_user_id
+            self.user_info.keycloak_user_id
         )
         user_secrets = await secrets_store.load()
 

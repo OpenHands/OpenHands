@@ -25,13 +25,11 @@ from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.jsonpatch_compat import deep_merge
 from openhands.app_server.utils.llm import is_openhands_model
-from openhands.core.config.openhands_config import OpenHandsConfig
 
 
 @dataclass
 class SaasSettingsStore(SettingsStore):
     user_id: str
-    config: OpenHandsConfig
 
     async def _get_user_settings_by_keycloak_id_async(
         self, keycloak_user_id: str, session=None
@@ -297,11 +295,14 @@ class SaasSettingsStore(SettingsStore):
     @classmethod
     async def get_instance(
         cls,
-        config: OpenHandsConfig,
         user_id: str,  # type: ignore[override]
     ) -> SaasSettingsStore:
+        """Get a SaasSettingsStore instance for the given user.
+
+        TODO: This method should be replaced with dependency injection.
+        """
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
-        return SaasSettingsStore(user_id, config)
+        return SaasSettingsStore(user_id)
 
     async def _ensure_api_key(
         self, item: Settings, org_id: str, openhands_type: bool = False

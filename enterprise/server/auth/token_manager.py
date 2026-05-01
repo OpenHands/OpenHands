@@ -38,7 +38,6 @@ from server.auth.email_validation import (
     matches_base_email,
 )
 from server.auth.keycloak_manager import get_keycloak_admin, get_keycloak_openid
-from server.config import get_config
 from server.logger import logger
 from sqlalchemy import String as SQLString
 from sqlalchemy import select, type_coerce
@@ -871,7 +870,7 @@ class TokenManager:
             return token
 
     async def store_offline_token(self, user_id: str, offline_token: str):
-        token_store = await OfflineTokenStore.get_instance(get_config(), user_id)
+        token_store = await OfflineTokenStore.get_instance(user_id)
         encrypted_tokens = self.encrypt_payload({'refresh_token': offline_token})
         payload = {'tokens': encrypted_tokens}
         await token_store.store_token(json.dumps(payload))
@@ -940,7 +939,7 @@ class TokenManager:
         return active
 
     async def load_offline_token(self, user_id: str) -> str | None:
-        token_store = await OfflineTokenStore.get_instance(get_config(), user_id)
+        token_store = await OfflineTokenStore.get_instance(user_id)
         payload = await token_store.load_token()
         if not payload:
             return None

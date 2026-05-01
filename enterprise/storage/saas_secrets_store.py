@@ -119,9 +119,12 @@ class SaasSecretsStore(SecretsStore):
     @classmethod
     async def get_instance(
         cls,
-        config: object,
         user_id: str,  # type: ignore[override]
     ) -> SaasSecretsStore:
+        """Get a SaasSecretsStore instance for the given user.
+
+        TODO: This method should be replaced with dependency injection.
+        """
         logger.debug(f'saas_secrets_store.get_instance::{user_id}')
         from storage.encrypt_utils import get_jwt_service
 
