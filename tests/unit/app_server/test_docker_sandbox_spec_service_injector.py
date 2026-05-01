@@ -277,7 +277,7 @@ class TestDockerSandboxSpecServiceInjector:
 
         # Execute & Verify
         with pytest.raises(
-            SandboxError, match='Error Getting Docker Image: test-image:latest'
+            SandboxError, match="Error getting Docker image 'test-image:latest'"
         ):
             await injector.pull_spec_if_missing(sample_spec)
 
@@ -296,7 +296,7 @@ class TestDockerSandboxSpecServiceInjector:
 
         # Execute & Verify
         with pytest.raises(
-            SandboxError, match='Error Getting Docker Image: test-image:latest'
+            SandboxError, match="Error getting Docker image 'test-image:latest'"
         ):
             await injector.pull_spec_if_missing(sample_spec)
 
@@ -528,3 +528,58 @@ class TestDockerSandboxSpecServiceInjector:
 
         # Should have no progress log messages for fast pulls
         assert len(progress_calls) == 0
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_spec_service.get_docker_client')
+    async def test_pull_spec_if_missing_concurrent_no_double_pull(
+        self, mock_get_docker_client, sample_spec
+    ):
+        """Test that two concurrent callers for the same image only pull once.
+
+        The per-image asyncio.Lock ensures that when multiple coroutines race to
+        pull the same image, only the first performs the actual pull while the other
+        waits.  The second coroutine acquires the lock *after* the first has finished
+        and then finds the image already present (images.get succeeds), so images.pull
+        is only ever called once.
+        """
+        mock_docker_client = MagicMock()
+        mock_get_docker_client.return_value = mock_docker_client
+
+        pull_count = 0
+        first_pull_allowed = asyncio.Event()
+
+        def get_side_effect(image_id):
+            # Before the first pull completes raise ImageNotFound; after, return ok.
+            if not first_pull_allowed.is_set():
+                raise ImageNotFound('not found')
+            return MagicMock()
+
+        async def pull_side_effect_async(image_id):
+            nonlocal pull_count
+            pull_count += 1
+            await asyncio.sleep(0.05)
+            first_pull_allowed.set()
+
+        mock_docker_client.images.get.side_effect = get_side_effect
+
+        injector = DockerSandboxSpecServiceInjector()
+        original_pull_spec = injector.pull_spec_if_missing
+
+        async def patched_pull_spec(spec):
+            loop = asyncio.get_running_loop()
+
+            def sync_pull(image_id):
+                fut = asyncio.run_coroutine_threadsafe(
+                    pull_side_effect_async(image_id), loop
+                )
+                fut.result()
+
+            mock_docker_client.images.pull.side_effect = sync_pull
+            await original_pull_spec(spec)
+
+        await asyncio.gather(
+            patched_pull_spec(sample_spec),
+            patched_pull_spec(sample_spec),
+        )
+
+        # Despite two concurrent callers, Docker pull must only be invoked once.
+        assert pull_count == 1

@@ -72,6 +72,10 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
             'remote repositories.'
         ),
     )
+    # Per-image lock: prevents two concurrent callers from both seeing
+    # ImageNotFound and then both downloading the same image (wastes bandwidth
+    # and can hit Docker Hub rate limits on parallel sandbox startups).
+    _pull_locks: dict[str, asyncio.Lock] = {}
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -97,16 +101,24 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
 
     async def pull_spec_if_missing(self, spec: SandboxSpecInfo):
         _logger.debug('Checking Docker Image: %s', spec.id)
-        try:
-            docker_client = get_docker_client()
+        # Acquire a per-image lock so that if two coroutines race here, only
+        # one of them performs the actual pull while the other waits.
+        if spec.id not in self._pull_locks:
+            self._pull_locks[spec.id] = asyncio.Lock()
+        async with self._pull_locks[spec.id]:
             try:
-                docker_client.images.get(spec.id)
-            except docker.errors.ImageNotFound:
-                _logger.info('Pulling Docker Image: %s', spec.id)
-                await self._pull_with_progress_logging(docker_client, spec.id)
-                _logger.info('Finished Pulling Docker Image: %s', spec.id)
-        except docker.errors.DockerException as exc:
-            raise SandboxError(f'Error Getting Docker Image: {spec.id}') from exc
+                docker_client = get_docker_client()
+                loop = asyncio.get_running_loop()
+                try:
+                    await loop.run_in_executor(None, docker_client.images.get, spec.id)
+                except docker.errors.ImageNotFound:
+                    _logger.info('Pulling Docker Image: %s', spec.id)
+                    await self._pull_with_progress_logging(docker_client, spec.id)
+                    _logger.info('Finished Pulling Docker Image: %s', spec.id)
+            except docker.errors.DockerException as exc:
+                raise SandboxError(
+                    f'Error getting Docker image {spec.id!r}: {exc}'
+                ) from exc
 
     async def _pull_with_progress_logging(
         self, docker_client: docker.DockerClient, image_id: str

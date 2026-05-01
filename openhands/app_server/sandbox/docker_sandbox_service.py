@@ -277,8 +277,8 @@ class DockerSandboxService(SandboxService):
                     AttributeError,
                     TypeError,
                 ) as start_time_exc:
-                    _logger.debug(
-                        'Error getting container start time for %s: %s',
+                    _logger.warning(
+                        'Could not parse container start time for %s: %s',
                         container.name,
                         start_time_exc,
                     )
@@ -540,8 +540,14 @@ class DockerSandboxService(SandboxService):
                     'Cleaned up orphaned container after failed start: %s',
                     container_name,
                 )
-            except (NotFound, APIError, OSError):
-                pass  # Already gone or truly never created
+            except NotFound:
+                pass  # Container was never created — expected
+            except (APIError, OSError) as cleanup_exc:
+                _logger.debug(
+                    'Failed to remove orphaned container %s during cleanup: %s',
+                    container_name,
+                    cleanup_exc,
+                )
             raise SandboxError(f'Failed to start container: {e}')
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
