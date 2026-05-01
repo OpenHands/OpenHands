@@ -179,7 +179,9 @@ def _model_native_tool_calling_reliable(model: str) -> bool:
         return True
     # Ollama's tool-calling API is inconsistent across local models.
     # Prompted function calling yields far better reliability there.
-    if raw.startswith('ollama/'):
+    # This covers both the standard 'ollama/' prefix and registry-URL forms
+    # like 'registry.ollama.ai/library/deepseek-r1:14b'.
+    if raw.startswith('ollama/') or 'registry.ollama.ai/' in raw:
         return False
     return True
 
