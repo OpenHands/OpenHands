@@ -250,9 +250,15 @@ class RemoteSandboxService(SandboxService):
         # The batch endpoint should return a list of runtimes
         # Convert to a dictionary keyed by session_id for easy lookup
         runtimes_by_id = {}
-        for runtime in batch_data:
-            if runtime and 'session_id' in runtime:
-                runtimes_by_id[runtime['session_id']] = runtime
+        if isinstance(batch_data, list):
+            for runtime in batch_data:
+                if runtime and isinstance(runtime, dict) and 'session_id' in runtime:
+                    runtimes_by_id[runtime['session_id']] = runtime
+        else:
+            _logger.warning(
+                'Unexpected batch response type %s; expected list',
+                type(batch_data).__name__,
+            )
 
         return runtimes_by_id
 
@@ -564,7 +570,6 @@ class RemoteSandboxService(SandboxService):
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
-            await self.db_session.delete(stored_sandbox)
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
                 'POST',
@@ -573,6 +578,8 @@ class RemoteSandboxService(SandboxService):
             )
             if response.status_code != 404:
                 response.raise_for_status()
+            # Only delete from DB after the remote runtime is confirmed stopped
+            await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as exc:
             _logger.error('Error deleting sandbox %s: %s', sandbox_id, exc)

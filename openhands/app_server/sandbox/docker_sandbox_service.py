@@ -548,7 +548,7 @@ class DockerSandboxService(SandboxService):
                     container_name,
                     cleanup_exc,
                 )
-            raise SandboxError(f'Failed to start container: {e}')
+            raise SandboxError(f'Failed to start container: {e}') from e
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox."""

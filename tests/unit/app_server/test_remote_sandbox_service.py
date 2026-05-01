@@ -713,6 +713,36 @@ class TestSandboxLifecycle:
         assert paused == ['sb-old']
         remote_sandbox_service.pause_sandbox.assert_called_once_with('sb-old')
 
+    @pytest.mark.asyncio
+    async def test_delete_sandbox_db_not_deleted_if_stop_api_fails(
+        self, remote_sandbox_service
+    ):
+        """Test that DB record is NOT deleted when the /stop API call fails."""
+        stored_sandbox = create_stored_sandbox()
+        runtime_data = create_runtime_data()
+
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service.db_session.delete = AsyncMock()
+
+        # Make /stop request fail with a non-404 HTTP error
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            'Server error', request=MagicMock(), response=mock_response
+        )
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is False
+        # DB record must NOT be deleted since the stop API call failed
+        remote_sandbox_service.db_session.delete.assert_not_called()
+
 
 class TestSandboxSearch:
     """Test cases for sandbox search and retrieval."""
@@ -1052,6 +1082,22 @@ class TestErrorHandling:
 
         # Verify
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_get_runtimes_batch_handles_none_response(
+        self, remote_sandbox_service
+    ):
+        """Test that _get_runtimes_batch returns empty dict (not crash) when API returns None."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = None
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        result = await remote_sandbox_service._get_runtimes_batch(['sb1', 'sb2'])
+
+        assert result == {}
 
 
 class TestGetSandboxBySessionApiKey:

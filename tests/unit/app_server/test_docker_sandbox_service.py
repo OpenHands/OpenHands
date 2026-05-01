@@ -611,6 +611,19 @@ class TestDockerSandboxService:
         ):
             await service.start_sandbox()
 
+    async def test_start_sandbox_docker_api_error_preserves_exception_chain(
+        self, service
+    ):
+        """Test that SandboxError raised from APIError preserves the original exception as __cause__."""
+        api_error = APIError('Image not found')
+        service.docker_client.containers.run.side_effect = api_error
+
+        with patch.object(service, 'pause_old_sandboxes', return_value=[]):
+            with pytest.raises(SandboxError) as exc_info:
+                await service.start_sandbox()
+
+        assert exc_info.value.__cause__ is api_error
+
     async def test_start_sandbox_raises_sandbox_error_when_info_is_none(self, service):
         """_container_to_sandbox_info returning None must raise SandboxError, not AssertionError."""
         with (

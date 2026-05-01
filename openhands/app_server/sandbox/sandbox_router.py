@@ -1,7 +1,7 @@
 """Runtime Containers router for OpenHands App Server."""
 
 import logging
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import APIKeyHeader
@@ -165,11 +165,8 @@ async def list_secret_names(
         items.append(SecretNameItem(name=name, description=source.description))
 
     # Provider tokens (github_token, gitlab_token, etc.)
-    provider_env_vars = cast(
-        dict[str, str] | None,
-        await user_context.get_provider_tokens(as_env_vars=True),
-    )
-    if provider_env_vars:
+    provider_env_vars = await user_context.get_provider_tokens(as_env_vars=True)
+    if isinstance(provider_env_vars, dict):
         for env_key in provider_env_vars:
             items.append(
                 SecretNameItem(name=env_key, description=f'{env_key} provider token')
@@ -201,11 +198,8 @@ async def get_secret_value(
         return Response(content=value, media_type='text/plain')
 
     # Fall back to provider tokens (resolved fresh per request)
-    provider_env_vars = cast(
-        dict[str, str] | None,
-        await user_context.get_provider_tokens(as_env_vars=True),
-    )
-    if provider_env_vars:
+    provider_env_vars = await user_context.get_provider_tokens(as_env_vars=True)
+    if isinstance(provider_env_vars, dict):
         token_value = provider_env_vars.get(secret_name)
         if token_value is not None:
             return Response(content=token_value, media_type='text/plain')
