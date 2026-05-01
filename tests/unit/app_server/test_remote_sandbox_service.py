@@ -743,6 +743,75 @@ class TestSandboxLifecycle:
         # DB record must NOT be deleted since the stop API call failed
         remote_sandbox_service.db_session.delete.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_pause_old_sandboxes_skips_runtimes_without_session_id(
+        self, remote_sandbox_service
+    ):
+        """Runtimes lacking session_id must be filtered out, not inserted as None into the SQL IN clause."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'runtimes': [
+                {'session_id': 'sb-valid'},
+                {'other_key': 'no-session-id-here'},
+            ]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        valid_sandbox = create_stored_sandbox('sb-valid')
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = [valid_sandbox]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value = mock_scalars
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        # max=5 exceeds the 1 running sandbox, so nothing is paused
+        paused = await remote_sandbox_service.pause_old_sandboxes(5)
+
+        assert paused == []
+        # execute must have been called (no SQL error from None in .in_())
+        remote_sandbox_service.db_session.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_pause_old_sandboxes_logs_warning_on_pause_failure(
+        self, remote_sandbox_service
+    ):
+        """A pause failure must be logged as a warning, not silently swallowed."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'runtimes': [
+                {'session_id': 'sb-1'},
+                {'session_id': 'sb-2'},
+            ]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        sb1 = create_stored_sandbox('sb-1')
+        sb2 = create_stored_sandbox('sb-2')
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = [sb1, sb2]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value = mock_scalars
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        remote_sandbox_service.pause_sandbox = AsyncMock(
+            side_effect=Exception('API error')
+        )
+
+        with patch(
+            'openhands.app_server.sandbox.remote_sandbox_service._logger'
+        ) as mock_log:
+            # max=1 → 2-1=1 sandbox to pause; pause fails → warning logged
+            paused = await remote_sandbox_service.pause_old_sandboxes(1)
+
+        assert paused == []
+        mock_log.warning.assert_called_once()
+        warning_args = mock_log.warning.call_args[0]
+        assert 'sb-1' in str(warning_args)
+
 
 class TestSandboxSearch:
     """Test cases for sandbox search and retrieval."""

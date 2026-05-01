@@ -604,7 +604,9 @@ class RemoteSandboxService(SandboxService):
         )
         content = response.json()
         running_session_ids = [
-            runtime.get('session_id') for runtime in content['runtimes']
+            runtime.get('session_id')
+            for runtime in content['runtimes']
+            if runtime.get('session_id')
         ]
 
         query = await self._secure_select()
@@ -629,9 +631,9 @@ class RemoteSandboxService(SandboxService):
                 success = await self.pause_sandbox(sandbox.id)
                 if success:
                     paused_sandbox_ids.append(sandbox.id)
-            except Exception:
+            except Exception as exc:
                 # Continue trying to pause other sandboxes even if one fails
-                pass
+                _logger.warning('Failed to pause sandbox %s: %s', sandbox.id, exc)
 
         return paused_sandbox_ids
 
@@ -643,11 +645,9 @@ class RemoteSandboxService(SandboxService):
             return []
         query = await self._secure_select()
         query = query.filter(StoredRemoteSandbox.id.in_(sandbox_ids))
-        stored_remote_sandboxes = await self.db_session.execute(query)
-        stored_remote_sandboxes_by_id = {
-            stored_remote_sandbox[0].id: stored_remote_sandbox[0]
-            for stored_remote_sandbox in stored_remote_sandboxes
-        }
+        result = await self.db_session.execute(query)
+        sandboxes_list = result.scalars().all()
+        stored_remote_sandboxes_by_id = {s.id: s for s in sandboxes_list}
         runtimes_by_id = await self._get_runtimes_batch(
             list(stored_remote_sandboxes_by_id)
         )

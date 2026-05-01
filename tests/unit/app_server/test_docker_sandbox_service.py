@@ -633,6 +633,21 @@ class TestDockerSandboxService:
         ):
             await service.start_sandbox()
 
+    async def test_start_sandbox_removes_container_when_info_is_none(self, service):
+        """Container must be removed when _container_to_sandbox_info returns None."""
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-orphan'
+        service.docker_client.containers.run.return_value = mock_container
+
+        with (
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+            patch.object(service, '_container_to_sandbox_info', return_value=None),
+            pytest.raises(SandboxError, match='produced no sandbox info'),
+        ):
+            await service.start_sandbox()
+
+        mock_container.remove.assert_called_once_with(force=True)
+
     @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
     @patch('os.urandom')
     async def test_start_sandbox_with_extra_hosts(

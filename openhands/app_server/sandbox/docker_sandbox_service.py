@@ -524,6 +524,18 @@ class DockerSandboxService(SandboxService):
 
             sandbox_info = await self._container_to_sandbox_info(container)
             if sandbox_info is None:
+                try:
+                    container.remove(force=True)
+                    _logger.info(
+                        'Removed container %s after it produced no sandbox info',
+                        container.name,
+                    )
+                except (APIError, OSError) as cleanup_exc:
+                    _logger.debug(
+                        'Failed to remove container %s after no sandbox info: %s',
+                        container.name,
+                        cleanup_exc,
+                    )
                 raise SandboxError(
                     f'Container {container.name} created but produced no sandbox info; '
                     'the image may be missing tags.'
