@@ -141,10 +141,11 @@ class RemoteSandboxService(SandboxService):
                     exposed_urls.append(
                         ExposedUrl(name=AGENT_SERVER, url=url, port=AGENT_SERVER_PORT)
                     )
-                    vscode_url = (
-                        _build_service_url(url, 'vscode', runtime_id)
-                        + f'?tkn={session_api_key}&folder=%2Fworkspace%2Fproject'
-                    )
+                    vscode_url = _build_service_url(url, 'vscode', runtime_id)
+                    if session_api_key:
+                        vscode_url += (
+                            f'?tkn={session_api_key}&folder=%2Fworkspace%2Fproject'
+                        )
                     exposed_urls.append(
                         ExposedUrl(name=VSCODE, url=vscode_url, port=VSCODE_PORT)
                     )
@@ -715,13 +716,20 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
                         f'{api_url}/list', headers={'X-API-Key': api_key}
                     )
                     response.raise_for_status()
-                    runtimes = response.json()['runtimes']
+                    _content = response.json()
+                    runtimes = (
+                        _content.get('runtimes', [])
+                        if isinstance(_content, dict)
+                        else []
+                    )
                     runtimes_by_sandbox_id = {
                         runtime['session_id']: runtime
                         for runtime in runtimes
                         # The runtime API currently reports a running status when
                         # pods are still starting. Resync can tolerate this.
-                        if runtime['status'] == 'running'
+                        if isinstance(runtime, dict)
+                        and runtime.get('session_id')
+                        and runtime.get('status') == 'running'
                     }
 
                 # We allow access to all items here

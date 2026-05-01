@@ -404,6 +404,91 @@ class TestSandboxInfoConversion:
 
         assert sandbox_info.session_api_key is None
 
+    @pytest.mark.asyncio
+    async def test_to_sandbox_info_running_no_session_api_key_omits_token_param(
+        self, remote_sandbox_service
+    ):
+        """Fix M: vscode URL must not embed a literal 'tkn=None' when session_api_key is absent.
+
+        When a RUNNING runtime has no session_api_key the VSCode URL should still
+        be built (so callers receive it) but the ?tkn=... query param must be
+        omitted entirely rather than containing the string 'None'.
+        """
+        stored_sandbox = create_stored_sandbox()
+        runtime = {
+            'session_id': 'sandbox-123',
+            'status': 'running',
+            'url': 'https://runtime.example.com',
+            'runtime_id': 'rt-abc',
+            # session_api_key deliberately absent
+        }
+
+        sandbox_info = remote_sandbox_service._to_sandbox_info(stored_sandbox, runtime)
+
+        assert sandbox_info.status == SandboxStatus.RUNNING
+        vscode_url = next(
+            (u.url for u in (sandbox_info.exposed_urls or []) if u.name == VSCODE),
+            None,
+        )
+        assert vscode_url is not None, (
+            'VSCode URL should be present for running sandbox'
+        )
+        assert 'tkn=None' not in vscode_url, (
+            f'Token param must not contain literal None; got: {vscode_url}'
+        )
+
+    @pytest.mark.asyncio
+    async def test_poll_agent_servers_missing_runtimes_key_does_not_raise(
+        self, remote_sandbox_service
+    ):
+        """Fix N: poll_agent_servers must not raise KeyError when 'runtimes' key is absent.
+
+        The runtime API may return a response body without a 'runtimes' key (e.g.
+        during a transient error or API version mismatch).  After the fix the code
+        uses .get('runtimes', []) and guards dict-field accesses so it degrades
+        gracefully instead of crashing the polling loop.
+        """
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            poll_agent_servers,
+        )
+
+        # First response is missing 'runtimes'; second call raises to break the loop.
+        no_runtimes_response = MagicMock()
+        no_runtimes_response.json.return_value = {'message': 'not ready yet'}
+        no_runtimes_response.raise_for_status = MagicMock()
+
+        call_count = 0
+
+        async def _mock_get(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return no_runtimes_response
+            raise RuntimeError('stop loop')
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = _mock_get
+
+        with (
+            patch(
+                'openhands.app_server.sandbox.remote_sandbox_service.get_httpx_client',
+                return_value=mock_client,
+            ),
+            patch(
+                'openhands.app_server.sandbox.remote_sandbox_service.asyncio.sleep',
+                new_callable=AsyncMock,
+            ),
+        ):
+            # Should not raise KeyError on the missing-runtimes response
+            with pytest.raises(RuntimeError, match='stop loop'):
+                await poll_agent_servers(
+                    api_url='https://api.example.com',
+                    api_key='test-key',
+                    sleep_interval=0,
+                )
+
 
 class TestSandboxLifecycle:
     """Test cases for sandbox lifecycle operations."""
