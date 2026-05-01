@@ -28,6 +28,7 @@ from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanSe
 from openhands.app_server.app_lifespan.oss_app_lifespan_service import (
     OssAppLifespanService,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.config_api.llm_model_service import (
     LLMModelService,
     LLMModelServiceInjector,
@@ -37,6 +38,8 @@ from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
     EventCallbackServiceInjector,
 )
+from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.pending_messages.pending_message_service import (
     PendingMessageService,
     PendingMessageServiceInjector,
@@ -64,7 +67,6 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.sdk.utils.models import OpenHandsModel
-from openhands.server.types import AppMode
 
 
 def get_default_persistence_dir() -> Path:
@@ -168,8 +170,14 @@ def _get_default_lifespan():
     return OssAppLifespanService()
 
 
+def _get_default_file_store() -> FileStore:
+    """Create a default LocalFileStore using the default persistence directory."""
+    return LocalFileStore(root=str(get_default_persistence_dir()))
+
+
 class AppServerConfig(OpenHandsModel):
     persistence_dir: Path = Field(default_factory=get_default_persistence_dir)
+    file_store: FileStore = Field(default_factory=_get_default_file_store)
     web_url: str | None = Field(
         default_factory=get_default_web_url,
         description='The URL where OpenHands is running (e.g., http://localhost:3000)',

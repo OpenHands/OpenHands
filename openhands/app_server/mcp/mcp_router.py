@@ -12,6 +12,7 @@ from openhands.app_server.config import (
     get_app_conversation_info_service,
     get_global_config,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
@@ -36,7 +37,6 @@ from openhands.app_server.user_auth import (
     get_user_id,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.types import AppMode
 
 mcp_server = FastMCP('mcp', mask_error_details=True)
 

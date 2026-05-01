@@ -23,8 +23,8 @@ from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.shared import server_config
 from openhands.app_server.utils.import_utils import get_impl
-from openhands.server.shared import server_config
 
 
 class AuthType(Enum):
@@ -41,7 +41,7 @@ class UserAuth(ABC):
     2. Implementing all required methods
     3. Setting server_config.user_auth_class to the fully qualified name of the class
 
-    The class is instantiated via get_impl() in openhands.server.shared.py.
+    The class is instantiated via get_impl() in openhands.app_server.shared.py.
     """
 
     _settings: Settings | None

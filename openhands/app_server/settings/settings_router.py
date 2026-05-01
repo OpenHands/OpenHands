@@ -43,13 +43,12 @@ from openhands.app_server.utils.llm import (
     resolve_llm_base_url,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.app_server.utils.sdk_settings_compat import (
-    LLMAgentSettings,
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import (
+    ConversationSettings,
+    OpenHandsAgentSettings,
     export_agent_settings_schema,
 )
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import ConversationSettings
-from openhands.server.shared import config
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -70,7 +69,7 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     rules to :func:`openhands.app_server.utils.llm.resolve_llm_base_url` so the
     personal-save and enterprise org-defaults paths stay in lockstep.
     """
-    if not isinstance(settings.agent_settings, LLMAgentSettings):
+    if not isinstance(settings.agent_settings, OpenHandsAgentSettings):
         return
     llm = settings.agent_settings.llm
     llm.base_url = resolve_llm_base_url(
@@ -236,20 +235,6 @@ async def store_settings(
                 )
             if settings.disabled_skills is None:
                 settings.disabled_skills = existing_settings.disabled_skills
-
-        # Update git configuration with new settings
-        git_config_updated = False
-        if settings.git_user_name is not None:
-            config.git_user_name = settings.git_user_name
-            git_config_updated = True
-        if settings.git_user_email is not None:
-            config.git_user_email = settings.git_user_email
-            git_config_updated = True
-
-        if git_config_updated:
-            logger.info(
-                f'Updated global git configuration: name={config.git_user_name}, email={config.git_user_email}'
-            )
 
         await settings_store.store(settings)
         return JSONResponse(

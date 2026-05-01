@@ -3,12 +3,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.async_utils import call_sync_from_async
-from openhands.core.config.openhands_config import OpenHandsConfig
 
 
 @dataclass
@@ -37,11 +35,12 @@ class FileSettingsStore(SettingsStore):
         await call_sync_from_async(self.file_store.write, self.path, json_str)
 
     @classmethod
-    async def get_instance(
-        cls, config: OpenHandsConfig, user_id: str | None
-    ) -> FileSettingsStore:
-        file_store = get_file_store(
-            file_store_type=config.file_store,
-            file_store_path=config.file_store_path,
-        )
+    async def get_instance(cls, user_id: str | None) -> FileSettingsStore:
+        """Get a FileSettingsStore instance using the global config's file_store.
+
+        TODO: This method should be replaced with dependency injection.
+        """
+        from openhands.app_server.config import get_global_config
+
+        file_store = get_global_config().file_store
         return FileSettingsStore(file_store)

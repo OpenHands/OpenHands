@@ -11,13 +11,13 @@ from dataclasses import dataclass
 from fastapi import Request
 from pydantic import SecretStr
 
+from openhands.app_server import shared
 from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.server import shared
 
 
 @dataclass
@@ -46,9 +46,7 @@ class DefaultUserAuth(UserAuth):
         if settings_store:
             return settings_store
         user_id = await self.get_user_id()
-        settings_store = await shared.SettingsStoreImpl.get_instance(
-            shared.config, user_id
-        )
+        settings_store = await shared.SettingsStoreImpl.get_instance(user_id)
         if settings_store is None:
             raise ValueError('Failed to get settings store instance')
         self._settings_store = settings_store
@@ -68,9 +66,7 @@ class DefaultUserAuth(UserAuth):
         if secrets_store:
             return secrets_store
         user_id = await self.get_user_id()
-        secret_store = await shared.SecretsStoreImpl.get_instance(
-            shared.config, user_id
-        )
+        secret_store = await shared.SecretsStoreImpl.get_instance(user_id)
         if secret_store is None:
             raise ValueError('Failed to get secrets store instance')
         self._secrets_store = secret_store

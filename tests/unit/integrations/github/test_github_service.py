@@ -12,7 +12,7 @@ from openhands.app_server.integrations.service_types import (
     Repository,
     User,
 )
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 @pytest.mark.asyncio

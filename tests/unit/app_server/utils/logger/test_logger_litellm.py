@@ -73,10 +73,10 @@ def test_litellm_loggers_suppressed_with_uvicorn_json_config(reset_litellm):
     import pathlib
 
     # Find the logger.py file path relative to the openhands package
-    # __file__ is tests/unit/core/logger/test_logger_litellm.py
+    # __file__ is tests/unit/app_server/utils/logger/test_logger_litellm.py
     # We need to go up to tests/, then find openhands/app_server/utils/logger.py
-    test_dir = pathlib.Path(__file__).parent  # tests/unit/core/logger
-    project_root = test_dir.parent.parent.parent.parent  # workspace/openhands
+    test_dir = pathlib.Path(__file__).parent  # tests/unit/app_server/utils/logger
+    project_root = test_dir.parent.parent.parent.parent.parent  # workspace/openhands
     logger_file = project_root / 'openhands' / 'app_server' / 'utils' / 'logger.py'
 
     # Read the actual source file

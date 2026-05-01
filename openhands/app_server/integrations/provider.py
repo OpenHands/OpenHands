@@ -14,6 +14,7 @@ from pydantic import (
     SecretStr,
 )
 
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
@@ -42,7 +43,6 @@ from openhands.app_server.integrations.service_types import (
 )
 from openhands.app_server.utils.http_session import httpx_verify_option
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.types import AppMode
 
 
 class ProviderToken(BaseModel):

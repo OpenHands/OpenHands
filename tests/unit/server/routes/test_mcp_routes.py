@@ -5,7 +5,7 @@ import pytest
 
 from openhands.app_server.integrations.service_types import GitService
 from openhands.app_server.mcp.mcp_router import get_conversation_link
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 def test_mcp_server_no_stateless_http_deprecation_warning():

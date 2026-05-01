@@ -26,6 +26,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
 from openhands.app_server.sandbox.sandbox_models import (
@@ -47,7 +48,6 @@ from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.server.types import AppMode
 
 # True only on SDK versions that include PR #2984 (secrets acp_compatible=True).
 # When False, _build_acp_start_conversation_request skips the agent_context path.
@@ -3312,7 +3312,7 @@ class TestAgentKindConversationUrl:
             id=UUID('11111111-1111-1111-1111-111111111111'),
             created_by_user_id=None,
             sandbox_id='sandbox-a',
-            agent_kind='llm',
+            agent_kind='openhands',
         )
         sandbox = SandboxInfo(
             id='sandbox-a',
@@ -3371,20 +3371,26 @@ class TestAgentKindConversationUrl:
         )
 
     def test_agent_kind_to_router_path_known_kinds(self):
-        """``'llm'`` → ``'conversations'``, ``'acp'`` → ``'acp/conversations'``."""
+        """``'openhands'`` routes to standard conversations; ``'acp'`` to ACP."""
+        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
+            _agent_kind_to_router_path,
+        )
+
+        assert _agent_kind_to_router_path('openhands') == 'conversations'
+        assert _agent_kind_to_router_path('acp') == 'acp/conversations'
+
+    def test_agent_kind_to_router_path_unknown_falls_back(self):
+        """Any value that is not 'acp' routes to 'conversations'.
+
+        This includes the legacy ``'llm'`` value that the old default emitted
+        before the rename, so rows stored with ``agent_kind='llm'`` continue to
+        route correctly without a migration.
+        """
         from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
             _agent_kind_to_router_path,
         )
 
         assert _agent_kind_to_router_path('llm') == 'conversations'
-        assert _agent_kind_to_router_path('acp') == 'acp/conversations'
-
-    def test_agent_kind_to_router_path_unknown_falls_back(self):
-        """Unknown variants fall back to the LLM route."""
-        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
-            _agent_kind_to_router_path,
-        )
-
         assert _agent_kind_to_router_path('future-variant') == 'conversations'
 
 

@@ -57,11 +57,11 @@ from server.verified_models.verified_model_router import (  # noqa: E402
     api_router as verified_models_router,
 )
 
-from openhands.server.app import app as base_app  # noqa: E402
-from openhands.server.middleware import (  # noqa: E402
+from openhands.app_server.app import app as base_app  # noqa: E402
+from openhands.app_server.middleware import (  # noqa: E402
     CacheControlMiddleware,
 )
-from openhands.server.static import SPAStaticFiles  # noqa: E402
+from openhands.app_server.static import SPAStaticFiles  # noqa: E402
 
 directory = os.getenv('FRONTEND_DIRECTORY', './frontend/build')
 

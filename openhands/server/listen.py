@@ -1,34 +1,8 @@
-# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
-# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
-# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
-#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
-#   - V1 application server (in this repo): openhands/app_server/
-# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
-# Tag: Legacy-V0
-# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
+# DEPRECATED: This module is deprecated and will be removed in a future release.
+# Please use openhands.app_server.app instead.
+#
+# For backward compatibility, this module re-exports the app from openhands.app_server.app.
 
-import os
+from openhands.app_server.app import app
 
-from openhands.server.app import app as base_app
-from openhands.server.middleware import (
-    CacheControlMiddleware,
-    InMemoryRateLimiter,
-    LocalhostCORSMiddleware,
-    RateLimitMiddleware,
-)
-from openhands.server.static import SPAStaticFiles
-
-if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':
-    base_app.mount(
-        '/', SPAStaticFiles(directory='./frontend/build', html=True), name='dist'
-    )
-
-base_app.add_middleware(LocalhostCORSMiddleware)
-base_app.add_middleware(CacheControlMiddleware)
-base_app.add_middleware(
-    RateLimitMiddleware,
-    rate_limiter=InMemoryRateLimiter(requests=10, seconds=1),
-)
-
-# Note: socketio is no longer used for communication. The base FastAPI app is used directly.
-app = base_app
+__all__ = ['app']
