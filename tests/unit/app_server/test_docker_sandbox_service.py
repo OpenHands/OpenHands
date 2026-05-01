@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from docker.errors import APIError, NotFound
+from pydantic import ValidationError
 
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.docker_sandbox_service import (
@@ -595,6 +596,15 @@ class TestDockerSandboxService:
         ):
             await service.start_sandbox()
 
+    async def test_start_sandbox_raises_sandbox_error_when_info_is_none(self, service):
+        """_container_to_sandbox_info returning None must raise SandboxError, not AssertionError."""
+        with (
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+            patch.object(service, '_container_to_sandbox_info', return_value=None),
+            pytest.raises(SandboxError, match='produced no sandbox info'),
+        ):
+            await service.start_sandbox()
+
     @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
     @patch('os.urandom')
     async def test_start_sandbox_with_extra_hosts(
@@ -1123,6 +1133,40 @@ class TestDockerSandboxService:
         # Health check was skipped because there is no AGENT_SERVER URL
         service.httpx_client.get.assert_not_called()
 
+    async def test_container_to_sandbox_info_malformed_host_port(self, service):
+        """Guard against malformed HostPort values in Docker port binding data.
+
+        Previously raised KeyError (missing key) or ValueError (non-integer)
+        instead of gracefully skipping the bad binding.
+        """
+        container = MagicMock()
+        container.name = 'oh-test-abc123'
+        container.status = 'running'
+        container.image.tags = ['spec456']
+        container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEY=somekey'],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'bridge'},
+            'NetworkSettings': {
+                'Ports': {
+                    # Missing HostPort key entirely
+                    '8000/tcp': [{}],
+                    # Non-integer HostPort value
+                    '8001/tcp': [{'HostPort': 'not-a-number'}],
+                }
+            },
+        }
+
+        # Should return a SandboxInfo without crashing, with empty exposed_urls
+        result = await service._container_to_sandbox_info(container)
+
+        assert result is not None
+        # Both malformed ports are skipped — no URLs built
+        assert result.exposed_urls == []
+
     async def test_container_to_sandbox_info_running(
         self, service, mock_running_container
     ):
@@ -1148,6 +1192,33 @@ class TestDockerSandboxService:
             vscode_url.url
             == 'http://localhost:12346/?tkn=session_key_123&folder=/workspace'
         )
+
+    async def test_container_to_sandbox_info_vscode_no_session_key(self, service):
+        """VSCode URL must not contain 'tkn=None' when session_api_key is absent."""
+        container = MagicMock()
+        container.name = 'oh-test-abc123'
+        container.status = 'running'
+        container.image.tags = ['spec456']
+        container.attrs = {
+            'Created': '2024-01-01T00:00:00Z',
+            'Config': {
+                # No OH_SESSION_API_KEY in env
+                'Env': ['OTHER_VAR=value'],
+                'WorkingDir': '/workspace',
+            },
+            'NetworkSettings': {
+                'Ports': {
+                    '12346/tcp': [{'HostIp': '', 'HostPort': '12346'}],
+                }
+            },
+        }
+
+        result = await service._container_to_sandbox_info(container)
+
+        assert result is not None
+        vscode_urls = [u for u in result.exposed_urls if u.name == VSCODE]
+        for u in vscode_urls:
+            assert 'tkn=None' not in u.url
 
     async def test_container_to_sandbox_info_invalid_created_time(self, service):
         """Test conversion with invalid creation timestamp."""
@@ -1526,6 +1597,20 @@ class TestDockerSandboxServiceInjectorFromEnv:
             assert config.sandbox is not None
             assert config.sandbox.host_port == 4000
             assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'
+
+    def test_max_num_sandboxes_zero_raises_validation_error(self):
+        """max_num_sandboxes=0 must be rejected at configuration time.
+
+        Previously this would cause a cryptic ValueError deep inside
+        pause_old_sandboxes at runtime.
+        """
+        with pytest.raises(ValidationError):
+            DockerSandboxServiceInjector(max_num_sandboxes=0)
+
+    def test_max_num_sandboxes_negative_raises_validation_error(self):
+        """max_num_sandboxes=-1 must be rejected at configuration time."""
+        with pytest.raises(ValidationError):
+            DockerSandboxServiceInjector(max_num_sandboxes=-1)
 
 
 class TestDockerSandboxServiceHostNetwork:

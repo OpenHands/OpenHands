@@ -10,6 +10,7 @@ This module tests the Docker sandbox spec service injector implementation, focus
 """
 
 import asyncio
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -303,7 +304,11 @@ class TestDockerSandboxSpecServiceInjector:
     async def test_pull_spec_if_missing_uses_executor(
         self, mock_get_docker_client, sample_spec
     ):
-        """Test that pull_spec_if_missing uses executor for blocking operations."""
+        """Test that pull_spec_if_missing uses executor for blocking operations.
+
+        Both images.get (preflight check) and images.pull must be dispatched
+        via run_in_executor so they don't block the event loop.
+        """
         # Setup
         mock_docker_client = MagicMock()
         mock_get_docker_client.return_value = mock_docker_client
@@ -316,14 +321,28 @@ class TestDockerSandboxSpecServiceInjector:
         with patch('asyncio.get_running_loop') as mock_get_loop:
             mock_loop = MagicMock()
             mock_get_loop.return_value = mock_loop
-            mock_loop.run_in_executor.return_value = asyncio.Future()
-            mock_loop.run_in_executor.return_value.set_result(MagicMock())
+
+            def executor_side_effect(executor, fn, *args):
+                """Invoke fn so that mock side_effects/return_values are honoured."""
+                fut = asyncio.Future()
+                try:
+                    result = fn(*args)
+                    fut.set_result(result)
+                except Exception as exc:
+                    fut.set_exception(exc)
+                return fut
+
+            mock_loop.run_in_executor.side_effect = executor_side_effect
 
             # Execute
             await injector.pull_spec_if_missing(sample_spec)
 
-            # Verify executor was used
-            mock_loop.run_in_executor.assert_called_once_with(
+            # Verify executor was used for both the preflight get and the pull
+            assert mock_loop.run_in_executor.call_count == 2
+            mock_loop.run_in_executor.assert_any_call(
+                None, mock_docker_client.images.get, 'test-image:latest'
+            )
+            mock_loop.run_in_executor.assert_any_call(
                 None, mock_docker_client.images.pull, 'test-image:latest'
             )
 
@@ -459,43 +478,29 @@ class TestDockerSandboxSpecServiceInjector:
         mock_get_docker_client.return_value = mock_docker_client
         mock_docker_client.images.get.side_effect = ImageNotFound('Image not found')
 
-        # Create a future that will be resolved after some delay to simulate slow pull
-        pull_future = asyncio.Future()
+        # images.pull blocks its executor thread long enough for the logger to fire twice.
+        # Using a real thread executor means the event loop stays free to run periodic_logger.
+        mock_docker_client.images.pull.side_effect = lambda _id: time.sleep(12)
 
-        async def delayed_pull_completion():
-            # Wait for multiple logging intervals to pass
-            await asyncio.sleep(12)  # 12 seconds = 2 logging intervals (5s each)
-            pull_future.set_result(MagicMock())
+        injector = DockerSandboxSpecServiceInjector()
 
-        # Start the delayed completion task
-        asyncio.create_task(delayed_pull_completion())
+        # Execute
+        await injector.pull_spec_if_missing(sample_spec)
 
-        # Mock the executor to return our delayed future
-        with patch('asyncio.get_running_loop') as mock_get_loop:
-            mock_loop = MagicMock()
-            mock_get_loop.return_value = mock_loop
-            mock_loop.run_in_executor.return_value = pull_future
+        # Verify that progress logging occurred
+        progress_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if 'Downloading Docker Image:' in str(call)
+        ]
 
-            injector = DockerSandboxSpecServiceInjector()
+        # Should have at least 2 progress log messages (every 5 seconds for 12 seconds)
+        assert len(progress_calls) >= 2
 
-            # Execute
-            await injector.pull_spec_if_missing(sample_spec)
-
-            # Verify that progress logging occurred
-            # Should have initial pull message, progress messages, and completion message
-            progress_calls = [
-                call
-                for call in mock_logger.info.call_args_list
-                if 'Downloading Docker Image:' in str(call)
-            ]
-
-            # Should have at least 2 progress log messages (every 5 seconds for 12 seconds)
-            assert len(progress_calls) >= 2
-
-            # Verify the progress message format
-            for call in progress_calls:
-                assert 'Downloading Docker Image:' in str(call)
-                assert 'test-image:latest' in str(call)
+        # Verify the progress message format
+        for call in progress_calls:
+            assert 'Downloading Docker Image:' in str(call)
+            assert 'test-image:latest' in str(call)
 
     @patch('openhands.app_server.sandbox.docker_sandbox_spec_service.get_docker_client')
     @patch('openhands.app_server.sandbox.docker_sandbox_spec_service._logger')
@@ -508,25 +513,18 @@ class TestDockerSandboxSpecServiceInjector:
         mock_get_docker_client.return_value = mock_docker_client
         mock_docker_client.images.get.side_effect = ImageNotFound('Image not found')
 
-        # Mock fast pull (completes immediately)
-        with patch('asyncio.get_running_loop') as mock_get_loop:
-            mock_loop = MagicMock()
-            mock_get_loop.return_value = mock_loop
-            fast_future = asyncio.Future()
-            fast_future.set_result(MagicMock())
-            mock_loop.run_in_executor.return_value = fast_future
+        # images.pull returns immediately (default MagicMock -- no side_effect needed)
+        injector = DockerSandboxSpecServiceInjector()
 
-            injector = DockerSandboxSpecServiceInjector()
+        # Execute
+        await injector.pull_spec_if_missing(sample_spec)
 
-            # Execute
-            await injector.pull_spec_if_missing(sample_spec)
+        # Verify that no progress logging occurred (only start/end messages)
+        progress_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if 'Downloading Docker Image:' in str(call)
+        ]
 
-            # Verify that no progress logging occurred (only start/end messages)
-            progress_calls = [
-                call
-                for call in mock_logger.info.call_args_list
-                if 'Downloading Docker Image:' in str(call)
-            ]
-
-            # Should have no progress log messages for fast pulls
-            assert len(progress_calls) == 0
+        # Should have no progress log messages for fast pulls
+        assert len(progress_calls) == 0

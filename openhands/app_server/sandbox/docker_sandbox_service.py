@@ -164,7 +164,7 @@ class DockerSandboxService(SandboxService):
                     url = self.container_url_pattern.format(port=host_port)
 
                     # VSCode URLs require the api_key and working dir
-                    if exposed_port.name == VSCODE:
+                    if exposed_port.name == VSCODE and session_api_key:
                         url += f'/?tkn={session_api_key}&folder={working_dir}'
 
                     exposed_urls.append(
@@ -182,7 +182,18 @@ class DockerSandboxService(SandboxService):
                 if port_bindings:
                     for container_port, host_bindings in port_bindings.items():
                         if host_bindings:
-                            host_port = int(host_bindings[0]['HostPort'])
+                            raw_host_port = host_bindings[0].get('HostPort')
+                            if not raw_host_port:
+                                continue
+                            try:
+                                host_port = int(raw_host_port)
+                            except (TypeError, ValueError):
+                                _logger.debug(
+                                    'Skipping malformed HostPort %r for %s',
+                                    raw_host_port,
+                                    container_port,
+                                )
+                                continue
                             matching_port = next(
                                 (
                                     ep
@@ -195,7 +206,7 @@ class DockerSandboxService(SandboxService):
                                 url = self.container_url_pattern.format(port=host_port)
 
                                 # VSCode URLs require the api_key and working dir
-                                if matching_port.name == VSCODE:
+                                if matching_port.name == VSCODE and session_api_key:
                                     bridge_working_dir = container.attrs.get(
                                         'Config', {}
                                     ).get('WorkingDir', '')
@@ -512,7 +523,11 @@ class DockerSandboxService(SandboxService):
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)
-            assert sandbox_info is not None
+            if sandbox_info is None:
+                raise SandboxError(
+                    f'Container {container.name} created but produced no sandbox info; '
+                    'the image may be missing tags.'
+                )
             return sandbox_info
 
         except APIError as e:
@@ -629,6 +644,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
     container_name_prefix: str = 'oh-agent-server-'
     max_num_sandboxes: int = Field(
         default=5,
+        gt=0,
         description='Maximum number of sandboxes allowed to run simultaneously',
     )
     mounts: list[VolumeMount] = Field(default_factory=list)
