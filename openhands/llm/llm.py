@@ -465,16 +465,24 @@ class LLM(RetryMixin, DebugMixin):
                 },
             )
 
-            try:
-                resp_json = response.json()
-                if 'data' not in resp_json:
-                    logger.info(
-                        f'No data field in model info response from LiteLLM proxy: {resp_json}'
-                    )
-                all_model_info = resp_json.get('data', [])
-            except Exception as e:
-                logger.info(f'Error parsing JSON response from LiteLLM proxy: {e}')
+            if not response.is_success:
+                logger.warning(
+                    'LiteLLM proxy returned HTTP %d for model info: %s',
+                    response.status_code,
+                    response.text[:200],
+                )
                 all_model_info = []
+            else:
+                try:
+                    resp_json = response.json()
+                    if 'data' not in resp_json:
+                        logger.info(
+                            f'No data field in model info response from LiteLLM proxy: {resp_json}'
+                        )
+                    all_model_info = resp_json.get('data', [])
+                except Exception as e:
+                    logger.info(f'Error parsing JSON response from LiteLLM proxy: {e}')
+                    all_model_info = []
             current_model_info = next(
                 (
                     info

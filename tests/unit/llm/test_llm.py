@@ -471,7 +471,7 @@ def test_completion_retry_with_llm_no_response_error_zero_temp(
 ):
     """Test that the retry decorator properly handles LLMNoResponseError by:
     1. First call to llm_completion uses temperature=0 and throws LLMNoResponseError
-    2. Second call should have temperature=0.2 and return a successful response
+    2. Second call should have temperature=0.2 and return a successful response.
     """
 
     # Define a side effect function that checks the temperature parameter
@@ -1035,6 +1035,42 @@ def test_llm_base_url_auto_protocol_patch(mock_get):
 
     called_url = mock_get.call_args[0][0]
     assert called_url.startswith('http://') or called_url.startswith('https://')
+
+
+@patch('httpx.get')
+def test_init_model_info_logs_warning_on_http_error(mock_get):
+    """Fix L: init_model_info must log a warning and skip model_info on non-2xx HTTP.
+
+    Before the fix, a 500/401 response body was passed directly to response.json()
+    with no status check, so a JSON-parseable error body would silently produce an
+    empty model_info without any indication of the HTTP failure.  After the fix,
+    response.is_success is checked first and a WARNING is emitted.
+    """
+
+    mock_get.return_value.is_success = False
+    mock_get.return_value.status_code = 500
+    mock_get.return_value.text = 'Internal Server Error'
+
+    config = LLMConfig(
+        model='litellm_proxy/my-model',
+        api_key='fake-key',
+        base_url='http://proxy.example.com',
+    )
+    llm = LLM(config=config, service_id='test-service')
+
+    with patch('openhands.llm.llm.logger') as mock_logger:
+        llm.init_model_info()
+
+    # model_info stays None — nothing should have been set from the failed response
+    assert llm.model_info is None
+
+    # A WARNING (not just INFO) must have been emitted about the HTTP status
+    warning_calls = [
+        call for call in mock_logger.warning.call_args_list if '500' in str(call)
+    ]
+    assert warning_calls, (
+        'Expected a logger.warning call mentioning the 500 status code'
+    )
 
 
 # Tests for max_output_tokens configuration and usage
