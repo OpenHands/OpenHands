@@ -7,13 +7,11 @@ from storage.database import a_session_maker
 from storage.stored_offline_token import StoredOfflineToken
 
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.core.config.openhands_config import OpenHandsConfig
 
 
 @dataclass
 class OfflineTokenStore:
     user_id: str
-    config: OpenHandsConfig
 
     async def store_token(self, offline_token: str) -> None:
         """Store an offline token in the database."""
@@ -52,9 +50,11 @@ class OfflineTokenStore:
     @classmethod
     async def get_instance(
         cls,
-        config: OpenHandsConfig,
-        user_id: str,  # type: ignore[override]
+        user_id: str,
     ) -> OfflineTokenStore:
-        """Get an instance of the OfflineTokenStore."""
+        """Get an instance of the OfflineTokenStore.
+
+        TODO: This method should be replaced with dependency injection.
+        """
         logger.debug(f'offline_token_store.get_instance::{user_id}')
-        return OfflineTokenStore(user_id, config)
+        return OfflineTokenStore(user_id)

@@ -422,6 +422,19 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.get(url, headers=headers)
+            if response.status_code == 401:
+                logger.error(
+                    '[Jira DC] 401 from %s. PAT length=%d prefix=%s '
+                    'WWW-Authenticate=%r X-Seraph-LoginReason=%r '
+                    'X-AUSERNAME=%r body=%s',
+                    url,
+                    len(svc_acc_api_key),
+                    svc_acc_api_key[:6] if svc_acc_api_key else '',
+                    response.headers.get('WWW-Authenticate'),
+                    response.headers.get('X-Seraph-LoginReason'),
+                    response.headers.get('X-AUSERNAME'),
+                    response.text[:500],
+                )
             response.raise_for_status()
             issue_payload = response.json()
 

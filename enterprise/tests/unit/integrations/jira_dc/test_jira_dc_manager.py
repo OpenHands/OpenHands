@@ -7,6 +7,7 @@ import hmac
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi import Request
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
@@ -914,6 +915,57 @@ class TestGetIssueDetails:
                 await jira_dc_manager.get_issue_details(
                     sample_job_context, 'bearer_token'
                 )
+
+    @pytest.mark.asyncio
+    async def test_get_issue_details_logs_diagnostic_on_401(
+        self, jira_dc_manager, sample_job_context
+    ):
+        """A 401 response must surface auth diagnostics before re-raising.
+
+        Without these fields (PAT length, WWW-Authenticate, X-Seraph-LoginReason,
+        X-AUSERNAME), a silently-rejected PAT is indistinguishable from a permission
+        error — operators cannot tell if the token was wrong, the user has no app
+        access, or the instance only accepts a different auth scheme.
+        """
+        # Arrange
+        pat = 'OdC2NTPATfullValueXyz123456789'
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.headers = {
+            'WWW-Authenticate': 'OAuth realm="https%3A%2F%2Fjira.example.com"',
+            'X-Seraph-LoginReason': 'AUTHENTICATED_FAILED',
+            'X-AUSERNAME': 'anonymous',
+        }
+        mock_response.text = '{"errorMessages":["Login Required"]}'
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Client error '401 Unauthorized'",
+            request=MagicMock(),
+            response=mock_response,
+        )
+
+        with patch('httpx.AsyncClient') as mock_client, patch(
+            'integrations.jira_dc.jira_dc_manager.logger'
+        ) as mock_logger:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
+            )
+
+            # Act
+            with pytest.raises(httpx.HTTPStatusError):
+                await jira_dc_manager.get_issue_details(sample_job_context, pat)
+
+        # Assert: log fires once, and carries every field operators need.
+        mock_logger.error.assert_called_once()
+        format_string, *log_args = mock_logger.error.call_args.args
+        assert log_args == [
+            f'{sample_job_context.base_api_url}/rest/api/2/issue/{sample_job_context.issue_key}',
+            len(pat),
+            pat[:6],
+            'OAuth realm="https%3A%2F%2Fjira.example.com"',
+            'AUTHENTICATED_FAILED',
+            'anonymous',
+            '{"errorMessages":["Login Required"]}',
+        ]
 
 
 class TestSendMessage:

@@ -3,7 +3,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from openhands.app_server.settings.settings_models import Settings
-from openhands.core.config.openhands_config import OpenHandsConfig
 
 
 class SettingsStore(ABC):
@@ -30,7 +29,8 @@ class SettingsStore(ABC):
 
     @classmethod
     @abstractmethod
-    async def get_instance(
-        cls, config: OpenHandsConfig, user_id: str | None
-    ) -> SettingsStore:
-        """Get a store for the user represented by the token given."""
+    async def get_instance(cls, user_id: str | None) -> SettingsStore:
+        """Get a store for the user represented by the token given.
+
+        TODO: This method should be replaced with dependency injection.
+        """

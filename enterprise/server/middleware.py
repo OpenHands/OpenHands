@@ -3,7 +3,6 @@ from typing import Callable, cast
 import jwt
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import SecretStr
 from server.auth.auth_error import (
     AuthError,
     EmailNotVerifiedError,
@@ -17,7 +16,6 @@ from server.utils.url_utils import get_cookie_domain, get_cookie_samesite
 
 from openhands.app_server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.shared import config
 
 
 class SetAuthCookieMiddleware:
@@ -115,21 +113,16 @@ class SetAuthCookieMiddleware:
         ):
             raise NoCredentialsError
 
-        jwt_secret: SecretStr = config.jwt_secret  # type: ignore[assignment]
         if keycloak_auth_cookie:
             try:
-                decoded = jwt.decode(
-                    keycloak_auth_cookie,
-                    jwt_secret.get_secret_value(),
-                    algorithms=['HS256'],
-                )
+                from storage.encrypt_utils import get_jwt_service
+
+                decoded = get_jwt_service().verify_jws_token(keycloak_auth_cookie)
                 accepted_tos = decoded.get('accepted_tos')
-            except jwt.exceptions.InvalidSignatureError:
-                # If we can't decode the token, treat it as an auth error
+            except (jwt.InvalidTokenError, ValueError):
                 logger.warning('Invalid JWT signature detected')
                 raise AuthError('Invalid authentication token')
             except Exception as e:
-                # Handle any other JWT decoding errors
                 logger.warning(f'JWT decode error: {str(e)}')
                 raise AuthError('Invalid authentication token')
         else:

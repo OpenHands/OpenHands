@@ -6,7 +6,6 @@ from pydantic import SecretStr
 
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_models import Settings as DataSettings
-from openhands.core.config.openhands_config import OpenHandsConfig
 
 
 def _agent_value(settings: Settings, key: str):
@@ -73,16 +72,7 @@ with patch('storage.database.a_session_maker'):
     from storage.user_settings import UserSettings
 
 
-@pytest.fixture
-def mock_config():
-    config = MagicMock(spec=OpenHandsConfig)
-    config.jwt_secret = SecretStr('test_secret')
-    config.file_store = 'google_cloud'
-    config.file_store_path = 'bucket'
-    return config
-
-
-def test_member_settings_persist_full_effective_agent_settings(mock_config):
+def test_member_settings_persist_full_effective_agent_settings():
     settings = Settings()
     settings.update(
         {
@@ -119,8 +109,8 @@ def test_member_settings_persist_full_effective_agent_settings(mock_config):
 
 
 @pytest.fixture
-def settings_store(async_session_maker, mock_config):
-    store = SaasSettingsStore('5594c7b6-f959-4b81-92e9-b09c206f5081', mock_config)
+def settings_store(async_session_maker):
+    store = SaasSettingsStore('5594c7b6-f959-4b81-92e9-b09c206f5081')
     store.a_session_maker = async_session_maker
 
     # Patch the load method to read from UserSettings table directly (for testing)
@@ -318,9 +308,9 @@ async def test_encryption(settings_store):
 
 
 @pytest.mark.asyncio
-async def test_ensure_api_key_keeps_valid_key(mock_config):
+async def test_ensure_api_key_keeps_valid_key():
     """When the existing key is valid, it should be kept unchanged."""
-    store = SaasSettingsStore('test-user-id-123', mock_config)
+    store = SaasSettingsStore('test-user-id-123')
     existing_key = 'sk-existing-key'
     item = _make_settings(model='openhands/gpt-4', api_key=existing_key)
 
@@ -337,11 +327,9 @@ async def test_ensure_api_key_keeps_valid_key(mock_config):
 
 
 @pytest.mark.asyncio
-async def test_ensure_api_key_generates_new_key_when_verification_fails(
-    mock_config,
-):
+async def test_ensure_api_key_generates_new_key_when_verification_fails():
     """When verification fails, a new key should be generated."""
-    store = SaasSettingsStore('test-user-id-123', mock_config)
+    store = SaasSettingsStore('test-user-id-123')
     new_key = 'sk-new-key'
     item = _make_settings(model='openhands/gpt-4', api_key='sk-invalid-key')
 
@@ -464,7 +452,7 @@ def org_with_multiple_members_fixture(session_maker):
 
 @pytest.mark.asyncio
 async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
-    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """External provider keys should still sync as an org-wide shared snapshot."""
     from sqlalchemy import select
@@ -475,7 +463,7 @@ async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
     org_id = fixture['org_id']
     decrypt_value = fixture['decrypt_value']
 
-    store = SaasSettingsStore(str(fixture['admin_user_id']), mock_config)
+    store = SaasSettingsStore(str(fixture['admin_user_id']))
     new_settings = _make_settings(
         model='anthropic/claude-sonnet-4',
         base_url='https://api.anthropic.com/v1',
@@ -518,7 +506,7 @@ async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
 
 @pytest.mark.asyncio
 async def test_store_keeps_openhands_managed_keys_member_specific(
-    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """Managed OpenHands keys should not be copied from one member to everyone else."""
     from sqlalchemy import select
@@ -530,7 +518,7 @@ async def test_store_keeps_openhands_managed_keys_member_specific(
     admin_user_id = str(fixture['admin_user_id'])
     decrypt_value = fixture['decrypt_value']
 
-    store = SaasSettingsStore(admin_user_id, mock_config)
+    store = SaasSettingsStore(admin_user_id)
     new_settings = _make_settings(
         model='openhands/claude-opus-4-5-20251101',
         base_url=LITE_LLM_API_URL,
@@ -588,7 +576,7 @@ async def test_store_keeps_openhands_managed_keys_member_specific(
 
 @pytest.mark.asyncio
 async def test_store_saves_mcp_config_in_agent_settings(
-    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """mcp_config now flows through agent_settings / agent_settings_diff,
     so it is persisted on both the org and all members."""
@@ -602,7 +590,7 @@ async def test_store_saves_mcp_config_in_agent_settings(
     member1_user_id = str(fixture['member1_user_id'])
     member2_user_id = str(fixture['member2_user_id'])
 
-    store = SaasSettingsStore(admin_user_id, mock_config)
+    store = SaasSettingsStore(admin_user_id)
     user_mcp_config = {
         'mcpServers': {
             'user1': {'url': 'https://user1-mcp-server.com', 'transport': 'sse'}
@@ -654,7 +642,7 @@ async def test_store_saves_mcp_config_in_agent_settings(
 
 @pytest.mark.asyncio
 async def test_store_skips_ensure_api_key_for_non_openhands_model_without_base_url(
-    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """When saving a non-OpenHands model with no base URL (basic view BYOR),
     _ensure_api_key should NOT be called, preserving the user's custom API key.
@@ -664,7 +652,7 @@ async def test_store_skips_ensure_api_key_for_non_openhands_model_without_base_u
     """
     fixture = org_with_multiple_members_fixture
     admin_user_id = str(fixture['admin_user_id'])
-    store = SaasSettingsStore(admin_user_id, mock_config)
+    store = SaasSettingsStore(admin_user_id)
 
     settings = _make_settings(
         model='openai/gpt-5.2',
@@ -682,12 +670,12 @@ async def test_store_skips_ensure_api_key_for_non_openhands_model_without_base_u
 
 @pytest.mark.asyncio
 async def test_store_calls_ensure_api_key_for_openhands_model_without_base_url(
-    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """OpenHands models still require proxy-key verification without a base URL."""
     fixture = org_with_multiple_members_fixture
     admin_user_id = str(fixture['admin_user_id'])
-    store = SaasSettingsStore(admin_user_id, mock_config)
+    store = SaasSettingsStore(admin_user_id)
 
     settings = _make_settings(
         model='openhands/claude-opus-4-5-20251101',
@@ -705,12 +693,12 @@ async def test_store_calls_ensure_api_key_for_openhands_model_without_base_url(
 
 @pytest.mark.asyncio
 async def test_store_calls_ensure_api_key_when_base_url_is_litellm_proxy(
-    session_maker, async_session_maker, mock_config, org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """Explicit LiteLLM proxy usage should always verify/generate the API key."""
     fixture = org_with_multiple_members_fixture
     admin_user_id = str(fixture['admin_user_id'])
-    store = SaasSettingsStore(admin_user_id, mock_config)
+    store = SaasSettingsStore(admin_user_id)
 
     settings = _make_settings(
         model='openai/gpt-5.2',
@@ -729,7 +717,7 @@ async def test_store_calls_ensure_api_key_when_base_url_is_litellm_proxy(
 
 @pytest.mark.asyncio
 async def test_store_and_load_mcp_config_via_agent_settings(
-    async_session_maker, mock_config, org_with_multiple_members_fixture
+    async_session_maker, org_with_multiple_members_fixture
 ):
     """mcp_config is persisted inside agent_settings / agent_settings_diff and
     round-trips correctly through store → load."""
@@ -742,7 +730,7 @@ async def test_store_and_load_mcp_config_via_agent_settings(
         },
     }
 
-    admin_store = SaasSettingsStore(admin_user_id, mock_config)
+    admin_store = SaasSettingsStore(admin_user_id)
 
     admin_settings = DataSettings()
     admin_settings.update(
@@ -778,7 +766,7 @@ async def test_store_and_load_mcp_config_via_agent_settings(
 
 @pytest.mark.asyncio
 async def test_store_and_load_llm_profiles_round_trip(
-    async_session_maker, mock_config, org_with_multiple_members_fixture
+    async_session_maker, org_with_multiple_members_fixture
 ):
     """Saved llm_profiles must persist on the User row and round-trip through
     store → load. Without the user.llm_profiles column they are silently
@@ -787,7 +775,7 @@ async def test_store_and_load_llm_profiles_round_trip(
 
     fixture = org_with_multiple_members_fixture
     admin_user_id = str(fixture['admin_user_id'])
-    admin_store = SaasSettingsStore(admin_user_id, mock_config)
+    admin_store = SaasSettingsStore(admin_user_id)
 
     settings = DataSettings()
     settings.update(
@@ -846,7 +834,7 @@ async def test_store_and_load_llm_profiles_round_trip(
 
 @pytest.mark.asyncio
 async def test_load_with_null_llm_profiles_column_uses_default_factory(
-    async_session_maker, mock_config, org_with_multiple_members_fixture
+    async_session_maker, org_with_multiple_members_fixture
 ):
     """Rows predating the user.llm_profiles column read back as None.
     Settings.llm_profiles is non-nullable (default_factory=LLMProfiles), so
@@ -857,7 +845,7 @@ async def test_load_with_null_llm_profiles_column_uses_default_factory(
 
     fixture = org_with_multiple_members_fixture
     admin_user_id = fixture['admin_user_id']
-    admin_store = SaasSettingsStore(str(admin_user_id), mock_config)
+    admin_store = SaasSettingsStore(str(admin_user_id))
 
     seed_settings = _make_settings(
         model='anthropic/claude-sonnet-4-5-20250929',
@@ -887,7 +875,7 @@ async def test_load_with_null_llm_profiles_column_uses_default_factory(
 
 @pytest.mark.asyncio
 async def test_llm_profiles_are_encrypted_at_rest(
-    async_session_maker, mock_config, org_with_multiple_members_fixture
+    async_session_maker, org_with_multiple_members_fixture
 ):
     """The raw value in the user.llm_profiles column must be ciphertext, not
     a JSON dict — profile api_keys would otherwise leak in DB dumps,
@@ -900,7 +888,7 @@ async def test_llm_profiles_are_encrypted_at_rest(
 
     fixture = org_with_multiple_members_fixture
     admin_user_id = fixture['admin_user_id']
-    admin_store = SaasSettingsStore(str(admin_user_id), mock_config)
+    admin_store = SaasSettingsStore(str(admin_user_id))
 
     settings = DataSettings()
     settings.update(
