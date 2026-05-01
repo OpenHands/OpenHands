@@ -93,7 +93,8 @@ class TokenManager:
         self._jwt_svc = get_jwt_service()
 
     def encrypt_text(self, text: str) -> str:
-        return self._jwt_svc.encrypt_value(text)
+        encrypted = self._jwt_svc.encrypt_value(text)
+        return encrypted
 
     def decrypt_text(self, encrypted_text: str) -> str:
         return self._jwt_svc.decrypt_value(encrypted_text)
