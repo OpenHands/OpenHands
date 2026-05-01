@@ -3,12 +3,7 @@ This directory contains the core components of OpenHands.
 
 ## Documentation
 
-**[Architecture Documentation](./architecture/README.md)** with diagrams covering:
-  - System Architecture Overview
-  - Conversation Startup & WebSocket Flow
-  - Agent Execution & LLM Flow
-
-- **[External Architecture Docs](https://docs.openhands.dev/usage/architecture/backend)** - Official documentation (v0 backend architecture)
+- **[Architecture Documentation](https://docs.openhands.dev/openhands/usage/architecture/backend)** - Official documentation covering system architecture
 
 ## Classes
 
