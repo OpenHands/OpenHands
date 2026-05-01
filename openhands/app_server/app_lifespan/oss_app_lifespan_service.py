@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -7,6 +9,8 @@ from alembic import command
 from alembic.config import Config
 
 from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanService
+
+_logger = logging.getLogger(__name__)
 
 
 class OssAppLifespanService(AppLifespanService):
@@ -18,7 +22,15 @@ class OssAppLifespanService(AppLifespanService):
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
-        pass
+        from openhands.app_server.sandbox import remote_sandbox_service
+
+        task = remote_sandbox_service.polling_task
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                _logger.info('Polling task cancelled on shutdown')
 
     def run_alembic(self):
         # Run alembic upgrade head to ensure database is up to date

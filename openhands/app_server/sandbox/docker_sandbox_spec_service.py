@@ -155,6 +155,6 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
             if not logger_task.done():
                 logger_task.cancel()
                 try:
-                    await logger_task
-                except asyncio.CancelledError:
+                    await asyncio.wait_for(logger_task, timeout=5.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
                     pass

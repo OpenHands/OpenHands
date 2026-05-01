@@ -197,6 +197,47 @@ class TestProcessSandboxService:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_delete_sandbox_handles_kill_timeout(self, process_sandbox_service):
+        """Test that TimeoutExpired on process.wait(5) after kill is handled gracefully.
+
+        Without the fix the TimeoutExpired propagates past the outer except clause,
+        skipping the del _processes[sandbox_id] cleanup and leaving a stale entry.
+        """
+        sandbox_id = 'sandbox-kill-timeout'
+
+        process_info = ProcessInfo(
+            pid=9999,
+            port=9000,
+            user_id='test-user-id',
+            working_dir='/tmp/nonexistent-sandbox-dir',
+            session_api_key='test-key',
+            created_at=datetime.now(),
+            sandbox_spec_id='test-spec',
+        )
+
+        import openhands.app_server.sandbox.process_sandbox_service as pss_module
+
+        pss_module._processes[sandbox_id] = process_info
+
+        try:
+            mock_process = MagicMock()
+            mock_process.is_running.return_value = True
+            # Graceful termination times out
+            mock_process.wait.side_effect = [
+                psutil.TimeoutExpired(9999, 10),  # first wait after terminate
+                psutil.TimeoutExpired(9999, 5),  # second wait after kill
+            ]
+
+            with patch('psutil.Process', return_value=mock_process):
+                result = await process_sandbox_service.delete_sandbox(sandbox_id)
+
+            # Should succeed and remove the sandbox from tracking
+            assert result is True
+            assert sandbox_id not in pss_module._processes
+        finally:
+            pss_module._processes.pop(sandbox_id, None)
+
+    @pytest.mark.asyncio
     async def test_start_sandbox_with_sandbox_id(self, process_sandbox_service):
         """Test starting a sandbox with a specified sandbox_id."""
         # Mock subprocess and waiting for server

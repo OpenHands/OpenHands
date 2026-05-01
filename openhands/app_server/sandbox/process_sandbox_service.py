@@ -20,9 +20,9 @@ import base62
 import httpx
 import psutil
 from fastapi import Request
+from openhands.agent_server.utils import utc_now
 from pydantic import BaseModel, ConfigDict, Field
 
-from openhands.agent_server.utils import utc_now
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -388,11 +388,25 @@ class ProcessSandboxService(SandboxService):
                 except psutil.TimeoutExpired:
                     # Force kill if graceful termination fails
                     process.kill()
-                    process.wait(timeout=5)
+                    try:
+                        process.wait(timeout=5)
+                    except psutil.TimeoutExpired:
+                        _logger.error(
+                            'Forceful kill timed out for sandbox %s (PID %d)',
+                            sandbox_id,
+                            process.pid,
+                        )
 
             # Clean up the working directory
-            if os.path.exists(process_info.working_dir):
-                shutil.rmtree(process_info.working_dir, ignore_errors=True)
+            if os.path.exists(process_info.working_dir):  # noqa: ASYNC240
+                try:
+                    shutil.rmtree(process_info.working_dir)
+                except OSError as rm_exc:
+                    _logger.warning(
+                        'Failed to remove working directory for sandbox %s: %s',
+                        sandbox_id,
+                        rm_exc,
+                    )
 
             # Remove from our tracking
             del _processes[sandbox_id]

@@ -530,6 +530,45 @@ class TestDockerSandboxSpecServiceInjector:
         assert len(progress_calls) == 0
 
     @patch('openhands.app_server.sandbox.docker_sandbox_spec_service.get_docker_client')
+    async def test_pull_logger_task_cancel_timeout_is_handled(
+        self, mock_get_docker_client, sample_spec
+    ):
+        """Test that a stuck logger_task cancellation does not hang pull_spec_if_missing.
+
+        After Fix D the cleanup block uses asyncio.wait_for(logger_task, timeout=5.0)
+        so that a logger task that ignores CancelledError cannot block the caller.
+        We verify the fix by simulating asyncio.TimeoutError being raised ONLY for
+        Task-based wait_for calls (the logger_task cleanup in the finally block).
+        Coroutine-based wait_for calls (periodic_logger's pull_complete.wait()) use
+        the real implementation so the pull can complete normally.
+        """
+        mock_docker_client = MagicMock()
+        mock_get_docker_client.return_value = mock_docker_client
+        mock_docker_client.images.get.side_effect = ImageNotFound('not found')
+        # Pull completes instantly
+        mock_docker_client.images.pull.return_value = MagicMock()
+
+        original_wait_for = asyncio.wait_for
+
+        async def selective_wait_for(coro_or_future, timeout):
+            # Only intercept Task-based calls (the logger_task cleanup in finally).
+            # Coroutine-based calls (pull_complete.wait() inside periodic_logger)
+            # fall through to the real wait_for so the pull can complete normally.
+            if isinstance(coro_or_future, asyncio.Task):
+                try:
+                    coro_or_future.cancel()
+                except Exception:
+                    pass
+                raise asyncio.TimeoutError
+            return await original_wait_for(coro_or_future, timeout)
+
+        injector = DockerSandboxSpecServiceInjector()
+
+        with patch('asyncio.wait_for', new=selective_wait_for):
+            # Should complete without raising — TimeoutError is caught by Fix D
+            await injector.pull_spec_if_missing(sample_spec)
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_spec_service.get_docker_client')
     async def test_pull_spec_if_missing_concurrent_no_double_pull(
         self, mock_get_docker_client, sample_spec
     ):
