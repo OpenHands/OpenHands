@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from openhands.app_server.integrations.forgejo.service.base import ForgejoMixinBase
 from openhands.app_server.integrations.service_types import Repository
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 class ForgejoReposMixin(ForgejoMixinBase):

@@ -50,7 +50,7 @@ make setup-config
 ```
 
 **Note on Alternative Models:**
-See [our documentation](https://docs.openhands.dev/usage/llms) for recommended models.
+See [our documentation](https://docs.openhands.dev/openhands/usage/llms/llms) for recommended models.
 
 ### 4. Run the Application
 

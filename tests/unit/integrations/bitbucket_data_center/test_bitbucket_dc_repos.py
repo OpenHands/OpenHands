@@ -8,7 +8,7 @@ from pydantic import SecretStr
 from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_service import (
     BitbucketDCService,
 )
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 def make_service():

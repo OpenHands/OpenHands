@@ -11,9 +11,6 @@ if not os.getenv('OPENHANDS_CONFIG_CLS'):
 from fastapi import Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
-from server.app_lifespan.saas_app_lifespan_service import (  # noqa: E402
-    SaasAppLifespanService,
-)
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
     BITBUCKET_APP_CLIENT_ID,
@@ -25,10 +22,7 @@ from server.auth.constants import (  # noqa: E402
 )
 from server.constants import PERMITTED_CORS_ORIGINS  # noqa: E402
 from server.logger import logger  # noqa: E402
-from server.middleware import (  # noqa: E402
-    PostHogSessionMiddleware,
-    SetAuthCookieMiddleware,
-)
+from server.middleware import SetAuthCookieMiddleware  # noqa: E402
 from server.rate_limit import setup_rate_limit_handler  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
@@ -63,13 +57,11 @@ from server.verified_models.verified_model_router import (  # noqa: E402
     api_router as verified_models_router,
 )
 
-from openhands.server.app import create_app  # noqa: E402
-
-base_app = create_app(lifespan_service=SaasAppLifespanService())
-from openhands.server.middleware import (  # noqa: E402
+from openhands.app_server.app import app as base_app  # noqa: E402
+from openhands.app_server.middleware import (  # noqa: E402
     CacheControlMiddleware,
 )
-from openhands.server.static import SPAStaticFiles  # noqa: E402
+from openhands.app_server.static import SPAStaticFiles  # noqa: E402
 
 directory = os.getenv('FRONTEND_DIRECTORY', './frontend/build')
 
@@ -181,7 +173,6 @@ base_app.add_middleware(
     allow_headers=['*'],
 )
 base_app.add_middleware(CacheControlMiddleware)
-base_app.middleware('http')(PostHogSessionMiddleware())
 base_app.middleware('http')(SetAuthCookieMiddleware())
 
 base_app.mount('/', SPAStaticFiles(directory=directory, html=True), name='dist')

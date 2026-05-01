@@ -100,7 +100,7 @@ def _get_github_app_slug() -> str | None:
 def _get_slack_enabled() -> bool:
     """Return whether Slack integration is fully configured for the web client."""
     return (
-        os.getenv('SLACK_WEBHOOKS_ENABLED', 'false').lower() == 'true'
+        os.getenv('SLACK_WEBHOOKS_ENABLED', 'false').lower() in ('true', '1')
         and bool(os.getenv('SLACK_CLIENT_ID', '').strip())
         and bool(os.getenv('SLACK_CLIENT_SECRET', '').strip())
         and bool(os.getenv('SLACK_SIGNING_SECRET', '').strip())
