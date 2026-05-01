@@ -282,6 +282,48 @@ async def test_update_existing_custom_secret(test_client, file_secrets_store):
 
 
 @pytest.mark.asyncio
+async def test_update_nonexistent_custom_secret(test_client, file_secrets_store):
+    """Test updating a custom secret that doesn't exist."""
+    custom_secrets = {'API_KEY': CustomSecret(secret=SecretStr('api-key-value'))}
+    provider_tokens = {
+        ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
+    }
+    user_secrets = Secrets(
+        custom_secrets=custom_secrets, provider_tokens=provider_tokens
+    )
+    await file_secrets_store.store(user_secrets)
+
+    update_secret_data = {
+        'name': 'NONEXISTENT_KEY',
+        'description': None,
+    }
+    response = test_client.put('/secrets/NONEXISTENT_KEY', json=update_secret_data)
+    assert response.status_code == 404
+
+    stored_settings = await file_secrets_store.load()
+    assert 'API_KEY' in stored_settings.custom_secrets
+    assert (
+        stored_settings.custom_secrets['API_KEY'].secret.get_secret_value()
+        == 'api-key-value'
+    )
+    assert ProviderType.GITHUB in stored_settings.provider_tokens
+
+
+@pytest.mark.asyncio
+async def test_update_custom_secret_with_no_existing_secrets(
+    test_client, file_secrets_store
+):
+    """Test updating a custom secret when no secrets store exists."""
+    update_secret_data = {
+        'name': 'NONEXISTENT_KEY',
+        'description': None,
+    }
+    response = test_client.put('/secrets/NONEXISTENT_KEY', json=update_secret_data)
+    assert response.status_code == 404
+    assert await file_secrets_store.load() is None
+
+
+@pytest.mark.asyncio
 async def test_add_multiple_custom_secrets(test_client, file_secrets_store):
     """Test adding multiple custom secrets at once."""
     # Create initial settings with one custom secret
@@ -414,6 +456,16 @@ async def test_delete_nonexistent_custom_secret(test_client, file_secrets_store)
 
     # Check that other settings were preserved
     assert ProviderType.GITHUB in stored_settings.provider_tokens
+
+
+@pytest.mark.asyncio
+async def test_delete_custom_secret_with_no_existing_secrets(
+    test_client, file_secrets_store
+):
+    """Test deleting a custom secret when no secrets store exists."""
+    response = test_client.delete('/secrets/NONEXISTENT_KEY')
+    assert response.status_code == 404
+    assert await file_secrets_store.load() is None
 
 
 @pytest.mark.asyncio
