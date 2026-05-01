@@ -1,7 +1,6 @@
-from base64 import b64encode
+import datetime
 import hashlib
 import os
-import datetime
 from pathlib import Path
 from typing import Any
 
