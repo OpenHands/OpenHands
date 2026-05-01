@@ -248,5 +248,3 @@ Tests are automatically run during:
 ## Contributing
 
 Please read the [CONTRIBUTING.md](../CONTRIBUTING.md) file for details on our code of conduct, and the process for submitting pull requests to us.
-
-
