@@ -6,7 +6,6 @@ from openhands.core.config.config_utils import (
     OH_DEFAULT_AGENT,
     OH_MAX_ITERATIONS,
 )
-from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.config.utils import (
     finalize_config,
@@ -21,7 +20,6 @@ __all__ = [
     'OH_DEFAULT_AGENT',
     'OH_MAX_ITERATIONS',
     'OpenHandsConfig',
-    'MCPConfig',
     'load_openhands_config',
     'load_from_env',
     'load_from_toml',
