@@ -452,7 +452,7 @@ def org_with_multiple_members_fixture(session_maker):
 
 @pytest.mark.asyncio
 async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
-    session_maker, async_session_maker,  org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """External provider keys should still sync as an org-wide shared snapshot."""
     from sqlalchemy import select
@@ -506,7 +506,7 @@ async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
 
 @pytest.mark.asyncio
 async def test_store_keeps_openhands_managed_keys_member_specific(
-    session_maker, async_session_maker,  org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """Managed OpenHands keys should not be copied from one member to everyone else."""
     from sqlalchemy import select
@@ -576,7 +576,7 @@ async def test_store_keeps_openhands_managed_keys_member_specific(
 
 @pytest.mark.asyncio
 async def test_store_saves_mcp_config_in_agent_settings(
-    session_maker, async_session_maker,  org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """mcp_config now flows through agent_settings / agent_settings_diff,
     so it is persisted on both the org and all members."""
@@ -642,7 +642,7 @@ async def test_store_saves_mcp_config_in_agent_settings(
 
 @pytest.mark.asyncio
 async def test_store_skips_ensure_api_key_for_non_openhands_model_without_base_url(
-    session_maker, async_session_maker,  org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """When saving a non-OpenHands model with no base URL (basic view BYOR),
     _ensure_api_key should NOT be called, preserving the user's custom API key.
@@ -670,7 +670,7 @@ async def test_store_skips_ensure_api_key_for_non_openhands_model_without_base_u
 
 @pytest.mark.asyncio
 async def test_store_calls_ensure_api_key_for_openhands_model_without_base_url(
-    session_maker, async_session_maker,  org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """OpenHands models still require proxy-key verification without a base URL."""
     fixture = org_with_multiple_members_fixture
@@ -693,7 +693,7 @@ async def test_store_calls_ensure_api_key_for_openhands_model_without_base_url(
 
 @pytest.mark.asyncio
 async def test_store_calls_ensure_api_key_when_base_url_is_litellm_proxy(
-    session_maker, async_session_maker,  org_with_multiple_members_fixture
+    session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
     """Explicit LiteLLM proxy usage should always verify/generate the API key."""
     fixture = org_with_multiple_members_fixture
@@ -717,7 +717,7 @@ async def test_store_calls_ensure_api_key_when_base_url_is_litellm_proxy(
 
 @pytest.mark.asyncio
 async def test_store_and_load_mcp_config_via_agent_settings(
-    async_session_maker,  org_with_multiple_members_fixture
+    async_session_maker, org_with_multiple_members_fixture
 ):
     """mcp_config is persisted inside agent_settings / agent_settings_diff and
     round-trips correctly through store → load."""
@@ -766,7 +766,7 @@ async def test_store_and_load_mcp_config_via_agent_settings(
 
 @pytest.mark.asyncio
 async def test_store_and_load_llm_profiles_round_trip(
-    async_session_maker,  org_with_multiple_members_fixture
+    async_session_maker, org_with_multiple_members_fixture
 ):
     """Saved llm_profiles must persist on the User row and round-trip through
     store → load. Without the user.llm_profiles column they are silently
@@ -834,7 +834,7 @@ async def test_store_and_load_llm_profiles_round_trip(
 
 @pytest.mark.asyncio
 async def test_load_with_null_llm_profiles_column_uses_default_factory(
-    async_session_maker,  org_with_multiple_members_fixture
+    async_session_maker, org_with_multiple_members_fixture
 ):
     """Rows predating the user.llm_profiles column read back as None.
     Settings.llm_profiles is non-nullable (default_factory=LLMProfiles), so
@@ -875,7 +875,7 @@ async def test_load_with_null_llm_profiles_column_uses_default_factory(
 
 @pytest.mark.asyncio
 async def test_llm_profiles_are_encrypted_at_rest(
-    async_session_maker,  org_with_multiple_members_fixture
+    async_session_maker, org_with_multiple_members_fixture
 ):
     """The raw value in the user.llm_profiles column must be ciphertext, not
     a JSON dict — profile api_keys would otherwise leak in DB dumps,
