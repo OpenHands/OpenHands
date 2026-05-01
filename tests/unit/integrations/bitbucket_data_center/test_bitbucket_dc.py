@@ -10,7 +10,7 @@ from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_servic
     BitbucketDCService,
 )
 from openhands.app_server.integrations.service_types import AuthenticationError, User
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 # ── init / BASE_URL ───────────────────────────────────────────────────────────
 

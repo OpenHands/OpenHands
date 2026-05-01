@@ -35,7 +35,7 @@ from openhands.app_server.integrations.provider import ProviderToken, ProviderTy
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.types import (
+from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,

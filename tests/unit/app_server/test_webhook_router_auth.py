@@ -19,11 +19,11 @@ from openhands.app_server.event_callback.webhook_router import (
     valid_sandbox,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
+from openhands.app_server.types import AppMode
 from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
 )
-from openhands.server.types import AppMode
 
 
 class MockRequestState:

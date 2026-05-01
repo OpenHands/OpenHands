@@ -25,8 +25,8 @@ from fastapi import HTTPException, status
 from openhands.app_server.config import get_global_config, get_sandbox_service
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.types import AppMode
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
-from openhands.server.types import AppMode
 
 if TYPE_CHECKING:
     from openhands.app_server.user.user_context import UserContext

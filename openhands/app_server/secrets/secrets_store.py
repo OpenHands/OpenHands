@@ -14,7 +14,7 @@ class SecretsStore(ABC):
     2. Implementing all required methods
     3. Setting server_config.secret_store_class to the fully qualified name of the class
 
-    The class is instantiated via get_impl() in openhands.server.shared.py.
+    The class is instantiated via get_impl() in openhands.app_server.shared.py.
 
     The implementation may or may not support multiple users depending on the environment.
     """

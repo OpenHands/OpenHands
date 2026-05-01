@@ -26,6 +26,7 @@ from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServic
 from openhands.app_server.integrations.provider import ProviderToken
 from openhands.app_server.integrations.service_types import GitService, ProviderType
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.types import AppMode
 from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
@@ -36,7 +37,6 @@ from openhands.app_server.user_auth import (
     get_user_id,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.types import AppMode
 
 mcp_server = FastMCP('mcp', mask_error_details=True)
 

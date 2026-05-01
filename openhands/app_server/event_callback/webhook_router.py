@@ -38,6 +38,7 @@ from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
+from openhands.app_server.types import AppMode
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.specifiy_user_context import (
     ADMIN,
@@ -50,7 +51,6 @@ from openhands.app_server.user_auth.user_auth import (
 )
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.server.types import AppMode
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()

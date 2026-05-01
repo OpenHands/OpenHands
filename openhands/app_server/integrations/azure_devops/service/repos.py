@@ -4,7 +4,7 @@ from openhands.app_server.integrations.azure_devops.service.base import (
     AzureDevOpsMixinBase,
 )
 from openhands.app_server.integrations.service_types import ProviderType, Repository
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 class AzureDevOpsReposMixin(AzureDevOpsMixinBase):

@@ -23,8 +23,8 @@ from server.auth.constants import (
 from server.constants import DEPLOYMENT_MODE
 
 from openhands.app_server.integrations.service_types import ProviderType
-from openhands.server.config.server_config import ServerConfig
-from openhands.server.types import AppMode
+from openhands.app_server.server_config.server_config import ServerConfig
+from openhands.app_server.types import AppMode
 
 
 def sign_token(payload: dict[str, object], jwt_secret: str, algorithm='HS256') -> str:

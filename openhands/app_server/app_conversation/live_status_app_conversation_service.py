@@ -85,6 +85,7 @@ from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
+from openhands.app_server.types import AppMode
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils._redact_compat import sanitize_config
@@ -105,7 +106,6 @@ from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.server.types import AppMode
 from openhands.tools.preset.default import (
     get_default_tools,
 )
@@ -2146,7 +2146,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             # Get app_mode for SaaS mode
             app_mode = None
             try:
-                from openhands.server.shared import server_config
+                from openhands.app_server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None
