@@ -26,6 +26,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
 from openhands.app_server.sandbox.sandbox_models import (
@@ -40,7 +41,6 @@ from openhands.app_server.settings.settings_models import (
     SandboxGroupingStrategy,
     Settings,
 )
-from openhands.app_server.types import AppMode
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk import Agent, Event
 from openhands.sdk.context.agent_context import AgentContext as _AgentContext

@@ -28,6 +28,7 @@ from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanSe
 from openhands.app_server.app_lifespan.oss_app_lifespan_service import (
     OssAppLifespanService,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.config_api.llm_model_service import (
     LLMModelService,
     LLMModelServiceInjector,
@@ -57,7 +58,6 @@ from openhands.app_server.services.db_session_injector import (
 from openhands.app_server.services.httpx_client_injector import HttpxClientInjector
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService, JwtServiceInjector
-from openhands.app_server.types import AppMode
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
 from openhands.app_server.utils.environment import StorageProvider, get_storage_provider
 from openhands.app_server.web_client.default_web_client_config_injector import (

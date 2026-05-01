@@ -1,11 +1,7 @@
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import Any
 
-
-class AppMode(Enum):
-    OPENHANDS = 'oss'
-    SAAS = 'saas'
+from openhands.app_server.config_api.config_models import AppMode
 
 
 class ServerConfigInterface(ABC):
@@ -36,3 +32,12 @@ class SessionExpiredError(ValueError):
     """Raised when the user's authentication session has expired."""
 
     pass
+
+
+__all__ = [
+    'AppMode',
+    'ServerConfigInterface',
+    'MissingSettingsError',
+    'LLMAuthenticationError',
+    'SessionExpiredError',
+]

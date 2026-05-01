@@ -12,6 +12,7 @@ from openhands.app_server.config import (
     get_app_conversation_info_service,
     get_global_config,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
@@ -26,7 +27,6 @@ from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServic
 from openhands.app_server.integrations.provider import ProviderToken
 from openhands.app_server.integrations.service_types import GitService, ProviderType
 from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.types import AppMode
 from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
