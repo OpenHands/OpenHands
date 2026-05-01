@@ -52,6 +52,13 @@ class JwtService:
         """Get the default key ID."""
         return self._default_key_id
 
+    @property
+    def key_ids(self) -> list[str]:
+        return list(self._keys)
+
+    def get_key(self, key_id: str) -> EncryptionKey:
+        return self._keys[key_id]
+
     def create_jws_token(
         self,
         payload: dict[str, Any],

@@ -75,7 +75,7 @@ def get_fernet():
     global _fernet
     if _fernet is None:
         jwt_svc = get_jwt_service()
-        default_key = jwt_svc._keys[jwt_svc._default_key_id]
+        default_key = jwt_svc.get_key(jwt_svc._default_key_id)
         secret = default_key.key.get_secret_value()
         fernet_key = b64encode(hashlib.sha256(secret.encode()).digest())
         _fernet = Fernet(fernet_key)
