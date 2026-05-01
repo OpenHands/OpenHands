@@ -26,13 +26,11 @@ class SaasAppLifespanService(AppLifespanService):
     async def __aenter__(self):
         api_key = os.environ.get('POSTHOG_CLIENT_KEY', '')
         host = os.environ.get('POSTHOG_HOST', 'https://us.i.posthog.com')
-        config_cls = os.environ.get('OPENHANDS_CONFIG_CLS', '')
-        app_mode = AppMode.SAAS if 'saas' in config_cls.lower() else AppMode.OPENHANDS
 
         init_analytics_service(
             api_key=api_key,
             host=host,
-            app_mode=app_mode,
+            app_mode=AppMode.SAAS,
             is_feature_env=IS_FEATURE_ENV,
         )
         return self

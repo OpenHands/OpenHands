@@ -344,40 +344,6 @@ async def keycloak_callback(
 
     logger.info(f'Logging in user {str(user.id)} in org {user.current_org_id}')
 
-    # Analytics: user signed up event (fires only for new users, once per user)
-    if is_new_user:
-        try:
-            analytics = get_analytics_service()
-            if analytics:
-                from openhands.analytics.analytics_context import AnalyticsContext
-
-                consented = (
-                    user.user_consents_to_analytics is True
-                )  # None = undecided = not consented
-                org_id_str = str(user.current_org_id) if user.current_org_id else None
-
-                ctx = AnalyticsContext(
-                    user_id=user_id,
-                    consented=consented,
-                    org_id=org_id_str,
-                    user=user,
-                )
-                analytics.track_user_signed_up(
-                    ctx=ctx,
-                    email_domain=email.split('@')[1]
-                    if email and '@' in email
-                    else None,
-                    invitation_source='invitation'
-                    if invitation_token
-                    else 'self_signup',
-                )
-                analytics.set_person_properties(
-                    ctx=ctx,
-                    properties={'signed_up_at': datetime.now(timezone.utc).isoformat()},
-                )
-        except Exception:
-            logger.exception('analytics:user_signed_up:failed')
-
     # reCAPTCHA verification with Account Defender
     if RECAPTCHA_SITE_KEY:
         if not recaptcha_token:
@@ -630,6 +596,44 @@ async def keycloak_callback(
             else:
                 redirect_url = f'{redirect_url}?invitation_success=true'
         response = RedirectResponse(redirect_url, status_code=302)
+
+        # Analytics: user signed up event (fires only for new users, once per user)
+        if is_new_user:
+            try:
+                analytics = get_analytics_service()
+                if analytics:
+                    from openhands.analytics.analytics_context import AnalyticsContext
+
+                    consented = (
+                        user.user_consents_to_analytics is True
+                    )  # None = undecided = not consented
+                    org_id_str = (
+                        str(user.current_org_id) if user.current_org_id else None
+                    )
+
+                    ctx = AnalyticsContext(
+                        user_id=user_id,
+                        consented=consented,
+                        org_id=org_id_str,
+                        user=user,
+                    )
+                    analytics.track_user_signed_up(
+                        ctx=ctx,
+                        email_domain=email.split('@')[1]
+                        if email and '@' in email
+                        else None,
+                        invitation_source='invitation'
+                        if invitation_token
+                        else 'self_signup',
+                    )
+                    analytics.set_person_properties(
+                        ctx=ctx,
+                        properties={
+                            'signed_up_at': datetime.now(timezone.utc).isoformat()
+                        },
+                    )
+            except Exception:
+                logger.exception('analytics:user_signed_up:failed')
 
     set_response_cookie(
         request=request,
