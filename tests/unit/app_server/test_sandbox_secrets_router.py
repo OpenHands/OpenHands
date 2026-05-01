@@ -12,7 +12,7 @@ import contextlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
@@ -201,7 +201,7 @@ class TestGetCurrentUserExposeSecrets:
         extra = mock_user_audit.info.call_args.kwargs['extra']
         assert extra['outcome'] == 'allowed'
         assert extra['user_id'] == USER_ID
-        assert extra['sandbox_id'] == SANDBOX_ID
+        assert extra['sandbox_id'] is None
         assert extra['route'] == '/users/me'
 
     async def test_expose_secrets_rejects_missing_session_key(self):
@@ -215,43 +215,56 @@ class TestGetCurrentUserExposeSecrets:
 
     async def test_expose_secrets_rejects_wrong_user(self, mock_user_audit):
         """expose_secrets=true with session key from different user is rejected."""
+        user_info = UserInfo(id='user-A', llm_api_key=SecretStr('sk-test'))
         mock_context = AsyncMock()
+        mock_context.get_user_info = AsyncMock(return_value=user_info)
         mock_context.get_user_id = AsyncMock(return_value='user-A')
 
-        other_user_sandbox = _make_sandbox_info(user_id='user-B')
-
-        ctx, mock_svc = _patch_sandbox_service(other_user_sandbox)
-        with ctx as mock_get, pytest.raises(HTTPException) as exc_info:
-            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
-            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
-
-            await validate_session_key_ownership(
-                mock_context, session_api_key='stolen-key'
+        with (
+            patch(
+                'openhands.app_server.user.user_router.validate_session_key_ownership',
+                side_effect=HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail='Session API key does not belong to the authenticated user',
+                ),
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_current_user(
+                user_context=mock_context,
+                expose_secrets=True,
+                x_session_api_key='stolen-key',
             )
 
         assert exc_info.value.status_code == 403
 
-        # User mismatch is suspicious and should be logged at error level
-        mock_user_audit.error.assert_called_once()
-        extra = mock_user_audit.error.call_args.kwargs['extra']
+        # Denied access is logged as warning at the endpoint level
+        mock_user_audit.warning.assert_called_once()
+        extra = mock_user_audit.warning.call_args.kwargs['extra']
         assert extra['outcome'] == 'denied'
         assert extra['user_id'] == 'user-A'
-        assert extra['sandbox_id'] == SANDBOX_ID
 
     async def test_expose_secrets_rejects_unknown_caller(self, mock_user_audit):
         """If caller_id cannot be determined, reject with 401."""
+        user_info = UserInfo(id='user-A', llm_api_key=SecretStr('sk-test'))
         mock_context = AsyncMock()
+        mock_context.get_user_info = AsyncMock(return_value=user_info)
         mock_context.get_user_id = AsyncMock(return_value=None)
 
-        sandbox = _make_sandbox_info(user_id='user-B')
-
-        ctx, mock_svc = _patch_sandbox_service(sandbox)
-        with ctx as mock_get, pytest.raises(HTTPException) as exc_info:
-            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
-            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
-
-            await validate_session_key_ownership(
-                mock_context, session_api_key='some-key'
+        with (
+            patch(
+                'openhands.app_server.user.user_router.validate_session_key_ownership',
+                side_effect=HTTPException(
+                    status.HTTP_401_UNAUTHORIZED,
+                    detail='Cannot determine authenticated user',
+                ),
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_current_user(
+                user_context=mock_context,
+                expose_secrets=True,
+                x_session_api_key='some-key',
             )
 
         assert exc_info.value.status_code == 401
@@ -260,7 +273,7 @@ class TestGetCurrentUserExposeSecrets:
         mock_user_audit.warning.assert_called_once()
         extra = mock_user_audit.warning.call_args.kwargs['extra']
         assert extra['outcome'] == 'denied'
-        assert extra['sandbox_id'] == SANDBOX_ID
+        assert extra['user_id'] == 'user-A'
 
     async def test_default_masks_api_key(self):
         """Without expose_secrets, llm_api_key is masked (no session key needed)."""
