@@ -661,8 +661,8 @@ def test_save_profile_rejects_invalid_name(test_client, bad_name):
         f'/api/v1/settings/profiles/{bad_name}',
         json={'llm': {'model': 'openai/gpt-4o'}},
     )
-    # Invalid chars/length → 422 from Path validation; slash → 404 routing miss.
-    assert response.status_code in (404, 422)
+    # Invalid chars/length → 422 from Path validation; slash → 404/405 routing miss.
+    assert response.status_code in (404, 405, 422)
 
 
 # ── Profile count cap ────────────────────────────────────────────
