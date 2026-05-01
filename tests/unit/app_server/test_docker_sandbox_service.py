@@ -9,6 +9,7 @@ This module tests the Docker sandbox service implementation, focusing on:
 - Edge cases with malformed container data
 """
 
+import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -258,6 +259,25 @@ class TestDockerSandboxService:
         result = await service.search_sandboxes()
 
         # Verify
+        assert isinstance(result, SandboxPage)
+        assert len(result.items) == 0
+        assert result.next_page_id is None
+
+    async def test_search_sandboxes_docker_timeout(self, service):
+        """Test that a hung Docker daemon (timeout) returns an empty SandboxPage.
+
+        Regression test: containers.list(all=True) is wrapped in asyncio.wait_for
+        with a 30-second timeout.  If the Docker daemon becomes unresponsive the
+        coroutine raises asyncio.TimeoutError, which must be caught so the server
+        does not hang forever.
+        """
+        # Simulate Docker daemon failing to respond within the timeout
+        service.docker_client.containers.list.side_effect = asyncio.TimeoutError()
+
+        # Execute
+        result = await service.search_sandboxes()
+
+        # Verify - should degrade gracefully to an empty page
         assert isinstance(result, SandboxPage)
         assert len(result.items) == 0
         assert result.next_page_id is None
