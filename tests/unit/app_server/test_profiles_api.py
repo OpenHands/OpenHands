@@ -15,6 +15,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.app import app
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import UserGitInfo
@@ -28,7 +29,6 @@ from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings
-from openhands.server.app import app
 
 
 @pytest.fixture(autouse=True)
@@ -661,8 +661,8 @@ def test_save_profile_rejects_invalid_name(test_client, bad_name):
         f'/api/v1/settings/profiles/{bad_name}',
         json={'llm': {'model': 'openai/gpt-4o'}},
     )
-    # Invalid chars/length → 422 from Path validation; slash → 404 routing miss.
-    assert response.status_code in (404, 422)
+    # Invalid chars/length → 422 from Path validation; slash → 404/405 routing miss.
+    assert response.status_code in (404, 405, 422)
 
 
 # ── Profile count cap ────────────────────────────────────────────

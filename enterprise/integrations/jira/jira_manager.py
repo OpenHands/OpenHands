@@ -42,14 +42,14 @@ from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
 
-from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.app_server.utils.http_session import httpx_verify_option
-from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.types import (
+from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
 )
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 

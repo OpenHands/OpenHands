@@ -2146,7 +2146,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             # Get app_mode for SaaS mode
             app_mode = None
             try:
-                from openhands.server.shared import server_config
+                from openhands.app_server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None

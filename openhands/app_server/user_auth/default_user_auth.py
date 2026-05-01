@@ -11,13 +11,13 @@ from dataclasses import dataclass
 from fastapi import Request
 from pydantic import SecretStr
 
+from openhands.app_server import shared
 from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.server import shared
 
 
 @dataclass

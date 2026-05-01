@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import SecretStr
 
-from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_service import (
     BitbucketDCService,
 )
+from openhands.app_server.types import AppMode
 
 
 def make_service():

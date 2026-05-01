@@ -1,10 +1,10 @@
 """Repository operations for Azure DevOps integration."""
 
-from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.azure_devops.service.base import (
     AzureDevOpsMixinBase,
 )
 from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.types import AppMode
 
 
 class AzureDevOpsReposMixin(AzureDevOpsMixinBase):

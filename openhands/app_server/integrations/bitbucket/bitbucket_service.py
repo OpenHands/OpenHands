@@ -32,7 +32,7 @@ class BitBucketService(
     2. Implementing all required methods
     3. Setting server_config.bitbucket_service_class to the fully qualified name of the class
 
-    The class is instantiated via get_impl() in openhands.server.shared.py.
+    The class is instantiated via get_impl() in openhands.app_server.shared.py.
     """
 
     def __init__(

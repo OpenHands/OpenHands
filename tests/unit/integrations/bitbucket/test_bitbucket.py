@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import SecretStr
 
-from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.bitbucket.bitbucket_service import (
     BitBucketService,
 )
@@ -17,6 +16,7 @@ from openhands.app_server.integrations.service_types import (
 from openhands.app_server.integrations.utils import validate_provider_token
 from openhands.app_server.secrets.secrets_router import check_provider_tokens
 from openhands.app_server.settings.settings_models import POSTProviderModel
+from openhands.app_server.types import AppMode
 
 
 # Provider Token Validation Tests

@@ -1,69 +1,15 @@
-# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
-# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
-# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
-#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
-#   - V1 application server (in this repo): openhands/app_server/
-# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
-# Tag: Legacy-V0
-# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
-import contextlib
-import warnings
+# DEPRECATED: This module is deprecated and will be removed in a future release.
+# Please use openhands.app_server.app instead.
+#
+# For backward compatibility, this module re-exports the app from openhands.app_server.app.
+# Note: This module does NOT include middleware setup. Use openhands.server.listen or
+# openhands.app_server.app directly for the fully configured application.
 
-from fastapi.routing import Mount
-
-with warnings.catch_warnings():
-    warnings.simplefilter('ignore')
-
-from fastapi import (
-    FastAPI,
-    Request,
-)
-from fastapi.responses import JSONResponse
-
-from openhands.app_server import v1_router
-from openhands.app_server.config import get_app_lifespan_service
-from openhands.app_server.integrations.service_types import AuthenticationError
-from openhands.app_server.mcp.mcp_router import mcp_server
-from openhands.app_server.status.status_router import router as health_router
-from openhands.version import get_version
-
-mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
-
-
-def combine_lifespans(*lifespans):
-    # Create a combined lifespan to manage multiple session managers
-    @contextlib.asynccontextmanager
-    async def combined_lifespan(app):
-        async with contextlib.AsyncExitStack() as stack:
-            for lifespan in lifespans:
-                await stack.enter_async_context(lifespan(app))
-            yield
-
-    return combined_lifespan
-
-
-lifespans = [mcp_app.lifespan]
-app_lifespan_ = get_app_lifespan_service()
-if app_lifespan_:
-    lifespans.append(app_lifespan_.lifespan)
-
-
-app = FastAPI(
-    title='OpenHands',
-    description='OpenHands: Code Less, Make More',
-    version=get_version(),
-    lifespan=combine_lifespans(*lifespans),
-    routes=[Mount(path='/mcp', app=mcp_app)],
+from openhands.app_server.app import (
+    app,
+    authentication_error_handler,
+    combine_lifespans,
+    mcp_app,
 )
 
-
-@app.exception_handler(AuthenticationError)
-async def authentication_error_handler(request: Request, exc: AuthenticationError):
-    return JSONResponse(
-        status_code=401,
-        content=str(exc),
-    )
-
-
-app.include_router(v1_router.router)
-app.include_router(health_router)
+__all__ = ['app', 'mcp_app', 'combine_lifespans', 'authentication_error_handler']

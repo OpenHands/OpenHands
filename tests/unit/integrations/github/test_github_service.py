@@ -4,7 +4,6 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.github.github_service import GitHubService
 from openhands.app_server.integrations.service_types import (
     AuthenticationError,
@@ -13,6 +12,7 @@ from openhands.app_server.integrations.service_types import (
     Repository,
     User,
 )
+from openhands.app_server.types import AppMode
 
 
 @pytest.mark.asyncio
