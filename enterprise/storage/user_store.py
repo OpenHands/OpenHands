@@ -85,8 +85,6 @@ class UserStore:
             )
             user.email = user_info.get('email')
             user.email_verified = user_info.get('email_verified')
-            # SaaS users consent to analytics via Terms of Service acceptance
-            user.user_consents_to_analytics = True
             session.add(user)
 
             role = await RoleStore.get_role_by_name('owner')
