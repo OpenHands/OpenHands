@@ -49,7 +49,6 @@ from openhands.sdk.settings import (
     OpenHandsAgentSettings,
     export_agent_settings_schema,
 )
-from openhands.server.shared import config
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -236,20 +235,6 @@ async def store_settings(
                 )
             if settings.disabled_skills is None:
                 settings.disabled_skills = existing_settings.disabled_skills
-
-        # Update git configuration with new settings
-        git_config_updated = False
-        if settings.git_user_name is not None:
-            config.git_user_name = settings.git_user_name
-            git_config_updated = True
-        if settings.git_user_email is not None:
-            config.git_user_email = settings.git_user_email
-            git_config_updated = True
-
-        if git_config_updated:
-            logger.info(
-                f'Updated global git configuration: name={config.git_user_name}, email={config.git_user_email}'
-            )
 
         await settings_store.store(settings)
         return JSONResponse(

@@ -10,14 +10,18 @@ from storage.stored_custom_secrets import StoredCustomSecrets
 
 from openhands.app_server.integrations.provider import CustomSecret
 from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.core.config.openhands_config import OpenHandsConfig
+from openhands.app_server.services.jwt_service import JwtService
+from openhands.app_server.utils.encryption_key import EncryptionKey
+
+
+def _make_jwt_service() -> JwtService:
+    key = EncryptionKey(kid='test', key=SecretStr('test_secret'), active=True)
+    return JwtService(keys=[key])
 
 
 @pytest.fixture
-def mock_config():
-    config = MagicMock(spec=OpenHandsConfig)
-    config.jwt_secret = SecretStr('test_secret')
-    return config
+def jwt_svc():
+    return _make_jwt_service()
 
 
 @pytest.fixture
@@ -29,13 +33,13 @@ def mock_user():
 
 
 @pytest.fixture
-def secrets_store(async_session_maker, mock_config):
+def secrets_store(async_session_maker, jwt_svc):
     # Inject the test session maker into the store module
     import storage.saas_secrets_store as store_module
 
     store_module.a_session_maker = async_session_maker
 
-    store = SaasSecretsStore('user-id', mock_config)
+    store = SaasSecretsStore('user-id', jwt_svc)
     # Also add it as an attribute for tests that need direct access
     store.a_session_maker = async_session_maker
     return store
@@ -240,12 +244,13 @@ class TestSaasSecretsStore:
         assert 'other_value' not in loaded_secrets.custom_secrets
 
     @pytest.mark.asyncio
-    async def test_get_instance(self, mock_config):
+    async def test_get_instance(self, jwt_svc):
         # Test the get_instance class method
-        store = await SaasSecretsStore.get_instance(mock_config, 'test-user-id')
+        with patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc):
+            store = await SaasSecretsStore.get_instance(None, 'test-user-id')
         assert isinstance(store, SaasSecretsStore)
         assert store.user_id == 'test-user-id'
-        assert store.config == mock_config
+        assert store._jwt_svc is jwt_svc
 
     @pytest.mark.asyncio
     @patch(

@@ -1,14 +1,11 @@
 import asyncio
 import base64
-import hashlib
 import json
 import time
-from base64 import b64encode
 from urllib.parse import parse_qs
 
 import httpx
 import jwt
-from cryptography.fernet import Fernet
 from jwt.exceptions import DecodeError
 from keycloak.exceptions import (
     KeycloakAuthenticationError,
@@ -88,47 +85,25 @@ def _before_sleep_callback(retry_state: RetryCallState) -> None:
     logger.info(f'Retry attempt {retry_state.attempt_number} for Keycloak operation')
 
 
-def create_encryption_utility(secret_key: bytes):
-    """Creates an encryption utility using a 32-byte secret key.
-
-    Args:
-        secret_key (bytes): A 32-byte secret key
-    Returns:
-        tuple: (encrypt_string, decrypt_string) functions.
-    """
-    # Convert the 32-byte key into a Fernet key (32 bytes -> urlsafe base64)
-    fernet_key = b64encode(hashlib.sha256(secret_key).digest())
-    f = Fernet(fernet_key)
-
-    def encrypt_text(text: str) -> str:
-        return f.encrypt(text.encode()).decode()
-
-    def encrypt_payload(payload: dict) -> str:
-        """Encrypts a string and returns the result as a base64 string."""
-        text = json.dumps(payload)
-        return encrypt_text(text)
-
-    def decrypt_text(encrypted_text: str) -> str:
-        return f.decrypt(encrypted_text.encode()).decode()
-
-    def decrypt_payload(encrypted_text: str) -> dict:
-        """Decrypts a base64 encoded encrypted string."""
-        text = decrypt_text(encrypted_text)
-        return json.loads(text)
-
-    return encrypt_payload, decrypt_payload, encrypt_text, decrypt_text
-
-
 class TokenManager:
     def __init__(self, external: bool = False):
         self.external = external
-        jwt_secret = get_config().jwt_secret.get_secret_value()
-        (
-            self.encrypt_payload,
-            self.decrypt_payload,
-            self.encrypt_text,
-            self.decrypt_text,
-        ) = create_encryption_utility(jwt_secret.encode())
+        from storage.encrypt_utils import get_jwt_service
+
+        self._jwt_svc = get_jwt_service()
+
+    def encrypt_text(self, text: str) -> str:
+        encrypted = self._jwt_svc.encrypt_value(text)
+        return encrypted
+
+    def decrypt_text(self, encrypted_text: str) -> str:
+        return self._jwt_svc.decrypt_value(encrypted_text)
+
+    def encrypt_payload(self, payload: dict) -> str:
+        return self.encrypt_text(json.dumps(payload))
+
+    def decrypt_payload(self, encrypted_text: str) -> dict:
+        return json.loads(self.decrypt_text(encrypted_text))
 
     async def get_keycloak_tokens(
         self, code: str, redirect_uri: str
@@ -316,7 +291,7 @@ class TokenManager:
                 raise ValueError(
                     f'No tokens for user: {username}, identity provider: {idp}'
                 )
-            access_token = self.decrypt_text(token_info['access_token'])
+            access_token = self.decrypt_text(str(token_info['access_token']))
             logger.info(f'Got {idp} token: {access_token[0:5]}')
             return access_token
         except httpx.HTTPStatusError as e:
@@ -362,8 +337,8 @@ class TokenManager:
         logger.info(f'Access token expired for {identity_provider}. Refreshing token.')
         refresh_token = self.decrypt_text(encrypted_refresh_token)
         token_data = await self._refresh_token(identity_provider, refresh_token)
-        access_token = token_data['access_token']
-        refresh_token = token_data['refresh_token']
+        access_token = str(token_data['access_token'])
+        refresh_token = str(token_data['refresh_token'])
         access_expiration = token_data['access_token_expires_at']
         refresh_expiration = token_data['refresh_token_expires_at']
 

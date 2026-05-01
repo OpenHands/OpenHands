@@ -2,7 +2,7 @@ import base64
 import json
 import uuid
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Annotated, Optional, cast
 from urllib.parse import quote, urlencode
@@ -27,7 +27,6 @@ from server.auth.user.user_authorizer import (
     UserAuthorizer,
     depends_user_authorizer,
 )
-from server.config import sign_token
 from server.constants import (
     DEPLOYMENT_MODE,
     IS_FEATURE_ENV,
@@ -56,7 +55,6 @@ from openhands.app_server.integrations.service_types import ProviderType, TokenR
 from openhands.app_server.user_auth import get_access_token
 from openhands.app_server.user_auth.user_auth import get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.server.shared import config
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -93,7 +91,11 @@ def set_response_cookie(
         'refresh_token': keycloak_refresh_token,
         'accepted_tos': accepted_tos,
     }
-    signed_token = sign_token(cookie_data, config.jwt_secret.get_secret_value())  # type: ignore
+    from storage.encrypt_utils import get_jwt_service
+
+    signed_token = get_jwt_service().create_jws_token(
+        cookie_data, expires_in=timedelta(weeks=1)
+    )
 
     # Set secure cookie with signed token
     domain = get_cookie_domain()

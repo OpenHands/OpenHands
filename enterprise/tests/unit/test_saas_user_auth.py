@@ -71,9 +71,17 @@ def mock_token_manager():
 
 @pytest.fixture
 def mock_config():
-    with patch('server.auth.saas_user_auth.get_config') as mock_get_config:
+    from openhands.app_server.services.jwt_service import JwtService
+    from openhands.app_server.utils.encryption_key import EncryptionKey
+
+    jwt_svc = JwtService(
+        keys=[EncryptionKey(kid='test', key=SecretStr('test_secret'), active=True)]
+    )
+    with (
+        patch('server.auth.saas_user_auth.get_config') as mock_get_config,
+        patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc),
+    ):
         mock_cfg = mock_get_config.return_value
-        mock_cfg.jwt_secret.get_secret_value.return_value = 'test_secret'
         yield mock_cfg
 
 
@@ -1042,7 +1050,9 @@ class TestOpenHandsApiKey:
 
             mock_secrets_store = MagicMock()
             mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
-            mock_secrets_store_cls.return_value = mock_secrets_store
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
 
             mock_get_config.return_value = MagicMock()
 
@@ -1098,7 +1108,9 @@ class TestOpenHandsApiKey:
 
             mock_secrets_store = MagicMock()
             mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
-            mock_secrets_store_cls.return_value = mock_secrets_store
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
 
             mock_get_config.return_value = MagicMock()
 
@@ -1146,7 +1158,9 @@ class TestOpenHandsApiKey:
 
             mock_secrets_store = MagicMock()
             mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
-            mock_secrets_store_cls.return_value = mock_secrets_store
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
 
             mock_get_config.return_value = MagicMock()
 
