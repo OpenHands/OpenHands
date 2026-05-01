@@ -101,7 +101,7 @@ async def test_get_instance():
     mock_store = MagicMock(spec=FileStore)
 
     with patch(
-        'openhands.app_server.settings.file_settings_store.get_global_config'
+        'openhands.app_server.config.get_global_config'
     ) as mock_get_config:
         mock_config = MagicMock()
         mock_config.file_store = mock_store
