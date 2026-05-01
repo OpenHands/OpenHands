@@ -96,13 +96,13 @@ from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
-from openhands.app_server.utils.sdk_settings_compat import ACPAgentSettings
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
@@ -130,18 +130,18 @@ def _split_ids_by_kind(
     conversation_ids: list[str],
     conversation_kind_by_id: dict[str, str],
 ) -> tuple[list[str], list[str]]:
-    """Split conversation IDs into (llm_ids, acp_ids) based on their agent_kind."""
-    llm_ids = [
+    """Split conversation IDs into (openhands_ids, acp_ids) by agent_kind."""
+    openhands_ids = [
         cid
         for cid in conversation_ids
-        if conversation_kind_by_id.get(cid, 'llm') != 'acp'
+        if conversation_kind_by_id.get(cid, 'openhands') != 'acp'
     ]
     acp_ids = [
         cid
         for cid in conversation_ids
-        if conversation_kind_by_id.get(cid, 'llm') == 'acp'
+        if conversation_kind_by_id.get(cid, 'openhands') == 'acp'
     ]
-    return llm_ids, acp_ids
+    return openhands_ids, acp_ids
 
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
@@ -381,7 +381,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 display_model = start_conversation_request.agent.acp_model
             else:
                 info = ConversationInfo.model_validate(response.json())
-                agent_kind = 'llm'
+                agent_kind = 'openhands'
                 display_model = start_conversation_request.agent.llm.model
 
             # Store info...
@@ -518,7 +518,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         conversation_kind_by_id = conversation_kind_by_id or {}
 
-        llm_ids, acp_ids = _split_ids_by_kind(conversation_ids, conversation_kind_by_id)
+        openhands_ids, acp_ids = _split_ids_by_kind(
+            conversation_ids, conversation_kind_by_id
+        )
 
         agent_server_url = self._get_agent_server_url(sandbox)
         headers: dict[str, str] = {}
@@ -527,12 +529,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         results: list[ConversationInfo | ACPConversationInfo] = []
 
-        # Fetch LLM conversations
-        if llm_ids:
+        # Fetch OpenHands conversations
+        if openhands_ids:
             try:
                 url = f'{agent_server_url.rstrip("/")}/api/conversations'
                 response = await self.httpx_client.get(
-                    url, params={'ids': llm_ids}, headers=headers
+                    url, params={'ids': openhands_ids}, headers=headers
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -540,12 +542,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 results.extend(c for c in infos if c)
             except httpx.HTTPStatusError:
                 _logger.warning(
-                    f'Error getting LLM conversation status from sandbox {sandbox.id}',
+                    f'Error getting OpenHands conversation status from sandbox {sandbox.id}',
                     exc_info=True,
                 )
             except Exception:
                 _logger.exception(
-                    f'Error getting LLM conversation status from sandbox {sandbox.id}',
+                    f'Error getting OpenHands conversation status from sandbox {sandbox.id}',
                     stack_info=True,
                 )
 

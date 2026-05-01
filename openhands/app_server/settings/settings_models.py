@@ -29,14 +29,14 @@ from openhands.app_server.integrations.provider import ProviderToken
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.utils.jsonpatch_compat import deep_merge
-from openhands.app_server.utils.sdk_settings_compat import (
+from openhands.sdk.settings import (
     ACPAgentSettings,
     AgentSettingsConfig,
-    LLMAgentSettings,
+    ConversationSettings,
+    OpenHandsAgentSettings,
     default_agent_settings,
     validate_agent_settings,
 )
-from openhands.sdk.settings import ConversationSettings
 
 
 def _coerce_value(value: Any) -> Any:
@@ -253,7 +253,7 @@ class Settings(BaseModel):
     @field_serializer('agent_settings')
     def agent_settings_serializer(
         self,
-        agent_settings: LLMAgentSettings | ACPAgentSettings,
+        agent_settings: OpenHandsAgentSettings | ACPAgentSettings,
         info: SerializationInfo,
     ) -> dict[str, Any]:
         context = info.context or {}
@@ -292,7 +292,7 @@ class Settings(BaseModel):
         agent_settings = data.get('agent_settings')
         if isinstance(agent_settings, dict):
             data['agent_settings'] = _coerce_dict_secrets(agent_settings)
-        elif isinstance(agent_settings, (LLMAgentSettings, ACPAgentSettings)):
+        elif isinstance(agent_settings, (OpenHandsAgentSettings, ACPAgentSettings)):
             data['agent_settings'] = agent_settings.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
@@ -332,7 +332,7 @@ class Settings(BaseModel):
     def secrets_store_serializer(self, secrets: Any, info: SerializationInfo):
         return {'provider_tokens': {}}
 
-    def to_agent_settings(self) -> LLMAgentSettings | ACPAgentSettings:
+    def to_agent_settings(self) -> OpenHandsAgentSettings | ACPAgentSettings:
         return self.agent_settings
 
     def get_agent_settings_display(self) -> dict[str, Any]:
