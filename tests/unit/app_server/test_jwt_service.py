@@ -571,7 +571,9 @@ class TestEncryptDecryptValue:
         fernet_key = b64encode(hashlib.sha256(secret.encode()).digest())
         f = Fernet(fernet_key)
         plaintext = 'legacy-encrypted-token'
-        legacy_ciphertext = b64encode(f.encrypt(plaintext.encode())).decode()
+        # Fernet.encrypt() returns base64-encoded bytes, decode to string
+        # (no extra b64encode - that was the bug!)
+        legacy_ciphertext = f.encrypt(plaintext.encode()).decode()
 
         assert jwt_service.decrypt_value(legacy_ciphertext) == plaintext
 
@@ -581,7 +583,9 @@ class TestEncryptDecryptValue:
         fernet_key = b64encode(hashlib.sha256(secret.encode()).digest())
         f = Fernet(fernet_key)
         plaintext = 'old-key-data'
-        legacy_ciphertext = b64encode(f.encrypt(plaintext.encode())).decode()
+        # Fernet.encrypt() returns base64-encoded bytes, decode to string
+        # (no extra b64encode - that was the bug!)
+        legacy_ciphertext = f.encrypt(plaintext.encode()).decode()
 
         assert jwt_service.decrypt_value(legacy_ciphertext) == plaintext
 
