@@ -133,6 +133,9 @@ export type Settings = {
   is_new_user?: boolean;
   mcp_config?: MCPConfig;
   disabled_skills?: string[];
+  personal_skills_repo_url?: string | null;
+  personal_skills_repo_commit?: string | null;
+  personal_skills_repo_updated_at?: string | null;
   max_budget_per_task: number | null;
   email?: string;
   email_verified?: boolean;

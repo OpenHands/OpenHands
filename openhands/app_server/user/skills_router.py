@@ -8,6 +8,10 @@ from pydantic import BaseModel
 import openhands
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.server.personal_skills_repo import (
+    PERSONAL_SKILLS_CACHE_DIR,
+    get_skills_dir_from_repo,
+)
 
 router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
 
@@ -135,6 +139,15 @@ async def search_skills(
         skills.extend(_load_skills_from_dir(USER_SKILLS_DIR, 'user'))
     except Exception as e:
         logger.warning(f'Failed to load user skills: {e}')
+
+    # Load personal skills repo skills
+    try:
+        if PERSONAL_SKILLS_CACHE_DIR.exists():
+            skills_dir = get_skills_dir_from_repo(PERSONAL_SKILLS_CACHE_DIR)
+            if skills_dir:
+                skills.extend(_load_skills_from_dir(skills_dir, 'personal_repo'))
+    except Exception as e:
+        logger.warning(f'Failed to load personal repo skills: {e}')
 
     # Sort by source (global first), then by name
     skills.sort(key=lambda s: (s.source, s.name))

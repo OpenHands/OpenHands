@@ -1,12 +1,14 @@
 """Sandboxed Conversation router for OpenHands App Server."""
 
 import asyncio
+import json
 import logging
 import os
 import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, AsyncGenerator, Literal
 from uuid import UUID
 
@@ -76,8 +78,11 @@ from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
-from openhands.sdk.skills import KeywordTrigger, TaskTrigger
+from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.server.personal_skills_repo import (
+    load_personal_repo_skills,
+)
 
 # Handle anext compatibility for Python < 3.10
 if sys.version_info >= (3, 10):
@@ -901,6 +906,39 @@ async def get_conversation_skills(
             f'Loaded {len(all_skills)} skills for conversation {conversation_id}: '
             f'{[s.name for s in all_skills]}'
         )
+
+        # Load personal skills repo skills
+        try:
+            for sk_name, sk_content, sk_triggers in load_personal_repo_skills():
+                sk_trigger: KeywordTrigger | TaskTrigger | None = None
+                if sk_triggers:
+                    if any(t.startswith('/') for t in sk_triggers):
+                        sk_trigger = TaskTrigger(triggers=sk_triggers)
+                    else:
+                        sk_trigger = KeywordTrigger(keywords=sk_triggers)
+                all_skills.append(
+                    Skill(
+                        name=sk_name,
+                        content=sk_content,
+                        trigger=sk_trigger,
+                        source='personal_repo',
+                    )
+                )
+        except Exception as e:
+            logger.debug(f'Failed to load personal repo skills: {e}')
+
+        # Filter out disabled skills from user settings
+        try:
+            settings_path = Path.home() / '.openhands' / 'settings.json'
+            if settings_path.exists():
+                with open(settings_path) as f:
+                    data = json.load(f)
+                disabled = data.get('disabled_skills') or []
+                if disabled:
+                    disabled_set = set(disabled)
+                    all_skills = [s for s in all_skills if s.name not in disabled_set]
+        except Exception as e:
+            logger.debug(f'Failed to load disabled_skills: {e}')
 
         # Transform skills to response format
         skills_response = []

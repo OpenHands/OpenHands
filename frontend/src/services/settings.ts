@@ -24,6 +24,9 @@ export const DEFAULT_SETTINGS: Settings = {
   search_api_key: "",
   is_new_user: true,
   disabled_skills: [],
+  personal_skills_repo_url: null,
+  personal_skills_repo_commit: null,
+  personal_skills_repo_updated_at: null,
   mcp_config: {
     sse_servers: [],
     stdio_servers: [],

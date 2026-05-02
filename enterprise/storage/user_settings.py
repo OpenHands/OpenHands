@@ -47,6 +47,13 @@ class UserSettings(Base):
     # Deprecated (v0): mcp_config now lives inside AgentSettings on Org / OrgMember.
     mcp_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     disabled_skills: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    personal_skills_repo_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    personal_skills_repo_commit: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    personal_skills_repo_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
     search_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     sandbox_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
