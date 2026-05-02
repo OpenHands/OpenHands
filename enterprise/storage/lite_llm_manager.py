@@ -46,7 +46,7 @@ def _get_default_initial_budget() -> float | None:
         return None
 
     try:
-        budget = float(os.environ.get('DEFAULT_INITIAL_BUDGET', 10.0))
+        budget = float(os.environ.get('DEFAULT_INITIAL_BUDGET', 0.0))
         if budget < 0:
             raise ValueError(
                 f'DEFAULT_INITIAL_BUDGET must be non-negative, got {budget}'

@@ -13,22 +13,6 @@ import { SettingsScope } from "#/types/settings";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-defaults-guard";
 
-// These fields are rendered manually in the header, so exclude them from
-// schema-driven rendering.  Agent-settings keys are dot-prefixed with the
-// section name (e.g. "verification.confirmation_mode").
-const VERIFICATION_SCHEMA_EXCLUDE_KEYS = new Set([
-  "verification.confirmation_mode",
-  "verification.security_analyzer",
-]);
-
-// Promote iterative refinement to Basic view so it's discoverable alongside "Enable Critic"
-const VERIFICATION_PROMINENCE_OVERRIDES: Record<
-  string,
-  "critical" | "major" | "minor"
-> = {
-  "verification.enable_iterative_refinement": "critical",
-};
-
 function VerificationSettingsHeader({
   confirmationMode,
   securityAnalyzer,
@@ -179,7 +163,12 @@ export function VerificationSettingsScreen({
 
       return result;
     },
-    [confirmationMode, confirmationModeDirty, securityAnalyzer, securityAnalyzerDirty],
+    [
+      confirmationMode,
+      confirmationModeDirty,
+      securityAnalyzer,
+      securityAnalyzerDirty,
+    ],
   );
 
   return (
@@ -187,8 +176,6 @@ export function VerificationSettingsScreen({
       scope={scope}
       settingsSource="agent_settings"
       sectionKeys={["verification"]}
-      excludeKeys={VERIFICATION_SCHEMA_EXCLUDE_KEYS}
-      prominenceOverrides={VERIFICATION_PROMINENCE_OVERRIDES}
       header={buildHeader}
       extraDirty={confirmationModeDirty || securityAnalyzerDirty}
       buildPayload={buildPayload}

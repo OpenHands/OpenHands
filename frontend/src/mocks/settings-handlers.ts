@@ -191,39 +191,6 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
       label: "Verification",
       fields: [
         {
-          key: "verification.confirmation_mode",
-          label: "Confirmation mode",
-          description:
-            "Pause for confirmation before the agent performs high-risk actions.",
-          section: "verification",
-          section_label: "Verification",
-          value_type: "boolean",
-          default: false,
-          choices: [],
-          depends_on: [],
-          prominence: "critical",
-          secret: false,
-          required: true,
-        },
-        {
-          key: "verification.security_analyzer",
-          label: "Security analyzer",
-          description:
-            "Choose how OpenHands should analyze actions before asking for confirmation.",
-          section: "verification",
-          section_label: "Verification",
-          value_type: "string",
-          default: "llm",
-          choices: [
-            { label: "llm", value: "llm" },
-            { label: "none", value: "none" },
-          ],
-          depends_on: ["verification.confirmation_mode"],
-          prominence: "major",
-          secret: false,
-          required: false,
-        },
-        {
           key: "verification.critic_enabled",
           label: "Enable Critic",
           description:

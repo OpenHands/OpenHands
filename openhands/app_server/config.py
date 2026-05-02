@@ -126,49 +126,8 @@ def get_default_tavily_api_key() -> str | None:
     return os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY') or None
 
 
-def get_critic_server_url() -> str | None:
-    """Return the deployment-level critic server URL, if configured.
-
-    Priority:
-    1. Explicit ``CRITIC_SERVER_URL`` env var.
-    2. Derived from ``OPENHANDS_PROVIDER_BASE_URL`` (append ``/vllm``
-       for the LiteLLM pass-through path).
-    """
-    explicit = os.getenv('CRITIC_SERVER_URL')
-    if explicit:
-        return explicit
-    provider_base = get_openhands_provider_base_url()
-    if provider_base:
-        return provider_base.rstrip('/') + '/vllm'
-    return None
-
-
-def get_critic_model_name() -> str | None:
-    """Return the deployment-level critic model name, if configured.
-
-    Priority:
-    1. Explicit ``CRITIC_MODEL_NAME`` env var.
-    2. ``"critic"`` (LiteLLM model alias) when the critic is routed through
-       the LiteLLM proxy via ``OPENHANDS_PROVIDER_BASE_URL`` — matches the
-       OpenHands CLI behaviour, which uses the alias so LiteLLM rewrites
-       the upstream model + auth.
-    """
-    explicit = os.getenv('CRITIC_MODEL_NAME')
-    if explicit:
-        return explicit
-    if get_openhands_provider_base_url():
-        return 'critic'
-    return None
-
-
 def get_critic_api_key() -> str | None:
-    """Return the deployment-level critic API key, if configured.
-
-    When set, this key is injected into the critic client *after* agent
-    creation, overriding the default behaviour of inheriting the user's
-    LLM proxy key.  This allows deployments to provide a service-level
-    key that is not subject to per-user budget limits.
-    """
+    """Return the deployment-level critic API key, if configured."""
     return os.getenv('CRITIC_API_KEY') or None
 
 
@@ -256,17 +215,9 @@ class AppServerConfig(OpenHandsModel):
         default_factory=get_default_tavily_api_key,
         description='Tavily API key for search integration (proxied via MCP server)',
     )
-    critic_server_url: str | None = Field(
-        default_factory=get_critic_server_url,
-        description='Deployment-level critic server URL.',
-    )
-    critic_model_name: str | None = Field(
-        default_factory=get_critic_model_name,
-        description='Deployment-level critic model name.',
-    )
     critic_api_key: str | None = Field(
         default_factory=get_critic_api_key,
-        description='Deployment-level critic API key (bypasses per-user budget).',
+        description='Optional deployment-level critic API key.',
     )
     # Dependency Injection Injectors
     llm_model: LLMModelServiceInjector | None = None

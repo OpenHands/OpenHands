@@ -184,8 +184,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
     tavily_api_key: str | None = None
-    critic_server_url: str | None = None
-    critic_model_name: str | None = None
     critic_api_key: str | None = None
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
@@ -1381,18 +1379,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # --- build AgentSettings and create agent ---------------------------
         from fastmcp.mcp_config import MCPConfig
 
-        # Apply deployment-level critic defaults when the user hasn't
-        # explicitly configured them.  This allows SaaS deployments to
-        # route critic requests through the LiteLLM proxy.
-        verification = user.agent_settings.verification
-        critic_updates: dict[str, object] = {}
-        if verification.critic_server_url is None and self.critic_server_url:
-            critic_updates['critic_server_url'] = self.critic_server_url
-        if verification.critic_model_name is None and self.critic_model_name:
-            critic_updates['critic_model_name'] = self.critic_model_name
-        if critic_updates:
-            verification = verification.model_copy(update=critic_updates)
-
         configured_agent_settings = user.agent_settings.model_copy(
             update={
                 'llm': llm,
@@ -1402,7 +1388,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     system_message_suffix=effective_suffix,
                     secrets=secrets,
                 ),
-                'verification': verification,
             }
         )
         agent = configured_agent_settings.create_agent()
@@ -2162,7 +2147,5 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
                 tavily_api_key=tavily_api_key,
-                critic_server_url=config.critic_server_url,
-                critic_model_name=config.critic_model_name,
                 critic_api_key=config.critic_api_key,
             )

@@ -13,7 +13,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from openhands.analytics import get_analytics_service
-from openhands.app_server.config import get_critic_model_name, get_critic_server_url
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
@@ -82,46 +81,10 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     )
 
 
-def _get_critic_sdk_defaults() -> tuple[str | None, str | None]:
-    """Return (server_url, model_name) SDK built-in defaults, or None if unavailable."""
-    from pydantic_core import PydanticUndefinedType
-
-    from openhands.sdk.critic.impl.api.client import CriticClient
-
-    def _default(field_name: str) -> str | None:
-        val = CriticClient.model_fields[field_name].default
-        return val if not isinstance(val, PydanticUndefinedType) else None
-
-    return _default('server_url'), _default('model_name')
-
-
-def _fill_critic_defaults(verification: Any) -> Any:
-    """Return a copy of *verification* with effective critic URL/model filled.
-
-    Priority: user-set value → deployment env var → SDK built-in default.
-    Returns a new object — does not mutate the original.
-    """
-    if verification is None:
-        return verification
-
-    sdk_url, sdk_model = _get_critic_sdk_defaults()
-    updates: dict[str, object] = {}
-
-    if verification.critic_server_url is None:
-        effective = get_critic_server_url() or sdk_url
-        if effective is not None:
-            updates['critic_server_url'] = effective
-
-    if verification.critic_model_name is None:
-        effective = get_critic_model_name() or sdk_model
-        if effective is not None:
-            updates['critic_model_name'] = effective
-
-    if not updates:
-        return verification
-    return verification.model_copy(update=updates)
-
-
+# NOTE: We use response_model=None for endpoints that return JSONResponse directly.
+# This is because FastAPI's response_model expects a Pydantic model, but we're returning
+# a response object directly. We document the possible responses using the 'responses'
+# parameter and maintain proper type annotations for mypy.
 @router.get(
     '',
     response_model=GETSettingsModel,
@@ -205,13 +168,6 @@ async def load_settings(
         resp_llm.api_key = None
         settings_with_token_data.search_api_key = None
         settings_with_token_data.sandbox_api_key = None
-
-        # Fill effective critic defaults so the frontend shows what the
-        # agent will actually use rather than empty fields.
-        settings_with_token_data.agent_settings.verification = _fill_critic_defaults(
-            settings_with_token_data.agent_settings.verification
-        )
-
         return settings_with_token_data
     except Exception as e:
         logger.warning(f'Invalid token: {e}')
