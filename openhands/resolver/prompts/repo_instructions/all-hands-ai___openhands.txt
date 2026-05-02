@@ -1,7 +1,0 @@
-OpenHands is an automated AI software engineer. It is a repo with a Python backend
-(in the `openhands` directory) and typescript frontend (in the `frontend` directory).
-
-- Setup: To set up the repo, including frontend/backend you can `make build`
-- Backend Testing: All tests are in `tests/unit/test_*.py`. To test new code, you
-  can do `poetry run pytest tests/unit/test_xxx.py` where `xxx` is the appropriate
-  file for the current functionality. Write all tests with pytest.

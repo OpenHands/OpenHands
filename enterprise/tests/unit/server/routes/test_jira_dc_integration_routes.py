@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi import HTTPException, Request, status
@@ -116,6 +117,39 @@ async def test_create_jira_dc_workspace_oauth_success(
 @patch('server.routes.integration.jira_dc.get_user_auth')
 @patch('server.routes.integration.jira_dc.redis_client')
 @patch('server.routes.integration.jira_dc.JIRA_DC_ENABLE_OAUTH', True)
+async def test_create_jira_dc_workspace_oauth_url_uses_jira_dc_write_scope(
+    mock_redis, mock_get_auth, mock_request, mock_user_auth
+):
+    """OAuth authorization URL must request the Jira DC `WRITE` scope.
+
+    Jira DC OAuth 2.0 uses coarse scopes (READ/WRITE/ADMIN/SYSTEM_ADMIN). Sending
+    Atlassian Cloud-style scopes such as `read:me read:jira-user read:jira-work`
+    is rejected with `invalid_scope`, which breaks the consent flow.
+    """
+    # Arrange
+    mock_get_auth.return_value = mock_user_auth
+    mock_redis.setex.return_value = True
+    workspace_data = JiraDcWorkspaceCreate(
+        workspace_name='test-workspace',
+        webhook_secret='secret',
+        svc_acc_email='svc@test.com',
+        svc_acc_api_key='key',
+        is_active=True,
+    )
+
+    # Act
+    response = await create_jira_dc_workspace(mock_request, workspace_data)
+    content = json.loads(response.body)
+
+    # Assert
+    query = parse_qs(urlparse(content['authorizationUrl']).query)
+    assert query['scope'] == ['WRITE']
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('server.routes.integration.jira_dc.JIRA_DC_ENABLE_OAUTH', True)
 async def test_create_workspace_link_oauth_success(
     mock_redis, mock_get_auth, mock_request, mock_user_auth
 ):
@@ -196,6 +230,63 @@ async def test_jira_dc_callback_workspace_integration_new_workspace(
             mock_handle_link.assert_called_once_with(
                 'user1', 'jira_user_123', 'test.atlassian.net'
             )
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('requests.post')
+@patch('requests.get')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+async def test_jira_dc_callback_token_exchange_uses_form_encoding(
+    mock_handle_link, mock_manager, mock_get, mock_post, mock_redis, mock_request
+):
+    """Token exchange must POST `application/x-www-form-urlencoded`, not JSON.
+
+    Jira DC's `/rest/oauth2/latest/token` endpoint is JAX-RS with @FormParam, which
+    only populates parameters when the body is form-encoded. Sending JSON returns
+    a 500 ("@FormParam is utilized when the content type ... is not
+    application/x-www-form-urlencoded").
+    """
+    # Arrange
+    state = 'test_state'
+    code = 'test_code'
+    session_data = {
+        'operation_type': 'workspace_integration',
+        'keycloak_user_id': 'user1',
+        'target_workspace': 'test.atlassian.net',
+        'webhook_secret': 'secret',
+        'svc_acc_email': 'email@test.com',
+        'svc_acc_api_key': 'apikey',
+        'is_active': True,
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+    mock_post.return_value = MagicMock(
+        status_code=200, json=lambda: {'access_token': 'token'}
+    )
+    mock_get.return_value = MagicMock(
+        status_code=200, json=lambda: {'key': 'jira_user_123'}, text=''
+    )
+    mock_manager.integration_store.get_workspace_by_name.return_value = None
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_token_manager:
+        with patch(
+            'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
+            'https://test.atlassian.net',
+        ):
+            mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
+
+            # Act
+            await jira_dc_callback(mock_request, code, state)
+
+    # Assert: token POST is form-encoded (data=), not JSON (json=).
+    kwargs = mock_post.call_args.kwargs
+    assert kwargs.get('data', {}).get('grant_type') == 'authorization_code'
+    assert 'json' not in kwargs
 
 
 @pytest.mark.asyncio
@@ -1250,8 +1341,6 @@ class TestJiraDcOAuthUrlEncoding:
         auth_url = content['authorizationUrl']
         # Verify no raw spaces in the URL (spaces should be encoded as + or %20)
         assert ' ' not in auth_url
-        # Verify scope parameter contains encoded scopes (+ is valid URL encoding for space)
-        assert 'scope=read%3Ame+read%3Ajira-user+read%3Ajira-work' in auth_url
         # Verify redirect_uri is properly encoded
         assert 'redirect_uri=https%3A%2F%2F' in auth_url
 
@@ -1273,7 +1362,5 @@ class TestJiraDcOAuthUrlEncoding:
         auth_url = content['authorizationUrl']
         # Verify no raw spaces in the URL (spaces should be encoded as + or %20)
         assert ' ' not in auth_url
-        # Verify scope parameter contains encoded scopes (+ is valid URL encoding for space)
-        assert 'scope=read%3Ame+read%3Ajira-user+read%3Ajira-work' in auth_url
         # Verify redirect_uri is properly encoded
         assert 'redirect_uri=https%3A%2F%2F' in auth_url

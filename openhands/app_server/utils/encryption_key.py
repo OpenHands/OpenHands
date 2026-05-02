@@ -1,6 +1,6 @@
+import datetime
 import hashlib
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +17,7 @@ class EncryptionKey(BaseModel):
     key: SecretStr
     active: bool = True
     notes: str | None = None
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime.datetime = Field(default_factory=utc_now)
 
     @field_serializer('key')
     def serialize_key(self, key: SecretStr, info: Any):
@@ -28,18 +28,21 @@ class EncryptionKey(BaseModel):
 
 
 def get_default_encryption_keys(workspace_dir: Path) -> list[EncryptionKey]:
-    """Generate default encryption keys."""
-    master_key = os.getenv('JWT_SECRET')
-    if master_key:
+    """Generate default encryption keys obtain these from previously saved values
+    and environment variables."""
+    encryption_keys = []
+
+    jwt_secret = os.getenv('JWT_SECRET')
+    if jwt_secret:
         # Derive a deterministic key ID from the secret itself.
         # This ensures all pods using the same JWT_SECRET get the same key ID,
         # which is critical for multi-pod deployments where tokens may be
         # created by one pod and verified by another.
-        key_id = base62.encodebytes(hashlib.sha256(master_key.encode()).digest())
+        key_id = base62.encodebytes(hashlib.sha256(jwt_secret.encode()).digest())
         return [
             EncryptionKey(
                 id=key_id,
-                key=SecretStr(master_key),
+                key=SecretStr(jwt_secret),
                 active=True,
                 notes='jwt secret master key',
             )
@@ -49,6 +52,24 @@ def get_default_encryption_keys(workspace_dir: Path) -> list[EncryptionKey]:
     type_adapter = TypeAdapter(list[EncryptionKey])
     if key_file.exists():
         encryption_keys = type_adapter.validate_json(key_file.read_text())
+
+    # Fallback to JWTSecret...
+    jwt_secret_file = workspace_dir / '.jwt_secret'
+    if jwt_secret_file.exists():
+        jwt_secret = jwt_secret_file.read_text().strip()
+        encryption_keys.append(
+            EncryptionKey(
+                id=base62.encodebytes(hashlib.sha256(jwt_secret.encode()).digest()),
+                key=SecretStr(jwt_secret),
+                active=True,
+                notes='jwt secret master key',
+                created_at=datetime.datetime.fromtimestamp(
+                    jwt_secret_file.stat().st_mtime, tz=datetime.UTC
+                ),
+            )
+        )
+
+    if encryption_keys:
         return encryption_keys
 
     encryption_keys = [

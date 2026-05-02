@@ -12,6 +12,16 @@ def gitlab_service():
     return SaaSGitLabService(external_auth_id='test_user_id')
 
 
+class TestSaaSGitLabServiceInit:
+    """Tests for SaaSGitLabService __init__."""
+
+    def test_explicit_base_domain_overrides_default(self):
+        """An explicit base_domain parameter overrides the upstream class default."""
+        service = SaaSGitLabService(external_auth_id='u1', base_domain='other.host')
+
+        assert service.BASE_URL == 'https://other.host/api/v4'
+
+
 class TestGetUserResourcesWithAdminAccess:
     """Test cases for get_user_resources_with_admin_access method."""
 

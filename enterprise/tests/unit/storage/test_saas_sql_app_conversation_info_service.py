@@ -22,10 +22,10 @@ from storage.user import User
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
+    ConversationTrigger,
 )
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
-from openhands.integrations.service_types import ProviderType
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 # Test UUIDs
 USER1_ID = UUID('a1111111-1111-1111-1111-111111111111')
@@ -76,13 +76,11 @@ async def async_session_with_users(async_engine) -> AsyncGenerator[AsyncSession,
         org1 = Org(
             id=ORG1_ID,
             name='test-org-1',
-            enable_default_condenser=True,
             enable_proactive_conversation_starters=True,
         )
         org2 = Org(
             id=ORG2_ID,
             name='test-org-2',
-            enable_default_condenser=True,
             enable_proactive_conversation_starters=True,
         )
         db_session.add(org1)
@@ -282,6 +280,7 @@ class TestSaasSQLAppConversationInfoService:
         stored_metadata.per_turn_token = 0
         stored_metadata.public = None
         stored_metadata.tags = {}
+        stored_metadata.agent_kind = None
 
         saas_metadata = MagicMock(spec=StoredConversationMetadataSaas)
         saas_metadata.user_id = UUID('a1111111-1111-1111-1111-111111111111')

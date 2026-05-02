@@ -2,6 +2,8 @@ import { FiUsers, FiBriefcase } from "react-icons/fi";
 import CreditCardIcon from "#/icons/credit-card.svg?react";
 import KeyIcon from "#/icons/key.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
+import LockIcon from "#/icons/lock.svg?react";
+import MemoryIcon from "#/icons/memory_icon.svg?react";
 import ServerProcessIcon from "#/icons/server-process.svg?react";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -23,7 +25,6 @@ export interface SettingsNavItem {
 }
 
 export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
-  // Org settings section (Admin/Owner only)
   {
     icon: <FiBriefcase size={22} />,
     to: "/settings/org",
@@ -38,11 +39,40 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
   },
   {
     icon: <CircuitIcon width={22} height={22} />,
-    to: "/settings",
+    to: "/settings/org-defaults",
     text: "COMMON$LANGUAGE_MODEL_LLM",
     section: "org",
   },
-  // Personal settings section
+  {
+    icon: <MemoryIcon width={22} height={22} />,
+    to: "/settings/org-defaults/condenser",
+    text: "SETTINGS$NAV_CONDENSER",
+    section: "org",
+  },
+  {
+    icon: <LockIcon width={22} height={22} />,
+    to: "/settings/org-defaults/verification",
+    text: "SETTINGS$NAV_VERIFICATION",
+    section: "org",
+  },
+  {
+    icon: <CircuitIcon width={22} height={22} />,
+    to: "/settings",
+    text: "COMMON$LANGUAGE_MODEL_LLM",
+    section: "personal",
+  },
+  {
+    icon: <MemoryIcon width={22} height={22} />,
+    to: "/settings/condenser",
+    text: "SETTINGS$NAV_CONDENSER",
+    section: "personal",
+  },
+  {
+    icon: <LockIcon width={22} height={22} />,
+    to: "/settings/verification",
+    text: "SETTINGS$NAV_VERIFICATION",
+    section: "personal",
+  },
   {
     icon: <KeyIcon width={22} height={22} />,
     to: "/settings/api-keys",
@@ -61,7 +91,6 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     text: "SETTINGS$NAV_MCP",
     section: "personal",
   },
-  // User settings section (no header shown)
   {
     icon: <UserIcon width={22} height={22} />,
     to: "/settings/user",
@@ -74,14 +103,12 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     text: "SETTINGS$NAV_APPLICATION",
     section: "user",
   },
-  // Billing section (personal orgs only)
   {
     icon: <CreditCardIcon width={22} height={22} />,
     to: "/settings/billing",
     text: "SETTINGS$NAV_BILLING",
     section: "billing",
   },
-  // Other items
   {
     icon: <PuzzlePieceIcon width={22} height={22} />,
     to: "/settings/integrations",
@@ -101,6 +128,16 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",
     text: "SETTINGS$NAV_LLM",
+  },
+  {
+    icon: <MemoryIcon width={22} height={22} />,
+    to: "/settings/condenser",
+    text: "SETTINGS$NAV_CONDENSER",
+  },
+  {
+    icon: <LockIcon width={22} height={22} />,
+    to: "/settings/verification",
+    text: "SETTINGS$NAV_VERIFICATION",
   },
   {
     icon: <ServerProcessIcon width={22} height={22} />,

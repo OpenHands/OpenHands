@@ -11,7 +11,7 @@ from storage.api_key import ApiKey
 from storage.database import a_session_maker
 from storage.user_store import UserStore
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass

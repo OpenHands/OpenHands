@@ -5,7 +5,16 @@ import {
   OrganizationMembersPage,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
+import { Settings } from "#/types/settings";
 import { openHands } from "../open-hands-axios";
+
+type OrganizationSettingsResponse = Pick<
+  Settings,
+  | "agent_settings"
+  | "conversation_settings"
+  | "search_api_key"
+  | "llm_api_key_set"
+>;
 
 export const organizationService = {
   getMe: async ({ orgId }: { orgId: string }) => {
@@ -13,13 +22,6 @@ export const organizationService = {
       `/api/organizations/${orgId}/me`,
     );
 
-    return data;
-  },
-
-  getOrganization: async ({ orgId }: { orgId: string }) => {
-    const { data } = await openHands.get<Organization>(
-      `/api/organizations/${orgId}`,
-    );
     return data;
   },
 
@@ -166,6 +168,27 @@ export const organizationService = {
       role: string;
     }>("/api/organizations/members/invite/accept", { token });
 
+    return data;
+  },
+
+  getOrganizationSettings: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<OrganizationSettingsResponse>(
+      `/api/organizations/${orgId}/settings`,
+    );
+    return data;
+  },
+
+  saveOrganizationSettings: async ({
+    orgId,
+    settings,
+  }: {
+    orgId: string;
+    settings: Partial<Settings> & Record<string, unknown>;
+  }) => {
+    const { data } = await openHands.patch<OrganizationSettingsResponse>(
+      `/api/organizations/${orgId}/settings`,
+      settings,
+    );
     return data;
   },
 

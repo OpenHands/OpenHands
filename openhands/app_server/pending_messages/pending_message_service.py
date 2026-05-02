@@ -2,12 +2,14 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import AsyncGenerator
+from datetime import datetime
+from typing import Any, AsyncGenerator
 
 from fastapi import Request
 from pydantic import TypeAdapter
-from sqlalchemy import JSON, Column, String, func, select
+from sqlalchemy import JSON, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
 from openhands.agent_server.models import ImageContent, TextContent
 from openhands.app_server.pending_messages.pending_message_models import (
@@ -22,15 +24,18 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 _content_type_adapter = TypeAdapter(list[TextContent | ImageContent])
 
 
-class StoredPendingMessage(Base):  # type: ignore
+class StoredPendingMessage(Base):
     """SQLAlchemy model for pending messages."""
 
     __tablename__ = 'pending_messages'
-    id = Column(String, primary_key=True)
-    conversation_id = Column(String, nullable=False, index=True)
-    role = Column(String(20), nullable=False, default='user')
-    content = Column(JSON, nullable=False)
-    created_at = Column(UtcDateTime, server_default=func.now(), index=True)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default='user')
+    content: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now(), index=True
+    )
 
 
 class PendingMessageService(ABC):

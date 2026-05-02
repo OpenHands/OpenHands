@@ -112,6 +112,7 @@ describe("Manage Organization Members Route", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -133,7 +134,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active",
     });
@@ -225,7 +225,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: string;
       max_iterations: number;
       llm_model: string;
-      llm_api_key_for_byor: string | null;
       llm_base_url: string;
       status: "active" | "invited" | "inactive";
     },
@@ -253,7 +252,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: string;
       max_iterations: number;
       llm_model: string;
-      llm_api_key_for_byor: string | null;
       llm_base_url: string;
       status: "active" | "invited" | "inactive";
     },
@@ -376,7 +374,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       },
@@ -435,7 +432,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active" as const,
     };
@@ -480,7 +476,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active" as const,
       },
@@ -492,7 +487,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active" as const,
       },
@@ -514,7 +508,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active",
     });
@@ -551,7 +544,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       },
@@ -661,7 +653,6 @@ describe("Manage Organization Members Route", () => {
             llm_api_key: "**********",
             max_iterations: 20,
             llm_model: "gpt-4",
-            llm_api_key_for_byor: null,
             llm_base_url: "https://api.openai.com",
             status: "invited",
           },
@@ -708,7 +699,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active",
         });
@@ -722,7 +712,7 @@ describe("Manage Organization Members Route", () => {
       },
     );
 
-    it("should not show invite button when user lacks canInviteUsers permission (User role)", async () => {
+    it("should redirect user when they lack canInviteUsers permission (Member role)", async () => {
       const userData = {
         org_id: "1",
         user_id: "1",
@@ -731,29 +721,25 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active" as const,
       };
 
-      // Set mock and remove cached query before rendering
+      // Set mock for member role user
       getMeSpy.mockResolvedValue(userData);
-      // Remove any cached "me" queries so fresh data is fetched
-      queryClient.removeQueries({ queryKey: ["organizations"] });
+      // Also set the mockQueryClient used by clientLoader
+      mockQueryClient.setQueryData(["organizations", "1", "me"], userData);
 
-      await setupTestWithOrg(0);
+      renderManageOrganizationMembers();
 
-      // Directly set the query data to force component re-render with user role
-      // This ensures the component uses the user role data instead of cached admin data
-      queryClient.setQueryData(["organizations", "1", "me"], userData);
-
-      // Wait for the component to update with the new query data
+      // Member role users cannot access org-members page - they get redirected
+      // The clientLoader redirects users without invite_user_to_organization permission
+      // So the manage-organization-members-settings element should not be present
       await waitFor(
         () => {
-          const inviteButton = screen.queryByRole("button", {
-            name: /ORG\$INVITE_ORG_MEMBERS/i,
-          });
-          expect(inviteButton).not.toBeInTheDocument();
+          expect(
+            screen.queryByTestId("manage-organization-members-settings"),
+          ).not.toBeInTheDocument();
         },
         { timeout: 3000 },
       );
@@ -776,7 +762,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active" as const,
       };
@@ -821,7 +806,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
@@ -833,7 +817,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
@@ -855,7 +838,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -891,7 +873,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
@@ -928,7 +909,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
@@ -964,7 +944,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
@@ -1006,7 +985,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
@@ -1036,7 +1014,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },

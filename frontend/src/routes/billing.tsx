@@ -16,14 +16,15 @@ import { isBillingHidden } from "#/utils/org/billing-visibility";
 import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
 import { WebClientConfig } from "#/api/option-service/option.types";
+import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
 import { getFirstAvailablePath } from "#/utils/settings-utils";
 
 export const clientLoader = async () => {
-  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
-  if (!config) {
-    config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
-  }
+  const config = await queryClient.fetchQuery<WebClientConfig>({
+    queryKey: QUERY_KEYS.WEB_CLIENT_CONFIG,
+    queryFn: OptionService.getConfig,
+    ...CONFIG_CACHE_OPTIONS,
+  });
 
   const isSaas = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;
@@ -58,8 +59,13 @@ function BillingSettingsScreen() {
   const checkoutStatus = searchParams.get("checkout");
   const amount = searchParams.get("amount");
   const sessionId = searchParams.get("session_id");
+  const hasHandledCheckoutRef = React.useRef(false);
 
   React.useEffect(() => {
+    if (!checkoutStatus) return;
+    if (hasHandledCheckoutRef.current) return;
+    hasHandledCheckoutRef.current = true;
+
     if (checkoutStatus === "success") {
       // Track credits purchased if we have the necessary data
       if (amount && sessionId) {

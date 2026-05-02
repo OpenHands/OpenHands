@@ -5,20 +5,14 @@ import { useTranslation } from "react-i18next";
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import {
-  getConversationVersionFromQueryCache,
   pauseV1ConversationSandbox,
-  stopV0Conversation,
   updateConversationSandboxStatusInCache,
 } from "./conversation-mutation-utils";
 
 /**
- * Unified hook that automatically routes to the correct pause conversation sandbox
- * implementation based on the conversation version (V0 or V1).
+ * Hook to pause a conversation sandbox.
  *
- * This hook checks the cached conversation data to determine the version, then calls
- * the appropriate API directly. Returns a single useMutation instance that all components share.
- *
- * Usage is the same as useStopConversation:
+ * Usage:
  * const { mutate: stopConversation } = useUnifiedPauseConversationSandbox();
  * stopConversation({ conversationId: "some-id" });
  */
@@ -30,24 +24,8 @@ export const useUnifiedPauseConversationSandbox = () => {
 
   return useMutation({
     mutationKey: ["stop-conversation"],
-    mutationFn: async (variables: {
-      conversationId: string;
-      version?: "V0" | "V1";
-    }) => {
-      // Use provided version or fallback to cache lookup
-      const version =
-        variables.version ||
-        getConversationVersionFromQueryCache(
-          queryClient,
-          variables.conversationId,
-        );
-
-      if (version === "V1") {
-        return pauseV1ConversationSandbox(variables.conversationId);
-      }
-
-      return stopV0Conversation(variables.conversationId);
-    },
+    mutationFn: async (variables: { conversationId: string }) =>
+      pauseV1ConversationSandbox(variables.conversationId),
     onMutate: async () => {
       const toastId = toast.loading(
         t(I18nKey.TOAST$STOPPING_CONVERSATION),

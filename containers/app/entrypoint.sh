@@ -23,18 +23,6 @@ if [ -z "$WORKSPACE_MOUNT_PATH" ]; then
   unset WORKSPACE_BASE
 fi
 
-if [[ "$INSTALL_THIRD_PARTY_RUNTIMES" == "true" ]]; then
-  echo "Downloading and installing third_party_runtimes..."
-  echo "Warning: Third-party runtimes are provided as-is, not actively supported and may be removed in future releases."
-
-  if pip install 'openhands-ai[third_party_runtimes]' -qqq 2> >(tee /dev/stderr); then
-    echo "third_party_runtimes installed successfully."
-  else
-    echo "Failed to install third_party_runtimes." >&2
-    exit 1
-  fi
-fi
-
 if [[ "$SANDBOX_USER_ID" -eq 0 ]]; then
   echo "Running OpenHands as root"
   export RUN_AS_OPENHANDS=false

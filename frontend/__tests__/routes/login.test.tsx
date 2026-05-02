@@ -73,9 +73,18 @@ vi.mock("#/hooks/use-invitation", () => ({
   useInvitation: () => useInvitationMock(),
 }));
 
-// Mock feature flags - enable by default for tests
-vi.mock("#/utils/feature-flags", () => ({
-  ENABLE_PROJ_USER_JOURNEY: () => true,
+// Mock useAppMode hook - enable CTA by default (SaaS Cloud mode)
+vi.mock("#/hooks/use-app-mode", () => ({
+  useAppMode: () => ({
+    isOss: false,
+    isSaas: true,
+    isCloud: true,
+    isSelfHosted: false,
+    isEnterpriseSelfHosted: false,
+    isEnterpriseCloud: true,
+    appMode: "saas",
+    deploymentMode: "cloud",
+  }),
 }));
 
 const RouterStub = createRoutesStub([
@@ -146,6 +155,7 @@ describe("LoginPage", () => {
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
     });
 
@@ -213,6 +223,7 @@ describe("LoginPage", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       });
 
@@ -252,6 +263,7 @@ describe("LoginPage", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       });
 
@@ -415,6 +427,7 @@ describe("LoginPage", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       });
 

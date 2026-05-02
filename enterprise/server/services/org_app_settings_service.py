@@ -20,7 +20,7 @@ from storage.org_app_settings_store import OrgAppSettingsStore
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import Injector, InjectorState
 from openhands.app_server.user.user_context import UserContext
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass

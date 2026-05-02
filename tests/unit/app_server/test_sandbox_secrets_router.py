@@ -16,6 +16,8 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.integrations.provider import ProviderHandler, ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
     SandboxStatus,
@@ -32,9 +34,9 @@ from openhands.app_server.sandbox.session_auth import (
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.user.user_router import get_current_user
-from openhands.integrations.provider import ProviderHandler, ProviderToken
-from openhands.integrations.service_types import ProviderType
+from openhands.sdk.llm import LLM
 from openhands.sdk.secret import StaticSecret
+from openhands.sdk.settings import AgentSettings
 
 SANDBOX_ID = 'sb-test-123'
 USER_ID = 'test-user-id'
@@ -147,7 +149,7 @@ class TestValidateSessionKey:
             mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
             mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            from openhands.server.types import AppMode
+            from openhands.app_server.types import AppMode
 
             mock_cfg.return_value.app_mode = AppMode.SAAS
 
@@ -155,6 +157,105 @@ class TestValidateSessionKey:
                 await validate_session_key('valid-key')
         assert exc_info.value.status_code == 401
         assert 'no user' in exc_info.value.detail
+
+    # -------------------------------------------------------------------------
+    # Security: Status check tests (prevents leaked session keys from being
+    # used after sandbox is paused/stopped/deleted)
+    # -------------------------------------------------------------------------
+
+    async def test_rejects_paused_sandbox(self):
+        """Session key for PAUSED sandbox raises 401 - security mitigation."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.PAUSED,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await validate_session_key('valid-key')
+        assert exc_info.value.status_code == 401
+        assert 'not running' in exc_info.value.detail
+
+    async def test_rejects_missing_sandbox(self):
+        """Session key for MISSING sandbox raises 401 - security mitigation."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.MISSING,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await validate_session_key('valid-key')
+        assert exc_info.value.status_code == 401
+        assert 'not running' in exc_info.value.detail
+
+    async def test_rejects_error_sandbox(self):
+        """Session key for ERROR sandbox raises 401 - security mitigation."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.ERROR,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await validate_session_key('valid-key')
+        assert exc_info.value.status_code == 401
+        assert 'not running' in exc_info.value.detail
+
+    async def test_rejects_starting_sandbox(self):
+        """Session key for STARTING sandbox raises 401 - must wait for RUNNING."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.STARTING,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await validate_session_key('valid-key')
+        assert exc_info.value.status_code == 401
+        assert 'not running' in exc_info.value.detail
+
+    async def test_accepts_running_sandbox(self):
+        """Session key for RUNNING sandbox is accepted."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await validate_session_key('valid-key')
+        assert result.id == SANDBOX_ID
+        assert result.status == SandboxStatus.RUNNING
 
 
 # ---------------------------------------------------------------------------
@@ -170,9 +271,13 @@ class TestGetCurrentUserExposeSecrets:
         """With valid session key, expose_secrets=true returns unmasked llm_api_key."""
         user_info = UserInfo(
             id=USER_ID,
-            llm_model='anthropic/claude-sonnet-4-20250514',
-            llm_api_key=SecretStr('sk-test-key-123'),
-            llm_base_url='https://litellm.example.com',
+            agent_settings=AgentSettings(
+                llm=LLM(
+                    model='anthropic/claude-sonnet-4-20250514',
+                    api_key=SecretStr('sk-test-key-123'),
+                    base_url='https://litellm.example.com',
+                ),
+            ),
         )
         mock_context = AsyncMock()
         mock_context.get_user_info = AsyncMock(return_value=user_info)
@@ -188,13 +293,13 @@ class TestGetCurrentUserExposeSecrets:
                 x_session_api_key='valid-key',
             )
 
-        # JSONResponse — parse the body
         import json
 
         body = json.loads(result.body)
-        assert body['llm_model'] == 'anthropic/claude-sonnet-4-20250514'
-        assert body['llm_api_key'] == 'sk-test-key-123'
-        assert body['llm_base_url'] == 'https://litellm.example.com'
+        sdk_vals = body['agent_settings']
+        assert sdk_vals['llm']['model'] == 'anthropic/claude-sonnet-4-20250514'
+        assert sdk_vals['llm']['api_key'] == 'sk-test-key-123'
+        assert sdk_vals['llm']['base_url'] == 'https://litellm.example.com'
 
         # Audit log assertions
         mock_user_audit.info.assert_called_once()
@@ -279,7 +384,9 @@ class TestGetCurrentUserExposeSecrets:
         """Without expose_secrets, llm_api_key is masked (no session key needed)."""
         user_info = UserInfo(
             id=USER_ID,
-            llm_api_key=SecretStr('sk-test-key-123'),
+            agent_settings=AgentSettings(
+                llm=LLM(model='gpt-4o', api_key=SecretStr('sk-test-key-123')),
+            ),
         )
         mock_context = AsyncMock()
         mock_context.get_user_info = AsyncMock(return_value=user_info)
@@ -290,10 +397,9 @@ class TestGetCurrentUserExposeSecrets:
 
         # Returns UserInfo directly (FastAPI will serialize with masking)
         assert isinstance(result, UserInfo)
-        assert result.llm_api_key is not None
-        # The raw value is still in the object, but serialization masks it
         dumped = result.model_dump(mode='json')
-        assert dumped['llm_api_key'] == '**********'
+        assert dumped['agent_settings']['llm']['api_key'] != 'sk-test-key-123'
+        assert dumped['agent_settings']['llm']['api_key'] == '**********'
 
 
 # ---------------------------------------------------------------------------
@@ -516,7 +622,12 @@ class TestExposeSecretsIntegration:
         """Bearer token alone cannot expose secrets (no X-Session-API-Key)."""
         mock_user_ctx = AsyncMock()
         mock_user_ctx.get_user_info = AsyncMock(
-            return_value=UserInfo(id=USER_ID, llm_api_key=SecretStr('sk-secret-123'))
+            return_value=UserInfo(
+                id=USER_ID,
+                agent_settings=AgentSettings(
+                    llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
+                ),
+            )
         )
         mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
 
@@ -532,7 +643,12 @@ class TestExposeSecretsIntegration:
         """Invalid session key (no matching sandbox) is rejected."""
         mock_user_ctx = AsyncMock()
         mock_user_ctx.get_user_info = AsyncMock(
-            return_value=UserInfo(id=USER_ID, llm_api_key=SecretStr('sk-secret-123'))
+            return_value=UserInfo(
+                id=USER_ID,
+                agent_settings=AgentSettings(
+                    llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
+                ),
+            )
         )
         mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
 
@@ -559,7 +675,12 @@ class TestExposeSecretsIntegration:
         """Session key from a different user's sandbox is rejected."""
         mock_user_ctx = AsyncMock()
         mock_user_ctx.get_user_info = AsyncMock(
-            return_value=UserInfo(id='user-A', llm_api_key=SecretStr('sk-secret-123'))
+            return_value=UserInfo(
+                id='user-A',
+                agent_settings=AgentSettings(
+                    llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
+                ),
+            )
         )
         mock_user_ctx.get_user_id = AsyncMock(return_value='user-A')
 
@@ -592,9 +713,13 @@ class TestExposeSecretsIntegration:
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
                 id=USER_ID,
-                llm_model='anthropic/claude-sonnet-4-20250514',
-                llm_api_key=SecretStr('sk-real-secret'),
-                llm_base_url='https://litellm.example.com',
+                agent_settings=AgentSettings(
+                    llm=LLM(
+                        model='anthropic/claude-sonnet-4-20250514',
+                        api_key=SecretStr('sk-real-secret'),
+                        base_url='https://litellm.example.com',
+                    ),
+                ),
             )
         )
         mock_user_ctx.get_user_id = AsyncMock(return_value=USER_ID)
@@ -619,17 +744,23 @@ class TestExposeSecretsIntegration:
             )
 
         assert response.status_code == 200
-        body = response.json()
-        assert body['llm_api_key'] == 'sk-real-secret'
-        assert body['llm_model'] == 'anthropic/claude-sonnet-4-20250514'
-        assert body['llm_base_url'] == 'https://litellm.example.com'
+        user = UserInfo.model_validate_json(response.text)
+        assert user.agent_settings.llm.api_key.get_secret_value() == 'sk-real-secret'
+        assert user.agent_settings.llm.model == 'anthropic/claude-sonnet-4-20250514'
+        assert user.agent_settings.llm.base_url == 'https://litellm.example.com'
 
     def test_default_masks_secrets_via_http(self):
-        """Without expose_secrets, secrets are masked even via real HTTP."""
+        """Without expose_secrets, secrets are in agent_settings."""
         mock_user_ctx = AsyncMock()
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
-                id=USER_ID, llm_api_key=SecretStr('sk-should-be-masked')
+                id=USER_ID,
+                agent_settings=AgentSettings(
+                    llm=LLM(
+                        model='gpt-4o',
+                        api_key=SecretStr('sk-should-be-masked'),
+                    ),
+                ),
             )
         )
 
@@ -639,8 +770,9 @@ class TestExposeSecretsIntegration:
         response = client.get('/api/v1/users/me')
 
         assert response.status_code == 200
-        body = response.json()
-        assert body['llm_api_key'] == '**********'
+        user = UserInfo.model_validate_json(response.text)
+        # Masked secrets are stripped to None on deserialization
+        assert user.agent_settings.llm.api_key is None
 
 
 class TestSandboxSecretsIntegration:

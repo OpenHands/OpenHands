@@ -7,8 +7,8 @@ from uuid import UUID
 
 import pytest
 
-from openhands.utils import shutdown_listener
-from openhands.utils.shutdown_listener import (
+from openhands.app_server.utils import shutdown_listener
+from openhands.app_server.utils.shutdown_listener import (
     add_shutdown_listener,
     remove_shutdown_listener,
     should_continue,
@@ -59,7 +59,7 @@ def test_remove_shutdown_listener():
 
 def test_signal_handler_calls_listeners():
     mock_signal = MockSignal()
-    with patch('openhands.utils.shutdown_listener.signal', mock_signal):
+    with patch('openhands.app_server.utils.shutdown_listener.signal', mock_signal):
         mock_callable1 = MagicMock()
         mock_callable2 = MagicMock()
         add_shutdown_listener(mock_callable1)
@@ -79,7 +79,7 @@ def test_signal_handler_calls_listeners():
 
 def test_listeners_called_only_once():
     mock_signal = MockSignal()
-    with patch('openhands.utils.shutdown_listener.signal', mock_signal):
+    with patch('openhands.app_server.utils.shutdown_listener.signal', mock_signal):
         mock_callable = MagicMock()
         add_shutdown_listener(mock_callable)
 
@@ -94,7 +94,7 @@ def test_listeners_called_only_once():
 
 def test_remove_listener_during_shutdown():
     mock_signal = MockSignal()
-    with patch('openhands.utils.shutdown_listener.signal', mock_signal):
+    with patch('openhands.app_server.utils.shutdown_listener.signal', mock_signal):
         mock_callable1 = MagicMock()
         mock_callable2 = MagicMock()
 

@@ -14,6 +14,7 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
+import { useAgentNotification } from "#/hooks/use-agent-notification";
 
 export interface AgentStatusProps {
   className?: string;
@@ -32,7 +33,10 @@ export function AgentStatus({
 }: AgentStatusProps) {
   const { t } = useTranslation();
   const { setShouldShownAgentLoading } = useConversationStore();
-  const { curAgentState } = useAgentState();
+  const { curAgentState, executionStatus, isArchived } = useAgentState();
+
+  // Trigger browser tab flash and notification sound on state changes
+  useAgentNotification(curAgentState);
   const webSocketStatus = useUnifiedWebSocketStatus();
   const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
@@ -48,18 +52,20 @@ export function AgentStatus({
 
   const statusCode = getStatusCode(
     webSocketStatus,
-    conversation?.execution_status || null,
+    executionStatus ?? null,
     conversation?.sandbox_status || null,
     taskStatus,
     subConversationTaskStatus,
   );
 
+  // Never show loading state for archived conversations - they are read-only
   const shouldShownAgentLoading =
-    curAgentState === AgentState.INIT ||
-    curAgentState === AgentState.LOADING ||
-    (webSocketStatus === "CONNECTING" && taskStatus !== "ERROR") ||
-    isTaskPolling(taskStatus) ||
-    isTaskPolling(subConversationTaskStatus);
+    !isArchived &&
+    (curAgentState === AgentState.INIT ||
+      curAgentState === AgentState.LOADING ||
+      (webSocketStatus === "CONNECTING" && taskStatus !== "ERROR") ||
+      isTaskPolling(taskStatus) ||
+      isTaskPolling(subConversationTaskStatus));
 
   // For UI rendering - includes pause state
   const isLoading = shouldShownAgentLoading || isPausing;
