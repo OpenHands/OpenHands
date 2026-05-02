@@ -4,8 +4,12 @@ from types import MappingProxyType
 
 from pydantic import SecretStr
 
-from openhands.integrations.provider import ProviderHandler, ProviderToken
-from openhands.integrations.service_types import OwnerType, ProviderType, Repository
+from openhands.app_server.integrations.provider import ProviderHandler, ProviderToken
+from openhands.app_server.integrations.service_types import (
+    OwnerType,
+    ProviderType,
+    Repository,
+)
 
 
 def _make_handler() -> ProviderHandler:
