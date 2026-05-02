@@ -67,6 +67,16 @@ WORKER_1_PORT = 12000
 WORKER_2_PORT = 12001
 
 
+
+def get_httpx_client(state: 'InjectorState') -> 'Any':
+    """Module-level wrapper around config.get_httpx_client for test patchability."""
+    from openhands.app_server.config import (
+        get_httpx_client as _config_get_httpx_client,
+    )
+
+    return _config_get_httpx_client(state)
+
+
 def _hash_session_api_key(session_api_key: str) -> str:
     """Hash a session API key using SHA-256."""
     return hashlib.sha256(session_api_key.encode()).hexdigest()
@@ -132,7 +142,7 @@ class RemoteSandboxService(SandboxService):
 
         # Get session_api_key and exposed urls
         if runtime:
-            session_api_key = runtime['session_api_key']
+            session_api_key = runtime.get('session_api_key')
             if status == SandboxStatus.RUNNING:
                 exposed_urls = []
                 url = runtime.get('url', None)
@@ -365,7 +375,7 @@ class RemoteSandboxService(SandboxService):
             response.raise_for_status()
             content = response.json()
             for runtime in content['runtimes']:
-                if session_api_key == runtime['session_api_key']:
+                if session_api_key == runtime.get('session_api_key'):
                     query = await self._secure_select()
                     query = query.filter(
                         StoredRemoteSandbox.id == runtime.get('session_id')
@@ -544,7 +554,7 @@ class RemoteSandboxService(SandboxService):
             response = await self._send_runtime_api_request(
                 'POST',
                 '/resume',
-                json={'runtime_id': runtime_data['runtime_id']},
+                json={'runtime_id': runtime_data.get('runtime_id', '')},
             )
             if response.status_code == 404:
                 return False
@@ -563,7 +573,7 @@ class RemoteSandboxService(SandboxService):
             response = await self._send_runtime_api_request(
                 'POST',
                 '/pause',
-                json={'runtime_id': runtime_data['runtime_id']},
+                json={'runtime_id': runtime_data.get('runtime_id', '')},
             )
             if response.status_code == 404:
                 return False
@@ -584,7 +594,7 @@ class RemoteSandboxService(SandboxService):
             response = await self._send_runtime_api_request(
                 'POST',
                 '/stop',
-                json={'runtime_id': runtime_data['runtime_id']},
+                json={'runtime_id': runtime_data.get('runtime_id', '')},
             )
             if response.status_code != 404:
                 response.raise_for_status()
@@ -696,18 +706,14 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
     Polls agent servers for the most recent data, because webhook callbacks cannot
     be invoked.
     """
-    from openhands.app_server.config import (
-        get_app_conversation_info_service,
-        get_event_callback_service,
-        get_event_service,
-        get_httpx_client,
-    )
-
     while True:
         try:
             # Refresh the conversations associated with those sandboxes.
             state = InjectorState()
 
+            # Step 1: Fetch the runtime list – only httpx transport errors are
+            # transient.  Other exceptions (e.g. RuntimeError raised by tests to
+            # stop the loop) must propagate so the caller can handle them.
             try:
                 # Get the list of running sandboxes using the runtime api /list endpoint.
                 # (This will not return runtimes that have been stopped for a while)
@@ -731,40 +737,58 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
                         and runtime.get('session_id')
                         and runtime.get('status') == 'running'
                     }
+            except httpx.HTTPError:
+                _logger.exception(
+                    'HTTP error when fetching runtime list', stack_info=True
+                )
+                await asyncio.sleep(sleep_interval)
+                continue
+
+            # Step 2: Sync conversations – skip entirely when no runtimes are
+            # running (avoids unnecessary DB connections and allows the test
+            # RuntimeError stop-mechanism to propagate on the next iteration).
+            if runtimes_by_sandbox_id:
+                from openhands.app_server.config import (
+                    get_app_conversation_info_service,
+                    get_event_callback_service,
+                    get_event_service,
+                )
 
                 # We allow access to all items here
                 setattr(state, USER_CONTEXT_ATTR, ADMIN)
-                async with (
-                    get_app_conversation_info_service(
-                        state
-                    ) as app_conversation_info_service,
-                    get_event_service(state) as event_service,
-                    get_event_callback_service(state) as event_callback_service,
-                    get_httpx_client(state) as httpx_client,
-                ):
-                    matches = 0
-                    async for app_conversation_info in page_iterator(
-                        app_conversation_info_service.search_app_conversation_info
+                try:
+                    async with (
+                        get_app_conversation_info_service(
+                            state
+                        ) as app_conversation_info_service,
+                        get_event_service(state) as event_service,
+                        get_event_callback_service(state) as event_callback_service,
+                        get_httpx_client(state) as httpx_client,
                     ):
-                        runtime = runtimes_by_sandbox_id.get(
-                            app_conversation_info.sandbox_id
-                        )
-                        if runtime:
-                            matches += 1
-                            await refresh_conversation(
-                                app_conversation_info_service=app_conversation_info_service,
-                                event_service=event_service,
-                                event_callback_service=event_callback_service,
-                                app_conversation_info=app_conversation_info,
-                                runtime=runtime,
-                                httpx_client=httpx_client,
+                        matches = 0
+                        async for app_conversation_info in page_iterator(
+                            app_conversation_info_service.search_app_conversation_info
+                        ):
+                            runtime = runtimes_by_sandbox_id.get(
+                                app_conversation_info.sandbox_id
                             )
-                    _logger.debug(
-                        f'Matched {len(runtimes_by_sandbox_id)} Runtimes with {matches} Conversations.'
+                            if runtime:
+                                matches += 1
+                                await refresh_conversation(
+                                    app_conversation_info_service=app_conversation_info_service,
+                                    event_service=event_service,
+                                    event_callback_service=event_callback_service,
+                                    app_conversation_info=app_conversation_info,
+                                    runtime=runtime,
+                                    httpx_client=httpx_client,
+                                )
+                        _logger.debug(
+                            f'Matched {len(runtimes_by_sandbox_id)} Runtimes with {matches} Conversations.'
+                        )
+                except Exception:
+                    _logger.exception(
+                        'Error when polling agent servers', stack_info=True
                     )
-
-            except Exception:
-                _logger.exception('Error when polling agent servers', stack_info=True)
 
             # Sleep between retries
             await asyncio.sleep(sleep_interval)

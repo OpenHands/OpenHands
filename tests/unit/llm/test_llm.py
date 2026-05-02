@@ -1058,6 +1058,10 @@ def test_init_model_info_logs_warning_on_http_error(mock_get):
     )
     llm = LLM(config=config, service_id='test-service')
 
+    # LLM.__init__ already called init_model_info(); reset the guard so the
+    # explicit call below actually runs (with the logger mock active).
+    llm._tried_model_info = False
+
     with patch('openhands.llm.llm.logger') as mock_logger:
         llm.init_model_info()
 

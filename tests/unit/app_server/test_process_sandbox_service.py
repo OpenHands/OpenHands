@@ -388,7 +388,12 @@ class TestProcessSandboxService:
     def test_get_process_status_starting(
         self, mock_process_class, process_sandbox_service
     ):
-        """Test getting process status for starting process."""
+        """Test that a sleeping (but alive) process is reported as RUNNING.
+
+        Server processes idle in STATUS_SLEEPING between requests; _get_process_status
+        must map that to RUNNING (not STARTING) so health-check logic is triggered.
+        See test_get_process_status_sleeping_returns_running for the complementary check.
+        """
         mock_process = MagicMock()
         mock_process.is_running.return_value = True
         mock_process.status.return_value = psutil.STATUS_SLEEPING
@@ -405,7 +410,7 @@ class TestProcessSandboxService:
         )
 
         status = process_sandbox_service._get_process_status(process_info)
-        assert status == SandboxStatus.STARTING
+        assert status == SandboxStatus.RUNNING
 
     @patch('psutil.Process')
     def test_get_process_status_access_denied(

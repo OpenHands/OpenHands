@@ -171,6 +171,9 @@ from openhands.llm.metrics import Metrics
 class DummyResponse:
     def __init__(self, json_data):
         self._json = json_data
+        self.is_success = True
+        self.status_code = 200
+        self.text = ''
 
     def json(self):
         return self._json
