@@ -1,6 +1,5 @@
 from typing import Any
 
-import jwt
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
 from integrations.slack.slack_errors import SlackError, SlackErrorCode
@@ -24,27 +23,27 @@ from integrations.utils import (
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from server.constants import SLACK_CLIENT_ID
-from server.utils.conversation_callback_utils import register_callback_processor
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import select
 from storage.database import a_session_maker
+from storage.redis import get_redis_client_async
 from storage.slack_user import SlackUser
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import (
     AuthenticationError,
     ProviderTimeoutError,
     Repository,
 )
-from openhands.server.shared import config, server_config, sio
-from openhands.server.types import (
+from openhands.app_server.shared import server_config
+from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
@@ -115,7 +114,7 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
-            redis = sio.manager.redis
+            redis = get_redis_client_async()
             await redis.set(key, user_msg, ex=SLACK_USER_MSG_EXPIRATION)
             logger.info(
                 'slack_stored_user_msg',
@@ -158,7 +157,7 @@ class SlackManager(Manager[SlackViewInterface]):
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
-            redis = sio.manager.redis
+            redis = get_redis_client_async()
             user_msg = await redis.get(key)
             if user_msg:
                 # Redis returns bytes, decode to string
@@ -499,12 +498,9 @@ class SlackManager(Manager[SlackViewInterface]):
 
     def _generate_login_link_with_state(self, message: Message) -> str:
         """Generate OAuth login link with message state encoded."""
-        jwt_secret = config.jwt_secret
-        if not jwt_secret:
-            raise ValueError('Must configure jwt_secret')
-        state = jwt.encode(
-            message.message, jwt_secret.get_secret_value(), algorithm='HS256'
-        )
+        from storage.encrypt_utils import get_jwt_service
+
+        state = get_jwt_service().create_jws_token(message.message)
         return authorize_url_generator.generate(state)
 
     async def handle_slack_error(self, payload: dict, error: SlackError) -> None:
@@ -698,11 +694,7 @@ class SlackManager(Manager[SlackViewInterface]):
         return False
 
     async def start_job(self, slack_view: SlackViewInterface) -> None:
-        # Importing here prevents circular import
-        from server.conversation_callback_processor.slack_callback_processor import (
-            SlackCallbackProcessor,
-        )
-
+        """Start a Slack job using V1 app conversation system."""
         try:
             msg_info = None
             user_info = slack_view.slack_to_openhands_user
@@ -719,37 +711,7 @@ class SlackManager(Manager[SlackViewInterface]):
                     f'[Slack] Created conversation {conversation_id} for user {user_info.slack_display_name}'
                 )
 
-                # Only add SlackCallbackProcessor for new conversations (not updates) and non-v1 conversations
-                if (
-                    not isinstance(slack_view, SlackUpdateExistingConversationView)
-                    and not slack_view.v1_enabled
-                ):
-                    # We don't re-subscribe for follow up messages from slack.
-                    # Summaries are generated for every messages anyways, we only need to do
-                    # this subscription once for the event which kicked off the job.
-
-                    processor = SlackCallbackProcessor(
-                        slack_user_id=slack_view.slack_user_id,
-                        channel_id=slack_view.channel_id,
-                        message_ts=slack_view.message_ts,
-                        thread_ts=slack_view.thread_ts,
-                        team_id=slack_view.team_id,
-                    )
-
-                    # Register the callback processor
-                    register_callback_processor(conversation_id, processor)
-
-                    logger.info(
-                        f'[Slack] Created callback processor for conversation {conversation_id}'
-                    )
-                elif isinstance(slack_view, SlackUpdateExistingConversationView):
-                    logger.info(
-                        f'[Slack] Skipping callback processor for existing conversation update {conversation_id}'
-                    )
-                elif slack_view.v1_enabled:
-                    logger.info(
-                        f'[Slack] Skipping callback processor for v1 conversation {conversation_id}'
-                    )
+                # V1 callback processors are registered by the view during conversation creation
 
                 msg_info = slack_view.get_response_msg()
 

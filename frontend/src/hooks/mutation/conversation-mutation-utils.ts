@@ -149,4 +149,8 @@ export const invalidateConversationQueries = (
   queryClient.invalidateQueries({
     queryKey: ["v1-batch-get-app-conversations"],
   });
+  // Invalidate sandbox and VS Code URL caches to pick up new runtime URLs after resume
+  // Uses partial key matching to invalidate all sandbox-related queries (batch, individual, etc.)
+  queryClient.invalidateQueries({ queryKey: ["sandboxes"] });
+  queryClient.invalidateQueries({ queryKey: ["unified", "vscode_url"] });
 };

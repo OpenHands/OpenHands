@@ -2,7 +2,8 @@ import base64
 import json
 import uuid
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from types import MappingProxyType
 from typing import Annotated, Optional, cast
 from urllib.parse import quote, urlencode
 from uuid import UUID as parse_uuid
@@ -26,12 +27,10 @@ from server.auth.user.user_authorizer import (
     UserAuthorizer,
     depends_user_authorizer,
 )
-from server.config import sign_token
 from server.constants import (
     DEPLOYMENT_MODE,
     IS_FEATURE_ENV,
 )
-from server.routes.event_webhook import _get_session_api_key, _get_user_id
 from server.services.org_invitation_service import (
     EmailMismatchError,
     InvitationExpiredError,
@@ -39,6 +38,7 @@ from server.services.org_invitation_service import (
     OrgInvitationService,
     UserAlreadyMemberError,
 )
+from server.utils.conversation_utils import get_session_api_key, get_user_id
 from server.utils.rate_limit_utils import check_rate_limit_by_user_id
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
 from sqlalchemy import select
@@ -46,13 +46,15 @@ from storage.database import a_session_maker
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import ProviderType, TokenResponse
-from openhands.server.services.conversation_service import create_provider_tokens_object
-from openhands.server.shared import config
-from openhands.server.user_auth import get_access_token
-from openhands.server.user_auth.user_auth import get_user_auth
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+    ProviderToken,
+)
+from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
+from openhands.app_server.user_auth import get_access_token
+from openhands.app_server.user_auth.user_auth import get_user_auth
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -61,6 +63,18 @@ api_router = APIRouter(prefix='/api')
 oauth_router = APIRouter(prefix='/oauth')
 
 token_manager = TokenManager()
+
+
+def create_provider_tokens_object(
+    providers_set: list[ProviderType],
+) -> PROVIDER_TOKEN_TYPE:
+    """Create provider tokens object for the given providers."""
+    provider_information: dict[ProviderType, ProviderToken] = {}
+
+    for provider in providers_set:
+        provider_information[provider] = ProviderToken(token=None, user_id=None)
+
+    return MappingProxyType(provider_information)
 
 
 def set_response_cookie(
@@ -77,7 +91,11 @@ def set_response_cookie(
         'refresh_token': keycloak_refresh_token,
         'accepted_tos': accepted_tos,
     }
-    signed_token = sign_token(cookie_data, config.jwt_secret.get_secret_value())  # type: ignore
+    from storage.encrypt_utils import get_jwt_service
+
+    signed_token = get_jwt_service().create_jws_token(
+        cookie_data, expires_in=timedelta(weeks=1)
+    )
 
     # Set secure cookie with signed token
     domain = get_cookie_domain()
@@ -703,6 +721,41 @@ async def accept_tos(request: Request):
     return response
 
 
+@api_router.get('/onboarding_status')
+async def onboarding_status(request: Request):
+    """Return whether the current user must still complete onboarding.
+
+    Kept as a dedicated endpoint instead of riding on ``GET /api/v1/settings``
+    (the natural home for fields like ``email_verified``) because the settings
+    response is heavyweight: ``SaasSettingsStore.load`` joins User, Org, and
+    OrgMember rows and deep-merges the org-level and member-level
+    ``agent_settings`` before returning. Onboarding gating runs on every
+    protected-route navigation, so we need a lightweight read of a single
+    boolean rather than paying for the full settings aggregation.
+    """
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
+    user_id = await user_auth.get_user_id()
+
+    if not user_id:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'User is not authenticated'},
+        )
+
+    user = await UserStore.get_user_by_id(user_id)
+    if not user:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'User not found'},
+        )
+
+    should_complete = await _should_redirect_to_onboarding(user_id, user)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={'should_complete_onboarding': should_complete},
+    )
+
+
 @api_router.post('/complete_onboarding')
 async def complete_onboarding(request: Request):
     """Mark onboarding as completed for the current user."""
@@ -770,8 +823,8 @@ async def refresh_tokens(
     x_session_api_key: Annotated[str | None, Header(alias='X-Session-API-Key')],
 ) -> TokenResponse:
     """Return the latest token for a given provider."""
-    user_id = _get_user_id(sid)
-    session_api_key = await _get_session_api_key(user_id, sid)
+    user_id = get_user_id(sid)
+    session_api_key = await get_session_api_key(sid)
     if session_api_key != x_session_api_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Forbidden')
 

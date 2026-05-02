@@ -29,7 +29,6 @@ def mock_org():
     org = MagicMock(spec=Org)
     org.id = uuid.uuid4()
     org.enable_proactive_conversation_starters = True
-    org.enable_solvability_analysis = False
     org.max_budget_per_task = 25.0
     return org
 
@@ -67,7 +66,6 @@ async def test_get_org_app_settings_success(
     # Assert
     assert isinstance(result, OrgAppSettingsResponse)
     assert result.enable_proactive_conversation_starters is True
-    assert result.enable_solvability_analysis is False
     assert result.max_budget_per_task == 25.0
     mock_store.get_current_org_by_user_id.assert_called_once_with(user_id)
 

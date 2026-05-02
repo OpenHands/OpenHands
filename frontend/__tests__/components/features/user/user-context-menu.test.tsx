@@ -186,18 +186,28 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
 
     renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-    // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
+    // In SaaS, personal LLM/Condenser/Verification routes are hidden in favor
+    // of /settings/org-defaults/* (visible only when an org is selected, which
+    // this test does not seed). Org-only and billing routes are also filtered.
+    const personalLlmPaths = new Set([
+      "/settings",
+      "/settings/condenser",
+      "/settings/verification",
+    ]);
     const expectedItems = SAAS_NAV_ITEMS.filter(
       (item) =>
         item.to !== "/settings/org-members" &&
         item.to !== "/settings/org" &&
-        item.to !== "/settings/billing",
+        item.to !== "/settings/billing" &&
+        !item.to.startsWith("/settings/org-defaults") &&
+        !personalLlmPaths.has(item.to),
     );
 
     await waitFor(() => {
@@ -220,6 +230,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -270,6 +281,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -334,6 +346,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -363,9 +376,19 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
+      // The LLM nav item now lives under /settings/org-defaults, which only
+      // appears when an org is selected. Seed a personal org for that.
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      useSelectedOrganizationStore.setState({
+        organizationId: MOCK_PERSONAL_ORG.id,
+      });
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
@@ -459,6 +482,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -701,6 +725,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -754,6 +779,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -794,6 +820,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -823,6 +850,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );

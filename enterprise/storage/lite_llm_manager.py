@@ -19,8 +19,8 @@ from server.constants import (
 from server.logger import logger
 from storage.user_settings import UserSettings
 
-from openhands.server.settings import Settings
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 # Timeout in seconds for key verification requests to LiteLLM
 KEY_VERIFICATION_TIMEOUT = 5.0
@@ -217,7 +217,7 @@ class LiteLlmManager:
 
         oss_settings.update(
             {
-                'agent_settings': {
+                'agent_settings_diff': {
                     'agent': 'CodeActAgent',
                     'llm': {
                         'model': get_default_litellm_model(),
@@ -402,9 +402,7 @@ class LiteLlmManager:
                             extra={'org_id': org_id, 'user_id': keycloak_user_id},
                         )
                         # Update user_settings with the new key so it gets stored in org_member
-                        # agent_settings is a JSON column (dict) on UserSettings
-                        if user_settings.agent_settings is None:
-                            user_settings.agent_settings = {}
+                        # agent_settings is a non-nullable JSON column (dict) on UserSettings
                         user_settings.agent_settings.setdefault('llm', {})[
                             'api_key'
                         ] = new_key

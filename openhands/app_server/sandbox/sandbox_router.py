@@ -19,10 +19,10 @@ from openhands.app_server.sandbox.sandbox_service import (
 )
 from openhands.app_server.sandbox.session_auth import validate_session_key
 from openhands.app_server.user.auth_user_context import AuthUserContext
-from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.server.user_auth.user_auth import (
+from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
+from openhands.app_server.utils.dependencies import get_dependencies
 
 _logger = logging.getLogger(__name__)
 

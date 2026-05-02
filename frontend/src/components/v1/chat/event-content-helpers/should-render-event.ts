@@ -6,6 +6,7 @@ import {
   isAgentErrorEvent,
   isConversationStateUpdateEvent,
   isHookExecutionEvent,
+  isACPToolCallEvent,
 } from "#/types/v1/type-guards";
 
 export const shouldRenderEvent = (event: OpenHandsEvent) => {
@@ -53,6 +54,11 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
   // Render hook execution events
   if (isHookExecutionEvent(event)) {
+    return true;
+  }
+
+  // Render ACP sub-agent tool call events
+  if (isACPToolCallEvent(event)) {
     return true;
   }
 

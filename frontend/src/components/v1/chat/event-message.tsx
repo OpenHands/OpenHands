@@ -1,6 +1,6 @@
 import React from "react";
 import { OpenHandsEvent, MessageEvent, ActionEvent } from "#/types/v1/core";
-import { FinishAction } from "#/types/v1/core/base/action";
+import { FinishAction, ThinkAction } from "#/types/v1/core/base/action";
 import {
   isActionEvent,
   isObservationEvent,
@@ -8,11 +8,14 @@ import {
   isUserMessageEvent,
   isPlanningFileEditorObservationEvent,
   isHookExecutionEvent,
+  isACPToolCallEvent,
 } from "#/types/v1/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
+import { ChatMessage } from "../../features/chat/chat-message";
+import { PlanPreview } from "../../features/chat/plan-preview";
 import {
   ErrorEventMessage,
   UserAssistantEventMessage,
@@ -22,7 +25,6 @@ import {
   HookExecutionEventMessage,
 } from "./event-message-components";
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
-import { PlanPreview } from "../../features/chat/plan-preview";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 
 interface EventMessageProps {
@@ -151,12 +153,35 @@ export function EventMessage({
     return <HookExecutionEventMessage event={event} />;
   }
 
+  // ACP sub-agent tool call events (Claude Code, Codex, Gemini CLI, …)
+  // render through the same generic wrapper used for observation events so
+  // the card shape, success indicator and markdown rendering all match.
+  if (isACPToolCallEvent(event)) {
+    return (
+      <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
+    );
+  }
+
   // Finish actions
   if (isActionEvent(event) && event.action.kind === "FinishAction") {
     return (
       <FinishEventMessage
         event={event as ActionEvent<FinishAction>}
         {...commonProps}
+      />
+    );
+  }
+
+  // ThinkAction - render the thought as a normal chat message (not a collapsible block)
+  // The thought content IS the action, so we use event.action.thought directly
+  // instead of event.thought (which contains the raw tool call text).
+  if (isActionEvent(event) && event.action.kind === "ThinkAction") {
+    const thinkAction = event as ActionEvent<ThinkAction>;
+    return (
+      <ChatMessage
+        type="agent"
+        message={thinkAction.action.thought}
+        isFromPlanningAgent={isFromPlanningAgent}
       />
     );
   }
@@ -208,9 +233,15 @@ export function EventMessage({
       (msg) => isActionEvent(msg) && msg.id === event.action_id,
     );
 
+    // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
+    const shouldShowThought =
+      correspondingAction &&
+      isActionEvent(correspondingAction) &&
+      correspondingAction.action.kind !== "ThinkAction";
+
     return (
       <>
-        {correspondingAction && isActionEvent(correspondingAction) && (
+        {shouldShowThought && (
           <ThoughtEventMessage
             event={correspondingAction}
             isFromPlanningAgent={isFromPlanningAgent}

@@ -22,10 +22,10 @@ from storage.user import User
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
+    ConversationTrigger,
 )
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
-from openhands.integrations.service_types import ProviderType
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 # Test UUIDs
 USER1_ID = UUID('a1111111-1111-1111-1111-111111111111')
@@ -280,6 +280,7 @@ class TestSaasSQLAppConversationInfoService:
         stored_metadata.per_turn_token = 0
         stored_metadata.public = None
         stored_metadata.tags = {}
+        stored_metadata.agent_kind = None
 
         saas_metadata = MagicMock(spec=StoredConversationMetadataSaas)
         saas_metadata.user_id = UUID('a1111111-1111-1111-1111-111111111111')

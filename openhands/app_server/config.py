@@ -28,11 +28,18 @@ from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanSe
 from openhands.app_server.app_lifespan.oss_app_lifespan_service import (
     OssAppLifespanService,
 )
+from openhands.app_server.config_api.config_models import AppMode
+from openhands.app_server.config_api.llm_model_service import (
+    LLMModelService,
+    LLMModelServiceInjector,
+)
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
 from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
     EventCallbackServiceInjector,
 )
+from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.pending_messages.pending_message_service import (
     PendingMessageService,
     PendingMessageServiceInjector,
@@ -52,6 +59,7 @@ from openhands.app_server.services.httpx_client_injector import HttpxClientInjec
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService, JwtServiceInjector
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
+from openhands.app_server.utils.environment import StorageProvider, get_storage_provider
 from openhands.app_server.web_client.default_web_client_config_injector import (
     DefaultWebClientConfigInjector,
 )
@@ -59,8 +67,6 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.sdk.utils.models import OpenHandsModel
-from openhands.server.types import AppMode
-from openhands.utils.environment import StorageProvider, get_storage_provider
 
 
 def get_default_persistence_dir() -> Path:
@@ -164,8 +170,14 @@ def _get_default_lifespan():
     return OssAppLifespanService()
 
 
+def _get_default_file_store() -> FileStore:
+    """Create a default LocalFileStore using the default persistence directory."""
+    return LocalFileStore(root=str(get_default_persistence_dir()))
+
+
 class AppServerConfig(OpenHandsModel):
     persistence_dir: Path = Field(default_factory=get_default_persistence_dir)
+    file_store: FileStore = Field(default_factory=_get_default_file_store)
     web_url: str | None = Field(
         default_factory=get_default_web_url,
         description='The URL where OpenHands is running (e.g., http://localhost:3000)',
@@ -183,6 +195,7 @@ class AppServerConfig(OpenHandsModel):
         description='Base URL for the OpenHands provider',
     )
     # Dependency Injection Injectors
+    llm_model: LLMModelServiceInjector | None = None
     event: EventServiceInjector | None = None
     event_callback: EventCallbackServiceInjector | None = None
     sandbox: SandboxServiceInjector | None = None
@@ -253,6 +266,26 @@ def config_from_env() -> AppServerConfig:
     )
 
     config: AppServerConfig = from_env(AppServerConfig, 'OH')  # type: ignore
+
+    if config.llm_model is None:
+        from openhands.app_server.config_api.default_llm_model_service import (
+            DefaultLLMModelServiceInjector,
+        )
+
+        llm_model_kwargs: dict = {}
+        aws_region = os.getenv('AWS_REGION_NAME')
+        aws_key = os.getenv('AWS_ACCESS_KEY_ID')
+        aws_secret = os.getenv('AWS_SECRET_ACCESS_KEY')
+        if aws_region and aws_key and aws_secret:
+            llm_model_kwargs['aws_region_name'] = aws_region
+            llm_model_kwargs['aws_access_key_id'] = SecretStr(aws_key)
+            llm_model_kwargs['aws_secret_access_key'] = SecretStr(aws_secret)
+
+        ollama_url = os.getenv('OLLAMA_BASE_URL')
+        if ollama_url:
+            llm_model_kwargs['ollama_base_url'] = ollama_url
+
+        config.llm_model = DefaultLLMModelServiceInjector(**llm_model_kwargs)
 
     if config.event is None:
         provider = get_storage_provider()
@@ -552,3 +585,17 @@ def depends_jwt_service():
 
 def depends_db_session():
     return Depends(get_global_config().db_session.depends)
+
+
+def get_llm_model_service(
+    state: InjectorState, request: Request | None = None
+) -> AsyncContextManager[LLMModelService]:
+    injector = get_global_config().llm_model
+    assert injector is not None
+    return injector.context(state, request)
+
+
+def depends_llm_model_service():
+    injector = get_global_config().llm_model
+    assert injector is not None
+    return Depends(injector.depends)

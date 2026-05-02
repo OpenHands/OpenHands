@@ -5,15 +5,15 @@ import yaml
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+import openhands
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.core.logger import openhands_logger as logger
-from openhands.memory.memory import GLOBAL_MICROAGENTS_DIR, USER_MICROAGENTS_DIR
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
 
-# Re-use V0 path constants (single source of truth)
-GLOBAL_SKILLS_DIR = Path(GLOBAL_MICROAGENTS_DIR)
-USER_SKILLS_DIR = Path(USER_MICROAGENTS_DIR)
+# skills/ is at the repo root, two levels above the openhands package __file__
+GLOBAL_SKILLS_DIR = Path(openhands.__file__).parent.parent / 'skills'
+USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
 
 
 class SkillInfo(BaseModel):

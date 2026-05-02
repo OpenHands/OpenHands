@@ -7,6 +7,7 @@ import hmac
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi import Request
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
@@ -17,8 +18,8 @@ from integrations.jira_dc.jira_dc_view import (
 )
 from integrations.models import Message, SourceType
 
-from openhands.integrations.service_types import ProviderType, Repository
-from openhands.server.types import (
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
@@ -663,7 +664,7 @@ class TestStartJob:
     async def test_start_job_success_new_conversation(
         self, jira_dc_manager, sample_jira_dc_workspace
     ):
-        """Test successful job start for new conversation."""
+        """Test successful job start for new conversation using V1 app conversation system."""
         mock_view = MagicMock(spec=JiraDcNewConversationView)
         mock_view.jira_dc_user = MagicMock()
         mock_view.jira_dc_user.keycloak_user_id = 'test_user'
@@ -676,17 +677,11 @@ class TestStartJob:
         jira_dc_manager.send_message = AsyncMock()
         jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        with patch(
-            'integrations.jira_dc.jira_dc_manager.register_callback_processor'
-        ) as mock_register:
-            with patch(
-                'server.conversation_callback_processor.jira_dc_callback_processor.JiraDcCallbackProcessor'
-            ):
-                await jira_dc_manager.start_job(mock_view)
+        await jira_dc_manager.start_job(mock_view)
 
-                mock_view.create_or_update_conversation.assert_called_once()
-                mock_register.assert_called_once()
-                jira_dc_manager.send_message.assert_called_once()
+        # V1 callback processors are registered by the view during conversation creation
+        mock_view.create_or_update_conversation.assert_called_once()
+        jira_dc_manager.send_message.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_job_success_existing_conversation(
@@ -705,15 +700,10 @@ class TestStartJob:
         jira_dc_manager.send_message = AsyncMock()
         jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        with patch(
-            'integrations.jira_dc.jira_dc_manager.register_callback_processor'
-        ) as mock_register:
-            await jira_dc_manager.start_job(mock_view)
+        await jira_dc_manager.start_job(mock_view)
 
-            mock_view.create_or_update_conversation.assert_called_once()
-            # Should not register callback for existing conversation
-            mock_register.assert_not_called()
-            jira_dc_manager.send_message.assert_called_once()
+        mock_view.create_or_update_conversation.assert_called_once()
+        jira_dc_manager.send_message.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_job_missing_settings_error(
@@ -833,9 +823,8 @@ class TestStartJob:
         jira_dc_manager.send_message = AsyncMock(side_effect=Exception('Send failed'))
         jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        with patch('integrations.jira_dc.jira_dc_manager.register_callback_processor'):
-            # Should not raise exception even if send_message fails
-            await jira_dc_manager.start_job(mock_view)
+        # Should not raise exception even if send_message fails
+        await jira_dc_manager.start_job(mock_view)
 
 
 class TestGetIssueDetails:
@@ -926,6 +915,57 @@ class TestGetIssueDetails:
                 await jira_dc_manager.get_issue_details(
                     sample_job_context, 'bearer_token'
                 )
+
+    @pytest.mark.asyncio
+    async def test_get_issue_details_logs_diagnostic_on_401(
+        self, jira_dc_manager, sample_job_context
+    ):
+        """A 401 response must surface auth diagnostics before re-raising.
+
+        Without these fields (PAT length, WWW-Authenticate, X-Seraph-LoginReason,
+        X-AUSERNAME), a silently-rejected PAT is indistinguishable from a permission
+        error — operators cannot tell if the token was wrong, the user has no app
+        access, or the instance only accepts a different auth scheme.
+        """
+        # Arrange
+        pat = 'OdC2NTPATfullValueXyz123456789'
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.headers = {
+            'WWW-Authenticate': 'OAuth realm="https%3A%2F%2Fjira.example.com"',
+            'X-Seraph-LoginReason': 'AUTHENTICATED_FAILED',
+            'X-AUSERNAME': 'anonymous',
+        }
+        mock_response.text = '{"errorMessages":["Login Required"]}'
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Client error '401 Unauthorized'",
+            request=MagicMock(),
+            response=mock_response,
+        )
+
+        with patch('httpx.AsyncClient') as mock_client, patch(
+            'integrations.jira_dc.jira_dc_manager.logger'
+        ) as mock_logger:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
+            )
+
+            # Act
+            with pytest.raises(httpx.HTTPStatusError):
+                await jira_dc_manager.get_issue_details(sample_job_context, pat)
+
+        # Assert: log fires once, and carries every field operators need.
+        mock_logger.error.assert_called_once()
+        format_string, *log_args = mock_logger.error.call_args.args
+        assert log_args == [
+            f'{sample_job_context.base_api_url}/rest/api/2/issue/{sample_job_context.issue_key}',
+            len(pat),
+            pat[:6],
+            'OAuth realm="https%3A%2F%2Fjira.example.com"',
+            'AUTHENTICATED_FAILED',
+            'anonymous',
+            '{"errorMessages":["Login Required"]}',
+        ]
 
 
 class TestSendMessage:

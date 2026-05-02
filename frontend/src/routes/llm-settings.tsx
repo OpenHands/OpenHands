@@ -3,14 +3,13 @@ import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-defaults-guard";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { HelpLink } from "#/ui/help-link";
 import { useConfig } from "#/hooks/query/use-config";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
-import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
-import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import {
   SdkSectionHeaderProps,
   SdkSectionPage,
@@ -21,7 +20,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
-import { OrgWideSettingsBadge } from "#/components/features/settings/org-wide-settings-badge";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import {
   inferInitialView,
@@ -29,27 +27,12 @@ import {
 } from "#/utils/sdk-settings-schema";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 
-const LLM_EXCLUDED_KEYS = new Set([
-  "llm.model",
-  "llm.api_key",
-  "llm.base_url",
-  "agent",
-  "tools",
-  "mcp_config",
-]);
+const LLM_EXCLUDED_KEYS = new Set(["llm.model", "llm.api_key", "llm.base_url"]);
 
 const buildModelId = (provider: string | null, model: string | null) => {
   if (!provider || !model) return null;
   return `${provider}/${model}`;
 };
-
-const hasSchemaField = (
-  schema: SettingsSchema | null | undefined,
-  fieldKey: string,
-) =>
-  schema?.sections.some((section) =>
-    section.fields.some((field) => field.key === fieldKey),
-  ) ?? false;
 
 const getSchemaFieldDefaultValue = (
   schema: SettingsSchema | null | undefined,
@@ -58,14 +41,6 @@ const getSchemaFieldDefaultValue = (
   schema?.sections
     .flatMap((section) => section.fields)
     .find((field) => field.key === fieldKey)?.default ?? null;
-
-const getSchemaFieldChoices = (
-  schema: SettingsSchema | null | undefined,
-  fieldKey: string,
-) =>
-  schema?.sections
-    .flatMap((section) => section.fields)
-    .find((field) => field.key === fieldKey)?.choices ?? [];
 
 const KNOWN_PROVIDER_DEFAULT_BASE_URLS: Partial<Record<string, Set<string>>> = {
   openai: new Set(["https://api.openai.com", "https://api.openai.com/v1"]),
@@ -149,13 +124,10 @@ export function LlmSettingsScreen({
     settings?.agent_settings_schema,
   );
   const { data: config } = useConfig();
-  const { isTeamOrg } = useOrgTypeAndAccess();
 
   const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
     null,
   );
-  const [searchApiKey, setSearchApiKey] = React.useState("");
-  const [searchApiKeyDirty, setSearchApiKeyDirty] = React.useState(false);
   const hasHydratedInitialPersonalSaasViewRef = React.useRef(false);
 
   const defaultModel = String(
@@ -164,7 +136,6 @@ export function LlmSettingsScreen({
   );
 
   const isSaasMode = config?.app_mode === "saas";
-  const hasAgentField = hasSchemaField(schema, "agent");
 
   React.useEffect(() => {
     if (settings?.llm_model) {
@@ -172,11 +143,6 @@ export function LlmSettingsScreen({
       setSelectedProvider(provider || null);
     }
   }, [settings?.llm_model]);
-
-  React.useEffect(() => {
-    setSearchApiKey(settings?.search_api_key ?? "");
-    setSearchApiKeyDirty(false);
-  }, [settings?.search_api_key]);
 
   React.useEffect(() => {
     if (settings && isSaasMode && scope !== "org") {
@@ -197,11 +163,11 @@ export function LlmSettingsScreen({
   }, [searchParams, setSearchParams, t]);
 
   const infoMessageKey = React.useMemo((): I18nKey | null => {
-    if (!isSaasMode || !isTeamOrg) return null;
+    if (!isSaasMode) return null;
     return scope === "org"
       ? I18nKey.SETTINGS$ORG_DEFAULTS_INFO
       : I18nKey.SETTINGS$PERSONAL_AGENT_INFO;
-  }, [isSaasMode, isTeamOrg, scope]);
+  }, [isSaasMode, scope]);
 
   const getInitialView = React.useCallback(
     (
@@ -240,8 +206,6 @@ export function LlmSettingsScreen({
         typeof values["llm.base_url"] === "string"
           ? values["llm.base_url"]
           : "";
-      const agentValue =
-        typeof values.agent === "string" ? values.agent : undefined;
       const derivedProvider = modelValue
         ? extractModelAndProvider(modelValue).provider || null
         : null;
@@ -290,25 +254,8 @@ export function LlmSettingsScreen({
         );
       };
 
-      const agentItems = getSchemaFieldChoices(schema, "agent").map(
-        (choice) => ({
-          key: String(choice.value),
-          label: choice.label,
-        }),
-      );
-
-      if (
-        hasAgentField &&
-        agentValue &&
-        !agentItems.some((item) => item.key === agentValue)
-      ) {
-        agentItems.unshift({ key: agentValue, label: agentValue });
-      }
-
       return (
         <div className="flex flex-col gap-6">
-          {scope === "org" ? <OrgWideSettingsBadge /> : null}
-
           {infoMessageKey ? (
             <p
               data-testid="llm-settings-info-message"
@@ -380,72 +327,17 @@ export function LlmSettingsScreen({
                 "llm-api-key-input",
                 "llm-api-key-help-anchor-advanced",
               )}
-
-              {!isSaasMode ? (
-                <>
-                  <SettingsInput
-                    testId="search-api-key-input"
-                    label={t(I18nKey.SETTINGS$SEARCH_API_KEY)}
-                    type="password"
-                    className="w-full"
-                    value={searchApiKey}
-                    placeholder={t(I18nKey.API$TVLY_KEY_EXAMPLE)}
-                    onChange={(value) => {
-                      setSearchApiKey(value);
-                      setSearchApiKeyDirty(
-                        value !== (settings?.search_api_key ?? ""),
-                      );
-                    }}
-                    startContent={
-                      settings?.search_api_key_set ? (
-                        <KeyStatusIcon isSet={settings.search_api_key_set} />
-                      ) : undefined
-                    }
-                    isDisabled={isDisabled}
-                  />
-
-                  <HelpLink
-                    testId="search-api-key-help-anchor"
-                    text={t(I18nKey.SETTINGS$SEARCH_API_KEY_OPTIONAL)}
-                    linkText={t(I18nKey.SETTINGS$SEARCH_API_KEY_INSTRUCTIONS)}
-                    href="https://tavily.com/"
-                  />
-
-                  {hasAgentField ? (
-                    <SettingsDropdownInput
-                      testId="agent-input"
-                      name="agent-input"
-                      label={t(I18nKey.SETTINGS$AGENT)}
-                      items={agentItems}
-                      selectedKey={agentValue}
-                      isClearable={false}
-                      onSelectionChange={(key) => {
-                        if (key) {
-                          onChange("agent", String(key));
-                        }
-                      }}
-                      isDisabled={isDisabled}
-                      wrapperClassName="w-full"
-                    />
-                  ) : null}
-                </>
-              ) : null}
             </div>
           )}
         </div>
       );
     },
     [
-      hasAgentField,
       infoMessageKey,
       isSaasMode,
       defaultModel,
-      schema,
-      searchApiKey,
       selectedProvider,
       settings?.llm_api_key_set,
-      settings?.search_api_key,
-      settings?.search_api_key_set,
       t,
     ],
   );
@@ -460,11 +352,6 @@ export function LlmSettingsScreen({
     ) => {
       // basePayload is a nested dict (e.g. {llm: {model: "gpt-4"}})
       const agentSettings = structuredClone(basePayload);
-      const topLevel: Record<string, unknown> = {};
-
-      if (!isSaasMode && searchApiKeyDirty) {
-        topLevel.search_api_key = searchApiKey.trim();
-      }
 
       const modelValue =
         typeof context.values["llm.model"] === "string"
@@ -489,43 +376,37 @@ export function LlmSettingsScreen({
       if (context.view === "basic") {
         llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
         agentSettings.llm = llm;
-
-        if (!isSaasMode) {
-          topLevel.search_api_key = DEFAULT_SETTINGS.search_api_key;
-        }
-
-        if (hasAgentField) {
-          agentSettings.agent = getSchemaFieldDefaultValue(schema, "agent");
-        }
       }
 
-      return { agent_settings: agentSettings, ...topLevel };
+      return { agent_settings_diff: agentSettings };
     },
-    [
-      hasAgentField,
-      isSaasMode,
-      schema,
-      searchApiKey,
-      searchApiKeyDirty,
-      selectedProvider,
-    ],
+    [isSaasMode, schema, selectedProvider],
   );
 
   return (
     <SdkSectionPage
       scope={scope}
-      sectionKeys={["llm", "general"]}
+      sectionKeys={["llm"]}
       excludeKeys={LLM_EXCLUDED_KEYS}
       header={buildHeader}
-      extraDirty={searchApiKeyDirty}
       buildPayload={buildPayload}
-      onSaveSuccess={() => setSearchApiKeyDirty(false)}
       getInitialView={getInitialView}
+      forceShowAdvancedView
+      allowAllView={!isSaasMode}
       testId="llm-settings-screen"
     />
   );
 }
 
-export const clientLoader = createPermissionGuard("view_llm_settings");
+const orgDefaultsRedirectGuard = requireOrgDefaultsRedirect(
+  "/settings/org-defaults",
+);
+const llmPermissionGuard = createPermissionGuard("view_llm_settings");
+
+export const clientLoader = async (args: { request: Request }) => {
+  const blocked = await orgDefaultsRedirectGuard(args);
+  if (blocked) return blocked;
+  return llmPermissionGuard(args);
+};
 
 export default LlmSettingsScreen;

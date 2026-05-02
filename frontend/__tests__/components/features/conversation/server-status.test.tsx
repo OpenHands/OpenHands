@@ -58,7 +58,7 @@ describe("ServerStatus", () => {
   // Helper function to mock agent state with specific state
   const mockAgentStore = (agentState: AgentState) => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: agentState,
+      curAgentState: agentState, isArchived: false,
     });
   };
 
@@ -147,7 +147,7 @@ describe("ServerStatusContextMenu", () => {
   // Helper function to mock agent state with specific state
   const mockAgentStore = (agentState: AgentState) => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: agentState,
+      curAgentState: agentState, isArchived: false,
     });
   };
 

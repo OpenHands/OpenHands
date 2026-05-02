@@ -144,7 +144,7 @@ class TestGetOrgInfoFromContext:
         from server.routes.users_v1 import _get_org_info_from_context
 
         from openhands.app_server.user.auth_user_context import AuthUserContext
-        from openhands.server.user_auth.user_auth import UserAuth
+        from openhands.app_server.user_auth.user_auth import UserAuth
 
         # Create AuthUserContext with a non-SaasUserAuth
         mock_user_auth = MagicMock(spec=UserAuth)

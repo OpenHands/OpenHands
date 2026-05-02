@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.middleware.cors import CORSMiddleware
 
-from openhands.server.middleware import LocalhostCORSMiddleware
+from openhands.app_server.middleware import LocalhostCORSMiddleware
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def test_localhost_cors_middleware_init_with_config():
         'https://test.com',
     ]
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app = FastAPI()
         middleware = LocalhostCORSMiddleware(app)
@@ -44,7 +44,7 @@ def test_localhost_cors_middleware_init_without_config():
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = []
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app = FastAPI()
         middleware = LocalhostCORSMiddleware(app)
@@ -58,7 +58,7 @@ def test_localhost_cors_middleware_is_allowed_origin_localhost(app):
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = []
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app.add_middleware(LocalhostCORSMiddleware)
         client = TestClient(app)
@@ -90,7 +90,7 @@ def test_localhost_cors_middleware_is_allowed_origin_non_localhost(app):
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = ['https://example.com']
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app.add_middleware(LocalhostCORSMiddleware)
         client = TestClient(app)
@@ -112,7 +112,7 @@ def test_localhost_cors_middleware_missing_origin(app):
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = []
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app.add_middleware(LocalhostCORSMiddleware)
         client = TestClient(app)
@@ -134,7 +134,7 @@ def test_localhost_cors_middleware_cors_parameters():
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = []
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         # We need to inspect the initialization parameters rather than attributes
         # since CORSMiddleware doesn't expose these as attributes

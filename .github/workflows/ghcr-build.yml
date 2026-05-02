@@ -1,17 +1,13 @@
-# Workflow that builds, tests and then pushes the OpenHands and runtime docker images to the ghcr.io repository
+# Workflow that builds and pushes the OpenHands app and enterprise Docker images to ghcr.io.
+# Per-image build logic lives in .github/workflows/_build-image.yml.
 name: Docker
 
-# Always run on "main"
-# Always run on tags
-# Always run on PRs
-# Can also be triggered manually
 on:
   push:
     branches:
       - main
       - "saas-rel-*"
-    tags:
-      - "*"
+      - "oss-rel-*"
   pull_request:
   workflow_dispatch:
     inputs:
@@ -20,401 +16,37 @@ on:
         required: true
         default: ""
 
-# If triggered by a PR, it will be in the same group. However, each commit on main will be in its own unique group
+# PR events share a group so pushes supersede each other; each commit on a release branch gets its own group.
 concurrency:
   group: ${{ github.workflow }}-${{ (github.head_ref && github.ref) || github.run_id }}
   cancel-in-progress: true
 
-env:
-  RELEVANT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-
 jobs:
-  define-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      base_image: ${{ steps.define-base-images.outputs.base_image }}
-      architectures: ${{ steps.define-base-images.outputs.architectures }}
-    steps:
-      - name: Define base images
-        shell: bash
-        id: define-base-images
-        run: |
-          architectures='["amd64", "arm64"]'
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik" }
-              ]')
-          else
-            json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22-slim", tag: "nikolaik" },
-                { image: "ubuntu:24.04", tag: "ubuntu" }
-              ]')
-          fi
-          echo "base_image=$json" >> "$GITHUB_OUTPUT"
-          echo "architectures=$architectures" >> "$GITHUB_OUTPUT"
-
-  # Builds the OpenHands Docker images (one per architecture, natively)
-  ghcr_build_app:
-    name: Build App Image (${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-22.04' }}
-    if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ext-v'))"
-    needs: define-matrix
-    outputs:
-      # All arch variants produce the same base tags, so any entry works
-      base_tags: ${{ steps.build.outputs.base_tags }}
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        arch: ${{ fromJson(needs.define-matrix.outputs.architectures) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Lowercase Repository Owner
-        run: |
-          echo REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
-      - name: Build and push app image
-        id: build
-        if: "!github.event.pull_request.head.repo.fork"
-        run: |
-          ./containers/build.sh -i openhands -o ${{ env.REPO_OWNER }} --push --arch ${{ matrix.arch }}
-
-          # Output base tags (without arch suffix) for the merge job
-          ./containers/build.sh -i openhands -o ${{ env.REPO_OWNER }} --arch ${{ matrix.arch }} --dry
-          BASE_TAGS=$(jq -r '.base_tags | join("\n")' docker-build-dry.json)
-          echo "base_tags<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$BASE_TAGS" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-  # Merges per-architecture app images into a multi-arch manifest
-  ghcr_build_app_merge:
-    name: Merge App Multi-Arch Manifest
-    runs-on: ubuntu-22.04
-    needs: [define-matrix, ghcr_build_app]
+  build_app:
+    name: App
     if: github.event.pull_request.head.repo.fork != true
-    permissions:
-      packages: write
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Merge multi-arch manifest
-        run: |
-          ARCHS='${{ join(fromJson(needs.define-matrix.outputs.architectures), ' ') }}'
-          TAGS="${{ needs.ghcr_build_app.outputs.base_tags }}"
-          while IFS= read -r tag; do
-            [[ -z "$tag" ]] && continue
-            sources=""
-            for arch in $ARCHS; do
-              if ! docker buildx imagetools inspect "${tag}-${arch}" > /dev/null 2>&1; then
-                echo "::error::Missing image ${tag}-${arch}"
-                exit 1
-              fi
-              sources+=" ${tag}-${arch}"
-            done
-            echo "Creating manifest for $tag from:$sources"
-            docker buildx imagetools create -t "$tag" $sources
-          done <<< "$TAGS"
+    uses: ./.github/workflows/_build-image.yml
+    with:
+      image: ghcr.io/openhands/openhands
+      dockerfile: containers/app/Dockerfile
 
-  # Builds the runtime Docker images (one per architecture x base_image, natively)
-  ghcr_build_runtime:
-    name: Build Runtime Image (${{ matrix.base_image.tag }}, ${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-22.04' }}
-    if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ext-v'))"
-    permissions:
-      contents: read
-      packages: write
-    needs: define-matrix
-    outputs:
-      # Keyed by base_image tag so the merge job can access per-variant tags.
-      # Matrix outputs from different entries with the same key overwrite each other,
-      # but all arch variants of the same base_image produce identical base tags.
-      base_tags_nikolaik: ${{ steps.params.outputs.base_tags_nikolaik }}
-      base_tags_ubuntu: ${{ steps.params.outputs.base_tags_ubuntu }}
-    strategy:
-      matrix:
-        base_image: ${{ fromJson(needs.define-matrix.outputs.base_image) }}
-        arch: ${{ fromJson(needs.define-matrix.outputs.architectures) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Install poetry via pipx
-        run: pipx install poetry
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: poetry
-      - name: Install Python dependencies using Poetry
-        run: make install-python-dependencies POETRY_GROUP=main INSTALL_PLAYWRIGHT=0
-      - name: Create source distribution and Dockerfile
-        run: poetry run python3 -m openhands.runtime.utils.runtime_build --base_image ${{ matrix.base_image.image }} --build_folder containers/runtime --force_rebuild
-      - name: Lowercase Repository Owner
-        run: |
-          echo REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
-      - name: Short SHA
-        run: |
-          echo SHORT_SHA=$(git rev-parse --short "$RELEVANT_SHA") >> $GITHUB_ENV
-      - name: Determine docker build params
-        id: params
-        if: github.event.pull_request.head.repo.fork != true
-        shell: bash
-        run: |
-          ./containers/build.sh -i runtime -o ${{ env.REPO_OWNER }} -t ${{ matrix.base_image.tag }} --arch ${{ matrix.arch }} --dry
-
-          DOCKER_BUILD_JSON=$(jq -c . < docker-build-dry.json)
-          echo "DOCKER_TAGS=$(echo "$DOCKER_BUILD_JSON" | jq -r '.tags | join(",")')" >> $GITHUB_ENV
-          echo "DOCKER_PLATFORM=$(echo "$DOCKER_BUILD_JSON" | jq -r '.platform')" >> $GITHUB_ENV
-          echo "DOCKER_BUILD_ARGS=$(echo "$DOCKER_BUILD_JSON" | jq -r '.build_args | join(",")')" >> $GITHUB_ENV
-
-          # Output base tags (without arch suffix) keyed by base_image tag for the merge job
-          BASE_TAGS=$(echo "$DOCKER_BUILD_JSON" | jq -r '.base_tags | join("\n")')
-          echo "base_tags_${{ matrix.base_image.tag }}<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$BASE_TAGS" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-      - name: Build and push runtime image ${{ matrix.base_image.image }}
-        if: github.event.pull_request.head.repo.fork != true
-        uses: docker/build-push-action@v7
-        with:
-          push: true
-          tags: ${{ env.DOCKER_TAGS }}
-          platforms: ${{ env.DOCKER_PLATFORM }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime:buildcache-${{ matrix.base_image.tag }}-${{ matrix.arch }}
-          cache-to: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime:buildcache-${{ matrix.base_image.tag }}-${{ matrix.arch }},mode=max
-          build-args: ${{ env.DOCKER_BUILD_ARGS }}
-          context: containers/runtime
-          provenance: false
-      # Forked repos can't push to GHCR, so we just build in order to populate the cache for rebuilding
-      - name: Build runtime image ${{ matrix.base_image.image }} for fork
-        if: github.event.pull_request.head.repo.fork
-        uses: docker/build-push-action@v7
-        with:
-          tags: ghcr.io/${{ env.REPO_OWNER }}/runtime:${{ env.RELEVANT_SHA }}-${{ matrix.base_image.tag }}
-          context: containers/runtime
-      - name: Upload runtime source for fork
-        if: github.event.pull_request.head.repo.fork
-        uses: actions/upload-artifact@v7
-        with:
-          name: runtime-src-${{ matrix.base_image.tag }}-${{ matrix.arch }}
-          path: containers/runtime
-
-  # Merges per-architecture runtime images into multi-arch manifests
-  ghcr_build_runtime_merge:
-    name: Merge Runtime Multi-Arch Manifest
-    runs-on: ubuntu-22.04
-    needs: [define-matrix, ghcr_build_runtime]
+  build_enterprise:
+    name: Enterprise
     if: github.event.pull_request.head.repo.fork != true
-    permissions:
-      packages: write
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Merge multi-arch manifests
-        run: |
-          ARCHS='${{ join(fromJson(needs.define-matrix.outputs.architectures), ' ') }}'
-
-          # Merge all runtime base_image variants
-          for variant_tags in \
-            "${{ needs.ghcr_build_runtime.outputs.base_tags_nikolaik }}" \
-            "${{ needs.ghcr_build_runtime.outputs.base_tags_ubuntu }}"; do
-            while IFS= read -r tag; do
-              [[ -z "$tag" ]] && continue
-              sources=""
-              for arch in $ARCHS; do
-                if ! docker buildx imagetools inspect "${tag}-${arch}" > /dev/null 2>&1; then
-                  echo "::error::Missing image ${tag}-${arch}"
-                  exit 1
-                fi
-                sources+=" ${tag}-${arch}"
-              done
-              echo "Creating manifest for $tag from:$sources"
-              docker buildx imagetools create -t "$tag" $sources
-            done <<< "$variant_tags"
-          done
-
-  ghcr_build_enterprise:
-    name: Push Enterprise Image (${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-22.04' }}
-    permissions:
-      contents: read
-      packages: write
-    needs: [define-matrix, ghcr_build_app_merge]
-    # Do not build enterprise in forks
-    if: github.event.pull_request.head.repo.fork != true
-    outputs:
-      # Tags without arch suffix, for the merge job
-      base_tags: ${{ steps.meta_base.outputs.tags }}
-    strategy:
-      matrix:
-        arch: ${{ fromJson(needs.define-matrix.outputs.architectures) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      # Set up Docker Buildx for better performance
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: network=host
-
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/openhands/enterprise-server
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
-            type=sha,format=long
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=match,pattern=cloud-\d+\.\d+\.\d+
-          flavor: |
-            latest=auto
-            prefix=
-            suffix=-${{ matrix.arch }}
-        env:
-          DOCKER_METADATA_PR_HEAD_SHA: true
-
-      # Also compute base tags (no arch suffix) for the merge job output
-      - name: Extract base metadata for merge
-        id: meta_base
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/openhands/enterprise-server
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
-            type=sha,format=long
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=match,pattern=cloud-\d+\.\d+\.\d+
-          flavor: |
-            latest=auto
-            prefix=
-            suffix=
-        env:
-          DOCKER_METADATA_PR_HEAD_SHA: true
-
-      - name: Determine app image tag
-        shell: bash
-        run: |
-          # Use the commit SHA to pin the exact app image built by ghcr_build_app,
-          # rather than a mutable branch tag like "main" which can serve stale cached layers.
-          echo "OPENHANDS_DOCKER_TAG=${RELEVANT_SHA}" >> $GITHUB_ENV
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: enterprise/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            OPENHANDS_VERSION=${{ env.OPENHANDS_DOCKER_TAG }}
-          platforms: linux/${{ matrix.arch }}
-          # Add build provenance
-          provenance: true
-          # Add build attestations for better security
-          sbom: true
-
-  # Merges per-architecture enterprise images into a multi-arch manifest
-  ghcr_build_enterprise_merge:
-    name: Merge Enterprise Multi-Arch Manifest
-    runs-on: ubuntu-22.04
-    permissions:
-      packages: write
-    needs: [define-matrix, ghcr_build_enterprise]
-    if: github.event.pull_request.head.repo.fork != true
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Merge multi-arch manifest
-        run: |
-          ARCHS='${{ join(fromJson(needs.define-matrix.outputs.architectures), ' ') }}'
-          TAGS="${{ needs.ghcr_build_enterprise.outputs.base_tags }}"
-          while IFS= read -r tag; do
-            [[ -z "$tag" ]] && continue
-            sources=""
-            for arch in $ARCHS; do
-              if ! docker buildx imagetools inspect "${tag}-${arch}" > /dev/null 2>&1; then
-                echo "::error::Missing image ${tag}-${arch}"
-                exit 1
-              fi
-              sources+=" ${tag}-${arch}"
-            done
-            echo "Creating manifest for $tag from:$sources"
-            docker buildx imagetools create -t "$tag" $sources
-          done <<< "$TAGS"
-
-  # "All Runtime Tests Passed" is a required job for PRs to merge
-  # We can remove this once the config changes
-  runtime_tests_check_success:
-    name: All Runtime Tests Passed
-    runs-on: ubuntu-22.04
-    steps:
-      - name: All tests passed
-        run: echo "All runtime tests have passed successfully!"
+    needs: build_app
+    uses: ./.github/workflows/_build-image.yml
+    with:
+      image: ghcr.io/openhands/enterprise-server
+      dockerfile: enterprise/Dockerfile
+      extra-build-args: OPENHANDS_VERSION=sha-${{ github.event.pull_request.head.sha || github.sha }}
+      provenance: true
+      sbom: true
+      buildx-driver-opts: network=host
 
   update_pr_description:
     name: Update PR Description
     if: github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]'
-    needs: [ghcr_build_runtime_merge]
+    needs: build_app
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -422,7 +54,7 @@ jobs:
 
       - name: Get short SHA
         id: short_sha
-        run: echo "SHORT_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+        run: echo "SHORT_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
       - name: Update PR Description
         env:
@@ -433,4 +65,4 @@ jobs:
         shell: bash
         run: |
           echo "Updating PR description with Docker and uvx commands"
-          bash ${GITHUB_WORKSPACE}/.github/scripts/update_pr_description.sh
+          bash "${GITHUB_WORKSPACE}/.github/scripts/update_pr_description.sh"

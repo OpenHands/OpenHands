@@ -2,11 +2,13 @@
 name: PR Review by OpenHands
 
 on:
-    # TEMPORARY MITIGATION (Clinejection hardening)
-    #
-    # We temporarily avoid `pull_request_target` here. We'll restore it after the PR review
-    # workflow is fully hardened for untrusted execution.
+    # Use pull_request for same-repo PRs so workflow changes can self-verify in PRs.
     pull_request:
+        types: [opened, ready_for_review, labeled, review_requested]
+    # Use pull_request_target for fork PRs.
+    # The bot token used here is intentionally scoped to PR review operations,
+    # so the remaining blast radius is bounded even though PR content is untrusted.
+    pull_request_target:
         types: [opened, ready_for_review, labeled, review_requested]
 
 permissions:
@@ -16,13 +18,33 @@ permissions:
 
 jobs:
     pr-review:
-        # Note: fork PRs will not have access to repository secrets under `pull_request`.
-        # Skip forks to avoid noisy failures until we restore a hardened `pull_request_target` flow.
+        # Run on same-repo PRs via pull_request and on fork PRs via pull_request_target.
+        # Trigger when one of the following conditions is met:
+        #   1. A new non-draft PR is opened by a non-first-time contributor, OR
+        #   2. A draft PR is converted to ready for review by a non-first-time contributor, OR
+        #   3. The 'review-this' label is added, OR
+        #   4. openhands-agent or all-hands-bot is requested as a reviewer
+        # Note: FIRST_TIME_CONTRIBUTOR and NONE PRs require manual trigger via label/reviewer request.
+        # Trigger logic:
+        #   1. Route same-repo PRs through `pull_request` and fork PRs through `pull_request_target`
+        #   2. Auto-trigger on `opened` / `ready_for_review` for non-first-time contributors
+        #   3. Always allow manual triggers via `review-this` or reviewer request
+        # The author association check is duplicated intentionally for both
+        # auto-triggered actions (`opened` and `ready_for_review`).
         if: |
-            github.event.pull_request.head.repo.full_name == github.repository &&
             (
-                (github.event.action == 'opened' && github.event.pull_request.draft == false) ||
-                github.event.action == 'ready_for_review' ||
+                (
+                    github.event_name == 'pull_request' &&
+                    github.event.pull_request.head.repo.full_name == github.repository
+                ) ||
+                (
+                    github.event_name == 'pull_request_target' &&
+                    github.event.pull_request.head.repo.full_name != github.repository
+                )
+            ) &&
+            (
+                (github.event.action == 'opened' && github.event.pull_request.draft == false && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' && github.event.pull_request.author_association != 'NONE') ||
+                (github.event.action == 'ready_for_review' && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' && github.event.pull_request.author_association != 'NONE') ||
                 (github.event.action == 'labeled' && github.event.label.name == 'review-this') ||
                 (
                     github.event.action == 'review_requested' &&
@@ -44,5 +66,5 @@ jobs:
                   llm-base-url: https://llm-proxy.app.all-hands.dev
                   review-style: roasted
                   llm-api-key: ${{ secrets.LLM_API_KEY }}
-                  github-token: ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}
+                  github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
                   lmnr-api-key: ${{ secrets.LMNR_SKILLS_API_KEY }}

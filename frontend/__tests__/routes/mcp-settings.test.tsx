@@ -72,6 +72,52 @@ beforeEach(() => {
 });
 
 describe("MCPSettingsScreen", () => {
+  it("renders and saves the built-in Tavily search settings on the MCP page", async () => {
+    let persistedSettings = buildSettings({
+      search_api_key: "tavily-key",
+      search_api_key_set: true,
+    });
+
+    vi.spyOn(SettingsService, "getSettings").mockImplementation(async () =>
+      structuredClone(persistedSettings),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation(async (payload) => {
+        persistedSettings = buildSettings(
+          deepMerge(
+            structuredClone(persistedSettings) as Record<string, unknown>,
+            payload as Record<string, unknown>,
+          ) as Partial<Settings>,
+        );
+        return true;
+      });
+
+    renderMcpSettingsScreen();
+
+    expect(
+      await screen.findByTestId("mcp-search-settings-section"),
+    ).toBeInTheDocument();
+    const searchApiKeyInput = await screen.findByTestId("search-api-key-input");
+    expect(searchApiKeyInput).toHaveValue("tavily-key");
+
+    await userEvent.clear(searchApiKeyInput);
+    await userEvent.type(searchApiKeyInput, "updated-tavily-key");
+    await userEvent.click(screen.getByTestId("save-search-api-key-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith({
+        search_api_key: "updated-tavily-key",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("search-api-key-input")).toHaveValue(
+        "updated-tavily-key",
+      );
+    });
+  });
+
   it("removes a newly added MCP server after the delete flow completes", async () => {
     let persistedSettings = buildSettings();
 
@@ -80,12 +126,28 @@ describe("MCPSettingsScreen", () => {
     );
     vi.spyOn(SettingsService, "saveSettings").mockImplementation(
       async (payload) => {
-        persistedSettings = buildSettings(
-          deepMerge(
-            structuredClone(persistedSettings) as Record<string, unknown>,
-            payload as Record<string, unknown>,
-          ) as Partial<Settings>,
-        );
+        const nextSettings = structuredClone(persistedSettings) as Record<
+          string,
+          unknown
+        >;
+        const agentSettingsPatch = (payload as Record<string, unknown>)
+          .agent_settings_diff as Record<string, unknown> | undefined;
+
+        if (agentSettingsPatch) {
+          nextSettings.agent_settings = deepMerge(
+            (nextSettings.agent_settings ?? {}) as Record<string, unknown>,
+            agentSettingsPatch,
+          );
+        }
+
+        for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+          if (key === "agent_settings_diff") {
+            continue;
+          }
+          nextSettings[key] = value;
+        }
+
+        persistedSettings = buildSettings(nextSettings as Partial<Settings>);
         return true;
       },
     );

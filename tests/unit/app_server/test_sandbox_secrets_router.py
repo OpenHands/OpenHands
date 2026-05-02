@@ -16,6 +16,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.integrations.provider import ProviderHandler, ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
     SandboxStatus,
@@ -32,8 +34,6 @@ from openhands.app_server.sandbox.session_auth import (
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.user.user_router import get_current_user
-from openhands.integrations.provider import ProviderHandler, ProviderToken
-from openhands.integrations.service_types import ProviderType
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import StaticSecret
 from openhands.sdk.settings import AgentSettings
@@ -135,7 +135,7 @@ class TestValidateSessionKey:
             mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
             mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            from openhands.server.types import AppMode
+            from openhands.app_server.types import AppMode
 
             mock_cfg.return_value.app_mode = AppMode.SAAS
 
@@ -143,6 +143,105 @@ class TestValidateSessionKey:
                 await validate_session_key('valid-key')
         assert exc_info.value.status_code == 401
         assert 'no user' in exc_info.value.detail
+
+    # -------------------------------------------------------------------------
+    # Security: Status check tests (prevents leaked session keys from being
+    # used after sandbox is paused/stopped/deleted)
+    # -------------------------------------------------------------------------
+
+    async def test_rejects_paused_sandbox(self):
+        """Session key for PAUSED sandbox raises 401 - security mitigation."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.PAUSED,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await validate_session_key('valid-key')
+        assert exc_info.value.status_code == 401
+        assert 'not running' in exc_info.value.detail
+
+    async def test_rejects_missing_sandbox(self):
+        """Session key for MISSING sandbox raises 401 - security mitigation."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.MISSING,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await validate_session_key('valid-key')
+        assert exc_info.value.status_code == 401
+        assert 'not running' in exc_info.value.detail
+
+    async def test_rejects_error_sandbox(self):
+        """Session key for ERROR sandbox raises 401 - security mitigation."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.ERROR,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await validate_session_key('valid-key')
+        assert exc_info.value.status_code == 401
+        assert 'not running' in exc_info.value.detail
+
+    async def test_rejects_starting_sandbox(self):
+        """Session key for STARTING sandbox raises 401 - must wait for RUNNING."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.STARTING,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await validate_session_key('valid-key')
+        assert exc_info.value.status_code == 401
+        assert 'not running' in exc_info.value.detail
+
+    async def test_accepts_running_sandbox(self):
+        """Session key for RUNNING sandbox is accepted."""
+        sandbox = SandboxInfo(
+            id=SANDBOX_ID,
+            created_by_user_id=USER_ID,
+            sandbox_spec_id='test-spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='session-key',
+        )
+        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        with ctx as mock_get:
+            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
+            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await validate_session_key('valid-key')
+        assert result.id == SANDBOX_ID
+        assert result.status == SandboxStatus.RUNNING
 
 
 # ---------------------------------------------------------------------------

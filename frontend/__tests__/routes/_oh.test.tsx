@@ -25,6 +25,7 @@ describe("frontend/routes/_oh", () => {
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       };
 
       return {
@@ -145,6 +146,7 @@ describe("frontend/routes/_oh", () => {
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
     });
 
@@ -186,6 +188,7 @@ describe("frontend/routes/_oh", () => {
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
     });
     useConfigMock.mockReturnValue({
@@ -277,6 +280,7 @@ describe("frontend/routes/_oh", () => {
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
     });
     useConfigMock.mockReturnValue({

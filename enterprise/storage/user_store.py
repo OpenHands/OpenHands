@@ -109,10 +109,10 @@ class UserStore:
 
     @staticmethod
     def _get_redis_client():
-        """Get the Redis client from the Socket.IO manager."""
-        from openhands.server.shared import sio
+        """Get the shared async Redis client from enterprise storage."""
+        from storage.redis import get_redis_client_async
 
-        return getattr(sio.manager, 'redis', None)
+        return get_redis_client_async()
 
     @staticmethod
     async def _acquire_user_creation_lock(user_id: str) -> bool:
@@ -121,19 +121,21 @@ class UserStore:
         Returns True if the lock was acquired or if Redis is unavailable (fallback to no locking).
         Returns False if another process holds the lock.
         """
+        from storage.redis import redis_exceptions
+
         redis_client = UserStore._get_redis_client()
-        if redis_client is None:
+        try:
+            user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
+            lock_acquired = await redis_client.set(
+                user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
+            )
+            return bool(lock_acquired)
+        except redis_exceptions.RedisError:
             logger.warning(
-                'user_store:_acquire_user_creation_lock:no_redis_client',
+                'user_store:_acquire_user_creation_lock:redis_error',
                 extra={'user_id': user_id},
             )
-            return True  # Proceed without locking if Redis is unavailable
-
-        user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
-        lock_acquired = await redis_client.set(
-            user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
-        )
-        return bool(lock_acquired)
+            return True  # Proceed without locking on error
 
     @staticmethod
     async def _release_user_creation_lock(user_id: str) -> bool:
@@ -142,17 +144,19 @@ class UserStore:
         Returns True if the lock was released or if Redis is unavailable.
         Returns False if the lock could not be released.
         """
+        from storage.redis import redis_exceptions
+
         redis_client = UserStore._get_redis_client()
-        if redis_client is None:
+        try:
+            user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
+            deleted = await redis_client.delete(user_key)
+            return bool(deleted)
+        except redis_exceptions.RedisError:
             logger.warning(
-                'user_store:_release_user_creation_lock:no_redis_client',
+                'user_store:_release_user_creation_lock:redis_error',
                 extra={'user_id': user_id},
             )
-            return True  # Nothing to release if Redis is unavailable
-
-        user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
-        deleted = await redis_client.delete(user_key)
-        return bool(deleted)
+            return True  # Proceed without locking on error
 
     @staticmethod
     async def migrate_user(
@@ -230,19 +234,10 @@ class UserStore:
 
             from storage.org_store import OrgStore
 
-            org_kwargs = OrgStore.get_kwargs_from_user_settings(decrypted_user_settings)
-            org_kwargs.pop('id', None)
-
-            # If the user has custom settings, keep the org defaults minimal.
-            if custom_settings:
-                org_kwargs['agent_settings'] = {
-                    'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
-                    'llm': {
-                        'model': get_default_litellm_model(),
-                        'base_url': LITE_LLM_API_URL,
-                    },
-                }
-                org_kwargs['org_version'] = ORG_SETTINGS_VERSION
+            org_kwargs = UserStore._get_org_kwargs_for_migration(
+                decrypted_user_settings,
+                custom_settings=custom_settings,
+            )
 
             for key, value in org_kwargs.items():
                 if hasattr(org, key):
@@ -940,7 +935,7 @@ class UserStore:
     from typing import TYPE_CHECKING
 
     if TYPE_CHECKING:
-        from openhands.storage.data_models.settings import Settings
+        from openhands.app_server.settings.settings_models import Settings
 
     @staticmethod
     async def create_default_settings(
@@ -954,7 +949,7 @@ class UserStore:
         if not org_id:
             return None
 
-        from openhands.storage.data_models.settings import Settings
+        from openhands.app_server.settings.settings_models import Settings
 
         default_settings = Settings(
             language='en', enable_proactive_conversation_starters=True
@@ -1058,13 +1053,33 @@ class UserStore:
             if org.sandbox_api_key
             else None,
             max_budget_per_task=org.max_budget_per_task,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             sandbox_grouping_strategy=org.sandbox_grouping_strategy,
             agent_settings=agent_settings,
             conversation_settings=conversation_settings,
             already_migrated=False,
         )
+
+    @staticmethod
+    def _get_org_kwargs_for_migration(
+        user_settings: UserSettings, *, custom_settings: bool
+    ) -> dict:
+        from storage.org_store import OrgStore
+
+        org_kwargs = OrgStore.get_kwargs_from_user_settings(user_settings)
+        org_kwargs.pop('id', None)
+        org_kwargs['org_version'] = ORG_SETTINGS_VERSION
+
+        if custom_settings:
+            org_kwargs['agent_settings'] = {
+                'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
+                'llm': {
+                    'model': get_default_litellm_model(),
+                    'base_url': LITE_LLM_API_URL,
+                },
+            }
+
+        return org_kwargs
 
     @staticmethod
     def _has_custom_settings(
