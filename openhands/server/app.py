@@ -21,8 +21,8 @@ security_api_router = _load_optional_security_api_router()
 # For backward compatibility, this module re-exports the app from openhands.app_server.app.
 # Use openhands.server.listen or openhands.app_server.app directly for the fully configured
 # application (middleware, static files, etc.).
-
-from openhands.app_server.app import (
+# Imports from app_server must follow optional legacy hooks (agenthub registration).
+from openhands.app_server.app import (  # noqa: E402
     app,
     authentication_error_handler,
     combine_lifespans,
@@ -32,4 +32,4 @@ from openhands.app_server.app import (
 if security_api_router is not None:
     app.include_router(security_api_router)
 
-__all__ = ["app", "mcp_app", "combine_lifespans", "authentication_error_handler"]
+__all__ = ['app', 'mcp_app', 'combine_lifespans', 'authentication_error_handler']

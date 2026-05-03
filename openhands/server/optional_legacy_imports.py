@@ -15,9 +15,9 @@ def _import_optional_agenthub() -> None:
     all other import errors to avoid hiding real failures.
     """
     try:
-        importlib.import_module("openhands.agenthub")
+        importlib.import_module('openhands.agenthub')
     except ModuleNotFoundError as exc:
-        if exc.name != "openhands.agenthub":
+        if exc.name != 'openhands.agenthub':
             raise
 
 
@@ -28,9 +28,9 @@ def _load_optional_security_api_router():
     tree or a bad merge) while still surfacing unrelated import errors.
     """
     try:
-        mod = importlib.import_module("openhands.server.routes.security")
+        mod = importlib.import_module('openhands.server.routes.security')
     except ModuleNotFoundError as exc:
-        if exc.name != "openhands.server.routes.security":
+        if exc.name != 'openhands.server.routes.security':
             raise
         return None
     return mod.app
