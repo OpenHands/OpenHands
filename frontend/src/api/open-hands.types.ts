@@ -131,13 +131,6 @@ export interface IOption<T> {
   value: T;
 }
 
-export interface MicroagentContentResponse {
-  content: string;
-  path: string;
-  git_provider: Provider;
-  triggers: string[];
-}
-
 export type GetFilesResponse = string[];
 
 export interface GetFileResponse {

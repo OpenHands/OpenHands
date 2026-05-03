@@ -12,6 +12,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
+from openhands.app_server.conversation_paths import V1_CONVERSATIONS_DIR
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
@@ -60,7 +61,7 @@ class EventServiceBase(EventService, ABC):
             conversation_info = await task
             if conversation_info and conversation_info.created_by_user_id:
                 path /= conversation_info.created_by_user_id
-        path = path / 'v1_conversations' / conversation_id.hex
+        path = path / V1_CONVERSATIONS_DIR / conversation_id.hex
         return path
 
     async def get_event(self, conversation_id: UUID, event_id: UUID) -> Event | None:

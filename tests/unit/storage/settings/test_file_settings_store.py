@@ -4,17 +4,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
-from openhands.core.config.openhands_config import OpenHandsConfig
+from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.settings.file_settings_store import FileSettingsStore
+from openhands.app_server.settings.settings_models import Settings
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.data_models.settings import Settings
-from openhands.storage.files import FileStore
-from openhands.storage.settings.file_settings_store import FileSettingsStore
-
-
-@pytest.fixture
-def mock_file_store():
-    return MagicMock(spec=FileStore)
 
 
 @pytest.fixture(autouse=True)
@@ -24,18 +18,19 @@ def allow_short_context_windows():
 
 
 @pytest.fixture
+def mock_file_store():
+    return MagicMock(spec=FileStore)
+
+
+@pytest.fixture
 def file_settings_store(mock_file_store):
     return FileSettingsStore(mock_file_store)
 
 
 @pytest.mark.asyncio
 async def test_load_nonexistent_data(file_settings_store):
-    with patch(
-        'openhands.storage.data_models.settings.load_openhands_config',
-        MagicMock(return_value=OpenHandsConfig()),
-    ):
-        file_settings_store.file_store.read.side_effect = FileNotFoundError()
-        assert await file_settings_store.load() is None
+    file_settings_store.file_store.read.side_effect = FileNotFoundError()
+    assert await file_settings_store.load() is None
 
 
 @pytest.mark.asyncio
@@ -103,22 +98,15 @@ async def test_store_and_load_data(file_settings_store):
 
 @pytest.mark.asyncio
 async def test_get_instance():
-    config = OpenHandsConfig(file_store='local', file_store_path='/test/path')
+    mock_store = MagicMock(spec=FileStore)
 
-    with patch(
-        'openhands.storage.settings.file_settings_store.get_file_store'
-    ) as mock_get_store:
-        mock_store = MagicMock(spec=FileStore)
-        mock_get_store.return_value = mock_store
+    with patch('openhands.app_server.config.get_global_config') as mock_get_config:
+        mock_config = MagicMock()
+        mock_config.file_store = mock_store
+        mock_get_config.return_value = mock_config
 
-        store = await FileSettingsStore.get_instance(config, None)
+        store = await FileSettingsStore.get_instance(None)
 
         assert isinstance(store, FileSettingsStore)
         assert store.file_store == mock_store
-        mock_get_store.assert_called_once_with(
-            file_store_type='local',
-            file_store_path='/test/path',
-            file_store_web_hook_url=None,
-            file_store_web_hook_headers=None,
-            file_store_web_hook_batch=False,
-        )
+        mock_get_config.assert_called_once()

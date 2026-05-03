@@ -1,8 +1,11 @@
 import { OpenHandsEvent, ActionEvent } from "#/types/v1/core";
 import { GenericEventMessage } from "../../../features/chat/generic-event-message";
 import { getEventContent } from "../event-content-helpers/get-event-content";
-import { getObservationResult } from "../event-content-helpers/get-observation-result";
-import { isObservationEvent } from "#/types/v1/type-guards";
+import {
+  getACPToolCallResult,
+  getObservationResult,
+} from "../event-content-helpers/get-observation-result";
+import { isACPToolCallEvent, isObservationEvent } from "#/types/v1/type-guards";
 import {
   SkillReadyEvent,
   isSkillReadyEvent,
@@ -39,6 +42,8 @@ export function GenericEventMessageWrapper({
     success = "success";
   } else if (isObservationEvent(event)) {
     success = getObservationResult(event);
+  } else if (isACPToolCallEvent(event)) {
+    success = getACPToolCallResult(event);
   }
 
   // For Skill Ready events with items, render expandable skill list

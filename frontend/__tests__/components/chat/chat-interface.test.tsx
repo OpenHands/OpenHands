@@ -52,7 +52,7 @@ vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
 
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(() => ({
-    curAgentState: AgentState.AWAITING_USER_INPUT,
+    curAgentState: AgentState.AWAITING_USER_INPUT, isArchived: false,
   })),
 }));
 
@@ -275,7 +275,7 @@ describe("ChatInterface - Empty state", () => {
 describe('ChatInterface - Status Indicator', () => {
   it("should render ChatStatusIndicator when agent is not awaiting user input / conversation is NOT ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.LOADING,
+      curAgentState: AgentState.LOADING, isArchived: false,
     });
 
     renderChatInterfaceWithRouter();
@@ -285,7 +285,7 @@ describe('ChatInterface - Status Indicator', () => {
 
   it("should NOT render ChatStatusIndicator when agent is awaiting user input / conversation is ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.AWAITING_USER_INPUT,
+      curAgentState: AgentState.AWAITING_USER_INPUT, isArchived: false,
     });
 
     renderChatInterfaceWithRouter();

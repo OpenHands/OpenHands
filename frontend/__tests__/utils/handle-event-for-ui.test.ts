@@ -6,6 +6,7 @@ import {
   SecurityRisk,
   OpenHandsEvent,
 } from "#/types/v1/core";
+import { ACPToolCallEvent } from "#/types/v1/core/events/acp-tool-call-event";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 
 describe("handleEventForUI", () => {
@@ -183,6 +184,61 @@ describe("handleEventForUI", () => {
     // ThinkObservation should NOT be added - ThinkAction should remain
     expect(result).toEqual([mockMessageEvent, mockThinkAction]);
     expect(result).not.toBe(initialUiEvents);
+  });
+
+  describe("ACPToolCallEvent dedup", () => {
+    const mockInProgress: ACPToolCallEvent = {
+      kind: "ACPToolCallEvent",
+      id: "acp-evt-1",
+      timestamp: "2026-04-16T19:32:29.828069",
+      source: "agent",
+      tool_call_id: "toolu_ABC",
+      title: "gh pr diff 490",
+      tool_kind: "execute",
+      status: "in_progress",
+      raw_input: { command: "gh pr diff 490" },
+      raw_output: null,
+      content: null,
+      is_error: false,
+    };
+
+    const mockCompleted: ACPToolCallEvent = {
+      ...mockInProgress,
+      id: "acp-evt-2",
+      status: "completed",
+      raw_output: "output text",
+    };
+
+    it("appends the first tool call for a new tool_call_id", () => {
+      const result = handleEventForUI(mockInProgress, [mockMessageEvent]);
+
+      expect(result).toEqual([mockMessageEvent, mockInProgress]);
+    });
+
+    it("replaces a later status event at the original position", () => {
+      const result = handleEventForUI(mockCompleted, [
+        mockMessageEvent,
+        mockInProgress,
+      ]);
+
+      expect(result).toEqual([mockMessageEvent, mockCompleted]);
+    });
+
+    it("leaves tool calls with different tool_call_ids untouched", () => {
+      const other: ACPToolCallEvent = {
+        ...mockInProgress,
+        id: "acp-evt-99",
+        tool_call_id: "toolu_XYZ",
+        title: "ls -la",
+      };
+      const result = handleEventForUI(mockCompleted, [
+        mockMessageEvent,
+        other,
+        mockInProgress,
+      ]);
+
+      expect(result).toEqual([mockMessageEvent, other, mockCompleted]);
+    });
   });
 
   it("should NOT add ThinkObservation even when ThinkAction is not found", () => {

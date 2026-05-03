@@ -24,11 +24,11 @@ from storage.org_member import OrgMember
 from storage.user import User
 from storage.user_settings import UserSettings
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.data_models.settings import Settings
-from openhands.utils.jsonpatch_compat import deep_merge
-from openhands.utils.llm import is_openhands_model
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.app_server.utils.llm import is_openhands_model
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
     'id',
@@ -49,8 +49,12 @@ class OrgStore:
     """Store for managing organizations."""
 
     @staticmethod
-    def get_agent_settings_from_org(org: Org) -> AgentSettings:
-        return AgentSettings.model_validate(dict(org.agent_settings))
+    def get_agent_settings_from_org(org: Org) -> OpenHandsAgentSettings:
+        kwargs = dict(org.agent_settings)
+
+        # Some saved entries have 'llm' in here which is invalid.
+        kwargs['agent_kind'] = 'openhands'
+        return OpenHandsAgentSettings.model_validate(kwargs)
 
     @staticmethod
     def get_conversation_settings_from_org(org: Org) -> ConversationSettings:
@@ -218,8 +222,8 @@ class OrgStore:
     def _merge_and_validate_settings(
         current_settings: dict[str, Any],
         settings_diff: dict[str, Any],
-        settings_type: type[AgentSettings] | type[ConversationSettings],
-    ) -> AgentSettings | ConversationSettings:
+        settings_type: type[OpenHandsAgentSettings] | type[ConversationSettings],
+    ) -> OpenHandsAgentSettings | ConversationSettings:
         """Deep-merge a sparse settings diff and validate the merged result."""
         merged_settings = deep_merge(current_settings or {}, settings_diff)
         return settings_type.model_validate(merged_settings)
@@ -280,7 +284,7 @@ class OrgStore:
                 org.agent_settings = OrgStore._merge_and_validate_settings(
                     org.agent_settings,
                     agent_settings_diff,
-                    AgentSettings,
+                    OpenHandsAgentSettings,
                 ).model_dump(mode='json', exclude_unset=True)
 
             if conversation_settings_diff is not None:

@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
 import OnboardingForm, { clientLoader } from "#/routes/onboarding-form";
+import AuthService from "#/api/auth-service/auth-service.api";
+import { onboardingService } from "#/api/onboarding-service/onboarding-service.api";
 
 const mockMutate = vi.fn();
 const mockNavigate = vi.fn();
@@ -55,6 +57,8 @@ vi.mock("#/api/option-service/option-service.api", () => ({
     getConfig: () => mockGetConfig(),
   },
 }));
+
+
 
 const renderOnboardingForm = async () => {
   const queryClient = new QueryClient({
@@ -555,6 +559,40 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
   });
 });
 
+describe("OnboardingForm - redirect when already onboarded", () => {
+  beforeEach(() => {
+    mockMutate.mockClear();
+    mockNavigate.mockClear();
+    mockUseMe.mockReturnValue({ data: { role: "member" } });
+    loaderData = {
+      config: {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud" },
+      },
+    };
+    mockGetConfig.mockResolvedValue({
+      app_mode: "saas",
+      feature_flags: { deployment_mode: "cloud" },
+    });
+    vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+  });
+
+  it("should navigate to / when the backend reports onboarding is already complete", async () => {
+    // Arrange
+    vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
+      should_complete_onboarding: false,
+    });
+
+    // Act
+    await renderOnboardingForm();
+
+    // Assert
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
+    });
+  });
+});
+
 describe("onboarding-form clientLoader", () => {
   beforeEach(() => {
     mockQueryClientGetData.mockReset();
@@ -563,10 +601,24 @@ describe("onboarding-form clientLoader", () => {
   });
 
   describe("redirect behavior", () => {
+    it("should redirect to / when enable_onboarding feature flag is false", async () => {
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: false },
+      };
+      mockQueryClientGetData.mockReturnValue(saasConfig);
+
+      const result = await clientLoader();
+
+      expect(result).toBeDefined();
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
     it("should redirect to / when app_mode is oss", async () => {
       const ossConfig = {
         app_mode: "oss",
-        feature_flags: { deployment_mode: undefined },
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(ossConfig);
 
@@ -580,7 +632,7 @@ describe("onboarding-form clientLoader", () => {
     it("should redirect to / when app_mode is undefined", async () => {
       const undefinedConfig = {
         app_mode: undefined,
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(undefinedConfig);
 
@@ -602,10 +654,10 @@ describe("onboarding-form clientLoader", () => {
       expect((result as Response).headers.get("Location")).toBe("/");
     });
 
-    it("should allow access and return config when app_mode is saas with cloud deployment", async () => {
+    it("should allow access and return config when app_mode is saas with cloud deployment and enable_onboarding is true", async () => {
       const saasCloudConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(saasCloudConfig);
 
@@ -614,10 +666,10 @@ describe("onboarding-form clientLoader", () => {
       expect(result).toEqual({ config: saasCloudConfig });
     });
 
-    it("should allow access and return config when app_mode is saas with self_hosted deployment", async () => {
+    it("should allow access and return config when app_mode is saas with self_hosted deployment and enable_onboarding is true", async () => {
       const saasSelfHostedConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "self_hosted" },
+        feature_flags: { deployment_mode: "self_hosted", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(saasSelfHostedConfig);
 
@@ -631,7 +683,7 @@ describe("onboarding-form clientLoader", () => {
     it("should use cached config from queryClient when available", async () => {
       const cachedConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(cachedConfig);
 
@@ -644,7 +696,7 @@ describe("onboarding-form clientLoader", () => {
     it("should fetch config from OptionService when not cached", async () => {
       const fetchedConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "cloud" },
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: true },
       };
       mockQueryClientGetData.mockReturnValue(null);
       mockGetConfig.mockResolvedValue(fetchedConfig);

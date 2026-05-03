@@ -22,7 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 from openhands.app_server.config import depends_db_session
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class StoredVerifiedModel(Base):

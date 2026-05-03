@@ -2,7 +2,6 @@ import base64
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import jwt
 import pytest
 from fastapi import HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -19,7 +18,7 @@ from server.routes.auth import (
     set_response_cookie,
 )
 
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
 
 
 def create_mock_user_authorizer(success: bool = True, error_detail: str | None = None):
@@ -53,12 +52,17 @@ def mock_response():
 
 def test_set_response_cookie(mock_response, mock_request):
     """Test setting the auth cookie on a response."""
+    from openhands.app_server.services.jwt_service import JwtService
+    from openhands.app_server.utils.encryption_key import EncryptionKey
+
+    jwt_svc = JwtService(
+        keys=[EncryptionKey(kid='test', key=SecretStr('test_secret'), active=True)]
+    )
 
     with (
-        patch('server.routes.auth.config') as mock_config,
+        patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc),
         patch('server.utils.url_utils.get_global_config') as get_global_config,
     ):
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
         get_global_config.return_value = MagicMock(web_url='https://example.com')
 
         set_response_cookie(
@@ -81,7 +85,7 @@ def test_set_response_cookie(mock_response, mock_request):
         assert kwargs['domain'] == 'example.com'
 
         # Verify the JWT token contains the correct data
-        token_data = jwt.decode(kwargs['value'], 'test_secret', algorithms=['HS256'])
+        token_data = jwt_svc.verify_jws_token(kwargs['value'])
         assert token_data['access_token'] == 'test_access_token'
         assert token_data['refresh_token'] == 'test_refresh_token'
         assert token_data['accepted_tos'] is True
@@ -799,7 +803,7 @@ async def test_logout_without_refresh_token():
 
     with patch('server.routes.auth.token_manager') as mock_token_manager:
         with patch(
-            'openhands.server.user_auth.default_user_auth.DefaultUserAuth.get_instance'
+            'openhands.app_server.user_auth.default_user_auth.DefaultUserAuth.get_instance'
         ) as mock_get_instance:
             mock_get_instance.side_effect = AuthError()
             result = await logout(mock_request)
