@@ -118,6 +118,14 @@ def get_openhands_provider_base_url() -> str | None:
     return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or os.getenv('LLM_BASE_URL') or None
 
 
+def get_default_tavily_api_key() -> str | None:
+    """Return the Tavily API key from environment, if configured.
+
+    Falls back to SEARCH_API_KEY for backward compatibility.
+    """
+    return os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY') or None
+
+
 # The SDK auto-fills this URL as the default for openhands/ and litellm_proxy/
 # models.  Deployments (e.g. staging) may use a different LLM proxy, configured
 # via OPENHANDS_PROVIDER_BASE_URL.
@@ -193,6 +201,10 @@ class AppServerConfig(OpenHandsModel):
     openhands_provider_base_url: str | None = Field(
         default_factory=get_openhands_provider_base_url,
         description='Base URL for the OpenHands provider',
+    )
+    tavily_api_key: str | None = Field(
+        default_factory=get_default_tavily_api_key,
+        description='Tavily API key for search integration (proxied via MCP server)',
     )
     # Dependency Injection Injectors
     llm_model: LLMModelServiceInjector | None = None
@@ -385,13 +397,7 @@ def config_from_env() -> AppServerConfig:
         )
 
     if config.app_conversation is None:
-        tavily_api_key = None
-        tavily_api_key_str = os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY')
-        if tavily_api_key_str:
-            tavily_api_key = SecretStr(tavily_api_key_str)
-        config.app_conversation = LiveStatusAppConversationServiceInjector(
-            tavily_api_key=tavily_api_key
-        )
+        config.app_conversation = LiveStatusAppConversationServiceInjector()
 
     if config.pending_message is None:
         from openhands.app_server.pending_messages.pending_message_service import (

@@ -3,8 +3,10 @@ import re
 from typing import Annotated
 from uuid import UUID
 
-from fastmcp import FastMCP
+from fastmcp import Client, FastMCP
+from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
+from fastmcp.server import create_proxy
 from fastmcp.server.dependencies import get_http_request
 from pydantic import Field
 
@@ -42,6 +44,35 @@ mcp_server = FastMCP('mcp', mask_error_details=True)
 
 HOST = f'https://{os.getenv("WEB_HOST", "app.all-hands.dev").strip()}'
 CONVERSATION_URL = HOST + '/conversations/{}'
+
+
+def init_tavily_proxy() -> None:
+    """Initialize the Tavily MCP proxy if API key is configured.
+
+    This mounts a proxy to Tavily's MCP server under the 'tavily' namespace,
+    allowing sandboxes to use Tavily search without the API key being exposed.
+    """
+    config = get_global_config()
+    tavily_api_key = config.tavily_api_key
+
+    if not tavily_api_key:
+        logger.info('Tavily API key not configured, skipping Tavily MCP proxy')
+        return
+
+    try:
+        # Create a client that connects to Tavily's HTTP MCP endpoint
+        proxy_client = Client(
+            transport=StreamableHttpTransport(
+                url=f'https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}'
+            )
+        )
+        proxy_server = create_proxy(proxy_client)
+
+        # Mount under 'tavily' namespace so tools are accessible as tavily_*
+        mcp_server.mount(namespace='tavily', server=proxy_server)
+        logger.info('Tavily MCP proxy initialized successfully')
+    except Exception as e:
+        logger.error(f'Failed to initialize Tavily MCP proxy: {e}')
 
 
 async def get_conversation_link(
