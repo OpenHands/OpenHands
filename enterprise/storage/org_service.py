@@ -24,9 +24,12 @@ from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
-from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_models import (
+    Settings,
+    default_agent_settings,
+)
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings
 
 
 class OrgService:
@@ -108,15 +111,15 @@ class OrgService:
         Returns:
             Org: New organization entity (not yet persisted)
         """
-        default_agent_settings = AgentSettings()
-        default_agent_settings.llm.model = get_default_litellm_model()
+        agent_settings = default_agent_settings()
+        agent_settings.llm.model = get_default_litellm_model()
         return Org(
             id=org_id,
             name=name,
             contact_name=contact_name,
             contact_email=contact_email,
             org_version=ORG_SETTINGS_VERSION,
-            agent_settings=default_agent_settings,
+            agent_settings=agent_settings,
             conversation_settings=ConversationSettings(),
         )
 

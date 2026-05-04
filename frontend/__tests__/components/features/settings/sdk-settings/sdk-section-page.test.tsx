@@ -566,6 +566,79 @@ describe("SdkSectionPage", () => {
     ).toHaveAttribute("type", "url");
   });
 
+  it("shows iterative refinement in the basic view once critic is enabled", async () => {
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "verification",
+          label: "Verification",
+          fields: [
+            {
+              key: "verification.critic_enabled",
+              label: "Enable critic",
+              section: "verification",
+              section_label: "Verification",
+              value_type: "boolean",
+              default: true,
+              choices: [],
+              depends_on: [],
+              prominence: "critical",
+              secret: false,
+              required: true,
+            },
+            {
+              key: "verification.enable_iterative_refinement",
+              label: "Enable iterative refinement",
+              section: "verification",
+              section_label: "Verification",
+              value_type: "boolean",
+              default: false,
+              choices: [],
+              depends_on: ["verification.critic_enabled"],
+              prominence: "critical",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          verification: {
+            critic_enabled: false,
+            enable_iterative_refinement: false,
+          },
+        },
+      }),
+    );
+
+    renderSdkSectionPage({ sectionKeys: ["verification"] });
+
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByTestId("sdk-settings-verification.critic_enabled"),
+    );
+
+    expect(
+      await screen.findByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows a success toast after saving settings", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSavableSettings(),

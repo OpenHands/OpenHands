@@ -87,6 +87,13 @@ def test_settings_update_deep_merges_agent_settings():
     assert settings.agent_settings.condenser.enabled is True
 
 
+def test_settings_enable_critic_by_default():
+    settings = Settings()
+
+    assert settings.agent_settings.verification.critic_enabled is True
+    assert settings.agent_settings.verification.enable_iterative_refinement is False
+
+
 def test_settings_preserve_agent_settings():
     settings = Settings(
         agent_settings=AgentSettings(

@@ -35,8 +35,10 @@ from openhands.sdk.settings import (
     AgentSettingsConfig,
     ConversationSettings,
     OpenHandsAgentSettings,
-    default_agent_settings,
     validate_agent_settings,
+)
+from openhands.sdk.settings import (
+    default_agent_settings as sdk_default_agent_settings,
 )
 
 
@@ -99,6 +101,14 @@ class SandboxGroupingStrategy(str, Enum):
 #   raw dict here both bypassed those guards and crashed downstream
 #   serialisation.
 _SETTINGS_UPDATE_IGNORED_FIELDS = frozenset(['secrets_store', 'llm_profiles'])
+
+
+def default_agent_settings() -> OpenHandsAgentSettings:
+    """Return OpenHands app defaults for SDK agent settings."""
+    agent_settings = sdk_default_agent_settings()
+    if isinstance(agent_settings, OpenHandsAgentSettings):
+        agent_settings.verification.critic_enabled = True
+    return agent_settings
 
 
 class Settings(BaseModel):
