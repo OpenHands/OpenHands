@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
 from integrations.resolver_org_router import resolve_org_for_repo
+from integrations.slack.slack_errors import SlackError, SlackErrorCode
 from integrations.slack.slack_types import (
     SlackMessageView,
     SlackViewInterface,
@@ -13,11 +14,10 @@ from integrations.slack.slack_types import (
 from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProcessor
 from integrations.utils import (
     CONVERSATION_URL,
-    ENABLE_V1_SLACK_RESOLVER,
-    get_user_v1_enabled_setting,
 )
 from jinja2 import Environment
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from storage.slack_conversation import SlackConversation
 from storage.slack_conversation_store import SlackConversationStore
 from storage.slack_team_store import SlackTeamStore
@@ -26,20 +26,18 @@ from storage.slack_user import SlackUser
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
+    ConversationTrigger,
     SendMessageRequest,
 )
 from openhands.app_server.config import get_app_conversation_service
+from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.async_utils import GENERAL_TIMEOUT
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk import TextContent
-from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import (
-    ConversationTrigger,
-)
-from openhands.utils.async_utils import GENERAL_TIMEOUT
 
 # =================================================
 # SECTION: Slack view types
@@ -49,10 +47,6 @@ from openhands.utils.async_utils import GENERAL_TIMEOUT
 CONTEXT_LIMIT = 21
 slack_conversation_store = SlackConversationStore.get_instance()
 slack_team_store = SlackTeamStore.get_instance()
-
-
-async def is_v1_enabled_for_slack_resolver(user_id: str) -> bool:
-    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_SLACK_RESOLVER
 
 
 @dataclass
@@ -70,7 +64,6 @@ class SlackNewConversationView(SlackViewInterface):
     send_summary_instruction: bool
     conversation_id: str
     team_id: str
-    v1_enabled: bool
 
     def _get_initial_prompt(self, text: str, blocks: list[dict]):
         bot_id = self._get_bot_id(blocks)
@@ -95,24 +88,34 @@ class SlackNewConversationView(SlackViewInterface):
         messages = []
         if self.thread_ts:
             client = WebClient(token=self.bot_access_token)
-            result = client.conversations_replies(
-                channel=self.channel_id,
-                ts=self.thread_ts,
-                inclusive=True,
-                latest=self.message_ts,
-                limit=CONTEXT_LIMIT,  # We can be smarter about getting more context/condensing it even in the future
-            )
+            try:
+                result = client.conversations_replies(
+                    channel=self.channel_id,
+                    ts=self.thread_ts,
+                    inclusive=True,
+                    latest=self.message_ts,
+                    limit=CONTEXT_LIMIT,  # We can be smarter about getting more context/condensing it even in the future
+                )
+            except SlackApiError as e:
+                if e.response.get('error') == 'missing_scope':
+                    raise SlackError(SlackErrorCode.MISSING_SLACK_SCOPES) from e
+                raise
 
             messages = result['messages']
 
         else:
             client = WebClient(token=self.bot_access_token)
-            result = client.conversations_history(
-                channel=self.channel_id,
-                inclusive=True,
-                latest=self.message_ts,
-                limit=CONTEXT_LIMIT,
-            )
+            try:
+                result = client.conversations_history(
+                    channel=self.channel_id,
+                    inclusive=True,
+                    latest=self.message_ts,
+                    limit=CONTEXT_LIMIT,
+                )
+            except SlackApiError as e:
+                if e.response.get('error') == 'missing_scope':
+                    raise SlackError(SlackErrorCode.MISSING_SLACK_SCOPES) from e
+                raise
 
             messages = result['messages']
             messages.reverse()
@@ -149,7 +152,7 @@ class SlackNewConversationView(SlackViewInterface):
                 'Attempting to start conversation without confirming selected repo from user'
             )
 
-    async def save_slack_convo(self, v1_enabled: bool = False):
+    async def save_slack_convo(self):
         if self.slack_to_openhands_user:
             user_info: SlackUser = self.slack_to_openhands_user
 
@@ -161,7 +164,6 @@ class SlackNewConversationView(SlackViewInterface):
                     'keycloak_user_id': user_info.keycloak_user_id,
                     'org_id': user_info.org_id,
                     'parent_id': self.thread_ts or self.message_ts,
-                    'v1_enabled': v1_enabled,
                 },
             )
             slack_conversation = SlackConversation(
@@ -171,7 +173,7 @@ class SlackNewConversationView(SlackViewInterface):
                 org_id=user_info.org_id,
                 parent_id=self.thread_ts
                 or self.message_ts,  # conversations can start in a thread reply as well; we should always references the parent's (root level msg's) message ID
-                v1_enabled=v1_enabled,
+                v1_enabled=True,  # All conversations are V1
             )
             await slack_conversation_store.create_slack_conversation(slack_conversation)
 
@@ -268,7 +270,7 @@ class SlackNewConversationView(SlackViewInterface):
                     )
 
         logger.info(f'[Slack V1]: Created new conversation: {self.conversation_id}')
-        await self.save_slack_convo(v1_enabled=True)
+        await self.save_slack_convo()
 
     def get_response_msg(self) -> str:
         user_info: SlackUser = self.slack_to_openhands_user
@@ -290,13 +292,18 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         client = WebClient(token=self.bot_access_token)
-        result = client.conversations_replies(
-            channel=self.channel_id,
-            ts=self.message_ts,
-            inclusive=True,
-            latest=self.message_ts,
-            limit=1,  # Get exact user message, in future we can be smarter with collecting additional context
-        )
+        try:
+            result = client.conversations_replies(
+                channel=self.channel_id,
+                ts=self.message_ts,
+                inclusive=True,
+                latest=self.message_ts,
+                limit=1,  # Get exact user message, in future we can be smarter with collecting additional context
+            )
+        except SlackApiError as e:
+            if e.response.get('error') == 'missing_scope':
+                raise SlackError(SlackErrorCode.MISSING_SLACK_SCOPES) from e
+            raise
 
         user_message = result['messages'][0]
         user_message = self._get_initial_prompt(
@@ -375,7 +382,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
             )
 
             # 6. Send the message to the agent server
-            url = f"{agent_server_url.rstrip('/')}/api/conversations/{UUID(self.conversation_id)}/events"
+            url = f'{agent_server_url.rstrip("/")}/api/conversations/{UUID(self.conversation_id)}/events'
 
             headers = {'X-Session-API-Key': running_sandbox.session_api_key}
             payload = send_message_request.model_dump()
@@ -516,7 +523,6 @@ class SlackFactory:
                 conversation_id=conversation.conversation_id,
                 slack_conversation=conversation,
                 team_id=team_id,
-                v1_enabled=False,
             )
 
         elif SlackFactory.did_user_select_repo_from_form(message):
@@ -534,7 +540,6 @@ class SlackFactory:
                 send_summary_instruction=True,
                 conversation_id='',
                 team_id=team_id,
-                v1_enabled=False,
             )
 
         else:
@@ -552,7 +557,6 @@ class SlackFactory:
                 send_summary_instruction=True,
                 conversation_id='',
                 team_id=team_id,
-                v1_enabled=False,
             )
 
 

@@ -1,6 +1,7 @@
 import React from "react";
 import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
+import { FaChevronLeft } from "react-icons/fa6";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-defaults-guard";
@@ -10,6 +11,7 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { HelpLink } from "#/ui/help-link";
 import { useConfig } from "#/hooks/query/use-config";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
+import { OpenHandsApiKeyHelp } from "#/components/features/settings/openhands-api-key-help";
 import {
   SdkSectionHeaderProps,
   SdkSectionPage,
@@ -26,6 +28,16 @@ import {
   type SettingsView,
 } from "#/utils/sdk-settings-schema";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
+import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
+import { useRenameLlmProfile } from "#/hooks/mutation/use-rename-llm-profile";
+import {
+  deriveProfileNameFromModel,
+  PROFILE_NAME_PATTERN,
+} from "#/utils/derive-profile-name";
+import { LlmProfilesManager } from "#/components/features/settings/llm-profiles-manager";
+import { ProfileNameInput } from "#/components/features/settings/profile-name-input";
+import { Typography } from "#/ui/typography";
 
 const LLM_EXCLUDED_KEYS = new Set(["llm.model", "llm.api_key", "llm.base_url"]);
 
@@ -80,37 +92,6 @@ const isProviderDefaultBaseUrl = (model: string, baseUrl: string) => {
   );
 };
 
-interface OpenHandsApiKeyHelpProps {
-  testId: string;
-}
-
-function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
-  const { t } = useTranslation();
-
-  return (
-    <>
-      <HelpLink
-        testId={testId}
-        text={t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_TEXT)}
-        linkText={t(I18nKey.SETTINGS$NAV_API_KEYS)}
-        href="https://app.all-hands.dev/settings/api-keys"
-        suffix={` ${t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX)}`}
-      />
-      <p className="text-xs">
-        {t(I18nKey.SETTINGS$LLM_BILLING_INFO)}{" "}
-        <a
-          href="https://docs.openhands.dev/usage/llms/openhands-llms"
-          rel="noreferrer noopener"
-          target="_blank"
-          className="underline underline-offset-2"
-        >
-          {t(I18nKey.SETTINGS$SEE_PRICING_DETAILS)}
-        </a>
-      </p>
-    </>
-  );
-}
-
 export function LlmSettingsScreen({
   scope = "personal",
 }: {
@@ -129,6 +110,34 @@ export function LlmSettingsScreen({
     null,
   );
   const hasHydratedInitialPersonalSaasViewRef = React.useRef(false);
+  // Captured during buildPayload so onSaveSuccess can derive a profile name
+  // from the exact model that was just persisted.
+  const lastSavedModelRef = React.useRef<string | null>(null);
+  const saveProfile = useSaveLlmProfile();
+  const activateProfile = useActivateLlmProfile();
+  const renameProfile = useRenameLlmProfile();
+
+  // Controls whether the LLM form or the Profiles list is shown. Flipping
+  // this unmounts the inactive branch, so the SdkSectionPage re-hydrates
+  // its view from ``initialViewHint`` when coming back from profiles.
+  // Personal scope lands on the Available Models list first; org-scope
+  // defaults (which don't have profiles) always open straight into the form.
+  const [showProfiles, setShowProfiles] = React.useState(scope === "personal");
+  // User-supplied profile name. Empty → fall back to deriveProfileNameFromModel
+  // in handleSaveSuccess. Reset on every form open so a stale name from the
+  // previous Add doesn't leak in.
+  const [profileName, setProfileName] = React.useState("");
+  // Snapshotted on form open so we can flag the form dirty when the user
+  // edits *only* the name — the SDK section page tracks the LLM fields but
+  // not the profile-name input that lives outside its schema.
+  const [initialProfileName, setInitialProfileName] = React.useState("");
+  // When the user clicks Basic / Advanced / All from inside the profiles
+  // view, we want the LLM form to open on *that* tier — not whatever the
+  // schema happened to infer. We stash the choice here and consume it in
+  // getInitialView below.
+  const [initialViewHint, setInitialViewHint] =
+    React.useState<SettingsView | null>(null);
+  const isProfilesView = scope === "personal" && showProfiles;
 
   const defaultModel = String(
     (DEFAULT_SETTINGS.agent_settings?.llm as Record<string, unknown>)?.model ??
@@ -143,12 +152,6 @@ export function LlmSettingsScreen({
       setSelectedProvider(provider || null);
     }
   }, [settings?.llm_model]);
-
-  React.useEffect(() => {
-    if (settings && isSaasMode && scope !== "org") {
-      hasHydratedInitialPersonalSaasViewRef.current = true;
-    }
-  }, [isSaasMode, scope, settings]);
 
   React.useEffect(() => {
     const checkout = searchParams.get("checkout");
@@ -174,11 +177,22 @@ export function LlmSettingsScreen({
       currentSettings: Settings,
       filteredSchema: SettingsSchema,
     ): SettingsView => {
+      // A hint set by the Profiles mirror-strip beats every other rule —
+      // the user explicitly asked for this tier when leaving profiles.
+      if (initialViewHint) {
+        return initialViewHint;
+      }
+
+      // Personal SaaS users now land on Available Models first; the form
+      // is mounted on-demand (Add / Edit). The first form mount per session
+      // should still default to basic so users aren't dropped straight into
+      // advanced/all even if the active profile has complex fields.
       if (
         isSaasMode &&
         scope !== "org" &&
         !hasHydratedInitialPersonalSaasViewRef.current
       ) {
+        hasHydratedInitialPersonalSaasViewRef.current = true;
         return "basic";
       }
 
@@ -195,7 +209,7 @@ export function LlmSettingsScreen({
 
       return hasCustomBaseUrl ? "all" : "basic";
     },
-    [isSaasMode, scope],
+    [initialViewHint, isSaasMode, scope],
   );
 
   const buildHeader = React.useCallback(
@@ -254,15 +268,30 @@ export function LlmSettingsScreen({
         );
       };
 
+      const profileNamePlaceholder =
+        deriveProfileNameFromModel(modelValue) ?? "";
+
       return (
         <div className="flex flex-col gap-6">
           {infoMessageKey ? (
-            <p
-              data-testid="llm-settings-info-message"
+            <Typography.Paragraph
+              testId="llm-settings-info-message"
               className="text-sm text-tertiary-alt"
             >
               {t(infoMessageKey)}
-            </p>
+            </Typography.Paragraph>
+          ) : null}
+
+          {scope === "personal" ? (
+            <ProfileNameInput
+              testId="llm-profile-name-input"
+              ruleTestId="llm-profile-name-rule"
+              value={profileName}
+              placeholder={profileNamePlaceholder}
+              onChange={setProfileName}
+              isDisabled={isDisabled}
+              isOptional
+            />
           ) : null}
 
           {view === "basic" ? (
@@ -336,6 +365,8 @@ export function LlmSettingsScreen({
       infoMessageKey,
       isSaasMode,
       defaultModel,
+      profileName,
+      scope,
       selectedProvider,
       settings?.llm_api_key_set,
       t,
@@ -378,23 +409,124 @@ export function LlmSettingsScreen({
         agentSettings.llm = llm;
       }
 
+      // Remember the model currently shown in the form — this is what the
+      // user is saving regardless of whether `llm.model` was toggled dirty
+      // this turn. ``basePayload`` only includes dirty fields, so falling
+      // back to ``context.values`` makes the profile auto-creation fire on
+      // same-value re-saves (e.g. save → delete profile → save again).
+      lastSavedModelRef.current = modelValue || null;
+
       return { agent_settings_diff: agentSettings };
     },
     [isSaasMode, schema, selectedProvider],
   );
 
+  const handleSaveSuccess = React.useCallback(async () => {
+    const savedModel = lastSavedModelRef.current;
+    const trimmedUserName = profileName.trim();
+    // Use the user-supplied name only if it matches the backend regex —
+    // otherwise silently fall back to the model-derived default (the helper
+    // text under the input has already warned them their name was invalid).
+    const userName = PROFILE_NAME_PATTERN.test(trimmedUserName)
+      ? trimmedUserName
+      : null;
+    const derivedName = savedModel
+      ? deriveProfileNameFromModel(savedModel)
+      : null;
+    const name = userName ?? derivedName;
+
+    // Auto-saved profiles are a personal-scope feature — organization default
+    // LLM settings reuse this screen but shouldn't spawn per-user profiles.
+    if (scope !== "org" && name) {
+      try {
+        // Editing an existing profile and renaming it via the form should
+        // rename the record in place rather than spawning a new one and
+        // leaving the original orphaned.
+        if (initialProfileName && initialProfileName !== name) {
+          await renameProfile.mutateAsync({
+            name: initialProfileName,
+            newName: name,
+          });
+        }
+        // Omit `llm` → backend snapshots the just-saved agent_settings.llm
+        // (api_key and all). Saves us from having to hand-reconstruct the
+        // config and risk mangling the secret placeholder handling.
+        await saveProfile.mutateAsync({
+          name,
+          request: { include_secrets: true },
+        });
+        await activateProfile.mutateAsync(name);
+      } catch {
+        // Best-effort: the settings save already succeeded. Profile cap
+        // (HTTP 409) and transient errors are surfaced on the Profiles page.
+      }
+    }
+
+    setProfileName("");
+    setInitialProfileName("");
+    setInitialViewHint(null);
+    setShowProfiles(true);
+  }, [
+    activateProfile,
+    initialProfileName,
+    profileName,
+    renameProfile,
+    saveProfile,
+    scope,
+  ]);
+
+  const openForm = (view: SettingsView | null, name = "") => {
+    setProfileName(name);
+    setInitialProfileName(name);
+    setInitialViewHint(view);
+    setShowProfiles(false);
+  };
+
+  if (isProfilesView) {
+    return (
+      <LlmProfilesManager
+        onAddProfile={() => openForm(null)}
+        onEditProfile={(profile) => openForm(null, profile.name)}
+      />
+    );
+  }
+
+  // Sub-page back affordance (personal scope only — org-defaults has no
+  // parent list to return to). Replaces the previous "Profiles" trailing
+  // action so the form view follows the second-level settings pattern.
+  const backToProfiles =
+    scope === "personal" ? (
+      <button
+        data-testid="llm-back-to-profiles"
+        type="button"
+        onClick={() => {
+          setInitialViewHint(null);
+          setShowProfiles(true);
+        }}
+        className="flex items-center gap-2 self-start text-sm text-gray-300 hover:text-white cursor-pointer"
+      >
+        <FaChevronLeft size={12} aria-hidden="true" />
+        {t(I18nKey.SETTINGS$BACK_TO_LLM_LIST)}
+      </button>
+    ) : null;
+
   return (
-    <SdkSectionPage
-      scope={scope}
-      sectionKeys={["llm"]}
-      excludeKeys={LLM_EXCLUDED_KEYS}
-      header={buildHeader}
-      buildPayload={buildPayload}
-      getInitialView={getInitialView}
-      forceShowAdvancedView
-      allowAllView={!isSaasMode}
-      testId="llm-settings-screen"
-    />
+    <div className="flex flex-col gap-4">
+      {backToProfiles}
+      <SdkSectionPage
+        scope={scope}
+        sectionKeys={["llm"]}
+        excludeKeys={LLM_EXCLUDED_KEYS}
+        header={buildHeader}
+        buildPayload={buildPayload}
+        extraDirty={profileName.trim() !== initialProfileName.trim()}
+        onSaveSuccess={handleSaveSuccess}
+        getInitialView={getInitialView}
+        forceShowAdvancedView
+        allowAllView={!isSaasMode}
+        testId="llm-settings-screen"
+      />
+    </div>
   );
 }
 

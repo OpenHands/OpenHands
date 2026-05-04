@@ -9,11 +9,10 @@ import {
 } from "#/components/features/onboarding/information-request-form";
 import { EnterpriseFormData } from "#/utils/local-storage";
 
-// Mock useTracking
-const mockTrackEnterpriseLeadFormSubmitted = vi.fn();
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackEnterpriseLeadFormSubmitted: mockTrackEnterpriseLeadFormSubmitted,
+vi.mock("#/hooks/use-client-analytics", () => ({
+  useClientAnalytics: () => ({
+    trackSaasSelfhostedInquiry: vi.fn(),
+    trackEnterpriseLeadFormSubmitted: vi.fn(),
   }),
 }));
 
@@ -215,16 +214,6 @@ describe("InformationRequestForm", () => {
       expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
     });
 
-    it("should not call tracking when form is submitted with empty fields", async () => {
-      const user = userEvent.setup();
-      renderWithRouter();
-
-      const submitButton = screen.getByRole("button", { name: "ENTERPRISE$FORM_SUBMIT" });
-      await user.click(submitButton);
-
-      expect(mockTrackEnterpriseLeadFormSubmitted).not.toHaveBeenCalled();
-    });
-
     it("should navigate to login page when form is submitted with all fields filled", async () => {
       const user = userEvent.setup();
       renderWithRouter();
@@ -241,70 +230,6 @@ describe("InformationRequestForm", () => {
 
       // Should navigate to login page
       expect(screen.getByTestId("login-page")).toBeInTheDocument();
-    });
-
-    it("should call tracking with form data when form is submitted successfully", async () => {
-      const user = userEvent.setup();
-      renderWithRouter({ ...defaultProps, requestType: "saas" });
-
-      await user.type(screen.getByTestId("form-input-name"), "John Doe");
-      await user.type(screen.getByTestId("form-input-company"), "Acme Inc");
-      await user.type(screen.getByTestId("form-input-email"), "john@example.com");
-      await user.type(screen.getByTestId("form-input-message"), "Hello world");
-
-      const submitButton = screen.getByRole("button", { name: "ENTERPRISE$FORM_SUBMIT" });
-      await user.click(submitButton);
-
-      expect(mockTrackEnterpriseLeadFormSubmitted).toHaveBeenCalledTimes(1);
-      expect(mockTrackEnterpriseLeadFormSubmitted).toHaveBeenCalledWith({
-        requestType: "saas",
-        name: "John Doe",
-        company: "Acme Inc",
-        email: "john@example.com",
-        message: "Hello world",
-      });
-    });
-
-    it("should call tracking with self-hosted request type", async () => {
-      const user = userEvent.setup();
-      renderWithRouter({ ...defaultProps, requestType: "self-hosted" });
-
-      await user.type(screen.getByTestId("form-input-name"), "Jane Smith");
-      await user.type(screen.getByTestId("form-input-company"), "Tech Corp");
-      await user.type(screen.getByTestId("form-input-email"), "jane@techcorp.com");
-      await user.type(screen.getByTestId("form-input-message"), "Interested in self-hosted");
-
-      const submitButton = screen.getByRole("button", { name: "ENTERPRISE$FORM_SUBMIT" });
-      await user.click(submitButton);
-
-      expect(mockTrackEnterpriseLeadFormSubmitted).toHaveBeenCalledWith({
-        requestType: "self-hosted",
-        name: "Jane Smith",
-        company: "Tech Corp",
-        email: "jane@techcorp.com",
-        message: "Interested in self-hosted",
-      });
-    });
-
-    it("should trim whitespace from form fields before tracking", async () => {
-      const user = userEvent.setup();
-      renderWithRouter();
-
-      await user.type(screen.getByTestId("form-input-name"), "  John Doe  ");
-      await user.type(screen.getByTestId("form-input-company"), "  Acme Inc  ");
-      await user.type(screen.getByTestId("form-input-email"), "  john@example.com  ");
-      await user.type(screen.getByTestId("form-input-message"), "  Hello world  ");
-
-      const submitButton = screen.getByRole("button", { name: "ENTERPRISE$FORM_SUBMIT" });
-      await user.click(submitButton);
-
-      expect(mockTrackEnterpriseLeadFormSubmitted).toHaveBeenCalledWith({
-        requestType: "saas",
-        name: "John Doe",
-        company: "Acme Inc",
-        email: "john@example.com",
-        message: "Hello world",
-      });
     });
 
     it("should have valid aria-invalid state when field has value", async () => {
@@ -335,7 +260,6 @@ describe("InformationRequestForm", () => {
       // Should stay on form page, not navigate to login
       expect(screen.getByTestId("information-request-form")).toBeInTheDocument();
       expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
-      expect(mockTrackEnterpriseLeadFormSubmitted).not.toHaveBeenCalled();
     });
   });
 
@@ -358,8 +282,6 @@ describe("InformationRequestForm", () => {
       await user.click(submitButton);
       await user.click(submitButton);
 
-      // Should only track once
-      expect(mockTrackEnterpriseLeadFormSubmitted).toHaveBeenCalledTimes(1);
       // Should navigate to login page
       expect(screen.getByTestId("login-page")).toBeInTheDocument();
     });

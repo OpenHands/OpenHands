@@ -16,8 +16,10 @@ from fastapi import Request
 from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
+    ACPConversationInfo,
     ConversationInfo,
     SendMessageRequest,
+    StartACPConversationRequest,
     StartConversationRequest,
     TextContent,
 )
@@ -34,7 +36,9 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskStatus,
     AppConversationUpdateRequest,
+    ConversationTrigger,
     PluginSpec,
+    SandboxGroupingStrategy,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
@@ -66,6 +70,8 @@ from openhands.app_server.event_callback.event_callback_service import (
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
 )
+from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.service_types import SuggestedTask
 from openhands.app_server.pending_messages.pending_message_service import (
     PendingMessageService,
 )
@@ -81,25 +87,24 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
+from openhands.app_server.utils._redact_compat import sanitize_config
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.app_server.utils.git import ensure_valid_git_branch_name
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.integrations.service_types import SuggestedTask
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.server.types import AppMode
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
-from openhands.storage.data_models.settings import SandboxGroupingStrategy
 from openhands.tools.preset.default import (
     get_default_tools,
 )
@@ -107,11 +112,36 @@ from openhands.tools.preset.planning import (
     format_plan_structure,
     get_planning_tools,
 )
-from openhands.utils._redact_compat import sanitize_config
-from openhands.utils.git import ensure_valid_git_branch_name
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
+_acp_conversation_info_type_adapter = TypeAdapter(list[ACPConversationInfo | None])
 _logger = logging.getLogger(__name__)
+
+
+def _agent_kind_to_router_path(agent_kind: str) -> str:
+    """Map agent_kind discriminator to the agent-server router path prefix."""
+    if agent_kind == 'acp':
+        return 'acp/conversations'
+    return 'conversations'
+
+
+def _split_ids_by_kind(
+    conversation_ids: list[str],
+    conversation_kind_by_id: dict[str, str],
+) -> tuple[list[str], list[str]]:
+    """Split conversation IDs into (openhands_ids, acp_ids) by agent_kind."""
+    openhands_ids = [
+        cid
+        for cid in conversation_ids
+        if conversation_kind_by_id.get(cid, 'openhands') != 'acp'
+    ]
+    acp_ids = [
+        cid
+        for cid in conversation_ids
+        if conversation_kind_by_id.get(cid, 'openhands') == 'acp'
+    ]
+    return openhands_ids, acp_ids
+
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
 PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
@@ -149,7 +179,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
-    tavily_api_key: str | None = None
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
@@ -334,15 +363,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 if sandbox.session_api_key
                 else {}
             )
+            is_acp = isinstance(start_conversation_request, StartACPConversationRequest)
+            router_path = 'acp/conversations' if is_acp else 'conversations'
             response = await self.httpx_client.post(
-                f'{agent_server_url}/api/conversations',
+                f'{agent_server_url}/api/{router_path}',
                 json=body_json,
                 headers=headers,
                 timeout=self.sandbox_startup_timeout,
             )
 
             response.raise_for_status()
-            info = ConversationInfo.model_validate(response.json())
+            if is_acp:
+                info = ACPConversationInfo.model_validate(response.json())
+                agent_kind = 'acp'
+                display_model = start_conversation_request.agent.acp_model
+            else:
+                info = ConversationInfo.model_validate(response.json())
+                agent_kind = 'openhands'
+                display_model = start_conversation_request.agent.llm.model
 
             # Store info...
             user_id = await self.user_context.get_user_id()
@@ -351,7 +389,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 title=f'Conversation {info.id.hex[:5]}',
                 sandbox_id=sandbox.id,
                 created_by_user_id=user_id,
-                llm_model=start_conversation_request.agent.llm.model,
+                llm_model=display_model,
+                agent_kind=agent_kind,
                 # Git parameters
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,
@@ -411,6 +450,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             app_conversation_infos
         )
 
+        # Build a mapping from conversation id -> agent_kind for routing
+        conversation_kind_by_id: dict[str, str] = {
+            str(info.id): info.agent_kind
+            for info in app_conversation_infos
+            if info is not None
+        }
+
         # Get referenced sandboxes in a single batch operation...
         sandboxes = await self.sandbox_service.batch_get_sandboxes(
             list(sandbox_id_to_conversation_ids)
@@ -420,7 +466,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Gather the running conversations
         tasks = [
             self._get_live_conversation_info(
-                sandbox, sandbox_id_to_conversation_ids.get(sandbox.id)
+                sandbox,
+                sandbox_id_to_conversation_ids.get(sandbox.id),
+                conversation_kind_by_id,
             )
             for sandbox in sandboxes
             if sandbox and sandbox.status == SandboxStatus.RUNNING
@@ -456,41 +504,74 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self,
         sandbox: SandboxInfo,
         conversation_ids: list[str],
-    ) -> list[ConversationInfo]:
-        """Get agent status for multiple conversations from the Agent Server."""
-        try:
-            # Build the URL with query parameters
-            agent_server_url = self._get_agent_server_url(sandbox)
-            url = f'{agent_server_url.rstrip("/")}/api/conversations'
-            params = {'ids': conversation_ids}
+        conversation_kind_by_id: dict[str, str] | None = None,
+    ) -> list[ConversationInfo | ACPConversationInfo]:
+        """Get agent status for multiple conversations from the Agent Server.
 
-            # Set up headers
-            headers = {}
-            if sandbox.session_api_key:
-                headers['X-Session-API-Key'] = sandbox.session_api_key
-
-            response = await self.httpx_client.get(url, params=params, headers=headers)
-            response.raise_for_status()
-
-            data = response.json()
-            conversation_info = _conversation_info_type_adapter.validate_python(data)
-            conversation_info = [c for c in conversation_info if c]
-            return conversation_info
-        except httpx.HTTPStatusError:
-            # The runtime API stops idle sandboxes all the time and they return a 404 or a 503.
-            # This is normal and should not be considered an error.
-            _logger.warning(
-                f'Error getting conversation status from sandbox {sandbox.id}',
-                exc_info=True,
-            )
+        Splits conversation_ids by agent_kind and fetches from the appropriate
+        endpoint (/api/conversations for LLM, /api/acp/conversations for ACP).
+        """
+        if not conversation_ids:
             return []
-        except Exception:
-            # Not getting a status is not a fatal error - we just mark the conversation as stopped
-            _logger.exception(
-                f'Error getting conversation status from sandbox {sandbox.id}',
-                stack_info=True,
-            )
-            return []
+
+        conversation_kind_by_id = conversation_kind_by_id or {}
+
+        openhands_ids, acp_ids = _split_ids_by_kind(
+            conversation_ids, conversation_kind_by_id
+        )
+
+        agent_server_url = self._get_agent_server_url(sandbox)
+        headers: dict[str, str] = {}
+        if sandbox.session_api_key:
+            headers['X-Session-API-Key'] = sandbox.session_api_key
+
+        results: list[ConversationInfo | ACPConversationInfo] = []
+
+        # Fetch OpenHands conversations
+        if openhands_ids:
+            try:
+                url = f'{agent_server_url.rstrip("/")}/api/conversations'
+                response = await self.httpx_client.get(
+                    url, params={'ids': openhands_ids}, headers=headers
+                )
+                response.raise_for_status()
+                data = response.json()
+                infos = _conversation_info_type_adapter.validate_python(data)
+                results.extend(c for c in infos if c)
+            except httpx.HTTPStatusError:
+                _logger.warning(
+                    f'Error getting OpenHands conversation status from sandbox {sandbox.id}',
+                    exc_info=True,
+                )
+            except Exception:
+                _logger.exception(
+                    f'Error getting OpenHands conversation status from sandbox {sandbox.id}',
+                    stack_info=True,
+                )
+
+        # Fetch ACP conversations
+        if acp_ids:
+            try:
+                url = f'{agent_server_url.rstrip("/")}/api/acp/conversations'
+                response = await self.httpx_client.get(
+                    url, params={'ids': acp_ids}, headers=headers
+                )
+                response.raise_for_status()
+                data = response.json()
+                infos = _acp_conversation_info_type_adapter.validate_python(data)
+                results.extend(c for c in infos if c)
+            except httpx.HTTPStatusError:
+                _logger.warning(
+                    f'Error getting ACP conversation status from sandbox {sandbox.id}',
+                    exc_info=True,
+                )
+            except Exception:
+                _logger.exception(
+                    f'Error getting ACP conversation status from sandbox {sandbox.id}',
+                    stack_info=True,
+                )
+
+        return results
 
     def _build_conversation(
         self,
@@ -516,7 +597,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 None,
             )
             if conversation_url:
-                conversation_url += f'/api/conversations/{app_conversation_info.id.hex}'
+                router_path = _agent_kind_to_router_path(
+                    app_conversation_info.agent_kind
+                )
+                conversation_url += f'/api/{router_path}/{app_conversation_info.id.hex}'
             session_api_key = sandbox.session_api_key
 
         return AppConversation(
@@ -909,44 +993,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             usage_id='agent',
         )
 
-    async def _get_tavily_api_key(self, user: UserInfo) -> str | None:
-        """Get Tavily search API key, prioritizing user's key over service key.
-
-        Args:
-            user: User information
-
-        Returns:
-            Tavily API key if available, None otherwise
-        """
-        # Get the actual API key values, prioritizing user's key over service key
-        user_search_key = None
-        if user.search_api_key:
-            key_value = user.search_api_key.get_secret_value()
-            if key_value and key_value.strip():
-                user_search_key = key_value
-
-        service_tavily_key = None
-        if self.tavily_api_key:
-            # tavily_api_key is already a string (extracted in the factory method)
-            if self.tavily_api_key.strip():
-                service_tavily_key = self.tavily_api_key
-
-        return user_search_key or service_tavily_key
-
     async def _add_system_mcp_servers(
-        self, mcp_servers: dict[str, Any], user: UserInfo, conversation_id: UUID
+        self, mcp_servers: dict[str, Any], conversation_id: UUID
     ) -> None:
-        """Add system-generated MCP servers (default OpenHands server and Tavily).
+        """Add system-generated MCP servers (default OpenHands server).
+
+        The default server includes the Tavily search proxy if configured.
+        Tavily search is proxied through the app server to avoid exposing
+        the API key to sandboxes.
 
         Args:
             mcp_servers: Dictionary to add servers to
-            user: User information for API keys
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
         """
         if not self.web_url:
             return
 
-        # Add default OpenHands MCP server
+        # Add default OpenHands MCP server (includes Tavily proxy if configured)
         mcp_url = f'{self.web_url}/mcp/mcp'
         mcp_servers['default'] = {
             'url': mcp_url,
@@ -957,16 +1020,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         mcp_api_key = await self.user_context.get_mcp_api_key()
         if mcp_api_key:
             mcp_servers['default']['headers']['X-Session-API-Key'] = mcp_api_key
-
-        # Add Tavily search if API key is available
-        tavily_api_key = await self._get_tavily_api_key(user)
-        if tavily_api_key:
-            _logger.info('Adding search engine to MCP config')
-            mcp_servers['tavily'] = {
-                'url': f'https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}'
-            }
-        else:
-            _logger.info('No search engine API key found, skipping search engine')
 
     def _merge_custom_mcp_config(
         self, mcp_servers: dict[str, Any], user: UserInfo
@@ -1023,8 +1076,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Configure MCP - SDK expects format: {'mcpServers': {'server_name': {...}}}
         mcp_servers: dict[str, Any] = {}
 
-        # Add system-generated servers (default + tavily)
-        await self._add_system_mcp_servers(mcp_servers, user, conversation_id)
+        # Add system-generated servers (default MCP server with Tavily proxy)
+        await self._add_system_mcp_servers(mcp_servers, conversation_id)
 
         # Merge custom servers from user settings
         self._merge_custom_mcp_config(mcp_servers, user)
@@ -1219,7 +1272,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
-    ) -> StartConversationRequest:
+    ) -> StartConversationRequest | StartACPConversationRequest:
         """Build a complete StartConversationRequest for a user.
 
         Resolves LLM, MCP, tools, secrets and agent context, then
@@ -1227,6 +1280,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Server-only overrides (system prompts, LLM tracing metadata,
         skills, hooks) are applied to the agent after creation.
         Finally delegates to ``ConversationSettings.create_request()``.
+
+        For ACP agent settings, routes to ``_build_acp_start_conversation_request``.
 
         Args:
             sandbox: Sandbox information
@@ -1246,6 +1301,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 precedence.
         """
         user = await self.user_context.get_user_info()
+
+        # Route ACP agent settings to the ACP-specific builder
+        if isinstance(user.agent_settings, ACPAgentSettings):
+            return await self._build_acp_start_conversation_request(
+                sandbox=sandbox,
+                conversation_id=conversation_id,
+                initial_message=initial_message,
+                working_dir=working_dir,
+                selected_repository=selected_repository,
+                plugins=plugins,
+                api_secrets=api_secrets,
+            )
 
         project_dir = get_project_dir(working_dir, selected_repository)
         workspace = LocalWorkspace(working_dir=project_dir)
@@ -1387,6 +1454,166 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Pass agent explicitly — it has server-only overrides (system
         # prompts, LLM metadata, skills) applied after create_agent().
         return conv_settings.create_request(StartConversationRequest, agent=agent)
+
+    @staticmethod
+    def _acp_provider_env(user: UserInfo) -> dict[str, str]:
+        """Translate UI-saved LLM credentials into provider-native env vars.
+
+        The ACP subprocess reads provider credentials from environment variables.
+        Maps the user's LLM API key to the env var expected by the active ACP
+        server via ``ACPAgentSettings.api_key_env_var``. Custom servers return
+        ``None`` — users manage credentials entirely via ``acp_env``.
+
+        Args:
+            user: User information containing ACP agent settings.
+
+        Returns:
+            Dict of env var name → value to inject into the ACP subprocess.
+        """
+        if not isinstance(user.agent_settings, ACPAgentSettings):
+            return {}
+
+        acp_settings = user.agent_settings
+        env: dict[str, str] = {}
+
+        llm_api_key = acp_settings.llm.api_key
+        if not llm_api_key:
+            return env
+
+        key_value = (
+            llm_api_key.get_secret_value()
+            if isinstance(llm_api_key, SecretStr)
+            else str(llm_api_key)
+        )
+        if not key_value or not key_value.strip():
+            return env
+
+        # TODO: simplify to `acp_settings.api_key_env_var` once OpenHands is
+        # pinned to an SDK version that includes software-agent-sdk PR #2984.
+        # The fallback per-server mapping below duplicates that SDK property.
+        api_key_env: str | None = getattr(acp_settings, 'api_key_env_var', None)
+        if api_key_env is None:
+            _SERVER_KEY_MAP = {
+                'claude-code': 'ANTHROPIC_API_KEY',
+                'codex': 'OPENAI_API_KEY',
+                'gemini-cli': 'GEMINI_API_KEY',
+            }
+            api_key_env = _SERVER_KEY_MAP.get(acp_settings.acp_server)
+
+        if api_key_env:
+            env[api_key_env] = key_value
+
+        return env
+
+    async def _build_acp_start_conversation_request(
+        self,
+        sandbox: SandboxInfo,
+        conversation_id: UUID,
+        initial_message: SendMessageRequest | None,
+        working_dir: str,
+        selected_repository: str | None = None,
+        plugins: list[PluginSpec] | None = None,
+        api_secrets: dict[str, SecretStr] | None = None,
+    ) -> StartACPConversationRequest:
+        """Build a StartACPConversationRequest for ACP agent conversations.
+
+        Unlike the LLM path, ACP agents run as separate subprocesses; we pass
+        credentials via environment variables rather than injecting an LLM object.
+
+        User secrets (Secrets panel + git provider tokens) are also passed through
+        ``AgentContext.secrets`` so the SDK renders a ``<CUSTOM_SECRETS>`` block
+        in the ACP prompt and injects values into the subprocess env at start time.
+
+        Args:
+            sandbox: Sandbox information
+            conversation_id: Unique conversation identifier
+            initial_message: Optional initial message to send
+            working_dir: Working directory path
+            selected_repository: Optional repository name
+            plugins: Optional list of plugins to load
+            api_secrets: Optional secrets passed directly via the API.
+        """
+        user = await self.user_context.get_user_info()
+
+        project_dir = get_project_dir(working_dir, selected_repository)
+        workspace = LocalWorkspace(working_dir=project_dir)
+
+        # --- secrets --------------------------------------------------------
+        secrets = await self._setup_secrets_for_git_providers(user)
+
+        if api_secrets:
+            from openhands.app_server.constants import (
+                validate_secret_name,
+                validate_secrets_dict,
+            )
+
+            validate_secrets_dict(cast('Mapping[str, object]', api_secrets))
+            for name, value in api_secrets.items():
+                validate_secret_name(name)
+                if name in secrets:
+                    _logger.warning(
+                        'API-provided secret %r overrides existing secret', name
+                    )
+                secrets[name] = StaticSecret(value=value)
+
+        # --- build the ACP agent ------------------------------------------
+        acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
+        assert isinstance(acp_settings, ACPAgentSettings)
+
+        # Merge provider env vars (API keys etc.) into acp_env.
+        # Priority (highest → lowest): acp_env > provider_env
+        provider_env = self._acp_provider_env(user)
+        merged_env: dict[str, str] = {
+            **provider_env,
+            **dict(acp_settings.acp_env or {}),
+        }
+
+        # Pass user secrets via AgentContext so the SDK renders a
+        # <CUSTOM_SECRETS> block in the ACP prompt and injects values into
+        # the subprocess env at start time (SDK PR #2984).
+        # TODO: remove the _sdk_supports_acp_secrets guard once OpenHands pins
+        # to an SDK version that includes PR #2984 (secrets acp_compatible=True).
+        _sdk_supports_acp_secrets = (
+            AgentContext.model_fields.get('secrets') is not None
+            and isinstance(AgentContext.model_fields['secrets'].json_schema_extra, dict)
+            and AgentContext.model_fields['secrets'].json_schema_extra.get(
+                'acp_compatible'
+            )
+            is True
+        )
+        agent_context = (
+            AgentContext(secrets=secrets)
+            if secrets and _sdk_supports_acp_secrets
+            else None
+        )
+
+        acp_agent = ACPAgent(
+            acp_command=acp_settings.acp_command,
+            acp_args=acp_settings.acp_args,
+            acp_env=merged_env,
+            acp_model=acp_settings.acp_model,
+            acp_session_mode=acp_settings.acp_session_mode,
+            acp_prompt_timeout=acp_settings.acp_prompt_timeout,
+            agent_context=agent_context,
+        )
+
+        sdk_plugins: list[PluginSource] | None = None
+        if plugins:
+            sdk_plugins = [
+                PluginSource(source=p.source, ref=p.ref, repo_path=p.repo_path)
+                for p in plugins
+            ]
+
+        return StartACPConversationRequest(
+            workspace=workspace,
+            conversation_id=conversation_id,
+            initial_message=self._construct_initial_message_with_plugin_params(
+                initial_message, plugins
+            ),
+            secrets=secrets,
+            plugins=sdk_plugins,
+            agent=acp_agent,
+        )
 
     async def _process_pending_messages(
         self,
@@ -1833,10 +2060,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             'be retrieved by a sandboxed conversation.'
         ),
     )
-    tavily_api_key: SecretStr | None = Field(
-        default=None,
-        description='The Tavily Search API key to add to MCP integration',
-    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -1886,7 +2109,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             # Get app_mode for SaaS mode
             app_mode = None
             try:
-                from openhands.server.shared import server_config
+                from openhands.app_server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None
@@ -1894,14 +2117,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             except (ImportError, AttributeError):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
-
-            # We supply the global tavily key only if the app mode is not SAAS, where
-            # currently the search endpoints are patched into the app server instead
-            # so the tavily key does not need to be shared
-            if self.tavily_api_key and app_mode != AppMode.SAAS:
-                tavily_api_key = self.tavily_api_key.get_secret_value()
-            else:
-                tavily_api_key = None
 
             yield LiveStatusAppConversationService(
                 init_git_in_empty_workspace=self.init_git_in_empty_workspace,
@@ -1922,5 +2137,4 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
-                tavily_api_key=tavily_api_key,
             )

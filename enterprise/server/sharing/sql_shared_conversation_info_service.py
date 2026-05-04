@@ -30,8 +30,8 @@ from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     StoredConversationMetadata,
 )
+from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.services.injector import InjectorState
-from openhands.integrations.provider import ProviderType
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 
 logger = logging.getLogger(__name__)

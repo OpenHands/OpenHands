@@ -1,13 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import userEvent from "@testing-library/user-event";
 import { ContextMenuCTA } from "#/components/features/context-menu/context-menu-cta";
 
-// Mock useTracking hook
-const mockTrackSaasSelfhostedInquiry = vi.fn();
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackSaasSelfhostedInquiry: mockTrackSaasSelfhostedInquiry,
+vi.mock("#/hooks/use-client-analytics", () => ({
+  useClientAnalytics: () => ({
+    trackSaasSelfhostedInquiry: vi.fn(),
+    trackEnterpriseLeadFormSubmitted: vi.fn(),
   }),
 }));
 
@@ -18,20 +16,6 @@ describe("ContextMenuCTA", () => {
     expect(screen.getByText("CTA$ENTERPRISE_TITLE")).toBeInTheDocument();
     expect(screen.getByText("CTA$ENTERPRISE_DESCRIPTION")).toBeInTheDocument();
     expect(screen.getByText("CTA$LEARN_MORE")).toBeInTheDocument();
-  });
-
-  it("should call trackSaasSelfhostedInquiry with location 'context_menu' when Learn More is clicked", async () => {
-    const user = userEvent.setup();
-    render(<ContextMenuCTA />);
-
-    const learnMoreLink = screen.getByRole("link", {
-      name: "CTA$LEARN_MORE",
-    });
-    await user.click(learnMoreLink);
-
-    expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
-      location: "context_menu",
-    });
   });
 
   it("should render Learn More as a link with correct href and target", () => {

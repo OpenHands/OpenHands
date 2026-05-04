@@ -29,6 +29,7 @@ export interface WebClientFeatureFlags {
   hide_billing_page: boolean;
   hide_integrations_page: boolean;
   deployment_mode?: DeploymentMode;
+  enable_onboarding: boolean;
 }
 
 export interface WebClientConfig {
@@ -44,5 +45,6 @@ export interface WebClientConfig {
   updated_at: string;
   github_app_slug: string | null;
   gitlab_enabled?: boolean;
+  provider_default_hosts?: Partial<Record<Provider, string>>;
   slack_enabled?: boolean;
 }

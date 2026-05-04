@@ -12,7 +12,7 @@ vi.mock("#/hooks/use-unified-websocket-status", () => ({
 
 // Mock agent state
 vi.mock("#/hooks/use-agent-state", () => ({
-  useAgentState: () => ({ curAgentState: "IDLE" }),
+  useAgentState: () => ({ curAgentState: "IDLE", isArchived: false }),
 }));
 
 // Track invalidateQueries calls

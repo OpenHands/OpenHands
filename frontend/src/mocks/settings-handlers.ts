@@ -52,6 +52,7 @@ export const createMockWebClientConfig = (
     hide_users_page: false,
     hide_billing_page: false,
     hide_integrations_page: false,
+    enable_onboarding: false,
     ...overrides.feature_flags,
   },
   providers_configured: [],
@@ -63,6 +64,13 @@ export const createMockWebClientConfig = (
   updated_at: new Date().toISOString(),
   github_app_slug: null,
   gitlab_enabled: false,
+  provider_default_hosts: {
+    github: "github.com",
+    gitlab: "gitlab.com",
+    bitbucket: "bitbucket.org",
+    azure_devops: "dev.azure.com",
+    forgejo: "codeberg.org",
+  },
   slack_enabled: false,
   ...overrides,
 });
@@ -224,7 +232,7 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
           default: false,
           choices: [],
           depends_on: [],
-          prominence: "major",
+          prominence: "critical",
           secret: false,
           required: true,
         },
@@ -418,6 +426,7 @@ export const SETTINGS_HANDLERS = [
         hide_users_page: false,
         hide_billing_page: false,
         hide_integrations_page: false,
+        enable_onboarding: false,
       },
       providers_configured: [],
       maintenance_start_time: null,
@@ -428,6 +437,13 @@ export const SETTINGS_HANDLERS = [
       updated_at: new Date().toISOString(),
       github_app_slug: mockSaas ? "openhands" : null,
       gitlab_enabled: false,
+      provider_default_hosts: {
+        github: "github.com",
+        gitlab: "gitlab.com",
+        bitbucket: "bitbucket.org",
+        azure_devops: "dev.azure.com",
+        forgejo: "codeberg.org",
+      },
       slack_enabled: false,
     };
 

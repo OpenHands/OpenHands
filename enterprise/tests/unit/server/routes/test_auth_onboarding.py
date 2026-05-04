@@ -4,8 +4,10 @@ Tests for:
 - _should_redirect_to_onboarding() function
 - _get_post_auth_redirect() function
 - /complete_onboarding endpoint
+- /onboarding_status endpoint
 """
 
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,6 +19,7 @@ from server.routes.auth import (
     _get_post_auth_redirect,
     _should_redirect_to_onboarding,
     complete_onboarding,
+    onboarding_status,
 )
 from storage.user import User
 
@@ -328,3 +331,78 @@ class TestCompleteOnboardingEndpoint:
             await complete_onboarding(mock_request)
 
         mock_mark_completed.assert_called_once_with(user_id)
+
+
+class TestOnboardingStatusEndpoint:
+    """Tests for the /onboarding_status API endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_returns_401_when_not_authenticated(self, mock_request):
+        """Unauthenticated requests return 401."""
+        mock_user_auth = MagicMock(spec=SaasUserAuth)
+        mock_user_auth.get_user_id = AsyncMock(return_value=None)
+
+        with patch(
+            'server.routes.auth.get_user_auth',
+            new_callable=AsyncMock,
+            return_value=mock_user_auth,
+        ):
+            result = await onboarding_status(mock_request)
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_returns_true_for_new_cloud_user(self, mock_request, mock_user):
+        """A cloud user whose onboarding is incomplete should be told to complete it."""
+        user_id = str(uuid.uuid4())
+        mock_user.onboarding_completed = False
+        mock_user_auth = MagicMock(spec=SaasUserAuth)
+        mock_user_auth.get_user_id = AsyncMock(return_value=user_id)
+
+        with (
+            patch(
+                'server.routes.auth.get_user_auth',
+                new_callable=AsyncMock,
+                return_value=mock_user_auth,
+            ),
+            patch(
+                'server.routes.auth.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+            patch('server.routes.auth.DEPLOYMENT_MODE', 'cloud'),
+        ):
+            result = await onboarding_status(mock_request)
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+        body = json.loads(result.body)
+        assert body == {'should_complete_onboarding': True}
+
+    @pytest.mark.asyncio
+    async def test_returns_false_for_completed_user(self, mock_request, mock_user):
+        """A user who already completed onboarding should not be told to complete it."""
+        user_id = str(uuid.uuid4())
+        mock_user.onboarding_completed = True
+        mock_user_auth = MagicMock(spec=SaasUserAuth)
+        mock_user_auth.get_user_id = AsyncMock(return_value=user_id)
+
+        with (
+            patch(
+                'server.routes.auth.get_user_auth',
+                new_callable=AsyncMock,
+                return_value=mock_user_auth,
+            ),
+            patch(
+                'server.routes.auth.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+        ):
+            result = await onboarding_status(mock_request)
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+        body = json.loads(result.body)
+        assert body == {'should_complete_onboarding': False}

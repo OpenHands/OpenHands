@@ -4,11 +4,11 @@ from fastapi import APIRouter, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from openhands.app_server.config import depends_user_context
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.sandbox.session_auth import validate_session_key_ownership
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.integrations.service_types import UserGitInfo
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
