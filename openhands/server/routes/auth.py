@@ -365,6 +365,10 @@ async def oauth_proxy_callback(request: Request):
        `cookies` query param, and the full callbackURL in `callbackURL`.
        We decrypt and set cookies, then redirect to the final destination.
     """
+    # Newer Better Auth (>=1.x) stores cookies server-side and sends a
+    # short reference key as `p`. Older versions sent the actual encrypted
+    # payload as `cookies`.
+    proxy_ref = request.query_params.get('p', '')
     encrypted_cookies = request.query_params.get('cookies', '')
 
     # Determine the final destination URL.
@@ -377,20 +381,52 @@ async def oauth_proxy_callback(request: Request):
     if destination:
         destination = unquote(destination)
 
-    if encrypted_cookies and ba_callback_url:
-        # Scenario 2: redirect-proxy with encrypted cookies.
-        # The ba_callback_url from Better Auth is our proxy endpoint URL
-        # (including the _destination param). We need to extract the
-        # actual destination from it.
+    if (proxy_ref or encrypted_cookies) and ba_callback_url:
+        # Redirect-proxy scenario: the `callbackURL` in the request is our
+        # proxy endpoint URL (with our `_destination` param). Pull the real
+        # destination out of it.
         parsed_ba = urlparse(ba_callback_url)
         ba_qs = parse_qs(parsed_ba.query)
         final_destination = ba_qs.get('_destination', ['/'])[0]
     elif destination:
-        # Scenario 1: direct redirect from Better Auth (no proxy).
+        # Direct redirect from Better Auth (no proxy).
         final_destination = destination
     else:
         # Fallback
         final_destination = ba_callback_url or '/'
+
+    # --- New Better Auth (>=1.x): server-side stored cookies, fetched by ref ---
+    if proxy_ref and BETTER_AUTH_URL:
+        # Forward the request to the auth server's own oauth-proxy-callback,
+        # which returns a redirect with Set-Cookie headers carrying the
+        # session cookies. Proxy those Set-Cookie headers back to our
+        # response so the cookies are set on our origin.
+        async with httpx.AsyncClient(follow_redirects=False) as client:
+            ba_resp = await client.get(
+                _auth_url('/api/auth/oauth-proxy-callback'),
+                params={'p': proxy_ref, 'callbackURL': ba_callback_url},
+            )
+
+        set_cookies = ba_resp.headers.get_list('set-cookie')
+
+        if not set_cookies:
+            logger.error(
+                'OAuth proxy callback: auth server returned no Set-Cookie '
+                '(status=%s, body_prefix=%r)',
+                ba_resp.status_code,
+                ba_resp.text[:200],
+            )
+            parsed_dest = urlparse(final_destination)
+            login_url = (
+                f'{parsed_dest.scheme}://{parsed_dest.netloc}/login'
+                if parsed_dest.scheme
+                else '/login'
+            )
+            return RedirectResponse(url=login_url, status_code=302)
+
+        response = RedirectResponse(url=final_destination, status_code=302)
+        _proxy_set_cookie_headers(ba_resp, response)
+        return response
 
     # --- Handle encrypted cookies (redirect-proxy scenario) ---
     if encrypted_cookies:
