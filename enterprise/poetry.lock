@@ -6442,7 +6442,7 @@ files = []
 develop = true
 
 [package.dependencies]
-aiohttp = "3.13.4"
+aiohttp = ">=3.13.4"
 anthropic = {version = "*", extras = ["vertex"]}
 anyio = "4.9"
 asyncpg = ">=0.30"
@@ -6476,7 +6476,7 @@ lmnr = ">=0.7.20"
 mcp = ">=1.25"
 memory-profiler = ">=0.61"
 numpy = "*"
-openai = "2.24.0"
+openai = "2.24"
 openhands-aci = "0.3.3"
 openhands-agent-server = "1.19.1"
 openhands-sdk = "1.19.1"

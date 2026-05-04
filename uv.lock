@@ -3660,7 +3660,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", specifier = "==3.13.4" },
+    { name = "aiohttp", specifier = ">=3.13.4" },
     { name = "anthropic", extras = ["vertex"] },
     { name = "anyio", specifier = "==4.9" },
     { name = "asyncpg", specifier = ">=0.30" },
@@ -3694,7 +3694,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.25" },
     { name = "memory-profiler", specifier = ">=0.61" },
     { name = "numpy" },
-    { name = "openai", specifier = "==2.24.0" },
+    { name = "openai", specifier = "==2.24" },
     { name = "openhands-aci", specifier = "==0.3.3" },
     { name = "openhands-agent-server", specifier = "==1.19.1" },
     { name = "openhands-sdk", specifier = "==1.19.1" },
