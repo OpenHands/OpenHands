@@ -101,7 +101,7 @@ from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.settings import ACPAgentSettings
+from openhands.sdk.settings import ACPAgentSettings, OpenHandsAgentSettings
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
@@ -185,11 +185,37 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     app_mode: str | None = None
     tavily_api_key: str | None = None
     critic_api_key: str | None = None
+    critic_server_url: str | None = None
+    critic_model_name: str | None = None
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
         user_info = await self.user_context.get_user_info()
         return user_info.sandbox_grouping_strategy
+
+    def _apply_deployment_critic_config(
+        self,
+        agent: Agent | ACPAgent,
+        configured_agent_settings: OpenHandsAgentSettings | ACPAgentSettings,
+    ) -> None:
+        """Apply deployment critic defaults without overwriting explicit user settings."""
+        if not isinstance(configured_agent_settings, OpenHandsAgentSettings):
+            return
+
+        critic = getattr(agent, 'critic', None)
+        if critic is None:
+            return
+
+        verification = configured_agent_settings.verification
+        if verification.critic_server_url is None and self.critic_server_url:
+            critic.server_url = self.critic_server_url
+        if verification.critic_model_name is None and self.critic_model_name:
+            critic.model_name = self.critic_model_name
+
+        # Use a deployment-level service key, when available, so critic
+        # requests are not subject to per-user budget limits.
+        if self.critic_api_key:
+            critic.api_key = SecretStr(self.critic_api_key)
 
     async def search_app_conversations(
         self,
@@ -1392,10 +1418,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         agent = configured_agent_settings.create_agent()
 
-        # Override the critic API key with a deployment-level service key
-        # so that critic requests are not subject to per-user budget limits.
-        if agent.critic is not None and self.critic_api_key:
-            agent.critic.api_key = SecretStr(self.critic_api_key)
+        self._apply_deployment_critic_config(agent, configured_agent_settings)
 
         agent = self._apply_server_agent_overrides(
             agent, agent_type, mcp_config, conversation_id, user.id
@@ -2148,4 +2171,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 app_mode=app_mode,
                 tavily_api_key=tavily_api_key,
                 critic_api_key=config.critic_api_key,
+                critic_server_url=config.critic_server_url,
+                critic_model_name=config.critic_model_name,
             )

@@ -43,6 +43,7 @@ from openhands.app_server.settings.settings_models import (
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk import Agent, Event
 from openhands.sdk.context.agent_context import AgentContext as _AgentContext
+from openhands.sdk.critic.impl.api import APIBasedCritic
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import AgentSettings, ConversationSettings
@@ -881,6 +882,50 @@ class TestLiveStatusAppConversationService:
 
         # Non-openhands model: main LLM unchanged, but condenser still gets usage_id
         assert updated.condenser.llm.usage_id == 'condenser'
+
+    def test_apply_deployment_critic_config_fills_unset_defaults(self):
+        """Deployment critic config supplies the hidden routing defaults."""
+        self.service.critic_server_url = 'https://critic.example.com'
+        self.service.critic_model_name = 'critic-model'
+        self.service.critic_api_key = 'service-key'
+
+        settings = Settings(
+            agent_settings={
+                'llm': {'model': 'gpt-4', 'api_key': 'user-key'},
+                'verification': {'critic_enabled': True},
+            }
+        ).agent_settings
+        agent = settings.create_agent()
+
+        self.service._apply_deployment_critic_config(agent, settings)
+
+        assert isinstance(agent.critic, APIBasedCritic)
+        assert agent.critic.server_url == 'https://critic.example.com'
+        assert agent.critic.model_name == 'critic-model'
+        assert agent.critic.api_key.get_secret_value() == 'service-key'
+
+    def test_apply_deployment_critic_config_preserves_user_routing(self):
+        """Explicit critic routing in user settings wins over deployment defaults."""
+        self.service.critic_server_url = 'https://critic.example.com'
+        self.service.critic_model_name = 'critic-model'
+
+        settings = Settings(
+            agent_settings={
+                'llm': {'model': 'gpt-4', 'api_key': 'user-key'},
+                'verification': {
+                    'critic_enabled': True,
+                    'critic_server_url': 'https://custom.example.com',
+                    'critic_model_name': 'custom-model',
+                },
+            }
+        ).agent_settings
+        agent = settings.create_agent()
+
+        self.service._apply_deployment_critic_config(agent, settings)
+
+        assert isinstance(agent.critic, APIBasedCritic)
+        assert agent.critic.server_url == 'https://custom.example.com'
+        assert agent.critic.model_name == 'custom-model'
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
