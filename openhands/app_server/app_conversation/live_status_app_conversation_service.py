@@ -26,6 +26,9 @@ from openhands.agent_server.models import (
 from openhands.app_server.app_conversation.agent_server_routing import (
     acp_display_name as _acp_display_name,
 )
+from openhands.app_server.app_conversation.agent_server_routing import (
+    agent_kind_to_router_path,
+)
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -101,7 +104,6 @@ from openhands.app_server.utils.llm_metadata import (
     should_set_litellm_extra_body,
 )
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
-from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
@@ -120,13 +122,6 @@ from openhands.tools.preset.planning import (
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _acp_conversation_info_type_adapter = TypeAdapter(list[ACPConversationInfo | None])
 _logger = logging.getLogger(__name__)
-
-
-def _agent_kind_to_router_path(agent_kind: str) -> str:
-    """Map agent_kind discriminator to the agent-server router path prefix."""
-    if agent_kind == 'acp':
-        return 'acp/conversations'
-    return 'conversations'
 
 
 def _split_ids_by_kind(
@@ -369,7 +364,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 else {}
             )
             is_acp = isinstance(start_conversation_request, StartACPConversationRequest)
-            router_path = _agent_kind_to_router_path('acp' if is_acp else 'openhands')
+            router_path = agent_kind_to_router_path('acp' if is_acp else 'openhands')
             response = await self.httpx_client.post(
                 f'{agent_server_url}/api/{router_path}',
                 json=body_json,
@@ -607,7 +602,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 None,
             )
             if conversation_url:
-                router_path = _agent_kind_to_router_path(
+                router_path = agent_kind_to_router_path(
                     app_conversation_info.agent_kind
                 )
                 conversation_url += f'/api/{router_path}/{app_conversation_info.id.hex}'
@@ -1518,31 +1513,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         env: dict[str, str] = {}
 
         llm_api_key = acp_settings.llm.api_key
-        if not llm_api_key:
-            return env
+        if llm_api_key:
+            key_value = (
+                llm_api_key.get_secret_value()
+                if isinstance(llm_api_key, SecretStr)
+                else str(llm_api_key)
+            )
+            if key_value and key_value.strip() and acp_settings.api_key_env_var:
+                env[acp_settings.api_key_env_var] = key_value
 
-        key_value = (
-            llm_api_key.get_secret_value()
-            if isinstance(llm_api_key, SecretStr)
-            else str(llm_api_key)
-        )
-        if not key_value or not key_value.strip():
-            return env
-
-        # TODO: simplify to `acp_settings.api_key_env_var` once OpenHands is
-        # pinned to an SDK version that includes software-agent-sdk PR #2984.
-        # The fallback per-server mapping below duplicates that SDK property.
-        api_key_env: str | None = getattr(acp_settings, 'api_key_env_var', None)
-        if api_key_env is None:
-            _SERVER_KEY_MAP = {
-                'claude-code': 'ANTHROPIC_API_KEY',
-                'codex': 'OPENAI_API_KEY',
-                'gemini-cli': 'GEMINI_API_KEY',
-            }
-            api_key_env = _SERVER_KEY_MAP.get(acp_settings.acp_server)
-
-        if api_key_env:
-            env[api_key_env] = key_value
+        base_url = acp_settings.llm.base_url
+        if base_url and base_url.strip() and acp_settings.base_url_env_var:
+            env[acp_settings.base_url_env_var] = base_url
 
         return env
 
@@ -1628,15 +1610,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             else None
         )
 
-        acp_agent = ACPAgent(
-            acp_command=acp_settings.acp_command,
-            acp_args=acp_settings.acp_args,
-            acp_env=merged_env,
-            acp_model=acp_settings.acp_model,
-            acp_session_mode=acp_settings.acp_session_mode,
-            acp_prompt_timeout=acp_settings.acp_prompt_timeout,
-            agent_context=agent_context,
-        )
+        acp_agent = acp_settings.model_copy(
+            update={'acp_env': merged_env}
+        ).create_agent()
+        if agent_context is not None:
+            acp_agent = acp_agent.model_copy(update={'agent_context': agent_context})
 
         sdk_plugins: list[PluginSource] | None = None
         if plugins:

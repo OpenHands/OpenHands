@@ -51,7 +51,6 @@ from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
 from openhands.sdk import ConversationExecutionStatus, Event
-from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.sdk.event import ConversationStateUpdateEvent
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
@@ -227,14 +226,18 @@ async def on_conversation_update(
         sandbox_id=sandbox_info.id,
     )
 
-    is_acp = isinstance(conversation_info.agent, ACPAgent)
+    agent = conversation_info.agent
+    is_acp = (
+        getattr(agent, 'supports_openhands_tools', True) is False
+        or getattr(agent, 'kind', None) == 'ACPAgent'
+    )
     if is_acp:
         agent_kind = 'acp'
         llm_model = None
-        display_name = acp_display_name(conversation_info.agent.acp_command)
+        display_name = acp_display_name(agent.acp_command)
     else:
         agent_kind = existing.agent_kind or 'openhands'
-        llm_model = conversation_info.agent.llm.model
+        llm_model = agent.llm.model
         display_name = None
 
     app_conversation_info = AppConversationInfo(

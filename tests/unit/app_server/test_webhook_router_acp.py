@@ -88,6 +88,7 @@ def _make_acp_conversation_info(acp_command: list[str]) -> ACPConversationInfo:
     info.id = uuid4()
     info.execution_status = ConversationExecutionStatus.RUNNING
     acp_agent = MagicMock(spec=ACPAgent)
+    acp_agent.supports_openhands_tools = False
     acp_agent.acp_command = acp_command
     info.agent = acp_agent
     info.stats = MagicMock()
@@ -101,16 +102,17 @@ def _make_acp_conversation_info(acp_command: list[str]) -> ACPConversationInfo:
 # ---------------------------------------------------------------------------
 
 
-def test_acp_agent_isinstance_check_is_true_for_acp_agent():
-    """ACPAgent payload in ACPConversationInfo satisfies isinstance check."""
+def test_acp_agent_capability_check_is_false_for_openhands_tools():
+    """ACPAgent payload advertises that the ACP server owns its tools."""
     acp_agent = MagicMock(spec=ACPAgent)
-    assert isinstance(acp_agent, ACPAgent)
+    acp_agent.supports_openhands_tools = False
+    assert acp_agent.supports_openhands_tools is False
 
 
-def test_regular_agent_isinstance_check_is_false():
-    """A regular Agent mock does NOT satisfy ACPAgent isinstance check."""
+def test_regular_agent_capability_defaults_to_openhands_tools():
+    """A regular Agent mock keeps the default OpenHands tool capability."""
     regular_agent = MagicMock()
-    assert not isinstance(regular_agent, ACPAgent)
+    assert getattr(regular_agent, 'supports_openhands_tools', True) is not False
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +184,7 @@ async def test_acp_conversation_stores_display_name(
     saved = await service.get_app_conversation_info(conversation_id)
     assert saved is not None
     assert saved.llm_model is None
-    assert saved.display_name == 'ACP: claude-agent-acp'
+    assert saved.display_name == 'Claude Code'
     assert saved.agent_kind == 'acp'
 
 

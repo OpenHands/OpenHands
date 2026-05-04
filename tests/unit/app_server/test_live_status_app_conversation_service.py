@@ -3281,6 +3281,13 @@ class TestAcpProviderEnv:
         env = LiveStatusAppConversationService._acp_provider_env(user)
         assert env == {}
 
+    def test_provider_base_url_env_var_is_synthesized(self, _user_factory):
+        user = _user_factory(
+            acp_server='gemini-cli', base_url='https://gemini-proxy.example.com'
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(user)
+        assert env == {'GEMINI_BASE_URL': 'https://gemini-proxy.example.com'}
+
 
 class TestAgentKindConversationUrl:
     """Regression tests for conversation_url / live-status route dispatch.
@@ -3372,12 +3379,12 @@ class TestAgentKindConversationUrl:
 
     def test_agent_kind_to_router_path_known_kinds(self):
         """``'openhands'`` routes to standard conversations; ``'acp'`` to ACP."""
-        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
-            _agent_kind_to_router_path,
+        from openhands.app_server.app_conversation.agent_server_routing import (
+            agent_kind_to_router_path,
         )
 
-        assert _agent_kind_to_router_path('openhands') == 'conversations'
-        assert _agent_kind_to_router_path('acp') == 'acp/conversations'
+        assert agent_kind_to_router_path('openhands') == 'conversations'
+        assert agent_kind_to_router_path('acp') == 'acp/conversations'
 
     def test_agent_kind_to_router_path_unknown_falls_back(self):
         """Any value that is not 'acp' routes to 'conversations'.
@@ -3386,12 +3393,12 @@ class TestAgentKindConversationUrl:
         before the rename, so rows stored with ``agent_kind='llm'`` continue to
         route correctly without a migration.
         """
-        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
-            _agent_kind_to_router_path,
+        from openhands.app_server.app_conversation.agent_server_routing import (
+            agent_kind_to_router_path,
         )
 
-        assert _agent_kind_to_router_path('llm') == 'conversations'
-        assert _agent_kind_to_router_path('future-variant') == 'conversations'
+        assert agent_kind_to_router_path('llm') == 'conversations'
+        assert agent_kind_to_router_path('future-variant') == 'conversations'
 
 
 class TestBuildAcpStartConversationRequestSecrets:

@@ -32,6 +32,12 @@ class WebClientFeatureFlags(BaseModel):
         return self
 
 
+class ACPProviderConfig(BaseModel):
+    key: str
+    display_name: str
+    default_command: list[str]
+
+
 class WebClientConfig(DiscriminatedUnionMixin):
     app_mode: AppMode
     posthog_client_key: str | None
@@ -47,3 +53,4 @@ class WebClientConfig(DiscriminatedUnionMixin):
     gitlab_enabled: bool = False
     provider_default_hosts: dict[str, str] = Field(default_factory=dict)
     slack_enabled: bool = False
+    acp_providers: list[ACPProviderConfig] = Field(default_factory=list)

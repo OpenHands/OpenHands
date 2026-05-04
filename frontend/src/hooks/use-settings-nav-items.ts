@@ -33,12 +33,6 @@ const ACP_DISABLED_PATHS = new Set<string>([
   "/settings/mcp",
 ]);
 
-const ACP_SERVER_NAMES: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  "gemini-cli": "Gemini CLI",
-};
-
 // Section header text mapping
 const SECTION_HEADERS: Partial<Record<SettingsNavSection, I18nKey>> = {
   org: I18nKey.SETTINGS$ORG_SETTINGS_HEADER,
@@ -71,9 +65,9 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const isAcpEnabled = !!featureFlags?.enable_acp;
   const isAcpAgent = settings?.agent_settings?.agent_kind === "acp";
   const acpServerName = isAcpAgent
-    ? (ACP_SERVER_NAMES[
-        (settings?.agent_settings?.acp_server as string) ?? ""
-      ] ?? "ACP Agent")
+    ? (config?.acp_providers?.find(
+        ({ key }) => key === settings?.agent_settings?.acp_server,
+      )?.display_name ?? "ACP Agent")
     : null;
 
   let items = isSaasMode ? [...SAAS_NAV_ITEMS] : [...OSS_NAV_ITEMS];

@@ -15,30 +15,45 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import type { ACPProviderConfig } from "#/api/option-service/option.types";
 
 export const handle = { hideTitle: true };
 
 type AgentType = "openhands" | "acp";
-type CommandPreset = "claude-code" | "codex" | "gemini-cli" | "custom";
-
-const PRESET_COMMANDS: Record<Exclude<CommandPreset, "custom">, string> = {
-  "claude-code": "npx -y @agentclientprotocol/claude-agent-acp",
-  codex: "npx -y @zed-industries/codex-acp",
-  "gemini-cli": "npx -y @google/gemini-cli --acp",
-};
-
-const COMMAND_PLACEHOLDER = PRESET_COMMANDS["claude-code"];
+const CUSTOM_PRESET = "custom";
+const EMPTY_ACP_PROVIDERS: ACPProviderConfig[] = [];
+const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 
 function tokenizeCommand(value: string): string[] {
   return value.split(/\s+/).filter(Boolean);
 }
 
-function detectPreset(text: string): CommandPreset {
-  const trimmed = text.trim();
-  for (const [key, cmd] of Object.entries(PRESET_COMMANDS)) {
-    if (trimmed === cmd) return key as CommandPreset;
+function formatCommand(command: string[]): string {
+  return command.join(" ");
+}
+
+function normalizeCommand(command: string): string {
+  return command.trim().split(/\s+/).filter(Boolean).join(" ");
+}
+
+function detectPreset(
+  acpServer: string | null | undefined,
+  commandText: string,
+  providers: ACPProviderConfig[],
+): string {
+  if (acpServer) {
+    const provider = providers.find(({ key }) => key === acpServer);
+    if (provider) return provider.key;
   }
-  return "custom";
+  const normalized = normalizeCommand(commandText);
+  for (const provider of providers) {
+    if (
+      normalized === normalizeCommand(formatCommand(provider.default_command))
+    ) {
+      return provider.key;
+    }
+  }
+  return CUSTOM_PRESET;
 }
 
 function AgentSettingsScreen() {
@@ -47,11 +62,11 @@ function AgentSettingsScreen() {
   const { data: settings, isLoading } = useSettings();
   const { data: config, isLoading: isConfigLoading } = useConfig();
   const { mutate: saveSettings, isPending: isSaving } = useSaveSettings();
+  const acpProviders = config?.acp_providers ?? EMPTY_ACP_PROVIDERS;
 
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
-  const [selectedPreset, setSelectedPreset] =
-    useState<CommandPreset>("claude-code");
+  const [selectedPreset, setSelectedPreset] = useState(CUSTOM_PRESET);
   const [acpModel, setAcpModel] = useState("");
   const [isDirty, setIsDirty] = useState(false);
 
@@ -72,8 +87,16 @@ function AgentSettingsScreen() {
           : []),
       ];
       const joined = tokens.join(" ");
-      setCommandText(joined);
-      setSelectedPreset(detectPreset(joined));
+      const rawAcpServer = settings.agent_settings?.acp_server;
+      const acpServer =
+        typeof rawAcpServer === "string" ? rawAcpServer : undefined;
+      const provider = acpProviders.find(({ key }) => key === acpServer);
+      const effectiveCommand =
+        joined || formatCommand(provider?.default_command ?? []);
+      setCommandText(effectiveCommand);
+      setSelectedPreset(
+        detectPreset(acpServer, effectiveCommand, acpProviders),
+      );
 
       const savedModel = settings.agent_settings?.acp_model;
       setAcpModel(typeof savedModel === "string" ? savedModel : "");
@@ -83,7 +106,7 @@ function AgentSettingsScreen() {
       setAcpModel("");
     }
     setIsDirty(false);
-  }, [settings]);
+  }, [settings, acpProviders]);
 
   const isAcpEnabled = !!config?.feature_flags?.enable_acp;
 
@@ -98,14 +121,28 @@ function AgentSettingsScreen() {
   const isAcp = agentType === "acp";
   const commandTokens = tokenizeCommand(commandText);
   const isAcpInvalid = isAcp && commandTokens.length === 0;
+  const selectedProvider = acpProviders.find(
+    ({ key }) => key === selectedPreset,
+  );
+  const isDefaultProviderCommand =
+    !!selectedProvider &&
+    normalizeCommand(commandText) ===
+      normalizeCommand(formatCommand(selectedProvider.default_command));
+  const commandPlaceholder =
+    formatCommand(acpProviders[0]?.default_command ?? []) ||
+    COMMAND_PLACEHOLDER_FALLBACK;
 
   const handleSave = () => {
     let agentSettingsDiff: Record<string, unknown>;
     if (isAcp) {
       agentSettingsDiff = {
         agent_kind: "acp",
-        acp_server: "custom",
-        acp_command: commandTokens,
+        acp_server:
+          selectedProvider && isDefaultProviderCommand
+            ? selectedProvider.key
+            : CUSTOM_PRESET,
+        acp_command:
+          selectedProvider && isDefaultProviderCommand ? [] : commandTokens,
         acp_args: [],
         acp_model: acpModel.trim() || null,
       };
@@ -171,21 +208,23 @@ function AgentSettingsScreen() {
             name="agent-preset"
             label={t(I18nKey.SETTINGS$AGENT_PRESET)}
             items={[
-              { key: "claude-code", label: "Claude Code" },
-              { key: "codex", label: "Codex" },
-              { key: "gemini-cli", label: "Gemini CLI" },
+              ...acpProviders.map((provider) => ({
+                key: provider.key,
+                label: provider.display_name,
+              })),
               {
-                key: "custom",
+                key: CUSTOM_PRESET,
                 label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
               },
             ]}
             selectedKey={selectedPreset}
             onSelectionChange={(key) => {
               if (!key) return;
-              const preset = key as CommandPreset;
+              const preset = String(key);
               setSelectedPreset(preset);
-              if (preset !== "custom") {
-                setCommandText(PRESET_COMMANDS[preset]);
+              const provider = acpProviders.find(({ key: k }) => k === preset);
+              if (provider) {
+                setCommandText(formatCommand(provider.default_command));
               }
               setIsDirty(true);
             }}
@@ -199,11 +238,11 @@ function AgentSettingsScreen() {
               data-testid="agent-command-input"
               className="bg-tertiary border border-[#717888] rounded-sm p-2 text-sm font-mono text-white placeholder:italic placeholder:text-[#717888] min-h-[60px] resize-y focus:outline-none focus:border-white"
               value={commandText}
-              placeholder={COMMAND_PLACEHOLDER}
+              placeholder={commandPlaceholder}
               onChange={(e) => {
                 const text = e.target.value;
                 setCommandText(text);
-                setSelectedPreset(detectPreset(text));
+                setSelectedPreset(detectPreset(undefined, text, acpProviders));
                 setIsDirty(true);
               }}
             />

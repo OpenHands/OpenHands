@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event";
 import AgentSettingsScreen from "#/routes/agent-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
+import type { ACPProviderConfig } from "#/api/option-service/option.types";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
@@ -32,6 +33,27 @@ const renderAgentSettings = () =>
     },
   );
 
+// Mirrors the SDK registry-backed web-client config. Frontend tests cannot
+// import the Python SDK source directly, but keeping this as a typed fixture
+// catches frontend drift in the API shape.
+const ACP_PROVIDERS_FIXTURE: ACPProviderConfig[] = [
+  {
+    key: "claude-code",
+    display_name: "Claude Code",
+    default_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+  },
+  {
+    key: "codex",
+    display_name: "Codex",
+    default_command: ["npx", "-y", "@zed-industries/codex-acp"],
+  },
+  {
+    key: "gemini-cli",
+    display_name: "Gemini CLI",
+    default_command: ["npx", "-y", "@google/gemini-cli", "--acp"],
+  },
+];
+
 const baseConfig = {
   app_mode: "oss" as const,
   posthog_client_key: null,
@@ -55,6 +77,7 @@ const baseConfig = {
   error_message: null,
   updated_at: "2026-01-01T00:00:00Z",
   github_app_slug: null,
+  acp_providers: ACP_PROVIDERS_FIXTURE,
 };
 
 describe("AgentSettingsScreen — minimal generic ACP UX", () => {
@@ -133,5 +156,80 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
         acp_model: null,
       },
     });
+  });
+
+  it("saves built-in presets via acp_server and lets the SDK resolve defaults", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(baseConfig);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      agent_settings: {
+        agent_kind: "acp",
+        acp_server: "custom",
+        acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+        acp_args: [],
+        acp_env: {},
+        acp_model: null,
+      },
+    });
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderAgentSettings();
+
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId("agent-command-input") as HTMLTextAreaElement)
+          .value,
+      ).toBe("npx -y @agentclientprotocol/claude-agent-acp");
+    });
+
+    const commandInput = screen.getByTestId("agent-command-input");
+    await userEvent.clear(commandInput);
+    await userEvent.type(
+      commandInput,
+      "npx   -y{enter}@agentclientprotocol/claude-agent-acp",
+    );
+    await userEvent.type(screen.getByTestId("agent-model-input"), "opus");
+    await userEvent.click(screen.getByTestId("agent-save-button"));
+
+    await waitFor(() => {
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+    });
+
+    expect(saveSpy.mock.calls[0][0]).toMatchObject({
+      agent_settings_diff: {
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        acp_command: [],
+        acp_args: [],
+        acp_model: "opus",
+      },
+    });
+  });
+
+  it("keeps a useful command placeholder if no provider metadata is available", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+      ...baseConfig,
+      acp_providers: [],
+    });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      agent_settings: {
+        agent_kind: "acp",
+        acp_server: "custom",
+        acp_command: [],
+        acp_args: [],
+        acp_env: {},
+        acp_model: null,
+      },
+    });
+
+    renderAgentSettings();
+
+    expect(await screen.findByTestId("agent-command-input")).toHaveAttribute(
+      "placeholder",
+      "npx -y <package-name>",
+    );
   });
 });

@@ -33,6 +33,12 @@ export interface WebClientFeatureFlags {
   enable_onboarding: boolean;
 }
 
+export interface ACPProviderConfig {
+  key: string;
+  display_name: string;
+  default_command: string[];
+}
+
 export interface WebClientConfig {
   app_mode: "saas" | "oss";
   posthog_client_key: string | null;
@@ -48,4 +54,5 @@ export interface WebClientConfig {
   gitlab_enabled?: boolean;
   provider_default_hosts?: Partial<Record<Provider, string>>;
   slack_enabled?: boolean;
+  acp_providers?: ACPProviderConfig[];
 }
