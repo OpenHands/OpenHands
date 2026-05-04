@@ -104,6 +104,37 @@ html.light .modal-body * {
   line-height: 2;
 }
 
+/* Light theme: ensure markdown body text is readable on light backgrounds */
+html.light [data-testid="markdown-renderer"],
+html.light [data-testid="markdown-renderer"] p,
+html.light [data-testid="markdown-renderer"] li,
+html.light [data-testid="markdown-renderer"] ul,
+html.light [data-testid="markdown-renderer"] ol,
+html.light [data-testid="markdown-renderer"] blockquote,
+html.light [data-testid="markdown-renderer"] table,
+html.light [data-testid="markdown-renderer"] th,
+html.light [data-testid="markdown-renderer"] td,
+html.light [data-testid="markdown-renderer"] strong,
+html.light [data-testid="markdown-renderer"] em {
+  color: #1f2937 !important;
+}
+
+html.light [data-testid="markdown-renderer"] h1,
+html.light [data-testid="markdown-renderer"] h2,
+html.light [data-testid="markdown-renderer"] h3,
+html.light [data-testid="markdown-renderer"] h4,
+html.light [data-testid="markdown-renderer"] h5,
+html.light [data-testid="markdown-renderer"] h6 {
+  color: #111827 !important;
+}
+
+/* Code blocks: light theme overrides them to a light gray bg, so text needs to be dark */
+html.light [data-testid="markdown-renderer"] pre,
+html.light [data-testid="markdown-renderer"] pre code,
+html.light [data-testid="markdown-renderer"] pre * {
+  color: #1f2937 !important;
+}
+
 /* Inline code only (not code inside pre) */
 html.light [data-testid="user-message"] code:not(pre code),
 html.light [data-testid="agent-message"] code:not(pre code) {
