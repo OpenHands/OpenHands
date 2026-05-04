@@ -613,9 +613,13 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://provider.example.com'
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_openhands_model_no_base_urls(self):
+    async def test_configure_llm_and_mcp_openhands_model_no_base_urls(
+        self, monkeypatch
+    ):
         """openhands/* model still uses the SDK proxy when no other URLs exist."""
         # Arrange
+        monkeypatch.delenv('OPENHANDS_PROVIDER_BASE_URL', raising=False)
+        monkeypatch.delenv('LLM_BASE_URL', raising=False)
         self.mock_user.llm_model = 'openhands/default'
         self.mock_user.llm_base_url = None
         self.service.openhands_provider_base_url = None
@@ -939,6 +943,106 @@ class TestLiveStatusAppConversationService:
         self.service._configure_llm_and_mcp.assert_called_once_with(
             self.mock_user, 'gpt-4', test_conversation_id
         )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_routes_critic_through_deployment_proxy(
+        self, _mock_tools
+    ):
+        self.mock_user.agent_settings = Settings(
+            agent_settings={
+                'llm': {
+                    'model': 'litellm_proxy/minimax-m2.5',
+                    'api_key': 'user-key',
+                    'base_url': 'https://llm-proxy.app.all-hands.dev/',
+                },
+                'verification': {
+                    'critic_enabled': True,
+                    'enable_iterative_refinement': True,
+                },
+            }
+        ).agent_settings
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        self.service.openhands_provider_base_url = (
+            'https://llm-proxy.staging.all-hands.dev/'
+        )
+        self.service.critic_api_key = 'service-key'
+
+        real_llm = LLM(
+            model='litellm_proxy/minimax-m2.5',
+            api_key=SecretStr('user-key'),
+            base_url='https://llm-proxy.staging.all-hands.dev/',
+        )
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        assert result.agent.critic is not None
+        assert (
+            result.agent.critic.server_url
+            == 'https://llm-proxy.staging.all-hands.dev/vllm'
+        )
+        assert result.agent.critic.model_name == 'critic'
+        assert isinstance(result.agent.critic.api_key, SecretStr)
+        assert result.agent.critic.api_key.get_secret_value() == 'service-key'
+        assert result.agent.critic.iterative_refinement is not None
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_preserves_explicit_critic_server_url(
+        self, _mock_tools
+    ):
+        self.mock_user.agent_settings = Settings(
+            agent_settings={
+                'llm': {
+                    'model': 'litellm_proxy/minimax-m2.5',
+                    'api_key': 'user-key',
+                },
+                'verification': {
+                    'critic_enabled': True,
+                    'critic_server_url': 'https://custom.example.com/vllm',
+                },
+            }
+        ).agent_settings
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        self.service.openhands_provider_base_url = (
+            'https://llm-proxy.staging.all-hands.dev/'
+        )
+
+        real_llm = LLM(
+            model='litellm_proxy/minimax-m2.5',
+            api_key=SecretStr('user-key'),
+        )
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        assert result.agent.critic is not None
+        assert result.agent.critic.server_url == 'https://custom.example.com/vllm'
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',

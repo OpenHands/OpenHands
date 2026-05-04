@@ -59,6 +59,7 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 )
 from openhands.app_server.config import (
     get_event_callback_service,
+    resolve_provider_critic_server_url,
     resolve_provider_llm_base_url,
 )
 from openhands.app_server.errors import SandboxError
@@ -1379,6 +1380,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # --- build AgentSettings and create agent ---------------------------
         from fastmcp.mcp_config import MCPConfig
 
+        verification = user.agent_settings.verification
+        critic_server_url = resolve_provider_critic_server_url(
+            verification.critic_server_url,
+            provider_base_url=self.openhands_provider_base_url,
+        )
+        if critic_server_url is not None:
+            verification = verification.model_copy(
+                update={'critic_server_url': critic_server_url}
+            )
+
         configured_agent_settings = user.agent_settings.model_copy(
             update={
                 'llm': llm,
@@ -1388,6 +1399,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     system_message_suffix=effective_suffix,
                     secrets=secrets,
                 ),
+                'verification': verification,
             }
         )
         agent = configured_agent_settings.create_agent()

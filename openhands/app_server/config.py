@@ -128,7 +128,7 @@ def get_default_tavily_api_key() -> str | None:
 
 def get_critic_api_key() -> str | None:
     """Return the deployment-level critic API key, if configured."""
-    return os.getenv('CRITIC_API_KEY') or None
+    return os.getenv('CRITIC_API_KEY') or os.getenv('LITE_LLM_API_KEY') or None
 
 
 # The SDK auto-fills this URL as the default for openhands/ and litellm_proxy/
@@ -173,6 +173,27 @@ def resolve_provider_llm_base_url(
         return provider_base_url
 
     return base_url
+
+
+def resolve_provider_critic_server_url(
+    critic_server_url: str | None,
+    provider_base_url: str | None = None,
+) -> str | None:
+    """Apply deployment-specific LLM proxy routing to the critic endpoint.
+
+    SDK defaults route to production. Feature and staging deployments use their
+    own LiteLLM proxy, so when the user has not explicitly configured a critic
+    server URL, derive the ``/vllm`` endpoint from the deployment provider URL.
+    """
+    if critic_server_url:
+        return critic_server_url
+
+    if provider_base_url is None:
+        provider_base_url = get_openhands_provider_base_url()
+    if provider_base_url:
+        return f'{provider_base_url.rstrip("/")}/vllm'
+
+    return None
 
 
 def _get_default_lifespan():
