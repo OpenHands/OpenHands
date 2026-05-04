@@ -1591,24 +1591,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             **dict(acp_settings.acp_env or {}),
         }
 
-        # Pass user secrets via AgentContext so the SDK renders a
-        # <CUSTOM_SECRETS> block in the ACP prompt and injects values into
-        # the subprocess env at start time (SDK PR #2984).
-        # TODO: remove the _sdk_supports_acp_secrets guard once OpenHands pins
-        # to an SDK version that includes PR #2984 (secrets acp_compatible=True).
-        _sdk_supports_acp_secrets = (
-            AgentContext.model_fields.get('secrets') is not None
-            and isinstance(AgentContext.model_fields['secrets'].json_schema_extra, dict)
-            and AgentContext.model_fields['secrets'].json_schema_extra.get(
-                'acp_compatible'
-            )
-            is True
-        )
-        agent_context = (
-            AgentContext(secrets=secrets)
-            if secrets and _sdk_supports_acp_secrets
-            else None
-        )
+        # Pass user secrets via AgentContext so the SDK renders a <CUSTOM_SECRETS>
+        # block in the ACP prompt and injects values into the subprocess env.
+        agent_context = AgentContext(secrets=secrets) if secrets else None
 
         acp_agent = acp_settings.model_copy(
             update={'acp_env': merged_env}
@@ -1626,8 +1611,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Mirror the regular path: populate ConversationSettings and delegate
         # to create_request() so that max_iterations, confirmation_mode, and
         # security_analyzer flow through to ACP conversations too.
-        # create_request() extracts secrets from acp_agent.agent_context.secrets;
-        # fall back to explicit kwarg on older SDKs where agent_context is unset.
         conv_settings = user.conversation_settings.model_copy(
             update={
                 'workspace': workspace,
@@ -1638,9 +1621,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 'plugins': sdk_plugins,
             }
         )
-        secrets_kwarg = {} if _sdk_supports_acp_secrets else {'secrets': secrets}
         return conv_settings.create_request(
-            StartACPConversationRequest, agent=acp_agent, **secrets_kwarg
+            StartACPConversationRequest, agent=acp_agent
         )
 
     async def _process_pending_messages(
