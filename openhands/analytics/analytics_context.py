@@ -55,7 +55,7 @@ def _get_user_provider() -> AnalyticsUserProvider:
     server_config.analytics_user_provider_class. Defaults to
     DefaultAnalyticsUserProvider if not configured.
     """
-    from openhands.server.shared import server_config
+    from openhands.app_server.shared import server_config
 
     impl_class = get_impl(
         AnalyticsUserProvider, server_config.analytics_user_provider_class
