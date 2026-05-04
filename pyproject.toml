@@ -50,7 +50,7 @@ dependencies = [
   "jwcrypto>=1.5.6",
   "kubernetes>=33.1",
   "libtmux>=0.46.2",
-  "litellm!=1.64.4,!=1.67.*,>=1.83.14,<1.83.15",
+  "litellm!=1.64.4,!=1.67.*,>=1.83.14",
   "lmnr>=0.7.20",
   "mcp>=1.25",
   "memory-profiler>=0.61",
@@ -156,15 +156,15 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
-authlib = ">=1.6.9"                                 # CVE-2026-27962 (fixed in 1.6.9)
-orjson = ">=3.11.6"                                 # Pinned to fix CVE-2025-67221
-litellm = ">=1.83.14, <1.83.15, !=1.64.4, !=1.67.*" # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
-openai = "2.24.0"                                   # Pin because litellm 1.83.14 requires 2.24.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
-aiohttp = ">=3.13.4"                                # Keep aiohttp on a fixed-or-newer release while allowing litellm's pinned 3.13.4
-google-genai = "*"                                  # To use litellm with Gemini Pro API
-google-api-python-client = "^2.164.0"               # For Google Sheets API
-google-auth-httplib2 = "*"                          # For Google Sheets authentication
-google-auth-oauthlib = "*"                          # For Google Sheets OAuth
+authlib = ">=1.6.9"                                # CVE-2026-27962 (fixed in 1.6.9)
+orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
+litellm = ">=1.83.14, !=1.64.4, !=1.67.*"          # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
+openai = "2.24.0"                                  # Pin because litellm 1.83.14 requires 2.24.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
+aiohttp = ">=3.13.4"                               # Keep aiohttp on a fixed-or-newer release while allowing litellm's pinned 3.13.4
+google-genai = "*"                                 # To use litellm with Gemini Pro API
+google-api-python-client = "^2.164.0"              # For Google Sheets API
+google-auth-httplib2 = "*"                         # For Google Sheets authentication
+google-auth-oauthlib = "*"                         # For Google Sheets OAuth
 termcolor = "*"
 docker = "*"
 fastapi = "*"
@@ -173,7 +173,7 @@ types-toml = "*"
 uvicorn = "*"
 numpy = "*"
 json-repair = "*"
-browsergym-core = "0.13.3"                          # integrate browsergym-core as the browsing interface
+browsergym-core = "0.13.3"                         # integrate browsergym-core as the browsing interface
 playwright = "^1.55.0"
 html2text = "*"
 deprecated = "*"
@@ -189,7 +189,7 @@ tornado = ">=6.5"
 python-dotenv = "*"
 rapidfuzz = "^3.9.0"
 whatthepatch = "^1.0.6"
-protobuf = ">=5.29.6,<6.0.0"                        # Updated to fix CVE-2026-0994
+protobuf = ">=5.29.6,<6.0.0"                       # Updated to fix CVE-2026-0994
 opentelemetry-api = "^1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 
