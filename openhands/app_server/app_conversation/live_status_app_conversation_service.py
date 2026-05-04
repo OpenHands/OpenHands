@@ -1623,15 +1623,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 for p in plugins
             ]
 
-        return StartACPConversationRequest(
-            workspace=workspace,
-            conversation_id=conversation_id,
-            initial_message=self._construct_initial_message_with_plugin_params(
-                initial_message, plugins
-            ),
-            secrets=secrets,
-            plugins=sdk_plugins,
-            agent=acp_agent,
+        # Mirror the regular path: populate ConversationSettings and delegate
+        # to create_request() so that max_iterations, confirmation_mode, and
+        # security_analyzer flow through to ACP conversations too.
+        # create_request() extracts secrets from acp_agent.agent_context.secrets;
+        # fall back to explicit kwarg on older SDKs where agent_context is unset.
+        conv_settings = user.conversation_settings.model_copy(
+            update={
+                'workspace': workspace,
+                'conversation_id': conversation_id,
+                'initial_message': self._construct_initial_message_with_plugin_params(
+                    initial_message, plugins
+                ),
+                'plugins': sdk_plugins,
+            }
+        )
+        secrets_kwarg = {} if _sdk_supports_acp_secrets else {'secrets': secrets}
+        return conv_settings.create_request(
+            StartACPConversationRequest, agent=acp_agent, **secrets_kwarg
         )
 
     async def _process_pending_messages(

@@ -208,6 +208,55 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
     });
   });
 
+  it("saves as custom when acp_server is built-in but command differs from default", async () => {
+    // If the persisted command doesn't match the provider default, the UI must
+    // treat it as "custom" and save it that way — even if acp_server says
+    // "claude-code". This prevents silent round-trip corruption where the UI
+    // shows a built-in preset but saving overwrites the custom command with [].
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(baseConfig);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      agent_settings: {
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        acp_command: ["npx", "-y", "@custom/my-agent"],
+        acp_args: [],
+        acp_env: {},
+        acp_model: null,
+      },
+    });
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderAgentSettings();
+
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId("agent-command-input") as HTMLTextAreaElement)
+          .value,
+      ).toBe("npx -y @custom/my-agent");
+    });
+
+    // Touch the model field to dirty the form (so save is enabled).
+    await userEvent.type(screen.getByTestId("agent-model-input"), "x");
+    await userEvent.clear(screen.getByTestId("agent-model-input"));
+    await userEvent.click(screen.getByTestId("agent-save-button"));
+
+    await waitFor(() => {
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+    });
+
+    // Since the command doesn't match the claude-code default, it must save as
+    // custom with the full command — NOT as acp_server="claude-code" + acp_command=[].
+    expect(saveSpy.mock.calls[0][0]).toMatchObject({
+      agent_settings_diff: {
+        acp_server: "custom",
+        acp_command: ["npx", "-y", "@custom/my-agent"],
+      },
+    });
+  });
+
   it("keeps a useful command placeholder if no provider metadata is available", async () => {
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
       ...baseConfig,

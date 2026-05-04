@@ -228,8 +228,8 @@ async def on_conversation_update(
 
     agent = conversation_info.agent
     is_acp = (
-        getattr(agent, 'supports_openhands_tools', True) is False
-        or getattr(agent, 'kind', None) == 'ACPAgent'
+        getattr(agent, 'kind', None) == 'ACPAgent'
+        or getattr(agent, 'supports_openhands_tools', True) is False
     )
     if is_acp:
         agent_kind = 'acp'

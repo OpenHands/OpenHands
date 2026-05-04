@@ -37,14 +37,9 @@ function normalizeCommand(command: string): string {
 }
 
 function detectPreset(
-  acpServer: string | null | undefined,
   commandText: string,
   providers: ACPProviderConfig[],
 ): string {
-  if (acpServer) {
-    const provider = providers.find(({ key }) => key === acpServer);
-    if (provider) return provider.key;
-  }
   const normalized = normalizeCommand(commandText);
   for (const provider of providers) {
     if (
@@ -94,9 +89,7 @@ function AgentSettingsScreen() {
       const effectiveCommand =
         joined || formatCommand(provider?.default_command ?? []);
       setCommandText(effectiveCommand);
-      setSelectedPreset(
-        detectPreset(acpServer, effectiveCommand, acpProviders),
-      );
+      setSelectedPreset(detectPreset(effectiveCommand, acpProviders));
 
       const savedModel = settings.agent_settings?.acp_model;
       setAcpModel(typeof savedModel === "string" ? savedModel : "");
@@ -242,7 +235,7 @@ function AgentSettingsScreen() {
               onChange={(e) => {
                 const text = e.target.value;
                 setCommandText(text);
-                setSelectedPreset(detectPreset(undefined, text, acpProviders));
+                setSelectedPreset(detectPreset(text, acpProviders));
                 setIsDirty(true);
               }}
             />

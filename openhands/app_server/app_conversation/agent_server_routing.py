@@ -16,7 +16,7 @@ def acp_display_name(acp_command: Sequence[str] | None) -> str:
         return 'ACP'
     command = list(acp_command)
     for provider in ACP_PROVIDERS.values():
-        if command == provider.default_command:
+        if command == list(provider.default_command):
             return provider.display_name
     token = acp_command[-1]
     if not token:
