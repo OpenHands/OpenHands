@@ -2,10 +2,6 @@
 
 from openhands.app_server.config import (
     _SDK_DEFAULT_PROXY,
-    DEFAULT_CRITIC_MODEL_NAME,
-    DEFAULT_CRITIC_SERVER_URL,
-    get_critic_model_name,
-    get_critic_server_url,
     resolve_provider_llm_base_url,
 )
 
@@ -195,23 +191,3 @@ class TestEdgeCases:
             base_url=SDK_DEFAULT,
         )
         assert result == STAGING_URL
-
-
-class TestCriticDeploymentDefaults:
-    """Critic routing falls back to deployment-safe defaults."""
-
-    def test_default_critic_server_url(self, monkeypatch):
-        monkeypatch.delenv('CRITIC_SERVER_URL', raising=False)
-        assert get_critic_server_url() == DEFAULT_CRITIC_SERVER_URL
-
-    def test_default_critic_model_name(self, monkeypatch):
-        monkeypatch.delenv('CRITIC_MODEL_NAME', raising=False)
-        assert get_critic_model_name() == DEFAULT_CRITIC_MODEL_NAME
-
-    def test_env_critic_server_url_override(self, monkeypatch):
-        monkeypatch.setenv('CRITIC_SERVER_URL', 'https://critic.example.com')
-        assert get_critic_server_url() == 'https://critic.example.com'
-
-    def test_env_critic_model_name_override(self, monkeypatch):
-        monkeypatch.setenv('CRITIC_MODEL_NAME', 'critic-model')
-        assert get_critic_model_name() == 'critic-model'

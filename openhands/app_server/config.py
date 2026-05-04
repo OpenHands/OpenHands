@@ -131,24 +131,6 @@ def get_critic_api_key() -> str | None:
     return os.getenv('CRITIC_API_KEY') or None
 
 
-DEFAULT_CRITIC_SERVER_URL = (
-    'https://all-hands-ai--critic-qwen3-4b-5e-06lr-withtools-step9658-e06544.modal.run'
-)
-DEFAULT_CRITIC_MODEL_NAME = (
-    'critic-qwen3-4b-5e-06lr-withtools-step9658-success-survival'
-)
-
-
-def get_critic_server_url() -> str | None:
-    """Return the critic server URL used when user settings leave it unset."""
-    return os.getenv('CRITIC_SERVER_URL') or DEFAULT_CRITIC_SERVER_URL
-
-
-def get_critic_model_name() -> str | None:
-    """Return the critic model name used when user settings leave it unset."""
-    return os.getenv('CRITIC_MODEL_NAME') or DEFAULT_CRITIC_MODEL_NAME
-
-
 # The SDK auto-fills this URL as the default for openhands/ and litellm_proxy/
 # models.  Deployments (e.g. staging) may use a different LLM proxy, configured
 # via OPENHANDS_PROVIDER_BASE_URL.
@@ -236,14 +218,6 @@ class AppServerConfig(OpenHandsModel):
     critic_api_key: str | None = Field(
         default_factory=get_critic_api_key,
         description='Optional deployment-level critic API key.',
-    )
-    critic_server_url: str | None = Field(
-        default_factory=get_critic_server_url,
-        description='Critic server URL to use when user settings leave it unset.',
-    )
-    critic_model_name: str | None = Field(
-        default_factory=get_critic_model_name,
-        description='Critic model name to use when user settings leave it unset.',
     )
     # Dependency Injection Injectors
     llm_model: LLMModelServiceInjector | None = None
