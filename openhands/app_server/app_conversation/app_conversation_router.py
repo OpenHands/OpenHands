@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.models import Success
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -352,6 +353,7 @@ async def batch_get_app_conversations(
 async def start_app_conversation(
     request: Request,
     start_request: AppConversationStartRequest,
+    user_context: UserContext = user_context_dependency,
     db_session: AsyncSession = db_session_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
     app_conversation_service: AppConversationService = (
@@ -366,6 +368,29 @@ async def start_app_conversation(
         """Start an app conversation start task and return it."""
         async_iter = app_conversation_service.start_app_conversation(start_request)
         result = await anext(async_iter)
+
+        # Analytics: conversation created (V1)
+        try:
+            analytics = get_analytics_service()
+            if analytics:
+                user_id = await user_context.get_user_id()
+                if user_id:
+                    ctx = await resolve_analytics_context(user_id)
+                    analytics.track_conversation_created(
+                        ctx=ctx,
+                        conversation_id=str(result.app_conversation_id)
+                        if result.app_conversation_id
+                        else result.id,
+                        trigger=start_request.trigger.value
+                        if start_request.trigger
+                        else None,
+                        llm_model=None,  # Not available at start time
+                        agent_type='default',
+                        has_repository=start_request.selected_repository is not None,
+                    )
+        except Exception:
+            logger.exception('analytics:conversation_created:failed')
+
         asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
         return result
     except Exception:
@@ -630,6 +655,20 @@ async def delete_app_conversation(
     )
     if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, 'Failed to delete conversation')
+
+    # Analytics: conversation deleted (V1)
+    try:
+        analytics = get_analytics_service()
+        if analytics and app_conversation_info.created_by_user_id:
+            ctx = await resolve_analytics_context(
+                app_conversation_info.created_by_user_id
+            )
+            analytics.track_conversation_deleted(
+                ctx=ctx,
+                conversation_id=conversation_id,
+            )
+    except Exception:
+        logger.exception('analytics:conversation_deleted:failed')
 
     # Commit the deletion
     await db_session.commit()
@@ -1094,6 +1133,7 @@ async def export_conversation(
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
+    user_context: UserContext = user_context_dependency,
 ):
     """Download a conversation trajectory as a zip file.
 
@@ -1110,6 +1150,29 @@ async def export_conversation(
         zip_content = await app_conversation_service.export_conversation(
             conversation_id
         )
+
+        # Analytics: track trajectory download
+        try:
+            analytics = get_analytics_service()
+            user_id = await user_context.get_user_id()
+            if analytics and user_id:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                user_info = await user_context.get_user_info()
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=user_info.user_consents_to_analytics
+                    if user_info and user_info.user_consents_to_analytics is not None
+                    else False,
+                    org_id=None,
+                    user=None,
+                )
+                analytics.track_trajectory_downloaded(
+                    ctx=ctx,
+                    conversation_id=str(conversation_id),
+                )
+        except Exception:
+            logger.exception('analytics:trajectory_downloaded:failed')
 
         # Return as a downloadable zip file
         return Response(

@@ -21,6 +21,7 @@ const typographyVariants = cva("", {
 interface TypographyProps extends VariantProps<typeof typographyVariants> {
   className?: string;
   testId?: string;
+  title?: string;
   children: React.ReactNode;
 }
 
@@ -28,6 +29,7 @@ export function Typography({
   variant,
   className,
   testId,
+  title,
   children,
 }: TypographyProps) {
   const Tag = variant as keyof React.JSX.IntrinsicElements;
@@ -35,6 +37,7 @@ export function Typography({
   return (
     <Tag
       data-testid={testId}
+      title={title}
       className={cn(typographyVariants({ variant }), className)}
     >
       {children}
@@ -82,10 +85,16 @@ export function H3({
 export function Text({
   className,
   testId,
+  title,
   children,
 }: Omit<TypographyProps, "variant">) {
   return (
-    <Typography variant="span" className={className} testId={testId}>
+    <Typography
+      variant="span"
+      className={className}
+      testId={testId}
+      title={title}
+    >
       {children}
     </Typography>
   );

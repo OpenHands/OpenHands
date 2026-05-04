@@ -23,10 +23,10 @@ vi.mock("#/hooks/use-breakpoint", () => ({
   useBreakpoint: vi.fn(() => false), // Default to desktop (not mobile)
 }));
 
-// Mock useTracking hook for CTA
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
+vi.mock("#/hooks/use-client-analytics", () => ({
+  useClientAnalytics: () => ({
     trackSaasSelfhostedInquiry: vi.fn(),
+    trackEnterpriseLeadFormSubmitted: vi.fn(),
   }),
 }));
 

@@ -62,6 +62,9 @@ class SaaSServerConfig(ServerConfig):
     settings_store_class: str = 'storage.saas_settings_store.SaasSettingsStore'
     secret_store_class: str = 'storage.saas_secrets_store.SaasSecretsStore'
     user_auth_class: str = 'server.auth.saas_user_auth.SaasUserAuth'
+    analytics_user_provider_class: str = (
+        'analytics.saas_user_provider.SaasAnalyticsUserProvider'
+    )
     # Maintenance window configuration
     maintenance_start_time: str = os.environ.get(
         'MAINTENANCE_START_TIME', ''

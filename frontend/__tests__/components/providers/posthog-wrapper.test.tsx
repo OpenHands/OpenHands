@@ -136,6 +136,28 @@ describe("PostHogWrapper", () => {
     expect(sessionStorage.getItem("posthog_bootstrap")).toBeNull();
   });
 
+  it("should initialize PostHog with health monitoring config (web vitals, error tracking, network timing)", async () => {
+    render(
+      <PostHogWrapper>
+        <div data-testid="child" />
+      </PostHogWrapper>,
+    );
+
+    await screen.findByTestId("child");
+
+    expect(mockPostHogProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          capture_performance: {
+            network_timing: true,
+            web_vitals: true,
+          },
+          capture_exceptions: true,
+        }),
+      }),
+    );
+  });
+
   it("should initialize without bootstrap when neither hash nor sessionStorage has IDs", async () => {
     render(
       <PostHogWrapper>
