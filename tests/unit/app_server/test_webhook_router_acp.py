@@ -89,7 +89,6 @@ def _make_acp_conversation_info(acp_command: list[str]) -> ACPConversationInfo:
     info.execution_status = ConversationExecutionStatus.RUNNING
     acp_agent = MagicMock(spec=ACPAgent)
     acp_agent.kind = 'ACPAgent'
-    acp_agent.supports_openhands_tools = False
     acp_agent.acp_command = acp_command
     info.agent = acp_agent
     info.stats = MagicMock()
@@ -103,40 +102,19 @@ def _make_acp_conversation_info(acp_command: list[str]) -> ACPConversationInfo:
 # ---------------------------------------------------------------------------
 
 
-def test_acp_agent_capability_check_is_false_for_openhands_tools():
-    """ACPAgent payload advertises that the ACP server owns its tools."""
-    acp_agent = MagicMock(spec=ACPAgent)
-    acp_agent.supports_openhands_tools = False
-    assert acp_agent.supports_openhands_tools is False
-
-
-def test_regular_agent_capability_defaults_to_openhands_tools():
-    """A regular Agent mock keeps the default OpenHands tool capability."""
-    regular_agent = MagicMock()
-    assert getattr(regular_agent, 'supports_openhands_tools', True) is not False
-
-
-def test_acp_detection_by_kind_takes_precedence():
-    """kind == 'ACPAgent' classifies an agent as ACP even without capability flag."""
+def test_acp_agent_classified_by_kind():
+    """kind == 'ACPAgent' is the sole identity check."""
     agent = MagicMock()
     agent.kind = 'ACPAgent'
-    # supports_openhands_tools not explicitly set — getattr default is True
-    is_acp = (
-        getattr(agent, 'kind', None) == 'ACPAgent'
-        or getattr(agent, 'supports_openhands_tools', True) is False
-    )
-    assert is_acp is True
+    assert getattr(agent, 'kind', None) == 'ACPAgent'
 
 
 def test_non_acp_agent_not_classified_as_acp():
-    """A generic agent without ACP identity or capability flag is not ACP."""
-    agent = MagicMock()
-    agent.kind = 'Agent'
-    is_acp = (
-        getattr(agent, 'kind', None) == 'ACPAgent'
-        or getattr(agent, 'supports_openhands_tools', True) is False
-    )
-    assert is_acp is False
+    """An agent whose kind is not 'ACPAgent' is never classified as ACP."""
+    for kind in ('Agent', 'CustomAgent', None):
+        agent = MagicMock()
+        agent.kind = kind
+        assert getattr(agent, 'kind', None) != 'ACPAgent'
 
 
 # ---------------------------------------------------------------------------
