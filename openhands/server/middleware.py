@@ -227,12 +227,26 @@ class BetterAuthMiddleware(BaseHTTPMiddleware):
             request.state.better_auth_user = cached_user
             return await call_next(request)
 
-        # Validate session with remote Better Auth server
+        # Validate session with remote Better Auth server.
+        # Forward host/proto so Better Auth resolves baseURL to our origin.
+        forwarded_host = request.headers.get('x-forwarded-host') or request.headers.get(
+            'host', ''
+        )
+        forwarded_proto = request.headers.get('x-forwarded-proto') or request.url.scheme
+        forwarded_headers = (
+            {
+                'x-forwarded-host': forwarded_host,
+                'x-forwarded-proto': forwarded_proto,
+            }
+            if forwarded_host
+            else {}
+        )
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(
                     f'{self.better_auth_url}/api/auth/get-session',
                     cookies={cookie_name: session_token},
+                    headers=forwarded_headers,
                     timeout=10.0,
                 )
         except Exception:

@@ -51,12 +51,19 @@ def _request_origin(request: Request) -> str:
 
 
 def _build_proxy_headers(origin: str) -> dict[str, str]:
-    """Build headers that tell Better Auth we're a same-origin proxy."""
+    """Build headers that tell Better Auth we're a same-origin proxy.
+
+    Newer Better Auth resolves its per-request baseURL from x-forwarded-host
+    / x-forwarded-proto, so include those too.
+    """
     if not origin:
         return {}
+    parsed = urlparse(origin)
     return {
         'x-better-auth-proxy-mode': 'enabled',
         'x-better-auth-url': origin,
+        'x-forwarded-host': parsed.netloc,
+        'x-forwarded-proto': parsed.scheme or 'https',
     }
 
 
@@ -401,10 +408,12 @@ async def oauth_proxy_callback(request: Request):
         # which returns a redirect with Set-Cookie headers carrying the
         # session cookies. Proxy those Set-Cookie headers back to our
         # response so the cookies are set on our origin.
+        proxy_headers = _build_proxy_headers(_request_origin(request))
         async with httpx.AsyncClient(follow_redirects=False) as client:
             ba_resp = await client.get(
                 _auth_url('/api/auth/oauth-proxy-callback'),
                 params={'p': proxy_ref, 'callbackURL': ba_callback_url},
+                headers=proxy_headers,
             )
 
         set_cookies = ba_resp.headers.get_list('set-cookie')

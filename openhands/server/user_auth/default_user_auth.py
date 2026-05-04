@@ -50,6 +50,8 @@ class DefaultUserAuth(UserAuth):
     _secrets: Secrets | None = None
     _better_auth_user: dict | None = None
     _session_cookie: tuple[str, str] | None = field(default=None, repr=False)
+    _forwarded_host: str | None = field(default=None, repr=False)
+    _forwarded_proto: str | None = field(default=None, repr=False)
 
     async def get_user_id(self) -> str | None:
         # Single-user deployment; V1 OSS storage doesn't track per-user
@@ -132,6 +134,14 @@ class DefaultUserAuth(UserAuth):
             return None
 
         cookie_name, cookie_value = self._session_cookie
+        forwarded_headers = (
+            {
+                'x-forwarded-host': self._forwarded_host,
+                'x-forwarded-proto': self._forwarded_proto or 'https',
+            }
+            if self._forwarded_host
+            else {}
+        )
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -139,6 +149,7 @@ class DefaultUserAuth(UserAuth):
                 keys_resp = await client.get(
                     f'{better_auth_url}/api/secrets/keys',
                     cookies={cookie_name: cookie_value},
+                    headers=forwarded_headers,
                 )
                 if keys_resp.status_code != 200:
                     logger.warning(
@@ -158,6 +169,7 @@ class DefaultUserAuth(UserAuth):
                         resp = await client.get(
                             f'{better_auth_url}/api/secrets/key/{key}',
                             cookies={cookie_name: cookie_value},
+                            headers=forwarded_headers,
                         )
                         if resp.status_code != 200:
                             return key, None
@@ -255,6 +267,15 @@ class DefaultUserAuth(UserAuth):
                 if token:
                     user_auth._session_cookie = (name, token)
                     break
+            # Capture the public origin so we can forward it to the auth
+            # server (newer Better Auth resolves baseURL per-request from
+            # x-forwarded-host / x-forwarded-proto).
+            user_auth._forwarded_host = request.headers.get(
+                'x-forwarded-host'
+            ) or request.headers.get('host')
+            user_auth._forwarded_proto = (
+                request.headers.get('x-forwarded-proto') or request.url.scheme
+            )
         return user_auth
 
     @classmethod
