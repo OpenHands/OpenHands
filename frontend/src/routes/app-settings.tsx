@@ -139,15 +139,12 @@ function AppSettingsScreen() {
     );
   };
 
-  const checkIfLanguageInputHasChanged = (value: string) => {
-    const selectedLanguage = AvailableLanguages.find(
-      ({ label: langValue }) => langValue === value,
-    )?.label;
-    const currentLanguage = AvailableLanguages.find(
-      ({ value: langValue }) => langValue === settings?.language,
-    )?.label;
-
-    setLanguageInputHasChanged(selectedLanguage !== currentLanguage);
+  const checkIfLanguageInputHasChanged = (key: React.Key | null) => {
+    if (key === null) {
+      setLanguageInputHasChanged(false);
+      return;
+    }
+    setLanguageInputHasChanged(key !== settings?.language);
   };
 
   const checkIfAnalyticsSwitchHasChanged = (checked: boolean) => {

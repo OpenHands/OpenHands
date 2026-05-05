@@ -1,3 +1,4 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { AvailableLanguages } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
@@ -5,7 +6,7 @@ import { SettingsDropdownInput } from "../settings-dropdown-input";
 
 interface LanguageInputProps {
   name: string;
-  onChange: (value: string) => void;
+  onChange: (key: React.Key | null) => void;
   defaultKey: string;
 }
 
@@ -20,7 +21,7 @@ export function LanguageInput({
     <SettingsDropdownInput
       testId={name}
       name={name}
-      onInputChange={onChange}
+      onSelectionChange={onChange}
       label={t(I18nKey.SETTINGS$LANGUAGE)}
       items={AvailableLanguages.map((l) => ({
         key: l.value,
