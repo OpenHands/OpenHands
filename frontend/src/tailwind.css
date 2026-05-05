@@ -151,6 +151,20 @@ html.light [data-testid="agent-message"] div[class*="language-"] {
   border-color: #d1d5db !important;
 }
 
+/* Light theme: task list (in-conversation tasks panel) — task-item.tsx hardcodes
+   text-white / text-[#A3A3A3] which are unreadable on a light background. */
+html.light .task-list-section .text-white {
+  color: #1f2937 !important;
+}
+
+html.light .task-list-section .text-\[\#A3A3A3\] {
+  color: #6b7280 !important;
+}
+
+html.light .task-list-section .text-\[\#ffffff\] {
+  color: #1f2937 !important;
+}
+
 html.light [data-testid="conversation-name-context-menu"],
 html.light [data-testid="tools-context-menu"],
 html.light [data-testid="account-settings-context-menu"],

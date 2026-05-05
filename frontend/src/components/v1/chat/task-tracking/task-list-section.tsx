@@ -13,7 +13,7 @@ export function TaskListSection({ taskList }: TaskListSectionProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-col overflow-clip bg-base-secondary border border-[#525252] rounded-[12px] w-full">
+    <div className="task-list-section flex flex-col overflow-clip bg-base-secondary border border-[#525252] rounded-[12px] w-full">
       {/* Header Tabs */}
       <div className="flex gap-1 items-center border-b border-[#525252] h-[41px] px-2 shrink-0">
         <LessonPlanIcon className="shrink-0 w-4.5 h-4.5 text-[#9299aa]" />
