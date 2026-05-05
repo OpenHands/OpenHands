@@ -171,6 +171,13 @@ class OrgResponse(BaseModel):
         cls, org: Org, credits: float | None = None, user_id: str | None = None
     ) -> 'OrgResponse':
         """Create an OrgResponse from an Org entity."""
+        agent_settings = org.agent_settings or {}
+        if agent_settings and agent_settings.get('agent_kind') != 'llm':
+            agent_settings = {**agent_settings, 'agent_kind': 'llm'}
+        conversation_settings = org.conversation_settings or {}
+        conversation_agent_settings = conversation_settings.get('agent_settings')
+        if conversation_agent_settings and conversation_agent_settings.get('agent_kind') != 'llm':
+            conversation_settings = {**conversation_settings, 'agent_settings': {**conversation_agent_settings, 'agent_kind': 'llm'}}
         return cls(
             id=str(org.id),
             name=org.name,
@@ -185,11 +192,9 @@ class OrgResponse(BaseModel):
             sandbox_base_container_image=org.sandbox_base_container_image,
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             org_version=org.org_version if org.org_version is not None else 0,
-            agent_settings=AgentSettings.model_validate(
-                dict(org.agent_settings) if org.agent_settings else {}
-            ),
+            agent_settings=AgentSettings.model_validate(agent_settings),
             conversation_settings=ConversationSettings.model_validate(
-                dict(org.conversation_settings) if org.conversation_settings else {}
+                conversation_settings
             ),
             search_api_key=None,
             sandbox_api_key=None,
