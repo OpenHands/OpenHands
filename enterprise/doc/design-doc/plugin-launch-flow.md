@@ -251,7 +251,7 @@ The frontend displays a confirmation modal:
    - Text input for `city`, pre-filled with `"San Francisco"`
 3. Shows message preview: `/city-weather:now`
 
-### User Submits → Message Construction
+### User Submits
 
 When user clicks "Start Conversation":
 
@@ -263,12 +263,9 @@ When user clicks "Start Conversation":
    "parameters": { "city": "Tokyo" }
    ```
 
-3. **⚠️ CRITICAL: Append parameter values to message**:
-   ```
-   Original message:  "/city-weather:now"
-   Parameter values:  "Tokyo"
-   Final message:     "/city-weather:now Tokyo"
-   ```
+3. **Pass message through unchanged**:
+   - The message `/city-weather:now` is NOT modified by the Frontend
+   - Parameter values are passed in `plugins[].parameters`, not in the message
 
 ### Output (API call to App Server)
 
@@ -286,7 +283,10 @@ Authorization: Bearer <user_token>
       "city": "Tokyo"
     }
   }],
-  "message": "/city-weather:now Tokyo"
+  "initial_message": {
+    "role": "user",
+    "content": [{"type": "text", "text": "/city-weather:now"}]
+  }
 }
 ```
 
@@ -294,7 +294,9 @@ Authorization: Bearer <user_token>
 | Field | Input (from URL) | Output (to API) |
 |-------|------------------|-----------------|
 | `plugins[].parameters` | Default values (`"San Francisco"`) | User's values (`"Tokyo"`) |
-| `message` | Slash command only (`/city-weather:now`) | Slash command + parameter values (`/city-weather:now Tokyo`) |
+| `initial_message.text` | Slash command (`/city-weather:now`) | Slash command unchanged (`/city-weather:now`) |
+
+**Note**: The Frontend does NOT append parameter values to the message. Parameters are passed as structured data in `plugins[].parameters`. The App Server will append them to the message text (see Step 5).
 
 ---
 
@@ -314,9 +316,14 @@ Authorization: Bearer <user_token>
     "repo_path": "plugins/city-weather",
     "parameters": { "city": "Tokyo" }
   }],
-  "message": "/city-weather:now Tokyo"
+  "initial_message": {
+    "role": "user",
+    "content": [{"type": "text", "text": "/city-weather:now"}]
+  }
 }
 ```
+
+Note: The `initial_message.text` contains only the slash command—parameter values come separately in `plugins[].parameters`.
 
 ### Request Schema
 
@@ -337,9 +344,9 @@ class AppConversationStartRequest(BaseModel):
 
 1. **`_construct_initial_message_with_plugin_params()`** - Appends parameters to message:
    ```python
-   # Original message: "/city-weather:now Tokyo"
+   # Original message: "/city-weather:now"
    # Parameters: {"city": "Tokyo"}
-   # Result: "/city-weather:now Tokyo\n\nPlugin Configuration Parameters:\n- city: Tokyo"
+   # Result: "/city-weather:now\n\nPlugin Configuration Parameters:\n- city: Tokyo"
    ```
 
 2. **Convert PluginSpec → SDK PluginSource** (parameters are DROPPED):
@@ -372,7 +379,7 @@ StartConversationRequest(
     initial_message=SendMessageRequest(
         content=[
             TextContent(
-                text="/city-weather:now Tokyo\n\nPlugin Configuration Parameters:\n- city: Tokyo"
+                text="/city-weather:now\n\nPlugin Configuration Parameters:\n- city: Tokyo"
             )
         ]
     ),
@@ -381,6 +388,8 @@ StartConversationRequest(
 ```
 
 **⚠️ CRITICAL**: Plugin parameters are passed to the agent via **message text**, not via the `PluginSource` object. The SDK's `PluginSource` class only has `source`, `ref`, and `repo_path` fields.
+
+**Note on message construction**: The original slash command `/city-weather:now` does NOT include the parameter value "Tokyo" inline. The parameter appears only in the formatted "Plugin Configuration Parameters" block appended by the App Server.
 
 ---
 
@@ -404,7 +413,7 @@ StartConversationRequest(
     initial_message=SendMessageRequest(
         content=[
             TextContent(
-                text="/city-weather:now Tokyo\n\nPlugin Configuration Parameters:\n- city: Tokyo"
+                text="/city-weather:now\n\nPlugin Configuration Parameters:\n- city: Tokyo"
             )
         ]
     )
@@ -490,7 +499,7 @@ The agent now has:
 ### Message Content
 
 ```
-/city-weather:now Tokyo
+/city-weather:now
 
 Plugin Configuration Parameters:
 - city: Tokyo
@@ -501,12 +510,10 @@ Plugin Configuration Parameters:
 When the agent processes the message:
 1. Recognizes `/city-weather:now` as a slash command (keyword trigger)
 2. The `KeywordTrigger` activates the command skill
-3. The skill content includes `$ARGUMENTS` placeholder for "Tokyo"
-4. The agent uses the parameter value from the message text
+3. The agent reads the parameter value from the "Plugin Configuration Parameters" block
+4. The skill executes with `city=Tokyo`
 
-**Note**: Parameters are NOT passed as structured data to the plugin. The agent reads them from the message text where they appear in two forms:
-- Inline in the slash command: `/city-weather:now Tokyo`
-- Formatted block: `Plugin Configuration Parameters:\n- city: Tokyo`
+**Note**: Parameters are NOT passed as structured data to the plugin. The agent reads them from the message text in the formatted "Plugin Configuration Parameters" block appended by the App Server.
 
 ---
 
@@ -529,14 +536,18 @@ When the agent processes the message:
 ┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
 │  Plugin Directory   │     │  OpenHands Frontend │     │    App Server       │
 │                     │     │                     │     │                     │
-│  plugins[].params   │────▶│  plugins[].params   │────▶│  Appends to message │
-│  = defaults         │     │  = user values      │     │  text, then DROPS   │
+│  plugins[].params   │────▶│  plugins[].params   │────▶│  Appends params to  │
+│  = defaults         │     │  = user values      │     │  message as text    │
+│                     │     │  (from form edit)   │     │  block, then DROPS  │
 │                     │     │                     │     │  from PluginSource  │
 │  message =          │     │  message =          │     │                     │
-│  /cmd:entry         │────▶│  /cmd:entry values  │────▶│  message text has   │
-│  (no values)        │     │  (values appended)  │     │  all param context  │
+│  /cmd:entry         │────▶│  /cmd:entry         │────▶│  Final message:     │
+│  (no values)        │     │  (unchanged!)       │     │  /cmd:entry         │
+│                     │     │                     │     │  + params block     │
 └─────────────────────┘     └─────────────────────┘     └─────────────────────┘
 ```
+
+**Key insight**: The Frontend does NOT modify the message. It passes the slash command through unchanged and sends parameters as structured data in `plugins[].parameters`. The App Server is responsible for formatting parameters into the message text.
 
 ---
 
@@ -558,19 +569,21 @@ The `entry_command` field contains only the command name (e.g., `"now"`), not th
 
 ### Parameter Flow (Important!)
 
-Parameters travel through the system in **two forms**, which merge at the App Server:
+Parameters travel through the system as **structured data until the App Server**, where they are converted to text:
 
-1. **Structured data** (`PluginSpec.parameters`):
+1. **Structured data path** (`PluginSpec.parameters`):
    - Plugin Directory → Frontend → App Server API
-   - Used for form rendering and validation
-   - **Dropped at App Server** (not passed to SDK `PluginSource`)
+   - Used for form rendering (pre-fill defaults, collect user edits)
+   - **Formatted into message text by App Server**
+   - **Then dropped** (not passed to SDK `PluginSource`)
 
-2. **Message text**:
-   - Appended to slash command by Frontend launch modal
-   - Also appended as formatted block by App Server
+2. **Message path**:
+   - Plugin Directory sends slash command only (e.g., `/city-weather:now`)
+   - Frontend passes it through **unchanged**
+   - App Server appends formatted parameter block to the message
    - **This is how the agent receives parameter values**
 
-The SDK's `PluginSource` class intentionally does NOT have a `parameters` field. All parameter context is communicated to the agent via the initial message text.
+The SDK's `PluginSource` class intentionally does NOT have a `parameters` field. All parameter context is communicated to the agent via the initial message text, specifically in the "Plugin Configuration Parameters" block appended by the App Server.
 
 ---
 
