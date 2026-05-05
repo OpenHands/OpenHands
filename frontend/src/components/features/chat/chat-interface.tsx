@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { createChatMessage } from "#/services/chat-service";
 import { BtwMessages } from "./btw-messages";
+import { ModelMessages } from "./model-messages";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
@@ -34,6 +35,7 @@ import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { I18nKey } from "#/i18n/declaration";
 import { ArchivedBanner } from "./archived-banner";
+import { useModelStore } from "#/stores/model-store";
 
 export function ChatInterface() {
   const { setMessageToSend } = useConversationStore();
@@ -104,6 +106,14 @@ export function ChatInterface() {
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();
 
   const optimisticUserMessage = getOptimisticUserMessage();
+  const modelEntriesByConversation = useModelStore(
+    (s) => s.entriesByConversation,
+  );
+  const modelEntriesCount =
+    (params.conversationId &&
+      modelEntriesByConversation[params.conversationId]?.length) ||
+    0;
+  const hasModelEntries = modelEntriesCount > 0;
 
   // Show V1 messages immediately if events exist in store (e.g., remount),
   // or once loading completes. This replaces the old transition-observation
@@ -191,6 +201,7 @@ export function ChatInterface() {
     v1UiEvents.length,
     v0Events.length,
     optimisticUserMessage,
+    modelEntriesCount,
     scrollDomToBottom,
   ]);
 
@@ -236,7 +247,8 @@ export function ChatInterface() {
         {!hasSubstantiveAgentActions &&
           !optimisticUserMessage &&
           !userEventsExist &&
-          !isChatLoading && (
+          !isChatLoading &&
+          !hasModelEntries && (
             <ChatSuggestions
               onSuggestionsClick={(message) => setMessageToSend(message)}
             />
@@ -258,6 +270,10 @@ export function ChatInterface() {
             </div>
           )}
 
+          <ModelMessages
+            conversationId={params.conversationId}
+            anchorEventId={null}
+          />
           {showV1Messages && v1UserEventsExist && (
             <V1Messages messages={v1UiEvents} allEvents={v1FullEvents} />
           )}
