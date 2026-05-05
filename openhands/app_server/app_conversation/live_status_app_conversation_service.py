@@ -1406,6 +1406,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Override the critic API key with a deployment-level service key
         # so that critic requests are not subject to per-user budget limits.
+        # This allows centralized cost management for the critic feature.
         if agent.critic is not None and self.critic_api_key:
             agent.critic.api_key = SecretStr(self.critic_api_key)
 

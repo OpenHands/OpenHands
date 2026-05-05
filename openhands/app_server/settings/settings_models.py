@@ -107,6 +107,8 @@ def default_agent_settings() -> OpenHandsAgentSettings:
     """Return OpenHands app defaults for SDK agent settings."""
     agent_settings = sdk_default_agent_settings()
     if isinstance(agent_settings, OpenHandsAgentSettings):
+        # The OpenHands product defaults to showing critic feedback for new
+        # users. Deployments can still opt out through verification settings.
         agent_settings.verification.critic_enabled = True
     return agent_settings
 
