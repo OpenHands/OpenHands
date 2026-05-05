@@ -191,3 +191,19 @@ class SetAuthCookieMiddleware:
                 await token_manager.logout(user_auth.refresh_token.get_secret_value())
         except Exception:
             logger.debug('Error logging out')
+
+
+class PostHogSessionMiddleware:
+    """Extract the PostHog session ID from the incoming request header.
+
+    Stores the value on ``request.state.posthog_session_id`` so that
+    subsequent event-capture call sites can link server-side events to the
+    corresponding frontend session-replay recording.
+
+    When the ``X-POSTHOG-SESSION-ID`` header is absent the attribute is set
+    to ``None`` — never raises, never blocks.
+    """
+
+    async def __call__(self, request: Request, call_next: Callable):
+        request.state.posthog_session_id = request.headers.get('X-POSTHOG-SESSION-ID')
+        return await call_next(request)

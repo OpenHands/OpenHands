@@ -1,4 +1,3 @@
-import type { PostHog } from "posthog-js";
 import { handleStatusMessage } from "#/services/actions";
 import { displayErrorToast } from "./custom-toast-handlers";
 
@@ -7,31 +6,19 @@ interface ErrorDetails {
   source?: string;
   metadata?: Record<string, unknown>;
   msgId?: string;
-  posthog?: PostHog;
 }
 
-export function trackError({
-  message,
-  source,
-  metadata = {},
-  posthog,
-}: ErrorDetails) {
-  if (!posthog) return;
-
-  const error = new Error(message);
-  posthog.captureException(error, {
-    error_source: source || "unknown",
-    ...metadata,
-  });
-}
+// PostHog capture removed — error tracking is now handled server-side
+export function trackError(
+  details: ErrorDetails, // eslint-disable-line @typescript-eslint/no-unused-vars
+): void {}
 
 export function showErrorToast({
   message,
   source,
   metadata = {},
-  posthog,
 }: ErrorDetails) {
-  trackError({ message, source, metadata, posthog });
+  trackError({ message, source, metadata });
   displayErrorToast(message);
 }
 
@@ -40,9 +27,8 @@ export function showChatError({
   source,
   metadata = {},
   msgId,
-  posthog,
 }: ErrorDetails) {
-  trackError({ message, source, metadata, posthog });
+  trackError({ message, source, metadata });
   handleStatusMessage({
     type: "error",
     message,

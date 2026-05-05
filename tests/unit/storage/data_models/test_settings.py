@@ -316,6 +316,47 @@ def test_switch_to_profile_preserves_other_agent_settings():
     assert 's' in settings.agent_settings.mcp_config.mcpServers
 
 
+def test_delete_active_profile_promotes_remaining_one():
+    settings = Settings()
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
+
+    assert settings.delete_profile('a') is True
+
+    assert 'a' not in settings.llm_profiles.profiles
+    assert settings.llm_profiles.active == 'b'
+    assert settings.agent_settings.llm.model == 'anthropic/claude-opus-4'
+
+
+def test_delete_inactive_profile_does_not_touch_active():
+    settings = Settings()
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
+
+    assert settings.delete_profile('b') is True
+
+    assert settings.llm_profiles.active == 'a'
+    assert settings.agent_settings.llm.model == 'openai/gpt-4o'
+
+
+def test_delete_only_profile_clears_active():
+    settings = Settings()
+    settings.llm_profiles.save('only', LLM(model='openai/gpt-4o'))
+    settings.switch_to_profile('only')
+
+    assert settings.delete_profile('only') is True
+
+    assert settings.llm_profiles.profiles == {}
+    assert settings.llm_profiles.active is None
+
+
+def test_delete_missing_profile_returns_false():
+    settings = Settings()
+    assert settings.delete_profile('nope') is False
+
+
 def test_update_ignores_llm_profiles_payload():
     """``Settings.update`` refuses to mutate ``llm_profiles``; profile changes
     must go through the dedicated endpoints (which enforce name rules, the

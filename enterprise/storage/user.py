@@ -20,7 +20,10 @@ if TYPE_CHECKING:
 
 
 class User(Base):
-    """User model with organizational relationships."""
+    """User model with organizational relationships.
+
+    This model satisfies the UserBase protocol via structural typing.
+    """
 
     __tablename__ = 'user'
 

@@ -26,6 +26,7 @@ from openhands.app_server.user_auth import (
     get_provider_tokens,
     get_secrets,
     get_secrets_store,
+    get_user_id,
 )
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.models import EditResponse
@@ -96,6 +97,7 @@ async def store_provider_tokens(
     provider_info: POSTProviderModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
+    user_id: str | None = Depends(get_user_id),
 ) -> EditResponse:
     """Store git provider tokens.
 
@@ -130,6 +132,20 @@ async def store_provider_tokens(
         update={'provider_tokens': provider_info.provider_tokens}
     )
     await secrets_store.store(updated_secrets)
+
+    # ACTV-02: git provider connected analytics
+    from openhands.analytics import get_analytics_service, resolve_analytics_context
+
+    analytics = get_analytics_service()
+    if analytics and user_id and provider_info.provider_tokens:
+        ctx = await resolve_analytics_context(user_id)
+        for provider_type, token_value in provider_info.provider_tokens.items():
+            # Only fire for providers with actual token, not host-only updates
+            if token_value.token:
+                analytics.track_git_provider_connected(
+                    ctx=ctx,
+                    provider_type=provider_type.value,
+                )
 
     return EditResponse(
         message='Git providers stored',
@@ -295,7 +311,7 @@ async def update_custom_secret(
     if existing_secrets:
         # Check if the secret to update exists
         if secret_id not in existing_secrets.custom_secrets:
-            return HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f'Secret with ID {secret_id} not found',
             )

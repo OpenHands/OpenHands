@@ -1,15 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { usePostHog } from "posthog-js/react";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import {
-  MCPConfig,
-  Settings,
-  SettingsScope,
-  SettingsValue,
-} from "#/types/settings";
-import { useSettings } from "../query/use-settings";
+import { Settings, SettingsScope, SettingsValue } from "#/types/settings";
 
 type SettingsUpdate = Partial<Settings> & Record<string, unknown>;
 
@@ -77,26 +70,11 @@ const saveSettingsMutationFn = async (
 };
 
 export const useSaveSettings = (scope: SettingsScope = "personal") => {
-  const posthog = usePostHog();
   const queryClient = useQueryClient();
-  const { data: currentSettings } = useSettings(scope);
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: async (settings: SettingsUpdate) => {
-      const nextMcpConfig = settings.mcp_config as MCPConfig | undefined;
-      const currentMcpConfig = currentSettings?.mcp_config as
-        | MCPConfig
-        | undefined;
-
-      if (nextMcpConfig && currentMcpConfig !== nextMcpConfig) {
-        posthog.capture("mcp_config_updated", {
-          has_mcp_config: true,
-          sse_servers_count: nextMcpConfig.sse_servers?.length || 0,
-          stdio_servers_count: nextMcpConfig.stdio_servers?.length || 0,
-        });
-      }
-
       await saveSettingsMutationFn(scope, settings, organizationId);
     },
     onSuccess: async () => {

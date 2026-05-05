@@ -274,9 +274,31 @@ class Settings(BaseModel):
 
         Raises :class:`ProfileNotFoundError` if ``name`` isn't a saved profile.
         """
+        # Copy the LLM so post-activation fixups (e.g. resolving ``base_url``
+        # against the provider default) don't bleed back into the saved
+        # profile. ``model_copy(update={'llm': llm})`` is shallow, so the
+        # update value is shared with ``llm_profiles.profiles[name]``.
         llm = self.llm_profiles.require(name)
-        self.agent_settings = self.agent_settings.model_copy(update={'llm': llm})
+        self.agent_settings = self.agent_settings.model_copy(
+            update={'llm': llm.model_copy()}
+        )
         self.llm_profiles.active = name
+
+    def delete_profile(self, name: str) -> bool:
+        """Delete a saved profile, promoting a fallback when it was active.
+
+        Returns False if the profile didn't exist; True otherwise. When the
+        deleted profile was active and other profiles remain, switches to
+        the first remaining one (insertion order — same ordering ``rename``
+        relies on) so the user isn't left without an active LLM.
+        """
+        was_active = self.llm_profiles.active == name
+        if not self.llm_profiles.delete(name):
+            return False
+        if was_active and self.llm_profiles.profiles:
+            fallback = next(iter(self.llm_profiles.profiles))
+            self.switch_to_profile(fallback)
+        return True
 
     @model_validator(mode='before')
     @classmethod

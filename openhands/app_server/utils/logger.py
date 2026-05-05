@@ -425,6 +425,7 @@ LOQUACIOUS_LOGGERS = [
     'socketio.server',
     'aiosqlite',
     'alembic.runtime.plugins',
+    'sqlalchemy.orm.mapper.Mapper',
 ]
 
 for logger_name in LOQUACIOUS_LOGGERS:
