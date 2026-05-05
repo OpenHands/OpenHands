@@ -550,8 +550,10 @@ describe("SdkSectionPage", () => {
       buildSettings({
         agent_settings_schema: schema,
         agent_settings: {
-          "verification.critic_enabled": true,
-          "verification.critic_server_url": "https://critic.example.com",
+          verification: {
+            critic_enabled: true,
+            critic_server_url: "https://critic.example.com",
+          },
         },
       }),
     );
