@@ -9,11 +9,10 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { SettingsScope, SettingsSchema } from "#/types/settings";
 import {
   buildInitialSettingsFormValues,
-  buildSdkSettingsPayloadForView,
+  buildSdkSettingsPayload,
   getVisibleSettingsSections,
   SettingsDirtyState,
   SettingsFormValues,
-  SettingsView,
 } from "#/utils/sdk-settings-schema";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-defaults-guard";
@@ -46,21 +45,19 @@ function VerificationSettingsHeader({
   criticSchema,
   criticValues,
   isDisabled,
-  view,
   onCriticChange,
   renderTopContent,
 }: {
   criticSchema: SettingsSchema | null;
   criticValues: SettingsFormValues;
   isDisabled: boolean;
-  view: SettingsView;
   onCriticChange: (key: string, value: string | boolean) => void;
   renderTopContent?: () => React.ReactNode;
 }) {
   const visibleSections = React.useMemo(() => {
     if (!criticSchema) return [];
-    return getVisibleSettingsSections(criticSchema, criticValues, view);
-  }, [criticSchema, criticValues, view]);
+    return getVisibleSettingsSections(criticSchema, criticValues, "all");
+  }, [criticSchema, criticValues]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -125,12 +122,11 @@ export function VerificationSettingsScreen({
   );
 
   const buildHeader = React.useCallback(
-    ({ isDisabled, view }: SdkSectionHeaderProps) => (
+    ({ isDisabled }: SdkSectionHeaderProps) => (
       <VerificationSettingsHeader
         criticSchema={criticSchema}
         criticValues={criticValues}
         isDisabled={isDisabled}
-        view={view}
         onCriticChange={handleCriticChange}
         renderTopContent={renderTopContent}
       />
@@ -143,10 +139,8 @@ export function VerificationSettingsScreen({
       conversationPayload: Record<string, unknown>,
       {
         dirty,
-        view,
       }: {
         dirty: SettingsDirtyState;
-        view: SettingsView;
       },
     ) => {
       const payload: Record<string, unknown> = {};
@@ -159,11 +153,10 @@ export function VerificationSettingsScreen({
       }
 
       if (criticSchema && Object.keys(criticDirty).length > 0) {
-        payload.agent_settings_diff = buildSdkSettingsPayloadForView(
+        payload.agent_settings_diff = buildSdkSettingsPayload(
           criticSchema,
           criticValues,
           criticDirty,
-          view,
         );
       }
 

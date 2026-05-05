@@ -29,7 +29,6 @@ from openhands.app_server.settings.llm_profiles import (
 from openhands.app_server.settings.settings_models import (
     GETSettingsModel,
     Settings,
-    default_agent_settings,
 )
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth import (
@@ -52,7 +51,6 @@ from openhands.sdk.settings import (
     OpenHandsAgentSettings,
     export_agent_settings_schema,
 )
-from openhands.sdk.settings.model import SettingProminence, SettingsSchema
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -81,21 +79,6 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
         base_url=llm.base_url,
         managed_proxy_url=LITE_LLM_API_URL,
     )
-
-
-def _export_openhands_agent_settings_schema() -> SettingsSchema:
-    """Return SDK schema with OpenHands product defaults for critic settings."""
-    schema = export_agent_settings_schema()
-    agent_settings = default_agent_settings()
-    for section in schema.sections:
-        if section.key != 'verification':
-            continue
-        for field in section.fields:
-            if field.key == 'verification.critic_enabled':
-                field.default = agent_settings.verification.critic_enabled
-            elif field.key == 'verification.enable_iterative_refinement':
-                field.prominence = SettingProminence.CRITICAL
-    return schema
 
 
 # NOTE: We use response_model=None for endpoints that return JSONResponse directly.
@@ -294,7 +277,7 @@ async def store_settings(
 @router.get('/agent-schema')
 async def load_settings_schema() -> dict[str, Any]:
     """Load the schema for settings"""
-    return _export_openhands_agent_settings_schema().model_dump(mode='json')
+    return export_agent_settings_schema().model_dump(mode='json')
 
 
 @router.get('/conversation-schema')
