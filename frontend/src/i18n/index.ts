@@ -19,6 +19,7 @@ export const AvailableLanguages = [
   { label: "Català", value: "ca" },
   { label: "Türkçe", value: "tr" },
   { label: "Українська", value: "uk" },
+  { label: "Русский", value: "ru" },
 ];
 
 i18n
