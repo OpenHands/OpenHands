@@ -2158,6 +2158,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
-                tavily_api_key=tavily_api_key,
+                tavily_api_key=config.tavily_api_key,
                 critic_api_key=config.critic_api_key,
             )
