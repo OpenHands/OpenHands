@@ -64,7 +64,17 @@ beforeEach(() => {
 
 describe("VerificationSettingsScreen", () => {
   it("renders critic controls alongside existing confirmation settings", async () => {
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          verification: {
+            critic_enabled: true,
+            enable_iterative_refinement: false,
+          },
+        },
+      }),
+    );
 
     renderVerificationSettingsScreen();
 
@@ -97,6 +107,13 @@ describe("VerificationSettingsScreen", () => {
           ...MOCK_DEFAULT_USER_SETTINGS.conversation_settings,
           confirmation_mode: true,
           security_analyzer: "llm",
+        },
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          verification: {
+            critic_enabled: true,
+            enable_iterative_refinement: false,
+          },
         },
       }),
     );

@@ -347,7 +347,7 @@ export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
   agent_settings: {
     ...DEFAULT_AGENT_SETTINGS,
     verification: {
-      critic_enabled: true,
+      critic_enabled: false,
       enable_iterative_refinement: false,
     },
     llm: {

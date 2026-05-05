@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
       max_size: 240,
     },
     verification: {
-      critic_enabled: true,
+      critic_enabled: false,
       enable_iterative_refinement: false,
     },
     mcp_config: {
