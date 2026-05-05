@@ -147,46 +147,6 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
       ],
     },
     {
-      key: "critic",
-      label: "Critic",
-      fields: [
-        {
-          description:
-            "Enable an additional critic pass to review the agent's work.",
-
-          key: "critic.enabled",
-          label: "Enable critic",
-          section: "critic",
-          section_label: "Critic",
-          value_type: "boolean",
-          default: true,
-          choices: [],
-          depends_on: [],
-          prominence: "critical",
-          secret: false,
-          required: true,
-        },
-        {
-          description: "Choose when the critic should review and intervene.",
-
-          key: "critic.mode",
-          label: "Mode",
-          section: "critic",
-          section_label: "Critic",
-          value_type: "string",
-          default: "finish_and_message",
-          choices: [
-            { label: "finish_and_message", value: "finish_and_message" },
-            { label: "all_actions", value: "all_actions" },
-          ],
-          depends_on: ["critic.enabled"],
-          prominence: "minor",
-          secret: false,
-          required: true,
-        },
-      ],
-    },
-    {
       key: "verification",
       label: "Verification",
       fields: [
@@ -302,10 +262,6 @@ export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
   agent_settings_schema: MOCK_AGENT_SETTINGS_SCHEMA,
   agent_settings: {
     ...DEFAULT_AGENT_SETTINGS,
-    critic: {
-      mode: "finish_and_message",
-      enabled: true,
-    },
     verification: {
       critic_enabled: true,
       enable_iterative_refinement: false,
