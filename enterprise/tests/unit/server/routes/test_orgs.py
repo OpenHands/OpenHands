@@ -45,7 +45,7 @@ from server.routes.orgs import (
 from storage.org import Org
 
 from openhands.app_server.user_auth import get_user_id
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
 # Test user ID constant (must be a valid UUID string)
 TEST_USER_ID = str(uuid.uuid4())
@@ -550,6 +550,63 @@ async def test_list_user_orgs_success(mock_app_list):
         assert response_data['next_page_id'] is None
         # Credits should be None in list view
         assert response_data['items'][0]['credits'] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'persisted_agent_settings',
+    [
+        {
+            'agent_kind': 'openhands',
+            'llm': {'model': 'anthropic/claude-3-haiku-20240307'},
+        },
+        {'agent_kind': 'llm', 'llm': {'model': 'anthropic/claude-3-haiku-20240307'}},
+        {'llm': {'model': 'anthropic/claude-3-haiku-20240307'}},
+    ],
+    ids=['agent_kind_openhands', 'agent_kind_llm_legacy', 'no_agent_kind'],
+)
+async def test_list_user_orgs_handles_persisted_agent_kind_variants(
+    mock_app_list, persisted_agent_settings
+):
+    """GIVEN: An org row whose persisted ``agent_settings`` carries any of the
+        three discriminator shapes seen in production (current ``'openhands'``,
+        legacy ``'llm'``, or no ``agent_kind`` at all)
+    WHEN: GET /api/organizations is called
+    THEN: The endpoint returns 200 and serializes the org without raising
+        a Pydantic literal-mismatch ``ValidationError``.
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Org',
+        contact_name='Owner',
+        contact_email='owner@example.com',
+        agent_settings=persisted_agent_settings,
+    )
+    mock_user = MagicMock()
+    mock_user.current_org_id = org_id
+
+    with (
+        patch(
+            'server.routes.orgs.UserStore.get_user_by_id',
+            AsyncMock(return_value=mock_user),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_user_orgs_paginated',
+            AsyncMock(return_value=([mock_org], None)),
+        ),
+    ):
+        # Act
+        response = TestClient(mock_app_list).get('/api/organizations')
+
+    # Assert
+    assert response.status_code == status.HTTP_200_OK
+    items = response.json()['items']
+    assert (
+        items[0]['agent_settings']['llm']['model']
+        == 'anthropic/claude-3-haiku-20240307'
+    )
 
 
 @pytest.mark.asyncio
@@ -1110,7 +1167,7 @@ async def test_get_org_defaults_settings_success():
     """
     org_id = uuid.uuid4()
     mock_org = MagicMock(spec=Org)
-    mock_org.agent_settings = AgentSettings(
+    mock_org.agent_settings = OpenHandsAgentSettings(
         agent='CodeActAgent',
         llm={'model': 'openhands/claude-3', 'base_url': 'https://proxy.example'},
     )
@@ -1138,7 +1195,7 @@ async def test_update_org_defaults_settings_forwards_through_org_service():
     """
     org_id = uuid.uuid4()
     updated_org = MagicMock(spec=Org)
-    updated_org.agent_settings = AgentSettings(
+    updated_org.agent_settings = OpenHandsAgentSettings(
         llm={
             'model': 'openhands/claude-3.5-sonnet',
             'base_url': 'https://proxy.example',
