@@ -22,31 +22,39 @@ Marketplace ──▶ Plugin Directory ──▶ Frontend /launch ──▶ App 
 
 ## Step 1: Marketplace (GitHub)
 
-**Source**: `github.com/OpenHands/plugin-marketplace`
+**Source**: A GitHub repository (e.g., `github.com/OpenHands/plugin-marketplace`)
 
-The marketplace is a GitHub repository containing a `catalog.yaml` that defines all available plugins.
+The marketplace is a GitHub repository containing a `marketplace.json` that indexes all available plugins.
 
-### catalog.yaml
+### marketplace.json
 
-```yaml
-name: "OpenHands Plugin Marketplace"
-owner:
-  name: "OpenHands"
-  url: "https://github.com/OpenHands"
-metadata:
-  pluginRoot: "plugins"  # Optional: subdirectory containing plugins
-plugins:
-  - name: "city-weather"
-    source: "github:jpshackelford/openhands-sample-plugins"
-    ref: "main"
-    repo_path: "plugins/city-weather"
-    description: "Get current weather for any city"
-    tags: ["weather", "utility"]
+```json
+{
+  "name": "OpenHands Plugin Marketplace",
+  "owner": {
+    "name": "OpenHands",
+    "email": "team@all-hands.dev"
+  },
+  "metadata": {
+    "description": "Official OpenHands plugin marketplace",
+    "pluginRoot": "plugins"
+  },
+  "plugins": [
+    {
+      "name": "city-weather",
+      "source": "github:jpshackelford/openhands-sample-plugins",
+      "ref": "main",
+      "repo_path": "plugins/city-weather",
+      "description": "Get current weather for any city",
+      "tags": ["weather", "utility"]
+    }
+  ]
+}
 ```
 
 ### Plugin Source (`plugin.json`)
 
-Each plugin has a `plugin.json` in its `.claude-plugin/` directory:
+Each plugin has a `plugin.json` in its `.claude-plugin/` directory. This file contains both official plugin manifest fields and optional directory-specific config fields:
 
 ```json
 {
@@ -70,7 +78,7 @@ Each plugin has a `plugin.json` in its `.claude-plugin/` directory:
 }
 ```
 
-**Output to Plugin Directory**: Raw catalog.yaml + individual plugin.json files
+**Output to Plugin Directory**: `marketplace.json` + individual `plugin.json` files
 
 ---
 
@@ -401,7 +409,7 @@ When the agent processes the message:
 
 | Step | Component | Input | Output |
 |------|-----------|-------|--------|
-| 1 | Marketplace | - | `catalog.yaml` + `plugin.json` files |
+| 1 | Marketplace | - | `marketplace.json` + `plugin.json` files |
 | 2 | Plugin Directory Server | Marketplace files | REST API responses |
 | 3 | Plugin Directory Client | Plugin + Config | Launch URL with base64 `plugins` + `message` |
 | 4 | OpenHands Frontend | URL query params | `POST /api/v1/app-conversations` |
