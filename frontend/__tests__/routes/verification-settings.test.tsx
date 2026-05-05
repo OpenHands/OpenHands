@@ -9,6 +9,16 @@ import VerificationSettingsScreen, {
 } from "#/routes/verification-settings";
 import { Settings } from "#/types/settings";
 
+const mockUseConfig = vi.fn();
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => mockUseConfig(),
+}));
+
+vi.mock("#/hooks/query/use-is-authed", () => ({
+  useIsAuthed: () => ({ data: true }),
+}));
+
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     ...MOCK_DEFAULT_USER_SETTINGS,
@@ -46,10 +56,14 @@ function renderVerificationSettingsScreen() {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  mockUseConfig.mockReturnValue({
+    data: { app_mode: "oss" },
+    isLoading: false,
+  });
 });
 
 describe("VerificationSettingsScreen", () => {
-  it("keeps confirmation mode toggle visible in the header", async () => {
+  it("renders critic controls alongside existing confirmation settings", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
 
     renderVerificationSettingsScreen();
@@ -57,15 +71,23 @@ describe("VerificationSettingsScreen", () => {
     await screen.findByTestId("verification-settings-screen");
 
     expect(
-      screen.getByTestId("confirmation-mode-toggle"),
+      screen.getByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("sdk-settings-confirmation_mode"),
     ).toBeInTheDocument();
     // Security analyzer is hidden when confirmation mode is off
     expect(
-      screen.queryByTestId("security-analyzer-input"),
+      screen.queryByTestId("sdk-settings-security_analyzer"),
     ).not.toBeInTheDocument();
   });
 
-  it("shows the security analyzer when confirmation mode is enabled", async () => {
+  it("keeps security analyzer in the existing advanced view", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
         conversation_settings: {
@@ -80,9 +102,14 @@ describe("VerificationSettingsScreen", () => {
 
     await screen.findByTestId("verification-settings-screen");
 
-    // Security analyzer should appear because confirmation mode is on
     expect(
-      screen.getByTestId("security-analyzer-input"),
+      screen.queryByTestId("sdk-settings-security_analyzer"),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+
+    expect(
+      await screen.findByTestId("sdk-settings-security_analyzer"),
     ).toBeInTheDocument();
   });
 });

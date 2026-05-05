@@ -1,90 +1,86 @@
 import React from "react";
-import { useTranslation } from "react-i18next";
-import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
-import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import {
   SdkSectionHeaderProps,
   SdkSectionPage,
 } from "#/components/features/settings/sdk-settings/sdk-section-page";
+import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
+import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
-import { I18nKey } from "#/i18n/declaration";
-import { DEFAULT_SETTINGS } from "#/services/settings";
-import { SettingsScope } from "#/types/settings";
+import { SettingsScope, SettingsSchema } from "#/types/settings";
+import {
+  buildInitialSettingsFormValues,
+  buildSdkSettingsPayloadForView,
+  getVisibleSettingsSections,
+  SettingsDirtyState,
+  SettingsFormValues,
+  SettingsView,
+} from "#/utils/sdk-settings-schema";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-defaults-guard";
 
+const CRITIC_FIELD_KEYS = new Set([
+  "verification.critic_enabled",
+  "verification.enable_iterative_refinement",
+]);
+
+const filterCriticSchema = (
+  schema: SettingsSchema | null | undefined,
+): SettingsSchema | null => {
+  if (!schema) return null;
+
+  const sections = schema.sections
+    .map((section) => ({
+      ...section,
+      fields: section.fields.filter((field) =>
+        CRITIC_FIELD_KEYS.has(field.key),
+      ),
+    }))
+    .filter((section) => section.fields.length > 0);
+
+  if (sections.length === 0) return null;
+
+  return { ...schema, sections };
+};
+
 function VerificationSettingsHeader({
-  confirmationMode,
-  securityAnalyzer,
-  isConversationSettingsDisabled,
-  onConfirmationModeChange,
-  onSecurityAnalyzerChange,
+  criticSchema,
+  criticValues,
+  isDisabled,
+  view,
+  onCriticChange,
   renderTopContent,
 }: {
-  confirmationMode: boolean;
-  securityAnalyzer: string | null;
-  isConversationSettingsDisabled: boolean;
-  onConfirmationModeChange: (value: boolean) => void;
-  onSecurityAnalyzerChange: (value: string | null) => void;
+  criticSchema: SettingsSchema | null;
+  criticValues: SettingsFormValues;
+  isDisabled: boolean;
+  view: SettingsView;
+  onCriticChange: (key: string, value: string | boolean) => void;
   renderTopContent?: () => React.ReactNode;
 }) {
-  const { t } = useTranslation();
-
-  const securityAnalyzerItems = React.useMemo(
-    () => [
-      {
-        key: "llm",
-        label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT),
-      },
-      {
-        key: "none",
-        label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_NONE),
-      },
-    ],
-    [t],
-  );
-
-  const showSecurityAnalyzer = confirmationMode;
+  const visibleSections = React.useMemo(() => {
+    if (!criticSchema) return [];
+    return getVisibleSettingsSections(criticSchema, criticValues, view);
+  }, [criticSchema, criticValues, view]);
 
   return (
     <div className="flex flex-col gap-6">
       {renderTopContent?.()}
 
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-1.5">
-          <SettingsSwitch
-            testId="confirmation-mode-toggle"
-            isToggled={confirmationMode}
-            onToggle={onConfirmationModeChange}
-            isDisabled={isConversationSettingsDisabled}
-          >
-            {t(I18nKey.SETTINGS_FORM$ENABLE_CONFIRMATION_MODE_LABEL)}
-          </SettingsSwitch>
-          <p className="text-tertiary-alt text-xs leading-5">
-            {t(I18nKey.SETTINGS$CONFIRMATION_MODE_TOOLTIP)}
-          </p>
-        </div>
-
-        {showSecurityAnalyzer ? (
-          <div className="flex flex-col gap-1.5">
-            <SettingsDropdownInput
-              testId="security-analyzer-input"
-              name="security_analyzer"
-              label={t(I18nKey.SETTINGS_FORM$SECURITY_ANALYZER_LABEL)}
-              items={securityAnalyzerItems}
-              selectedKey={securityAnalyzer ?? undefined}
-              placeholder={t(I18nKey.SETTINGS$SECURITY_ANALYZER_PLACEHOLDER)}
-              isDisabled={isConversationSettingsDisabled}
-              onSelectionChange={(key) =>
-                onSecurityAnalyzerChange(key ? String(key) : null)
-              }
-            />
-            <p className="text-tertiary-alt text-xs leading-5 max-w-[680px] ">
-              {t(I18nKey.SETTINGS$SECURITY_ANALYZER_DESCRIPTION)}
-            </p>
+      {visibleSections.map((section) => (
+        <section key={section.key} className="flex flex-col gap-4">
+          <div className="grid gap-4 xl:grid-cols-2">
+            {section.fields.map((field) => (
+              <SchemaField
+                key={field.key}
+                field={field}
+                value={criticValues[field.key]}
+                isDisabled={isDisabled}
+                onChange={(nextValue) => onCriticChange(field.key, nextValue)}
+              />
+            ))}
           </div>
-        ) : null}
-      </div>
+        </section>
+      ))}
     </div>
   );
 }
@@ -99,90 +95,92 @@ export function VerificationSettingsScreen({
   testId?: string;
 }) {
   const { data: settings } = useSettings(scope);
-  const [confirmationMode, setConfirmationMode] = React.useState(
-    DEFAULT_SETTINGS.confirmation_mode,
+  const agentSchemaQuery = useAgentSettingsSchema(
+    settings?.agent_settings_schema,
   );
-  const [securityAnalyzer, setSecurityAnalyzer] = React.useState<string | null>(
-    DEFAULT_SETTINGS.security_analyzer,
+  const criticSchema = React.useMemo(
+    () => filterCriticSchema(agentSchemaQuery.data),
+    [agentSchemaQuery.data],
   );
-  const [confirmationModeDirty, setConfirmationModeDirty] =
-    React.useState(false);
-  const [securityAnalyzerDirty, setSecurityAnalyzerDirty] =
-    React.useState(false);
+  const [criticValues, setCriticValues] = React.useState<SettingsFormValues>(
+    {},
+  );
+  const [criticDirty, setCriticDirty] = React.useState<SettingsDirtyState>({});
 
   React.useEffect(() => {
-    setConfirmationMode(
-      settings?.confirmation_mode ?? DEFAULT_SETTINGS.confirmation_mode,
+    if (!settings || !criticSchema) return;
+
+    setCriticValues(
+      buildInitialSettingsFormValues(settings, criticSchema, "agent_settings"),
     );
-    setSecurityAnalyzer(
-      settings?.security_analyzer ?? DEFAULT_SETTINGS.security_analyzer,
-    );
-    setConfirmationModeDirty(false);
-    setSecurityAnalyzerDirty(false);
-  }, [settings?.confirmation_mode, settings?.security_analyzer]);
+    setCriticDirty({});
+  }, [settings, criticSchema]);
+
+  const handleCriticChange = React.useCallback(
+    (key: string, value: string | boolean) => {
+      setCriticValues((prev) => ({ ...prev, [key]: value }));
+      setCriticDirty((prev) => ({ ...prev, [key]: true }));
+    },
+    [],
+  );
 
   const buildHeader = React.useCallback(
-    ({ isDisabled }: SdkSectionHeaderProps) => (
+    ({ isDisabled, view }: SdkSectionHeaderProps) => (
       <VerificationSettingsHeader
-        confirmationMode={confirmationMode}
-        securityAnalyzer={securityAnalyzer}
-        isConversationSettingsDisabled={isDisabled}
-        onConfirmationModeChange={(value) => {
-          setConfirmationMode(value);
-          setConfirmationModeDirty(true);
-        }}
-        onSecurityAnalyzerChange={(value) => {
-          setSecurityAnalyzer(value);
-          setSecurityAnalyzerDirty(true);
-        }}
+        criticSchema={criticSchema}
+        criticValues={criticValues}
+        isDisabled={isDisabled}
+        view={view}
+        onCriticChange={handleCriticChange}
         renderTopContent={renderTopContent}
       />
     ),
-    [confirmationMode, renderTopContent, securityAnalyzer],
+    [criticSchema, criticValues, handleCriticChange, renderTopContent],
   );
 
   const buildPayload = React.useCallback(
-    (basePayload: Record<string, unknown>) => {
-      // Critic fields go into agent_settings_diff
-      const result: Record<string, unknown> = {};
-      if (Object.keys(basePayload).length > 0) {
-        result.agent_settings_diff = basePayload;
+    (
+      conversationPayload: Record<string, unknown>,
+      {
+        dirty,
+        view,
+      }: {
+        dirty: SettingsDirtyState;
+        view: SettingsView;
+      },
+    ) => {
+      const payload: Record<string, unknown> = {};
+
+      if (
+        Object.keys(dirty).length > 0 &&
+        Object.keys(conversationPayload).length > 0
+      ) {
+        payload.conversation_settings_diff = conversationPayload;
       }
 
-      // Confirmation mode and security analyzer go into conversation_settings_diff
-      const conversationDiff: Record<string, unknown> = {};
-      if (confirmationModeDirty) {
-        conversationDiff.confirmation_mode = confirmationMode;
-      }
-      if (securityAnalyzerDirty) {
-        conversationDiff.security_analyzer = securityAnalyzer;
-      }
-      if (Object.keys(conversationDiff).length > 0) {
-        result.conversation_settings_diff = conversationDiff;
+      if (criticSchema && Object.keys(criticDirty).length > 0) {
+        payload.agent_settings_diff = buildSdkSettingsPayloadForView(
+          criticSchema,
+          criticValues,
+          criticDirty,
+          view,
+        );
       }
 
-      return result;
+      return payload;
     },
-    [
-      confirmationMode,
-      confirmationModeDirty,
-      securityAnalyzer,
-      securityAnalyzerDirty,
-    ],
+    [criticDirty, criticSchema, criticValues],
   );
 
   return (
     <SdkSectionPage
       scope={scope}
-      settingsSource="agent_settings"
+      settingsSource="conversation_settings"
       sectionKeys={["verification"]}
       header={buildHeader}
-      extraDirty={confirmationModeDirty || securityAnalyzerDirty}
+      extraDirty={Object.keys(criticDirty).length > 0}
       buildPayload={buildPayload}
-      onSaveSuccess={() => {
-        setConfirmationModeDirty(false);
-        setSecurityAnalyzerDirty(false);
-      }}
+      onSaveSuccess={() => setCriticDirty({})}
       testId={testId}
     />
   );
