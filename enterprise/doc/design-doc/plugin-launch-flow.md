@@ -304,33 +304,8 @@ Authorization: Bearer <user_token>
 
 [PR #12338](https://github.com/OpenHands/OpenHands/pull/12338)
 
-### Request Schema
+### Input (API Request)
 
-```python
-class PluginSpec(BaseModel):
-    source: str                    # "github:owner/repo" or URL
-    ref: str | None = None         # Git ref (branch/tag/commit)
-    repo_path: str | None = None   # Subdirectory within repo
-    parameters: dict | None = None # User-provided parameter values
-
-class CreateAppConversationRequest(BaseModel):
-    plugins: list[PluginSpec] | None = None
-    message: str | None = None
-    # ... other fields
-```
-
-### Processing
-
-**Call stack**:
-1. `AppConversationRouter.create_conversation()` receives request
-2. `LiveStatusAppConversationService._finalize_conversation_request()`:
-   - Converts `PluginSpec` → SDK `PluginSource` objects
-   - Creates `initial_message` from `message` field
-3. Creates `StartConversationRequest` for agent server
-
-### Transformation
-
-**Input** (API request):
 ```json
 {
   "plugins": [{
@@ -343,24 +318,69 @@ class CreateAppConversationRequest(BaseModel):
 }
 ```
 
-**Output** (to Agent Server):
+### Request Schema
+
+```python
+class PluginSpec(PluginSource):
+    """Extends SDK's PluginSource with user-provided parameters."""
+    parameters: dict[str, Any] | None = None  # User-provided values
+
+class AppConversationStartRequest(BaseModel):
+    plugins: list[PluginSpec] | None = None
+    initial_message: SendMessageRequest | None = None
+    # ... other fields
+```
+
+### Processing & Transformation
+
+**Call stack** in `LiveStatusAppConversationService`:
+
+1. **`_construct_initial_message_with_plugin_params()`** - Appends parameters to message:
+   ```python
+   # Original message: "/city-weather:now Tokyo"
+   # Parameters: {"city": "Tokyo"}
+   # Result: "/city-weather:now Tokyo\n\nPlugin Configuration Parameters:\n- city: Tokyo"
+   ```
+
+2. **Convert PluginSpec → SDK PluginSource** (parameters are DROPPED):
+   ```python
+   sdk_plugins = [
+       PluginSource(
+           source=p.source,      # "github:jpshackelford/openhands-sample-plugins"
+           ref=p.ref,            # "main"
+           repo_path=p.repo_path # "plugins/city-weather"
+       )
+       # NOTE: p.parameters is NOT passed to SDK PluginSource!
+       for p in plugins
+   ]
+   ```
+
+3. **Create StartConversationRequest** for agent server
+
+### Output (to Agent Server)
+
 ```python
 StartConversationRequest(
     plugins=[
         PluginSource(
             source="github:jpshackelford/openhands-sample-plugins",
             ref="main",
-            repo_path="plugins/city-weather",
-            parameters={"city": "Tokyo"}
+            repo_path="plugins/city-weather"
+            # NO parameters field - SDK PluginSource doesn't have it
         )
     ],
-    initial_message=MessageParam(
-        role="user",
-        content=[{"type": "text", "text": "/city-weather:now Tokyo"}]
+    initial_message=SendMessageRequest(
+        content=[
+            TextContent(
+                text="/city-weather:now Tokyo\n\nPlugin Configuration Parameters:\n- city: Tokyo"
+            )
+        ]
     ),
     # ... other fields
 )
 ```
+
+**⚠️ CRITICAL**: Plugin parameters are passed to the agent via **message text**, not via the `PluginSource` object. The SDK's `PluginSource` class only has `source`, `ref`, and `repo_path` fields.
 
 ---
 
@@ -370,6 +390,27 @@ StartConversationRequest(
 
 [SDK PR #1651](https://github.com/OpenHands/software-agent-sdk/pull/1651)
 
+### Input (`StartConversationRequest`)
+
+```python
+StartConversationRequest(
+    plugins=[
+        PluginSource(
+            source="github:jpshackelford/openhands-sample-plugins",
+            ref="main",
+            repo_path="plugins/city-weather"
+        )
+    ],
+    initial_message=SendMessageRequest(
+        content=[
+            TextContent(
+                text="/city-weather:now Tokyo\n\nPlugin Configuration Parameters:\n- city: Tokyo"
+            )
+        ]
+    )
+)
+```
+
 ### Processing
 
 **Call stack**:
@@ -378,23 +419,14 @@ StartConversationRequest(
 3. Creates `LocalConversation(plugins=request.plugins, ...)`
 4. Plugin loading deferred until first `run()` or `send_message()`
 
-### Transformation
+### Output (`LocalConversation`)
 
-**Input** (`StartConversationRequest`):
-```python
-StartConversationRequest(
-    plugins=[PluginSource(source="github:...", ref="main", repo_path="...", parameters={...})],
-    initial_message=MessageParam(role="user", content=[...])
-)
-```
-
-**Output** (`LocalConversation` created):
 ```python
 LocalConversation(
     agent=agent,
     plugins=[PluginSource(...)],  # Stored, not yet loaded
     workspace=workspace,
-    # ...
+    # initial_message queued for processing
 )
 ```
 
@@ -406,6 +438,18 @@ LocalConversation(
 
 [SDK PR #1647](https://github.com/OpenHands/software-agent-sdk/pull/1647)
 
+### Input (`PluginSource` list)
+
+```python
+[
+    PluginSource(
+        source="github:jpshackelford/openhands-sample-plugins",
+        ref="main",
+        repo_path="plugins/city-weather"
+    )
+]
+```
+
 ### Processing
 
 **Call stack**:
@@ -416,32 +460,21 @@ LocalConversation(
 3. `plugin.add_skills_to(skill_context)` → merges skills into agent
 4. `plugin.add_mcp_config_to(mcp_config)` → merges MCP servers
 
-### Plugin.fetch() Transformation
+### Output (`Plugin` object)
 
-**Input** (`PluginSource`):
-```python
-PluginSource(
-    source="github:jpshackelford/openhands-sample-plugins",
-    ref="main",
-    repo_path="plugins/city-weather",
-    parameters={"city": "Tokyo"}
-)
-```
-
-**Output** (`Plugin` object):
 ```python
 Plugin(
     name="city-weather",
     path="/tmp/plugins/city-weather",
     manifest=PluginManifest(
         name="city-weather",
-        entry_command="now",
+        entry_command="now",       # Read from plugin.json
         commands={"now": Command(...)},
         skills=[Skill(...)],
         hooks={...},
         mcp_servers={...}
-    ),
-    parameters={"city": "Tokyo"}  # Passed through for skill interpolation
+    )
+    # NOTE: No parameters field - parameters are in the message text
 )
 ```
 
@@ -450,14 +483,30 @@ Plugin(
 ## Step 8: Agent Receives Message
 
 The agent now has:
-- Plugin skills merged into its skill context
+- Plugin skills merged into its skill context (including `/city-weather:now` command as a skill)
 - MCP servers configured and running
-- The initial message `/city-weather:now Tokyo` in its conversation
+- The initial message in its conversation
+
+### Message Content
+
+```
+/city-weather:now Tokyo
+
+Plugin Configuration Parameters:
+- city: Tokyo
+```
+
+### Processing
 
 When the agent processes the message:
-1. Recognizes `/city-weather:now` as a slash command
-2. Looks up the `now` command from the `city-weather` plugin
-3. Executes the command with parameter `city=Tokyo`
+1. Recognizes `/city-weather:now` as a slash command (keyword trigger)
+2. The `KeywordTrigger` activates the command skill
+3. The skill content includes `$ARGUMENTS` placeholder for "Tokyo"
+4. The agent uses the parameter value from the message text
+
+**Note**: Parameters are NOT passed as structured data to the plugin. The agent reads them from the message text where they appear in two forms:
+- Inline in the slash command: `/city-weather:now Tokyo`
+- Formatted block: `Plugin Configuration Parameters:\n- city: Tokyo`
 
 ---
 
@@ -466,13 +515,28 @@ When the agent processes the message:
 | Step | Component | Input | Output |
 |------|-----------|-------|--------|
 | 1 | Marketplace | - | `marketplace.json` + `plugin.json` files |
-| 2 | Plugin Directory Server | Marketplace files | REST API responses |
-| 3 | Plugin Directory Client | Plugin + Config | Launch URL with base64 `plugins` + `message` |
-| 4 | OpenHands Frontend | URL query params | `POST /api/v1/app-conversations` |
-| 5 | App Server | API request | `StartConversationRequest` to agent server |
+| 2 | Plugin Directory Server | Marketplace files | REST API responses with `entry_command`, `parameters` |
+| 3 | Plugin Directory Client | Plugin + Config | Launch URL: `plugins` (with defaults) + `message` (slash command only) |
+| 4 | OpenHands Frontend | URL query params | API call: `plugins` (with user values) + `message` (slash command + values) |
+| 5 | App Server | API request | `StartConversationRequest`: `PluginSource` (no params) + message (params in text) |
 | 6 | Agent Server | `StartConversationRequest` | `LocalConversation` with deferred plugins |
 | 7 | SDK | `PluginSource` list | Loaded `Plugin` objects with skills/hooks/MCP |
-| 8 | Agent | Initial message | Command execution |
+| 8 | Agent | Initial message with params in text | Command execution |
+
+### Parameter Journey
+
+```
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+│  Plugin Directory   │     │  OpenHands Frontend │     │    App Server       │
+│                     │     │                     │     │                     │
+│  plugins[].params   │────▶│  plugins[].params   │────▶│  Appends to message │
+│  = defaults         │     │  = user values      │     │  text, then DROPS   │
+│                     │     │                     │     │  from PluginSource  │
+│  message =          │     │  message =          │     │                     │
+│  /cmd:entry         │────▶│  /cmd:entry values  │────▶│  message text has   │
+│  (no values)        │     │  (values appended)  │     │  all param context  │
+└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
+```
 
 ---
 
@@ -492,11 +556,21 @@ The `entry_command` field contains only the command name (e.g., `"now"`), not th
 - Launch modal to append user-provided parameter values
 - Flexibility for the launch experience to differ from direct SDK usage
 
-### Parameter Flow
+### Parameter Flow (Important!)
 
-Parameters flow through two paths:
-1. **In URL/API**: As structured data in `PluginSpec.parameters` for validation and form rendering
-2. **In message**: As text appended to the slash command for the agent to parse
+Parameters travel through the system in **two forms**, which merge at the App Server:
+
+1. **Structured data** (`PluginSpec.parameters`):
+   - Plugin Directory → Frontend → App Server API
+   - Used for form rendering and validation
+   - **Dropped at App Server** (not passed to SDK `PluginSource`)
+
+2. **Message text**:
+   - Appended to slash command by Frontend launch modal
+   - Also appended as formatted block by App Server
+   - **This is how the agent receives parameter values**
+
+The SDK's `PluginSource` class intentionally does NOT have a `parameters` field. All parameter context is communicated to the agent via the initial message text.
 
 ---
 
