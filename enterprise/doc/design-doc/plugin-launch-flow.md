@@ -148,25 +148,57 @@ Fetches and returns the config fields from `plugin.json`.
 
 ## Step 3: Plugin Directory Client
 
-When user clicks "Launch", the client constructs a launch URL.
+When user clicks "Launch", the client constructs a launch URL using `buildLaunchUrl()`.
+
+### buildLaunchUrl() Input
+
+From Plugin Directory Server APIs:
+- **Plugin** (from `/api/plugins/{id}`):
+  ```json
+  {
+    "name": "city-weather",
+    "source": {
+      "source": "github",
+      "repo": "jpshackelford/openhands-sample-plugins",
+      "ref": "main",
+      "repo_path": "plugins/city-weather"
+    }
+  }
+  ```
+- **PluginConfig** (from `/api/plugins/{id}/config`):
+  ```json
+  {
+    "entry_command": "now",
+    "parameters": {
+      "city": { "type": "string", "required": true, "default": "San Francisco" }
+    }
+  }
+  ```
 
 ### buildLaunchUrl() Transformation
 
-**Input**:
-- Plugin: `{ name: "city-weather", source: { source: "github", repo: "...", ref: "main", repo_path: "plugins/city-weather" } }`
-- Config: `{ entry_command: "now", parameters: { city: { type: "string", default: "San Francisco" } } }`
+1. **Build PluginSpec** from plugin source:
+   - `source`: Convert to string format `"github:owner/repo"`
+   - `ref`: Extract git ref if present
+   - `repo_path`: Extract subdirectory path if present
+   - `parameters`: Extract default values from parameter definitions
 
-**Transformation**:
-1. Build `PluginSpec` with source and parameter defaults
-2. Base64-encode as `plugins` query param
-3. Build slash command from `entry_command` as `message` query param
+2. **Build message** using `buildEntrySlashCommand(pluginName, entryCommand)`:
+   - Combines plugin name + entry_command → `"/city-weather:now"`
+   - Does NOT include parameter values (those are added by launch modal)
 
-**Output** (Launch URL):
+3. **Encode and construct URL**:
+   - Base64-encode the PluginSpec array as `plugins` query param
+   - Add slash command as `message` query param
+
+### buildLaunchUrl() Output
+
+**Launch URL**:
 ```
-https://app.openhands.ai/launch?plugins=BASE64&message=/city-weather:now
+https://app.openhands.ai/launch?plugins=BASE64&message=%2Fcity-weather%3Anow
 ```
 
-Where `plugins` decodes to:
+Where `plugins` (base64-decoded) contains:
 ```json
 [{
   "source": "github:jpshackelford/openhands-sample-plugins",
@@ -178,7 +210,12 @@ Where `plugins` decodes to:
 }]
 ```
 
-**Note**: The `message` contains only the slash command (`/city-weather:now`), not parameter values. Parameter values are added by the launch modal when the user submits.
+And `message` (URL-decoded) is:
+```
+/city-weather:now
+```
+
+**Key point**: The `parameters` in the PluginSpec contain **default values** for pre-filling the launch modal form. The `message` contains only the slash command—parameter values are appended by the launch modal after the user reviews/edits them.
 
 ---
 
