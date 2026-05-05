@@ -185,7 +185,7 @@ From Plugin Directory Server APIs:
 
 2. **Build message** using `buildEntrySlashCommand(pluginName, entryCommand)`:
    - Combines plugin name + entry_command → `"/city-weather:now"`
-   - Does NOT include parameter values (those are added by launch modal)
+   - Does NOT include parameter values (App Server will add them later)
 
 3. **Encode and construct URL**:
    - Base64-encode the PluginSpec array as `plugins` query param
@@ -215,7 +215,7 @@ And `message` (URL-decoded) is:
 /city-weather:now
 ```
 
-**Key point**: The `parameters` in the PluginSpec contain **default values** for pre-filling the launch modal form. The `message` contains only the slash command—parameter values are appended by the launch modal after the user reviews/edits them.
+**Key point**: The `parameters` in the PluginSpec contain **default values** for pre-filling the launch modal form. The `message` contains only the slash command—the Frontend passes it through unchanged, and the App Server appends the parameter values as a formatted text block.
 
 ---
 
@@ -524,7 +524,7 @@ When the agent processes the message:
 | 1 | Marketplace | - | `marketplace.json` + `plugin.json` files |
 | 2 | Plugin Directory Server | Marketplace files | REST API responses with `entry_command`, `parameters` |
 | 3 | Plugin Directory Client | Plugin + Config | Launch URL: `plugins` (with defaults) + `message` (slash command only) |
-| 4 | OpenHands Frontend | URL query params | API call: `plugins` (with user values) + `message` (slash command + values) |
+| 4 | OpenHands Frontend | URL query params | API call: `plugins` (with user values) + `message` (unchanged slash command) |
 | 5 | App Server | API request | `StartConversationRequest`: `PluginSource` (no params) + message (params in text) |
 | 6 | Agent Server | `StartConversationRequest` | `LocalConversation` with deferred plugins |
 | 7 | SDK | `PluginSource` list | Loaded `Plugin` objects with skills/hooks/MCP |
@@ -564,7 +564,8 @@ Plugins load **inside the sandbox** because:
 
 The `entry_command` field contains only the command name (e.g., `"now"`), not the full slash command. This separation allows:
 - Plugin Directory to construct the slash command from plugin name + entry_command
-- Launch modal to append user-provided parameter values
+- Frontend to collect user-provided parameter values via form UI
+- App Server to format parameters into the message text
 - Flexibility for the launch experience to differ from direct SDK usage
 
 ### Parameter Flow (Important!)
