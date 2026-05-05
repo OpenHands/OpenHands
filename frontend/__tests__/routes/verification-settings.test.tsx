@@ -81,6 +81,9 @@ describe("VerificationSettingsScreen", () => {
     expect(
       screen.getByTestId("sdk-settings-confirmation_mode"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-verification.critic_mode"),
+    ).not.toBeInTheDocument();
     // Security analyzer is hidden when confirmation mode is off
     expect(
       screen.queryByTestId("sdk-settings-security_analyzer"),
@@ -110,6 +113,9 @@ describe("VerificationSettingsScreen", () => {
 
     expect(
       await screen.findByTestId("sdk-settings-security_analyzer"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_mode"),
     ).toBeInTheDocument();
   });
 });

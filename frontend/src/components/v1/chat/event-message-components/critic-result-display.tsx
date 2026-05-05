@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
+import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
 import type {
   CriticResult,
@@ -33,6 +34,23 @@ function getIssueColorClass(probability: number): string {
   if (probability >= 0.7) return "text-red-400 font-semibold";
   if (probability >= 0.5) return "text-yellow-400";
   return "text-neutral-400";
+}
+
+function getIterativeRefinementEnabled(
+  agentSettings: Record<string, unknown> | null | undefined,
+): boolean | null {
+  const verification = agentSettings?.verification;
+  if (
+    verification == null ||
+    typeof verification !== "object" ||
+    Array.isArray(verification)
+  ) {
+    return null;
+  }
+
+  const value = (verification as Record<string, unknown>)
+    .enable_iterative_refinement;
+  return typeof value === "boolean" ? value : null;
 }
 
 /**
@@ -142,11 +160,16 @@ export function CriticResultDisplay({
   criticResult,
 }: CriticResultDisplayProps) {
   const { t } = useTranslation();
+  const { data: settings } = useSettings();
   const [expanded, setExpanded] = React.useState(false);
 
   const { filled, empty } = getStarRating(criticResult.score);
   const colorClass = getScoreColorClass(criticResult.score);
   const percentage = (criticResult.score * 100).toFixed(1);
+  const iterativeRefinementEnabled = getIterativeRefinementEnabled(
+    settings?.agent_settings as Record<string, unknown> | null | undefined,
+  );
+  const showIterativeRefinementHint = iterativeRefinementEnabled === false;
 
   const categorized = criticResult.metadata?.categorized_features;
   const hasDetails =
@@ -186,6 +209,15 @@ export function CriticResultDisplay({
 
       {expanded && hasDetails && (
         <FeaturesBreakdown categorized={categorized!} />
+      )}
+
+      {showIterativeRefinementHint && (
+        <p
+          className="mt-1.5 text-xs leading-5 text-neutral-500"
+          data-testid="critic-iterative-refinement-hint"
+        >
+          {t(I18nKey.CRITIC$ITERATIVE_REFINEMENT_HINT)}
+        </p>
       )}
     </div>
   );

@@ -24632,6 +24632,23 @@
     "uk": "Критик: ймовірність успіху агента",
     "ca": "Crític: probabilitat d'èxit de l'agent"
   },
+  "CRITIC$ITERATIVE_REFINEMENT_HINT": {
+    "en": "Want the agent to automatically fix potential issues? Enable iterative refinement in settings.",
+    "ja": "エージェントに潜在的な問題を自動修正させますか？設定で反復改善を有効にしてください。",
+    "zh-CN": "想让代理自动修复可能出现的问题？请在设置里开启迭代优化。",
+    "zh-TW": "想讓代理自動修復可能出現的問題？請在設定中開啟迭代最佳化。",
+    "ko-KR": "에이전트가 잠재적인 문제를 자동으로 수정하게 할까요? 설정에서 반복 개선을 켜세요.",
+    "no": "Vil du at agenten automatisk skal fikse mulige problemer? Slå på iterativ forbedring i innstillingene.",
+    "it": "Vuoi che l'agente corregga automaticamente i potenziali problemi? Attiva il perfezionamento iterativo nelle impostazioni.",
+    "pt": "Quer que o agente corrija automaticamente possíveis problemas? Ative o refinamento iterativo nas configurações.",
+    "es": "¿Quieres que el agente corrija automáticamente posibles problemas? Activa el refinamiento iterativo en la configuración.",
+    "ar": "هل تريد أن يصلح الوكيل المشكلات المحتملة تلقائيًا؟ فعّل التحسين التكراري من الإعدادات.",
+    "fr": "Vous voulez que l'agent corrige automatiquement les problèmes possibles ? Activez l'affinage itératif dans les paramètres.",
+    "tr": "Aracının olası sorunları otomatik olarak düzeltmesini ister misiniz? Ayarlardan yinelemeli iyileştirmeyi etkinleştirin.",
+    "de": "Soll der Agent mögliche Probleme automatisch beheben? Aktiviere iterative Verfeinerung in den Einstellungen.",
+    "uk": "Хочете, щоб агент автоматично виправляв можливі проблеми? Увімкніть ітеративне вдосконалення в налаштуваннях.",
+    "ca": "Vols que l'agent corregeixi automàticament possibles problemes? Activa el refinament iteratiu a la configuració."
+  },
   "CRITIC$POTENTIAL_ISSUES": {
     "en": "Potential Issues:",
     "ja": "潜在的な問題:",

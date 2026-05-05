@@ -1,9 +1,25 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { CriticResultDisplay } from "#/components/v1/chat/event-message-components/critic-result-display";
 import type { CriticResult } from "#/types/v1/core/base/critic";
+
+const mockUseSettings = vi.hoisted(() =>
+  vi.fn(() => ({
+    data: {
+      agent_settings: {
+        verification: {
+          enable_iterative_refinement: true,
+        },
+      },
+    },
+  })),
+);
+
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => mockUseSettings(),
+}));
 
 const makeCriticResult = (
   overrides: Partial<CriticResult> = {},
@@ -12,6 +28,18 @@ const makeCriticResult = (
   message: null,
   metadata: null,
   ...overrides,
+});
+
+beforeEach(() => {
+  mockUseSettings.mockReturnValue({
+    data: {
+      agent_settings: {
+        verification: {
+          enable_iterative_refinement: true,
+        },
+      },
+    },
+  });
 });
 
 describe("CriticResultDisplay", () => {
@@ -83,6 +111,36 @@ describe("CriticResultDisplay", () => {
 
     expect(
       screen.queryByLabelText("Expand details"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("prompts users to enable iterative refinement when it is disabled", () => {
+    mockUseSettings.mockReturnValue({
+      data: {
+        agent_settings: {
+          verification: {
+            enable_iterative_refinement: false,
+          },
+        },
+      },
+    });
+
+    renderWithProviders(
+      <CriticResultDisplay criticResult={makeCriticResult()} />,
+    );
+
+    expect(
+      screen.getByTestId("critic-iterative-refinement-hint"),
+    ).toHaveTextContent("CRITIC$ITERATIVE_REFINEMENT_HINT");
+  });
+
+  it("does not prompt users when iterative refinement is enabled", () => {
+    renderWithProviders(
+      <CriticResultDisplay criticResult={makeCriticResult()} />,
+    );
+
+    expect(
+      screen.queryByTestId("critic-iterative-refinement-hint"),
     ).not.toBeInTheDocument();
   });
 

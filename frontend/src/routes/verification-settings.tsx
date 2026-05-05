@@ -6,32 +6,44 @@ import {
 import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
-import { SettingsScope, SettingsSchema } from "#/types/settings";
+import {
+  SettingsFieldSchema,
+  SettingsScope,
+  SettingsSchema,
+} from "#/types/settings";
 import {
   buildInitialSettingsFormValues,
   buildSdkSettingsPayload,
-  getVisibleSettingsSections,
+  isSettingsFieldVisible,
   SettingsDirtyState,
   SettingsFormValues,
+  SettingsView,
 } from "#/utils/sdk-settings-schema";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-defaults-guard";
 
-const CRITIC_FIELD_KEYS = new Set([
+const BASIC_AGENT_VERIFICATION_FIELD_KEYS = new Set([
   "verification.critic_enabled",
   "verification.enable_iterative_refinement",
 ]);
 
-const filterCriticSchema = (
+const CONVERSATION_OWNED_AGENT_VERIFICATION_FIELD_KEYS = new Set([
+  "verification.confirmation_mode",
+  "verification.security_analyzer",
+]);
+
+const getAgentVerificationSchema = (
   schema: SettingsSchema | null | undefined,
 ): SettingsSchema | null => {
   if (!schema) return null;
 
   const sections = schema.sections
+    .filter((section) => section.key === "verification")
     .map((section) => ({
       ...section,
-      fields: section.fields.filter((field) =>
-        CRITIC_FIELD_KEYS.has(field.key),
+      fields: section.fields.filter(
+        (field) =>
+          !CONVERSATION_OWNED_AGENT_VERIFICATION_FIELD_KEYS.has(field.key),
       ),
     }))
     .filter((section) => section.fields.length > 0);
@@ -41,23 +53,48 @@ const filterCriticSchema = (
   return { ...schema, sections };
 };
 
+const shouldShowAgentVerificationField = (
+  field: SettingsFieldSchema,
+  values: SettingsFormValues,
+  view: SettingsView,
+) => {
+  if (!isSettingsFieldVisible(field, values)) return false;
+  if (view === "basic") {
+    return BASIC_AGENT_VERIFICATION_FIELD_KEYS.has(field.key);
+  }
+  return true;
+};
+
 function VerificationSettingsHeader({
-  criticSchema,
-  criticValues,
+  agentVerificationSchema,
+  agentVerificationValues,
   isDisabled,
-  onCriticChange,
+  view,
+  onAgentVerificationChange,
   renderTopContent,
 }: {
-  criticSchema: SettingsSchema | null;
-  criticValues: SettingsFormValues;
+  agentVerificationSchema: SettingsSchema | null;
+  agentVerificationValues: SettingsFormValues;
   isDisabled: boolean;
-  onCriticChange: (key: string, value: string | boolean) => void;
+  view: SettingsView;
+  onAgentVerificationChange: (key: string, value: string | boolean) => void;
   renderTopContent?: () => React.ReactNode;
 }) {
   const visibleSections = React.useMemo(() => {
-    if (!criticSchema) return [];
-    return getVisibleSettingsSections(criticSchema, criticValues, "all");
-  }, [criticSchema, criticValues]);
+    if (!agentVerificationSchema) return [];
+    return agentVerificationSchema.sections
+      .map((section) => ({
+        ...section,
+        fields: section.fields.filter((field) =>
+          shouldShowAgentVerificationField(
+            field,
+            agentVerificationValues,
+            view,
+          ),
+        ),
+      }))
+      .filter((section) => section.fields.length > 0);
+  }, [agentVerificationSchema, agentVerificationValues, view]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,9 +107,11 @@ function VerificationSettingsHeader({
               <SchemaField
                 key={field.key}
                 field={field}
-                value={criticValues[field.key]}
+                value={agentVerificationValues[field.key]}
                 isDisabled={isDisabled}
-                onChange={(nextValue) => onCriticChange(field.key, nextValue)}
+                onChange={(nextValue) =>
+                  onAgentVerificationChange(field.key, nextValue)
+                }
               />
             ))}
           </div>
@@ -95,43 +134,53 @@ export function VerificationSettingsScreen({
   const agentSchemaQuery = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
-  const criticSchema = React.useMemo(
-    () => filterCriticSchema(agentSchemaQuery.data),
+  const agentVerificationSchema = React.useMemo(
+    () => getAgentVerificationSchema(agentSchemaQuery.data),
     [agentSchemaQuery.data],
   );
-  const [criticValues, setCriticValues] = React.useState<SettingsFormValues>(
-    {},
-  );
-  const [criticDirty, setCriticDirty] = React.useState<SettingsDirtyState>({});
+  const [agentVerificationValues, setAgentVerificationValues] =
+    React.useState<SettingsFormValues>({});
+  const [agentVerificationDirty, setAgentVerificationDirty] =
+    React.useState<SettingsDirtyState>({});
 
   React.useEffect(() => {
-    if (!settings || !criticSchema) return;
+    if (!settings || !agentVerificationSchema) return;
 
-    setCriticValues(
-      buildInitialSettingsFormValues(settings, criticSchema, "agent_settings"),
+    setAgentVerificationValues(
+      buildInitialSettingsFormValues(
+        settings,
+        agentVerificationSchema,
+        "agent_settings",
+      ),
     );
-    setCriticDirty({});
-  }, [settings, criticSchema]);
+    setAgentVerificationDirty({});
+  }, [settings, agentVerificationSchema]);
 
-  const handleCriticChange = React.useCallback(
+  const handleAgentVerificationChange = React.useCallback(
     (key: string, value: string | boolean) => {
-      setCriticValues((prev) => ({ ...prev, [key]: value }));
-      setCriticDirty((prev) => ({ ...prev, [key]: true }));
+      setAgentVerificationValues((prev) => ({ ...prev, [key]: value }));
+      setAgentVerificationDirty((prev) => ({ ...prev, [key]: true }));
     },
     [],
   );
 
   const buildHeader = React.useCallback(
-    ({ isDisabled }: SdkSectionHeaderProps) => (
+    ({ isDisabled, view }: SdkSectionHeaderProps) => (
       <VerificationSettingsHeader
-        criticSchema={criticSchema}
-        criticValues={criticValues}
+        agentVerificationSchema={agentVerificationSchema}
+        agentVerificationValues={agentVerificationValues}
         isDisabled={isDisabled}
-        onCriticChange={handleCriticChange}
+        view={view}
+        onAgentVerificationChange={handleAgentVerificationChange}
         renderTopContent={renderTopContent}
       />
     ),
-    [criticSchema, criticValues, handleCriticChange, renderTopContent],
+    [
+      agentVerificationSchema,
+      agentVerificationValues,
+      handleAgentVerificationChange,
+      renderTopContent,
+    ],
   );
 
   const buildPayload = React.useCallback(
@@ -152,17 +201,20 @@ export function VerificationSettingsScreen({
         payload.conversation_settings_diff = conversationPayload;
       }
 
-      if (criticSchema && Object.keys(criticDirty).length > 0) {
+      if (
+        agentVerificationSchema &&
+        Object.keys(agentVerificationDirty).length > 0
+      ) {
         payload.agent_settings_diff = buildSdkSettingsPayload(
-          criticSchema,
-          criticValues,
-          criticDirty,
+          agentVerificationSchema,
+          agentVerificationValues,
+          agentVerificationDirty,
         );
       }
 
       return payload;
     },
-    [criticDirty, criticSchema, criticValues],
+    [agentVerificationDirty, agentVerificationSchema, agentVerificationValues],
   );
 
   return (
@@ -171,9 +223,9 @@ export function VerificationSettingsScreen({
       settingsSource="conversation_settings"
       sectionKeys={["verification"]}
       header={buildHeader}
-      extraDirty={Object.keys(criticDirty).length > 0}
+      extraDirty={Object.keys(agentVerificationDirty).length > 0}
       buildPayload={buildPayload}
-      onSaveSuccess={() => setCriticDirty({})}
+      onSaveSuccess={() => setAgentVerificationDirty({})}
       testId={testId}
     />
   );
