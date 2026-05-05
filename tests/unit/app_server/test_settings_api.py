@@ -12,6 +12,7 @@ from openhands.app_server.integrations.provider import ProviderToken, ProviderTy
 from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.settings import settings_router
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
@@ -129,6 +130,21 @@ def test_get_agent_settings_schema_includes_critic_verification_fields(test_clie
     )
     assert 'confirmation_mode' not in field_keys
     assert 'security_analyzer' not in field_keys
+
+
+def test_agent_settings_schema_uses_openhands_default_agent_settings(monkeypatch):
+    agent_settings = Settings(
+        agent_settings={'verification': {'critic_enabled': False}}
+    ).agent_settings
+    monkeypatch.setattr(
+        settings_router, 'default_agent_settings', lambda: agent_settings
+    )
+
+    schema = settings_router._export_openhands_agent_settings_schema()
+    verification_section = next(s for s in schema.sections if s.key == 'verification')
+    fields_by_key = {f.key: f for f in verification_section.fields}
+
+    assert fields_by_key['verification.critic_enabled'].default is False
 
 
 def test_get_conversation_settings_schema_endpoint(test_client):

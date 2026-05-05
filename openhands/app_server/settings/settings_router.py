@@ -29,6 +29,7 @@ from openhands.app_server.settings.llm_profiles import (
 from openhands.app_server.settings.settings_models import (
     GETSettingsModel,
     Settings,
+    default_agent_settings,
 )
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth import (
@@ -85,12 +86,13 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
 def _export_openhands_agent_settings_schema() -> SettingsSchema:
     """Return SDK schema with OpenHands product defaults for critic settings."""
     schema = export_agent_settings_schema()
+    agent_settings = default_agent_settings()
     for section in schema.sections:
         if section.key != 'verification':
             continue
         for field in section.fields:
             if field.key == 'verification.critic_enabled':
-                field.default = True
+                field.default = agent_settings.verification.critic_enabled
             elif field.key == 'verification.enable_iterative_refinement':
                 field.prominence = SettingProminence.CRITICAL
     return schema
