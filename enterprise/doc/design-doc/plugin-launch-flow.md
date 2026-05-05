@@ -225,11 +225,10 @@ And `message` (URL-decoded) is:
 
 [PR #12699](https://github.com/OpenHands/OpenHands/pull/12699)
 
-### URL Parsing
+### Input (from URL query params)
 
-**Input** (query params):
 - `plugins`: Base64-encoded JSON array of PluginSpec
-- `message`: Pre-filled slash command (optional)
+- `message`: Pre-filled slash command (no parameter values)
 
 **Decoded**:
 ```json
@@ -246,16 +245,32 @@ And `message` (URL-decoded) is:
 
 ### Modal Display
 
-The frontend:
-1. Displays plugin info and parameter form
-2. Pre-fills parameter inputs with default values
-3. Shows the message input pre-filled with `/city-weather:now`
+The frontend displays a confirmation modal:
+1. Shows plugin info
+2. Renders parameter form fields based on `plugins[].parameters`:
+   - Text input for `city`, pre-filled with `"San Francisco"`
+3. Shows message preview: `/city-weather:now`
 
-### User Submits
+### User Submits → Message Construction
 
-User modifies parameters (e.g., changes city to "Tokyo") and clicks "Start Conversation".
+When user clicks "Start Conversation":
 
-**Output** (API call to App Server):
+1. **Collect final parameter values** from form inputs:
+   - User changed `city` from `"San Francisco"` to `"Tokyo"`
+
+2. **Update PluginSpec parameters** with user's values:
+   ```json
+   "parameters": { "city": "Tokyo" }
+   ```
+
+3. **⚠️ CRITICAL: Append parameter values to message**:
+   ```
+   Original message:  "/city-weather:now"
+   Parameter values:  "Tokyo"
+   Final message:     "/city-weather:now Tokyo"
+   ```
+
+### Output (API call to App Server)
 
 ```
 POST /api/v1/app-conversations
@@ -275,7 +290,11 @@ Authorization: Bearer <user_token>
 }
 ```
 
-**Note**: The message now includes the user's parameter value ("Tokyo").
+**Summary of transformations**:
+| Field | Input (from URL) | Output (to API) |
+|-------|------------------|-----------------|
+| `plugins[].parameters` | Default values (`"San Francisco"`) | User's values (`"Tokyo"`) |
+| `message` | Slash command only (`/city-weather:now`) | Slash command + parameter values (`/city-weather:now Tokyo`) |
 
 ---
 
