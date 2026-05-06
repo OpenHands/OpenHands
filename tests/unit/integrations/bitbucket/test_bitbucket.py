@@ -554,8 +554,8 @@ def test_is_atlassian_api_token_rejects_uppercase():
         _is_atlassian_api_token,
     )
 
-    # Uppercase -> regular Bitbucket PAT (uses Bearer auth)
-    assert _is_atlassian_api_token('ABCD1234EFGH5678IJKL9012MNOP') is False
+    # 24-char token with uppercase letter -> should be rejected (Atlassian tokens are lowercase-only)
+    assert _is_atlassian_api_token('ABCDefghijklmnopqrstuvwx') is False
 
 
 def test_is_atlassian_api_token_rejects_wrong_length():
@@ -564,8 +564,8 @@ def test_is_atlassian_api_token_rejects_wrong_length():
         _is_atlassian_api_token,
     )
 
-    assert _is_atlassian_api_token('abcdefghijklmnopqrstu') is False  # 23
-    assert _is_atlassian_api_token('abcdefghijklmnopqrstuvw') is False  # 25
+    assert _is_atlassian_api_token('abcdefghijklmnopqrstu') is False  # 21 chars
+    assert _is_atlassian_api_token('abcdefghijklmnopqrstuvw') is False  # 23
 
 
 def test_is_atlassian_api_token_rejects_dashes():

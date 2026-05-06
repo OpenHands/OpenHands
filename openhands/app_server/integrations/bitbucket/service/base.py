@@ -34,9 +34,7 @@ def _is_atlassian_api_token(token_value: str) -> bool:
 
 
 class BitBucketMixinBase(BaseGitService, HTTPClient):
-    """
-    Base mixin for BitBucket service containing common functionality
-    """
+    """Base mixin for BitBucket service containing common functionality."""
 
     BASE_URL = 'https://api.bitbucket.org/2.0'
 
@@ -80,12 +78,13 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
     async def _get_headers(self) -> dict[str, str]:
         """Get headers for Bitbucket API requests.
 
-        Auth method selection:
-        - Token contains ':'  -> Basic auth (Bitbucket App Password format: username:token)
-        - Token matches Atlassian API token pattern (24 lowercase chars, no colon)
-                              -> Basic auth with 'bitbucket.org' as username
-                                (Atlassian tokens from id.atlassian.com must use Basic)
-        - Otherwise          -> Bearer auth (Bitbucket personal access tokens)
+        Auth method selection (in precedence order):
+        - Atlassian API token (24 lowercase chars, no colon)
+          -> Basic auth with 'bitbucket.org' as username
+        - Token contains ':' (app password format)
+          -> Basic auth (unchanged)
+        - Otherwise (PAT, uppercase/dashes)
+          -> Bearer auth (unchanged)
         """
         if not self.token or not self.token.get_secret_value():
             latest_token = await self.get_latest_token()
@@ -151,6 +150,8 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
                     )
                 response.raise_for_status()
                 return response.json(), dict(response.headers)
+        except httpx.HTTPStatusError as e:
+            raise self.handle_http_status_error(e)
         except httpx.HTTPError as e:
             raise self.handle_http_error(e)
 
@@ -251,6 +252,27 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
             git_provider=ProviderType.BITBUCKET,
             is_public=is_public,
             stargazers_count=None,  # Bitbucket doesn't have stars
+            link_header=link_header,
             owner_type=owner_type,
             main_branch=main_branch,
         )
+
+    async def get_repository_details_from_repo_name(
+        self, repository: str, is_public: bool = False
+    ) -> dict | None:
+        """Fetch repository details from Bitbucket API by repository name.
+
+        Args:
+            repository: Repository name in format 'workspace/repo_slug'
+            is_public: Whether the repository is public (affects auth usage)
+
+        Returns:
+            Repository details dict or None if not found
+        """
+        owner, repo = self._extract_owner_and_repo(repository)
+        url = f'{self.BASE_URL}/repositories/{owner}/{repo}'
+        try:
+            data, _ = await self._make_request(url)
+            return data
+        except Exception:
+            return None
