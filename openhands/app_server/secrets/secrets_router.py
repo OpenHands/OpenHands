@@ -308,13 +308,14 @@ async def update_custom_secret(
         500: Error updating secret
     """
     existing_secrets = await secrets_store.load()
-    if existing_secrets:
-        # Check if the secret to update exists
-        if secret_id not in existing_secrets.custom_secrets:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Secret with ID {secret_id} not found',
-            )
+    if not existing_secrets or secret_id not in existing_secrets.custom_secrets:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Secret with ID {secret_id} not found',
+        )
+
+    # At this point, existing_secrets exists and contains the secret
+    secret_name = incoming_secret.name
 
         secret_name = incoming_secret.name
         secret_description = incoming_secret.description
