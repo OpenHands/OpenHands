@@ -3098,6 +3098,67 @@ class TestAcpProviderEnv:
         env = LiveStatusAppConversationService._acp_provider_env(user)
         assert env == {}
 
+    def test_claude_code_with_base_url_plumbs_both(self, _user_factory):
+        """When api_key + base_url are both set, plumb ANTHROPIC_BASE_URL too.
+
+        Regression for #13999 acceptance criterion: a user who configures a
+        LiteLLM proxy in the UI must reach it from the ACP subprocess.
+        """
+        user = _user_factory(
+            acp_server='claude-code',
+            api_key='sk-test-anthropic',
+            base_url='https://llm-proxy.eval.all-hands.dev',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(user)
+        assert env == {
+            'ANTHROPIC_API_KEY': 'sk-test-anthropic',
+            'ANTHROPIC_BASE_URL': 'https://llm-proxy.eval.all-hands.dev',
+        }
+
+    def test_codex_with_base_url_plumbs_both(self, _user_factory):
+        user = _user_factory(
+            acp_server='codex',
+            api_key='sk-test-openai',
+            base_url='https://proxy.example.com/v1',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(user)
+        assert env == {
+            'OPENAI_API_KEY': 'sk-test-openai',
+            'OPENAI_BASE_URL': 'https://proxy.example.com/v1',
+        }
+
+    def test_gemini_with_base_url_plumbs_both(self, _user_factory):
+        user = _user_factory(
+            acp_server='gemini-cli',
+            api_key='sk-test-gemini',
+            base_url='https://gemini-proxy.internal/v1',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(user)
+        assert env == {
+            'GEMINI_API_KEY': 'sk-test-gemini',
+            'GEMINI_BASE_URL': 'https://gemini-proxy.internal/v1',
+        }
+
+    def test_custom_server_with_base_url_returns_empty(self, _user_factory):
+        """Custom servers never get auto-plumbed vars, even with base_url."""
+        user = _user_factory(
+            acp_server='custom',
+            api_key='sk-test',
+            base_url='https://proxy.example.com',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(user)
+        assert env == {}
+
+    def test_blank_base_url_not_emitted(self, _user_factory):
+        """Empty / whitespace base_url must not emit a ``*_BASE_URL`` entry."""
+        user = _user_factory(
+            acp_server='claude-code',
+            api_key='sk-test-anthropic',
+            base_url='   ',
+        )
+        env = LiveStatusAppConversationService._acp_provider_env(user)
+        assert env == {'ANTHROPIC_API_KEY': 'sk-test-anthropic'}
+
 
 class TestAgentKindConversationUrl:
     """Regression tests for conversation_url / live-status route dispatch.

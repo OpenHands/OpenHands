@@ -1458,10 +1458,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     def _acp_provider_env(user: UserInfo) -> dict[str, str]:
         """Translate UI-saved LLM credentials into provider-native env vars.
 
-        The ACP subprocess reads provider credentials from environment variables.
-        Maps the user's LLM API key to the env var expected by the active ACP
-        server via ``ACPAgentSettings.api_key_env_var``. Custom servers return
-        ``None`` — users manage credentials entirely via ``acp_env``.
+        The ACP subprocess reads provider credentials from environment
+        variables. Maps the user's LLM api key (and, when present, base URL)
+        to the env vars expected by the active ACP server via
+        ``ACPAgentSettings.api_key_env_var`` / ``base_url_env_var``. Custom
+        servers return ``None`` for both — users manage credentials entirely
+        via ``acp_env``.
+
+        The ``*_BASE_URL`` var is only emitted when ``api_key`` is also set,
+        so a provider-default ``base_url`` alone never clobbers an explicit
+        ``OH_AGENT_SERVER_ENV`` passthrough (matches #13999 / PR #14004 intent).
 
         Args:
             user: User information containing ACP agent settings.
@@ -1487,20 +1493,38 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not key_value or not key_value.strip():
             return env
 
-        # TODO: simplify to `acp_settings.api_key_env_var` once OpenHands is
-        # pinned to an SDK version that includes software-agent-sdk PR #2984.
-        # The fallback per-server mapping below duplicates that SDK property.
+        # TODO: simplify to `acp_settings.api_key_env_var` /
+        # `acp_settings.base_url_env_var` once OpenHands is pinned to an SDK
+        # version that includes software-agent-sdk PR #2984. The fallback
+        # per-server maps below duplicate those SDK properties.
+        _SERVER_KEY_MAP = {
+            'claude-code': 'ANTHROPIC_API_KEY',
+            'codex': 'OPENAI_API_KEY',
+            'gemini-cli': 'GEMINI_API_KEY',
+        }
+        _SERVER_BASE_URL_MAP = {
+            'claude-code': 'ANTHROPIC_BASE_URL',
+            'codex': 'OPENAI_BASE_URL',
+            'gemini-cli': 'GEMINI_BASE_URL',
+        }
+
         api_key_env: str | None = getattr(acp_settings, 'api_key_env_var', None)
         if api_key_env is None:
-            _SERVER_KEY_MAP = {
-                'claude-code': 'ANTHROPIC_API_KEY',
-                'codex': 'OPENAI_API_KEY',
-                'gemini-cli': 'GEMINI_API_KEY',
-            }
             api_key_env = _SERVER_KEY_MAP.get(acp_settings.acp_server)
 
         if api_key_env:
             env[api_key_env] = key_value
+
+        # Only plumb base_url when we know the provider (non-custom) AND an
+        # api_key was successfully plumbed — matches the security gate above.
+        base_url = acp_settings.llm.base_url
+        if api_key_env and base_url and str(base_url).strip():
+            base_url_env: str | None = getattr(acp_settings, 'base_url_env_var', None)
+            if base_url_env is None:
+                base_url_env = _SERVER_BASE_URL_MAP.get(acp_settings.acp_server)
+
+            if base_url_env:
+                env[base_url_env] = str(base_url)
 
         return env
 
