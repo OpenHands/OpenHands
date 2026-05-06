@@ -16032,10 +16032,36 @@
     "uk": "Доступні навички"
   },
   "MCPS_MODAL$TITLE": {
-    "en": "Available MCP Servers"
+    "en": "Available MCP Servers",
+    "ja": "利用可能なMCPサーバー",
+    "zh-CN": "可用的 MCP 服务器",
+    "zh-TW": "可用的 MCP 伺服器",
+    "ko-KR": "사용 가능한 MCP 서버",
+    "no": "Tilgjengelige MCP-servere",
+    "ar": "خوادم MCP المتاحة",
+    "de": "Verfügbare MCP-Server",
+    "fr": "Serveurs MCP disponibles",
+    "it": "Server MCP disponibili",
+    "pt": "Servidores MCP disponíveis",
+    "es": "Servidores MCP disponibles",
+    "tr": "Kullanılabilir MCP Sunucuları",
+    "uk": "Доступні сервери MCP"
   },
   "CONVERSATION$SHOW_MCPS": {
-    "en": "Show MCP Servers"
+    "en": "Show MCP Servers",
+    "ja": "MCPサーバーを表示",
+    "zh-CN": "显示 MCP 服务器",
+    "zh-TW": "顯示 MCP 伺服器",
+    "ko-KR": "MCP 서버 표시",
+    "no": "Vis MCP-servere",
+    "ar": "عرض خوادم MCP",
+    "de": "MCP-Server anzeigen",
+    "fr": "Afficher les serveurs MCP",
+    "it": "Mostra server MCP",
+    "pt": "Mostrar servidores MCP",
+    "es": "Mostrar servidores MCP",
+    "tr": "MCP Sunucularını Göster",
+    "uk": "Показати сервери MCP"
   },
   "CONVERSATION$SHARE_PUBLICLY": {
     "en": "Public Share",

@@ -16,6 +16,7 @@ from openhands.server.listen_socket import sio
 from openhands.server.middleware import (
     BetterAuthMiddleware,
     CacheControlMiddleware,
+    HandoffRedemptionMiddleware,
     InMemoryRateLimiter,
     LocalhostCORSMiddleware,
     RateLimitMiddleware,
@@ -38,6 +39,13 @@ _better_auth_url = os.environ.get('BETTER_AUTH_URL', '')
 if _better_auth_url:
     base_app.add_middleware(
         BetterAuthMiddleware,
+        better_auth_url=_better_auth_url,
+    )
+    # Registered after BetterAuthMiddleware so it wraps as the outermost layer
+    # and runs first on incoming requests — handoff redemption needs to set the
+    # session cookie before any auth check inspects it.
+    base_app.add_middleware(
+        HandoffRedemptionMiddleware,
         better_auth_url=_better_auth_url,
     )
 

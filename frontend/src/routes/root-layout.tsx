@@ -22,6 +22,7 @@ import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
 import { useAutoLogin } from "#/hooks/use-auto-login";
 import { useAuthCallback } from "#/hooks/use-auth-callback";
+import { useHandoffRedemption } from "#/hooks/use-handoff-redemption";
 import { useReoTracking } from "#/hooks/use-reo-tracking";
 import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
@@ -73,6 +74,12 @@ export default function MainApp() {
   const { data: settings } = useSettings();
   const { migrateUserConsent } = useMigrateUserConsent();
   const { t } = useTranslation();
+
+  // Must run before useIsAuthed reads its cached result so that, in dev where
+  // the FastAPI middleware can't intercept the SPA's initial HTML GET, we
+  // still redeem the handoff code before the layout decides to redirect to
+  // /login.
+  const { isRedeeming: isHandoffRedeeming } = useHandoffRedemption();
 
   const config = useConfig();
   const {
@@ -177,12 +184,13 @@ export default function MainApp() {
   const hideSidebar = searchParams.get("hideSidebar") === "true";
 
   const shouldRedirectToLogin =
-    config.isLoading ||
-    isAuthLoading ||
-    (!isAuthed &&
-      !isAuthError &&
-      !isOnTosPage &&
-      ((config.data?.APP_MODE === "saas" && !loginMethodExists) || isB1));
+    !isHandoffRedeeming &&
+    (config.isLoading ||
+      isAuthLoading ||
+      (!isAuthed &&
+        !isAuthError &&
+        !isOnTosPage &&
+        ((config.data?.APP_MODE === "saas" && !loginMethodExists) || isB1)));
 
   React.useEffect(() => {
     if (shouldRedirectToLogin) {
@@ -199,7 +207,7 @@ export default function MainApp() {
     }
   }, [shouldRedirectToLogin, pathname, searchParams, navigate]);
 
-  if (shouldRedirectToLogin) {
+  if (isHandoffRedeeming || shouldRedirectToLogin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
         <LoadingSpinner size="large" />

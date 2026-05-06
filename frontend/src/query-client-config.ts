@@ -11,6 +11,14 @@ const handle401Error = (error: AxiosError, queryClient: QueryClient) => {
   }
 };
 
+// While a single-use handoff code is still being redeemed, the SPA may fire
+// API calls before the cookie lands and get a 401 back. The redemption hook
+// refetches those errored queries afterward, so the toast is just noise.
+const isHandoffInFlight = (): boolean => {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).has("handoff_code");
+};
+
 const shownErrors = new Set<string>();
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
@@ -21,7 +29,11 @@ export const queryClient = new QueryClient({
         handle401Error(error, queryClient);
       }
 
-      if (!query.meta?.disableToast) {
+      const is401 =
+        (error as AxiosError)?.response?.status === 401 ||
+        (error as AxiosError)?.status === 401;
+
+      if (!query.meta?.disableToast && !(is401 && isHandoffInFlight())) {
         const errorMessage = retrieveAxiosErrorMessage(error);
 
         if (!shownErrors.has(errorMessage || "")) {

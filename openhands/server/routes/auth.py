@@ -12,6 +12,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from nacl.bindings import crypto_aead_xchacha20poly1305_ietf_decrypt
 
+from openhands.server.middleware import (
+    _adapt_cookie_for_iframe,
+    is_request_origin_https,
+)
+
 logger = logging.getLogger(__name__)
 
 app = APIRouter(prefix='/api')
@@ -282,14 +287,29 @@ async def logout(request: Request):
             pass
 
     response = JSONResponse(content={'status': 'ok'})
-    for name in _SESSION_COOKIES:
-        response.delete_cookie(
-            key=name,
-            path='/',
-            secure=name.startswith('__Secure-'),
-            httponly=True,
-            samesite='lax',
+    is_https = is_request_origin_https(request)
+
+    # Partitioned cookies (CHIPS) live in a separate jar keyed by top-level
+    # site. Deleting them requires Set-Cookie with the Partitioned attribute
+    # — Starlette's delete_cookie can't express this, so craft the header
+    # manually. Also issue a non-Partitioned deletion so we cover legacy
+    # cookies that were set before the handoff flow added Partitioned.
+    if is_https:
+        response.headers.append(
+            'set-cookie',
+            '__Secure-b1.session_token=; Path=/; HttpOnly; Secure; '
+            'SameSite=None; Partitioned; Max-Age=0',
         )
+        response.headers.append(
+            'set-cookie',
+            '__Secure-b1.session_token=; Path=/; HttpOnly; Secure; '
+            'SameSite=None; Max-Age=0',
+        )
+
+    response.headers.append(
+        'set-cookie',
+        'b1.session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    )
     return response
 
 
@@ -538,6 +558,71 @@ async def oauth_proxy_callback(request: Request):
         else '/login'
     )
     return RedirectResponse(url=login_url, status_code=302)
+
+
+@app.post('/auth/handoff/redeem')
+async def handoff_redeem(request: Request):
+    """Redeem a single-use handoff code for a session cookie at our origin.
+
+    The embedding parent app appends ?handoff_code=<code> to the iframe URL.
+    In production the request-time middleware redeems it before the SPA loads.
+    In dev (Vite serves the SPA HTML) the middleware never sees the request,
+    so the SPA reads the param on first render and POSTs it here.
+
+    Cookies returned by the auth server are adapted for cross-site iframe use:
+    HTTPS adds Partitioned (CHIPS); HTTP strips __Secure- name prefix, drops
+    Secure, and rewrites SameSite=None to SameSite=Lax.
+
+    On any non-200 from the auth server we pass through the status so the
+    client can decide whether to fall through to the existing sign-in flow.
+    """
+    if not BETTER_AUTH_URL:
+        return JSONResponse(
+            status_code=501,
+            content={'error': 'Better Auth is not configured'},
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={'error': 'Invalid body'})
+
+    code = body.get('code')
+    if not code or not isinstance(code, str):
+        return JSONResponse(status_code=400, content={'error': 'Missing code'})
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                _auth_url('/api/auth/mcp/handoff/redeem'),
+                json={'code': code},
+                timeout=10.0,
+            )
+    except Exception as e:
+        logger.warning('Handoff redeem network error: %s', e)
+        return JSONResponse(
+            status_code=502,
+            content={'error': 'Auth service unavailable'},
+        )
+
+    if resp.status_code != 200:
+        logger.info(
+            'Handoff redeem rejected (%s): %s',
+            resp.status_code,
+            resp.text[:200],
+        )
+        try:
+            content = resp.json()
+        except Exception:
+            content = {'error': resp.text or 'Redeem failed'}
+        return JSONResponse(status_code=resp.status_code, content=content)
+
+    is_https = is_request_origin_https(request)
+    response = JSONResponse(content={'status': 'ok'})
+    for raw_cookie in resp.headers.get_list('set-cookie'):
+        adapted = _adapt_cookie_for_iframe(raw_cookie, is_https=is_https)
+        response.headers.append('set-cookie', adapted)
+    return response
 
 
 @app.post('/login')

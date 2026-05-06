@@ -12,7 +12,7 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from fastapi import Request
@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response
+from starlette.responses import RedirectResponse, Response
 from starlette.types import ASGIApp
 
 
@@ -150,6 +150,7 @@ class BetterAuthMiddleware(BaseHTTPMiddleware):
         '/api/auth/sign-up',
         '/api/auth/sign-in/social',
         '/api/auth/oauth-proxy-callback',
+        '/api/auth/handoff/redeem',
         '/api/auth/providers',
         '/api/authenticate',
         '/api/login',
@@ -267,3 +268,142 @@ class BetterAuthMiddleware(BaseHTTPMiddleware):
             status_code=401,
             content={'error': 'Invalid or expired session'},
         )
+
+
+def is_request_origin_https(request: Request) -> bool:
+    """Determine whether the public origin facing the browser is HTTPS.
+
+    APP_URL takes precedence (the configured public origin). X-Forwarded-Proto
+    is a fallback for proxies that don't expose APP_URL. request.url.scheme
+    alone is unreliable behind a TLS-terminating reverse proxy.
+    """
+    app_url = os.environ.get('APP_URL', '')
+    if app_url:
+        return app_url.lower().startswith('https://')
+    proto = request.headers.get('x-forwarded-proto') or request.url.scheme
+    return proto.lower() == 'https'
+
+
+def _adapt_cookie_for_iframe(cookie_header: str, *, is_https: bool) -> str:
+    """Rewrite a Set-Cookie header from the auth server for our origin's iframe context.
+
+    HTTPS (production): the iframe is cross-site relative to its parent. Add the
+    Partitioned attribute (CHIPS) so Chrome's third-party-cookie blocking does
+    not silently drop the cookie. Keep Secure and SameSite=None.
+
+    HTTP (local dev): strip the __Secure- name prefix, drop Secure, and rewrite
+    SameSite=None to SameSite=Lax. Browsers refuse Secure on HTTP and refuse
+    SameSite=None without Secure.
+    """
+    parts = [p.strip() for p in cookie_header.split(';') if p.strip()]
+    if not parts:
+        return cookie_header
+
+    name_value = parts[0]
+    attrs = parts[1:]
+
+    if is_https:
+        if not any(a.lower() == 'partitioned' for a in attrs):
+            attrs.append('Partitioned')
+        return '; '.join([name_value, *attrs])
+
+    # HTTP: rewrite for local dev.
+    if name_value.startswith('__Secure-'):
+        name_value = name_value[len('__Secure-') :]
+
+    rewritten: list[str] = []
+    for attr in attrs:
+        lower = attr.lower()
+        if lower == 'secure':
+            continue
+        if lower == 'partitioned':
+            # Partitioned is only meaningful with Secure, which we just dropped.
+            continue
+        if lower.startswith('samesite='):
+            value = attr.split('=', 1)[1].strip().lower()
+            if value == 'none':
+                rewritten.append('SameSite=Lax')
+                continue
+        rewritten.append(attr)
+
+    return '; '.join([name_value, *rewritten])
+
+
+class HandoffRedemptionMiddleware(BaseHTTPMiddleware):
+    """Redeems a single-use auth handoff code for a session cookie at our origin.
+
+    The embedding parent app (B1/Vanguard) loads our SPA in an iframe and appends
+    ?handoff_code=<code> to the URL. We exchange that code for session cookies at
+    the Better Auth server (server-to-server), set them on the browser response,
+    and 302 to the same URL with the param stripped so a refresh can't replay
+    the (now-consumed) code and the code doesn't sit in the address bar.
+
+    Any failure path — already authenticated, redeem non-200, network error —
+    falls through to the existing sign-in flow by stripping the param and
+    redirecting to the clean URL.
+    """
+
+    SESSION_COOKIES = ('__Secure-b1.session_token', 'b1.session_token')
+    HANDOFF_PARAM = 'handoff_code'
+
+    def __init__(self, app: ASGIApp, better_auth_url: str):
+        super().__init__(app)
+        self.better_auth_url = better_auth_url.rstrip('/')
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        if request.method != 'GET':
+            return await call_next(request)
+        if self.HANDOFF_PARAM not in request.query_params:
+            return await call_next(request)
+
+        path = request.url.path
+        # Don't try to redeem on API or static-asset requests; the handoff is
+        # only meaningful for SPA HTML loads (e.g. /conversations/:id).
+        if path.startswith('/api/') or path.startswith('/assets/'):
+            return await call_next(request)
+
+        clean_url = self._strip_handoff_param(request)
+        logger = logging.getLogger(__name__)
+
+        # Already signed in — no need to redeem, just clean the URL.
+        if any(request.cookies.get(name) for name in self.SESSION_COOKIES):
+            return RedirectResponse(url=clean_url, status_code=302)
+
+        code = request.query_params[self.HANDOFF_PARAM]
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f'{self.better_auth_url}/api/auth/mcp/handoff/redeem',
+                    json={'code': code},
+                    timeout=10.0,
+                )
+        except Exception as e:
+            logger.warning('Handoff redemption network error: %s', e)
+            return RedirectResponse(url=clean_url, status_code=302)
+
+        if resp.status_code != 200:
+            logger.info(
+                'Handoff redemption rejected (%s): %s',
+                resp.status_code,
+                resp.text[:200],
+            )
+            return RedirectResponse(url=clean_url, status_code=302)
+
+        is_https = is_request_origin_https(request)
+        redirect = RedirectResponse(url=clean_url, status_code=302)
+        for raw_cookie in resp.headers.get_list('set-cookie'):
+            adapted = _adapt_cookie_for_iframe(raw_cookie, is_https=is_https)
+            redirect.raw_headers.append((b'set-cookie', adapted.encode('latin-1')))
+        return redirect
+
+    @classmethod
+    def _strip_handoff_param(cls, request: Request) -> str:
+        remaining = [
+            (k, v)
+            for k, v in request.query_params.multi_items()
+            if k != cls.HANDOFF_PARAM
+        ]
+        query = urlencode(remaining)
+        return request.url.path + (f'?{query}' if query else '')

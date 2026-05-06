@@ -90,6 +90,15 @@ class AuthService {
   }
 
   /**
+   * Redeem a single-use handoff code for a session cookie at our origin.
+   * Throws on non-2xx so callers can decide whether to fall through to
+   * the existing sign-in flow.
+   */
+  static async redeemHandoffCode(code: string): Promise<void> {
+    await openHands.post("/api/auth/handoff/redeem", { code });
+  }
+
+  /**
    * Logout user from the application
    * @param appMode The application mode (saas, oss, or b1)
    */
