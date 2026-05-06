@@ -3304,7 +3304,9 @@ class TestBuildAcpStartConversationRequestSecrets:
             app_mode='test',
         )
 
-    def _make_acp_user(self, acp_server='claude-code', acp_env=None, api_key=None):
+    def _make_acp_user(
+        self, acp_server='claude-code', acp_env=None, api_key=None, base_url=None
+    ):
         try:
             from openhands.sdk.settings import (
                 ACPAgentSettings,  # type: ignore[attr-defined]
@@ -3329,6 +3331,7 @@ class TestBuildAcpStartConversationRequestSecrets:
             llm=LLM(
                 model='claude-sonnet-4-5',
                 api_key=SecretStr(api_key) if api_key else None,
+                base_url=base_url,
             ),
             acp_env=acp_env or {},
         )
@@ -3418,6 +3421,31 @@ class TestBuildAcpStartConversationRequestSecrets:
             )
         else:
             assert request.agent.agent_context is None
+
+    @pytest.mark.asyncio
+    async def test_provider_env_plumbs_base_url_end_to_end(self, service, tmp_path):
+        """Both *_API_KEY and *_BASE_URL land in acp_env when UI sets both.
+
+        End-to-end coverage for issue #13999: a user who configures
+        ``llm.api_key`` + ``llm.base_url`` in the Settings UI and picks
+        ACP must see both vars reach the ACP subprocess via ``acp_env``.
+        This exercises ``_build_acp_start_conversation_request``'s full
+        env-merge flow, not just the ``_acp_provider_env`` helper.
+        """
+        user = self._make_acp_user(
+            acp_server='claude-code',
+            api_key='sk-ui-key',
+            base_url='https://llm-proxy.eval.all-hands.dev',
+        )
+        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
+        assert (
+            request.agent.acp_env.get('ANTHROPIC_BASE_URL')
+            == 'https://llm-proxy.eval.all-hands.dev'
+        )
 
     @pytest.mark.asyncio
     async def test_no_secrets_no_agent_context(self, service, tmp_path):
