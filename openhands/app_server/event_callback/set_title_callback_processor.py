@@ -18,7 +18,6 @@ from openhands.app_server.event_callback.event_callback_result_models import (
 )
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
-
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )

@@ -15,7 +15,6 @@ from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
     EventCallbackResultStatus,
 )
-
 from openhands.sdk import Event
 from openhands.sdk.utils.models import (
     DiscriminatedUnionMixin,
