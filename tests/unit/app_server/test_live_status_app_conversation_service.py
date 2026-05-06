@@ -994,7 +994,7 @@ class TestLiveStatusAppConversationService:
             result.agent.critic.server_url
             == 'https://llm-proxy.staging.all-hands.dev/vllm'
         )
-        assert result.agent.critic.model_name == 'critic-qwen3-4b'
+        assert result.agent.critic.model_name == 'critic'
         assert isinstance(result.agent.critic.api_key, SecretStr)
         assert result.agent.critic.api_key.get_secret_value() == 'service-key'
         assert result.agent.critic.iterative_refinement is not None
