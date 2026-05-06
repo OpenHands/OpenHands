@@ -126,11 +126,6 @@ def get_default_tavily_api_key() -> str | None:
     return os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY') or None
 
 
-def get_critic_api_key() -> str | None:
-    """Return the deployment-level critic API key, if configured."""
-    return os.getenv('CRITIC_API_KEY') or os.getenv('LITE_LLM_API_KEY') or None
-
-
 # The SDK auto-fills this URL as the default for openhands/ and litellm_proxy/
 # models.  Deployments (e.g. staging) may use a different LLM proxy, configured
 # via OPENHANDS_PROVIDER_BASE_URL.
@@ -235,10 +230,6 @@ class AppServerConfig(OpenHandsModel):
     tavily_api_key: str | None = Field(
         default_factory=get_default_tavily_api_key,
         description='Tavily API key for search integration (proxied via MCP server)',
-    )
-    critic_api_key: str | None = Field(
-        default_factory=get_critic_api_key,
-        description='Optional deployment-level critic API key.',
     )
     # Dependency Injection Injectors
     llm_model: LLMModelServiceInjector | None = None

@@ -969,7 +969,6 @@ class TestLiveStatusAppConversationService:
         self.service.openhands_provider_base_url = (
             'https://llm-proxy.staging.all-hands.dev/'
         )
-        self.service.critic_api_key = 'service-key'
 
         real_llm = LLM(
             model='litellm_proxy/minimax-m2.5',
@@ -996,7 +995,7 @@ class TestLiveStatusAppConversationService:
         )
         assert result.agent.critic.model_name == 'critic'
         assert isinstance(result.agent.critic.api_key, SecretStr)
-        assert result.agent.critic.api_key.get_secret_value() == 'service-key'
+        assert result.agent.critic.api_key.get_secret_value() == 'user-key'
         assert result.agent.critic.iterative_refinement is not None
 
     @patch(

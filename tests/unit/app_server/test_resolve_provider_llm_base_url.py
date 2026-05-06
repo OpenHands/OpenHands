@@ -2,7 +2,6 @@
 
 from openhands.app_server.config import (
     _SDK_DEFAULT_PROXY,
-    get_critic_api_key,
     resolve_provider_critic_server_url,
     resolve_provider_llm_base_url,
 )
@@ -234,23 +233,3 @@ class TestResolveProviderCriticServerUrl:
         result = resolve_provider_critic_server_url(critic_server_url=None)
 
         assert result is None
-
-
-class TestGetCriticApiKey:
-    def test_prefers_explicit_critic_api_key(self, monkeypatch):
-        monkeypatch.setenv('CRITIC_API_KEY', 'critic-key')
-        monkeypatch.setenv('LITE_LLM_API_KEY', 'litellm-key')
-
-        assert get_critic_api_key() == 'critic-key'
-
-    def test_falls_back_to_litellm_service_key(self, monkeypatch):
-        monkeypatch.delenv('CRITIC_API_KEY', raising=False)
-        monkeypatch.setenv('LITE_LLM_API_KEY', 'litellm-key')
-
-        assert get_critic_api_key() == 'litellm-key'
-
-    def test_returns_none_without_service_key(self, monkeypatch):
-        monkeypatch.delenv('CRITIC_API_KEY', raising=False)
-        monkeypatch.delenv('LITE_LLM_API_KEY', raising=False)
-
-        assert get_critic_api_key() is None
