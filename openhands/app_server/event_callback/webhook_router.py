@@ -227,7 +227,7 @@ async def on_conversation_update(
     )
 
     agent = conversation_info.agent
-    is_acp = getattr(agent, 'kind', None) == 'ACPAgent'
+    is_acp = getattr(agent, 'conversation_contract', None) == 'acp'
     if is_acp:
         agent_kind = 'acp'
         llm_model = None

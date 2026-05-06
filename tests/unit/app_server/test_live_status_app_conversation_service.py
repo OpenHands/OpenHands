@@ -3184,101 +3184,6 @@ class TestLoadHooksFromWorkspace:
         )
 
 
-class TestAcpProviderEnv:
-    """Unit tests for ``LiveStatusAppConversationService._acp_provider_env``.
-
-    Tests the helper that translates UI-saved LLM credentials into the
-    provider env vars the chosen ACP subprocess expects.
-    """
-
-    @pytest.fixture
-    def _user_factory(self):
-        try:
-            from openhands.sdk.settings import (
-                ACPAgentSettings,  # type: ignore[attr-defined]
-            )
-        except ImportError:
-            pytest.skip('ACPAgentSettings not available in this SDK build')
-
-        def _make(
-            *,
-            acp_server: str = 'claude-code',
-            api_key: str | None = None,
-            base_url: str | None = None,
-            acp_env: dict[str, str] | None = None,
-        ):
-            user = _TestUserInfo(
-                id='user1',
-                llm_model='',
-                llm_base_url=None,
-                llm_api_key=None,
-                sandbox_grouping_strategy=SandboxGroupingStrategy.ADD_TO_ANY,
-                confirmation_mode=False,
-                security_analyzer=None,
-                search_api_key=None,
-                mcp_config=None,
-                disabled_skills=[],
-            )
-            user.agent_settings = ACPAgentSettings(
-                acp_server=acp_server,  # type: ignore[arg-type]
-                llm=LLM(
-                    model='claude-sonnet-4-5',
-                    api_key=SecretStr(api_key) if api_key else None,
-                    base_url=base_url,
-                ),
-                acp_env=acp_env or {},
-            )
-            return user
-
-        return _make
-
-    def test_claude_code_translates_to_anthropic_vars(self, _user_factory):
-        user = _user_factory(acp_server='claude-code', api_key='sk-test-anthropic')
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {'ANTHROPIC_API_KEY': 'sk-test-anthropic'}
-
-    def test_codex_translates_to_openai_vars(self, _user_factory):
-        user = _user_factory(acp_server='codex', api_key='sk-test-openai')
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {'OPENAI_API_KEY': 'sk-test-openai'}
-
-    def test_gemini_translates_to_gemini_vars(self, _user_factory):
-        user = _user_factory(acp_server='gemini-cli', api_key='sk-test-gemini')
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {'GEMINI_API_KEY': 'sk-test-gemini'}
-
-    def test_custom_server_returns_empty(self, _user_factory):
-        """For acp_server='custom', the user is on their own via acp_env."""
-        user = _user_factory(
-            acp_server='custom',
-            api_key='sk-test',
-            base_url='https://proxy.example.com',
-        )
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {}
-
-    def test_no_credentials_returns_empty(self, _user_factory):
-        """No api_key + no base_url → nothing synthesized."""
-        user = _user_factory(acp_server='claude-code')
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {}
-
-    def test_no_api_key_returns_empty(self, _user_factory):
-        """No api_key → nothing synthesized."""
-        user = _user_factory(
-            acp_server='claude-code', base_url='https://api.anthropic.com'
-        )
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {}
-
-    def test_provider_base_url_env_var_is_synthesized(self, _user_factory):
-        user = _user_factory(
-            acp_server='gemini-cli', base_url='https://gemini-proxy.example.com'
-        )
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {'GEMINI_BASE_URL': 'https://gemini-proxy.example.com'}
-
-
 class TestAgentKindConversationUrl:
     """Regression tests for conversation_url / live-status route dispatch.
 
@@ -3543,8 +3448,8 @@ class TestBuildAcpStartConversationRequestSecrets:
         """Explicit acp_env entries take priority over auto-generated provider_env.
 
         When a user sets ANTHROPIC_API_KEY explicitly in acp_env, it must win
-        over the same key that _acp_provider_env derives from the UI-saved LLM
-        credentials.  This exercises the merge priority:
+        over the same key the SDK derives from the UI-saved LLM credentials.
+        This exercises the merge priority:
           acp_env > provider_env > agent_context.secrets
         """
         user = self._make_acp_user(

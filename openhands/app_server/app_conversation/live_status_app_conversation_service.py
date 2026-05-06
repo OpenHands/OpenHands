@@ -1491,43 +1491,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # prompts, LLM metadata, skills) applied after create_agent().
         return conv_settings.create_request(StartConversationRequest, agent=agent)
 
-    @staticmethod
-    def _acp_provider_env(user: UserInfo) -> dict[str, str]:
-        """Translate UI-saved LLM credentials into provider-native env vars.
-
-        The ACP subprocess reads provider credentials from environment variables.
-        Maps the user's LLM API key to the env var expected by the active ACP
-        server via ``ACPAgentSettings.api_key_env_var``. Custom servers return
-        ``None`` — users manage credentials entirely via ``acp_env``.
-
-        Args:
-            user: User information containing ACP agent settings.
-
-        Returns:
-            Dict of env var name → value to inject into the ACP subprocess.
-        """
-        if not isinstance(user.agent_settings, ACPAgentSettings):
-            return {}
-
-        acp_settings = user.agent_settings
-        env: dict[str, str] = {}
-
-        llm_api_key = acp_settings.llm.api_key
-        if llm_api_key:
-            key_value = (
-                llm_api_key.get_secret_value()
-                if isinstance(llm_api_key, SecretStr)
-                else str(llm_api_key)
-            )
-            if key_value and key_value.strip() and acp_settings.api_key_env_var:
-                env[acp_settings.api_key_env_var] = key_value
-
-        base_url = acp_settings.llm.base_url
-        if base_url and base_url.strip() and acp_settings.base_url_env_var:
-            env[acp_settings.base_url_env_var] = base_url
-
-        return env
-
     async def _build_acp_start_conversation_request(
         self,
         sandbox: SandboxInfo,
@@ -1583,23 +1546,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
         assert isinstance(acp_settings, ACPAgentSettings)
 
-        # Merge provider env vars (API keys etc.) into acp_env.
-        # Priority (highest → lowest): acp_env > provider_env
-        provider_env = self._acp_provider_env(user)
-        merged_env: dict[str, str] = {
-            **provider_env,
-            **dict(acp_settings.acp_env or {}),
-        }
-
         # Pass user secrets via AgentContext so the SDK renders a <CUSTOM_SECRETS>
         # block in the ACP prompt and injects values into the subprocess env.
         agent_context = AgentContext(secrets=secrets) if secrets else None
 
-        acp_agent = acp_settings.model_copy(
-            update={'acp_env': merged_env}
-        ).create_agent()
-        if agent_context is not None:
-            acp_agent = acp_agent.model_copy(update={'agent_context': agent_context})
+        settings_update = (
+            {'agent_context': agent_context} if agent_context is not None else {}
+        )
+        acp_agent = acp_settings.model_copy(update=settings_update).create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
         if plugins:

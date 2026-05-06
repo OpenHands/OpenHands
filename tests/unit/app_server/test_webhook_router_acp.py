@@ -88,7 +88,7 @@ def _make_acp_conversation_info(acp_command: list[str]) -> ACPConversationInfo:
     info.id = uuid4()
     info.execution_status = ConversationExecutionStatus.RUNNING
     acp_agent = MagicMock(spec=ACPAgent)
-    acp_agent.kind = 'ACPAgent'
+    acp_agent.conversation_contract = 'acp'
     acp_agent.acp_command = acp_command
     info.agent = acp_agent
     info.stats = MagicMock()
@@ -102,19 +102,19 @@ def _make_acp_conversation_info(acp_command: list[str]) -> ACPConversationInfo:
 # ---------------------------------------------------------------------------
 
 
-def test_acp_agent_classified_by_kind():
-    """kind == 'ACPAgent' is the sole identity check."""
+def test_acp_agent_classified_by_conversation_contract():
+    """conversation_contract == 'acp' is the ACP identity check."""
     agent = MagicMock()
-    agent.kind = 'ACPAgent'
-    assert getattr(agent, 'kind', None) == 'ACPAgent'
+    agent.conversation_contract = 'acp'
+    assert getattr(agent, 'conversation_contract', None) == 'acp'
 
 
 def test_non_acp_agent_not_classified_as_acp():
-    """An agent whose kind is not 'ACPAgent' is never classified as ACP."""
-    for kind in ('Agent', 'CustomAgent', None):
+    """An agent whose conversation contract is not 'acp' is not ACP."""
+    for conversation_contract in ('openhands', 'custom', None):
         agent = MagicMock()
-        agent.kind = kind
-        assert getattr(agent, 'kind', None) != 'ACPAgent'
+        agent.conversation_contract = conversation_contract
+        assert getattr(agent, 'conversation_contract', None) != 'acp'
 
 
 # ---------------------------------------------------------------------------
