@@ -787,8 +787,9 @@ def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm()
         ORG_SETTINGS_VERSION,
         get_default_litellm_model,
     )
-    from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
     from storage.user_settings import UserSettings
+
+    from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
 
     user_settings = UserSettings(
         keycloak_user_id='test',
