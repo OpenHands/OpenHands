@@ -522,3 +522,96 @@ async def test_get_user_handles_user_emails_api_failure():
         assert user.email is None
         assert user.login == 'testuser'
         assert user.name == 'Test User'
+
+
+# =============================================================================
+# Atlassian API Token Detection Tests
+# =============================================================================
+
+
+def test_is_atlassian_api_token_accepts_24_lowercase_chars():
+    """24-char all-lowercase token is recognised as an Atlassian API token."""
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        _is_atlassian_api_token,
+    )
+
+    # Correct 24-char Atlassian API token format
+    assert _is_atlassian_api_token('abcd1234efgh5678ijkl9012') is True
+
+
+def test_is_atlassian_api_token_rejects_colon_token():
+    """App-password format (contains ':') is NOT an Atlassian API token."""
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        _is_atlassian_api_token,
+    )
+
+    assert _is_atlassian_api_token('username:app_password') is False
+
+
+def test_is_atlassian_api_token_rejects_uppercase():
+    """Token with uppercase letters is not an Atlassian API token (Bitbucket PAT)."""
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        _is_atlassian_api_token,
+    )
+
+    # Uppercase -> regular Bitbucket PAT (uses Bearer auth)
+    assert _is_atlassian_api_token('ABCD1234EFGH5678IJKL9012MNOP') is False
+
+
+def test_is_atlassian_api_token_rejects_wrong_length():
+    """Tokens that are not exactly 24 chars are not Atlassian API tokens."""
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        _is_atlassian_api_token,
+    )
+
+    assert _is_atlassian_api_token('abcdefghijklmnopqrstu') is False  # 23
+    assert _is_atlassian_api_token('abcdefghijklmnopqrstuvw') is False  # 25
+
+
+def test_is_atlassian_api_token_rejects_dashes():
+    """Token with dashes is a Bitbucket PAT, not an Atlassian API token."""
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        _is_atlassian_api_token,
+    )
+
+    assert _is_atlassian_api_token('abcd1234efgh5678-ijkl9012') is False
+
+
+# =============================================================================
+# _get_headers Auth Method Selection Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_headers_uses_basic_auth_for_atlassian_api_token():
+    """Atlassian API tokens (24 lowercase, no colon) use Basic auth, not Bearer."""
+    import base64
+
+    service = BitBucketService(token=SecretStr('abcd1234efgh5678ijkl9012'))
+
+    headers = await service._get_headers()
+    assert headers['Authorization'].startswith('Basic '), (
+        f"Expected Basic auth, got: {headers['Authorization']}"
+    )
+
+    expected = base64.b64encode('bitbucket.org:abcd1234efgh5678ijkl9012'.encode()).decode()
+    assert headers['Authorization'] == f'Basic {expected}'
+
+
+@pytest.mark.asyncio
+async def test_get_headers_uses_basic_auth_for_app_password():
+    """Token with ':' (App Password format) uses Basic auth unchanged."""
+    service = BitBucketService(token=SecretStr('myuser:mypassword'))
+
+    headers = await service._get_headers()
+    assert headers['Authorization'].startswith('Basic ')
+
+
+@pytest.mark.asyncio
+async def test_get_headers_uses_bearer_auth_for_regular_token():
+    """Regular token (no colon, not Atlassian format) uses Bearer auth."""
+    # 25-char token with mixed case and dashes -> regular Bitbucket PAT
+    service = BitBucketService(token=SecretStr('ABCDefgh1234IJKL5678MNOPqrst-uvwx'))
+
+    headers = await service._get_headers()
+    assert headers['Authorization'].startswith('Bearer ')

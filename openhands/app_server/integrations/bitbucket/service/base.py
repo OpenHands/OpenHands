@@ -1,4 +1,5 @@
 import base64
+import re
 from typing import Any
 
 import httpx
@@ -15,6 +16,21 @@ from openhands.app_server.integrations.service_types import (
 )
 from openhands.app_server.utils.http_session import httpx_verify_option
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+
+def _is_atlassian_api_token(token_value: str) -> bool:
+    """Detect Atlassian API tokens that require Basic auth (not Bearer).
+
+    Atlassian API tokens from https://id.atlassian.com/manage-profile/security
+    are exactly 24 lowercase letters and digits. They do NOT contain colons,
+    so the naive ':' check routes them to Bearer auth -- which Bitbucket Cloud
+    rejects for these tokens.
+
+    Regular Bitbucket personal access tokens (created in Bitbucket settings) are
+    typically longer and contain uppercase letters and/or dashes, so they are
+    correctly routed to Bearer auth.
+    """
+    return bool(re.fullmatch(r'[a-z0-9]{24}', token_value))
 
 
 class BitBucketMixinBase(BaseGitService, HTTPClient):
@@ -64,11 +80,12 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
     async def _get_headers(self) -> dict[str, str]:
         """Get headers for Bitbucket API requests.
 
-        Mirrors the GitLab base: when ``self.token`` is empty (the default
-        for services constructed only with ``external_auth_id``), resolve
-        the latest token before building the header. Without this, the
-        header would be ``Authorization: Bearer `` and httpx rejects it
-        as ``Illegal header value``.
+        Auth method selection:
+        - Token contains ':'  -> Basic auth (Bitbucket App Password format: username:token)
+        - Token matches Atlassian API token pattern (24 lowercase chars, no colon)
+                              -> Basic auth with 'bitbucket.org' as username
+                                (Atlassian tokens from id.atlassian.com must use Basic)
+        - Otherwise          -> Bearer auth (Bitbucket personal access tokens)
         """
         if not self.token or not self.token.get_secret_value():
             latest_token = await self.get_latest_token()
@@ -77,6 +94,15 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
 
         token_value = self.token.get_secret_value()
 
+        # Atlassian API tokens (24 lowercase chars, no colon) require Basic auth
+        # even though they don't contain a ':' separator.
+        if _is_atlassian_api_token(token_value):
+            auth_str = base64.b64encode(f'bitbucket.org:{token_value}'.encode()).decode()
+            return {
+                'Authorization': f'Basic {auth_str}',
+                'Accept': 'application/json',
+            }
+
         # Check if the token contains a colon, which indicates it's in username:password format
         if ':' in token_value:
             auth_str = base64.b64encode(token_value.encode()).decode()
@@ -84,11 +110,11 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
                 'Authorization': f'Basic {auth_str}',
                 'Accept': 'application/json',
             }
-        else:
-            return {
-                'Authorization': f'Bearer {token_value}',
-                'Accept': 'application/json',
-            }
+
+        return {
+            'Authorization': f'Bearer {token_value}',
+            'Accept': 'application/json',
+        }
 
     async def _make_request(
         self,
@@ -125,8 +151,6 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
                     )
                 response.raise_for_status()
                 return response.json(), dict(response.headers)
-        except httpx.HTTPStatusError as e:
-            raise self.handle_http_status_error(e)
         except httpx.HTTPError as e:
             raise self.handle_http_error(e)
 
@@ -203,11 +227,11 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         """Parse a Bitbucket API repository response into a Repository object.
 
         Args:
-            repo: Repository data from Bitbucket API
-            link_header: Optional link header for pagination
+            repo: The API response data
+            link_header: Optional pagination Link header
 
         Returns:
-            Repository object
+            A Repository object
         """
         repo_id = repo.get('uuid', '')
 
@@ -227,23 +251,6 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
             git_provider=ProviderType.BITBUCKET,
             is_public=is_public,
             stargazers_count=None,  # Bitbucket doesn't have stars
-            pushed_at=repo.get('updated_on'),
             owner_type=owner_type,
-            link_header=link_header,
             main_branch=main_branch,
         )
-
-    async def get_repository_details_from_repo_name(
-        self, repository: str
-    ) -> Repository:
-        """Get repository details from repository name.
-
-        Args:
-            repository: Repository name in format 'workspace/repo_slug'
-
-        Returns:
-            Repository object with details
-        """
-        url = f'{self.BASE_URL}/repositories/{repository}'
-        data, _ = await self._make_request(url)
-        return self._parse_repository(data)
