@@ -89,6 +89,7 @@ vi.mock("#/components/v1/chat", () => ({
   ),
   shouldRenderEvent: () => true,
   hasUserEvent: () => false,
+  getRenderedV1Events: (events: unknown[]) => events,
 }));
 
 const createQueryClient = () =>

@@ -21,7 +21,7 @@ dynamic = [ "version" ]
 
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
-  "aiohttp>=3.13.5",
+  "aiohttp>=3.13.4",
   "anthropic[vertex]",
   "anyio==4.9",
   "asyncpg>=0.30",
@@ -50,12 +50,12 @@ dependencies = [
   "jwcrypto>=1.5.6",
   "kubernetes>=33.1",
   "libtmux>=0.46.2",
-  "litellm!=1.64.4,!=1.67.*,>=1.74.3",
+  "litellm!=1.64.4,!=1.67.*,>=1.83.14",
   "lmnr>=0.7.20",
   "mcp>=1.25",
   "memory-profiler>=0.61",
   "numpy",
-  "openai==2.8",
+  "openai==2.24",
   "openhands-aci==0.3.3",
   "openhands-agent-server==1.19.1",
   "openhands-sdk==1.19.1",
@@ -158,9 +158,9 @@ include = [
 python = "^3.12,<3.14"
 authlib = ">=1.6.9"                                # CVE-2026-27962 (fixed in 1.6.9)
 orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
-litellm = ">=1.74.3, !=1.64.4, !=1.67.*"           # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
-openai = "2.8.0"                                   # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
-aiohttp = ">=3.13.5"                               # Pin to avoid CVE-2026-22815 (vulnerable versions < 3.13.4)
+litellm = ">=1.83.14, !=1.64.4, !=1.67.*"          # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
+openai = "2.24.0"                                  # Pin because litellm 1.83.14 requires 2.24.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
+aiohttp = ">=3.13.4"                               # Keep aiohttp on a fixed-or-newer release while allowing litellm's pinned 3.13.4
 google-genai = "*"                                 # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"              # For Google Sheets API
 google-auth-httplib2 = "*"                         # For Google Sheets authentication
