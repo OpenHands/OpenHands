@@ -14,6 +14,12 @@ import litellm
 from pythonjsonlogger.json import JsonFormatter
 from termcolor import colored
 
+from openhands.sdk.utils.redact import (
+    redact_api_key_literals,
+    redact_text_secrets,
+    redact_url_params,
+)
+
 # Suppress deprecation warnings from dependencies before they're imported
 # aifc was removed in Python 3.13 but speech_recognition still references it
 with warnings.catch_warnings():
@@ -290,6 +296,12 @@ class SensitiveDataFilter(logging.Filter):
             pattern = rf"{attr}='?([\w-]+)'?"
             msg = re.sub(pattern, f"{attr}='******'", msg)
 
+        # Apply SDK redaction utils to catch API key literals (e.g. sk_live_,
+        # sk-proj-, ghp_, etc.) and secret dict patterns (e.g. 'GITHUB_TOKEN':
+        # '...') that the pattern-based filter above does not cover.
+        msg = redact_api_key_literals(msg)
+        msg = redact_text_secrets(msg)
+
         # Update the record
         record.msg = msg
         record.args = ()
@@ -386,16 +398,26 @@ if DEBUG:
 if current_log_level == logging.DEBUG:
     openhands_logger.debug('DEBUG mode enabled.')
 
+_sensitive_data_filter = SensitiveDataFilter(openhands_logger.name)
+
 if LOG_JSON:
-    openhands_logger.addHandler(json_log_handler(current_log_level))
+    _json_handler = json_log_handler(current_log_level)
+    _json_handler.addFilter(_sensitive_data_filter)
+    openhands_logger.addHandler(_json_handler)
     # Configure concurrent.futures logger to use JSON formatting as well
     cf_logger = logging.getLogger('concurrent.futures')
     cf_logger.setLevel(current_log_level)
     cf_logger.addHandler(json_log_handler(current_log_level))
 else:
-    openhands_logger.addHandler(get_console_handler(current_log_level))
+    _console_handler = get_console_handler(current_log_level)
+    _console_handler.addFilter(_sensitive_data_filter)
+    openhands_logger.addHandler(_console_handler)
 
-openhands_logger.addFilter(SensitiveDataFilter(openhands_logger.name))
+# Keep the filter on the logger for records logged directly to openhands_logger,
+# and on the handlers for records propagated from child loggers (e.g.
+# openhands.app_server.*) — Python only checks the originating logger's
+# filters, not ancestor filters, during propagation.
+openhands_logger.addFilter(_sensitive_data_filter)
 openhands_logger.propagate = False
 openhands_logger.debug('Logging initialized')
 
@@ -521,7 +543,8 @@ class OpenHandsLoggerAdapter(logging.LoggerAdapter):
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
     ) -> tuple[str, MutableMapping[str, Any]]:
-        """If 'extra' is supplied in kwargs, merge it with the adapters 'extra' dict
+        """Merge 'extra' kwargs with the adapter's 'extra' dict.
+
         Starting in Python 3.13, LoggerAdapter's merge_extra option will do this.
         """
         if 'extra' in kwargs and isinstance(kwargs['extra'], dict):
@@ -542,8 +565,6 @@ class RedactURLParamsFilter(logging.Filter):
     _URL_WITH_QS_RE = re.compile(r'\S+\?\S+')
 
     def filter(self, record: logging.LogRecord) -> bool:
-        from openhands.sdk.utils.redact import redact_url_params
-
         if record.args:
             if isinstance(record.args, (tuple, list)):
                 record.args = tuple(
