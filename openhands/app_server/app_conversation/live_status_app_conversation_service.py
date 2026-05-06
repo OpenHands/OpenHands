@@ -433,7 +433,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     conversation_id=info.id,
                     agent_server_url=agent_server_url,
                     session_api_key=sandbox.session_api_key,
-                    agent_kind=agent_kind,
                 )
 
         except Exception as exc:
@@ -1620,7 +1619,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID,
         agent_server_url: str,
         session_api_key: str,
-        agent_kind: str = 'openhands',
     ) -> None:
         """Process pending messages queued before conversation was ready.
 
@@ -1632,7 +1630,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id: The real conversation ID
             agent_server_url: URL of the agent server
             session_api_key: API key for authenticating with agent server
-            agent_kind: Discriminator for agent-server route prefix ('acp' or 'openhands')
         """
         # Convert UUIDs to strings for the pending message service
         # The frontend uses task-{uuid.hex} format (no hyphens), matching OpenHandsUUID serialization
@@ -1672,9 +1669,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             try:
                 # Serialize content objects to JSON-compatible dicts
                 content_json = [item.model_dump() for item in msg.content]
-                router_path = _agent_kind_to_router_path(agent_kind)
+                # Use the events endpoint which handles message sending
                 response = await self.httpx_client.post(
-                    f'{agent_server_url}/api/{router_path}/{conversation_id_str}/events',
+                    f'{agent_server_url}/api/conversations/{conversation_id_str}/events',
                     json={
                         'role': msg.role,
                         'content': content_json,
