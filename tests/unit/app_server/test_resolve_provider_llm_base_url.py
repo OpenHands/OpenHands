@@ -2,7 +2,6 @@
 
 from openhands.app_server.config import (
     _SDK_DEFAULT_PROXY,
-    resolve_provider_critic_server_url,
     resolve_provider_llm_base_url,
 )
 
@@ -192,44 +191,3 @@ class TestEdgeCases:
             base_url=SDK_DEFAULT,
         )
         assert result == STAGING_URL
-
-
-class TestResolveProviderCriticServerUrl:
-    def test_explicit_critic_url_is_preserved(self):
-        result = resolve_provider_critic_server_url(
-            critic_server_url='https://critic.example.com/vllm',
-            provider_base_url=STAGING_URL,
-        )
-
-        assert result == 'https://critic.example.com/vllm'
-
-    def test_provider_url_derives_vllm_endpoint(self):
-        result = resolve_provider_critic_server_url(
-            critic_server_url=None,
-            provider_base_url=STAGING_URL,
-        )
-
-        assert result == 'https://llm-proxy.staging.all-hands.dev/vllm'
-
-    def test_provider_url_without_trailing_slash(self):
-        result = resolve_provider_critic_server_url(
-            critic_server_url=None,
-            provider_base_url=STAGING_URL.rstrip('/'),
-        )
-
-        assert result == 'https://llm-proxy.staging.all-hands.dev/vllm'
-
-    def test_env_fallback_when_provider_base_url_is_none(self, monkeypatch):
-        monkeypatch.setenv('OPENHANDS_PROVIDER_BASE_URL', STAGING_URL)
-
-        result = resolve_provider_critic_server_url(critic_server_url=None)
-
-        assert result == 'https://llm-proxy.staging.all-hands.dev/vllm'
-
-    def test_none_when_no_explicit_url_or_provider(self, monkeypatch):
-        monkeypatch.delenv('OPENHANDS_PROVIDER_BASE_URL', raising=False)
-        monkeypatch.delenv('LLM_BASE_URL', raising=False)
-
-        result = resolve_provider_critic_server_url(critic_server_url=None)
-
-        assert result is None

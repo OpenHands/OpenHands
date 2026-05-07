@@ -87,33 +87,6 @@ def test_settings_update_deep_merges_agent_settings():
     assert settings.agent_settings.condenser.enabled is True
 
 
-def test_settings_keep_sdk_critic_default_without_env_opt_in(monkeypatch):
-    monkeypatch.delenv('OH_ENABLE_CRITIC_BY_DEFAULT', raising=False)
-
-    settings = Settings()
-
-    assert settings.agent_settings.verification.critic_enabled is False
-    assert settings.agent_settings.verification.enable_iterative_refinement is False
-
-
-def test_settings_enable_critic_by_default_with_env_opt_in(monkeypatch):
-    monkeypatch.setenv('OH_ENABLE_CRITIC_BY_DEFAULT', 'true')
-
-    settings = Settings()
-
-    assert settings.agent_settings.verification.critic_enabled is True
-    assert settings.agent_settings.verification.enable_iterative_refinement is False
-
-
-def test_settings_enable_critic_by_default_with_env_opt_in_1(monkeypatch):
-    monkeypatch.setenv('OH_ENABLE_CRITIC_BY_DEFAULT', '1')
-
-    settings = Settings()
-
-    assert settings.agent_settings.verification.critic_enabled is True
-    assert settings.agent_settings.verification.enable_iterative_refinement is False
-
-
 def test_settings_preserve_agent_settings():
     settings = Settings(
         agent_settings=AgentSettings(

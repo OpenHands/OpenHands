@@ -170,27 +170,6 @@ def resolve_provider_llm_base_url(
     return base_url
 
 
-def resolve_provider_critic_server_url(
-    critic_server_url: str | None,
-    provider_base_url: str | None = None,
-) -> str | None:
-    """Apply deployment-specific LLM proxy routing to the critic endpoint.
-
-    SDK defaults route to production. Feature and staging deployments use their
-    own LiteLLM proxy, so when the user has not explicitly configured a critic
-    server URL, derive the ``/vllm`` endpoint from the deployment provider URL.
-    """
-    if critic_server_url:
-        return critic_server_url
-
-    if provider_base_url is None:
-        provider_base_url = get_openhands_provider_base_url()
-    if provider_base_url:
-        return f'{provider_base_url.rstrip("/")}/vllm'
-
-    return None
-
-
 def _get_default_lifespan():
     # Check legacy parameters for saas mode. If we are in SAAS mode use
     # SaasAppLifespanService to initialize PostHog analytics

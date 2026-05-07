@@ -10,7 +10,6 @@ This module contains:
 
 from __future__ import annotations
 
-import os
 from enum import Enum
 from typing import Annotated, Any
 
@@ -36,10 +35,8 @@ from openhands.sdk.settings import (
     AgentSettingsConfig,
     ConversationSettings,
     OpenHandsAgentSettings,
+    default_agent_settings,
     validate_agent_settings,
-)
-from openhands.sdk.settings import (
-    default_agent_settings as sdk_default_agent_settings,
 )
 
 
@@ -102,28 +99,6 @@ class SandboxGroupingStrategy(str, Enum):
 #   raw dict here both bypassed those guards and crashed downstream
 #   serialisation.
 _SETTINGS_UPDATE_IGNORED_FIELDS = frozenset(['secrets_store', 'llm_profiles'])
-
-
-def _is_critic_enabled_by_default_from_env() -> bool:
-    return os.getenv('OH_ENABLE_CRITIC_BY_DEFAULT', '').lower() in (
-        '1',
-        'true',
-    )
-
-
-def default_agent_settings() -> OpenHandsAgentSettings:
-    """Return OpenHands app defaults for SDK agent settings."""
-    agent_settings = sdk_default_agent_settings()
-    if (
-        isinstance(agent_settings, OpenHandsAgentSettings)
-        and _is_critic_enabled_by_default_from_env()
-    ):
-        # The OpenHands product defaults to showing critic feedback for new
-        # users only when the deployment opts in. Local OSS users may not have
-        # critic API credentials, so they should keep the SDK default unless
-        # they opt in explicitly.
-        agent_settings.verification.critic_enabled = True
-    return agent_settings
 
 
 class Settings(BaseModel):

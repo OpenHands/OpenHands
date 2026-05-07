@@ -949,9 +949,7 @@ class TestLiveStatusAppConversationService:
         return_value=[],
     )
     @pytest.mark.asyncio
-    async def test_build_request_routes_critic_through_deployment_proxy(
-        self, _mock_tools
-    ):
+    async def test_build_request_uses_saved_critic_settings(self, _mock_tools):
         self.mock_user.agent_settings = Settings(
             agent_settings={
                 'llm': {
@@ -966,9 +964,6 @@ class TestLiveStatusAppConversationService:
             }
         ).agent_settings
         self.mock_user_context.get_user_info.return_value = self.mock_user
-        self.service.openhands_provider_base_url = (
-            'https://llm-proxy.staging.all-hands.dev/'
-        )
 
         real_llm = LLM(
             model='litellm_proxy/minimax-m2.5',
@@ -989,11 +984,6 @@ class TestLiveStatusAppConversationService:
         )
 
         assert result.agent.critic is not None
-        assert (
-            result.agent.critic.server_url
-            == 'https://llm-proxy.staging.all-hands.dev/vllm'
-        )
-        assert result.agent.critic.model_name == 'critic'
         assert isinstance(result.agent.critic.api_key, SecretStr)
         assert result.agent.critic.api_key.get_secret_value() == 'user-key'
         assert result.agent.critic.iterative_refinement is not None
