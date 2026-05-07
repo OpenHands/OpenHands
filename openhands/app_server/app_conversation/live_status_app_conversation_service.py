@@ -1389,7 +1389,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             }
         )
         agent = configured_agent_settings.create_agent()
-
         agent = self._apply_server_agent_overrides(
             agent, agent_type, mcp_config, conversation_id, user.id
         )
@@ -2042,7 +2041,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
 class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
     sandbox_startup_timeout: int = Field(
-        default=300, description='The max timeout time for sandbox startup'
+        default=120, description='The max timeout time for sandbox startup'
     )
     sandbox_startup_poll_frequency: int = Field(
         default=2, description='The frequency to poll for sandbox readiness'
