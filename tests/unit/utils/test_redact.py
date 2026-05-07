@@ -1,9 +1,9 @@
-"""Tests for openhands.app_server.utils._redact_compat redaction utilities.
+"""Tests for openhands.sdk.utils.redact redaction utilities.
 
 These tests verify that MCP config secrets are properly redacted before logging.
 """
 
-from openhands.app_server.utils._redact_compat import (
+from openhands.sdk.utils.redact import (
     redact_api_key_literals,
     redact_text_secrets,
     redact_url_params,
@@ -107,16 +107,17 @@ class TestMCPConfigLoggingIntegration:
 
     def test_mcp_sse_server_logging_is_safe(self):
         """Simulate logging MCP SSE server configs as done in action_execution_client.py."""
+        # Note: The SDK regex requires at least 20 chars after 'sk-oh-' prefix
         sse_servers = [
             {
                 'url': 'http://localhost:8000/mcp/sse',
-                'api_key': 'sk-oh-realSessionKey456',
+                'api_key': 'sk-oh-realSessionKey4567890abc',
             }
         ]
 
         log_output = redact_text_secrets(str(sse_servers))
 
-        assert 'sk-oh-realSessionKey456' not in log_output
+        assert 'sk-oh-realSessionKey4567890abc' not in log_output
         assert REDACTED in log_output
         assert 'http://localhost:8000/mcp/sse' in log_output  # URL should be visible
 

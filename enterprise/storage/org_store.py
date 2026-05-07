@@ -102,6 +102,29 @@ class OrgStore:
         return await OrgStore._validate_org_version(org)
 
     @staticmethod
+    async def get_orgs_by_ids(org_ids: list[UUID]) -> list[Org]:
+        """Get multiple organizations by IDs in a single query.
+
+        Args:
+            org_ids: List of organization UUIDs to fetch.
+
+        Returns:
+            List of Org objects (may be fewer than input if some IDs don't exist).
+        """
+        if not org_ids:
+            return []
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.id.in_(org_ids)))
+            orgs = list(result.scalars().all())
+        # Validate org versions for all returned orgs
+        validated_orgs = []
+        for org in orgs:
+            validated = await OrgStore._validate_org_version(org)
+            if validated:
+                validated_orgs.append(validated)
+        return validated_orgs
+
+    @staticmethod
     async def get_current_org_from_keycloak_user_id(
         keycloak_user_id: str,
     ) -> Org | None:

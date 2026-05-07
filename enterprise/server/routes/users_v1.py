@@ -116,7 +116,7 @@ async def get_current_user_git_organizations(
     provider_tokens = await user_context.get_provider_tokens()
     if not provider_tokens:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,  # 403 not 401 to avoid frontend logout
             detail='Git provider token required.',
         )
 

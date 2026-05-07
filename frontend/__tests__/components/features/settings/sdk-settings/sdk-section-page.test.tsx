@@ -613,6 +613,28 @@ describe("SdkSectionPage", () => {
     });
   });
 
+  it("renders trailingActions after the view toggle buttons", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
+
+    renderSdkSectionPage({
+      sectionKeys: ["llm"],
+      trailingActions: (
+        <button type="button" data-testid="trailing-action">
+          Extra
+        </button>
+      ),
+    });
+
+    // The slot has no view toggles (buildSavableSettings schema has only a
+    // critical field), so this also locks the behavior that trailingActions
+    // alone is enough to force the strip to render.
+    expect(
+      await screen.findByTestId("trailing-action"),
+    ).toBeInTheDocument();
+  });
+
   it("allows saving custom payloads when only external state is dirty", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
     const saveSettingsSpy = vi

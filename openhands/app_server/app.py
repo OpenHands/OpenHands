@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from openhands.app_server import v1_router
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.integrations.service_types import AuthenticationError
-from openhands.app_server.mcp.mcp_router import mcp_server
+from openhands.app_server.mcp.mcp_router import init_tavily_proxy, mcp_server
 from openhands.app_server.middleware import (
     CacheControlMiddleware,
     InMemoryRateLimiter,
@@ -26,6 +26,9 @@ from openhands.app_server.middleware import (
 from openhands.app_server.static import SPAStaticFiles
 from openhands.app_server.status.status_router import router as health_router
 from openhands.app_server.version import get_version
+
+# Initialize the Tavily MCP proxy before creating the app
+init_tavily_proxy()
 
 mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
 

@@ -330,6 +330,16 @@ class AppSendMessageRequest(BaseModel):
     )
 
 
+class SwitchProfileRequest(BaseModel):
+    """Request to switch a running conversation's LLM to a saved profile."""
+
+    profile_name: str = Field(
+        ...,
+        description='Name of a profile previously saved via /api/v1/settings/profiles.',
+        min_length=1,
+    )
+
+
 class AppSendMessageResponse(BaseModel):
     """Response from sending a message to a conversation."""
 

@@ -12,7 +12,6 @@ import { onboardingService } from "#/api/onboarding-service/onboarding-service.a
 const mockMutate = vi.fn();
 const mockNavigate = vi.fn();
 const mockUseMe = vi.fn();
-const mockTrackOnboardingCompleted = vi.fn();
 
 // Loader data set in beforeEach for each test suite
 let loaderData: { config: { app_mode: string; feature_flags: { deployment_mode: string } } };
@@ -33,12 +32,6 @@ vi.mock("#/hooks/mutation/use-submit-onboarding", () => ({
 
 vi.mock("#/hooks/query/use-me", () => ({
   useMe: () => mockUseMe(),
-}));
-
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackOnboardingCompleted: mockTrackOnboardingCompleted,
-  }),
 }));
 
 // Mocks for clientLoader tests
@@ -90,7 +83,6 @@ describe("OnboardingForm - Cloud Mode", () => {
   beforeEach(() => {
     mockMutate.mockClear();
     mockNavigate.mockClear();
-    mockTrackOnboardingCompleted.mockClear();
     loaderData = {
       config: {
         app_mode: "saas",
@@ -191,28 +183,6 @@ describe("OnboardingForm - Cloud Mode", () => {
         use_case: ["new_features"],
         role: "software_engineer",
       },
-    });
-  });
-
-  it("should track onboarding completion to PostHog in cloud mode", async () => {
-    const user = userEvent.setup();
-    await renderOnboardingForm();
-
-    // Complete the full cloud onboarding flow
-    await user.click(screen.getByTestId("step-option-org_2_10"));
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    await user.click(screen.getByTestId("step-option-new_features"));
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    await user.click(screen.getByTestId("step-option-software_engineer"));
-    await user.click(screen.getByRole("button", { name: /finish/i }));
-
-    expect(mockTrackOnboardingCompleted).toHaveBeenCalledTimes(1);
-    expect(mockTrackOnboardingCompleted).toHaveBeenCalledWith({
-      role: "software_engineer",
-      orgSize: "org_2_10",
-      useCase: ["new_features"],
     });
   });
 
@@ -372,7 +342,6 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
   beforeEach(() => {
     mockMutate.mockClear();
     mockNavigate.mockClear();
-    mockTrackOnboardingCompleted.mockClear();
     loaderData = {
       config: {
         app_mode: "saas",
@@ -438,32 +407,6 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
     });
   });
 
-  it("should track onboarding completion in self-hosted mode", async () => {
-    const user = userEvent.setup();
-    await renderOnboardingForm();
-
-    // Complete the full self-hosted onboarding flow (3 steps)
-    const orgNameInput = screen.getByTestId("form-input-org_name");
-    const orgDomainInput = screen.getByTestId("form-input-org_domain");
-    await user.type(orgNameInput, "Test Company");
-    await user.type(orgDomainInput, "test.com");
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    await user.click(screen.getByTestId("step-option-org_2_10"));
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    await user.click(screen.getByTestId("step-option-new_features"));
-    await user.click(screen.getByRole("button", { name: /finish/i }));
-
-    expect(mockTrackOnboardingCompleted).toHaveBeenCalledTimes(1);
-    // Note: role is not included since role question is cloud-only
-    expect(mockTrackOnboardingCompleted).toHaveBeenCalledWith({
-      role: undefined,
-      orgSize: "org_2_10",
-      useCase: ["new_features"],
-    });
-  });
-
   it("should show all 3 progress bars filled on the last step", async () => {
     const user = userEvent.setup();
     await renderOnboardingForm();
@@ -504,59 +447,6 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
     expect(nextButton).not.toBeDisabled();
   });
 
-  it("should NOT track onboarding completion for non-owners in self-hosted mode", async () => {
-    // Override the mock to return a member (non-owner) role
-    mockUseMe.mockReturnValue({ data: { role: "member" } });
-
-    const user = userEvent.setup();
-    await renderOnboardingForm();
-
-    // Complete the full self-hosted onboarding flow (3 steps)
-    const orgNameInput = screen.getByTestId("form-input-org_name");
-    const orgDomainInput = screen.getByTestId("form-input-org_domain");
-    await user.type(orgNameInput, "Test Company");
-    await user.type(orgDomainInput, "test.com");
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    await user.click(screen.getByTestId("step-option-org_2_10"));
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    await user.click(screen.getByTestId("step-option-new_features"));
-    await user.click(screen.getByRole("button", { name: /finish/i }));
-
-    // Tracking should NOT be called for non-owners in self-hosted mode
-    expect(mockTrackOnboardingCompleted).not.toHaveBeenCalled();
-
-    // But onboarding submission should still work
-    expect(mockMutate).toHaveBeenCalledTimes(1);
-  });
-
-  it("should NOT track onboarding completion for admins in self-hosted mode", async () => {
-    // Override the mock to return an admin role
-    mockUseMe.mockReturnValue({ data: { role: "admin" } });
-
-    const user = userEvent.setup();
-    await renderOnboardingForm();
-
-    // Complete the full self-hosted onboarding flow (3 steps)
-    const orgNameInput = screen.getByTestId("form-input-org_name");
-    const orgDomainInput = screen.getByTestId("form-input-org_domain");
-    await user.type(orgNameInput, "Test Company");
-    await user.type(orgDomainInput, "test.com");
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    await user.click(screen.getByTestId("step-option-org_2_10"));
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    await user.click(screen.getByTestId("step-option-new_features"));
-    await user.click(screen.getByRole("button", { name: /finish/i }));
-
-    // Tracking should NOT be called for admins in self-hosted mode (only owners)
-    expect(mockTrackOnboardingCompleted).not.toHaveBeenCalled();
-
-    // But onboarding submission should still work
-    expect(mockMutate).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("OnboardingForm - redirect when already onboarded", () => {

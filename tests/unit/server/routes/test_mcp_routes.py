@@ -1,10 +1,10 @@
 import warnings
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from openhands.app_server.integrations.service_types import GitService
-from openhands.app_server.mcp.mcp_router import get_conversation_link
+from openhands.app_server.mcp.mcp_router import get_conversation_link, init_tavily_proxy
 from openhands.app_server.types import AppMode
 
 
@@ -149,3 +149,140 @@ async def test_get_conversation_link_none_conversation_id():
 
         # Verify get_user was never called (early return)
         mock_service.get_user.assert_not_called()
+
+
+class TestInitTavilyProxy:
+    """Tests for init_tavily_proxy function."""
+
+    def test_init_tavily_proxy_no_api_key(self):
+        """Test init_tavily_proxy does nothing when no API key is configured."""
+        with (
+            patch(
+                'openhands.app_server.mcp.mcp_router.get_global_config'
+            ) as mock_config,
+            patch('openhands.app_server.mcp.mcp_router.logger') as mock_logger,
+            patch('openhands.app_server.mcp.mcp_router.Client') as mock_client,
+            patch('openhands.app_server.mcp.mcp_router.create_proxy') as mock_proxy,
+            patch('openhands.app_server.mcp.mcp_router.mcp_server') as mock_mcp_server,
+        ):
+            # Configure no API key
+            mock_config.return_value.tavily_api_key = None
+
+            # Call the function
+            init_tavily_proxy()
+
+            # Verify it logged the skip message
+            mock_logger.info.assert_called_once_with(
+                'Tavily API key not configured, skipping Tavily MCP proxy'
+            )
+
+            # Verify no proxy was created
+            mock_client.assert_not_called()
+            mock_proxy.assert_not_called()
+            mock_mcp_server.mount.assert_not_called()
+
+    def test_init_tavily_proxy_empty_api_key(self):
+        """Test init_tavily_proxy does nothing when API key is empty string."""
+        with (
+            patch(
+                'openhands.app_server.mcp.mcp_router.get_global_config'
+            ) as mock_config,
+            patch('openhands.app_server.mcp.mcp_router.logger') as mock_logger,
+            patch('openhands.app_server.mcp.mcp_router.Client') as mock_client,
+            patch('openhands.app_server.mcp.mcp_router.create_proxy') as mock_proxy,
+            patch('openhands.app_server.mcp.mcp_router.mcp_server') as mock_mcp_server,
+        ):
+            # Configure empty API key
+            mock_config.return_value.tavily_api_key = ''
+
+            # Call the function
+            init_tavily_proxy()
+
+            # Verify it logged the skip message
+            mock_logger.info.assert_called_once_with(
+                'Tavily API key not configured, skipping Tavily MCP proxy'
+            )
+
+            # Verify no proxy was created
+            mock_client.assert_not_called()
+            mock_proxy.assert_not_called()
+            mock_mcp_server.mount.assert_not_called()
+
+    def test_init_tavily_proxy_with_api_key(self):
+        """Test init_tavily_proxy creates and mounts proxy when API key is configured."""
+        with (
+            patch(
+                'openhands.app_server.mcp.mcp_router.get_global_config'
+            ) as mock_config,
+            patch('openhands.app_server.mcp.mcp_router.logger') as mock_logger,
+            patch('openhands.app_server.mcp.mcp_router.Client') as mock_client,
+            patch(
+                'openhands.app_server.mcp.mcp_router.StreamableHttpTransport'
+            ) as mock_transport,
+            patch(
+                'openhands.app_server.mcp.mcp_router.create_proxy'
+            ) as mock_create_proxy,
+            patch('openhands.app_server.mcp.mcp_router.mcp_server') as mock_mcp_server,
+        ):
+            # Configure API key
+            mock_config.return_value.tavily_api_key = 'test-tavily-key'
+
+            # Setup mocks
+            mock_transport_instance = MagicMock()
+            mock_transport.return_value = mock_transport_instance
+            mock_client_instance = MagicMock()
+            mock_client.return_value = mock_client_instance
+            mock_proxy_server = MagicMock()
+            mock_create_proxy.return_value = mock_proxy_server
+
+            # Call the function
+            init_tavily_proxy()
+
+            # Verify transport was created with correct URL
+            mock_transport.assert_called_once_with(
+                url='https://mcp.tavily.com/mcp/?tavilyApiKey=test-tavily-key'
+            )
+
+            # Verify client was created with the transport
+            mock_client.assert_called_once_with(transport=mock_transport_instance)
+
+            # Verify proxy was created from the client
+            mock_create_proxy.assert_called_once_with(mock_client_instance)
+
+            # Verify proxy was mounted with correct namespace
+            mock_mcp_server.mount.assert_called_once_with(
+                namespace='tavily', server=mock_proxy_server
+            )
+
+            # Verify success was logged
+            mock_logger.info.assert_called_once_with(
+                'Tavily MCP proxy initialized successfully'
+            )
+
+    def test_init_tavily_proxy_handles_exception(self):
+        """Test init_tavily_proxy handles exceptions gracefully."""
+        with (
+            patch(
+                'openhands.app_server.mcp.mcp_router.get_global_config'
+            ) as mock_config,
+            patch('openhands.app_server.mcp.mcp_router.logger') as mock_logger,
+            patch('openhands.app_server.mcp.mcp_router.Client') as mock_client,
+            patch('openhands.app_server.mcp.mcp_router.StreamableHttpTransport'),
+            patch('openhands.app_server.mcp.mcp_router.mcp_server') as mock_mcp_server,
+        ):
+            # Configure API key
+            mock_config.return_value.tavily_api_key = 'test-tavily-key'
+
+            # Make Client raise an exception
+            mock_client.side_effect = Exception('Connection failed')
+
+            # Call the function - should not raise
+            init_tavily_proxy()
+
+            # Verify error was logged
+            mock_logger.error.assert_called_once_with(
+                'Failed to initialize Tavily MCP proxy: Connection failed'
+            )
+
+            # Verify mount was not called
+            mock_mcp_server.mount.assert_not_called()

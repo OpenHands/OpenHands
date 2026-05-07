@@ -7,21 +7,28 @@ type SubmitOnboardingArgs = {
   selections: Record<string, string | string[]>;
 };
 
+interface OnboardingResponse {
+  status: string;
+  redirect_url: string;
+}
+
 export const useSubmitOnboarding = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ selections }: SubmitOnboardingArgs) => {
-      // Mark onboarding as complete
-      await openHands.post("/api/complete_onboarding");
-      return { selections };
+      const { data } = await openHands.post<OnboardingResponse>(
+        "/api/complete_onboarding",
+        { selections },
+      );
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
       queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
 
-      const finalRedirectUrl = "/";
+      const finalRedirectUrl = data.redirect_url || "/";
       // Check if the redirect URL is an external URL (starts with http or https)
       if (
         finalRedirectUrl.startsWith("http://") ||

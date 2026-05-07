@@ -5,11 +5,20 @@ import V1ConversationService from "#/api/conversation-service/v1-conversation-se
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { SuggestedTask } from "#/utils/types";
 
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackConversationCreated: vi.fn(),
-  }),
-}));
+vi.mock("#/hooks/query/use-settings", async () => {
+  const actual = await vi.importActual<typeof import("#/hooks/query/use-settings")>(
+    "#/hooks/query/use-settings",
+  );
+  return {
+    ...actual,
+    useSettings: vi.fn().mockReturnValue({
+      data: {
+        v1_enabled: true,
+      },
+      isLoading: false,
+    }),
+  };
+});
 
 describe("useCreateConversation", () => {
   it("passes suggested tasks to the V1 create conversation API", async () => {
