@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Identity, Index, String
+from sqlalchemy import BigInteger, Boolean, Identity, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
@@ -17,6 +17,10 @@ class AuthTokens(Base):
     refresh_token_expires_at: Mapped[int] = mapped_column(
         BigInteger, nullable=False
     )  # Time since epoch in seconds
+    # Flag to keep user logged in with this provider across sessions
+    stay_logged_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
     __table_args__ = (
         Index(

@@ -62,6 +62,7 @@ class AuthTokenStore:
         refresh_token: str,
         access_token_expires_at: int,
         refresh_token_expires_at: int,
+        stay_logged_in: bool = False,
     ) -> None:
         """Store auth tokens in the database.
 
@@ -70,6 +71,7 @@ class AuthTokenStore:
             refresh_token: The refresh token to store
             access_token_expires_at: Expiration time for access token (seconds since epoch)
             refresh_token_expires_at: Expiration time for refresh token (seconds since epoch)
+            stay_logged_in: Whether to keep user logged in with this provider across sessions
         """
         async with a_session_maker() as session:
             async with session.begin():  # Explicitly start a transaction
@@ -86,6 +88,7 @@ class AuthTokenStore:
                     token_record.refresh_token = refresh_token
                     token_record.access_token_expires_at = access_token_expires_at
                     token_record.refresh_token_expires_at = refresh_token_expires_at
+                    token_record.stay_logged_in = stay_logged_in
                 else:
                     token_record = AuthTokens(
                         keycloak_user_id=self.keycloak_user_id,
@@ -94,6 +97,7 @@ class AuthTokenStore:
                         refresh_token=refresh_token,
                         access_token_expires_at=access_token_expires_at,
                         refresh_token_expires_at=refresh_token_expires_at,
+                        stay_logged_in=stay_logged_in,
                     )
                     session.add(token_record)
 
@@ -105,7 +109,7 @@ class AuthTokenStore:
             [ProviderType, str, int, int], Awaitable[Dict[str, str | int] | None]
         ]
         | None = None,
-    ) -> Dict[str, str | int] | None:
+    ) -> Dict[str, str | int | bool] | None:
         """Load authentication tokens from the database and refresh them if necessary.
 
         This method uses a double-checked locking pattern to minimize lock contention:
@@ -126,7 +130,7 @@ class AuthTokenStore:
 
         Returns:
             A dictionary containing the access_token, refresh_token,
-            access_token_expires_at, and refresh_token_expires_at.
+            access_token_expires_at, refresh_token_expires_at, and stay_logged_in.
             If no token record is found, returns None.
 
         Raises:
@@ -161,6 +165,7 @@ class AuthTokenStore:
                     'refresh_token': token_record.refresh_token,
                     'access_token_expires_at': token_record.access_token_expires_at,
                     'refresh_token_expires_at': token_record.refresh_token_expires_at,
+                    'stay_logged_in': token_record.stay_logged_in,
                 }
 
         # SLOW PATH: Token needs refresh, acquire lock
@@ -204,6 +209,7 @@ class AuthTokenStore:
                             'refresh_token': token_record.refresh_token,
                             'access_token_expires_at': token_record.access_token_expires_at,
                             'refresh_token_expires_at': token_record.refresh_token_expires_at,
+                            'stay_logged_in': token_record.stay_logged_in,
                         }
 
                     # We're the one doing the refresh
@@ -239,6 +245,7 @@ class AuthTokenStore:
                             'refresh_token': token_record.refresh_token,
                             'access_token_expires_at': token_record.access_token_expires_at,
                             'refresh_token_expires_at': token_record.refresh_token_expires_at,
+                            'stay_logged_in': token_record.stay_logged_in,
                         }
                     )
         except OperationalError as e:
@@ -299,3 +306,65 @@ class AuthTokenStore:
         if keycloak_user_id:
             keycloak_user_id = str(keycloak_user_id)
         return AuthTokenStore(keycloak_user_id=keycloak_user_id, idp=idp)
+
+    async def get_stay_logged_in(self) -> bool:
+        """Check if stay_logged_in is enabled for this provider.
+
+        Returns:
+            True if stay_logged_in is enabled, False otherwise
+        """
+        tokens = await self.load_tokens()
+        if not tokens:
+            return False
+        return tokens.get('stay_logged_in', False)
+
+    async def set_stay_logged_in(self, stay_logged_in: bool) -> bool:
+        """Set or update the stay_logged_in flag for this provider.
+
+        Args:
+            stay_logged_in: Whether to keep user logged in across sessions
+
+        Returns:
+            True if successfully updated, False if no token record exists
+        """
+        async with a_session_maker() as session:
+            async with session.begin():
+                result = await session.execute(
+                    select(AuthTokens).where(
+                        AuthTokens.keycloak_user_id == self.keycloak_user_id,
+                        AuthTokens.identity_provider == self.identity_provider_value,
+                    )
+                )
+                token_record = result.scalars().first()
+
+                if not token_record:
+                    return False
+
+                token_record.stay_logged_in = stay_logged_in
+                await session.commit()
+                logger.info(
+                    f'Stay logged in set to {stay_logged_in} for {self.identity_provider_value}'
+                )
+                return True
+
+    @classmethod
+    async def get_stay_logged_in_providers(
+        cls, keycloak_user_id: str
+    ) -> list[str]:
+        """Get list of providers where stay_logged_in is enabled.
+
+        Args:
+            keycloak_user_id: The Keycloak user ID
+
+        Returns:
+            List of provider names where stay_logged_in is True
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(AuthTokens).where(
+                    AuthTokens.keycloak_user_id == str(keycloak_user_id),
+                    AuthTokens.stay_logged_in == True,  # noqa: E712
+                )
+            )
+            token_records = result.scalars().all()
+            return [record.identity_provider for record in token_records]
