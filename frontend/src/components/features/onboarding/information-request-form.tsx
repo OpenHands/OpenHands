@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
+import { useClientAnalytics } from "#/hooks/use-client-analytics";
 import { I18nKey } from "#/i18n/declaration";
-import { useTracking } from "#/hooks/use-tracking";
 import { Card } from "#/ui/card";
 import { Typography } from "#/ui/typography";
 import {
@@ -32,7 +32,7 @@ export function InformationRequestForm({
 }: InformationRequestFormProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { trackEnterpriseLeadFormSubmitted } = useTracking();
+  const { trackEnterpriseLeadFormSubmitted } = useClientAnalytics();
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 

@@ -13,7 +13,7 @@ from openhands.app_server.integrations.service_types import (
     InstallationsService,
     ProviderType,
 )
-from openhands.utils.import_utils import get_impl
+from openhands.app_server.utils.import_utils import get_impl
 
 
 class BitbucketDCService(
@@ -32,7 +32,7 @@ class BitbucketDCService(
     2. Implementing all required methods
     3. Setting server_config.bitbucket_service_class to the fully qualified name of the class
 
-    The class is instantiated via get_impl() in openhands.server.shared.py.
+    The class is instantiated via get_impl() in openhands.app_server.shared.py.
     """
 
     def __init__(
@@ -44,6 +44,12 @@ class BitbucketDCService(
         external_token_manager: bool = False,
         base_domain: str | None = None,
     ) -> None:
+        # Fall back to the BITBUCKET_DATA_CENTER_HOST env var when no domain
+        # is passed explicitly — call sites in the SaaS resolver path
+        # construct this service without base_domain, and an empty BASE_URL
+        # silently produces schemeless API URLs that httpx rejects.
+        if not base_domain:
+            base_domain = os.environ.get('BITBUCKET_DATA_CENTER_HOST') or None
         self.user_id = user_id
         self.external_token_manager = external_token_manager
         self.external_auth_id = external_auth_id

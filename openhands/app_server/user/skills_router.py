@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 import openhands
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
 

@@ -3,12 +3,12 @@ from datetime import datetime
 from pydantic import BaseModel, Field, model_validator
 
 from openhands.agent_server.env_parser import DiscriminatedUnionMixin
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.web_client.web_client_deployment_mode import (
     DeploymentMode,
     get_deployment_mode,
 )
-from openhands.server.types import AppMode
 
 
 class WebClientFeatureFlags(BaseModel):
@@ -21,6 +21,7 @@ class WebClientFeatureFlags(BaseModel):
     hide_billing_page: bool = False
     hide_integrations_page: bool = False
     deployment_mode: DeploymentMode | None = None
+    enable_onboarding: bool = False
 
     # This can be removed / replaced when a DeploymentMode (or similar) env var is created.
     @model_validator(mode='after')

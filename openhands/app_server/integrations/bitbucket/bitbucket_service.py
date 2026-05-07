@@ -6,16 +6,18 @@ from openhands.app_server.integrations.bitbucket.service import (
     BitBucketBranchesMixin,
     BitBucketPRsMixin,
     BitBucketReposMixin,
+    BitBucketResolverMixin,
 )
 from openhands.app_server.integrations.service_types import (
     GitService,
     InstallationsService,
     ProviderType,
 )
-from openhands.utils.import_utils import get_impl
+from openhands.app_server.utils.import_utils import get_impl
 
 
 class BitBucketService(
+    BitBucketResolverMixin,
     BitBucketReposMixin,
     BitBucketBranchesMixin,
     BitBucketPRsMixin,
@@ -30,7 +32,7 @@ class BitBucketService(
     2. Implementing all required methods
     3. Setting server_config.bitbucket_service_class to the fully qualified name of the class
 
-    The class is instantiated via get_impl() in openhands.server.shared.py.
+    The class is instantiated via get_impl() in openhands.app_server.shared.py.
     """
 
     def __init__(

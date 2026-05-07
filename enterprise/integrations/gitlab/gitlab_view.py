@@ -12,7 +12,6 @@ from integrations.utils import (
 )
 from jinja2 import Environment
 from server.auth.token_manager import TokenManager
-from server.config import get_config
 from storage.saas_secrets_store import SaasSecretsStore
 
 from openhands.agent_server.models import SendMessageRequest
@@ -28,7 +27,7 @@ from openhands.app_server.integrations.service_types import Comment
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk import TextContent
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
@@ -97,7 +96,9 @@ class GitlabIssue(ResolverViewInterface):
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
-        secrets_store = SaasSecretsStore(self.user_info.keycloak_user_id, get_config())
+        secrets_store = await SaasSecretsStore.get_instance(
+            self.user_info.keycloak_user_id
+        )
         user_secrets = await secrets_store.load()
 
         return user_secrets.custom_secrets if user_secrets else None

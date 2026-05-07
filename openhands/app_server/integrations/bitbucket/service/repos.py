@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from openhands.app_server.integrations.bitbucket.service.base import BitBucketMixinBase
 from openhands.app_server.integrations.service_types import Repository, SuggestedTask
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 class BitBucketReposMixin(BitBucketMixinBase):

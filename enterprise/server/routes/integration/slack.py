@@ -2,7 +2,6 @@ import html
 import json
 from urllib.parse import quote
 
-import jwt
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -35,15 +34,17 @@ from slack_sdk.signature import SignatureVerifier
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import delete
 from storage.database import a_session_maker
+from storage.redis import get_redis_client_async
 from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
 
+from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
     ProviderType,
 )
-from openhands.server.shared import config, sio
+from openhands.app_server.services.jwt_service import JwtService
 
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
 slack_router = APIRouter(prefix='/slack')
@@ -65,6 +66,7 @@ token_manager = TokenManager()
 
 slack_manager = SlackManager(token_manager)
 slack_team_store = SlackTeamStore.get_instance()
+jwt_service_dependency = depends_jwt_service()
 
 
 @slack_router.get('/install')
@@ -76,7 +78,11 @@ async def install(state: str = ''):
 
 @slack_router.get('/install-callback')
 async def install_callback(
-    request: Request, code: str = '', state: str = '', error: str = ''
+    request: Request,
+    code: str = '',
+    state: str = '',
+    error: str = '',
+    jwt_service: JwtService = jwt_service_dependency,
 ):
     """Callback from slack authentication. Verifies, then forwards into keycloak authentication."""
     if not code or error:
@@ -92,14 +98,6 @@ async def install_callback(
             title='Error',
             description=html.escape(error or 'No code provided'),
             status_code=400,
-        )
-
-    if not config.jwt_secret:
-        logger.error('slack_install_callback_error JWT not configured.')
-        return _html_response(
-            title='Error',
-            description=html.escape('JWT not configured'),
-            status_code=500,
         )
 
     try:
@@ -118,16 +116,12 @@ async def install_callback(
         # Create a state variable for keycloak oauth
         payload = {}
         if state:
-            payload = jwt.decode(
-                state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
-            )
+            payload = jwt_service.verify_jws_token(state)
         payload['slack_user_id'] = authed_user.get('id')
         payload['bot_access_token'] = bot_access_token
         payload['team_id'] = team_id
 
-        state = jwt.encode(
-            payload, config.jwt_secret.get_secret_value(), algorithm='HS256'
-        )
+        state = jwt_service.create_jws_token(payload)
 
         # Redirect into keycloak
         scope = quote('openid email profile offline_access')
@@ -157,6 +151,7 @@ async def keycloak_callback(
     code: str = '',
     state: str = '',
     error: str = '',
+    jwt_service: JwtService = jwt_service_dependency,
 ):
     if not code or error:
         logger.warning(
@@ -173,17 +168,7 @@ async def keycloak_callback(
             status_code=400,
         )
 
-    if not config.jwt_secret:
-        logger.error('problem_retrieving_keycloak_tokens JWT not configured.')
-        return _html_response(
-            title='Error',
-            description=html.escape('JWT not configured'),
-            status_code=500,
-        )
-
-    payload: dict[str, str] = jwt.decode(
-        state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
-    )
+    payload: dict[str, str] = jwt_service.verify_jws_token(state)
     slack_user_id = payload['slack_user_id']
     bot_access_token: str | None = payload['bot_access_token']
     team_id = payload['team_id']
@@ -327,7 +312,7 @@ async def on_event(request: Request, background_tasks: BackgroundTasks):
     team_id = payload['team_id']
 
     # Sometimes slack sends duplicates, so we need to make sure this is not a duplicate.
-    redis = sio.manager.redis
+    redis = get_redis_client_async()
     key = f'slack_msg:{client_msg_id}'
     created = await redis.set(key, 1, nx=True, ex=60)
     if not created:

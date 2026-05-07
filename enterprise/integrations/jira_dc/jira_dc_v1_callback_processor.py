@@ -25,9 +25,9 @@ from openhands.app_server.event_callback.util import (
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
 )
+from openhands.app_server.utils.http_session import httpx_verify_option
 from openhands.sdk import Event
 from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.utils.http_session import httpx_verify_option
 
 _logger = logging.getLogger(__name__)
 

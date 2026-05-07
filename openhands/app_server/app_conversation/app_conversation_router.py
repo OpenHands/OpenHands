@@ -1,6 +1,8 @@
 """Sandboxed Conversation router for OpenHands App Server."""
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import sys
@@ -11,11 +13,12 @@ from typing import Annotated, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.models import Success
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -35,6 +38,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     HookEventResponse,
     HookMatcherResponse,
     SkillResponse,
+    SwitchProfileRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
@@ -70,12 +74,16 @@ from openhands.app_server.services.httpx_client_injector import (
     set_httpx_client_keep_open,
 )
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.user_auth import get_user_settings
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.app_server.utils.llm import resolve_llm_base_url
 from openhands.sdk.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
@@ -352,6 +360,7 @@ async def batch_get_app_conversations(
 async def start_app_conversation(
     request: Request,
     start_request: AppConversationStartRequest,
+    user_context: UserContext = user_context_dependency,
     db_session: AsyncSession = db_session_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
     app_conversation_service: AppConversationService = (
@@ -366,6 +375,29 @@ async def start_app_conversation(
         """Start an app conversation start task and return it."""
         async_iter = app_conversation_service.start_app_conversation(start_request)
         result = await anext(async_iter)
+
+        # Analytics: conversation created (V1)
+        try:
+            analytics = get_analytics_service()
+            if analytics:
+                user_id = await user_context.get_user_id()
+                if user_id:
+                    ctx = await resolve_analytics_context(user_id)
+                    analytics.track_conversation_created(
+                        ctx=ctx,
+                        conversation_id=str(result.app_conversation_id)
+                        if result.app_conversation_id
+                        else result.id,
+                        trigger=start_request.trigger.value
+                        if start_request.trigger
+                        else None,
+                        llm_model=None,  # Not available at start time
+                        agent_type='default',
+                        has_repository=start_request.selected_repository is not None,
+                    )
+        except Exception:
+            logger.exception('analytics:conversation_created:failed')
+
         asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
         return result
     except Exception:
@@ -554,6 +586,173 @@ async def send_message_to_conversation(
     )
 
 
+@router.post(
+    '/{conversation_id}/switch_profile',
+    responses={
+        404: {'description': 'Conversation, sandbox, or profile not found'},
+        409: {'description': 'Sandbox is not running'},
+        502: {'description': 'Agent server returned an error'},
+    },
+)
+async def switch_conversation_profile(
+    conversation_id: UUID,
+    request: SwitchProfileRequest,
+    user_settings: Settings | None = Depends(get_user_settings),
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    app_conversation_info_service: AppConversationInfoService = (
+        app_conversation_info_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Success:
+    """Switch the running conversation's LLM to a saved profile.
+
+    Profiles live in the app-server's user settings, not on the sandbox FS,
+    so we resolve the profile here and hand the LLM directly to the
+    agent-server's ``switch_llm`` endpoint.
+    """
+    if user_settings is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Settings not found',
+        )
+
+    profile_llm = user_settings.llm_profiles.get(request.profile_name)
+    if profile_llm is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Profile '{request.profile_name}' not found",
+        )
+
+    # Mirror the activate_profile fixup so a profile with an empty base_url
+    # picks up the provider default (e.g. the OpenHands LiteLLM proxy).
+    profile_llm = profile_llm.model_copy(
+        update={
+            'base_url': resolve_llm_base_url(
+                model=profile_llm.model,
+                base_url=profile_llm.base_url,
+                managed_proxy_url=LITE_LLM_API_URL,
+            ),
+        }
+    )
+
+    # The agent-server's LLM registry is first-write-wins by ``usage_id``:
+    # ``switch_llm`` returns the cached entry under that key and silently
+    # drops the incoming LLM. So:
+    #   - Two saved profiles that share the default ``usage_id="default"``
+    #     would no-op after the first switch (the second profile is dropped
+    #     and the agent keeps using the first).
+    #   - Editing a profile (e.g. swapping its model) wouldn't take effect
+    #     on subsequent switches because the registry still holds the
+    #     pre-edit LLM under the old slot.
+    # Both manifest as "I switched profiles but the request still goes out
+    # with the old model" (often surfacing as upstream "Invalid model name"
+    # errors when the cached model has been removed from the user's quota).
+    #
+    # Derive ``usage_id`` from the profile name + a hash of the resolved
+    # LLM payload. Identical snapshots dedupe in the registry; any change
+    # (model, base_url, api_key, etc.) produces a fresh slot so the swap
+    # actually lands.
+    fingerprint = profile_llm.model_dump(
+        mode='json',
+        exclude={'usage_id'},
+        exclude_none=True,
+        context={'expose_secrets': True},
+    )
+    content_hash = hashlib.sha1(
+        json.dumps(fingerprint, sort_keys=True, default=str).encode('utf-8'),
+    ).hexdigest()[:12]
+    profile_llm = profile_llm.model_copy(
+        update={'usage_id': f'profile:{request.profile_name}:{content_hash}'},
+    )
+
+    ctx = await _get_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    if isinstance(ctx, JSONResponse):
+        # Helper already framed a 404 response; mirror its status code.
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=f'Conversation {conversation_id} is not reachable',
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Sandbox is paused; resume it before switching profiles.',
+        )
+
+    llm_payload = profile_llm.model_dump(
+        mode='json',
+        exclude_none=True,
+        context={'expose_secrets': True},
+    )
+    headers = {'X-Session-API-Key': ctx.session_api_key} if ctx.session_api_key else {}
+
+    try:
+        switch_response = await httpx_client.post(
+            f'{ctx.agent_server_url}/api/conversations/{conversation_id}/switch_llm',
+            json={'llm': llm_payload},
+            headers=headers,
+            timeout=30.0,
+        )
+        switch_response.raise_for_status()
+        # Surface a success line so operators can confirm the swap landed
+        # without grepping for the absence of an error. ``usage_id`` is the
+        # registry key — different value across calls means the cache was
+        # busted and a fresh LLM is in use; identical value means a cache
+        # hit (intended for unchanged profiles).
+        logger.info(
+            'Switched conversation %s to profile %r '
+            '(model=%s, base_url=%s, usage_id=%s)',
+            conversation_id,
+            request.profile_name,
+            profile_llm.model,
+            profile_llm.base_url,
+            profile_llm.usage_id,
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            'Agent server returned error during switch_llm: '
+            f'{e.response.status_code} - {e.response.text}'
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Agent server error: {e.response.status_code}',
+        )
+    except httpx.RequestError as e:
+        logger.error(f'Failed to reach agent server during switch_llm: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+    # Persist the new model on the conversation record so the chat header
+    # (and other callers that read ``conversation.llm_model``) reflect the
+    # swap on the next fetch. Best-effort: a save failure is logged but
+    # does not undo the switch the agent-server already accepted.
+    try:
+        info = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id,
+        )
+        if info is not None and info.llm_model != profile_llm.model:
+            info.llm_model = profile_llm.model
+            await app_conversation_info_service.save_app_conversation_info(info)
+    except Exception:
+        logger.exception(
+            'Failed to persist new llm_model on conversation %s after profile '
+            'switch — header may be stale until the next refresh.',
+            conversation_id,
+        )
+
+    return Success()
+
+
 async def _finalize_sandbox_delete(
     sandbox_service: SandboxService,
     app_conversation_info_service: AppConversationInfoService,
@@ -630,6 +829,20 @@ async def delete_app_conversation(
     )
     if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, 'Failed to delete conversation')
+
+    # Analytics: conversation deleted (V1)
+    try:
+        analytics = get_analytics_service()
+        if analytics and app_conversation_info.created_by_user_id:
+            ctx = await resolve_analytics_context(
+                app_conversation_info.created_by_user_id
+            )
+            analytics.track_conversation_deleted(
+                ctx=ctx,
+                conversation_id=conversation_id,
+            )
+    except Exception:
+        logger.exception('analytics:conversation_deleted:failed')
 
     # Commit the deletion
     await db_session.commit()
@@ -1094,6 +1307,7 @@ async def export_conversation(
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
+    user_context: UserContext = user_context_dependency,
 ):
     """Download a conversation trajectory as a zip file.
 
@@ -1110,6 +1324,29 @@ async def export_conversation(
         zip_content = await app_conversation_service.export_conversation(
             conversation_id
         )
+
+        # Analytics: track trajectory download
+        try:
+            analytics = get_analytics_service()
+            user_id = await user_context.get_user_id()
+            if analytics and user_id:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                user_info = await user_context.get_user_info()
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=user_info.user_consents_to_analytics
+                    if user_info and user_info.user_consents_to_analytics is not None
+                    else False,
+                    org_id=None,
+                    user=None,
+                )
+                analytics.track_trajectory_downloaded(
+                    ctx=ctx,
+                    conversation_id=str(conversation_id),
+                )
+        except Exception:
+            logger.exception('analytics:trajectory_downloaded:failed')
 
         # Return as a downloadable zip file
         return Response(

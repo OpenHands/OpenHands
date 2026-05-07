@@ -89,21 +89,21 @@ def test_infer_repo_from_message(message, expected):
 class TestRepoVerificationHandling:
     """Test repo verification handling for Slack integration."""
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch('integrations.slack.slack_manager.ProviderHandler')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
     async def test_timeout_during_verification_shows_selector(
         self,
         mock_send_message,
         mock_provider_handler_class,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
         slack_new_conversation_view,
     ):
         """Test that when repo verification times out, selector is shown."""
         # Setup Redis mock
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Setup: Modify message to include exactly one repo reference to trigger verification
         slack_new_conversation_view.user_msg = 'Help me with OpenHands/OpenHands repo'
@@ -132,12 +132,12 @@ class TestRepoVerificationHandling:
         assert isinstance(selector_message, dict)
         assert selector_message.get('text') == 'Choose a Repository:'
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
     async def test_no_repo_mentioned_shows_button_and_dropdown(
         self,
         mock_send_message,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
         slack_new_conversation_view,
     ):
@@ -149,7 +149,7 @@ class TestRepoVerificationHandling:
         """
         # Setup Redis mock
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Setup: user message without any repo mention
         slack_new_conversation_view.user_msg = 'Hello, can you help me?'
@@ -189,10 +189,10 @@ class TestRepoVerificationHandling:
         assert elements[1].get('action_id').startswith('repository_select:')
 
     @pytest.mark.asyncio
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_no_repository_button_click_processes_correctly(
         self,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
     ):
         """Test that clicking 'No Repository' button correctly processes the interaction.
@@ -202,7 +202,7 @@ class TestRepoVerificationHandling:
         """
         # Setup: Mock Redis to return a stored user message
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
         stored_msg = json.dumps({'text': 'Hello, help me with code', 'user': 'U123'})
         mock_redis.get = AsyncMock(return_value=stored_msg)
 
@@ -236,14 +236,14 @@ class TestRepoVerificationHandling:
             assert call_args.message['message_ts'] == '1234567890.123456'
             assert call_args.message['thread_ts'] is None
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch('integrations.slack.slack_manager.ProviderHandler')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
     async def test_verified_repo_starts_job(
         self,
         mock_send_message,
         mock_provider_handler_class,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
         slack_new_conversation_view,
     ):
@@ -251,7 +251,7 @@ class TestRepoVerificationHandling:
 
         # Setup Redis mock
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Setup: Modify message to include exactly one repo reference
         slack_new_conversation_view.user_msg = 'Help me with OpenHands/OpenHands repo'
@@ -532,13 +532,18 @@ class TestUserMsgStorage:
         ],
         ids=['with_thread', 'without_thread', 'different_timestamps'],
     )
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_store_user_msg_for_form(
-        self, mock_sio, slack_manager, message_ts, thread_ts, user_msg
+        self,
+        mock_get_redis_client_async,
+        slack_manager,
+        message_ts,
+        thread_ts,
+        user_msg,
     ):
         """Test storing user message in Redis with various timestamp combinations."""
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Should not raise an exception on success
         await slack_manager._store_user_msg_for_form(message_ts, thread_ts, user_msg)
@@ -557,16 +562,16 @@ class TestUserMsgStorage:
         ],
         ids=['connection_error', 'timeout_error', 'generic_exception'],
     )
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_store_user_msg_for_form_redis_failure(
-        self, mock_sio, slack_manager, exception_type, exception_msg
+        self, mock_get_redis_client_async, slack_manager, exception_type, exception_msg
     ):
         """Test that Redis failures during store raise SlackError."""
         from integrations.slack.slack_errors import SlackError, SlackErrorCode
 
         mock_redis = AsyncMock()
         mock_redis.set.side_effect = exception_type(exception_msg)
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         message_ts = '1234567890.123456'
         thread_ts = '1234567890.111111'
@@ -591,14 +596,18 @@ class TestUserMsgStorage:
         ],
         ids=['bytes_response', 'string_response'],
     )
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_retrieve_user_msg_for_form(
-        self, mock_sio, slack_manager, redis_return_value, expected_result
+        self,
+        mock_get_redis_client_async,
+        slack_manager,
+        redis_return_value,
+        expected_result,
     ):
         """Test retrieving user message from Redis with various response types."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = redis_return_value
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         message_ts = '1234567890.123456'
         thread_ts = '1234567890.111111'
@@ -609,16 +618,16 @@ class TestUserMsgStorage:
         mock_redis.get.assert_called_once_with(expected_key)
         assert result == expected_result
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_retrieve_user_msg_for_form_key_not_found(
-        self, mock_sio, slack_manager
+        self, mock_get_redis_client_async, slack_manager
     ):
         """Test that missing key raises SlackError with SESSION_EXPIRED."""
         from integrations.slack.slack_errors import SlackError, SlackErrorCode
 
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         message_ts = '1234567890.123456'
         thread_ts = '1234567890.111111'
@@ -637,16 +646,16 @@ class TestUserMsgStorage:
         ],
         ids=['connection_error', 'timeout_error'],
     )
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_retrieve_user_msg_for_form_redis_failure(
-        self, mock_sio, slack_manager, exception_type, exception_msg
+        self, mock_get_redis_client_async, slack_manager, exception_type, exception_msg
     ):
         """Test that Redis failures during retrieve raise SlackError."""
         from integrations.slack.slack_errors import SlackError, SlackErrorCode
 
         mock_redis = AsyncMock()
         mock_redis.get.side_effect = exception_type(exception_msg)
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         message_ts = '1234567890.123456'
         thread_ts = '1234567890.111111'
@@ -661,18 +670,18 @@ class TestUserMsgStorage:
 class TestIsJobRequestedWithUserMsgStorage:
     """Test that is_job_requested properly stores user message for form flow."""
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
     async def test_stores_user_msg_when_showing_repo_selector(
         self,
         mock_send_message,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
         slack_new_conversation_view,
     ):
         """Test that user_msg is stored in Redis when repo selector is shown."""
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Setup: user message without any repo mention (no repo inferred)
         slack_new_conversation_view.user_msg = 'Hello, can you help me?'

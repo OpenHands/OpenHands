@@ -3,7 +3,6 @@ from typing import Callable, cast
 import jwt
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import SecretStr
 from server.auth.auth_error import (
     AuthError,
     EmailNotVerifiedError,
@@ -16,8 +15,7 @@ from server.routes.auth import set_response_cookie
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite
 
 from openhands.app_server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
-from openhands.core.logger import openhands_logger as logger
-from openhands.server.shared import config
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class SetAuthCookieMiddleware:
@@ -115,21 +113,16 @@ class SetAuthCookieMiddleware:
         ):
             raise NoCredentialsError
 
-        jwt_secret: SecretStr = config.jwt_secret  # type: ignore[assignment]
         if keycloak_auth_cookie:
             try:
-                decoded = jwt.decode(
-                    keycloak_auth_cookie,
-                    jwt_secret.get_secret_value(),
-                    algorithms=['HS256'],
-                )
+                from storage.encrypt_utils import get_jwt_service
+
+                decoded = get_jwt_service().verify_jws_token(keycloak_auth_cookie)
                 accepted_tos = decoded.get('accepted_tos')
-            except jwt.exceptions.InvalidSignatureError:
-                # If we can't decode the token, treat it as an auth error
+            except (jwt.InvalidTokenError, ValueError):
                 logger.warning('Invalid JWT signature detected')
                 raise AuthError('Invalid authentication token')
             except Exception as e:
-                # Handle any other JWT decoding errors
                 logger.warning(f'JWT decode error: {str(e)}')
                 raise AuthError('Invalid authentication token')
         else:
@@ -198,3 +191,19 @@ class SetAuthCookieMiddleware:
                 await token_manager.logout(user_auth.refresh_token.get_secret_value())
         except Exception:
             logger.debug('Error logging out')
+
+
+class PostHogSessionMiddleware:
+    """Extract the PostHog session ID from the incoming request header.
+
+    Stores the value on ``request.state.posthog_session_id`` so that
+    subsequent event-capture call sites can link server-side events to the
+    corresponding frontend session-replay recording.
+
+    When the ``X-POSTHOG-SESSION-ID`` header is absent the attribute is set
+    to ``None`` — never raises, never blocks.
+    """
+
+    async def __call__(self, request: Request, call_next: Callable):
+        request.state.posthog_session_id = request.headers.get('X-POSTHOG-SESSION-ID')
+        return await call_next(request)

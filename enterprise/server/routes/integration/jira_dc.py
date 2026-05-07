@@ -26,10 +26,10 @@ from server.auth.constants import (
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from server.constants import WEB_HOST
-from storage.redis import create_redis_client
+from storage.redis import get_redis_client
 
 from openhands.app_server.user_auth.user_auth import get_user_auth
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Environment variable to disable Jira DC webhooks
 JIRA_DC_WEBHOOKS_ENABLED = os.environ.get('JIRA_DC_WEBHOOKS_ENABLED', '0') in (
@@ -37,7 +37,7 @@ JIRA_DC_WEBHOOKS_ENABLED = os.environ.get('JIRA_DC_WEBHOOKS_ENABLED', '0') in (
     'true',
 )
 JIRA_DC_REDIRECT_URI = f'https://{WEB_HOST}/integration/jira-dc/callback'
-JIRA_DC_SCOPES = 'read:me read:jira-user read:jira-work'
+JIRA_DC_SCOPES = 'WRITE'
 JIRA_DC_AUTH_URL = f'{JIRA_DC_BASE_URL}/rest/oauth2/latest/authorize'
 JIRA_DC_TOKEN_URL = f'{JIRA_DC_BASE_URL}/rest/oauth2/latest/token'
 JIRA_DC_USER_INFO_URL = f'{JIRA_DC_BASE_URL}/rest/api/2/myself'
@@ -129,7 +129,7 @@ class JiraDcValidateWorkspaceResponse(BaseModel):
 jira_dc_integration_router = APIRouter(prefix='/integration/jira-dc')
 token_manager = TokenManager()
 jira_dc_manager = JiraDcManager(token_manager)
-redis_client = create_redis_client()
+redis_client = get_redis_client()
 
 
 async def _handle_workspace_link_creation(
@@ -504,7 +504,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
         'code': code,
         'redirect_uri': JIRA_DC_REDIRECT_URI,
     }
-    response = requests.post(JIRA_DC_TOKEN_URL, json=token_payload)
+    response = requests.post(JIRA_DC_TOKEN_URL, data=token_payload)
     if response.status_code != 200:
         raise HTTPException(
             status_code=400, detail=f'Error fetching token: {response.text}'

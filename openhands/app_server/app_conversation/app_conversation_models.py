@@ -102,7 +102,7 @@ class AppConversationInfo(BaseModel):
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
     llm_model: str | None = None
-    agent_kind: str = 'llm'
+    agent_kind: str = 'openhands'
 
     metrics: MetricsSnapshot | None = None
 
@@ -327,6 +327,16 @@ class AppSendMessageRequest(BaseModel):
     run: bool = Field(
         default=True,
         description='Whether to automatically run the agent after sending the message.',
+    )
+
+
+class SwitchProfileRequest(BaseModel):
+    """Request to switch a running conversation's LLM to a saved profile."""
+
+    profile_name: str = Field(
+        ...,
+        description='Name of a profile previously saved via /api/v1/settings/profiles.',
+        min_length=1,
     )
 
 

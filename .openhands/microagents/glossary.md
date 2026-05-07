@@ -121,7 +121,7 @@ A specialized prompt that enhances OpenHands with domain-specific knowledge, rep
 A central repository of available microagents and their configurations.
 
 #### Public Microagent
-A general-purpose microagent available to all OpenHands users, triggered by specific keywords. Located in `microagents/`.
+A general-purpose microagent available to all OpenHands users, triggered by specific keywords. Located in `skills/`.
 
 #### Repository Microagent
 A type of microagent that provides repository-specific context and guidelines, stored in the `.openhands/microagents/` directory.

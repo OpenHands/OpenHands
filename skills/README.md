@@ -28,13 +28,13 @@ Directory structure:
 ```
 OpenHands/skills/
 ├── # Keyword-triggered expertise
-│   ├── git.md         # Git operations
-│   ├── testing.md     # Testing practices
-│   └── docker.md      # Docker guidelines
-└── # These skills/microagents are always loaded
-    ├── pr_review.md   # PR review process
-    ├── bug_fix.md     # Bug fixing workflow
-    └── feature.md     # Feature implementation
+│   ├── github.md      # GitHub operations and API usage
+│   ├── docker.md      # Docker guidelines
+│   └── kubernetes.md  # Kubernetes setup and management
+└── # Other skills
+    ├── code-review.md # Code review process
+    ├── security.md    # Security best practices
+    └── ssh.md         # SSH connections and configuration
 ```
 
 ### 2. Repository Instructions (Private)
@@ -107,7 +107,7 @@ Key features:
 - **Always active**: Automatically loaded for the repository
 - **Locally maintained**: Updated with the project
 
-You can see an example of a repo agent in [the agent for the OpenHands repo itself](https://github.com/OpenHands/OpenHands/blob/main/.openhands/microagents/repo.md).
+You can see an example of a repo agent in [the glossary for the OpenHands repo](https://github.com/OpenHands/OpenHands/blob/main/.openhands/microagents/glossary.md).
 
 ## Contributing
 

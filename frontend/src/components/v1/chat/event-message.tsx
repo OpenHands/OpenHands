@@ -8,6 +8,7 @@ import {
   isUserMessageEvent,
   isPlanningFileEditorObservationEvent,
   isHookExecutionEvent,
+  isACPToolCallEvent,
 } from "#/types/v1/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -150,6 +151,15 @@ export function EventMessage({
   // Hook execution events
   if (isHookExecutionEvent(event)) {
     return <HookExecutionEventMessage event={event} />;
+  }
+
+  // ACP sub-agent tool call events (Claude Code, Codex, Gemini CLI, …)
+  // render through the same generic wrapper used for observation events so
+  // the card shape, success indicator and markdown rendering all match.
+  if (isACPToolCallEvent(event)) {
+    return (
+      <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
+    );
   }
 
   // Finish actions

@@ -5,7 +5,7 @@ Email domain validation utilities for enterprise endpoints.
 from fastapi import Depends, HTTPException, Request, status
 
 from openhands.app_server.user_auth import get_user_auth, get_user_id
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 async def get_admin_user_id(

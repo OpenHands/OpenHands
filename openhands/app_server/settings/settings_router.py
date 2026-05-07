@@ -12,6 +12,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from openhands.analytics import get_analytics_service
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
@@ -23,6 +24,7 @@ from openhands.app_server.settings.llm_profiles import (
     ProfileLimitExceededError,
     ProfileNotFoundError,
     StrictLLM,
+    has_real_api_key,
 )
 from openhands.app_server.settings.settings_models import (
     GETSettingsModel,
@@ -37,17 +39,16 @@ from openhands.app_server.user_auth import (
     get_user_settings_store,
 )
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.core.logger import openhands_logger as logger
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import ConversationSettings
-from openhands.server.shared import config
-from openhands.utils.llm import (
+from openhands.app_server.utils.llm import (
     get_provider_api_base,
     is_openhands_model,
     resolve_llm_base_url,
 )
-from openhands.utils.sdk_settings_compat import (
-    LLMAgentSettings,
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import (
+    ConversationSettings,
+    OpenHandsAgentSettings,
     export_agent_settings_schema,
 )
 
@@ -67,10 +68,10 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     """Apply LLM-specific fixups after merging settings.
 
     Delegates the empty-string → cleared and provider-default inference
-    rules to :func:`openhands.utils.llm.resolve_llm_base_url` so the
+    rules to :func:`openhands.app_server.utils.llm.resolve_llm_base_url` so the
     personal-save and enterprise org-defaults paths stay in lockstep.
     """
-    if not isinstance(settings.agent_settings, LLMAgentSettings):
+    if not isinstance(settings.agent_settings, OpenHandsAgentSettings):
         return
     llm = settings.agent_settings.llm
     llm.base_url = resolve_llm_base_url(
@@ -196,6 +197,7 @@ async def load_settings(
 async def store_settings(
     payload: dict[str, Any],
     settings_store: SettingsStore = Depends(get_user_settings_store),
+    user_id: str | None = Depends(get_user_id),
 ) -> JSONResponse:
     """Store user settings.
 
@@ -237,27 +239,29 @@ async def store_settings(
             if settings.disabled_skills is None:
                 settings.disabled_skills = existing_settings.disabled_skills
 
-        # Update sandbox config with new settings
-        if settings.remote_runtime_resource_factor is not None:
-            config.sandbox.remote_runtime_resource_factor = (
-                settings.remote_runtime_resource_factor
-            )
-
-        # Update git configuration with new settings
-        git_config_updated = False
-        if settings.git_user_name is not None:
-            config.git_user_name = settings.git_user_name
-            git_config_updated = True
-        if settings.git_user_email is not None:
-            config.git_user_email = settings.git_user_email
-            git_config_updated = True
-
-        if git_config_updated:
-            logger.info(
-                f'Updated global git configuration: name={config.git_user_name}, email={config.git_user_email}'
-            )
-
         await settings_store.store(settings)
+
+        # Analytics: track settings saved
+        try:
+            analytics = get_analytics_service()
+            if analytics and user_id:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=settings.user_consents_to_analytics is True,
+                    org_id=None,
+                    user=None,
+                )
+
+                settings_changed = list(payload.keys())
+                analytics.track_settings_saved(
+                    ctx=ctx,
+                    settings_changed=settings_changed,
+                )
+        except Exception:
+            logger.exception('analytics:settings_saved:failed')
+
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={'message': 'Settings stored'},
@@ -449,7 +453,7 @@ async def get_profile(
             detail=f"Profile '{name}' not found",
         )
 
-    api_key_set = profile.api_key is not None
+    api_key_set = has_real_api_key(profile.api_key)
     config = profile.model_dump(mode='json')
     config['api_key'] = None  # never echo a mask; use api_key_set instead
 
@@ -530,7 +534,7 @@ async def delete_profile(
     """
     async with _user_profile_locks[_profile_lock_key(user_id)]:
         settings = await settings_store.load()
-        if settings is not None and settings.llm_profiles.delete(name):
+        if settings is not None and settings.delete_profile(name):
             await settings_store.store(settings)
 
     return ProfileMutationResponse(name=name, message=f"Profile '{name}' deleted")

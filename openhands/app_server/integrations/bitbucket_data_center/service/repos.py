@@ -5,7 +5,7 @@ from openhands.app_server.integrations.bitbucket_data_center.service.base import
     BitbucketDCMixinBase,
 )
 from openhands.app_server.integrations.service_types import Repository, SuggestedTask
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 class BitbucketDCReposMixin(BitbucketDCMixinBase):

@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.app import app
 from openhands.app_server.file_store.memory import InMemoryFileStore
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import UserGitInfo
@@ -21,7 +22,6 @@ from openhands.sdk.settings import (
     ConversationSettings,
     VerificationSettings,
 )
-from openhands.server.app import app
 
 _EXPOSE = {'expose_secrets': True}
 

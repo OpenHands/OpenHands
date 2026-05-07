@@ -3,12 +3,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.utils.async_utils import call_sync_from_async
+from openhands.app_server.utils.async_utils import call_sync_from_async
 
 
 @dataclass
@@ -20,6 +18,16 @@ class FileSettingsStore(SettingsStore):
         try:
             json_str = await call_sync_from_async(self.file_store.read, self.path)
             kwargs = json.loads(json_str)
+            # Seed a Default profile from legacy agent_settings.llm when
+            # llm_profiles is absent — pre-llm_profiles settings.json files
+            # would otherwise present an empty profiles UI on upgrade.
+            if 'llm_profiles' not in kwargs:
+                legacy_llm = (kwargs.get('agent_settings') or {}).get('llm')
+                if isinstance(legacy_llm, dict) and legacy_llm.get('model'):
+                    kwargs['llm_profiles'] = {
+                        'profiles': {'Default': legacy_llm},
+                        'active': 'Default',
+                    }
             settings = Settings(**kwargs)
 
             # Turn on V1 in OpenHands
@@ -37,11 +45,12 @@ class FileSettingsStore(SettingsStore):
         await call_sync_from_async(self.file_store.write, self.path, json_str)
 
     @classmethod
-    async def get_instance(
-        cls, config: OpenHandsConfig, user_id: str | None
-    ) -> FileSettingsStore:
-        file_store = get_file_store(
-            file_store_type=config.file_store,
-            file_store_path=config.file_store_path,
-        )
+    async def get_instance(cls, user_id: str | None) -> FileSettingsStore:
+        """Get a FileSettingsStore instance using the global config's file_store.
+
+        TODO: This method should be replaced with dependency injection.
+        """
+        from openhands.app_server.config import get_global_config
+
+        file_store = get_global_config().file_store
         return FileSettingsStore(file_store)

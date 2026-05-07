@@ -1,3 +1,4 @@
+import json
 import os
 from unittest.mock import MagicMock, patch
 
@@ -7,7 +8,6 @@ from pydantic import SecretStr
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import AgentSettings, ConversationSettings
 
@@ -30,12 +30,8 @@ def file_settings_store(mock_file_store):
 
 @pytest.mark.asyncio
 async def test_load_nonexistent_data(file_settings_store):
-    with patch(
-        'openhands.app_server.settings.settings_models.load_openhands_config',
-        MagicMock(return_value=OpenHandsConfig()),
-    ):
-        file_settings_store.file_store.read.side_effect = FileNotFoundError()
-        assert await file_settings_store.load() is None
+    file_settings_store.file_store.read.side_effect = FileNotFoundError()
+    assert await file_settings_store.load() is None
 
 
 @pytest.mark.asyncio
@@ -102,20 +98,70 @@ async def test_store_and_load_data(file_settings_store):
 
 
 @pytest.mark.asyncio
+async def test_load_seeds_default_profile_from_legacy_llm(file_settings_store):
+    legacy_payload = {
+        'agent_settings': {
+            'llm': {
+                'model': 'openai/gpt-4o',
+                'api_key': 'legacy-key',
+                'base_url': 'https://example.com',
+            },
+        },
+    }
+    file_settings_store.file_store.read.return_value = json.dumps(legacy_payload)
+
+    loaded = await file_settings_store.load()
+
+    assert loaded is not None
+    assert loaded.llm_profiles.active == 'Default'
+    default_profile = loaded.llm_profiles.require('Default')
+    assert default_profile.model == 'openai/gpt-4o'
+    assert default_profile.base_url == 'https://example.com'
+    assert default_profile.api_key.get_secret_value() == 'legacy-key'
+
+
+@pytest.mark.asyncio
+async def test_load_does_not_overwrite_existing_profiles(file_settings_store):
+    payload = {
+        'agent_settings': {
+            'llm': {'model': 'openai/gpt-4o', 'api_key': 'legacy-key'},
+        },
+        'llm_profiles': {
+            'profiles': {'Saved': {'model': 'anthropic/claude-opus-4'}},
+            'active': 'Saved',
+        },
+    }
+    file_settings_store.file_store.read.return_value = json.dumps(payload)
+
+    loaded = await file_settings_store.load()
+
+    assert loaded is not None
+    assert set(loaded.llm_profiles.profiles) == {'Saved'}
+    assert loaded.llm_profiles.active == 'Saved'
+
+
+@pytest.mark.asyncio
+async def test_load_skips_seeding_when_no_legacy_model(file_settings_store):
+    file_settings_store.file_store.read.return_value = json.dumps({})
+
+    loaded = await file_settings_store.load()
+
+    assert loaded is not None
+    assert loaded.llm_profiles.profiles == {}
+    assert loaded.llm_profiles.active is None
+
+
+@pytest.mark.asyncio
 async def test_get_instance():
-    config = OpenHandsConfig(file_store='local', file_store_path='/test/path')
+    mock_store = MagicMock(spec=FileStore)
 
-    with patch(
-        'openhands.app_server.settings.file_settings_store.get_file_store'
-    ) as mock_get_store:
-        mock_store = MagicMock(spec=FileStore)
-        mock_get_store.return_value = mock_store
+    with patch('openhands.app_server.config.get_global_config') as mock_get_config:
+        mock_config = MagicMock()
+        mock_config.file_store = mock_store
+        mock_get_config.return_value = mock_config
 
-        store = await FileSettingsStore.get_instance(config, None)
+        store = await FileSettingsStore.get_instance(None)
 
         assert isinstance(store, FileSettingsStore)
         assert store.file_store == mock_store
-        mock_get_store.assert_called_once_with(
-            file_store_type='local',
-            file_store_path='/test/path',
-        )
+        mock_get_config.assert_called_once()

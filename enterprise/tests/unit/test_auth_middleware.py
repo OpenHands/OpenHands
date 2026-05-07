@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,6 +15,15 @@ from server.auth.saas_user_auth import SaasUserAuth
 from server.middleware import SetAuthCookieMiddleware
 
 from openhands.app_server.user_auth.user_auth import AuthType
+
+
+@contextmanager
+def _mock_jwt_decode(accepted_tos: bool = True):
+    """Patch get_jwt_service so verify_jws_token returns a controlled payload."""
+    mock_svc = MagicMock()
+    mock_svc.verify_jws_token.return_value = {'accepted_tos': accepted_tos}
+    with patch('storage.encrypt_utils.get_jwt_service', return_value=mock_svc):
+        yield mock_svc
 
 
 @pytest.fixture
@@ -55,14 +65,7 @@ async def test_middleware_with_cookie_no_refresh(
     middleware, mock_request, mock_response
 ):
     """Test middleware when auth cookie is present but no refresh occurred."""
-    # Create a valid JWT token for testing
-    with (
-        patch('server.middleware.jwt.decode') as mock_decode,
-        patch('server.middleware.config') as mock_config,
-    ):
-        mock_decode.return_value = {'accepted_tos': True}
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
-
+    with _mock_jwt_decode():
         mock_request.cookies = {'keycloak_auth': 'test_cookie'}
         mock_call_next = AsyncMock(return_value=mock_response)
 
@@ -86,14 +89,7 @@ async def test_middleware_with_cookie_and_refresh(
     middleware, mock_request, mock_response
 ):
     """Test middleware when auth cookie is present and refresh occurred."""
-    # Create a valid JWT token for testing
-    with (
-        patch('server.middleware.jwt.decode') as mock_decode,
-        patch('server.middleware.config') as mock_config,
-    ):
-        mock_decode.return_value = {'accepted_tos': True}
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
-
+    with _mock_jwt_decode():
         mock_request.cookies = {'keycloak_auth': 'test_cookie'}
         mock_call_next = AsyncMock(return_value=mock_response)
 
@@ -101,7 +97,7 @@ async def test_middleware_with_cookie_and_refresh(
         mock_user_auth.refreshed = True
         mock_user_auth.access_token = SecretStr('new_access_token')
         mock_user_auth.refresh_token = SecretStr('new_refresh_token')
-        mock_user_auth.accepted_tos = True  # Set the accepted_tos property on the mock
+        mock_user_auth.accepted_tos = True
         mock_user_auth.auth_type = AuthType.COOKIE
 
         with (
@@ -135,14 +131,7 @@ def decode_body(body: bytes | memoryview):
 @pytest.mark.asyncio
 async def test_middleware_with_no_auth_provided_error(middleware, mock_request):
     """Test middleware when NoCredentialsError is raised."""
-    # Create a valid JWT token for testing
-    with (
-        patch('server.middleware.jwt.decode') as mock_decode,
-        patch('server.middleware.config') as mock_config,
-    ):
-        mock_decode.return_value = {'accepted_tos': True}
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
-
+    with _mock_jwt_decode():
         mock_request.cookies = {'keycloak_auth': 'test_cookie'}
         mock_call_next = AsyncMock(side_effect=NoCredentialsError())
 
@@ -159,14 +148,7 @@ async def test_middleware_with_no_auth_provided_error(middleware, mock_request):
 @pytest.mark.asyncio
 async def test_middleware_with_expired_auth_cookie(middleware, mock_request):
     """Test middleware when ExpiredError is raised due to an expired authentication cookie."""
-    # Create a valid JWT token for testing
-    with (
-        patch('server.middleware.jwt.decode') as mock_decode,
-        patch('server.middleware.config') as mock_config,
-    ):
-        mock_decode.return_value = {'accepted_tos': True}
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
-
+    with _mock_jwt_decode():
         mock_request.cookies = {'keycloak_auth': 'test_cookie'}
         mock_call_next = AsyncMock(
             side_effect=ExpiredError('Authentication token has expired')
@@ -188,14 +170,7 @@ async def test_middleware_with_expired_auth_cookie(middleware, mock_request):
 @pytest.mark.asyncio
 async def test_middleware_with_cookie_error(middleware, mock_request):
     """Test middleware when CookieError is raised."""
-    # Create a valid JWT token for testing
-    with (
-        patch('server.middleware.jwt.decode') as mock_decode,
-        patch('server.middleware.config') as mock_config,
-    ):
-        mock_decode.return_value = {'accepted_tos': True}
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
-
+    with _mock_jwt_decode():
         mock_request.cookies = {'keycloak_auth': 'test_cookie'}
         mock_call_next = AsyncMock(side_effect=CookieError('Invalid cookie'))
 
@@ -212,14 +187,7 @@ async def test_middleware_with_cookie_error(middleware, mock_request):
 @pytest.mark.asyncio
 async def test_middleware_with_other_auth_error(middleware, mock_request):
     """Test middleware when another AuthError is raised."""
-    # Create a valid JWT token for testing
-    with (
-        patch('server.middleware.jwt.decode') as mock_decode,
-        patch('server.middleware.config') as mock_config,
-    ):
-        mock_decode.return_value = {'accepted_tos': True}
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
-
+    with _mock_jwt_decode():
         mock_request.cookies = {'keycloak_auth': 'test_cookie'}
         mock_call_next = AsyncMock(side_effect=AuthError('General auth error'))
 
@@ -269,14 +237,8 @@ async def test_middleware_ignores_email_resend_path_no_tos_check(
     mock_request.url.path = '/api/email/resend'
     mock_call_next = AsyncMock(return_value=mock_response)
 
-    with (
-        patch('server.middleware.jwt.decode') as mock_decode,
-        patch('server.middleware.config') as mock_config,
-    ):
-        # Even with accepted_tos=False, should not raise TosNotAcceptedError
-        mock_decode.return_value = {'accepted_tos': False}
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
-
+    # Even with accepted_tos=False, should not raise TosNotAcceptedError
+    with _mock_jwt_decode(accepted_tos=False):
         # Act
         result = await middleware(mock_request, mock_call_next)
 

@@ -11,8 +11,8 @@ from openhands.app_server.integrations.service_types import (
     UnknownException,
     User,
 )
-from openhands.core.logger import openhands_logger as logger
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class GitHubMixinBase(BaseGitService, HTTPClient):

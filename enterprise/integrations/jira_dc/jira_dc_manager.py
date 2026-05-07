@@ -31,15 +31,15 @@ from storage.jira_dc_workspace import JiraDcWorkspace
 
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import Repository
-from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.core.logger import openhands_logger as logger
-from openhands.server.shared import server_config
-from openhands.server.types import (
+from openhands.app_server.shared import server_config
+from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class JiraDcManager(Manager[JiraDcViewInterface]):
@@ -422,6 +422,19 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.get(url, headers=headers)
+            if response.status_code == 401:
+                logger.error(
+                    '[Jira DC] 401 from %s. PAT length=%d prefix=%s '
+                    'WWW-Authenticate=%r X-Seraph-LoginReason=%r '
+                    'X-AUSERNAME=%r body=%s',
+                    url,
+                    len(svc_acc_api_key),
+                    svc_acc_api_key[:6] if svc_acc_api_key else '',
+                    response.headers.get('WWW-Authenticate'),
+                    response.headers.get('X-Seraph-LoginReason'),
+                    response.headers.get('X-AUSERNAME'),
+                    response.text[:500],
+                )
             response.raise_for_status()
             issue_payload = response.json()
 

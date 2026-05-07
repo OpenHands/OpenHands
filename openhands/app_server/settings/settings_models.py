@@ -13,6 +13,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Any
 
+from fastmcp.mcp_config import MCPConfig
 from fastmcp.mcp_config import MCPConfig as SDKMCPConfig
 from pydantic import (
     BaseModel,
@@ -27,15 +28,13 @@ from pydantic import (
 from openhands.app_server.integrations.provider import ProviderToken
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.settings.llm_profiles import LLMProfiles
-from openhands.core.config.llm_config import LLMConfig
-from openhands.core.config.mcp_config import MCPConfig
-from openhands.core.config.utils import load_openhands_config
-from openhands.sdk.settings import ConversationSettings
-from openhands.utils.jsonpatch_compat import deep_merge
-from openhands.utils.sdk_settings_compat import (
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.sdk.settings import (
     ACPAgentSettings,
+    AgentSettings,
     AgentSettingsConfig,
-    LLMAgentSettings,
+    ConversationSettings,
+    OpenHandsAgentSettings,
     default_agent_settings,
     validate_agent_settings,
 )
@@ -61,36 +60,21 @@ def _coerce_dict_secrets(d: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _merge_sdk_mcp_configs(
-    base_config: SDKMCPConfig | None, extra_config: SDKMCPConfig | None
-) -> SDKMCPConfig | None:
-    if base_config is None:
-        return extra_config
-    if extra_config is None:
-        return base_config
+def _load_persisted_agent_settings(
+    data: Any,
+) -> OpenHandsAgentSettings | ACPAgentSettings:
+    """Load persisted agent settings via the SDK loader.
 
-    merged_servers: dict[str, Any] = {}
+    Routes the raw payload through :meth:`AgentSettings.from_persisted` so any
+    schema migrations registered with the SDK are applied before validation
+    against the discriminated :data:`AgentSettingsConfig` union.
+    """
+    return AgentSettings.from_persisted(data or {})
 
-    def _add_server(server_name: str, server_config: dict[str, Any]) -> None:
-        candidate = server_name or 'server'
-        if candidate not in merged_servers:
-            merged_servers[candidate] = server_config
-            return
 
-        suffix = 1
-        while f'{candidate}_{suffix}' in merged_servers:
-            suffix += 1
-        merged_servers[f'{candidate}_{suffix}'] = server_config
-
-    for config in (base_config, extra_config):
-        raw_config = config.model_dump(exclude_none=True)
-        for server_name, server_config in raw_config.get('mcpServers', {}).items():
-            _add_server(server_name, server_config)
-
-    if not merged_servers:
-        return None
-
-    return SDKMCPConfig.model_validate({'mcpServers': merged_servers})
+def _load_persisted_conversation_settings(data: Any) -> ConversationSettings:
+    """Load persisted conversation settings via the SDK loader."""
+    return ConversationSettings.from_persisted(data or {})
 
 
 class SandboxGroupingStrategy(str, Enum):
@@ -287,7 +271,7 @@ class Settings(BaseModel):
     @field_serializer('agent_settings')
     def agent_settings_serializer(
         self,
-        agent_settings: LLMAgentSettings | ACPAgentSettings,
+        agent_settings: OpenHandsAgentSettings | ACPAgentSettings,
         info: SerializationInfo,
     ) -> dict[str, Any]:
         context = info.context or {}
@@ -308,9 +292,31 @@ class Settings(BaseModel):
 
         Raises :class:`ProfileNotFoundError` if ``name`` isn't a saved profile.
         """
+        # Copy the LLM so post-activation fixups (e.g. resolving ``base_url``
+        # against the provider default) don't bleed back into the saved
+        # profile. ``model_copy(update={'llm': llm})`` is shallow, so the
+        # update value is shared with ``llm_profiles.profiles[name]``.
         llm = self.llm_profiles.require(name)
-        self.agent_settings = self.agent_settings.model_copy(update={'llm': llm})
+        self.agent_settings = self.agent_settings.model_copy(
+            update={'llm': llm.model_copy()}
+        )
         self.llm_profiles.active = name
+
+    def delete_profile(self, name: str) -> bool:
+        """Delete a saved profile, promoting a fallback when it was active.
+
+        Returns False if the profile didn't exist; True otherwise. When the
+        deleted profile was active and other profiles remain, switches to
+        the first remaining one (insertion order — same ordering ``rename``
+        relies on) so the user isn't left without an active LLM.
+        """
+        was_active = self.llm_profiles.active == name
+        if not self.llm_profiles.delete(name):
+            return False
+        if was_active and self.llm_profiles.profiles:
+            fallback = next(iter(self.llm_profiles.profiles))
+            self.switch_to_profile(fallback)
+        return True
 
     @model_validator(mode='before')
     @classmethod
@@ -325,15 +331,21 @@ class Settings(BaseModel):
         # --- Agent settings: coerce SecretStr leaves to plain strings ---
         agent_settings = data.get('agent_settings')
         if isinstance(agent_settings, dict):
-            data['agent_settings'] = _coerce_dict_secrets(agent_settings)
-        elif isinstance(agent_settings, (LLMAgentSettings, ACPAgentSettings)):
+            data['agent_settings'] = _load_persisted_agent_settings(
+                _coerce_dict_secrets(agent_settings)
+            ).model_dump(mode='json', context={'expose_secrets': True})
+        elif isinstance(agent_settings, (OpenHandsAgentSettings, ACPAgentSettings)):
             data['agent_settings'] = agent_settings.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
 
         # --- Conversation settings: normalize ---
         conversation_settings = data.get('conversation_settings')
-        if isinstance(conversation_settings, ConversationSettings):
+        if isinstance(conversation_settings, dict):
+            data['conversation_settings'] = _load_persisted_conversation_settings(
+                conversation_settings
+            ).model_dump(mode='json')
+        elif isinstance(conversation_settings, ConversationSettings):
             data['conversation_settings'] = conversation_settings.model_dump(
                 mode='json'
             )
@@ -366,65 +378,7 @@ class Settings(BaseModel):
     def secrets_store_serializer(self, secrets: Any, info: SerializationInfo):
         return {'provider_tokens': {}}
 
-    # ── Factory methods ─────────────────────────────────────────────
-
-    @staticmethod
-    def from_config() -> Settings | None:
-        app_config = load_openhands_config()
-        llm_config: LLMConfig = app_config.get_llm_config()
-        if llm_config.api_key is None:
-            return None
-
-        agent_settings_dict: dict[str, Any] = {
-            'agent': app_config.default_agent,
-            'llm': {
-                'model': llm_config.model,
-                'api_key': (
-                    llm_config.api_key.get_secret_value()
-                    if isinstance(llm_config.api_key, SecretStr)
-                    else llm_config.api_key
-                ),
-                'base_url': llm_config.base_url,
-            },
-        }
-        if hasattr(app_config, 'mcp') and app_config.mcp:
-            agent_settings_dict['mcp_config'] = _coerce_value(app_config.mcp)
-
-        return Settings(
-            language='en',
-            remote_runtime_resource_factor=app_config.sandbox.remote_runtime_resource_factor,
-            search_api_key=app_config.search_api_key,
-            max_budget_per_task=app_config.max_budget_per_task,
-            # Always LLM for config-file-sourced settings
-            agent_settings=LLMAgentSettings(**agent_settings_dict),
-            conversation_settings=ConversationSettings.model_validate(
-                {
-                    'confirmation_mode': bool(app_config.security.confirmation_mode),
-                    'security_analyzer': app_config.security.security_analyzer,
-                    'max_iterations': app_config.max_iterations,
-                }
-            ),
-        )
-
-    def merge_with_config_settings(self) -> 'Settings':
-        """Merge config.toml MCP settings with stored SDK agent_settings."""
-        if not isinstance(self.agent_settings, LLMAgentSettings):
-            return self
-        config_settings = Settings.from_config()
-        if not config_settings:
-            return self
-
-        merged_mcp = _merge_sdk_mcp_configs(
-            config_settings.agent_settings.mcp_config,
-            self.agent_settings.mcp_config,
-        )
-        if merged_mcp is None:
-            return self
-
-        self.agent_settings.mcp_config = merged_mcp
-        return self
-
-    def to_agent_settings(self) -> LLMAgentSettings | ACPAgentSettings:
+    def to_agent_settings(self) -> OpenHandsAgentSettings | ACPAgentSettings:
         return self.agent_settings
 
     def get_agent_settings_display(self) -> dict[str, Any]:
@@ -438,7 +392,7 @@ class Settings(BaseModel):
         Secrets are masked by Pydantic's default serialiser.
         """
         from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
-        from openhands.utils.llm import is_openhands_model
+        from openhands.app_server.utils.llm import is_openhands_model
 
         data = self.agent_settings.model_dump(mode='json')
         llm = data.get('llm')
