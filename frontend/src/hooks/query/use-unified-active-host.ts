@@ -41,11 +41,17 @@ export const useUnifiedActiveHost = () => {
     useConversationConfig();
 
   const isV1Conversation = conversation?.conversation_version === "V1";
-  const isEnvironmentConnection =
-    conversation?.trigger === "connect_to_environment";
   const sessionEnvironmentUrl = sessionStorage.getItem(
     `environment-url:${conversationId}`,
   );
+  // Treat a sessionStorage env URL as proof of an environment connection so the
+  // sandbox-host fallback never wins during the brief window before the
+  // conversation (and its `trigger`) finishes loading. Otherwise, in environments
+  // where the sandbox exposes a WORKER_* URL (e.g. Codespaces port forwarding),
+  // that URL gets latched into `activeHost` and isn't replaced.
+  const isEnvironmentConnection =
+    conversation?.trigger === "connect_to_environment" ||
+    Boolean(sessionEnvironmentUrl);
   const environmentUrl =
     sessionEnvironmentUrl || conversation?.environment_url || null;
   const sandboxId = conversationConfig?.runtime_id;
