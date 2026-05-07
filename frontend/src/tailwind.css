@@ -128,10 +128,17 @@ html.light [data-testid="markdown-renderer"] h6 {
   color: #111827 !important;
 }
 
-/* Code blocks: light theme overrides them to a light gray bg, so text needs to be dark */
-html.light [data-testid="markdown-renderer"] pre,
-html.light [data-testid="markdown-renderer"] pre code,
-html.light [data-testid="markdown-renderer"] pre * {
+/* Code blocks: only force dark text where we ALSO override the background to a light
+   gray (see the user-message/agent-message rule below). Other markdown contexts
+   (e.g. MCP tool calls) keep their dark code-block background and need the
+   default light syntax-highlighter colors — overriding text globally there
+   produces dark-on-dark. */
+html.light [data-testid="user-message"] pre,
+html.light [data-testid="user-message"] pre code,
+html.light [data-testid="user-message"] pre *,
+html.light [data-testid="agent-message"] pre,
+html.light [data-testid="agent-message"] pre code,
+html.light [data-testid="agent-message"] pre * {
   color: #1f2937 !important;
 }
 
