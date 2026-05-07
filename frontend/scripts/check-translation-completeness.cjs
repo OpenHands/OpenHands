@@ -36,6 +36,7 @@ Object.entries(translationJson).forEach(([key, translations]) => {
   const availableLanguages = Object.keys(translations);
 
   // Find missing languages for this key
+  // 找出该 key 缺失的语言代码
   const missing = supportedLanguageCodes.filter(
     (langCode) => !availableLanguages.includes(langCode)
   );

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { Spinner } from "@heroui/react";
 import { cn } from "#/utils/utils";
+import { Spinner } from "#/components/shared/spinner";
 
 interface BranchLoadingStateProps {
   wrapperClassName?: string;
