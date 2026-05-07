@@ -87,10 +87,8 @@ def test_settings_update_deep_merges_agent_settings():
     assert settings.agent_settings.condenser.enabled is True
 
 
-def test_settings_keep_sdk_critic_default_for_oss(monkeypatch):
-    monkeypatch.delenv('OH_APP_MODE', raising=False)
-    monkeypatch.delenv('APP_MODE', raising=False)
-    monkeypatch.delenv('OPENHANDS_CONFIG_CLS', raising=False)
+def test_settings_keep_sdk_critic_default_without_env_opt_in(monkeypatch):
+    monkeypatch.delenv('OH_ENABLE_CRITIC_BY_DEFAULT', raising=False)
 
     settings = Settings()
 
@@ -98,8 +96,8 @@ def test_settings_keep_sdk_critic_default_for_oss(monkeypatch):
     assert settings.agent_settings.verification.enable_iterative_refinement is False
 
 
-def test_settings_enable_critic_by_default_for_saas(monkeypatch):
-    monkeypatch.setenv('OPENHANDS_CONFIG_CLS', 'server.config.SaaSServerConfig')
+def test_settings_enable_critic_by_default_with_env_opt_in(monkeypatch):
+    monkeypatch.setenv('OH_ENABLE_CRITIC_BY_DEFAULT', 'true')
 
     settings = Settings()
 
