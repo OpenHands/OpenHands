@@ -338,14 +338,16 @@ class AuthTokenStore:
                 token_record = result.scalars().first()
 
                 if not token_record:
+                    # Transaction will auto-rollback on exit
                     return False
 
                 token_record.stay_logged_in = stay_logged_in
-                await session.commit()
-                logger.info(
-                    f'Stay logged in set to {stay_logged_in} for {self.identity_provider_value}'
-                )
-                return True
+                # Transaction will auto-commit on exit
+
+        logger.info(
+            f'Stay logged in set to {stay_logged_in} for {self.identity_provider_value}'
+        )
+        return True
 
     @classmethod
     async def get_stay_logged_in_providers(
