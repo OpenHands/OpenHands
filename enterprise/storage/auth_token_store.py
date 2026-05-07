@@ -316,7 +316,8 @@ class AuthTokenStore:
         tokens = await self.load_tokens()
         if not tokens:
             return False
-        return tokens.get('stay_logged_in', False)
+        stay_logged_in = tokens.get('stay_logged_in', False)
+        return bool(stay_logged_in)
 
     async def set_stay_logged_in(self, stay_logged_in: bool) -> bool:
         """Set or update the stay_logged_in flag for this provider.
