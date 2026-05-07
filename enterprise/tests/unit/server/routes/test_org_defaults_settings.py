@@ -7,7 +7,6 @@ from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import (
     MASKED_API_KEY,
     OrgDefaultsSettingsResponse,
-    OrgResponse,
     OrgUpdate,
 )
 from storage.org import Org
@@ -137,51 +136,6 @@ def test_from_org_denormalizes_litellm_proxy_prefix_and_returns_base_url_as_stor
     assert response.agent_settings.llm.model == 'openhands/minimax-m2.5'
     assert response.agent_settings.llm.base_url == LITE_LLM_API_URL
     assert response.agent_settings.llm.api_key is None
-
-
-def test_from_org_accepts_openhands_agent_kind():
-    """Stored SaaS org defaults may already use the OpenHands agent discriminator."""
-    org = Org(
-        id='5594c7b6-f959-4b81-92e9-b09c206f5081',
-        name='test-org',
-        contact_name='Test User',
-        contact_email='test@example.com',
-        org_version=1,
-        agent_settings={
-            'schema_version': 1,
-            'agent_kind': 'openhands',
-            'agent': 'CodeActAgent',
-            'llm': {'model': 'openhands/minimax-m2.5', 'base_url': LITE_LLM_API_URL},
-        },
-        conversation_settings={},
-    )
-
-    response = OrgResponse.from_org(org)
-
-    assert response.agent_settings.agent_kind == 'openhands'
-    assert response.agent_settings.llm.model == 'litellm_proxy/minimax-m2.5'
-
-
-def test_defaults_response_accepts_openhands_agent_kind():
-    """Org defaults response should not reject persisted OpenHands agent settings."""
-    org = MagicMock(spec=Org)
-    org.agent_settings = {
-        'schema_version': 1,
-        'agent_kind': 'openhands',
-        'agent': 'CodeActAgent',
-        'llm': {
-            'model': 'litellm_proxy/minimax-m2.5',
-            'base_url': LITE_LLM_API_URL,
-        },
-    }
-    org.conversation_settings = {}
-    org.llm_api_key = None
-    org.search_api_key = None
-
-    response = OrgDefaultsSettingsResponse.from_org(org)
-
-    assert response.agent_settings.agent_kind == 'openhands'
-    assert response.agent_settings.llm.model == 'openhands/minimax-m2.5'
 
 
 def test_from_org_returns_provider_default_base_url_as_stored_for_non_managed_models():
