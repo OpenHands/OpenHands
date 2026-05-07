@@ -27,7 +27,6 @@ import {
   hasAdvancedSettings,
   hasMinorSettings,
   inferInitialView,
-  SdkSettingsPayload,
   SettingsDirtyState,
   SettingsFormValues,
   type SettingsValueSource,
@@ -93,7 +92,7 @@ const PAYLOAD_DIFF_KEY: Record<SettingsValueSource, string> = {
 export interface SettingsSourceConfig {
   /** Which schema/values bucket on `settings` this source pulls from. */
   settingsSource: SettingsValueSource;
-  /** Section keys (e.g. ["verification"]) within that schema to render. */
+  /** Section keys (e.g. ["llm"]) within that schema to render. */
   sectionKeys: string[];
   /** Field keys to skip (rendered elsewhere by the caller). */
   excludeKeys?: Set<string>;
@@ -111,29 +110,24 @@ interface ResolvedSource extends SettingsSourceConfig {
 }
 
 /**
- * A generic SDK-schema–driven settings page that renders fields
- * from one or more schema sections.
+ * A generic SDK-schema–driven settings page that renders fields from one or
+ * more schema sections.
  *
- * Two ways to specify what to render:
+ * The `settingsSources` array specifies which schema(s)/section(s) the page
+ * owns. The page tracks values/dirty state per source, renders sections from
+ * each source in order (filtered by the schema's `prominence` field for the
+ * selected view), and emits a combined save payload like
+ * `{ conversation_settings_diff: {...}, agent_settings_diff: {...} }` —
+ * including only the keys for sources that actually have dirty changes.
  *
- * 1. **Single source (legacy)** — pass `settingsSource` + `sectionKeys`
- *    (+ optional `excludeKeys`). The page renders fields from one schema
- *    and emits one `<source>_diff` on save. The `buildPayload` callback
- *    receives the unwrapped per-source diff (matches llm-settings).
- *
- * 2. **Multiple sources** — pass `sources: SettingsSourceConfig[]`. The
- *    page renders sections from each source in order, tracks values/dirty
- *    state per source, and emits a combined payload (e.g. both
- *    `conversation_settings_diff` and `agent_settings_diff`) on save.
- *    `buildPayload` is not supported in this mode (file an enhancement
- *    if you need it).
+ * @param settingsSources  one or more schemas to render fields from
+ * @param header           render prop above the fields (receives unified state)
+ * @param buildPayload     customize the save payload before submission
+ * @param testId           data-testid on the page wrapper
  */
 export function SdkSectionPage({
-  sources,
-  sectionKeys,
-  excludeKeys = EMPTY_EXCLUDE_KEYS,
+  settingsSources,
   scope = "personal",
-  settingsSource = "agent_settings",
   header,
   extraDirty = false,
   buildPayload,
@@ -144,29 +138,18 @@ export function SdkSectionPage({
   trailingActions,
   testId = "sdk-section-settings-screen",
 }: {
-  /** Render fields from multiple settings sources on the same page. */
-  sources?: SettingsSourceConfig[];
-  /** Single-source: section keys to render. */
-  sectionKeys?: string[];
-  /** Single-source: field keys to skip (rendered elsewhere by the caller). */
-  excludeKeys?: Set<string>;
+  settingsSources: SettingsSourceConfig[];
   scope?: SettingsScope;
-  /** Single-source: which schema/values bucket to use. */
-  settingsSource?: SettingsValueSource;
 
   header?: (props: SdkSectionHeaderProps) => React.ReactNode;
   extraDirty?: boolean;
   /**
-   * Single-source only. Customize the payload before saving.
-   *
-   * Receives the unwrapped per-source diff (e.g. `{ llm: { model: "gpt-4" } }`)
-   * and the form context. Return the full payload to send (which typically
-   * wraps the diff in `agent_settings_diff` / `conversation_settings_diff`).
-   *
-   * Not invoked in multi-source mode.
+   * Customize the save payload. Receives the wrapped default payload (e.g.
+   * `{ agent_settings_diff: { llm: { model: "gpt-4" } } }`) plus the unified
+   * form context. Return the payload to actually send.
    */
   buildPayload?: (
-    payload: SdkSettingsPayload,
+    defaultPayload: Record<string, unknown>,
     context: {
       values: SettingsFormValues;
       dirty: SettingsDirtyState;
@@ -174,6 +157,10 @@ export function SdkSectionPage({
     },
   ) => Record<string, unknown>;
   onSaveSuccess?: () => void;
+  /**
+   * Override the initial view per source. Called once per source on
+   * hydration; the most-detailed result wins across sources.
+   */
   getInitialView?: (
     settings: Settings,
     filteredSchema: SettingsSchema,
@@ -203,35 +190,23 @@ export function SdkSectionPage({
   const isReadOnly =
     scope === "org" && !isOssMode ? !hasPermission("edit_llm_settings") : false;
 
-  // The `isMultiSource` flag preserves the legacy `buildPayload` contract
-  // (single-source callback receives the unwrapped diff).
-  const isMultiSource = !!(sources && sources.length > 0);
-
-  // Route all downstream memos through a JSON signature so that callers
-  // passing a fresh `sectionKeys`/`sources` array on every render don't
+  // Route all downstream memos through a JSON signature so callers passing
+  // a fresh `settingsSources` array reference on every render don't
   // invalidate component state (e.g. the selected view).
-  const sourcesSignature = React.useMemo(() => {
-    const configs =
-      sources && sources.length > 0
-        ? sources
-        : [
-            {
-              settingsSource,
-              sectionKeys: sectionKeys ?? [],
-              excludeKeys,
-            },
-          ];
-    return JSON.stringify(
-      configs.map((s) => ({
-        source: s.settingsSource,
-        sectionKeys: s.sectionKeys,
-        excludeKeys: s.excludeKeys ? Array.from(s.excludeKeys).sort() : null,
-      })),
-    );
-  }, [sources, settingsSource, sectionKeys, excludeKeys]);
+  const sourcesSignature = React.useMemo(
+    () =>
+      JSON.stringify(
+        settingsSources.map((s) => ({
+          source: s.settingsSource,
+          sectionKeys: s.sectionKeys,
+          excludeKeys: s.excludeKeys ? Array.from(s.excludeKeys).sort() : null,
+        })),
+      ),
+    [settingsSources],
+  );
 
-  // Stable list of source configs; reference only changes when the signature
-  // changes (and therefore semantic content has actually changed).
+  // Stable list of source configs; reference only changes when the
+  // signature changes (i.e. semantic content has actually changed).
   const resolvedSourceConfigs = React.useMemo<SettingsSourceConfig[]>(() => {
     const parsed = JSON.parse(sourcesSignature) as Array<{
       source: SettingsValueSource;
@@ -349,8 +324,8 @@ export function SdkSectionPage({
     });
   }, [initialValuesBySource, initialView]);
 
-  // Map from field key → source it belongs to. Used by the header callback to
-  // route generic onChange calls to the right source's bucket.
+  // Map from field key → source it belongs to. Used by the header callback
+  // to route generic onChange calls to the right source's bucket.
   const fieldKeyToSource = React.useMemo(() => {
     const map = new Map<string, SettingsValueSource>();
     for (const src of resolvedSources) {
@@ -421,54 +396,35 @@ export function SdkSectionPage({
 
     let payload: Record<string, unknown>;
     try {
-      if (!isMultiSource) {
-        // Legacy single-source path: preserve the existing `buildPayload`
-        // contract that hands callers the unwrapped per-source diff.
-        const src = resolvedSources[0];
+      const defaultPayload: Record<string, unknown> = {};
+      for (const src of resolvedSources) {
         const schema = src.filteredSchema!;
         const sourceValues = valuesBySource[src.settingsSource] ?? {};
         const sourceDirty = dirtyBySource[src.settingsSource] ?? {};
-        const basePayload = buildSdkSettingsPayloadForView(
+        const diff = buildSdkSettingsPayloadForView(
           schema,
           sourceValues,
           sourceDirty,
           view,
         );
-        const defaultPayload: Record<string, unknown> = {
-          [PAYLOAD_DIFF_KEY[src.settingsSource]]: basePayload,
-        };
-        payload = buildPayload
-          ? buildPayload(basePayload, {
-              values: flatValues,
-              dirty: flatDirty,
-              view,
-            })
-          : defaultPayload;
-      } else {
-        // Multi-source path: build the wrapped payload from each source's
-        // diff. `buildPayload` is intentionally not invoked here.
-        const wrapped: Record<string, unknown> = {};
-        for (const src of resolvedSources) {
-          const schema = src.filteredSchema!;
-          const sourceValues = valuesBySource[src.settingsSource] ?? {};
-          const sourceDirty = dirtyBySource[src.settingsSource] ?? {};
-          const diff = buildSdkSettingsPayloadForView(
-            schema,
-            sourceValues,
-            sourceDirty,
-            view,
-          );
-          if (Object.keys(diff).length > 0) {
-            const diffKey = PAYLOAD_DIFF_KEY[src.settingsSource];
-            wrapped[diffKey] = {
-              ...((wrapped[diffKey] as Record<string, unknown> | undefined) ??
-                {}),
-              ...diff,
-            };
-          }
+        if (Object.keys(diff).length > 0) {
+          const diffKey = PAYLOAD_DIFF_KEY[src.settingsSource];
+          defaultPayload[diffKey] = {
+            ...((defaultPayload[diffKey] as
+              | Record<string, unknown>
+              | undefined) ?? {}),
+            ...diff,
+          };
         }
-        payload = wrapped;
       }
+
+      payload = buildPayload
+        ? buildPayload(defaultPayload, {
+            values: flatValues,
+            dirty: flatDirty,
+            view,
+          })
+        : defaultPayload;
     } catch (error) {
       displayErrorToast(
         error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),

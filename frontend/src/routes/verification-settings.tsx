@@ -30,7 +30,7 @@ export function VerificationSettingsScreen({
   return (
     <SdkSectionPage
       scope={scope}
-      sources={[
+      settingsSources={[
         {
           settingsSource: "conversation_settings",
           sectionKeys: ["verification"],

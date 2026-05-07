@@ -375,14 +375,18 @@ export function LlmSettingsScreen({
 
   const buildPayload = React.useCallback(
     (
-      basePayload: Record<string, unknown>,
+      defaultPayload: Record<string, unknown>,
       context: {
         values: Record<string, string | boolean>;
         view: SettingsView;
       },
     ) => {
-      // basePayload is a nested dict (e.g. {llm: {model: "gpt-4"}})
-      const agentSettings = structuredClone(basePayload);
+      // defaultPayload is the wrapped diff (e.g.
+      // `{ agent_settings_diff: { llm: { model: "gpt-4" } } }`); we only
+      // mutate the inner `llm` object below.
+      const agentSettings = structuredClone(
+        (defaultPayload.agent_settings_diff as Record<string, unknown>) ?? {},
+      );
 
       const modelValue =
         typeof context.values["llm.model"] === "string"
@@ -411,9 +415,10 @@ export function LlmSettingsScreen({
 
       // Remember the model currently shown in the form — this is what the
       // user is saving regardless of whether `llm.model` was toggled dirty
-      // this turn. ``basePayload`` only includes dirty fields, so falling
-      // back to ``context.values`` makes the profile auto-creation fire on
-      // same-value re-saves (e.g. save → delete profile → save again).
+      // this turn. ``defaultPayload`` only includes dirty fields, so
+      // falling back to ``context.values`` makes the profile auto-creation
+      // fire on same-value re-saves (e.g. save → delete profile → save
+      // again).
       lastSavedModelRef.current = modelValue || null;
 
       return { agent_settings_diff: agentSettings };
@@ -515,8 +520,13 @@ export function LlmSettingsScreen({
       {backToProfiles}
       <SdkSectionPage
         scope={scope}
-        sectionKeys={["llm"]}
-        excludeKeys={LLM_EXCLUDED_KEYS}
+        settingsSources={[
+          {
+            settingsSource: "agent_settings",
+            sectionKeys: ["llm"],
+            excludeKeys: LLM_EXCLUDED_KEYS,
+          },
+        ]}
         header={buildHeader}
         buildPayload={buildPayload}
         extraDirty={profileName.trim() !== initialProfileName.trim()}
