@@ -105,6 +105,15 @@ def test_settings_enable_critic_by_default_with_env_opt_in(monkeypatch):
     assert settings.agent_settings.verification.enable_iterative_refinement is False
 
 
+def test_settings_enable_critic_by_default_with_env_opt_in_1(monkeypatch):
+    monkeypatch.setenv('OH_ENABLE_CRITIC_BY_DEFAULT', '1')
+
+    settings = Settings()
+
+    assert settings.agent_settings.verification.critic_enabled is True
+    assert settings.agent_settings.verification.enable_iterative_refinement is False
+
+
 def test_settings_preserve_agent_settings():
     settings = Settings(
         agent_settings=AgentSettings(
