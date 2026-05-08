@@ -19,7 +19,7 @@ from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk.context.skills import KeywordTrigger, Skill, TaskTrigger
+from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 _logger = logging.getLogger(__name__)
 

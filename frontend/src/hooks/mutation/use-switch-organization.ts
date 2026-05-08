@@ -32,7 +32,7 @@ export const useSwitchOrganization = () => {
         queryKey: ["organizations", orgId, "me"],
       });
       // Update local state - this triggers automatic refetch for all org-scoped queries
-      // since their query keys include organizationId (e.g., ["settings", orgId], ["secrets", orgId])
+      // since their query keys include the selected organizationId.
       setOrganizationId(orgId);
       // Broadcast org change to other apps (e.g. Automations) via localStorage
       setSelectedOrg(orgId);
