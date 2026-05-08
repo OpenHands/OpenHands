@@ -432,3 +432,235 @@ class TestConstants:
     def test_lock_timeout_seconds_value(self):
         """Test LOCK_TIMEOUT_SECONDS is set to 5 seconds."""
         assert LOCK_TIMEOUT_SECONDS == 5
+
+
+class TestStayLoggedIn:
+    """Tests for stay_logged_in functionality."""
+
+    @pytest.mark.asyncio
+    async def test_store_tokens_with_stay_logged_in_default_false(
+        self, async_session_maker
+    ):
+        """Test stay_logged_in defaults to False when not specified."""
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITHUB,
+            )
+
+            await store.store_tokens(
+                access_token='new-access-token',
+                refresh_token='new-refresh-token',
+                access_token_expires_at=1234567890,
+                refresh_token_expires_at=1234657890,
+            )
+
+            # Verify default is False
+            async with async_session_maker() as session:
+                result = await session.execute(
+                    select(AuthTokens).where(
+                        AuthTokens.keycloak_user_id == 'test-user-123',
+                        AuthTokens.identity_provider == ProviderType.GITHUB.value,
+                    )
+                )
+                token_record = result.scalars().first()
+                assert token_record is not None
+                assert token_record.stay_logged_in is False
+
+    @pytest.mark.asyncio
+    async def test_store_tokens_with_stay_logged_in_true(self, async_session_maker):
+        """Test stay_logged_in can be set to True."""
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITHUB,
+            )
+
+            await store.store_tokens(
+                access_token='new-access-token',
+                refresh_token='new-refresh-token',
+                access_token_expires_at=1234567890,
+                refresh_token_expires_at=1234657890,
+                stay_logged_in=True,
+            )
+
+            # Verify stay_logged_in is True
+            async with async_session_maker() as session:
+                result = await session.execute(
+                    select(AuthTokens).where(
+                        AuthTokens.keycloak_user_id == 'test-user-123',
+                        AuthTokens.identity_provider == ProviderType.GITHUB.value,
+                    )
+                )
+                token_record = result.scalars().first()
+                assert token_record is not None
+                assert token_record.stay_logged_in is True
+
+    @pytest.mark.asyncio
+    async def test_load_tokens_returns_stay_logged_in(self, async_session_maker):
+        """Test load_tokens returns stay_logged_in value."""
+        current_time = int(time.time())
+
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITHUB,
+            )
+
+            await store.store_tokens(
+                access_token='valid-access-token',
+                refresh_token='valid-refresh-token',
+                access_token_expires_at=current_time
+                + ACCESS_TOKEN_EXPIRY_BUFFER
+                + 1000,
+                refresh_token_expires_at=current_time + 10000,
+                stay_logged_in=True,
+            )
+
+            result = await store.load_tokens()
+
+            assert result is not None
+            assert result['stay_logged_in'] is True
+
+    @pytest.mark.asyncio
+    async def test_get_stay_logged_in_returns_false_when_no_tokens(
+        self, async_session_maker
+    ):
+        """Test get_stay_logged_in returns False when no tokens."""
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITHUB,
+            )
+
+            result = await store.get_stay_logged_in()
+
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_get_stay_logged_in_returns_value(self, async_session_maker):
+        """Test get_stay_logged_in returns stay_logged_in value."""
+        current_time = int(time.time())
+
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITHUB,
+            )
+
+            await store.store_tokens(
+                access_token='valid-access-token',
+                refresh_token='valid-refresh-token',
+                access_token_expires_at=current_time + 1000,
+                refresh_token_expires_at=current_time + 10000,
+                stay_logged_in=True,
+            )
+
+            result = await store.get_stay_logged_in()
+
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_set_stay_logged_in_updates_value(self, async_session_maker):
+        """Test set_stay_logged_in updates the value."""
+        current_time = int(time.time())
+
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITHUB,
+            )
+
+            # First store tokens with stay_logged_in=False
+            await store.store_tokens(
+                access_token='valid-access-token',
+                refresh_token='valid-refresh-token',
+                access_token_expires_at=current_time + 1000,
+                refresh_token_expires_at=current_time + 10000,
+                stay_logged_in=False,
+            )
+
+            # Now update to stay_logged_in=True
+            result = await store.set_stay_logged_in(True)
+
+            assert result is True
+
+            # Verify it's updated
+            result = await store.get_stay_logged_in()
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_set_stay_logged_in_returns_false_when_no_record(
+        self, async_session_maker
+    ):
+        """Test set_stay_logged_in returns False when no record exists."""
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITHUB,
+            )
+
+            result = await store.set_stay_logged_in(True)
+
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_get_stay_logged_in_providers_returns_empty_list(
+        self, async_session_maker
+    ):
+        """Test get_stay_logged_in_providers returns empty list when no providers."""
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            result = await AuthTokenStore.get_stay_logged_in_providers('test-user-123')
+
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_stay_logged_in_providers_returns_enabled_providers(
+        self, async_session_maker
+    ):
+        """Test get_stay_logged_in_providers returns enabled providers."""
+        current_time = int(time.time())
+
+        with patch('storage.auth_token_store.a_session_maker', async_session_maker):
+            # Store tokens for different providers
+            github_store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITHUB,
+            )
+            await github_store.store_tokens(
+                access_token='github-token',
+                refresh_token='github-refresh',
+                access_token_expires_at=current_time + 1000,
+                refresh_token_expires_at=current_time + 10000,
+                stay_logged_in=True,
+            )
+
+            gitlab_store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.GITLAB,
+            )
+            await gitlab_store.store_tokens(
+                access_token='gitlab-token',
+                refresh_token='gitlab-refresh',
+                access_token_expires_at=current_time + 1000,
+                refresh_token_expires_at=current_time + 10000,
+                stay_logged_in=False,
+            )
+
+            bitbucket_store = AuthTokenStore(
+                keycloak_user_id='test-user-123',
+                idp=ProviderType.BITBUCKET,
+            )
+            await bitbucket_store.store_tokens(
+                access_token='bitbucket-token',
+                refresh_token='bitbucket-refresh',
+                access_token_expires_at=current_time + 1000,
+                refresh_token_expires_at=current_time + 10000,
+                stay_logged_in=True,
+            )
+
+            result = await AuthTokenStore.get_stay_logged_in_providers('test-user-123')
+
+            assert 'github' in result
+            assert 'bitbucket' in result
+            assert 'gitlab' not in result
