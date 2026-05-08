@@ -945,6 +945,70 @@ class TestLiveStatusAppConversationService:
         return_value=[],
     )
     @pytest.mark.asyncio
+    async def test_build_request_passes_enable_sub_agents_true(self, mock_tools):
+        """get_default_tools receives enable_sub_agents=True when the user setting is on."""
+        from openhands.sdk.settings import OpenHandsAgentSettings
+
+        agent_settings = OpenHandsAgentSettings(
+            llm={'model': 'gpt-4', 'api_key': 'test-key'},
+            enable_sub_agents=True,
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        mock_tools.assert_called_once_with(enable_browser=True, enable_sub_agents=True)
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_passes_enable_sub_agents_false(self, mock_tools):
+        """get_default_tools receives enable_sub_agents=False when the user setting is off."""
+        from openhands.sdk.settings import OpenHandsAgentSettings
+
+        agent_settings = OpenHandsAgentSettings(
+            llm={'model': 'gpt-4', 'api_key': 'test-key'},
+            enable_sub_agents=False,
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        mock_tools.assert_called_once_with(enable_browser=True, enable_sub_agents=False)
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
     async def test_build_start_conversation_request_with_api_secrets(self, _mock_tools):
         """Test _build_start_conversation_request_for_user with API-provided secrets."""
         self.mock_user_context.get_user_info.return_value = self.mock_user
