@@ -108,6 +108,19 @@ const BASE_SETTINGS: Settings = {
             secret: false,
             required: true,
           },
+          {
+            key: "verification.enable_iterative_refinement",
+            label: "Enable iterative refinement",
+            section: "verification",
+            section_label: "Verification",
+            value_type: "boolean",
+            default: false,
+            choices: [],
+            depends_on: ["verification.critic_enabled"],
+            prominence: "minor",
+            secret: false,
+            required: false,
+          },
         ],
       },
       {
@@ -140,6 +153,7 @@ const BASE_SETTINGS: Settings = {
     verification: {
       critic_enabled: false,
       critic_mode: "finish_and_message",
+      enable_iterative_refinement: false,
       confirmation_mode: false,
     },
     condenser: {
@@ -159,6 +173,7 @@ describe("sdk settings schema helpers", () => {
       mcp_config: "",
       "verification.critic_enabled": false,
       "verification.critic_mode": "finish_and_message",
+      "verification.enable_iterative_refinement": false,
     });
   });
 
@@ -179,6 +194,22 @@ describe("sdk settings schema helpers", () => {
     };
     expect(hasAdvancedSettingsOverrides(withMinorOverride)).toBe(true);
     expect(inferInitialView(withMinorOverride)).toBe("all");
+
+    const withIterativeRefinementOverride: Settings = {
+      ...BASE_SETTINGS,
+      agent_settings: {
+        ...BASE_SETTINGS.agent_settings,
+        verification: {
+          ...(BASE_SETTINGS.agent_settings as Record<string, unknown>)
+            .verification as Record<string, unknown>,
+          enable_iterative_refinement: true,
+        },
+      },
+    };
+    expect(hasAdvancedSettingsOverrides(withIterativeRefinementOverride)).toBe(
+      false,
+    );
+    expect(inferInitialView(withIterativeRefinementOverride)).toBe("basic");
   });
 
   it("treats empty object value as equivalent to null default (mcp_config serializer artifact)", () => {
@@ -217,7 +248,28 @@ describe("sdk settings schema helpers", () => {
     const verificationSection = allSections.find(
       (s) => s.key === "verification",
     );
-    expect(verificationSection?.fields).toHaveLength(2);
+    expect(verificationSection?.fields).toHaveLength(3);
+  });
+
+  it("shows iterative refinement in basic despite SDK minor prominence", () => {
+    const values = {
+      ...buildInitialSettingsFormValues(BASE_SETTINGS),
+      "verification.critic_enabled": true,
+    };
+
+    const basicSections = getVisibleSettingsSections(
+      BASE_SETTINGS.agent_settings_schema!,
+      values,
+      "basic",
+    );
+
+    const allBasicFieldKeys = basicSections.flatMap((s) =>
+      s.fields.map((f) => f.key),
+    );
+    expect(allBasicFieldKeys).toContain(
+      "verification.enable_iterative_refinement",
+    );
+    expect(allBasicFieldKeys).not.toContain("verification.critic_mode");
   });
 
   it("passes through all fields when excludeKeys is empty", () => {
@@ -287,6 +339,7 @@ describe("sdk settings schema helpers", () => {
       "llm.model": "anthropic/claude-sonnet-4-20250514",
       "llm.timeout": "90",
       "verification.critic_enabled": true,
+      "verification.enable_iterative_refinement": true,
       "verification.critic_mode": "all_actions",
       "llm.litellm_extra_body": JSON.stringify(
         { metadata: { tier: "enterprise" } },
@@ -299,6 +352,7 @@ describe("sdk settings schema helpers", () => {
       "llm.model": true,
       "llm.timeout": true,
       "verification.critic_enabled": true,
+      "verification.enable_iterative_refinement": true,
       "verification.critic_mode": true,
       "llm.litellm_extra_body": true,
     };
@@ -310,7 +364,11 @@ describe("sdk settings schema helpers", () => {
         litellm_extra_body: {},
       },
       mcp_config: null,
-      verification: { critic_enabled: true, critic_mode: "finish_and_message" },
+      verification: {
+        critic_enabled: true,
+        enable_iterative_refinement: true,
+        critic_mode: "finish_and_message",
+      },
     });
 
     expect(
@@ -322,7 +380,11 @@ describe("sdk settings schema helpers", () => {
         litellm_extra_body: {},
       },
       mcp_config: null,
-      verification: { critic_enabled: true, critic_mode: "finish_and_message" },
+      verification: {
+        critic_enabled: true,
+        enable_iterative_refinement: true,
+        critic_mode: "finish_and_message",
+      },
     });
 
     expect(buildSdkSettingsPayloadForView(schema, values, dirty, "all")).toEqual({
@@ -331,7 +393,11 @@ describe("sdk settings schema helpers", () => {
         timeout: 90,
         litellm_extra_body: { metadata: { tier: "enterprise" } },
       },
-      verification: { critic_enabled: true, critic_mode: "all_actions" },
+      verification: {
+        critic_enabled: true,
+        enable_iterative_refinement: true,
+        critic_mode: "all_actions",
+      },
     });
   });
 });

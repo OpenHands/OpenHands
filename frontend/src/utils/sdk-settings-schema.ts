@@ -30,6 +30,22 @@ const VIEW_PROMINENCES: Record<SettingsView, Set<SettingProminence>> = {
   all: new Set<SettingProminence>(["critical", "major", "minor"]),
 };
 
+const BASIC_FIELD_OVERRIDES = new Set<string>([
+  // The SDK marks this as minor, but the UI should expose it beside
+  // Enable Critic once that dependency is toggled on.
+  "verification.enable_iterative_refinement",
+]);
+
+function getEffectiveFieldProminence(
+  field: SettingsFieldSchema,
+): SettingProminence {
+  if (BASIC_FIELD_OVERRIDES.has(field.key)) {
+    return "critical";
+  }
+
+  return field.prominence;
+}
+
 function getSchemaFields(schema: SettingsSchema): SettingsFieldSchema[] {
   return schema.sections.flatMap((section) => section.fields);
 }
@@ -99,11 +115,11 @@ function isChoiceField(field: SettingsFieldSchema): boolean {
 }
 
 function isCriticalField(field: SettingsFieldSchema): boolean {
-  return field.prominence === "critical";
+  return getEffectiveFieldProminence(field) === "critical";
 }
 
 function isMinorField(field: SettingsFieldSchema): boolean {
-  return field.prominence === "minor";
+  return getEffectiveFieldProminence(field) === "minor";
 }
 
 function normalizeFieldValue(
@@ -403,7 +419,7 @@ function isFieldVisibleInView(
   field: SettingsFieldSchema,
   view: SettingsView,
 ): boolean {
-  return VIEW_PROMINENCES[view].has(field.prominence);
+  return VIEW_PROMINENCES[view].has(getEffectiveFieldProminence(field));
 }
 
 export function buildSdkSettingsPayloadForView(

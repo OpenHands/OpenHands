@@ -598,7 +598,7 @@ describe("SdkSectionPage", () => {
               default: false,
               choices: [],
               depends_on: ["verification.critic_enabled"],
-              prominence: "critical",
+              prominence: "minor",
               secret: false,
               required: false,
             },

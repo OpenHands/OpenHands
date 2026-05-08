@@ -196,7 +196,7 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
           default: false,
           choices: [],
           depends_on: ["verification.critic_enabled"],
-          prominence: "critical",
+          prominence: "minor",
           secret: false,
           required: false,
         },
