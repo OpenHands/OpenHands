@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from jinja2 import Environment
 from pydantic import BaseModel
@@ -8,9 +9,8 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from integrations.models import Message
 
-    from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
-    from openhands.server.user_auth.user_auth import UserAuth
-    from openhands.storage.data_models.conversation_metadata import ConversationMetadata
+    from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
+    from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 class GitLabResourceType(Enum):
@@ -25,7 +25,9 @@ class PRStatus(Enum):
 
 
 class UserData(BaseModel):
-    user_id: int
+    # int for GitHub/GitLab numeric user ids; str for providers like Bitbucket
+    # whose user identifier is a UUID. Always pass through ``str()`` at use sites.
+    user_id: int | str
     username: str
     keycloak_user_id: str
 
@@ -53,11 +55,11 @@ class ResolverViewInterface(SummaryExtractionTracker):
         """Instructions passed when conversation is first initialized."""
         raise NotImplementedError()
 
-    async def initialize_new_conversation(self) -> 'ConversationMetadata':
-        """Initialize a new conversation and return metadata.
+    async def initialize_new_conversation(self) -> UUID:
+        """Initialize a new conversation and return the conversation ID.
 
-        For V1 conversations, creates a dummy ConversationMetadata.
-        For V0 conversations, initializes through the conversation store.
+        This method resolves the target organization and generates a new
+        conversation ID.
         """
         raise NotImplementedError()
 
@@ -65,7 +67,7 @@ class ResolverViewInterface(SummaryExtractionTracker):
         self,
         jinja_env: Environment,
         git_provider_tokens: 'PROVIDER_TOKEN_TYPE',
-        conversation_metadata: 'ConversationMetadata',
+        conversation_id: UUID,
         saas_user_auth: 'UserAuth',
     ) -> None:
         """Create a new conversation.
@@ -73,7 +75,7 @@ class ResolverViewInterface(SummaryExtractionTracker):
         Args:
             jinja_env: Jinja2 environment for template rendering
             git_provider_tokens: Token mapping for git providers
-            conversation_metadata: Metadata for the conversation
+            conversation_id: The UUID of the conversation to create
             saas_user_auth: User authentication for SaaS
         """
         raise NotImplementedError()

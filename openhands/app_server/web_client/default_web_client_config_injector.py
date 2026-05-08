@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import Field
 
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
@@ -10,7 +12,6 @@ from openhands.app_server.web_client.web_client_models import (
     WebClientConfig,
     WebClientFeatureFlags,
 )
-from openhands.integrations.service_types import ProviderType
 
 
 def _get_recaptcha_site_key() -> str | None:
@@ -99,7 +100,7 @@ def _get_github_app_slug() -> str | None:
 def _get_slack_enabled() -> bool:
     """Return whether Slack integration is fully configured for the web client."""
     return (
-        os.getenv('SLACK_WEBHOOKS_ENABLED', 'false').lower() == 'true'
+        os.getenv('SLACK_WEBHOOKS_ENABLED', 'false').lower() in ('true', '1')
         and bool(os.getenv('SLACK_CLIENT_ID', '').strip())
         and bool(os.getenv('SLACK_CLIENT_SECRET', '').strip())
         and bool(os.getenv('SLACK_SIGNING_SECRET', '').strip())
@@ -110,9 +111,9 @@ def _get_feature_flags() -> WebClientFeatureFlags:
     """Get feature flags from environment variables.
 
     Reads ENABLE_BILLING, HIDE_LLM_SETTINGS, ENABLE_JIRA, ENABLE_JIRA_DC,
-    ENABLE_LINEAR, HIDE_USERS_PAGE, HIDE_BILLING_PAGE, and HIDE_INTEGRATIONS_PAGE
-    from environment. Each flag is True only if the corresponding env var is
-    exactly 'true', otherwise False.
+    ENABLE_LINEAR, HIDE_USERS_PAGE, HIDE_BILLING_PAGE, HIDE_INTEGRATIONS_PAGE,
+    and OH_ENABLE_ONBOARDING from environment. Each flag is True only if the
+    corresponding env var is exactly 'true', otherwise False.
     """
     return WebClientFeatureFlags(
         enable_billing=os.getenv('ENABLE_BILLING', 'false') == 'true',
@@ -123,6 +124,7 @@ def _get_feature_flags() -> WebClientFeatureFlags:
         hide_users_page=os.getenv('HIDE_USERS_PAGE', 'false') == 'true',
         hide_billing_page=os.getenv('HIDE_BILLING_PAGE', 'false') == 'true',
         hide_integrations_page=os.getenv('HIDE_INTEGRATIONS_PAGE', 'false') == 'true',
+        enable_onboarding=os.getenv('OH_ENABLE_ONBOARDING', 'false') == 'true',
     )
 
 
@@ -149,6 +151,12 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     )
     github_app_slug: str | None = Field(default_factory=_get_github_app_slug)
     gitlab_enabled: bool = Field(default_factory=_is_gitlab_enabled)
+    provider_default_hosts: dict[str, str] = Field(
+        default_factory=lambda: {
+            provider.value: host
+            for provider, host in ProviderHandler.PROVIDER_DOMAINS.items()
+        }
+    )
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
 
     async def get_web_client_config(self) -> WebClientConfig:
@@ -168,6 +176,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             updated_at=self.updated_at,
             github_app_slug=self.github_app_slug,
             gitlab_enabled=self.gitlab_enabled,
+            provider_default_hosts=self.provider_default_hosts,
             slack_enabled=self.slack_enabled,
         )
         return result

@@ -1,6 +1,9 @@
 import pytest
 
-from openhands.utils.git import ensure_valid_git_branch_name, is_valid_git_branch_name
+from openhands.app_server.utils.git import (
+    ensure_valid_git_branch_name,
+    is_valid_git_branch_name,
+)
 
 
 def test_is_valid_git_branch_name_accepts_common_hosted_git_branch_names():

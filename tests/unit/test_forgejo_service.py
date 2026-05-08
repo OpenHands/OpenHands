@@ -4,14 +4,14 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from openhands.integrations.forgejo.forgejo_service import ForgejoService
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.forgejo.forgejo_service import ForgejoService
+from openhands.app_server.integrations.service_types import (
     ProviderType,
     Repository,
     RequestMethod,
     User,
 )
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 @pytest.fixture

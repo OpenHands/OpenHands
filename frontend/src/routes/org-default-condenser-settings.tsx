@@ -8,7 +8,9 @@ function OrgDefaultCondenserSettingsScreen() {
   return (
     <SdkSectionPage
       scope="org"
-      sectionKeys={["condenser"]}
+      settingsSources={[
+        { settingsSource: "agent_settings", sectionKeys: ["condenser"] },
+      ]}
       header={renderOrgDefaultsBanner}
       testId="org-default-condenser-settings-screen"
     />

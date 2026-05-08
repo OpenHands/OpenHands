@@ -14,8 +14,31 @@ from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
 
-from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.utils.llm import MASKED_API_KEY, resolve_llm_base_url
+from openhands.app_server.settings.settings_models import (
+    _load_persisted_agent_settings,
+    _load_persisted_conversation_settings,
+)
+from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+
+
+def _validate_persisted_agent_settings(
+    raw: dict[str, Any] | None,
+) -> OpenHandsAgentSettings:
+    """Validate persisted ``org.agent_settings`` against the canonical schema.
+
+    Routes the raw payload through the shared SDK loader so any schema
+    migrations registered with the SDK are applied first. Older rows carry
+    the legacy ``agent_kind: 'llm'`` discriminator from the pre-rename SDK;
+    force ``'openhands'`` after migration so the canonical class accepts
+    both shapes. Mirrors :func:`OrgStore.get_agent_settings_from_org` — kept
+    inline to avoid a circular import (``org_store`` already imports from this
+    module).
+    """
+    loaded = _load_persisted_agent_settings(raw or {})
+    payload = loaded.model_dump(mode='json', context={'expose_secrets': True})
+    payload['agent_kind'] = 'openhands'
+    return OpenHandsAgentSettings.model_validate(payload)
 
 
 class OrgCreationError(Exception):
@@ -155,14 +178,15 @@ class OrgResponse(BaseModel):
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
     org_version: int = 0
-    agent_settings: AgentSettings = Field(default_factory=AgentSettings)
+    agent_settings: OpenHandsAgentSettings = Field(
+        default_factory=OpenHandsAgentSettings
+    )
     conversation_settings: ConversationSettings = Field(
         default_factory=ConversationSettings
     )
     search_api_key: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = None
-    enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     credits: float | None = None
     is_personal: bool = False
@@ -186,16 +210,13 @@ class OrgResponse(BaseModel):
             sandbox_base_container_image=org.sandbox_base_container_image,
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             org_version=org.org_version if org.org_version is not None else 0,
-            agent_settings=AgentSettings.model_validate(
-                dict(org.agent_settings) if org.agent_settings else {}
-            ),
-            conversation_settings=ConversationSettings.model_validate(
-                dict(org.conversation_settings) if org.conversation_settings else {}
+            agent_settings=_validate_persisted_agent_settings(org.agent_settings),
+            conversation_settings=_load_persisted_conversation_settings(
+                org.conversation_settings
             ),
             search_api_key=None,
             sandbox_api_key=None,
             max_budget_per_task=org.max_budget_per_task,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             credits=credits,
             is_personal=str(org.id) == user_id if user_id else False,
@@ -232,7 +253,6 @@ class OrgUpdate(BaseModel):
     sandbox_runtime_container_image: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = Field(default=None, gt=0)
-    enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
@@ -374,7 +394,9 @@ class OrgUpdate(BaseModel):
 class OrgDefaultsSettingsResponse(BaseModel):
     """Response model for organization default settings."""
 
-    agent_settings: AgentSettings = Field(default_factory=AgentSettings)
+    agent_settings: OpenHandsAgentSettings = Field(
+        default_factory=OpenHandsAgentSettings
+    )
     conversation_settings: ConversationSettings = Field(
         default_factory=ConversationSettings
     )
@@ -405,21 +427,19 @@ class OrgDefaultsSettingsResponse(BaseModel):
         ``org_member.agent_settings_diff`` and this response always carry
         the same value.
         """
-        agent_settings = AgentSettings.model_validate(
-            dict(org.agent_settings) if org.agent_settings else {}
-        )
+        agent_settings = _validate_persisted_agent_settings(org.agent_settings)
         cls._denormalize_llm_for_response(agent_settings)
         return cls(
             agent_settings=agent_settings,
-            conversation_settings=ConversationSettings.model_validate(
-                dict(org.conversation_settings) if org.conversation_settings else {}
+            conversation_settings=_load_persisted_conversation_settings(
+                org.conversation_settings
             ),
             llm_api_key_set=org.llm_api_key is not None,
             search_api_key=cls._mask_key(org.search_api_key),
         )
 
     @staticmethod
-    def _denormalize_llm_for_response(agent_settings: AgentSettings) -> None:
+    def _denormalize_llm_for_response(agent_settings: OpenHandsAgentSettings) -> None:
         """Rewrite ``agent_settings.llm`` in-place for UI consumption.
 
         * ``litellm_proxy/X`` → ``openhands/X`` so the basic-view provider
@@ -553,7 +573,6 @@ class OrgAppSettingsResponse(BaseModel):
     """Response model for organization app settings."""
 
     enable_proactive_conversation_starters: bool = True
-    enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
     @classmethod
@@ -570,7 +589,6 @@ class OrgAppSettingsResponse(BaseModel):
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
             if org.enable_proactive_conversation_starters is not None
             else True,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             max_budget_per_task=org.max_budget_per_task,
         )
 
@@ -579,7 +597,6 @@ class OrgAppSettingsUpdate(BaseModel):
     """Request model for updating organization app settings."""
 
     enable_proactive_conversation_starters: bool | None = None
-    enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
     @field_validator('max_budget_per_task')

@@ -7,26 +7,32 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from server.routes.github_proxy import add_github_proxy_routes
 
+from openhands.app_server.services.jwt_service import JwtService
+from openhands.app_server.utils.encryption_key import EncryptionKey
+
+
+def _make_jwt_service() -> JwtService:
+    key = EncryptionKey(
+        kid='test', key=SecretStr('test-secret-key-for-testing'), active=True
+    )
+    return JwtService(keys=[key])
+
 
 @pytest.fixture
 def app_with_github_proxy(monkeypatch):
     """Create a FastAPI app with github proxy routes enabled."""
-    # Enable the github proxy endpoints
     monkeypatch.setenv('GITHUB_PROXY_ENDPOINTS', '1')
 
-    # Mock the config to have a jwt_secret
-    mock_config = type(
-        'MockConfig', (), {'jwt_secret': SecretStr('test-secret-key-for-testing')}
-    )()
-
+    jwt_svc = _make_jwt_service()
     app = FastAPI()
 
-    with patch('server.routes.github_proxy.GITHUB_PROXY_ENDPOINTS', True):
-        with patch('server.routes.github_proxy.config', mock_config):
-            add_github_proxy_routes(app)
+    with (
+        patch('server.routes.github_proxy.GITHUB_PROXY_ENDPOINTS', True),
+        patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc),
+    ):
+        add_github_proxy_routes(app)
 
-    # Return app and mock_config so we can use the same config in tests
-    return app, mock_config
+    return app, jwt_svc
 
 
 def test_state_compress_encrypt_and_decrypt_decompress_roundtrip(
@@ -39,14 +45,14 @@ def test_state_compress_encrypt_and_decrypt_decompress_roundtrip(
 
     This test exercises the actual endpoints to verify the roundtrip works correctly.
     """
-    app, mock_config = app_with_github_proxy
+    app, jwt_svc = app_with_github_proxy
     client = TestClient(app)
 
     original_state = 'some-state-value'
     original_redirect_uri = 'https://example.com/redirect'
 
     # Call github_proxy_start endpoint - it should redirect to GitHub with encrypted state
-    with patch('server.routes.github_proxy.config', mock_config):
+    with patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc):
         response = client.get(
             '/github-proxy/test-subdomain/login/oauth/authorize',
             params={
@@ -72,7 +78,7 @@ def test_state_compress_encrypt_and_decrypt_decompress_roundtrip(
     assert 'github-proxy/callback' in query_params['redirect_uri'][0]
 
     # Now simulate GitHub calling back with this encrypted state
-    with patch('server.routes.github_proxy.config', mock_config):
+    with patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc):
         callback_response = client.get(
             '/github-proxy/callback',
             params={

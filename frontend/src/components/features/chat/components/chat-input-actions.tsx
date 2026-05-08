@@ -5,6 +5,7 @@ import { useConversationId } from "#/hooks/use-conversation-id";
 import { useV1PauseConversation } from "#/hooks/mutation/use-v1-pause-conversation";
 import { useV1ResumeConversation } from "#/hooks/mutation/use-v1-resume-conversation";
 import { ChangeAgentButton } from "../change-agent-button";
+import { SwitchProfileButton } from "../switch-profile-button";
 
 interface ChatInputActionsProps {
   disabled: boolean;
@@ -36,6 +37,7 @@ export function ChatInputActions({ disabled }: ChatInputActionsProps) {
         <div className="flex items-center gap-4">
           <Tools />
           <ChangeAgentButton />
+          <SwitchProfileButton />
         </div>
       </div>
       <AgentStatus

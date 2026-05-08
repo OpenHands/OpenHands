@@ -94,4 +94,9 @@ export class SecretsService {
     );
     return data;
   }
+
+  static async deleteGitProviders() {
+    const { status } = await openHands.delete("/api/v1/secrets/git-providers");
+    return status === 200;
+  }
 }

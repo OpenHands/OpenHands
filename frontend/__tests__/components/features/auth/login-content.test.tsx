@@ -24,12 +24,6 @@ vi.mock("#/hooks/use-auth-url", () => ({
   },
 }));
 
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackLoginButtonClick: vi.fn(),
-  }),
-}));
-
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({
     data: undefined,

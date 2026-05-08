@@ -3,7 +3,6 @@ import V1ConversationService from "#/api/conversation-service/v1-conversation-se
 import { PluginSpec } from "#/api/conversation-service/v1-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
 import { Provider } from "#/types/settings";
-import { useTracking } from "#/hooks/use-tracking";
 
 interface CreateConversationVariables {
   query?: string;
@@ -30,7 +29,6 @@ interface CreateConversationResponse {
 
 export const useCreateConversation = () => {
   const queryClient = useQueryClient();
-  const { trackConversationCreated } = useTracking();
 
   return useMutation({
     mutationKey: ["create-conversation"],
@@ -72,11 +70,7 @@ export const useCreateConversation = () => {
         is_v1: true,
       };
     },
-    onSuccess: async (_, { repository }) => {
-      trackConversationCreated({
-        hasRepository: !!repository,
-      });
-
+    onSuccess: async () => {
       queryClient.removeQueries({
         queryKey: ["user", "conversations"],
       });

@@ -1,7 +1,6 @@
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { I18nKey } from "#/i18n/declaration";
 import { DangerModal } from "../confirmation-modals/danger-modal";
 import { extractSettings } from "#/utils/settings-utils";
@@ -21,7 +20,6 @@ interface SettingsFormProps {
 }
 
 export function SettingsForm({ settings, onClose }: SettingsFormProps) {
-  const posthog = usePostHog();
   const { mutate: saveUserSettings } = useSaveSettings();
 
   const location = useLocation();
@@ -38,17 +36,6 @@ export function SettingsForm({ settings, onClose }: SettingsFormProps) {
     await saveUserSettings(newSettings, {
       onSuccess: () => {
         onClose();
-
-        const agentLlm =
-          ((newSettings.agent_settings_diff as Record<string, unknown>)
-            ?.llm as Record<string, unknown>) ?? {};
-        posthog.capture("settings_saved", {
-          LLM_MODEL: agentLlm.model,
-          LLM_API_KEY_SET: agentLlm.api_key ? "SET" : "UNSET",
-          SEARCH_API_KEY_SET: newSettings.search_api_key ? "SET" : "UNSET",
-          REMOTE_RUNTIME_RESOURCE_FACTOR:
-            newSettings.remote_runtime_resource_factor,
-        });
       },
     });
   };

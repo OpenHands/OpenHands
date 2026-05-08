@@ -325,10 +325,10 @@ class TestGetProvidersConfigured:
 
     def test_includes_github_when_client_id_set(self):
         """When GITHUB_APP_CLIENT_ID is set, include GitHub in providers."""
+        from openhands.app_server.integrations.service_types import ProviderType
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_providers_configured,
         )
-        from openhands.integrations.service_types import ProviderType
 
         with patch.dict(os.environ, {'GITHUB_APP_CLIENT_ID': 'some-client-id'}):
             result = _get_providers_configured()
@@ -336,10 +336,10 @@ class TestGetProvidersConfigured:
 
     def test_includes_gitlab_when_client_id_set(self):
         """When GITLAB_APP_CLIENT_ID is set, include GitLab in providers."""
+        from openhands.app_server.integrations.service_types import ProviderType
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_providers_configured,
         )
-        from openhands.integrations.service_types import ProviderType
 
         with patch.dict(os.environ, {'GITLAB_APP_CLIENT_ID': 'some-client-id'}):
             result = _get_providers_configured()
@@ -347,10 +347,10 @@ class TestGetProvidersConfigured:
 
     def test_includes_bitbucket_when_client_id_set(self):
         """When BITBUCKET_APP_CLIENT_ID is set, include Bitbucket in providers."""
+        from openhands.app_server.integrations.service_types import ProviderType
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_providers_configured,
         )
-        from openhands.integrations.service_types import ProviderType
 
         with patch.dict(os.environ, {'BITBUCKET_APP_CLIENT_ID': 'some-client-id'}):
             result = _get_providers_configured()
@@ -358,10 +358,10 @@ class TestGetProvidersConfigured:
 
     def test_includes_enterprise_sso_when_enabled(self):
         """When ENABLE_ENTERPRISE_SSO is set, include Enterprise SSO in providers."""
+        from openhands.app_server.integrations.service_types import ProviderType
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_providers_configured,
         )
-        from openhands.integrations.service_types import ProviderType
 
         with patch.dict(os.environ, {'ENABLE_ENTERPRISE_SSO': 'true'}):
             result = _get_providers_configured()
@@ -369,10 +369,10 @@ class TestGetProvidersConfigured:
 
     def test_excludes_provider_when_env_var_empty(self):
         """When env var is empty string, do not include provider."""
+        from openhands.app_server.integrations.service_types import ProviderType
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_providers_configured,
         )
-        from openhands.integrations.service_types import ProviderType
 
         with patch.dict(os.environ, {'GITHUB_APP_CLIENT_ID': ''}):
             result = _get_providers_configured()
@@ -380,10 +380,10 @@ class TestGetProvidersConfigured:
 
     def test_excludes_provider_when_env_var_only_whitespace(self):
         """When env var is only whitespace, do not include provider."""
+        from openhands.app_server.integrations.service_types import ProviderType
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_providers_configured,
         )
-        from openhands.integrations.service_types import ProviderType
 
         with patch.dict(os.environ, {'GITHUB_APP_CLIENT_ID': '   '}):
             result = _get_providers_configured()
@@ -391,10 +391,10 @@ class TestGetProvidersConfigured:
 
     def test_includes_multiple_providers(self):
         """Multiple providers can be configured simultaneously."""
+        from openhands.app_server.integrations.service_types import ProviderType
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_providers_configured,
         )
-        from openhands.integrations.service_types import ProviderType
 
         with patch.dict(
             os.environ,
@@ -537,6 +537,24 @@ class TestGetSlackEnabled:
             clear=True,
         ):
             assert _get_slack_enabled() is False
+
+    def test_returns_true_when_webhooks_enabled_is_set_to_1(self):
+        """Slack is enabled when SLACK_WEBHOOKS_ENABLED is '1' (older chart format)."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_slack_enabled,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                'SLACK_WEBHOOKS_ENABLED': '1',
+                'SLACK_CLIENT_ID': 'client-id',
+                'SLACK_CLIENT_SECRET': 'client-secret',
+                'SLACK_SIGNING_SECRET': 'signing-secret',
+            },
+            clear=True,
+        ):
+            assert _get_slack_enabled() is True
 
     def test_returns_false_when_a_required_slack_secret_is_missing(self):
         """Slack stays disabled when one of the required credentials is missing."""
