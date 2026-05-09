@@ -10,6 +10,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -412,7 +413,9 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
     """Dependency injector for process sandbox services."""
 
     base_working_dir: str = Field(
-        default='/tmp/openhands-sandboxes',
+        default_factory=lambda: os.path.join(
+            tempfile.gettempdir(), 'openhands-sandboxes'
+        ),
         description='Base directory for sandbox working directories',
     )
     base_port: int = Field(

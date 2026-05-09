@@ -87,7 +87,6 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
-from openhands.app_server.utils._redact_compat import sanitize_config
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
@@ -104,6 +103,11 @@ from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.utils.paging import page_iterator
+from openhands.sdk.utils.redact import (
+    redact_api_key_literals,
+    redact_text_secrets,
+    sanitize_config,
+)
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.tools.preset.default import (
     get_default_tools,
@@ -352,12 +356,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             body_json = start_conversation_request.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
-            # Log hook_config to verify it's being passed
-            hook_config_in_request = body_json.get('hook_config')
-            _logger.debug(
-                f'Sending StartConversationRequest with hook_config: '
-                f'{hook_config_in_request}'
-            )
             headers = (
                 {'X-Session-API-Key': sandbox.session_api_key}
                 if sandbox.session_api_key
@@ -440,7 +438,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         except Exception as exc:
             _logger.exception('Error starting conversation', stack_info=True)
             task.status = AppConversationStartTaskStatus.ERROR
-            task.detail = str(exc)
+            task.detail = redact_text_secrets(redact_api_key_literals(str(exc)))
             yield task
 
     async def _build_app_conversations(
@@ -1030,6 +1028,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             mcp_servers: Dictionary to add servers to
             user: User information containing custom MCP config
         """
+        if isinstance(user.agent_settings, ACPAgentSettings):
+            return
+
         sdk_mcp = user.agent_settings.mcp_config
         if not sdk_mcp or not sdk_mcp.mcpServers:
             return
@@ -1371,7 +1372,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 plan_path = self._compute_plan_path(project_dir, git_provider)
             tools = get_planning_tools(plan_path=plan_path)
         else:
-            tools = get_default_tools(enable_browser=True)
+            tools = get_default_tools(
+                enable_browser=True,
+                enable_sub_agents=user.agent_settings.enable_sub_agents,
+            )
 
         # --- build AgentSettings and create agent ---------------------------
         from fastmcp.mcp_config import MCPConfig
@@ -1417,7 +1421,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
                 if hook_config:
                     _logger.debug(
-                        f'Successfully loaded hooks: {hook_config.model_dump()}'
+                        f'Successfully loaded hooks: {sanitize_config(hook_config.model_dump())}'
                     )
                 else:
                     _logger.debug('No hooks found in workspace')

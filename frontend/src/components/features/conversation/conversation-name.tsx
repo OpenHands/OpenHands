@@ -161,12 +161,12 @@ export function ConversationName() {
 
         {titleMode !== "edit" && conversation.llm_model && (
           <span
-            className="text-xs text-[#A3A3A3] max-w-[150px] flex items-center gap-1 overflow-hidden"
+            className="text-xs text-[#A3A3A3] flex items-center gap-1 whitespace-nowrap"
             title={conversation.llm_model}
             data-testid="conversation-name-llm-model"
           >
             <CircuitIcon width={12} height={12} className="shrink-0" />
-            <span className="truncate">{conversation.llm_model}</span>
+            <span>{conversation.llm_model}</span>
           </span>
         )}
 

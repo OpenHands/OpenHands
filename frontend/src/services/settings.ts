@@ -47,6 +47,10 @@ export const DEFAULT_SETTINGS: Settings = {
       enabled: true,
       max_size: 240,
     },
+    verification: {
+      critic_enabled: false,
+      enable_iterative_refinement: false,
+    },
     mcp_config: {
       sse_servers: [],
       stdio_servers: [],

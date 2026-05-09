@@ -321,7 +321,7 @@ function AppSettingsScreen() {
                 label={t(I18nKey.SETTINGS$GIT_USERNAME)}
                 defaultValue={settings.git_user_name || ""}
                 onChange={checkIfGitUserNameHasChanged}
-                placeholder="Username for git commits"
+                placeholder={t(I18nKey.SETTINGS$GIT_USERNAME_PLACEHOLDER)}
                 className="w-full max-w-[680px]"
               />
               <SettingsInput
@@ -331,7 +331,7 @@ function AppSettingsScreen() {
                 label={t(I18nKey.SETTINGS$GIT_EMAIL)}
                 defaultValue={settings.git_user_email || ""}
                 onChange={checkIfGitUserEmailHasChanged}
-                placeholder="Email for git commits"
+                placeholder={t(I18nKey.SETTINGS$GIT_EMAIL_PLACEHOLDER)}
                 className="w-full max-w-[680px]"
               />
             </div>
