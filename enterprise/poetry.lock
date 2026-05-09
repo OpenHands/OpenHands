@@ -6508,7 +6508,7 @@ pexpect = "*"
 pg8000 = ">=1.31.5"
 pillow = ">=12.1.1"
 playwright = ">=1.55"
-poetry = ">=2.3.3"
+poetry = ">=2.3.4,<2.4.0"
 prompt-toolkit = ">=3.0.50"
 protobuf = ">=5.29.6,<6"
 psutil = "*"
@@ -7308,14 +7308,14 @@ testing = ["coverage", "pytest", "pytest-benchmark"]
 
 [[package]]
 name = "poetry"
-version = "2.3.3"
+version = "2.3.4"
 description = "Python dependency management and packaging made easy."
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "poetry-2.3.3-py3-none-any.whl", hash = "sha256:dbbbd77c3c2782aed85be6f5cb00e7803d1e36376709d58b80f96686e601290b"},
-    {file = "poetry-2.3.3.tar.gz", hash = "sha256:fbffbca25cec43218779b60a1f754916d2f3d54f9642d66cf12729646c36edb7"},
+    {file = "poetry-2.3.4-py3-none-any.whl", hash = "sha256:2755806ed8a9f31340ea1b5f0e507da54c96437647ebf2873b6ca349be04e231"},
+    {file = "poetry-2.3.4.tar.gz", hash = "sha256:b293572d366569360c79d7caa6980c9b404d2b89530ed451a5b4570d248de3af"},
 ]
 
 [package.dependencies]
