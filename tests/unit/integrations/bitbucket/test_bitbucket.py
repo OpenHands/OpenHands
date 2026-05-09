@@ -52,7 +52,7 @@ async def test_validate_provider_token_with_bitbucket_token():
         mock_bitbucket_service.return_value = bitbucket_instance
 
         # Test with a Bitbucket token
-        token = SecretStr('username:app_password')
+        token = SecretStr('test@example.com:api_token')
         result = await validate_provider_token(token)
 
         # Verify that all services were tried
@@ -74,7 +74,7 @@ async def test_check_provider_tokens_with_only_bitbucket():
     # Create provider tokens with only Bitbucket
     provider_tokens = {
         ProviderType.BITBUCKET: ProviderToken(
-            token=SecretStr('username:app_password'), host='bitbucket.org'
+            token=SecretStr('test@example.com:api_token'), host='bitbucket.org'
         ),
         ProviderType.GITHUB: ProviderToken(token=SecretStr(''), host='github.com'),
         ProviderType.GITLAB: ProviderToken(token=SecretStr(''), host='gitlab.com'),
@@ -95,7 +95,7 @@ async def test_check_provider_tokens_with_only_bitbucket():
 
         # Verify that the token passed to validate_provider_token was the Bitbucket token
         args, kwargs = mock_validate.call_args
-        assert args[0].get_secret_value() == 'username:app_password'
+        assert args[0].get_secret_value() == 'test@example.com:api_token'
 
 
 @pytest.mark.asyncio
