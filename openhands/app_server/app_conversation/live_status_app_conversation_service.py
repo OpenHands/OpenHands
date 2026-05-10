@@ -95,8 +95,9 @@ from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
-from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk import Agent, AgentContext, LocalWorkspace, MessageEvent
 from openhands.sdk.agent.acp_agent import ACPAgent
+from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
@@ -120,6 +121,58 @@ from openhands.tools.preset.planning import (
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _acp_conversation_info_type_adapter = TypeAdapter(list[ACPConversationInfo | None])
 _logger = logging.getLogger(__name__)
+
+_ACP_RESUME_CONTEXT_MARKER = '<<RESUMED CONVERSATION>>'
+_ACP_RESUME_CONTEXT_MAX_CHARS = 60_000
+_ACP_RESUME_MESSAGE_MAX_CHARS = 8_000
+_ACP_RESUME_TOOL_MAX_CHARS = 2_000
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 3] + '...'
+
+
+def _content_to_text(content: Sequence[Any]) -> str:
+    parts: list[str] = []
+    for item in content:
+        text = getattr(item, 'text', None)
+        if isinstance(text, str):
+            parts.append(text)
+            continue
+
+        image_urls = getattr(item, 'image_urls', None)
+        if image_urls:
+            parts.append(f'[Image: {len(image_urls)} URL(s)]')
+            continue
+
+        parts.append(str(item))
+    return '\n'.join(part for part in parts if part)
+
+
+def _render_acp_resume_message_event(event: MessageEvent) -> str | None:
+    message = event.to_llm_message()
+    text = _content_to_text(message.content).strip()
+    if not text:
+        return None
+    return (
+        f'{message.role.upper()}: {_truncate_text(text, _ACP_RESUME_MESSAGE_MAX_CHARS)}'
+    )
+
+
+def _render_acp_resume_tool_event(event: ACPToolCallEvent) -> str:
+    status = f' [{event.status}]' if event.status else ''
+    details: list[str] = []
+    if event.raw_input:
+        details.append(f'input={_truncate_text(str(event.raw_input), 500)}')
+    if event.raw_output:
+        details.append(f'output={_truncate_text(str(event.raw_output), 500)}')
+    detail_text = f'\n  {"; ".join(details)}' if details else ''
+    return _truncate_text(
+        f'ACP TOOL: {event.title}{status}{detail_text}',
+        _ACP_RESUME_TOOL_MAX_CHARS,
+    )
 
 
 def _agent_kind_to_router_path(agent_kind: str) -> str:
@@ -1305,6 +1358,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Route ACP agent settings to the ACP-specific builder
         if isinstance(user.agent_settings, ACPAgentSettings):
+            initial_message = await self._maybe_build_acp_resume_initial_message(
+                conversation_id=conversation_id,
+                initial_message=initial_message,
+            )
             return await self._build_acp_start_conversation_request(
                 sandbox=sandbox,
                 conversation_id=conversation_id,
@@ -1458,6 +1515,134 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Pass agent explicitly — it has server-only overrides (system
         # prompts, LLM metadata, skills) applied after create_agent().
         return conv_settings.create_request(StartConversationRequest, agent=agent)
+
+    async def _maybe_build_acp_resume_initial_message(
+        self,
+        conversation_id: UUID,
+        initial_message: SendMessageRequest | None,
+    ) -> SendMessageRequest | None:
+        """Add durable-history context when restarting an existing ACP conversation."""
+        if initial_message and initial_message.content:
+            first_text = getattr(initial_message.content[0], 'text', None)
+            if isinstance(first_text, str) and first_text.startswith(
+                _ACP_RESUME_CONTEXT_MARKER
+            ):
+                return initial_message
+
+        try:
+            existing_info = (
+                await self.app_conversation_info_service.get_app_conversation_info(
+                    conversation_id
+                )
+            )
+        except Exception:
+            _logger.warning(
+                'Failed to check existing ACP conversation %s for resume context',
+                conversation_id,
+                exc_info=True,
+            )
+            return initial_message
+
+        if existing_info is None or existing_info.agent_kind != 'acp':
+            return initial_message
+
+        return await self._build_acp_resume_initial_message(
+            conversation_id=conversation_id,
+            initial_message=initial_message,
+        )
+
+    async def _build_acp_resume_initial_message(
+        self,
+        conversation_id: UUID,
+        initial_message: SendMessageRequest | None,
+    ) -> SendMessageRequest | None:
+        message_lines: list[str] = []
+        tool_events_by_id: dict[str, ACPToolCallEvent] = {}
+
+        try:
+            async for event in page_iterator(
+                self.event_service.search_events,
+                conversation_id=conversation_id,
+            ):
+                if isinstance(event, MessageEvent):
+                    rendered = _render_acp_resume_message_event(event)
+                    if rendered:
+                        message_lines.append(rendered)
+                elif isinstance(event, ACPToolCallEvent):
+                    tool_events_by_id[event.tool_call_id] = event
+        except Exception:
+            _logger.warning(
+                'Failed to build ACP resume context for conversation %s',
+                conversation_id,
+                exc_info=True,
+            )
+            return initial_message
+
+        if not message_lines and not tool_events_by_id:
+            return initial_message
+
+        sections = [
+            _ACP_RESUME_CONTEXT_MARKER,
+            (
+                'The previous ACP server session storage was unavailable after a '
+                'sandbox restart. Durable OpenHands events are replayed below so '
+                'you can continue with the restored conversation context.'
+            ),
+        ]
+
+        if message_lines:
+            sections.extend(['', 'Previous messages:', *message_lines])
+
+        if tool_events_by_id:
+            sections.append('')
+            sections.append('ACP tool activity summary:')
+            sections.extend(
+                _render_acp_resume_tool_event(event)
+                for event in tool_events_by_id.values()
+            )
+
+        if initial_message is None:
+            sections.extend(
+                [
+                    '',
+                    (
+                        'Continue from this restored context. If no action is '
+                        'needed, briefly acknowledge that the conversation was '
+                        'restored.'
+                    ),
+                ]
+            )
+            return SendMessageRequest(
+                role='user',
+                content=[
+                    TextContent(
+                        text=_truncate_text(
+                            '\n'.join(sections),
+                            _ACP_RESUME_CONTEXT_MAX_CHARS,
+                        )
+                    )
+                ],
+            )
+
+        sections.extend(
+            [
+                '',
+                'The user message that should be handled now follows this context.',
+            ]
+        )
+        return SendMessageRequest(
+            role=initial_message.role,
+            content=[
+                TextContent(
+                    text=_truncate_text(
+                        '\n'.join(sections),
+                        _ACP_RESUME_CONTEXT_MAX_CHARS,
+                    )
+                ),
+                *initial_message.content,
+            ],
+            run=initial_message.run,
+        )
 
     @staticmethod
     def _acp_provider_env(user: UserInfo) -> dict[str, str]:

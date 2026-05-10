@@ -13,6 +13,7 @@ import pytest
 from pydantic import SecretStr
 
 from openhands.agent_server.models import (
+    EventPage,
     SendMessageRequest,
     StartConversationRequest,
     TextContent,
@@ -41,8 +42,9 @@ from openhands.app_server.settings.settings_models import (
     Settings,
 )
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk import Agent, Event
+from openhands.sdk import Agent, Event, Message, MessageEvent
 from openhands.sdk.context.agent_context import AgentContext as _AgentContext
+from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import AgentSettings, ConversationSettings
@@ -3452,3 +3454,73 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         # acp_env must win; the UI-saved key must NOT overwrite it
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
+
+    @pytest.mark.asyncio
+    async def test_existing_acp_conversation_bootstraps_from_durable_events(
+        self, service, tmp_path
+    ):
+        """ACP restarts get a resume prompt synthesized from app-server events."""
+        conversation_id = uuid4()
+        user = self._make_acp_user()
+        service.user_context.get_user_info = AsyncMock(return_value=user)
+        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        service.app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=AppConversationInfo(
+                id=conversation_id,
+                created_by_user_id='user1',
+                sandbox_id='old-sandbox',
+                agent_kind='acp',
+            )
+        )
+        service.event_service.search_events = AsyncMock(
+            return_value=EventPage(
+                items=[
+                    MessageEvent(
+                        source='user',
+                        llm_message=Message(
+                            role='user',
+                            content=[TextContent(text='Build the feature.')],
+                        ),
+                    ),
+                    MessageEvent(
+                        source='agent',
+                        llm_message=Message(
+                            role='assistant',
+                            content=[TextContent(text='I edited app.py.')],
+                        ),
+                    ),
+                    ACPToolCallEvent(
+                        tool_call_id='tool-1',
+                        title='Edit app.py',
+                        status='completed',
+                        raw_input={'path': 'app.py'},
+                        raw_output='updated',
+                    ),
+                ],
+                next_page_id=None,
+            )
+        )
+
+        request = await service._build_start_conversation_request_for_user(
+            sandbox=Mock(spec=SandboxInfo),
+            conversation_id=conversation_id,
+            initial_message=SendMessageRequest(
+                role='user',
+                content=[TextContent(text='What is left?')],
+            ),
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir=str(tmp_path),
+        )
+
+        assert request.initial_message is not None
+        assert request.initial_message.content[0].text.startswith(
+            '<<RESUMED CONVERSATION>>'
+        )
+        assert 'USER: Build the feature.' in request.initial_message.content[0].text
+        assert 'ASSISTANT: I edited app.py.' in request.initial_message.content[0].text
+        assert (
+            'ACP TOOL: Edit app.py [completed]'
+            in request.initial_message.content[0].text
+        )
+        assert request.initial_message.content[1].text == 'What is left?'
