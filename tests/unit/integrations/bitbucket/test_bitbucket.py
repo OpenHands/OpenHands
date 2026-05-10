@@ -109,7 +109,17 @@ async def test_bitbucket_sort_parameter_mapping():
         # Mock workspaces response
         mock_request.side_effect = [
             # First call: workspaces
-            ({'values': [{'slug': 'test-workspace', 'name': 'Test Workspace'}]}, {}),
+            (
+                {
+                    'values': [
+                        {
+                            'workspace': {'slug': 'test-workspace'},
+                            'name': 'Test Workspace',
+                        }
+                    ]
+                },
+                {},
+            ),
             # Second call: repositories with mapped sort parameter
             ({'values': []}, {}),
         ]
@@ -140,7 +150,17 @@ async def test_bitbucket_pagination():
         # Mock responses for pagination test
         mock_request.side_effect = [
             # First call: workspaces
-            ({'values': [{'slug': 'test-workspace', 'name': 'Test Workspace'}]}, {}),
+            (
+                {
+                    'values': [
+                        {
+                            'workspace': {'slug': 'test-workspace'},
+                            'name': 'Test Workspace',
+                        }
+                    ]
+                },
+                {},
+            ),
             # Second call: first page of repositories
             (
                 {
@@ -263,7 +283,7 @@ async def test_bitbucket_get_repositories_with_user_owner_type():
     service = BitBucketService(token=SecretStr('test-token'))
 
     # Mock repository data for user repositories (private workspace)
-    mock_workspaces = [{'slug': 'test-user', 'name': 'Test User'}]
+    mock_workspaces = [{'workspace': {'slug': 'test-user'}, 'name': 'Test User'}]
     mock_repos = [
         {
             'uuid': 'repo-1',
@@ -302,7 +322,7 @@ async def test_bitbucket_get_repositories_with_organization_owner_type():
     service = BitBucketService(token=SecretStr('test-token'))
 
     # Mock repository data for organization repositories (public workspace)
-    mock_workspaces = [{'slug': 'test-org', 'name': 'Test Organization'}]
+    mock_workspaces = [{'workspace': {'slug': 'test-org'}, 'name': 'Test Organization'}]
     mock_repos = [
         {
             'uuid': 'repo-3',
@@ -342,8 +362,8 @@ async def test_bitbucket_get_repositories_mixed_owner_types():
 
     # Mock repository data with mixed workspace types
     mock_workspaces = [
-        {'slug': 'test-user', 'name': 'Test User'},
-        {'slug': 'test-org', 'name': 'Test Organization'},
+        {'workspace': {'slug': 'test-user'}, 'name': 'Test User'},
+        {'workspace': {'slug': 'test-org'}, 'name': 'Test Organization'},
     ]
 
     # First workspace (user) repositories
