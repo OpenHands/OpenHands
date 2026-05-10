@@ -12,6 +12,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from openhands.analytics import get_analytics_service
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
@@ -23,6 +24,7 @@ from openhands.app_server.settings.llm_profiles import (
     ProfileLimitExceededError,
     ProfileNotFoundError,
     StrictLLM,
+    has_real_api_key,
 )
 from openhands.app_server.settings.settings_models import (
     GETSettingsModel,
@@ -195,6 +197,7 @@ async def load_settings(
 async def store_settings(
     payload: dict[str, Any],
     settings_store: SettingsStore = Depends(get_user_settings_store),
+    user_id: str | None = Depends(get_user_id),
 ) -> JSONResponse:
     """Store user settings.
 
@@ -237,6 +240,28 @@ async def store_settings(
                 settings.disabled_skills = existing_settings.disabled_skills
 
         await settings_store.store(settings)
+
+        # Analytics: track settings saved
+        try:
+            analytics = get_analytics_service()
+            if analytics and user_id:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=settings.user_consents_to_analytics is True,
+                    org_id=None,
+                    user=None,
+                )
+
+                settings_changed = list(payload.keys())
+                analytics.track_settings_saved(
+                    ctx=ctx,
+                    settings_changed=settings_changed,
+                )
+        except Exception:
+            logger.exception('analytics:settings_saved:failed')
+
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={'message': 'Settings stored'},
@@ -428,7 +453,7 @@ async def get_profile(
             detail=f"Profile '{name}' not found",
         )
 
-    api_key_set = profile.api_key is not None
+    api_key_set = has_real_api_key(profile.api_key)
     config = profile.model_dump(mode='json')
     config['api_key'] = None  # never echo a mask; use api_key_set instead
 
@@ -509,7 +534,7 @@ async def delete_profile(
     """
     async with _user_profile_locks[_profile_lock_key(user_id)]:
         settings = await settings_store.load()
-        if settings is not None and settings.llm_profiles.delete(name):
+        if settings is not None and settings.delete_profile(name):
             await settings_store.store(settings)
 
     return ProfileMutationResponse(name=name, message=f"Profile '{name}' deleted")

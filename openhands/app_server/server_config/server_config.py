@@ -23,6 +23,7 @@ class ServerConfig(ServerConfigInterface):
     user_auth_class: str = (
         'openhands.app_server.user_auth.default_user_auth.DefaultUserAuth'
     )
+    analytics_user_provider_class: str | None = None
     enable_v1: bool = os.getenv('ENABLE_V1') != '0'
 
     def verify_config(self):

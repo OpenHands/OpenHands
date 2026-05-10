@@ -121,6 +121,7 @@ def test_get_agent_settings_schema_includes_critic_verification_fields(test_clie
     section = next(s for s in schema['sections'] if s['key'] == 'verification')
     field_keys = [f['key'] for f in section['fields']]
     assert 'verification.critic_enabled' in field_keys
+    assert 'verification.enable_iterative_refinement' in field_keys
     assert 'confirmation_mode' not in field_keys
     assert 'security_analyzer' not in field_keys
 

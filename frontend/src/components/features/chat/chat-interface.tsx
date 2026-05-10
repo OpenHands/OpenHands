@@ -1,10 +1,10 @@
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { createChatMessage } from "#/services/chat-service";
 import { BtwMessages } from "./btw-messages";
+import { ModelMessages } from "./model-messages";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
@@ -12,7 +12,6 @@ import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { TypingIndicator } from "./typing-indicator";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
-import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
@@ -36,18 +35,9 @@ import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { I18nKey } from "#/i18n/declaration";
 import { ArchivedBanner } from "./archived-banner";
-
-function getEntryPoint(
-  hasRepository: boolean | null,
-  hasReplayJson: boolean | null,
-): string {
-  if (hasRepository) return "github";
-  if (hasReplayJson) return "replay";
-  return "direct";
-}
+import { useModelStore } from "#/stores/model-store";
 
 export function ChatInterface() {
-  const posthog = usePostHog();
   const { setMessageToSend } = useConversationStore();
   const { errorMessage, removeErrorMessage } = useErrorMessageStore();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
@@ -112,11 +102,18 @@ export function ChatInterface() {
     };
   }, [isAgentRunning, handleBuildPlanClick, scrollDomToBottom]);
 
-  const { selectedRepository, replayJson } = useInitialQueryStore();
   const params = useParams();
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();
 
   const optimisticUserMessage = getOptimisticUserMessage();
+  const modelEntriesByConversation = useModelStore(
+    (s) => s.entriesByConversation,
+  );
+  const modelEntriesCount =
+    (params.conversationId &&
+      modelEntriesByConversation[params.conversationId]?.length) ||
+    0;
+  const hasModelEntries = modelEntriesCount > 0;
 
   // Show V1 messages immediately if events exist in store (e.g., remount),
   // or once loading completes. This replaces the old transition-observation
@@ -156,22 +153,6 @@ export function ChatInterface() {
     // Create mutable copies of the arrays
     const images = [...originalImages];
     const files = [...originalFiles];
-    if (totalEvents === 0) {
-      posthog.capture("initial_query_submitted", {
-        entry_point: getEntryPoint(
-          selectedRepository !== null,
-          replayJson !== null,
-        ),
-        query_character_length: content.length,
-        replay_json_size: replayJson?.length,
-      });
-    } else {
-      posthog.capture("user_message_sent", {
-        session_message_count: totalEvents,
-        current_message_length: content.length,
-      });
-    }
-
     // Validate file sizes before any processing
     const allFiles = [...images, ...files];
     const validation = validateFiles(allFiles);
@@ -220,6 +201,7 @@ export function ChatInterface() {
     v1UiEvents.length,
     v0Events.length,
     optimisticUserMessage,
+    modelEntriesCount,
     scrollDomToBottom,
   ]);
 
@@ -265,7 +247,8 @@ export function ChatInterface() {
         {!hasSubstantiveAgentActions &&
           !optimisticUserMessage &&
           !userEventsExist &&
-          !isChatLoading && (
+          !isChatLoading &&
+          !hasModelEntries && (
             <ChatSuggestions
               onSuggestionsClick={(message) => setMessageToSend(message)}
             />
@@ -287,6 +270,10 @@ export function ChatInterface() {
             </div>
           )}
 
+          <ModelMessages
+            conversationId={params.conversationId}
+            anchorEventId={null}
+          />
           {showV1Messages && v1UserEventsExist && (
             <V1Messages messages={v1UiEvents} allEvents={v1FullEvents} />
           )}

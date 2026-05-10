@@ -235,6 +235,22 @@ class V1ConversationService {
   }
 
   /**
+   * Switch the running conversation's LLM to a saved profile.
+   * Goes through the app-server proxy, which loads the profile from user
+   * settings (with api_key) and hands the LLM to the agent-server's
+   * `switch_llm` endpoint.
+   */
+  static async switchProfile(
+    conversationId: string,
+    profileName: string,
+  ): Promise<void> {
+    await openHands.post(
+      `/api/v1/app-conversations/${conversationId}/switch_profile`,
+      { profile_name: profileName },
+    );
+  }
+
+  /**
    * Resume a V1 conversation
    * Uses the custom runtime URL from the conversation
    *

@@ -7,7 +7,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
-import { useTracking } from "#/hooks/use-tracking";
 import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { getActiveOrganizationUser } from "#/utils/org/permission-checks";
@@ -52,13 +51,10 @@ export const clientLoader = async () => {
 function BillingSettingsScreen() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { trackCreditsPurchased } = useTracking();
   const { data: me } = useMe();
   const { hasPermission } = usePermission(me?.role ?? "member");
   const canAddCredits = !!me && hasPermission("add_credits");
   const checkoutStatus = searchParams.get("checkout");
-  const amount = searchParams.get("amount");
-  const sessionId = searchParams.get("session_id");
   const hasHandledCheckoutRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -67,29 +63,13 @@ function BillingSettingsScreen() {
     hasHandledCheckoutRef.current = true;
 
     if (checkoutStatus === "success") {
-      // Track credits purchased if we have the necessary data
-      if (amount && sessionId) {
-        trackCreditsPurchased({
-          amountUsd: parseFloat(amount),
-          stripeSessionId: sessionId,
-        });
-      }
-
       displaySuccessToast(t(I18nKey.PAYMENT$SUCCESS));
-
       setSearchParams({});
     } else if (checkoutStatus === "cancel") {
       displayErrorToast(t(I18nKey.PAYMENT$CANCELLED));
       setSearchParams({});
     }
-  }, [
-    checkoutStatus,
-    amount,
-    sessionId,
-    setSearchParams,
-    t,
-    trackCreditsPurchased,
-  ]);
+  }, [checkoutStatus, setSearchParams, t]);
 
   return <PaymentForm isDisabled={!canAddCredits} />;
 }

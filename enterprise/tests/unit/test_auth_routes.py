@@ -3,7 +3,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException, Request, Response, status
+from fastapi import BackgroundTasks, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
 from server.auth.auth_error import AuthError
@@ -50,6 +50,11 @@ def mock_response():
     return MagicMock(spec=Response)
 
 
+@pytest.fixture
+def mock_background_tasks():
+    return MagicMock(spec=BackgroundTasks)
+
+
 def test_set_response_cookie(mock_response, mock_request):
     """Test setting the auth cookie on a response."""
     from openhands.app_server.services.jwt_service import JwtService
@@ -92,13 +97,14 @@ def test_set_response_cookie(mock_response, mock_request):
 
 
 @pytest.mark.asyncio
-async def test_keycloak_callback_missing_code(mock_request):
+async def test_keycloak_callback_missing_code(mock_request, mock_background_tasks):
     """Test keycloak_callback with missing code."""
     with pytest.raises(HTTPException) as exc_info:
         await keycloak_callback(
             code='',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -107,7 +113,9 @@ async def test_keycloak_callback_missing_code(mock_request):
 
 
 @pytest.mark.asyncio
-async def test_keycloak_callback_token_retrieval_failure(mock_request):
+async def test_keycloak_callback_token_retrieval_failure(
+    mock_request, mock_background_tasks
+):
     """Test keycloak_callback when token retrieval fails."""
     get_keycloak_tokens_mock = AsyncMock(return_value=(None, None))
     with patch(
@@ -118,6 +126,7 @@ async def test_keycloak_callback_token_retrieval_failure(mock_request):
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -133,7 +142,7 @@ async def test_keycloak_callback_token_retrieval_failure(mock_request):
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_user_not_authorized(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when user authorization fails."""
     with (
@@ -174,6 +183,7 @@ async def test_keycloak_callback_user_not_authorized(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -183,25 +193,47 @@ async def test_keycloak_callback_user_not_authorized(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_success_with_valid_offline_token(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test successful keycloak_callback with valid offline token."""
+    mock_analytics = MagicMock()
+    mock_org = MagicMock()
+    mock_org.id = 'test_org_id'
+    mock_org.name = 'Test Org'
+
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
         patch('server.routes.auth.UserStore') as mock_user_store,
-        patch('server.routes.auth.posthog') as mock_posthog,
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            return_value=1,
+        ),
         patch(
             'server.routes.auth._should_redirect_to_onboarding',
             new_callable=AsyncMock,
             return_value=False,
         ),
     ):
-        # Mock user with accepted_tos
+        # Mock user with accepted_tos and analytics consent
         mock_user = MagicMock()
         mock_user.id = 'test_user_id'
         mock_user.current_org_id = 'test_org_id'
         mock_user.accepted_tos = '2025-01-01'
+        mock_user.user_consents_to_analytics = True
+        mock_user.org_members = []
 
         # Setup UserStore mocks
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
@@ -228,6 +260,7 @@ async def test_keycloak_callback_success_with_valid_offline_token(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -246,12 +279,33 @@ async def test_keycloak_callback_success_with_valid_offline_token(
             secure=False,
             accepted_tos=True,
         )
-        mock_posthog.set.assert_called_once()
+
+        # Verify background task was scheduled and execute it to test analytics
+        mock_background_tasks.add_task.assert_called_once()
+        background_fn = mock_background_tasks.add_task.call_args[0][0]
+        background_kwargs = mock_background_tasks.add_task.call_args[1]
+
+        # Execute the background function to verify analytics logic
+        await background_fn(**background_kwargs)
+
+        # Verify analytics service was called correctly
+        mock_analytics.identify_user.assert_called_once()
+        identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+        assert identify_kwargs['ctx'].user_id == 'test_user_id'
+        assert identify_kwargs['ctx'].consented is True
+        assert identify_kwargs['idp'] == 'github'
+
+        mock_analytics.track_user_logged_in.assert_called_once()
+        track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
+        assert track_kwargs['ctx'].user_id == 'test_user_id'
+        assert track_kwargs['ctx'].org_id == 'test_org_id'
+        assert track_kwargs['ctx'].consented is True
+        assert track_kwargs['idp'] == 'github'
 
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_email_not_verified(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when email is not verified."""
     # Arrange
@@ -290,6 +344,7 @@ async def test_keycloak_callback_email_not_verified(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -313,7 +368,7 @@ async def test_keycloak_callback_email_not_verified(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_email_not_verified_missing_field(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when email_verified field is missing (defaults to False)."""
     # Arrange
@@ -352,6 +407,7 @@ async def test_keycloak_callback_email_not_verified_missing_field(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -367,7 +423,7 @@ async def test_keycloak_callback_email_not_verified_missing_field(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_email_verification_rate_limited(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when email verification is rate limited.
 
@@ -417,6 +473,7 @@ async def test_keycloak_callback_email_verification_rate_limited(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -435,9 +492,14 @@ async def test_keycloak_callback_email_verification_rate_limited(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_success_without_offline_token(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test successful keycloak_callback without valid offline token."""
+    mock_analytics = MagicMock()
+    mock_org = MagicMock()
+    mock_org.id = 'test_org_id'
+    mock_org.name = 'Test Org'
+
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
@@ -447,18 +509,35 @@ async def test_keycloak_callback_success_without_offline_token(
         patch('server.routes.auth.KEYCLOAK_REALM_NAME', 'test-realm'),
         patch('server.routes.auth.KEYCLOAK_CLIENT_ID', 'test-client'),
         patch('server.routes.auth.UserStore') as mock_user_store,
-        patch('server.routes.auth.posthog') as mock_posthog,
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            return_value=1,
+        ),
         patch(
             'server.routes.auth._should_redirect_to_onboarding',
             new_callable=AsyncMock,
             return_value=False,
         ),
     ):
-        # Mock user with accepted_tos
+        # Mock user with accepted_tos and analytics consent
         mock_user = MagicMock()
         mock_user.id = 'test_user_id'
         mock_user.current_org_id = 'test_org_id'
         mock_user.accepted_tos = '2025-01-01'
+        mock_user.user_consents_to_analytics = True
+        mock_user.org_members = []
 
         # Setup UserStore mocks
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
@@ -486,6 +565,7 @@ async def test_keycloak_callback_success_without_offline_token(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -508,12 +588,33 @@ async def test_keycloak_callback_success_without_offline_token(
             secure=False,
             accepted_tos=True,
         )
-        mock_posthog.set.assert_called_once()
+
+        # Verify background task was scheduled and execute it to test analytics
+        mock_background_tasks.add_task.assert_called_once()
+        background_fn = mock_background_tasks.add_task.call_args[0][0]
+        background_kwargs = mock_background_tasks.add_task.call_args[1]
+
+        # Execute the background function to verify analytics logic
+        await background_fn(**background_kwargs)
+
+        # Verify analytics service was called correctly
+        mock_analytics.identify_user.assert_called_once()
+        identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+        assert identify_kwargs['ctx'].user_id == 'test_user_id'
+        assert identify_kwargs['ctx'].consented is True
+        assert identify_kwargs['idp'] == 'github'
+
+        mock_analytics.track_user_logged_in.assert_called_once()
+        track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
+        assert track_kwargs['ctx'].user_id == 'test_user_id'
+        assert track_kwargs['ctx'].org_id == 'test_org_id'
+        assert track_kwargs['ctx'].consented is True
+        assert track_kwargs['idp'] == 'github'
 
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invalid(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test that keycloak_callback redirects to Keycloak when offline token is invalid.
 
@@ -529,7 +630,8 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
         patch('server.routes.auth.KEYCLOAK_REALM_NAME', 'test-realm'),
         patch('server.routes.auth.KEYCLOAK_CLIENT_ID', 'test-client'),
         patch('server.routes.auth.UserStore') as mock_user_store,
-        patch('server.routes.auth.posthog'),
+        patch('server.routes.auth.get_analytics_service'),
+        patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
         patch('server.routes.auth.OrgInvitationService') as mock_invitation_service,
         patch(
             'server.routes.auth._should_redirect_to_onboarding',
@@ -577,6 +679,7 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
             code='test_code',
             state=encoded_state,
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -594,7 +697,9 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
 
 
 @pytest.mark.asyncio
-async def test_keycloak_callback_account_linking_error(mock_request):
+async def test_keycloak_callback_account_linking_error(
+    mock_request, mock_background_tasks
+):
     """Test keycloak_callback with account linking error."""
     # Test the case where error is 'temporarily_unavailable' and error_description is 'authentication_expired'
     result = await keycloak_callback(
@@ -603,6 +708,7 @@ async def test_keycloak_callback_account_linking_error(mock_request):
         error='temporarily_unavailable',
         error_description='authentication_expired',
         request=mock_request,
+        background_tasks=mock_background_tasks,
         user_authorizer=create_mock_user_authorizer(),
     )
 
@@ -668,7 +774,7 @@ async def test_keycloak_offline_callback_missing_user_info(mock_request):
 
 @pytest.mark.asyncio
 async def test_keycloak_offline_callback_success(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test successful keycloak_offline_callback."""
     with (
@@ -710,7 +816,7 @@ async def test_keycloak_offline_callback_success(
 
 @pytest.mark.asyncio
 async def test_keycloak_offline_callback_redirects_to_onboarding(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_offline_callback redirects to onboarding when needed."""
     with (
@@ -819,7 +925,7 @@ async def test_logout_without_refresh_token():
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_blocked_email_domain(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when user authorization fails (blocked email domain)."""
     # Arrange
@@ -859,6 +965,7 @@ async def test_keycloak_callback_blocked_email_domain(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -879,7 +986,9 @@ async def test_keycloak_callback_blocked_email_domain(
 
 
 @pytest.mark.asyncio
-async def test_keycloak_callback_missing_email(mock_request, create_keycloak_user_info):
+async def test_keycloak_callback_missing_email(
+    mock_request, mock_background_tasks, create_keycloak_user_info
+):
     """Test keycloak_callback when user info does not contain email."""
     # Arrange
     with (
@@ -930,6 +1039,7 @@ async def test_keycloak_callback_missing_email(mock_request, create_keycloak_use
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -941,7 +1051,7 @@ async def test_keycloak_callback_missing_email(mock_request, create_keycloak_use
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_duplicate_email_detected(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when duplicate email is detected by UserAuthorizer.
 
@@ -986,6 +1096,7 @@ async def test_keycloak_callback_duplicate_email_detected(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -995,7 +1106,7 @@ async def test_keycloak_callback_duplicate_email_detected(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test that new Keycloak user is deleted when duplicate email is detected.
 
@@ -1035,6 +1146,7 @@ async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -1046,7 +1158,7 @@ async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_duplicate_email_preserves_existing_user(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test that existing users are not deleted when duplicate email is detected.
 
@@ -1088,6 +1200,7 @@ async def test_keycloak_callback_duplicate_email_preserves_existing_user(
                 code='test_code',
                 state='test_state',
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
@@ -1099,7 +1212,7 @@ async def test_keycloak_callback_duplicate_email_preserves_existing_user(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_duplicate_check_exception(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when duplicate check raises exception."""
     with (
@@ -1150,6 +1263,7 @@ async def test_keycloak_callback_duplicate_check_exception(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -1161,7 +1275,7 @@ async def test_keycloak_callback_duplicate_check_exception(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_no_duplicate_email(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when authorization succeeds (no duplicate email).
 
@@ -1213,6 +1327,7 @@ async def test_keycloak_callback_no_duplicate_email(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(success=True),
         )
 
@@ -1223,7 +1338,7 @@ async def test_keycloak_callback_no_duplicate_email(
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_no_email_in_user_info(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """Test keycloak_callback when email is not in user_info."""
     with (
@@ -1271,6 +1386,7 @@ async def test_keycloak_callback_no_email_in_user_info(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -1286,7 +1402,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_verify_recaptcha_and_allow_login_when_score_is_high(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login proceeds when reCAPTCHA score is high."""
         # Arrange
@@ -1311,7 +1427,8 @@ class TestKeycloakCallbackRecaptcha:
                 'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
             patch('server.routes.auth.set_response_cookie'),
-            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
@@ -1364,6 +1481,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1374,7 +1492,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_block_login_when_recaptcha_score_is_low(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login is blocked and redirected when reCAPTCHA score is low."""
         # Arrange
@@ -1434,6 +1552,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1444,7 +1563,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_extract_ip_from_x_forwarded_for_header(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that IP is extracted from X-Forwarded-For header when present."""
         # Arrange
@@ -1471,7 +1590,8 @@ class TestKeycloakCallbackRecaptcha:
             ) as mock_user_auth_store,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
-            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
@@ -1524,6 +1644,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1533,7 +1654,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_use_client_host_when_x_forwarded_for_missing(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that client.host is used when X-Forwarded-For is missing."""
         # Arrange
@@ -1561,7 +1682,8 @@ class TestKeycloakCallbackRecaptcha:
             ) as mock_user_auth_store,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
-            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
@@ -1614,6 +1736,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1623,7 +1746,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_use_unknown_ip_when_client_is_none(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that 'unknown' IP is used when client is None."""
         # Arrange
@@ -1650,7 +1773,8 @@ class TestKeycloakCallbackRecaptcha:
             ) as mock_user_auth_store,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
-            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
@@ -1703,6 +1827,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1712,7 +1837,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_include_email_in_assessment_when_available(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that email is included in assessment when available."""
         # Arrange
@@ -1736,7 +1861,8 @@ class TestKeycloakCallbackRecaptcha:
             ) as mock_user_auth_store,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
-            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
@@ -1789,6 +1915,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1798,7 +1925,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_skip_recaptcha_when_site_key_not_configured(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that reCAPTCHA is skipped when RECAPTCHA_SITE_KEY is not configured."""
         # Arrange
@@ -1819,7 +1946,8 @@ class TestKeycloakCallbackRecaptcha:
                 'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
             patch('server.routes.auth.set_response_cookie'),
-            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
@@ -1867,6 +1995,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1875,7 +2004,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_skip_recaptcha_when_token_is_missing(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that reCAPTCHA is skipped when token is missing from state."""
         # Arrange
@@ -1890,7 +2019,8 @@ class TestKeycloakCallbackRecaptcha:
                 'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
             patch('server.routes.auth.set_response_cookie'),
-            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
@@ -1938,6 +2068,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -1946,7 +2077,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_fail_open_when_recaptcha_service_throws_exception(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login proceeds (fail open) when reCAPTCHA service throws exception."""
         # Arrange
@@ -1967,7 +2098,8 @@ class TestKeycloakCallbackRecaptcha:
                 'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
             patch('server.routes.auth.set_response_cookie'),
-            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
             patch('server.routes.auth.logger') as mock_logger,
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
@@ -2019,6 +2151,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -2034,7 +2167,7 @@ class TestKeycloakCallbackRecaptcha:
 
     @pytest.mark.asyncio
     async def test_should_log_warning_when_recaptcha_blocks_user(
-        self, mock_request, create_keycloak_user_info
+        self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that warning is logged when reCAPTCHA blocks user."""
         # Arrange
@@ -2096,6 +2229,7 @@ class TestKeycloakCallbackRecaptcha:
                 code='test_code',
                 state=encoded_state,
                 request=mock_request,
+                background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
@@ -2109,7 +2243,7 @@ class TestKeycloakCallbackRecaptcha:
 
 @pytest.mark.asyncio
 async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
-    mock_request, create_keycloak_user_info
+    mock_request, mock_background_tasks, create_keycloak_user_info
 ):
     """When an existing user logs in, backfill_user_email should be called."""
     user_info = create_keycloak_user_info(
@@ -2124,7 +2258,8 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.set_response_cookie'),
         patch('server.routes.auth.UserStore') as mock_user_store,
-        patch('server.routes.auth.posthog'),
+        patch('server.routes.auth.get_analytics_service'),
+        patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
     ):
         mock_user = MagicMock()
         mock_user.id = 'test_user_id'
@@ -2148,6 +2283,7 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
             code='test_code',
             state='test_state',
             request=mock_request,
+            background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
@@ -2275,3 +2411,324 @@ async def test_accept_tos_preserves_offline_flow_redirect(mock_request):
 
         response_body = json.loads(result.body.decode())
         assert response_body['redirect_url'] == offline_redirect_url
+
+
+# ---------------------------------------------------------------------------
+# Tests for _get_user_orgs_with_data helper function
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_user_orgs_with_data_returns_orgs():
+    """_get_user_orgs_with_data returns list of Org objects for given org_member_ids."""
+    from uuid import uuid4
+
+    from server.routes.auth import _get_user_orgs_with_data
+
+    org_id_1 = uuid4()
+    org_id_2 = uuid4()
+
+    mock_org_1 = MagicMock()
+    mock_org_1.id = org_id_1
+    mock_org_1.name = 'Org 1'
+
+    mock_org_2 = MagicMock()
+    mock_org_2.id = org_id_2
+    mock_org_2.name = 'Org 2'
+
+    with patch(
+        'storage.org_store.OrgStore.get_orgs_by_ids',
+        new_callable=AsyncMock,
+        return_value=[mock_org_1, mock_org_2],
+    ):
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
+
+    assert len(result) == 2
+    assert result[0].name == 'Org 1'
+    assert result[1].name == 'Org 2'
+
+
+@pytest.mark.asyncio
+async def test_get_user_orgs_with_data_returns_only_found_orgs():
+    """_get_user_orgs_with_data returns only orgs that exist."""
+    from uuid import uuid4
+
+    from server.routes.auth import _get_user_orgs_with_data
+
+    org_id_1 = uuid4()
+    org_id_2 = uuid4()
+
+    mock_org_1 = MagicMock()
+    mock_org_1.id = org_id_1
+    mock_org_1.name = 'Org 1'
+
+    # get_orgs_by_ids only returns orgs that exist (org_id_2 not found)
+    with patch(
+        'storage.org_store.OrgStore.get_orgs_by_ids',
+        new_callable=AsyncMock,
+        return_value=[mock_org_1],
+    ):
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
+
+    assert len(result) == 1
+    assert result[0].name == 'Org 1'
+
+
+@pytest.mark.asyncio
+async def test_get_user_orgs_with_data_handles_exception_gracefully():
+    """_get_user_orgs_with_data catches exceptions and returns empty list."""
+    from uuid import uuid4
+
+    from server.routes.auth import _get_user_orgs_with_data
+
+    org_id_1 = uuid4()
+    org_id_2 = uuid4()
+
+    with patch(
+        'storage.org_store.OrgStore.get_orgs_by_ids',
+        new_callable=AsyncMock,
+        side_effect=RuntimeError('Database error'),
+    ):
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
+
+    # Should return empty list on exception
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_user_orgs_with_data_returns_empty_list_for_empty_input():
+    """_get_user_orgs_with_data returns empty list when no org_member_ids provided."""
+    from server.routes.auth import _get_user_orgs_with_data
+
+    result = await _get_user_orgs_with_data('user-123', [])
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Tests for _track_login_analytics_background helper function
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_calls_identify_and_track():
+    """_track_login_analytics_background calls identify_user and track_user_logged_in."""
+    from uuid import uuid4
+
+    from server.routes.auth import _track_login_analytics_background
+
+    current_org_id = uuid4()
+    org_member_id = uuid4()
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user = MagicMock()
+    mock_analytics.track_user_logged_in = MagicMock()
+
+    mock_org = MagicMock()
+    mock_org.id = org_member_id
+    mock_org.name = 'Test Org'
+
+    with (
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            return_value=5,
+        ),
+    ):
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=current_org_id,
+            org_member_ids=[org_member_id],
+            consented=True,
+        )
+
+    mock_analytics.identify_user.assert_called_once()
+    mock_analytics.track_user_logged_in.assert_called_once()
+
+    # Verify identify_user call
+    identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+    assert identify_kwargs['ctx'].user_id == 'user-123'
+    assert identify_kwargs['ctx'].consented is True
+    assert identify_kwargs['email'] == 'user@example.com'
+    assert identify_kwargs['idp'] == 'github'
+
+    # Verify track_user_logged_in call
+    track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
+    assert track_kwargs['ctx'].user_id == 'user-123'
+    assert track_kwargs['ctx'].consented is True
+    assert track_kwargs['idp'] == 'github'
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_skips_when_no_analytics_service():
+    """_track_login_analytics_background returns early when analytics service is None."""
+    from server.routes.auth import _track_login_analytics_background
+
+    with patch('server.routes.auth.get_analytics_service', return_value=None):
+        # Should not raise
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[],
+            consented=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_handles_org_id_none():
+    """_track_login_analytics_background handles None current_org_id."""
+    from server.routes.auth import _track_login_analytics_background
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user = MagicMock()
+    mock_analytics.track_user_logged_in = MagicMock()
+
+    with patch('server.routes.auth.get_analytics_service', return_value=mock_analytics):
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[],
+            consented=True,
+        )
+
+    identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+    assert identify_kwargs['ctx'].org_id is None
+    assert identify_kwargs['org_name'] is None
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_handles_exception_gracefully():
+    """_track_login_analytics_background catches exceptions and does not raise."""
+    from server.routes.auth import _track_login_analytics_background
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user.side_effect = RuntimeError('PostHog error')
+
+    with patch('server.routes.auth.get_analytics_service', return_value=mock_analytics):
+        # Should not raise
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[],
+            consented=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_builds_orgs_data_with_member_count():
+    """_track_login_analytics_background builds orgs_data list with member counts."""
+    from uuid import uuid4
+
+    from server.routes.auth import _track_login_analytics_background
+
+    org_id = uuid4()
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user = MagicMock()
+    mock_analytics.track_user_logged_in = MagicMock()
+
+    mock_org = MagicMock()
+    mock_org.id = org_id
+    mock_org.name = 'Test Org'
+
+    with (
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            return_value=10,
+        ),
+    ):
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[org_id],
+            consented=True,
+        )
+
+    identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+    orgs = identify_kwargs['orgs']
+    assert len(orgs) == 1
+    assert orgs[0]['id'] == str(org_id)
+    assert orgs[0]['name'] == 'Test Org'
+    assert orgs[0]['member_count'] == 10
+
+
+@pytest.mark.asyncio
+async def test_track_login_analytics_background_handles_member_count_error():
+    """_track_login_analytics_background sets member_count to None on error."""
+    from uuid import uuid4
+
+    from server.routes.auth import _track_login_analytics_background
+
+    org_id = uuid4()
+
+    mock_analytics = MagicMock()
+    mock_analytics.identify_user = MagicMock()
+    mock_analytics.track_user_logged_in = MagicMock()
+
+    mock_org = MagicMock()
+    mock_org.id = org_id
+    mock_org.name = 'Test Org'
+
+    with (
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_store.OrgStore.get_orgs_by_ids',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
+            new_callable=AsyncMock,
+            side_effect=RuntimeError('DB error'),
+        ),
+    ):
+        await _track_login_analytics_background(
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
+            current_org_id=None,
+            org_member_ids=[org_id],
+            consented=True,
+        )
+
+    identify_kwargs = mock_analytics.identify_user.call_args.kwargs
+    orgs = identify_kwargs['orgs']
+    assert len(orgs) == 1
+    assert orgs[0]['member_count'] is None

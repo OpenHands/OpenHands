@@ -20,6 +20,7 @@ from storage.org import Org
 from storage.subscription_access import SubscriptionAccess
 from storage.user_store import UserStore
 
+from openhands.analytics import get_analytics_service
 from openhands.app_server.config import get_global_config
 from openhands.app_server.user_auth import get_user_id
 
@@ -28,9 +29,7 @@ billing_router = APIRouter(prefix='/api/billing', tags=['Billing'])
 
 
 async def validate_billing_enabled() -> None:
-    """
-    Validate that the billing feature flag is enabled
-    """
+    """Validate that the billing feature flag is enabled"""
     config = get_global_config()
     web_client_config = await config.web_client.get_web_client_config()
     if not web_client_config.feature_flags.enable_billing:
@@ -298,6 +297,27 @@ async def success_callback(session_id: str, request: Request):
             },
         )
         await session.commit()
+
+        # Analytics: credit purchased event (fires after commit so event only fires on success)
+        try:
+            analytics = get_analytics_service()
+            if analytics and user:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                ctx = AnalyticsContext(
+                    user_id=billing_session.user_id,
+                    consented=user.user_consents_to_analytics is True,
+                    org_id=str(user.current_org_id) if user.current_org_id else None,
+                    user=user,
+                )
+                analytics.track_credit_purchased(
+                    ctx=ctx,
+                    amount_usd=add_credits,
+                    credit_balance_before=max_budget,
+                    credit_balance_after=new_max_budget,
+                )
+        except Exception:
+            logger.exception('analytics:credit_purchased:failed')
 
     return RedirectResponse(
         f'{get_web_url(request)}/settings/billing?checkout=success', status_code=302

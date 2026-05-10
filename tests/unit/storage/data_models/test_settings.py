@@ -1,5 +1,6 @@
 import importlib
 import warnings
+from unittest.mock import patch
 
 import pytest
 from fastmcp.mcp_config import MCPConfig
@@ -40,6 +41,33 @@ def test_settings_handles_sensitive_data():
     llm_api_key = settings.agent_settings.llm.api_key
     assert str(llm_api_key) == '**********'
     assert llm_api_key.get_secret_value() == 'test-key'
+
+
+def test_settings_loads_persisted_settings_via_from_persisted():
+    loaded_agent_settings = AgentSettings(agent='migrated-agent')
+    loaded_conversation_settings = ConversationSettings(max_iterations=77)
+
+    with (
+        patch.object(
+            AgentSettings,
+            'from_persisted',
+            return_value=loaded_agent_settings,
+        ) as agent_loader,
+        patch.object(
+            ConversationSettings,
+            'from_persisted',
+            return_value=loaded_conversation_settings,
+        ) as conversation_loader,
+    ):
+        settings = Settings(
+            agent_settings={'legacy': True},
+            conversation_settings={'legacy': True},
+        )
+
+    agent_loader.assert_called_once_with({'legacy': True})
+    conversation_loader.assert_called_once_with({'legacy': True})
+    assert settings.agent_settings.agent == 'migrated-agent'
+    assert settings.conversation_settings.max_iterations == 77
 
 
 def test_settings_update_deep_merges_agent_settings():
@@ -314,6 +342,47 @@ def test_switch_to_profile_preserves_other_agent_settings():
     assert settings.agent_settings.verification.critic_mode == 'all_actions'
     assert settings.agent_settings.mcp_config is not None
     assert 's' in settings.agent_settings.mcp_config.mcpServers
+
+
+def test_delete_active_profile_promotes_remaining_one():
+    settings = Settings()
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
+
+    assert settings.delete_profile('a') is True
+
+    assert 'a' not in settings.llm_profiles.profiles
+    assert settings.llm_profiles.active == 'b'
+    assert settings.agent_settings.llm.model == 'anthropic/claude-opus-4'
+
+
+def test_delete_inactive_profile_does_not_touch_active():
+    settings = Settings()
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
+
+    assert settings.delete_profile('b') is True
+
+    assert settings.llm_profiles.active == 'a'
+    assert settings.agent_settings.llm.model == 'openai/gpt-4o'
+
+
+def test_delete_only_profile_clears_active():
+    settings = Settings()
+    settings.llm_profiles.save('only', LLM(model='openai/gpt-4o'))
+    settings.switch_to_profile('only')
+
+    assert settings.delete_profile('only') is True
+
+    assert settings.llm_profiles.profiles == {}
+    assert settings.llm_profiles.active is None
+
+
+def test_delete_missing_profile_returns_false():
+    settings = Settings()
+    assert settings.delete_profile('nope') is False
 
 
 def test_update_ignores_llm_profiles_payload():

@@ -50,6 +50,7 @@ from storage.org_service import OrgService
 from storage.org_store import OrgStore
 from storage.user_store import UserStore
 
+from openhands.analytics import get_analytics_service
 from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
 
@@ -1133,6 +1134,28 @@ async def switch_org(
             user_id=user_id,
             org_id=org_id,
         )
+
+        # Refresh person profile with new active org on org switch
+        analytics = get_analytics_service()
+        if analytics:
+            try:
+                from openhands.analytics import resolve_analytics_context
+
+                ctx = await resolve_analytics_context(user_id)
+
+                analytics.set_person_properties(
+                    ctx=ctx,
+                    properties={
+                        'org_id': str(org_id),
+                        'org_name': org.name,
+                        'plan_tier': None,  # plan_tier not yet on Org model
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    'orgs:switch_org:analytics:failed',
+                    extra={'user_id': user_id, 'org_id': str(org_id)},
+                )
 
         # Retrieve credits from LiteLLM for the new current org
         credits = await OrgService.get_org_credits(user_id, org.id)

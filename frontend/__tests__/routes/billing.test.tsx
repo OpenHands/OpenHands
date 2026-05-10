@@ -34,17 +34,6 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: (...args: unknown[]) => mockDisplayErrorToast(...args),
 }));
 
-// Mock the underlying posthog service so the real useTracking hook runs.
-// This is intentional: the real hook produces a fresh `trackCreditsPurchased`
-// reference on every render, which is the production-side trigger for the
-// duplicate-toast bug we're guarding against.
-const mockPostHogCapture = vi.fn();
-vi.mock("posthog-js/react", () => ({
-  usePostHog: () => ({
-    capture: mockPostHogCapture,
-  }),
-}));
-
 // Allow individual tests to pin `useSearchParams` to a fixed value (e.g. to
 // hold checkout=success across forced re-renders). When unset, the real
 // react-router implementation is used.
@@ -401,7 +390,7 @@ describe("Billing Route", () => {
       };
     }
 
-    it("should display success toast exactly once and capture credits_purchased even when the effect re-fires before the URL clears", async () => {
+    it("should display success toast exactly once even when the effect re-fires before the URL clears", async () => {
       // Arrange + Act
       const { forceReRenders } = renderWithForcedReRenders(
         "checkout=success&amount=25&session_id=sess_123",
@@ -411,15 +400,6 @@ describe("Billing Route", () => {
       // Assert
       await waitFor(() => {
         expect(mockDisplaySuccessToast).toHaveBeenCalledTimes(1);
-      });
-
-      const creditsPurchasedCalls = mockPostHogCapture.mock.calls.filter(
-        ([event]) => event === "credits_purchased",
-      );
-      expect(creditsPurchasedCalls).toHaveLength(1);
-      expect(creditsPurchasedCalls[0][1]).toMatchObject({
-        amount_usd: 25,
-        stripe_session_id: "sess_123",
       });
     });
 
@@ -432,12 +412,6 @@ describe("Billing Route", () => {
       await waitFor(() => {
         expect(mockDisplayErrorToast).toHaveBeenCalledTimes(1);
       });
-
-      expect(
-        mockPostHogCapture.mock.calls.some(
-          ([event]) => event === "credits_purchased",
-        ),
-      ).toBe(false);
     });
   });
 

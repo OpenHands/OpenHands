@@ -26,7 +26,6 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
 )
-from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
 from openhands.app_server.sandbox.sandbox_models import (
@@ -716,188 +715,6 @@ class TestLiveStatusAppConversationService:
         assert isinstance(llm, LLM)
         assert mcp_config == {}
 
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_with_user_search_api_key(self):
-        """Test _configure_llm_and_mcp adds tavily when user has search_api_key."""
-        # Arrange
-        self.mock_user.search_api_key = SecretStr('user_search_key')
-        self.mock_user_context.get_mcp_api_key.return_value = 'mcp_api_key'
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_with_env_tavily_key(self):
-        """Test _configure_llm_and_mcp adds tavily when service has tavily_api_key."""
-        # Arrange
-        self.service.tavily_api_key = 'env_tavily_key'
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_user_key_takes_precedence(self):
-        """Test _configure_llm_and_mcp user search_api_key takes precedence over env key."""
-        # Arrange
-        self.mock_user.search_api_key = SecretStr('user_search_key')
-        self.service.tavily_api_key = 'env_tavily_key'
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'tavily' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_no_tavily_without_keys(self):
-        """Test _configure_llm_and_mcp does not add tavily when no keys are available."""
-        # Arrange
-        self.mock_user.search_api_key = None
-        self.service.tavily_api_key = None
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' not in mcp_config['mcpServers']
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_saas_mode_no_tavily_without_user_key(self):
-        """Test _configure_llm_and_mcp does not add tavily in SAAS mode without user search_api_key.
-
-        In SAAS mode, the global tavily_api_key should not be passed to the service instance,
-        so tavily should only be added if the user has their own search_api_key.
-        """
-        # Arrange - simulate SAAS mode where no global tavily key is available
-        self.service.app_mode = AppMode.SAAS.value
-        self.service.tavily_api_key = None  # In SAAS mode, this should be None
-        self.mock_user.search_api_key = None
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' not in mcp_config['mcpServers']
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_saas_mode_with_user_search_key(self):
-        """Test _configure_llm_and_mcp adds tavily in SAAS mode when user has search_api_key.
-
-        Even in SAAS mode, if the user has their own search_api_key, tavily should be added.
-        """
-        # Arrange - simulate SAAS mode with user having their own search key
-        self.service.app_mode = AppMode.SAAS.value
-        self.service.tavily_api_key = None  # In SAAS mode, this should be None
-        self.mock_user.search_api_key = SecretStr('user_search_key')
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_with_empty_user_search_key(self):
-        """Test _configure_llm_and_mcp handles empty user search_api_key correctly."""
-        # Arrange
-        self.mock_user.search_api_key = SecretStr('')  # Empty string
-        self.service.tavily_api_key = 'env_tavily_key'
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'tavily' in mcp_config['mcpServers']
-        # Should fall back to env key since user key is empty
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_with_whitespace_user_search_key(self):
-        """Test _configure_llm_and_mcp handles whitespace-only user search_api_key correctly."""
-        # Arrange
-        self.mock_user.search_api_key = SecretStr('   ')  # Whitespace only
-        self.service.tavily_api_key = 'env_tavily_key'
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'tavily' in mcp_config['mcpServers']
-        # Should fall back to env key since user key is whitespace only
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
-        )
-
     def test_compute_plan_path_default_uses_agents_tmp(self):
         """Test _compute_plan_path returns .agents_tmp/PLAN.md for default/GitHub."""
         # Arrange
@@ -1122,6 +939,70 @@ class TestLiveStatusAppConversationService:
         self.service._configure_llm_and_mcp.assert_called_once_with(
             self.mock_user, 'gpt-4', test_conversation_id
         )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_passes_enable_sub_agents_true(self, mock_tools):
+        """get_default_tools receives enable_sub_agents=True when the user setting is on."""
+        from openhands.sdk.settings import OpenHandsAgentSettings
+
+        agent_settings = OpenHandsAgentSettings(
+            llm={'model': 'gpt-4', 'api_key': 'test-key'},
+            enable_sub_agents=True,
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        mock_tools.assert_called_once_with(enable_browser=True, enable_sub_agents=True)
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_passes_enable_sub_agents_false(self, mock_tools):
+        """get_default_tools receives enable_sub_agents=False when the user setting is off."""
+        from openhands.sdk.settings import OpenHandsAgentSettings
+
+        agent_settings = OpenHandsAgentSettings(
+            llm={'model': 'gpt-4', 'api_key': 'test-key'},
+            enable_sub_agents=False,
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        mock_tools.assert_called_once_with(enable_browser=True, enable_sub_agents=False)
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
@@ -1835,7 +1716,6 @@ class TestLiveStatusAppConversationService:
             StdioMCPServer,
         )
 
-        self.mock_user.search_api_key = SecretStr('tavily_key')
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
                 'custom-sse': RemoteMCPServer(
@@ -1852,12 +1732,13 @@ class TestLiveStatusAppConversationService:
 
         mcp_servers = mcp_config['mcpServers']
 
+        # System provides default MCP server (Tavily is proxied through it if configured)
         assert 'default' in mcp_servers
-        assert 'tavily' in mcp_servers
+        # Custom servers are merged
         assert 'custom-sse' in mcp_servers
         assert 'custom-stdio' in mcp_servers
 
-        assert len(mcp_servers) == 4
+        assert len(mcp_servers) == 3
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_custom_config_error_handling(self):

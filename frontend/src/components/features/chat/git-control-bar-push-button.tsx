@@ -4,7 +4,6 @@ import { cn, getGitPushPrompt } from "#/utils/utils";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { I18nKey } from "#/i18n/declaration";
 import { Provider } from "#/types/settings";
-import { useTracking } from "#/hooks/use-tracking";
 
 interface GitControlBarPushButtonProps {
   onSuggestionsClick: (value: string) => void;
@@ -20,8 +19,6 @@ export function GitControlBarPushButton({
   isConversationReady = true,
 }: GitControlBarPushButtonProps) {
   const { t } = useTranslation();
-  const { trackPushButtonClick } = useTracking();
-
   const { providers } = useUserProviders();
 
   const providersAreSet = providers.length > 0;
@@ -29,7 +26,6 @@ export function GitControlBarPushButton({
     providersAreSet && hasRepository && isConversationReady;
 
   const handlePushClick = () => {
-    trackPushButtonClick();
     onSuggestionsClick(getGitPushPrompt(currentGitProvider));
   };
 
