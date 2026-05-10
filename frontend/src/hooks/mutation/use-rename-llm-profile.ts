@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import ProfilesService from "#/api/settings-service/profiles-service.api";
 import { LLM_PROFILES_QUERY_KEY } from "#/hooks/query/use-llm-profiles";
+import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 interface RenameLlmProfileVariables {
   name: string;
@@ -19,7 +20,7 @@ export function useRenameLlmProfile() {
       // Renaming the active profile changes ``llm_profiles.active`` to the
       // new name; the settings cache must refetch so any UI that reads the
       // active-profile name stays in sync.
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
     },
   });
 }

@@ -154,7 +154,7 @@ describe("SdkSectionPage", () => {
     );
 
     renderSdkSectionPage({
-      sectionKeys: ["llm"],
+      settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["llm"] }],
       getInitialView: () => "advanced",
     });
 
@@ -222,7 +222,7 @@ describe("SdkSectionPage", () => {
 
       return (
         <SdkSectionPage
-          sectionKeys={["llm"]}
+          settingsSources={[{ settingsSource: "agent_settings", sectionKeys: ["llm"] }]}
           header={() => (
             <input
               data-testid="external-state-input"
@@ -321,7 +321,7 @@ describe("SdkSectionPage", () => {
       return true;
     });
 
-    renderSdkSectionPage({ sectionKeys: ["llm"] });
+    renderSdkSectionPage({ settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["llm"] }] });
 
     await screen.findByTestId("sdk-section-advanced-toggle");
     await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
@@ -413,7 +413,7 @@ describe("SdkSectionPage", () => {
       return true;
     });
 
-    renderSdkSectionPage({ sectionKeys: ["llm"] });
+    renderSdkSectionPage({ settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["llm"] }] });
 
     await screen.findByTestId("sdk-section-all-toggle");
     await userEvent.click(screen.getByTestId("sdk-section-all-toggle"));
@@ -439,7 +439,7 @@ describe("SdkSectionPage", () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSavableSettings());
 
     renderSdkSectionPage({
-      sectionKeys: ["llm"],
+      settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["llm"] }],
       forceShowAdvancedView: true,
     });
 
@@ -498,7 +498,7 @@ describe("SdkSectionPage", () => {
       }),
     );
 
-    renderSdkSectionPage({ sectionKeys: ["condenser"] });
+    renderSdkSectionPage({ settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["condenser"] }] });
 
     await screen.findByTestId("sdk-section-basic-toggle");
     expect(
@@ -550,20 +550,95 @@ describe("SdkSectionPage", () => {
       buildSettings({
         agent_settings_schema: schema,
         agent_settings: {
-          "verification.critic_enabled": true,
-          "verification.critic_server_url": "https://critic.example.com",
+          verification: {
+            critic_enabled: true,
+            critic_server_url: "https://critic.example.com",
+          },
         },
       }),
     );
 
     renderSdkSectionPage({
-      sectionKeys: ["verification"],
+      settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["verification"] }],
       getInitialView: () => "all",
     });
 
     expect(
       await screen.findByTestId("sdk-settings-verification.critic_server_url"),
     ).toHaveAttribute("type", "url");
+  });
+
+  it("shows iterative refinement in the basic view once critic is enabled", async () => {
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "verification",
+          label: "Verification",
+          fields: [
+            {
+              key: "verification.critic_enabled",
+              label: "Enable critic",
+              section: "verification",
+              section_label: "Verification",
+              value_type: "boolean",
+              default: true,
+              choices: [],
+              depends_on: [],
+              prominence: "critical",
+              secret: false,
+              required: true,
+            },
+            {
+              key: "verification.enable_iterative_refinement",
+              label: "Enable iterative refinement",
+              section: "verification",
+              section_label: "Verification",
+              value_type: "boolean",
+              default: false,
+              choices: [],
+              depends_on: ["verification.critic_enabled"],
+              prominence: "critical",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          verification: {
+            critic_enabled: false,
+            enable_iterative_refinement: false,
+          },
+        },
+      }),
+    );
+
+    renderSdkSectionPage({ settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["verification"] }] });
+
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByTestId("sdk-settings-verification.critic_enabled"),
+    );
+
+    expect(
+      await screen.findByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows a success toast after saving settings", async () => {
@@ -576,7 +651,7 @@ describe("SdkSectionPage", () => {
       "displaySuccessToast",
     );
 
-    renderSdkSectionPage({ sectionKeys: ["llm"] });
+    renderSdkSectionPage({ settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["llm"] }] });
 
     const endpointInput = await screen.findByTestId(
       "sdk-settings-llm.endpoint",
@@ -599,7 +674,7 @@ describe("SdkSectionPage", () => {
     );
     const displayErrorToastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
 
-    renderSdkSectionPage({ sectionKeys: ["llm"] });
+    renderSdkSectionPage({ settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["llm"] }] });
 
     const endpointInput = await screen.findByTestId(
       "sdk-settings-llm.endpoint",
@@ -619,7 +694,7 @@ describe("SdkSectionPage", () => {
     );
 
     renderSdkSectionPage({
-      sectionKeys: ["llm"],
+      settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["llm"] }],
       trailingActions: (
         <button type="button" data-testid="trailing-action">
           Extra
@@ -642,7 +717,7 @@ describe("SdkSectionPage", () => {
       .mockResolvedValue(true);
 
     renderSdkSectionPage({
-      sectionKeys: ["llm"],
+      settingsSources: [{ settingsSource: "agent_settings", sectionKeys: ["llm"] }],
       extraDirty: true,
       buildPayload: (payload) => ({
         ...payload,

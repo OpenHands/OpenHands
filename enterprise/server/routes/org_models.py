@@ -14,6 +14,10 @@ from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
 
+from openhands.app_server.settings.settings_models import (
+    _load_persisted_agent_settings,
+    _load_persisted_conversation_settings,
+)
 from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
 from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
@@ -23,14 +27,18 @@ def _validate_persisted_agent_settings(
 ) -> OpenHandsAgentSettings:
     """Validate persisted ``org.agent_settings`` against the canonical schema.
 
-    Older rows carry the legacy ``agent_kind: 'llm'`` discriminator from the
-    pre-rename SDK; force ``'openhands'`` so the canonical class accepts both
-    shapes. Mirrors :func:`OrgStore.get_agent_settings_from_org` — kept inline
-    to avoid a circular import (``org_store`` already imports from this module).
+    Routes the raw payload through the shared SDK loader so any schema
+    migrations registered with the SDK are applied first. Older rows carry
+    the legacy ``agent_kind: 'llm'`` discriminator from the pre-rename SDK;
+    force ``'openhands'`` after migration so the canonical class accepts
+    both shapes. Mirrors :func:`OrgStore.get_agent_settings_from_org` — kept
+    inline to avoid a circular import (``org_store`` already imports from this
+    module).
     """
-    kwargs = dict(raw) if raw else {}
-    kwargs['agent_kind'] = 'openhands'
-    return OpenHandsAgentSettings.model_validate(kwargs)
+    loaded = _load_persisted_agent_settings(raw or {})
+    payload = loaded.model_dump(mode='json', context={'expose_secrets': True})
+    payload['agent_kind'] = 'openhands'
+    return OpenHandsAgentSettings.model_validate(payload)
 
 
 class OrgCreationError(Exception):
@@ -203,8 +211,8 @@ class OrgResponse(BaseModel):
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             org_version=org.org_version if org.org_version is not None else 0,
             agent_settings=_validate_persisted_agent_settings(org.agent_settings),
-            conversation_settings=ConversationSettings.model_validate(
-                dict(org.conversation_settings) if org.conversation_settings else {}
+            conversation_settings=_load_persisted_conversation_settings(
+                org.conversation_settings
             ),
             search_api_key=None,
             sandbox_api_key=None,
@@ -423,8 +431,8 @@ class OrgDefaultsSettingsResponse(BaseModel):
         cls._denormalize_llm_for_response(agent_settings)
         return cls(
             agent_settings=agent_settings,
-            conversation_settings=ConversationSettings.model_validate(
-                dict(org.conversation_settings) if org.conversation_settings else {}
+            conversation_settings=_load_persisted_conversation_settings(
+                org.conversation_settings
             ),
             llm_api_key_set=org.llm_api_key is not None,
             search_api_key=cls._mask_key(org.search_api_key),

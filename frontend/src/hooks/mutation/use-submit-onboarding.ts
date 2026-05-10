@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { openHands } from "#/api/open-hands-axios";
+import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 type SubmitOnboardingArgs = {
@@ -25,7 +26,7 @@ export const useSubmitOnboarding = () => {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
       queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
 
       const finalRedirectUrl = data.redirect_url || "/";

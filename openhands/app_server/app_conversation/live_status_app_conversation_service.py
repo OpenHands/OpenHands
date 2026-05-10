@@ -1028,6 +1028,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             mcp_servers: Dictionary to add servers to
             user: User information containing custom MCP config
         """
+        if isinstance(user.agent_settings, ACPAgentSettings):
+            return
+
         sdk_mcp = user.agent_settings.mcp_config
         if not sdk_mcp or not sdk_mcp.mcpServers:
             return
@@ -1369,7 +1372,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 plan_path = self._compute_plan_path(project_dir, git_provider)
             tools = get_planning_tools(plan_path=plan_path)
         else:
-            tools = get_default_tools(enable_browser=True)
+            tools = get_default_tools(
+                enable_browser=True,
+                enable_sub_agents=user.agent_settings.enable_sub_agents,
+            )
 
         # --- build AgentSettings and create agent ---------------------------
         from fastmcp.mcp_config import MCPConfig

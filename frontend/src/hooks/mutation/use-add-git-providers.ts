@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SecretsService } from "#/api/secrets-service";
 import { Provider, ProviderToken } from "#/types/settings";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 export const useAddGitProviders = () => {
   const queryClient = useQueryClient();
@@ -15,7 +16,7 @@ export const useAddGitProviders = () => {
     }) => SecretsService.addGitProvider(providers),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["settings", "personal", organizationId],
+        queryKey: SETTINGS_QUERY_KEYS.personal(organizationId),
       });
     },
     meta: {

@@ -5,7 +5,9 @@ import { requireOrgDefaultsRedirect } from "#/utils/org/saas-redirect-to-org-def
 function CondenserSettingsScreen() {
   return (
     <SdkSectionPage
-      sectionKeys={["condenser"]}
+      settingsSources={[
+        { settingsSource: "agent_settings", sectionKeys: ["condenser"] },
+      ]}
       testId="condenser-settings-screen"
     />
   );
