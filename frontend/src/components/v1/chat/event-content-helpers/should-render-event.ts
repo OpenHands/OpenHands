@@ -1,3 +1,4 @@
+import { OpenHandsParsedEvent } from "#/types/core";
 import { OpenHandsEvent } from "#/types/v1/core";
 import {
   isActionEvent,
@@ -7,6 +8,7 @@ import {
   isConversationStateUpdateEvent,
   isHookExecutionEvent,
   isACPToolCallEvent,
+  isV1Event,
 } from "#/types/v1/type-guards";
 
 export const shouldRenderEvent = (event: OpenHandsEvent) => {
@@ -68,3 +70,14 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
 export const hasUserEvent = (events: OpenHandsEvent[]) =>
   events.some((event) => event.source === "user");
+
+/**
+ * Narrow a mixed V0/V1 event list to V1 events that actually render in chat.
+ * Single source of truth: callers (e.g. `useFilteredEvents`, slash-command
+ * interceptors that anchor to the latest visible event) MUST use this rather
+ * than re-implementing `isV1Event` + `shouldRenderEvent` chains, so updates
+ * to the rendering rules are picked up everywhere.
+ */
+export const getRenderedV1Events = (
+  events: ReadonlyArray<OpenHandsEvent | OpenHandsParsedEvent>,
+): OpenHandsEvent[] => events.filter(isV1Event).filter(shouldRenderEvent);

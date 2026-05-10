@@ -33,7 +33,7 @@ export function SettingsLayout({
           navigationItems={navigationItems}
         />
         {/* Main content */}
-        <main className="flex-1 overflow-auto custom-scrollbar-always">
+        <main className="flex-1 min-w-0 overflow-auto custom-scrollbar-always">
           {children}
         </main>
       </div>

@@ -1,5 +1,6 @@
 import { Action } from "../base/action";
 import { EventID, ToolCallID, SecurityRisk, TextContent } from "../base/common";
+import { CriticResult } from "../base/critic";
 import {
   BaseEvent,
   ChatCompletionMessageToolCall,
@@ -58,6 +59,11 @@ export interface ActionEvent<T extends Action = Action> extends BaseEvent {
    * The LLM's assessment of the safety risk of this action
    */
   security_risk: SecurityRisk;
+
+  /**
+   * Optional critic evaluation of this action and preceding history.
+   */
+  critic_result?: CriticResult | null;
 
   /**
    * Optional LLM-generated summary used to label the tool call in the UI.

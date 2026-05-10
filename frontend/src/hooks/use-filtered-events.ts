@@ -6,7 +6,7 @@ import {
   hasUserEvent,
 } from "#/components/features/chat/event-content-helpers/should-render-event";
 import {
-  shouldRenderEvent as shouldRenderV1Event,
+  getRenderedV1Events,
   hasUserEvent as hasV1UserEvent,
 } from "#/components/v1/chat";
 import {
@@ -42,7 +42,7 @@ export function useFilteredEvents() {
 
   // Filter V1 events - use uiEvents for rendering (actions replaced by observations)
   const v1UiEvents = React.useMemo(
-    () => uiEvents.filter(isV1Event).filter(shouldRenderV1Event),
+    () => getRenderedV1Events(uiEvents),
     [uiEvents],
   );
 

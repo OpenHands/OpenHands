@@ -8,9 +8,7 @@ import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { useSubmitOnboarding } from "#/hooks/mutation/use-submit-onboarding";
 import { useOnboardingStatus } from "#/hooks/query/use-onboarding-status";
-import { useTracking } from "#/hooks/use-tracking";
 import { cn } from "#/utils/utils";
-import { useMe } from "#/hooks/query/use-me";
 import {
   ONBOARDING_FORM,
   OnboardingQuestion,
@@ -87,11 +85,9 @@ function OnboardingForm() {
   const navigate = useNavigate();
   const loaderData = useLoaderData<typeof clientLoader>();
   const config = loaderData?.config;
-  const { data: me } = useMe();
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
     useOnboardingStatus();
   const { mutate: submitOnboarding } = useSubmitOnboarding();
-  const { trackOnboardingCompleted } = useTracking();
 
   React.useEffect(() => {
     if (isOnboardingStatusLoading) return;
@@ -186,26 +182,6 @@ function OnboardingForm() {
   const handleNext = () => {
     if (isLastStep) {
       submitOnboarding({ selections: answers });
-
-      // Track onboarding completion based on deployment mode:
-      // - Cloud mode: track ALL users
-      // - Self-hosted mode: track only org owners (SuperAdmin)
-      const deploymentMode = config?.feature_flags?.deployment_mode;
-      const isOwner = me?.role === "owner";
-      const shouldTrack =
-        deploymentMode === "cloud" ||
-        (deploymentMode === "self_hosted" && isOwner);
-
-      if (shouldTrack) {
-        trackOnboardingCompleted({
-          role: typeof answers.role === "string" ? answers.role : undefined,
-          orgSize:
-            typeof answers.org_size === "string" ? answers.org_size : undefined,
-          useCase: Array.isArray(answers.use_case)
-            ? answers.use_case
-            : undefined,
-        });
-      }
     } else {
       setCurrentStepIndex((prev) => prev + 1);
     }

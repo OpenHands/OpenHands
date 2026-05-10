@@ -31,7 +31,6 @@ from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
 from openhands.sdk import Agent, LLMSummarizingCondenser
 from openhands.sdk.context import AgentContext
-from openhands.sdk.context.skills import Skill
 from openhands.sdk.llm import LLM
 from openhands.sdk.security import (
     AlwaysConfirm,
@@ -41,6 +40,7 @@ from openhands.sdk.security import (
     NeverConfirm,
     SecurityAnalyzerBase,
 )
+from openhands.sdk.skills import Skill
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)

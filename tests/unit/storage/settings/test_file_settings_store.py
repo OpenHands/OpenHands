@@ -1,3 +1,4 @@
+import json
 import os
 from unittest.mock import MagicMock, patch
 
@@ -94,6 +95,60 @@ async def test_store_and_load_data(file_settings_store):
     assert (
         loaded_data.agent_settings.llm.base_url == init_data.agent_settings.llm.base_url
     )
+
+
+@pytest.mark.asyncio
+async def test_load_seeds_default_profile_from_legacy_llm(file_settings_store):
+    legacy_payload = {
+        'agent_settings': {
+            'llm': {
+                'model': 'openai/gpt-4o',
+                'api_key': 'legacy-key',
+                'base_url': 'https://example.com',
+            },
+        },
+    }
+    file_settings_store.file_store.read.return_value = json.dumps(legacy_payload)
+
+    loaded = await file_settings_store.load()
+
+    assert loaded is not None
+    assert loaded.llm_profiles.active == 'Default'
+    default_profile = loaded.llm_profiles.require('Default')
+    assert default_profile.model == 'openai/gpt-4o'
+    assert default_profile.base_url == 'https://example.com'
+    assert default_profile.api_key.get_secret_value() == 'legacy-key'
+
+
+@pytest.mark.asyncio
+async def test_load_does_not_overwrite_existing_profiles(file_settings_store):
+    payload = {
+        'agent_settings': {
+            'llm': {'model': 'openai/gpt-4o', 'api_key': 'legacy-key'},
+        },
+        'llm_profiles': {
+            'profiles': {'Saved': {'model': 'anthropic/claude-opus-4'}},
+            'active': 'Saved',
+        },
+    }
+    file_settings_store.file_store.read.return_value = json.dumps(payload)
+
+    loaded = await file_settings_store.load()
+
+    assert loaded is not None
+    assert set(loaded.llm_profiles.profiles) == {'Saved'}
+    assert loaded.llm_profiles.active == 'Saved'
+
+
+@pytest.mark.asyncio
+async def test_load_skips_seeding_when_no_legacy_model(file_settings_store):
+    file_settings_store.file_store.read.return_value = json.dumps({})
+
+    loaded = await file_settings_store.load()
+
+    assert loaded is not None
+    assert loaded.llm_profiles.profiles == {}
+    assert loaded.llm_profiles.active is None
 
 
 @pytest.mark.asyncio

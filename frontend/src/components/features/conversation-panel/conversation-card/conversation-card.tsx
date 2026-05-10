@@ -1,5 +1,4 @@
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -46,7 +45,6 @@ export function ConversationCard({
   onContextMenuToggle,
   llmModel,
 }: ConversationCardProps) {
-  const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
@@ -83,7 +81,6 @@ export function ConversationCard({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    posthog.capture("download_via_vscode_button_clicked");
 
     // Fetch the VS Code URL from the API
     if (conversationId) {

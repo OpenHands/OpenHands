@@ -309,8 +309,10 @@ def test_redact_url_params_filter_msg_embedded_url():
 
 
 def test_uvicorn_default_config_default_handler_has_redact_filter():
-    """The 'default' handler (used by uvicorn.error) must have the redact filter
-    so that WebSocket [accepted] logs don't leak session_api_key."""
+    """The 'default' handler (used by uvicorn.error) must have the redact filter.
+
+    Ensures WebSocket [accepted] logs don't leak session_api_key.
+    """
     config = _uvicorn_default_log_config()
     assert 'redact_url_params' in config['handlers']['default']['filters']
 
@@ -330,3 +332,67 @@ def test_uvicorn_configs_all_handlers_have_redact_filter():
                 f"Handler '{handler_name}' in {config_fn.__name__} is missing "
                 f"the 'redact_url_params' filter"
             )
+
+
+@patch.dict('os.environ', {}, clear=True)
+def test_sensitive_data_filter_redacts_api_key_literals():
+    """SensitiveDataFilter must redact common API key prefixes via SDK utils."""
+    sensitive_filter = SensitiveDataFilter()
+
+    # Use values that match the SDK's actual patterns (20+ chars after prefix)
+    cases = [
+        'sk-proj-' + 'a' * 25,
+        'ghp_' + 'A' * 25,
+        "api_key='should-be-hidden'",
+        "{'GITHUB_TOKEN': 'mytoken'}",
+    ]
+    for secret in cases:
+        record = logging.LogRecord(
+            name='test',
+            level=logging.INFO,
+            pathname='test.py',
+            lineno=1,
+            msg=f'Value: {secret}',
+            args=(),
+            exc_info=None,
+        )
+        sensitive_filter.filter(record)
+        assert secret not in record.msg, f'Secret {secret!r} was not redacted'
+        assert '<redacted>' in record.msg
+
+
+@patch.dict('os.environ', {}, clear=True)
+def test_sensitive_filter_applied_to_handler_catches_child_logger_records():
+    """Filter on the handler must catch records propagated from child loggers.
+
+    Python only checks the originating logger's filters during propagation,
+    not ancestor logger filters. The filter must therefore be attached to
+    the handler as well as to openhands_logger so that child-logger records
+    (e.g. openhands.app_server.*) are still redacted.
+    """
+    import io
+
+    sensitive_filter = SensitiveDataFilter()
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setLevel(logging.DEBUG)
+    handler.addFilter(sensitive_filter)
+
+    parent = logging.getLogger('openhands.test_parent')
+    parent.addHandler(handler)
+    parent.setLevel(logging.DEBUG)
+    parent.propagate = False
+
+    child = logging.getLogger('openhands.test_parent.child')
+    child.setLevel(logging.DEBUG)
+
+    # Use a value that matches the SDK's actual redaction patterns (20+ chars)
+    secret = 'sk-proj-' + 'x' * 25
+    child.info(f'Token: {secret}')
+
+    output = stream.getvalue()
+    assert secret not in output, (
+        'Child logger record was not redacted by handler filter'
+    )
+    assert '<redacted>' in output

@@ -441,6 +441,29 @@ async def test_list_profiles_reports_api_key_set_per_row(test_client, settings_s
 
 
 @pytest.mark.asyncio
+async def test_api_key_set_is_false_for_empty_secret(test_client, settings_store):
+    """``SecretStr('')`` is *not* a stored key — the UI must not claim one is."""
+    settings = _base_settings()
+    settings.llm_profiles.save(
+        'blank', LLM(model='openai/gpt-4o', api_key=SecretStr(''))
+    )
+    settings.llm_profiles.save(
+        'whitespace', LLM(model='openai/gpt-4o', api_key=SecretStr('   '))
+    )
+    await _seed(settings_store, settings)
+
+    rows = {
+        p['name']: p
+        for p in test_client.get('/api/v1/settings/profiles').json()['profiles']
+    }
+    assert rows['blank']['api_key_set'] is False
+    assert rows['whitespace']['api_key_set'] is False
+
+    detail = test_client.get('/api/v1/settings/profiles/blank').json()
+    assert detail['api_key_set'] is False
+
+
+@pytest.mark.asyncio
 async def test_save_profile_rejects_unknown_llm_field(test_client, settings_store):
     """StrictLLM forbids extras → typo in an LLM field returns 422 instead of a silent 201."""
     await _seed(settings_store, _base_settings())
@@ -527,8 +550,33 @@ async def test_activate_profile_applies_base_url_fixup(test_client, settings_sto
     assert response.status_code == 200
 
     stored = await settings_store.load()
-    # Fixup inferred the proxy URL; profile itself remains unchanged.
     assert stored.agent_settings.llm.base_url is not None
+
+
+@pytest.mark.asyncio
+async def test_activate_does_not_mutate_saved_profile_base_url(
+    test_client, settings_store
+):
+    """Activate must not bleed ``_post_merge_llm_fixups`` into the saved
+    profile. A shallow ``model_copy(update={'llm': llm})`` would share the
+    LLM reference and propagate the fixup to ``llm_profiles[name]``.
+
+    Use a custom base_url (not an openhands/* model) so the LLM SDK does
+    not auto-resolve base_url at construction time — that would mask the
+    mutation we want to detect.
+    """
+    settings = _base_settings()
+    settings.llm_profiles.save(
+        'custom',
+        LLM(model='openai/gpt-4o', base_url='https://custom.example.com'),
+    )
+    await _seed(settings_store, settings)
+
+    response = test_client.post('/api/v1/settings/profiles/custom/activate')
+    assert response.status_code == 200
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('custom').base_url == 'https://custom.example.com'
 
 
 # ── POST /profiles/{name}/rename ─────────────────────────────────
