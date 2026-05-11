@@ -1,4 +1,4 @@
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -207,6 +207,52 @@ def test_get_provider_env_key():
     """Test provider environment key generation"""
     assert ProviderHandler.get_provider_env_key(ProviderType.GITHUB) == 'github_token'
     assert ProviderHandler.get_provider_env_key(ProviderType.GITLAB) == 'gitlab_token'
+
+
+@pytest.mark.asyncio
+async def test_get_authenticated_git_url_quotes_bitbucket_basic_credentials():
+    tokens = MappingProxyType(
+        {
+            ProviderType.BITBUCKET: ProviderToken(
+                token=SecretStr('user@example.com:api/token#1')
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+    handler.verify_repo_provider = AsyncMock(
+        return_value=SimpleNamespace(
+            git_provider=ProviderType.BITBUCKET,
+            full_name='workspace/repo',
+        )
+    )
+
+    result = await handler.get_authenticated_git_url('workspace/repo')
+
+    assert (
+        result
+        == 'https://user%40example.com:api%2Ftoken%231@bitbucket.org/workspace/repo.git'
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_authenticated_git_url_quotes_bitbucket_token_credentials():
+    tokens = MappingProxyType(
+        {ProviderType.BITBUCKET: ProviderToken(token=SecretStr('api/token#1'))}
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+    handler.verify_repo_provider = AsyncMock(
+        return_value=SimpleNamespace(
+            git_provider=ProviderType.BITBUCKET,
+            full_name='workspace/repo',
+        )
+    )
+
+    result = await handler.get_authenticated_git_url('workspace/repo')
+
+    assert (
+        result
+        == 'https://x-token-auth:api%2Ftoken%231@bitbucket.org/workspace/repo.git'
+    )
 
 
 @pytest.mark.asyncio
