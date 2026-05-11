@@ -85,9 +85,8 @@ function AppSettingsScreen() {
       formData.get("enable-proactive-conversations-switch")?.toString() ===
       "on";
 
-    const enableStayLoggedIn = formData.has("stay-logged-in-switch")
-      ? formData.get("stay-logged-in-switch")?.toString() === "on"
-      : undefined;
+    const enableStayLoggedIn =
+      formData.get("stay-logged-in-switch")?.toString() === "on";
 
     const enableSolvabilityAnalysis =
       formData.get("enable-solvability-analysis-switch")?.toString() === "on";
