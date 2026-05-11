@@ -7,7 +7,6 @@ from typing import NoReturn
 from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
-from openhands.sdk.settings import AgentSettings, ConversationSettings
 from server.constants import ORG_SETTINGS_VERSION, get_default_litellm_model
 from server.routes.org_models import (
     LiteLLMIntegrationError,
@@ -27,6 +26,7 @@ from storage.user_store import UserStore
 
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.settings import AgentSettings, ConversationSettings
 
 
 class OrgService:

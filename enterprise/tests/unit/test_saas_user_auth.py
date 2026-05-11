@@ -966,7 +966,13 @@ class TestOpenHandsApiKey:
 
     @pytest.mark.asyncio
     async def test_get_openhands_api_key_raises_for_missing_user(self):
-        """Test that _get_openhands_api_key raises ValueError if user not found."""
+        """Test that _get_openhands_api_key raises ValueError if user not found.
+
+        The error message now collapses ``user not found`` and
+        ``user without org`` into a single ``has no current organization``
+        case, since both ultimately mean we cannot resolve an effective
+        org for the request.
+        """
         user_id = 'nonexistent_user'
 
         user_auth = SaasUserAuth(
@@ -978,7 +984,9 @@ class TestOpenHandsApiKey:
             mock_user_store.get_user_by_id = AsyncMock(return_value=None)
 
             # Act & Assert
-            with pytest.raises(ValueError, match=f'User not found: {user_id}'):
+            with pytest.raises(
+                ValueError, match=f'User {user_id} has no current organization'
+            ):
                 await user_auth._get_openhands_api_key()
 
     @pytest.mark.asyncio
