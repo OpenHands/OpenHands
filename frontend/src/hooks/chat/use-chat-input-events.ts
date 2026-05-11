@@ -4,6 +4,7 @@ import {
   ensureCursorVisible,
   clearEmptyContent,
 } from "#/components/features/chat/utils/chat-input.utils";
+import { useConversationStore } from "#/stores/conversation-store";
 
 /**
  * Hook for handling chat input events
@@ -17,6 +18,8 @@ export const useChatInputEvents = (
   onFocus?: () => void,
   onBlur?: () => void,
 ) => {
+  const { images, files: attachedFiles } = useConversationStore();
+
   // Handle input events
   const handleInput = useCallback(() => {
     smartResize();
@@ -36,14 +39,14 @@ export const useChatInputEvents = (
       e.preventDefault();
 
       // Check if there are files in the clipboard
-      const files = Array.from(e.clipboardData.files);
-      const hasFiles = files.length > 0;
+      const clipboardFiles = Array.from(e.clipboardData.files);
+      const hasFiles = clipboardFiles.length > 0;
 
       if (hasFiles) {
         // Handle file paste - let the file handling system process the files
         // We'll trigger a custom event that the file handling system can listen to
         const customEvent = new CustomEvent("pasteFiles", {
-          detail: { files },
+          detail: { files: clipboardFiles },
         });
         document.dispatchEvent(customEvent);
         return;
@@ -74,7 +77,11 @@ export const useChatInputEvents = (
         return;
       }
 
-      if (checkIsContentEmpty()) {
+      if (
+        checkIsContentEmpty() &&
+        images.length === 0 &&
+        attachedFiles.length === 0
+      ) {
         e.preventDefault();
         increaseHeightForEmptyContent();
         return;
@@ -86,7 +93,12 @@ export const useChatInputEvents = (
         handleSubmit();
       }
     },
-    [checkIsContentEmpty, increaseHeightForEmptyContent],
+    [
+      checkIsContentEmpty,
+      increaseHeightForEmptyContent,
+      images.length,
+      attachedFiles.length,
+    ],
   );
 
   // Handle blur events to ensure placeholder shows when empty

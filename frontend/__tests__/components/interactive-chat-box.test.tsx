@@ -1,6 +1,15 @@
-import { screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { MemoryRouter } from "react-router";
 import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-box";
 import { renderWithProviders } from "../../test-utils";
@@ -57,7 +66,8 @@ describe("InteractiveChatBox", () => {
 
   const mockStores = (agentState: AgentState = AgentState.INIT) => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: agentState, isArchived: false,
+      curAgentState: agentState,
+      isArchived: false,
     });
 
     useConversationStore.setState({
@@ -76,10 +86,13 @@ describe("InteractiveChatBox", () => {
   };
 
   // Helper function to render with Router context
-  const renderInteractiveChatBox = (props: any, options: any = {}) =>
+  const renderInteractiveChatBox = (
+    { onSubmit, disabled }: ComponentProps<typeof InteractiveChatBox>,
+    options: Parameters<typeof renderWithProviders>[1] = {},
+  ) =>
     renderWithProviders(
       <MemoryRouter>
-        <InteractiveChatBox {...props} />
+        <InteractiveChatBox onSubmit={onSubmit} disabled={disabled} />
       </MemoryRouter>,
       options,
     );
@@ -88,6 +101,16 @@ describe("InteractiveChatBox", () => {
     global.URL.createObjectURL = vi
       .fn()
       .mockReturnValue("blob:http://example.com");
+    window.matchMedia = vi.fn().mockImplementation((query) => ({
+      matches: query === "(pointer: fine)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
   });
 
   afterEach(() => {
@@ -199,6 +222,43 @@ describe("InteractiveChatBox", () => {
     await user.click(submitButton);
 
     expect(onSubmitMock).toHaveBeenCalledWith("Hello, world!", [], []);
+  });
+
+  it("should submit when only an image is attached", async () => {
+    const user = userEvent.setup();
+    const image = new File(["image"], "screenshot.png", { type: "image/png" });
+    mockStores(AgentState.AWAITING_USER_INPUT);
+    useConversationStore.setState({ images: [image] });
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+    });
+
+    const submitButton = screen.getByTestId("submit-button");
+    await user.click(submitButton);
+
+    expect(onSubmitMock).toHaveBeenCalledWith("", [image], []);
+    expect(useConversationStore.getState().images).toEqual([]);
+  });
+
+  it("should submit on Enter when only a file is attached", async () => {
+    const file = new File(["content"], "notes.txt", { type: "text/plain" });
+    mockStores(AgentState.AWAITING_USER_INPUT);
+    useConversationStore.setState({ files: [file] });
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+    });
+
+    const chatInput = screen.getByTestId("chat-input");
+    fireEvent.keyDown(chatInput, {
+      key: "Enter",
+      code: "Enter",
+      shiftKey: false,
+    });
+
+    expect(onSubmitMock).toHaveBeenCalledWith("", [], [file]);
+    expect(useConversationStore.getState().files).toEqual([]);
   });
 
   it("should disable the submit button when awaiting user confirmation", async () => {
