@@ -85,8 +85,9 @@ function AppSettingsScreen() {
       formData.get("enable-proactive-conversations-switch")?.toString() ===
       "on";
 
-    const enableStayLoggedIn =
-      formData.get("stay-logged-in-switch")?.toString() === "on";
+    const enableStayLoggedIn = formData.has("stay-logged-in-switch")
+      ? formData.get("stay-logged-in-switch")?.toString() === "on"
+      : undefined;
 
     const enableSolvabilityAnalysis =
       formData.get("enable-solvability-analysis-switch")?.toString() === "on";
@@ -114,7 +115,7 @@ function AppSettingsScreen() {
         user_consents_to_analytics: enableAnalytics,
         enable_sound_notifications: enableSoundNotifications,
         enable_proactive_conversation_starters: enableProactiveConversations,
-        stay_logged_in: enableStayLoggedIn,
+        ...(enableStayLoggedIn !== undefined && { stay_logged_in: enableStayLoggedIn }),
         enable_solvability_analysis: enableSolvabilityAnalysis,
         sandbox_grouping_strategy: sandboxGroupingStrategy,
         max_budget_per_task: maxBudgetPerTask,
