@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { createRoutesStub } from "react-router";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SettingsForm } from "#/components/shared/modals/settings/settings-form";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -28,14 +28,16 @@ describe("SettingsForm", () => {
     const saveButton = screen.getByRole("button", { name: /save/i });
     await user.click(saveButton);
 
-    expect(saveSettingsSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agent_settings_diff: expect.objectContaining({
-          llm: expect.objectContaining({
-            model: getAgentSettingValue(DEFAULT_SETTINGS, "llm.model"),
+    await waitFor(() =>
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({
+              model: getAgentSettingValue(DEFAULT_SETTINGS, "llm.model"),
+            }),
           }),
         }),
-      }),
+      ),
     );
   });
 });
