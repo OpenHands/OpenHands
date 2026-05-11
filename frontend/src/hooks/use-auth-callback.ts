@@ -27,11 +27,6 @@ export const useAuthCallback = () => {
       return;
     }
 
-    // Wait for settings to load before making persistence decisions
-    if (settings == null) {
-      return;
-    }
-
     // Only process callback if authentication was successful
     if (!isAuthed) {
       return;
@@ -62,9 +57,11 @@ export const useAuthCallback = () => {
     // Always redirect after successful authentication
     navigate(finalUrl, { replace: true });
 
-    // Only store login method if stay_logged_in is enabled (not explicitly disabled)
+    // Only store login method if settings is loaded and stay_logged_in is enabled
+    // (handles case where useSettings is disabled on intermediate pages)
     if (
       Object.values(LoginMethod).includes(loginMethod as LoginMethod) &&
+      settings != null &&
       settings.stay_logged_in !== false
     ) {
       setLoginMethod(loginMethod as LoginMethod);
