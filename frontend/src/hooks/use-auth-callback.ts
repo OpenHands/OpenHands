@@ -54,8 +54,11 @@ export const useAuthCallback = () => {
       ? `${destination}?${remainingParams}`
       : destination;
 
-    // Always redirect after successful authentication
-    navigate(finalUrl, { replace: true });
+    // Only redirect if there are auth params to clean up
+    // Avoids unnecessary revalidation on normal authenticated page loads
+    if (searchParams.toString() || loginMethod || returnTo) {
+      navigate(finalUrl, { replace: true });
+    }
 
     // Only store login method if settings is loaded and stay_logged_in is enabled
     // (handles case where useSettings is disabled on intermediate pages)
