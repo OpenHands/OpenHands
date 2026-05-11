@@ -4,11 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import AppSettingsScreen, { clientLoader } from "#/routes/app-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { AvailableLanguages } from "#/i18n";
 import * as CaptureConsent from "#/utils/handle-capture-consent";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import { createMockWebClientConfig } from "#/mocks/settings-handlers";
 
 beforeEach(() => {
   useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
@@ -320,5 +322,170 @@ describe("Status toasts", () => {
 
     expect(saveSettingsSpy).toHaveBeenCalled();
     expect(displayErrorToastSpy).toHaveBeenCalled();
+  });
+});
+
+describe("Stay logged in switch", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const mockSaasConfig = () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({ app_mode: "saas" }),
+    );
+  };
+
+  it("should not render the stay-logged-in switch in oss mode", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      MOCK_DEFAULT_USER_SETTINGS,
+    );
+    // oss mode by default (no spy on OptionService.getConfig)
+    renderAppSettingsScreen();
+
+    // Wait for settings to load
+    await screen.findByTestId("enable-analytics-switch");
+
+    expect(
+      screen.queryByTestId("stay-logged-in-switch"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should render the stay-logged-in switch in saas mode", async () => {
+    mockSaasConfig();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      MOCK_DEFAULT_USER_SETTINGS,
+    );
+
+    renderAppSettingsScreen();
+
+    const stayLoggedIn = await screen.findByTestId("stay-logged-in-switch");
+    expect(stayLoggedIn).toBeInTheDocument();
+  });
+
+  it("should default stay-logged-in to checked when settings.stay_logged_in is true", async () => {
+    mockSaasConfig();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      stay_logged_in: true,
+    });
+
+    renderAppSettingsScreen();
+
+    const stayLoggedIn = await screen.findByTestId("stay-logged-in-switch");
+    expect(stayLoggedIn).toBeChecked();
+  });
+
+  it("should render stay-logged-in as unchecked when settings.stay_logged_in is false", async () => {
+    mockSaasConfig();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      stay_logged_in: false,
+    });
+
+    renderAppSettingsScreen();
+
+    const stayLoggedIn = await screen.findByTestId("stay-logged-in-switch");
+    expect(stayLoggedIn).not.toBeChecked();
+  });
+
+  it("should enable the submit button when stay-logged-in is toggled", async () => {
+    mockSaasConfig();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      stay_logged_in: true,
+    });
+
+    renderAppSettingsScreen();
+
+    const submit = await screen.findByTestId("submit-button");
+    expect(submit).toBeDisabled();
+
+    const stayLoggedIn = await screen.findByTestId("stay-logged-in-switch");
+    await userEvent.click(stayLoggedIn);
+    expect(submit).not.toBeDisabled();
+  });
+
+  it("should disable the submit button when stay-logged-in is toggled back to original value", async () => {
+    mockSaasConfig();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      stay_logged_in: true,
+    });
+
+    renderAppSettingsScreen();
+
+    const submit = await screen.findByTestId("submit-button");
+    const stayLoggedIn = await screen.findByTestId("stay-logged-in-switch");
+
+    await userEvent.click(stayLoggedIn);
+    expect(submit).not.toBeDisabled();
+
+    await userEvent.click(stayLoggedIn);
+    expect(submit).toBeDisabled();
+  });
+
+  it("should submit stay_logged_in: false when switch is turned off", async () => {
+    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+    mockSaasConfig();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      stay_logged_in: true,
+    });
+
+    renderAppSettingsScreen();
+
+    const stayLoggedIn = await screen.findByTestId("stay-logged-in-switch");
+    await userEvent.click(stayLoggedIn);
+
+    const submit = await screen.findByTestId("submit-button");
+    await userEvent.click(submit);
+
+    expect(saveSettingsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ stay_logged_in: false }),
+      expect.anything(),
+    );
+  });
+
+  it("should submit stay_logged_in: true when switch is turned on", async () => {
+    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+    mockSaasConfig();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      stay_logged_in: false,
+    });
+
+    renderAppSettingsScreen();
+
+    const stayLoggedIn = await screen.findByTestId("stay-logged-in-switch");
+    await userEvent.click(stayLoggedIn);
+
+    const submit = await screen.findByTestId("submit-button");
+    await userEvent.click(submit);
+
+    expect(saveSettingsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ stay_logged_in: true }),
+      expect.anything(),
+    );
+  });
+
+  it("should reset stayLoggedInSwitchHasChanged to false after successful save", async () => {
+    mockSaasConfig();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      stay_logged_in: true,
+    });
+
+    renderAppSettingsScreen();
+
+    const stayLoggedIn = await screen.findByTestId("stay-logged-in-switch");
+    await userEvent.click(stayLoggedIn);
+
+    const submit = await screen.findByTestId("submit-button");
+    expect(submit).not.toBeDisabled();
+
+    await userEvent.click(submit);
+
+    await waitFor(() => expect(submit).toBeDisabled());
   });
 });
