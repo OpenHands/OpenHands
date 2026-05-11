@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enable_sound_notifications: false,
   user_consents_to_analytics: false,
   enable_proactive_conversation_starters: false,
+  stay_logged_in: true,
   enable_solvability_analysis: false,
   search_api_key: "",
   is_new_user: true,

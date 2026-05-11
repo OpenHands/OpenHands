@@ -102,6 +102,7 @@ const normalizeSettingsResponse = (settings: Partial<Settings>): Settings => {
       settings.conversation_settings_schema ??
       DEFAULT_SETTINGS.conversation_settings_schema,
     conversation_settings: conversationSettings,
+    stay_logged_in: settings.stay_logged_in ?? DEFAULT_SETTINGS.stay_logged_in,
     sandbox_grouping_strategy:
       settings.sandbox_grouping_strategy ??
       DEFAULT_SETTINGS.sandbox_grouping_strategy,

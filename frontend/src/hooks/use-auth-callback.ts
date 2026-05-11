@@ -3,14 +3,17 @@ import { useLocation, useNavigate } from "react-router";
 import { useIsAuthed } from "./query/use-is-authed";
 import { LoginMethod, setLoginMethod } from "#/utils/local-storage";
 import { useConfig } from "./query/use-config";
+import { useSettings } from "./query/use-settings";
 
 /**
  * Hook to handle authentication callback and set login method after successful authentication
+ * Only stores the login method if stay_logged_in setting is enabled
  */
 export const useAuthCallback = () => {
   const location = useLocation();
   const { data: isAuthed, isLoading: isAuthLoading } = useIsAuthed();
   const { data: config } = useConfig();
+  const { data: settings } = useSettings();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,8 +37,13 @@ export const useAuthCallback = () => {
     const loginMethod = searchParams.get("login_method");
     const returnTo = searchParams.get("returnTo");
 
-    // Set the login method if it's valid
-    if (Object.values(LoginMethod).includes(loginMethod as LoginMethod)) {
+    // Set the login method if it's valid and stay_logged_in is enabled
+    // If stay_logged_in is false or not set, we don't store the login method
+    // which means the user will need to log in manually on next visit
+    if (
+      Object.values(LoginMethod).includes(loginMethod as LoginMethod) &&
+      settings?.stay_logged_in !== false
+    ) {
       setLoginMethod(loginMethod as LoginMethod);
 
       // Clean up the URL by removing auth-related parameters
@@ -64,5 +72,6 @@ export const useAuthCallback = () => {
     location.pathname,
     config?.app_mode,
     navigate,
+    settings?.stay_logged_in,
   ]);
 };
