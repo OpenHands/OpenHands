@@ -27,6 +27,11 @@ export const useAuthCallback = () => {
       return;
     }
 
+    // Wait for settings to load before making persistence decisions
+    if (settings === undefined) {
+      return;
+    }
+
     // Only process callback if authentication was successful
     if (!isAuthed) {
       return;
@@ -37,33 +42,32 @@ export const useAuthCallback = () => {
     const loginMethod = searchParams.get("login_method");
     const returnTo = searchParams.get("returnTo");
 
-    // Set the login method if it's valid and stay_logged_in is enabled
-    // If stay_logged_in is false or not set, we don't store the login method
-    // which means the user will need to log in manually on next visit
+    // Always clean up the URL by removing auth-related parameters
+    searchParams.delete("login_method");
+    searchParams.delete("returnTo");
+
+    // Determine where to navigate after authentication
+    let destination = "/";
+    if (returnTo && returnTo !== "/login") {
+      destination = returnTo;
+    } else if (location.pathname !== "/login" && location.pathname !== "/") {
+      destination = location.pathname;
+    }
+
+    const remainingParams = searchParams.toString();
+    const finalUrl = remainingParams
+      ? `${destination}?${remainingParams}`
+      : destination;
+
+    // Always redirect after successful authentication
+    navigate(finalUrl, { replace: true });
+
+    // Only store login method if stay_logged_in is enabled (not explicitly disabled)
     if (
       Object.values(LoginMethod).includes(loginMethod as LoginMethod) &&
-      settings?.stay_logged_in !== false
+      settings.stay_logged_in !== false
     ) {
       setLoginMethod(loginMethod as LoginMethod);
-
-      // Clean up the URL by removing auth-related parameters
-      searchParams.delete("login_method");
-      searchParams.delete("returnTo");
-
-      // Determine where to navigate after authentication
-      let destination = "/";
-      if (returnTo && returnTo !== "/login") {
-        destination = returnTo;
-      } else if (location.pathname !== "/login" && location.pathname !== "/") {
-        destination = location.pathname;
-      }
-
-      const remainingParams = searchParams.toString();
-      const finalUrl = remainingParams
-        ? `${destination}?${remainingParams}`
-        : destination;
-
-      navigate(finalUrl, { replace: true });
     }
   }, [
     isAuthed,
@@ -72,6 +76,6 @@ export const useAuthCallback = () => {
     location.pathname,
     config?.app_mode,
     navigate,
-    settings?.stay_logged_in,
+    settings,
   ]);
 };
