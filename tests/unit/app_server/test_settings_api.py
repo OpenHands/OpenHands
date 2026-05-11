@@ -325,3 +325,141 @@ async def test_disabled_skills_persistence(test_client):
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == []
+
+
+def test_stay_logged_in_default_value():
+    """Test that stay_logged_in defaults to True in the Settings model."""
+    settings = Settings()
+    assert settings.stay_logged_in is True
+
+
+def test_stay_logged_in_explicit_true():
+    """Test that stay_logged_in can be explicitly set to True."""
+    settings = Settings(stay_logged_in=True)
+    assert settings.stay_logged_in is True
+
+
+def test_stay_logged_in_explicit_false():
+    """Test that stay_logged_in can be explicitly set to False."""
+    settings = Settings(stay_logged_in=False)
+    assert settings.stay_logged_in is False
+
+
+@pytest.mark.asyncio
+async def test_stay_logged_in_persistence_true(test_client):
+    """Test that stay_logged_in=True can be saved and retrieved via the settings API."""
+    response = test_client.post(
+        '/api/v1/settings',
+        json=_dump_update(
+            Settings(
+                stay_logged_in=True,
+                agent_settings=AgentSettings(llm=LLM(model='test-model')),
+            )
+        ),
+    )
+    assert response.status_code == 200
+
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['stay_logged_in'] is True
+
+
+@pytest.mark.asyncio
+async def test_stay_logged_in_persistence_false(test_client):
+    """Test that stay_logged_in=False can be saved and retrieved via the settings API."""
+    response = test_client.post(
+        '/api/v1/settings',
+        json=_dump_update(
+            Settings(
+                stay_logged_in=False,
+                agent_settings=AgentSettings(llm=LLM(model='test-model')),
+            )
+        ),
+    )
+    assert response.status_code == 200
+
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['stay_logged_in'] is False
+
+
+@pytest.mark.asyncio
+async def test_stay_logged_in_can_be_toggled(test_client):
+    """Test that stay_logged_in can be toggled from True to False and back."""
+    # Save with stay_logged_in=True
+    response = test_client.post(
+        '/api/v1/settings',
+        json=_dump_update(
+            Settings(
+                stay_logged_in=True,
+                agent_settings=AgentSettings(llm=LLM(model='test-model')),
+            )
+        ),
+    )
+    assert response.status_code == 200
+
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    assert response.json()['stay_logged_in'] is True
+
+    # Now toggle to stay_logged_in=False
+    response = test_client.post(
+        '/api/v1/settings',
+        json=_dump_update(
+            Settings(
+                stay_logged_in=False,
+                agent_settings=AgentSettings(llm=LLM(model='test-model')),
+            )
+        ),
+    )
+    assert response.status_code == 200
+
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    assert response.json()['stay_logged_in'] is False
+
+    # Toggle back to stay_logged_in=True
+    response = test_client.post(
+        '/api/v1/settings',
+        json=_dump_update(
+            Settings(
+                stay_logged_in=True,
+                agent_settings=AgentSettings(llm=LLM(model='test-model')),
+            )
+        ),
+    )
+    assert response.status_code == 200
+
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    assert response.json()['stay_logged_in'] is True
+
+
+@pytest.mark.asyncio
+async def test_stay_logged_in_preserved_in_partial_update(test_client):
+    """Test that stay_logged_in is preserved when other settings are updated."""
+    # First, set stay_logged_in=False
+    response = test_client.post(
+        '/api/v1/settings',
+        json=_dump_update(
+            Settings(
+                stay_logged_in=False,
+                agent_settings=AgentSettings(llm=LLM(model='test-model')),
+            )
+        ),
+    )
+    assert response.status_code == 200
+
+    # Then do a partial update (only language)
+    response = test_client.post(
+        '/api/v1/settings',
+        json={'language': 'fr'},
+    )
+    assert response.status_code == 200
+
+    # stay_logged_in should still be False
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    assert response.json()['stay_logged_in'] is False
