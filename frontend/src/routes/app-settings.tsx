@@ -114,7 +114,9 @@ function AppSettingsScreen() {
         user_consents_to_analytics: enableAnalytics,
         enable_sound_notifications: enableSoundNotifications,
         enable_proactive_conversation_starters: enableProactiveConversations,
-        ...(enableStayLoggedIn !== undefined && { stay_logged_in: enableStayLoggedIn }),
+        ...(enableStayLoggedIn !== undefined && {
+          stay_logged_in: enableStayLoggedIn,
+        }),
         enable_solvability_analysis: enableSolvabilityAnalysis,
         sandbox_grouping_strategy: sandboxGroupingStrategy,
         max_budget_per_task: maxBudgetPerTask,
