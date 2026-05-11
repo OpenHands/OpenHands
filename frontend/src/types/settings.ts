@@ -127,6 +127,7 @@ export type Settings = {
   condenser_max_size: number | null;
   enable_sound_notifications: boolean;
   enable_proactive_conversation_starters: boolean;
+  stay_logged_in: boolean;
   enable_solvability_analysis: boolean;
   user_consents_to_analytics: boolean | null;
   search_api_key?: string;

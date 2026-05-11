@@ -5830,6 +5830,23 @@
     "uk": "Запропонувати завдання на GitHub",
     "ca": "Suggereix tasques a GitHub"
   },
+  "SETTINGS$STAY_LOGGED_IN": {
+    "en": "Stay Logged In",
+    "ja": "ログイン状態を保持",
+    "zh-CN": "保持登录状态",
+    "zh-TW": "保持登入狀態",
+    "ko-KR": "로그인 상태 유지",
+    "de": "Angemeldet bleiben",
+    "no": "Hold meg innlogget",
+    "it": "Rimani connesso",
+    "pt": "Mantenha conectado",
+    "es": "Mantente conectado",
+    "ar": "ابق مسجلاً الدخول",
+    "fr": "Rester connecté",
+    "tr": "Giriş yapılmış durumda tut",
+    "uk": "Залишайтесь у системі",
+    "ca": "Mantén-te connectat"
+  },
   "SETTINGS$SOLVABILITY_ANALYSIS": {
     "en": "Enable Solvability Analysis",
     "ja": "解決可能性分析を有効にする",

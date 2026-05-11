@@ -117,6 +117,7 @@ class Settings(BaseModel):
     secrets_store: Annotated[Any, Field(frozen=True)] = Field(default=None)
     enable_sound_notifications: bool = False
     enable_proactive_conversation_starters: bool = True
+    stay_logged_in: bool = True  # Keep user logged in by re-authenticating automatically
     user_consents_to_analytics: bool | None = None
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
