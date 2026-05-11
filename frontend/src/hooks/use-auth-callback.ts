@@ -28,7 +28,7 @@ export const useAuthCallback = () => {
     }
 
     // Wait for settings to load before making persistence decisions
-    if (settings === undefined) {
+    if (settings == null) {
       return;
     }
 
