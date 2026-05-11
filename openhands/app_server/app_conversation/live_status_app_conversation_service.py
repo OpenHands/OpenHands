@@ -23,6 +23,10 @@ from openhands.agent_server.models import (
     StartConversationRequest,
     TextContent,
 )
+from openhands.app_server.app_conversation.agent_server_routing import (
+    ACP_SERVER_TAG,
+    agent_kind_to_router_path,
+)
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -96,7 +100,6 @@ from openhands.app_server.utils.llm_metadata import (
     should_set_litellm_extra_body,
 )
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
-from openhands.sdk.agent.acp_agent import ACPAgent
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
@@ -122,28 +125,23 @@ _acp_conversation_info_type_adapter = TypeAdapter(list[ACPConversationInfo | Non
 _logger = logging.getLogger(__name__)
 
 
-def _agent_kind_to_router_path(agent_kind: str) -> str:
-    """Map agent_kind discriminator to the agent-server router path prefix."""
-    if agent_kind == 'acp':
-        return 'acp/conversations'
-    return 'conversations'
-
-
 def _split_ids_by_kind(
-    conversation_ids: list[str],
+    conversation_ids: list[str] | list[UUID],
     conversation_kind_by_id: dict[str, str],
-) -> tuple[list[str], list[str]]:
-    """Split conversation IDs into (openhands_ids, acp_ids) by agent_kind."""
-    openhands_ids = [
-        cid
-        for cid in conversation_ids
-        if conversation_kind_by_id.get(cid, 'openhands') != 'acp'
-    ]
-    acp_ids = [
-        cid
-        for cid in conversation_ids
-        if conversation_kind_by_id.get(cid, 'openhands') == 'acp'
-    ]
+) -> tuple[list, list]:
+    """Split conversation IDs into (openhands_ids, acp_ids) by agent_kind.
+
+    ``conversation_ids`` may be either UUIDs (the runtime shape produced by
+    ``_get_sandbox_id_to_conversation_ids``) or strings; the lookup is
+    normalised to ``str`` because the kind map is keyed by ``str(info.id)``.
+    """
+    openhands_ids: list = []
+    acp_ids: list = []
+    for cid in conversation_ids:
+        if conversation_kind_by_id.get(str(cid), 'openhands') == 'acp':
+            acp_ids.append(cid)
+        else:
+            openhands_ids.append(cid)
     return openhands_ids, acp_ids
 
 
@@ -362,7 +360,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 else {}
             )
             is_acp = isinstance(start_conversation_request, StartACPConversationRequest)
-            router_path = 'acp/conversations' if is_acp else 'conversations'
+            agent_kind = 'acp' if is_acp else 'openhands'
+            router_path = agent_kind_to_router_path(agent_kind)
             response = await self.httpx_client.post(
                 f'{agent_server_url}/api/{router_path}',
                 json=body_json,
@@ -371,14 +370,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
             response.raise_for_status()
+            tags: dict[str, str] = {}
             if is_acp:
                 info = ACPConversationInfo.model_validate(response.json())
-                agent_kind = 'acp'
-                display_model = start_conversation_request.agent.acp_model
+                llm_model = None
+                # Persist the active ACP provider key so the conversation UI
+                # can resolve a brand label ("Claude Code", "Codex", …) via
+                # the SDK registry without keeping a per-conversation column.
+                user = await self.user_context.get_user_info()
+                if isinstance(user.agent_settings, ACPAgentSettings):
+                    tags[ACP_SERVER_TAG] = user.agent_settings.acp_server
             else:
                 info = ConversationInfo.model_validate(response.json())
-                agent_kind = 'openhands'
-                display_model = start_conversation_request.agent.llm.model
+                llm_model = start_conversation_request.agent.llm.model
 
             # Store info...
             user_id = await self.user_context.get_user_id()
@@ -387,8 +391,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 title=f'Conversation {info.id.hex[:5]}',
                 sandbox_id=sandbox.id,
                 created_by_user_id=user_id,
-                llm_model=display_model,
+                llm_model=llm_model,
                 agent_kind=agent_kind,
+                tags=tags,
                 # Git parameters
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,
@@ -595,7 +600,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 None,
             )
             if conversation_url:
-                router_path = _agent_kind_to_router_path(
+                router_path = agent_kind_to_router_path(
                     app_conversation_info.agent_kind
                 )
                 conversation_url += f'/api/{router_path}/{app_conversation_info.id.hex}'
@@ -1305,7 +1310,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Route ACP agent settings to the ACP-specific builder
         if isinstance(user.agent_settings, ACPAgentSettings):
-            return await self._build_acp_start_conversation_request(
+            acp_request = await self._build_acp_start_conversation_request(
                 sandbox=sandbox,
                 conversation_id=conversation_id,
                 initial_message=initial_message,
@@ -1314,6 +1319,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 plugins=plugins,
                 api_secrets=api_secrets,
             )
+            # --- skills (mirrors the LLM skill-loading block below) ----------
+            if remote_workspace:
+                try:
+                    acp_request = acp_request.model_copy(
+                        update={
+                            'agent': await self._load_skills_and_update_agent(
+                                sandbox,
+                                acp_request.agent,
+                                remote_workspace,
+                                selected_repository,
+                                get_project_dir(working_dir, selected_repository),
+                                disabled_skills=user.disabled_skills,
+                            )
+                        }
+                    )
+                except Exception as e:
+                    _logger.warning(f'Failed to load skills: {e}', exc_info=True)
+            return acp_request
 
         project_dir = get_project_dir(working_dir, selected_repository)
         workspace = LocalWorkspace(working_dir=project_dir)
@@ -1459,56 +1482,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # prompts, LLM metadata, skills) applied after create_agent().
         return conv_settings.create_request(StartConversationRequest, agent=agent)
 
-    @staticmethod
-    def _acp_provider_env(user: UserInfo) -> dict[str, str]:
-        """Translate UI-saved LLM credentials into provider-native env vars.
-
-        The ACP subprocess reads provider credentials from environment variables.
-        Maps the user's LLM API key to the env var expected by the active ACP
-        server via ``ACPAgentSettings.api_key_env_var``. Custom servers return
-        ``None`` — users manage credentials entirely via ``acp_env``.
-
-        Args:
-            user: User information containing ACP agent settings.
-
-        Returns:
-            Dict of env var name → value to inject into the ACP subprocess.
-        """
-        if not isinstance(user.agent_settings, ACPAgentSettings):
-            return {}
-
-        acp_settings = user.agent_settings
-        env: dict[str, str] = {}
-
-        llm_api_key = acp_settings.llm.api_key
-        if not llm_api_key:
-            return env
-
-        key_value = (
-            llm_api_key.get_secret_value()
-            if isinstance(llm_api_key, SecretStr)
-            else str(llm_api_key)
-        )
-        if not key_value or not key_value.strip():
-            return env
-
-        # TODO: simplify to `acp_settings.api_key_env_var` once OpenHands is
-        # pinned to an SDK version that includes software-agent-sdk PR #2984.
-        # The fallback per-server mapping below duplicates that SDK property.
-        api_key_env: str | None = getattr(acp_settings, 'api_key_env_var', None)
-        if api_key_env is None:
-            _SERVER_KEY_MAP = {
-                'claude-code': 'ANTHROPIC_API_KEY',
-                'codex': 'OPENAI_API_KEY',
-                'gemini-cli': 'GEMINI_API_KEY',
-            }
-            api_key_env = _SERVER_KEY_MAP.get(acp_settings.acp_server)
-
-        if api_key_env:
-            env[api_key_env] = key_value
-
-        return env
-
     async def _build_acp_start_conversation_request(
         self,
         sandbox: SandboxInfo,
@@ -1524,9 +1497,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Unlike the LLM path, ACP agents run as separate subprocesses; we pass
         credentials via environment variables rather than injecting an LLM object.
 
-        User secrets (Secrets panel + git provider tokens) are also passed through
-        ``AgentContext.secrets`` so the SDK renders a ``<CUSTOM_SECRETS>`` block
-        in the ACP prompt and injects values into the subprocess env at start time.
+        User secrets (Secrets panel + git provider tokens) flow through two
+        complementary channels: they're rendered into the ACP prompt as a
+        ``<CUSTOM_SECRETS>`` block via ``AgentContext.secrets`` (so the agent
+        knows the names) and also pre-exported as environment variables on
+        the ACP subprocess via ``acp_env`` (so plain CLI commands like
+        ``gh`` / ``aws`` / ``git`` pick them up from env without the agent
+        having to manually export them).
 
         Args:
             sandbox: Sandbox information
@@ -1564,42 +1541,59 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
         assert isinstance(acp_settings, ACPAgentSettings)
 
-        # Merge provider env vars (API keys etc.) into acp_env.
-        # Priority (highest → lowest): acp_env > provider_env
-        provider_env = self._acp_provider_env(user)
-        merged_env: dict[str, str] = {
-            **provider_env,
-            **dict(acp_settings.acp_env or {}),
-        }
+        # Pass user secrets via AgentContext so the SDK renders a <CUSTOM_SECRETS>
+        # block in the ACP prompt; this lets the agent know which secret names
+        # are available and what they're for.
+        agent_context = AgentContext(secrets=secrets) if secrets else None
 
-        # Pass user secrets via AgentContext so the SDK renders a
-        # <CUSTOM_SECRETS> block in the ACP prompt and injects values into
-        # the subprocess env at start time (SDK PR #2984).
-        # TODO: remove the _sdk_supports_acp_secrets guard once OpenHands pins
-        # to an SDK version that includes PR #2984 (secrets acp_compatible=True).
-        _sdk_supports_acp_secrets = (
-            AgentContext.model_fields.get('secrets') is not None
-            and isinstance(AgentContext.model_fields['secrets'].json_schema_extra, dict)
-            and AgentContext.model_fields['secrets'].json_schema_extra.get(
-                'acp_compatible'
+        # Also resolve those same secrets into ``acp_env`` so they appear as
+        # real environment variables on the ACP subprocess. The SDK Terminal
+        # tool (used by the regular OpenHands agent) does an analogous
+        # ``export KEY=value`` before each bash command via
+        # ``secret_registry.get_secrets_as_env_vars(command)``; ACP servers
+        # use their own bash tooling that the SDK doesn't intercept, so we
+        # pre-export at subprocess-launch time instead. Net effect: commands
+        # like ``gh pr view`` pick up ``GH_TOKEN`` from env without the agent
+        # having to manually ``export`` it from the prompt block.
+        #
+        # Precedence (preserves the SDK's ``acp_env > provider env`` rule):
+        # explicit ``acp_env`` from settings wins, then provider env derived
+        # from ``llm.api_key``, then panel-secret values fill remaining gaps.
+        # That way a user-set ``llm.api_key`` keeps owning
+        # ``ANTHROPIC_API_KEY`` even if a same-named secret exists in the
+        # panel; arbitrary credentials like ``GH_TOKEN`` (which have no
+        # provider-registry entry) still get injected.
+        gap_filling_env: dict[str, str] = {}
+        already_resolved = set(acp_settings.acp_env or {}) | set(
+            acp_settings.resolve_provider_env()
+        )
+        for name, source in (secrets or {}).items():
+            if name in already_resolved:
+                continue
+            try:
+                resolved: str | None = source.get_value()
+            except Exception as exc:
+                _logger.warning(
+                    'Could not resolve secret %r for ACP env: %s', name, exc
+                )
+                continue
+            if isinstance(resolved, str) and resolved:
+                gap_filling_env[name] = resolved
+
+        if gap_filling_env:
+            acp_settings = acp_settings.model_copy(
+                update={
+                    'acp_env': {
+                        **gap_filling_env,
+                        **(acp_settings.acp_env or {}),
+                    }
+                }
             )
-            is True
-        )
-        agent_context = (
-            AgentContext(secrets=secrets)
-            if secrets and _sdk_supports_acp_secrets
-            else None
-        )
 
-        acp_agent = ACPAgent(
-            acp_command=acp_settings.acp_command,
-            acp_args=acp_settings.acp_args,
-            acp_env=merged_env,
-            acp_model=acp_settings.acp_model,
-            acp_session_mode=acp_settings.acp_session_mode,
-            acp_prompt_timeout=acp_settings.acp_prompt_timeout,
-            agent_context=agent_context,
+        settings_update = (
+            {'agent_context': agent_context} if agent_context is not None else {}
         )
+        acp_agent = acp_settings.model_copy(update=settings_update).create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
         if plugins:
@@ -1608,15 +1602,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 for p in plugins
             ]
 
-        return StartACPConversationRequest(
-            workspace=workspace,
-            conversation_id=conversation_id,
-            initial_message=self._construct_initial_message_with_plugin_params(
-                initial_message, plugins
-            ),
-            secrets=secrets,
-            plugins=sdk_plugins,
-            agent=acp_agent,
+        # Mirror the regular path: populate ConversationSettings and delegate
+        # to create_request() so that max_iterations, confirmation_mode, and
+        # security_analyzer flow through to ACP conversations too.
+        conv_settings = user.conversation_settings.model_copy(
+            update={
+                'workspace': workspace,
+                'conversation_id': conversation_id,
+                'initial_message': self._construct_initial_message_with_plugin_params(
+                    initial_message, plugins
+                ),
+                'plugins': sdk_plugins,
+            }
+        )
+        return conv_settings.create_request(
+            StartACPConversationRequest, agent=acp_agent
         )
 
     async def _process_pending_messages(

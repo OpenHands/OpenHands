@@ -25,6 +25,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
+    _split_ids_by_kind,
 )
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
@@ -42,20 +43,10 @@ from openhands.app_server.settings.settings_models import (
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk import Agent, Event
-from openhands.sdk.context.agent_context import AgentContext as _AgentContext
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import AgentSettings, ConversationSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-
-# True only on SDK versions that include PR #2984 (secrets acp_compatible=True).
-# When False, _build_acp_start_conversation_request skips the agent_context path.
-_SDK_SUPPORTS_ACP_SECRETS = (
-    _AgentContext.model_fields.get('secrets') is not None
-    and isinstance(_AgentContext.model_fields['secrets'].json_schema_extra, dict)
-    and _AgentContext.model_fields['secrets'].json_schema_extra.get('acp_compatible')
-    is True
-)
 
 
 def _build_test_user_agent_settings(user: SimpleNamespace) -> AgentSettings:
@@ -3075,94 +3066,6 @@ class TestLoadHooksFromWorkspace:
         )
 
 
-class TestAcpProviderEnv:
-    """Unit tests for ``LiveStatusAppConversationService._acp_provider_env``.
-
-    Tests the helper that translates UI-saved LLM credentials into the
-    provider env vars the chosen ACP subprocess expects.
-    """
-
-    @pytest.fixture
-    def _user_factory(self):
-        try:
-            from openhands.sdk.settings import (
-                ACPAgentSettings,  # type: ignore[attr-defined]
-            )
-        except ImportError:
-            pytest.skip('ACPAgentSettings not available in this SDK build')
-
-        def _make(
-            *,
-            acp_server: str = 'claude-code',
-            api_key: str | None = None,
-            base_url: str | None = None,
-            acp_env: dict[str, str] | None = None,
-        ):
-            user = _TestUserInfo(
-                id='user1',
-                llm_model='',
-                llm_base_url=None,
-                llm_api_key=None,
-                sandbox_grouping_strategy=SandboxGroupingStrategy.ADD_TO_ANY,
-                confirmation_mode=False,
-                security_analyzer=None,
-                search_api_key=None,
-                mcp_config=None,
-                disabled_skills=[],
-            )
-            user.agent_settings = ACPAgentSettings(
-                acp_server=acp_server,  # type: ignore[arg-type]
-                llm=LLM(
-                    model='claude-sonnet-4-5',
-                    api_key=SecretStr(api_key) if api_key else None,
-                    base_url=base_url,
-                ),
-                acp_env=acp_env or {},
-            )
-            return user
-
-        return _make
-
-    def test_claude_code_translates_to_anthropic_vars(self, _user_factory):
-        user = _user_factory(acp_server='claude-code', api_key='sk-test-anthropic')
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {'ANTHROPIC_API_KEY': 'sk-test-anthropic'}
-
-    def test_codex_translates_to_openai_vars(self, _user_factory):
-        user = _user_factory(acp_server='codex', api_key='sk-test-openai')
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {'OPENAI_API_KEY': 'sk-test-openai'}
-
-    def test_gemini_translates_to_gemini_vars(self, _user_factory):
-        user = _user_factory(acp_server='gemini-cli', api_key='sk-test-gemini')
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {'GEMINI_API_KEY': 'sk-test-gemini'}
-
-    def test_custom_server_returns_empty(self, _user_factory):
-        """For acp_server='custom', the user is on their own via acp_env."""
-        user = _user_factory(
-            acp_server='custom',
-            api_key='sk-test',
-            base_url='https://proxy.example.com',
-        )
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {}
-
-    def test_no_credentials_returns_empty(self, _user_factory):
-        """No api_key + no base_url → nothing synthesized."""
-        user = _user_factory(acp_server='claude-code')
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {}
-
-    def test_no_api_key_returns_empty(self, _user_factory):
-        """No api_key → nothing synthesized."""
-        user = _user_factory(
-            acp_server='claude-code', base_url='https://api.anthropic.com'
-        )
-        env = LiveStatusAppConversationService._acp_provider_env(user)
-        assert env == {}
-
-
 class TestAgentKindConversationUrl:
     """Regression tests for conversation_url / live-status route dispatch.
 
@@ -3253,12 +3156,12 @@ class TestAgentKindConversationUrl:
 
     def test_agent_kind_to_router_path_known_kinds(self):
         """``'openhands'`` routes to standard conversations; ``'acp'`` to ACP."""
-        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
-            _agent_kind_to_router_path,
+        from openhands.app_server.app_conversation.agent_server_routing import (
+            agent_kind_to_router_path,
         )
 
-        assert _agent_kind_to_router_path('openhands') == 'conversations'
-        assert _agent_kind_to_router_path('acp') == 'acp/conversations'
+        assert agent_kind_to_router_path('openhands') == 'conversations'
+        assert agent_kind_to_router_path('acp') == 'acp/conversations'
 
     def test_agent_kind_to_router_path_unknown_falls_back(self):
         """Any value that is not 'acp' routes to 'conversations'.
@@ -3267,12 +3170,12 @@ class TestAgentKindConversationUrl:
         before the rename, so rows stored with ``agent_kind='llm'`` continue to
         route correctly without a migration.
         """
-        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
-            _agent_kind_to_router_path,
+        from openhands.app_server.app_conversation.agent_server_routing import (
+            agent_kind_to_router_path,
         )
 
-        assert _agent_kind_to_router_path('llm') == 'conversations'
-        assert _agent_kind_to_router_path('future-variant') == 'conversations'
+        assert agent_kind_to_router_path('llm') == 'conversations'
+        assert agent_kind_to_router_path('future-variant') == 'conversations'
 
 
 class TestBuildAcpStartConversationRequestSecrets:
@@ -3361,14 +3264,10 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        if _SDK_SUPPORTS_ACP_SECRETS:
-            assert request.agent.agent_context is not None
-            ctx = request.agent.agent_context.secrets
-            assert ctx.get('GITHUB_TOKEN') is github_secret
-            assert ctx.get('MY_API_KEY') is api_secret
-        else:
-            # Pinned SDK doesn't support ACP secrets yet; agent_context stays unset.
-            assert request.agent.agent_context is None
+        assert request.agent.agent_context is not None
+        ctx = request.agent.agent_context.secrets
+        assert ctx.get('GITHUB_TOKEN') is github_secret
+        assert ctx.get('MY_API_KEY') is api_secret
 
     @pytest.mark.asyncio
     async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
@@ -3381,11 +3280,8 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        if _SDK_SUPPORTS_ACP_SECRETS:
-            assert request.agent.agent_context is not None
-            assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
-        else:
-            assert request.agent.agent_context is None
+        assert request.agent.agent_context is not None
+        assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
 
     @pytest.mark.asyncio
     async def test_explicit_acp_env_preserved(self, service, tmp_path):
@@ -3413,14 +3309,10 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
-        if _SDK_SUPPORTS_ACP_SECRETS:
-            assert request.agent.agent_context is not None
-            assert (
-                request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY')
-                is panel_secret
-            )
-        else:
-            assert request.agent.agent_context is None
+        assert request.agent.agent_context is not None
+        assert (
+            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
+        )
 
     @pytest.mark.asyncio
     async def test_no_secrets_no_agent_context(self, service, tmp_path):
@@ -3437,8 +3329,8 @@ class TestBuildAcpStartConversationRequestSecrets:
         """Explicit acp_env entries take priority over auto-generated provider_env.
 
         When a user sets ANTHROPIC_API_KEY explicitly in acp_env, it must win
-        over the same key that _acp_provider_env derives from the UI-saved LLM
-        credentials.  This exercises the merge priority:
+        over the same key the SDK derives from the UI-saved LLM credentials.
+        This exercises the merge priority:
           acp_env > provider_env > agent_context.secrets
         """
         user = self._make_acp_user(
@@ -3452,3 +3344,104 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         # acp_env must win; the UI-saved key must NOT overwrite it
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
+
+    @pytest.mark.asyncio
+    async def test_secrets_exported_as_env_vars(self, service, tmp_path):
+        """Panel secrets are pre-exported as env vars on the ACP subprocess.
+
+        Mirrors the OpenHands Terminal tool's per-command ``export KEY=value``
+        flow. Without this, plain CLI tools like ``gh`` inside the ACP
+        subprocess shell can't authenticate from the ``<CUSTOM_SECRETS>``
+        prompt block alone.
+        """
+        gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
+        user = self._make_acp_user()
+        service._setup_secrets_for_git_providers = AsyncMock(
+            return_value={'GH_TOKEN': gh_secret}
+        )
+
+        request = await self._call_build(service, user, tmp_path)
+
+        # Resolved into acp_env so the subprocess shell sees it.
+        assert request.agent.acp_env.get('GH_TOKEN') == 'ghp_test123'
+        # AND still in agent_context.secrets so the agent knows it exists.
+        assert request.agent.agent_context is not None
+        assert request.agent.agent_context.secrets.get('GH_TOKEN') is gh_secret
+
+    @pytest.mark.asyncio
+    async def test_panel_secret_does_not_override_provider_env(self, service, tmp_path):
+        """Provider env (from ``llm.api_key``) keeps priority over panel secrets.
+
+        If a user has both a UI-saved Claude Code LLM key AND a same-named
+        ``ANTHROPIC_API_KEY`` in the Secrets panel, the LLM-saved one wins —
+        matches the SDK's ``acp_env > provider_env > secrets`` precedence
+        and avoids surprising silent overrides of the canonical model
+        credential.
+        """
+        user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
+        panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
+        service._setup_secrets_for_git_providers = AsyncMock(
+            return_value={'ANTHROPIC_API_KEY': panel_secret}
+        )
+
+        request = await self._call_build(service, user, tmp_path)
+
+        # llm.api_key-derived provider env wins.
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
+        # The panel secret is still surfaced in agent_context.secrets so
+        # the agent could reference it explicitly if needed.
+        assert request.agent.agent_context is not None
+        assert (
+            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
+        )
+
+    @pytest.mark.asyncio
+    async def test_explicit_acp_env_wins_over_panel_secret(self, service, tmp_path):
+        """Same-named explicit acp_env overrides a panel secret of the same name."""
+        user = self._make_acp_user(acp_env={'GH_TOKEN': 'explicit-token'})
+        service._setup_secrets_for_git_providers = AsyncMock(
+            return_value={'GH_TOKEN': StaticSecret(value=SecretStr('panel-token'))}
+        )
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
+
+
+class TestSplitIdsByKind:
+    """``_split_ids_by_kind`` routes ACP vs OpenHands conversation IDs.
+
+    The kind map is keyed by ``str(info.id)`` (see ``_build_app_conversations``)
+    but the IDs flowing in from ``_get_sandbox_id_to_conversation_ids`` are raw
+    ``UUID`` instances. A naive ``dict.get(cid)`` would always miss and silently
+    route ACP conversations to ``/api/conversations``.
+    """
+
+    def test_uuid_ids_against_string_keyed_map_routes_correctly(self):
+        oh_id = uuid4()
+        acp_id = uuid4()
+        kind_map = {str(oh_id): 'openhands', str(acp_id): 'acp'}
+
+        openhands_ids, acp_ids = _split_ids_by_kind([oh_id, acp_id], kind_map)
+
+        assert openhands_ids == [oh_id]
+        assert acp_ids == [acp_id]
+
+    def test_string_ids_work_too(self):
+        oh_id = uuid4()
+        acp_id = uuid4()
+        kind_map = {str(oh_id): 'openhands', str(acp_id): 'acp'}
+
+        openhands_ids, acp_ids = _split_ids_by_kind([str(oh_id), str(acp_id)], kind_map)
+
+        assert openhands_ids == [str(oh_id)]
+        assert acp_ids == [str(acp_id)]
+
+    def test_unknown_id_defaults_to_openhands(self):
+        unknown = uuid4()
+        openhands_ids, acp_ids = _split_ids_by_kind([unknown], {})
+        assert openhands_ids == [unknown]
+        assert acp_ids == []
+
+    def test_empty_input(self):
+        assert _split_ids_by_kind([], {}) == ([], [])

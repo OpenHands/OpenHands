@@ -16,8 +16,15 @@ from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from openhands.agent_server.models import ConversationInfo, EventPage
+from openhands.agent_server.models import (
+    ACPConversationInfo,
+    ConversationInfo,
+    EventPage,
+)
 from openhands.agent_server.utils import utc_now
+from openhands.app_server.app_conversation.agent_server_routing import (
+    agent_kind_to_router_path,
+)
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -806,14 +813,21 @@ async def refresh_conversation(
 
         # TODO: Maybe we can use RemoteConversation here?
 
+        router_path = agent_kind_to_router_path(app_conversation_info.agent_kind)
+
         # First get conversation...
-        conversation_url = f'{url}/api/conversations/{app_conversation_info.id.hex}'
+        conversation_url = f'{url}/api/{router_path}/{app_conversation_info.id.hex}'
         response = await httpx_client.get(
             conversation_url, headers={'X-Session-API-Key': runtime['session_api_key']}
         )
         response.raise_for_status()
 
-        updated_conversation_info = ConversationInfo.model_validate(response.json())
+        info_type = (
+            ACPConversationInfo
+            if app_conversation_info.agent_kind == 'acp'
+            else ConversationInfo
+        )
+        updated_conversation_info = info_type.model_validate(response.json())
 
         app_conversation_info.updated_at = updated_conversation_info.updated_at
 
@@ -836,7 +850,7 @@ async def refresh_conversation(
         # TODO: It would be nice to have an updated_at__gte filter parameter in the
         # agent server so that we don't pull the full event list each time
         event_url = (
-            f'{url}/api/conversations/{app_conversation_info.id.hex}/events/search'
+            f'{url}/api/{router_path}/{app_conversation_info.id.hex}/events/search'
         )
 
         async def fetch_events_page(page_id: str | None = None) -> EventPage:
