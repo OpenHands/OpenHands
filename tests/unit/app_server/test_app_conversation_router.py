@@ -34,11 +34,11 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
+from openhands.app_server.settings.llm_profiles import LLMProfiles
+from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
-from openhands.app_server.settings.llm_profiles import LLMProfiles
-from openhands.app_server.settings.settings_models import Settings
 from openhands.sdk.llm import LLM
 
 
@@ -720,6 +720,7 @@ class TestSwitchConversationProfile:
                 httpx_client=client,
             )
 
+
 @pytest.mark.asyncio
 class TestReadConversationFile:
     """Test suite for read_conversation_file endpoint."""
@@ -746,7 +747,9 @@ class TestReadConversationFile:
                 sandbox_spec_id=sandbox_spec_id,
                 session_api_key='test-api-key',
                 exposed_urls=[
-                    ExposedUrl(name=AGENT_SERVER, url='http://localhost:8000', port=8000)
+                    ExposedUrl(
+                        name=AGENT_SERVER, url='http://localhost:8000', port=8000
+                    )
                 ],
             )
         )
@@ -776,7 +779,9 @@ class TestReadConversationFile:
                 return_value=io.BytesIO(b'plan body'),
                 create=True,
             ),
-            patch('openhands.app_server.app_conversation.app_conversation_router.os.unlink'),
+            patch(
+                'openhands.app_server.app_conversation.app_conversation_router.os.unlink'
+            ),
         ):
             named_tempfile.return_value.__enter__.return_value.name = '/tmp/test-plan'
 
@@ -821,7 +826,9 @@ class TestReadConversationFile:
                 sandbox_spec_id=str(uuid4()),
                 session_api_key='test-api-key',
                 exposed_urls=[
-                    ExposedUrl(name=AGENT_SERVER, url='http://localhost:8000', port=8000)
+                    ExposedUrl(
+                        name=AGENT_SERVER, url='http://localhost:8000', port=8000
+                    )
                 ],
             )
         )
