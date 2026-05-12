@@ -8,7 +8,6 @@ import {
 export type ConversationTab =
   | "editor"
   | "browser"
-  | "served"
   | "vscode"
   | "terminal"
   | "planner"

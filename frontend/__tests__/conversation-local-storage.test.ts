@@ -52,6 +52,22 @@ describe("conversation localStorage utilities", () => {
       expect(state.rightPanelShown).toBe(true);
     });
 
+    it("drops removed app tab values from persisted state", () => {
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-conv-served`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          selectedTab: "served",
+          unpinnedTabs: ["terminal", "served", "app", "custom-tab"],
+        }),
+      );
+
+      const state = getConversationState("conv-served");
+
+      expect(state.selectedTab).toBe("editor");
+      expect(state.unpinnedTabs).toEqual(["terminal", "custom-tab"]);
+    });
+
     it("returns default state when key is missing or invalid", () => {
       expect(getConversationState("conv-missing").conversationMode).toBe(
         "code",
