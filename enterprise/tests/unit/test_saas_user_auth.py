@@ -371,19 +371,28 @@ async def test_get_provider_tokens_cached(mock_token_manager):
 @pytest.mark.asyncio
 async def test_get_user_settings_store():
     """Test that get_user_settings_store returns a settings store."""
-    with patch('server.auth.saas_user_auth.SaasSettingsStore') as mock_store_cls:
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    mock_user = MagicMock()
+    mock_user.current_org_id = org_id
+
+    with (
+        patch('server.auth.saas_user_auth.SaasSettingsStore') as mock_store_cls,
+        patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+    ):
         mock_store = MagicMock()
         mock_store_cls.return_value = mock_store
+        mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
         user_auth = SaasUserAuth(
-            user_id='test_user_id',
+            user_id=user_id,
             refresh_token=SecretStr('refresh_token'),
         )
 
         result = await user_auth.get_user_settings_store()
 
         assert result == mock_store
-        mock_store_cls.assert_called_once()
+        mock_store_cls.assert_called_once_with(user_id, effective_org_id=org_id)
         assert user_auth.settings_store == mock_store
 
 

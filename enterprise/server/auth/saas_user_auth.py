@@ -258,7 +258,15 @@ class SaasUserAuth(UserAuth):
         secrets_store = self.secrets_store
         if secrets_store:
             return secrets_store
-        secrets_store = await SaasSecretsStore.get_instance(self.user_id)
+        # Scope secrets to the request's effective org so that callers
+        # using an API key bound to org A — or supplying an X-Org-Id
+        # header — read/write secrets under that org, not under whatever
+        # `user.current_org_id` happens to point at.
+        effective_org_id = await self.get_effective_org_id()
+        secrets_store = await SaasSecretsStore.get_instance(
+            self.user_id,
+            effective_org_id=effective_org_id,
+        )
         self.secrets_store = secrets_store
         return secrets_store
 
@@ -361,7 +369,15 @@ class SaasUserAuth(UserAuth):
         settings_store = self.settings_store
         if settings_store:
             return settings_store
-        settings_store = SaasSettingsStore(self.user_id)
+        # Scope settings to the request's effective org. See
+        # `get_secrets_store` for the same rationale: the store mutates
+        # the resolved Org row (and per-member overrides), so the
+        # effective org must flow through here rather than letting the
+        # store fall back to `user.current_org_id`.
+        effective_org_id = await self.get_effective_org_id()
+        settings_store = SaasSettingsStore(
+            self.user_id, effective_org_id=effective_org_id
+        )
         self.settings_store = settings_store
         return settings_store
 
