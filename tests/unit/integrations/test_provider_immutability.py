@@ -9,6 +9,7 @@ from openhands.app_server.integrations.provider import (
     ProviderToken,
     ProviderType,
 )
+from openhands.app_server.integrations.service_types import Repository
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.settings.settings_models import Settings
 
@@ -207,6 +208,62 @@ def test_get_provider_env_key():
     """Test provider environment key generation"""
     assert ProviderHandler.get_provider_env_key(ProviderType.GITHUB) == 'github_token'
     assert ProviderHandler.get_provider_env_key(ProviderType.GITLAB) == 'gitlab_token'
+
+
+@pytest.mark.asyncio
+async def test_get_authenticated_git_url_quotes_bitbucket_app_password():
+    tokens = MappingProxyType(
+        {
+            ProviderType.BITBUCKET: ProviderToken(
+                token=SecretStr('user@example.com:abc#123/def')
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+    repo = Repository(
+        id='repo-id',
+        full_name='workspace/repo',
+        git_provider=ProviderType.BITBUCKET,
+        is_public=False,
+    )
+
+    with patch.object(
+        handler, 'verify_repo_provider', new=AsyncMock(return_value=repo)
+    ):
+        result = await handler.get_authenticated_git_url('workspace/repo')
+
+    assert (
+        result
+        == 'https://user%40example.com:abc%23123%2Fdef@bitbucket.org/workspace/repo.git'
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_authenticated_git_url_quotes_bitbucket_access_token():
+    tokens = MappingProxyType(
+        {
+            ProviderType.BITBUCKET: ProviderToken(
+                token=SecretStr('plain#token/with space')
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+    repo = Repository(
+        id='repo-id',
+        full_name='workspace/repo',
+        git_provider=ProviderType.BITBUCKET,
+        is_public=False,
+    )
+
+    with patch.object(
+        handler, 'verify_repo_provider', new=AsyncMock(return_value=repo)
+    ):
+        result = await handler.get_authenticated_git_url('workspace/repo')
+
+    assert (
+        result
+        == 'https://x-token-auth:plain%23token%2Fwith%20space@bitbucket.org/workspace/repo.git'
+    )
 
 
 @pytest.mark.asyncio
