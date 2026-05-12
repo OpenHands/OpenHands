@@ -7,7 +7,7 @@ from server.auth.authorization import (
     require_financial_data_access,
     require_permission,
 )
-from server.auth.org_context import EFFECTIVE_ORG_ID
+from server.auth.org_context import EFFECTIVE_ORG_ID, REJECT_X_ORG_ID_PATH_MISMATCH
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
@@ -223,7 +223,11 @@ async def create_org(
         )
 
 
-@org_router.get('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+@org_router.get(
+    '/{org_id}/settings',
+    response_model=OrgDefaultsSettingsResponse,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def get_org_defaults_settings(
     org_id: UUID,
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
@@ -248,7 +252,11 @@ async def get_org_defaults_settings(
         )
 
 
-@org_router.patch('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+@org_router.patch(
+    '/{org_id}/settings',
+    response_model=OrgDefaultsSettingsResponse,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def update_org_defaults_settings(
     org_id: UUID,
     settings: OrgUpdate,
@@ -474,6 +482,7 @@ async def update_org_app_settings(
     response_model=OrgResponse,
     status_code=status.HTTP_200_OK,
     deprecated=True,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_org(
     org_id: UUID,
@@ -511,7 +520,11 @@ async def get_org(
         )
 
 
-@org_router.get('/{org_id}/me', response_model=MeResponse)
+@org_router.get(
+    '/{org_id}/me',
+    response_model=MeResponse,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def get_me(
     org_id: UUID,
     user_id: str = Depends(get_user_id),
@@ -570,7 +583,11 @@ async def get_me(
         )
 
 
-@org_router.delete('/{org_id}', status_code=status.HTTP_200_OK)
+@org_router.delete(
+    '/{org_id}',
+    status_code=status.HTTP_200_OK,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def delete_org(
     org_id: UUID,
     user_id: str = Depends(require_permission(Permission.DELETE_ORGANIZATION)),
@@ -679,7 +696,11 @@ async def delete_org(
         )
 
 
-@org_router.patch('/{org_id}', response_model=OrgResponse)
+@org_router.patch(
+    '/{org_id}',
+    response_model=OrgResponse,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def update_org(
     org_id: UUID,
     update_data: OrgUpdate,
@@ -764,7 +785,10 @@ async def update_org(
         )
 
 
-@org_router.get('/{org_id}/members')
+@org_router.get(
+    '/{org_id}/members',
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def get_org_members(
     org_id: UUID,
     page_id: Annotated[
@@ -867,7 +891,10 @@ async def get_org_members(
         )
 
 
-@org_router.get('/{org_id}/members/count')
+@org_router.get(
+    '/{org_id}/members/count',
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def get_org_members_count(
     org_id: UUID,
     email: Annotated[
@@ -928,6 +955,7 @@ async def get_org_members_count(
 @org_router.get(
     '/{org_id}/members/financial',
     response_model=OrgMemberFinancialPage,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_org_members_financial(
     org_id: UUID,
@@ -1023,7 +1051,10 @@ async def get_org_members_financial(
         )
 
 
-@org_router.delete('/{org_id}/members/{user_id}')
+@org_router.delete(
+    '/{org_id}/members/{user_id}',
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def remove_org_member(
     org_id: UUID,
     user_id: str,
@@ -1100,7 +1131,10 @@ async def remove_org_member(
 
 
 @org_router.post(
-    '/{org_id}/switch', response_model=OrgResponse, status_code=status.HTTP_200_OK
+    '/{org_id}/switch',
+    response_model=OrgResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def switch_org(
     org_id: UUID,
@@ -1196,7 +1230,11 @@ async def switch_org(
         )
 
 
-@org_router.patch('/{org_id}/members/{user_id}', response_model=OrgMemberResponse)
+@org_router.patch(
+    '/{org_id}/members/{user_id}',
+    response_model=OrgMemberResponse,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 async def update_org_member(
     org_id: UUID,
     user_id: str,
@@ -1278,6 +1316,7 @@ async def update_org_member(
 @org_router.get(
     '/{org_id}/git-claims',
     response_model=list[GitOrgClaimResponse],
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_git_claims(
     org_id: UUID,
@@ -1319,6 +1358,7 @@ async def get_git_claims(
     '/{org_id}/git-claims',
     response_model=GitOrgClaimResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def claim_git_organization(
     org_id: UUID,
@@ -1407,6 +1447,7 @@ async def claim_git_organization(
 @org_router.delete(
     '/{org_id}/git-claims/{claim_id}',
     status_code=status.HTTP_200_OK,
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def disconnect_git_organization(
     org_id: UUID,
