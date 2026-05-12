@@ -56,7 +56,11 @@ from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Initialize API router
-org_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
+org_router = APIRouter(
+    prefix='/api/organizations',
+    tags=['Orgs'],
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 
 # Create injector instance and dependency at module level
 _org_app_settings_injector = OrgAppSettingsServiceInjector()
@@ -226,7 +230,6 @@ async def create_org(
 @org_router.get(
     '/{org_id}/settings',
     response_model=OrgDefaultsSettingsResponse,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_org_defaults_settings(
     org_id: UUID,
@@ -255,7 +258,6 @@ async def get_org_defaults_settings(
 @org_router.patch(
     '/{org_id}/settings',
     response_model=OrgDefaultsSettingsResponse,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def update_org_defaults_settings(
     org_id: UUID,
@@ -482,7 +484,6 @@ async def update_org_app_settings(
     response_model=OrgResponse,
     status_code=status.HTTP_200_OK,
     deprecated=True,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_org(
     org_id: UUID,
@@ -523,7 +524,6 @@ async def get_org(
 @org_router.get(
     '/{org_id}/me',
     response_model=MeResponse,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_me(
     org_id: UUID,
@@ -586,7 +586,6 @@ async def get_me(
 @org_router.delete(
     '/{org_id}',
     status_code=status.HTTP_200_OK,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def delete_org(
     org_id: UUID,
@@ -699,7 +698,6 @@ async def delete_org(
 @org_router.patch(
     '/{org_id}',
     response_model=OrgResponse,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def update_org(
     org_id: UUID,
@@ -787,7 +785,6 @@ async def update_org(
 
 @org_router.get(
     '/{org_id}/members',
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_org_members(
     org_id: UUID,
@@ -893,7 +890,6 @@ async def get_org_members(
 
 @org_router.get(
     '/{org_id}/members/count',
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_org_members_count(
     org_id: UUID,
@@ -955,7 +951,6 @@ async def get_org_members_count(
 @org_router.get(
     '/{org_id}/members/financial',
     response_model=OrgMemberFinancialPage,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_org_members_financial(
     org_id: UUID,
@@ -1053,7 +1048,6 @@ async def get_org_members_financial(
 
 @org_router.delete(
     '/{org_id}/members/{user_id}',
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def remove_org_member(
     org_id: UUID,
@@ -1134,7 +1128,6 @@ async def remove_org_member(
     '/{org_id}/switch',
     response_model=OrgResponse,
     status_code=status.HTTP_200_OK,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def switch_org(
     org_id: UUID,
@@ -1233,7 +1226,6 @@ async def switch_org(
 @org_router.patch(
     '/{org_id}/members/{user_id}',
     response_model=OrgMemberResponse,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def update_org_member(
     org_id: UUID,
@@ -1316,7 +1308,6 @@ async def update_org_member(
 @org_router.get(
     '/{org_id}/git-claims',
     response_model=list[GitOrgClaimResponse],
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def get_git_claims(
     org_id: UUID,
@@ -1358,7 +1349,6 @@ async def get_git_claims(
     '/{org_id}/git-claims',
     response_model=GitOrgClaimResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def claim_git_organization(
     org_id: UUID,
@@ -1447,7 +1437,6 @@ async def claim_git_organization(
 @org_router.delete(
     '/{org_id}/git-claims/{claim_id}',
     status_code=status.HTTP_200_OK,
-    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 async def disconnect_git_organization(
     org_id: UUID,
