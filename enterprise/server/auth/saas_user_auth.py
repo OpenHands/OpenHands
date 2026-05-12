@@ -117,7 +117,7 @@ class SaasUserAuth(UserAuth):
             return self._effective_org_id
 
         # Import locally to avoid a circular import via authorization.py.
-        from fastapi import HTTPException, status
+        from fastapi import status
         from storage.org_member_store import OrgMemberStore
 
         header_value = self._x_org_id_header
