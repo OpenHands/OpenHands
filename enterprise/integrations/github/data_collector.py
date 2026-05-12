@@ -19,15 +19,13 @@ from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from storage.openhands_pr import OpenhandsPR
 from storage.openhands_pr_store import OpenhandsPRStore
 
-from openhands.core.config import load_openhands_config
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.github.github_service import GithubServiceImpl
-from openhands.integrations.service_types import ProviderType
-from openhands.storage import get_file_store
-from openhands.storage.locations import get_conversation_dir
+from openhands.app_server.config import get_global_config
+from openhands.app_server.conversation_paths import get_conversation_dir
+from openhands.app_server.integrations.github.github_service import GithubServiceImpl
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
 
-config = load_openhands_config()
-file_store = get_file_store(config.file_store, config.file_store_path)
+file_store = get_global_config().file_store
 
 
 COLLECT_GITHUB_INTERACTIONS = (
@@ -112,7 +110,7 @@ class GitHubDataCollector:
         suffix = path.format(repo_id, number)
 
         if conversation_id:
-            return f'{get_conversation_dir(conversation_id)}{suffix}'
+            return f'{get_conversation_dir(conversation_id)}/{suffix}'
 
         return suffix
 
@@ -429,6 +427,11 @@ class GitHubDataCollector:
         - Num openhands review comments
         """
         pr_number = openhands_pr.pr_number
+        if openhands_pr.installation_id is None:
+            logger.warning(
+                f'Skipping PR {openhands_pr.repo_name}#{pr_number}: missing installation_id'
+            )
+            return
         installation_id = int(openhands_pr.installation_id)
         repo_id = openhands_pr.repo_id
 

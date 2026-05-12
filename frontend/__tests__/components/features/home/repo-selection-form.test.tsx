@@ -187,7 +187,7 @@ describe("RepositorySelectionForm", () => {
       },
     ];
     mockUseGitRepositories.mockReturnValue({
-      data: { pages: [{ data: MOCK_REPOS }] },
+      data: { pages: [{ items: MOCK_REPOS }] },
       isLoading: false,
       isError: false,
       hasNextPage: false,
@@ -229,7 +229,7 @@ describe("RepositorySelectionForm", () => {
 
     // Create a spy on the API call
     const searchGitReposSpy = vi.spyOn(GitService, "searchGitRepositories");
-    searchGitReposSpy.mockResolvedValue(MOCK_SEARCH_REPOS);
+    searchGitReposSpy.mockResolvedValue({ items: MOCK_SEARCH_REPOS, next_page_id: null });
 
     mockUseGitRepositories.mockReturnValue({
       data: { pages: [] },
@@ -267,7 +267,7 @@ describe("RepositorySelectionForm", () => {
     ];
 
     mockUseGitRepositories.mockReturnValue({
-      data: { pages: [{ data: MOCK_SEARCH_REPOS }] },
+      data: { pages: [{ items: MOCK_SEARCH_REPOS }] },
       isLoading: false,
       isError: false,
       hasNextPage: false,

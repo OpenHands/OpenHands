@@ -1,14 +1,14 @@
 """SQLAlchemy model for tracking users synced to Resend audiences."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 
-class ResendSyncedUser(Base):  # type: ignore
+class ResendSyncedUser(Base):
     """Tracks users that have been synced to a Resend audience.
 
     This table ensures that once a user is synced to a Resend audience,
@@ -18,15 +18,15 @@ class ResendSyncedUser(Base):  # type: ignore
 
     __tablename__ = 'resend_synced_users'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    email = Column(String, nullable=False, index=True)
-    audience_id = Column(String, nullable=False, index=True)
-    synced_at = Column(
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    email: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    audience_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         nullable=False,
     )
-    keycloak_user_id = Column(String, nullable=True)
+    keycloak_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

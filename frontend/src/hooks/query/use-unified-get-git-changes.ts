@@ -1,6 +1,5 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import GitService from "#/api/git-service/git-service.api";
 import V1GitService from "#/api/git-service/v1-git-service.api";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -22,8 +21,7 @@ export const useUnifiedGetGitChanges = () => {
   const previousDataRef = React.useRef<GitChange[] | null>(null);
   const runtimeIsReady = useRuntimeIsReady();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
-  const conversationUrl = conversation?.url;
+  const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
   const selectedRepository = conversation?.selected_repository;
 
@@ -42,24 +40,18 @@ export const useUnifiedGetGitChanges = () => {
     queryKey: [
       "file_changes",
       conversationId,
-      isV1Conversation,
       conversationUrl,
+      sessionApiKey,
       gitPath,
     ],
     queryFn: async () => {
       if (!conversationId) throw new Error("No conversation ID");
 
-      // V1: Use the V1 API endpoint with runtime URL
-      if (isV1Conversation) {
-        return V1GitService.getGitChanges(
-          conversationUrl,
-          sessionApiKey,
-          gitPath,
-        );
-      }
-
-      // V0 (Legacy): Use the legacy API endpoint
-      return GitService.getGitChanges(conversationId);
+      return V1GitService.getGitChanges(
+        conversationUrl,
+        sessionApiKey,
+        gitPath,
+      );
     },
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes

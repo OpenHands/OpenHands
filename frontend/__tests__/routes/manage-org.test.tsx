@@ -111,7 +111,6 @@ describe("Manage Org Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active",
     },
@@ -123,7 +122,6 @@ describe("Manage Org Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active",
     },
@@ -138,7 +136,6 @@ describe("Manage Org Route", () => {
     llm_api_key: string;
     max_iterations: number;
     llm_model: string;
-    llm_api_key_for_byor: string | null;
     llm_base_url: string;
     status: "active" | "invited" | "inactive";
   }) => {
@@ -176,6 +173,7 @@ describe("Manage Org Route", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -456,7 +454,6 @@ describe("Manage Org Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -482,7 +479,6 @@ describe("Manage Org Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -535,6 +531,7 @@ describe("Manage Org Route", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -567,6 +564,7 @@ describe("Manage Org Route", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -599,6 +597,7 @@ describe("Manage Org Route", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -632,6 +631,7 @@ describe("Manage Org Route", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );

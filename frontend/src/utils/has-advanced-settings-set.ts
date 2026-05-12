@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Settings } from "#/types/settings";
+import { getAgentSettingValue } from "#/utils/sdk-settings-schema";
 
 /**
  * Determines if any advanced-only settings are configured.
@@ -20,19 +21,18 @@ export const hasAdvancedSettingsSet = (
     return false;
   }
 
-  // Check for advanced-only settings that differ from defaults
   const hasBaseUrl =
-    !!settings.llm_base_url && settings.llm_base_url.trim() !== "";
+    typeof getAgentSettingValue(settings as Settings, "llm.base_url") ===
+      "string" &&
+    getAgentSettingValue(settings as Settings, "llm.base_url") !== "";
   const hasCustomAgent =
-    settings.agent !== undefined && settings.agent !== DEFAULT_SETTINGS.agent;
-  // Default is true, so only check if explicitly disabled
-  const hasDisabledCondenser = settings.enable_default_condenser === false;
-  // Check if condenser size differs from default (default is 240)
+    getAgentSettingValue(settings as Settings, "agent") !==
+    getAgentSettingValue(DEFAULT_SETTINGS, "agent");
+  const hasDisabledCondenser =
+    getAgentSettingValue(settings as Settings, "condenser.enabled") === false;
   const hasCustomCondenserSize =
-    settings.condenser_max_size !== undefined &&
-    settings.condenser_max_size !== null &&
-    settings.condenser_max_size !== DEFAULT_SETTINGS.condenser_max_size;
-  // Check if search API key is set (non-empty string)
+    getAgentSettingValue(settings as Settings, "condenser.max_size") !==
+    getAgentSettingValue(DEFAULT_SETTINGS, "condenser.max_size");
   const hasSearchApiKey =
     settings.search_api_key !== undefined &&
     settings.search_api_key !== null &&

@@ -12,12 +12,12 @@ from pydantic import SecretStr
 from enterprise.integrations.resolver_context import ResolverUserContext
 
 # Import the real classes we want to test
-from openhands.integrations.provider import CustomSecret, ProviderToken
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.provider import CustomSecret, ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.secrets.secrets_models import Secrets
 
 # Import the SDK types we need for testing
 from openhands.sdk.secret import SecretSource, StaticSecret
-from openhands.storage.data_models.secrets import Secrets
 
 
 @pytest.fixture
@@ -30,6 +30,28 @@ def mock_saas_user_auth():
 def resolver_context(mock_saas_user_auth):
     """Create a ResolverUserContext instance for testing."""
     return ResolverUserContext(saas_user_auth=mock_saas_user_auth)
+
+
+# ---------------------------------------------------------------------------
+# Tests for resolver_org_id - org routing for resolver conversations
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_org_id_defaults_to_none(mock_saas_user_auth):
+    """Test that resolver_org_id defaults to None when not provided."""
+    ctx = ResolverUserContext(saas_user_auth=mock_saas_user_auth)
+    assert ctx.resolver_org_id is None
+
+
+def test_resolver_org_id_can_be_set_via_constructor(mock_saas_user_auth):
+    """Test that resolver_org_id can be set via constructor for org routing."""
+    from uuid import UUID
+
+    org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    ctx = ResolverUserContext(
+        saas_user_auth=mock_saas_user_auth, resolver_org_id=org_id
+    )
+    assert ctx.resolver_org_id == org_id
 
 
 def create_custom_secret(value: str, description: str = 'Test secret') -> CustomSecret:
@@ -322,7 +344,7 @@ async def test_get_provider_handler_creates_handler_with_correct_params(
     handler = await resolver_context._get_provider_handler()
 
     # Assert
-    from openhands.integrations.provider import ProviderHandler
+    from openhands.app_server.integrations.provider import ProviderHandler
 
     assert isinstance(handler, ProviderHandler)
     assert handler.provider_tokens == provider_tokens

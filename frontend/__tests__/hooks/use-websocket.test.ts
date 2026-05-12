@@ -196,23 +196,16 @@ describe("useWebSocket", () => {
     const onCloseSpy = vi.fn();
     const options = { onClose: onCloseSpy };
 
-    const { result, unmount } = renderHook(() =>
-      useWebSocket("ws://acme.com/ws", options),
+    const closeLink = ws.link("ws://close-test.com/ws");
+    mswServer.use(
+      closeLink.addEventListener("connection", ({ client, server }) => {
+        server.connect();
+        client.close(1000, "Normal closure");
+      }),
     );
 
-    // Wait for connection to be established
-    await waitFor(() => {
-      expect(result.current.isConnected).toBe(true);
-    });
+    renderHook(() => useWebSocket("ws://close-test.com/ws", options));
 
-    // Reset spy after connection is established to ignore any spurious
-    // close events fired by the MSW mock during the handshake.
-    onCloseSpy.mockClear();
-
-    // Unmount to trigger close
-    unmount();
-
-    // Wait for onClose handler to be called
     await waitFor(() => {
       expect(onCloseSpy).toHaveBeenCalledOnce();
     });

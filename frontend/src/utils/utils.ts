@@ -146,28 +146,6 @@ export const removeUnwantedKeys = (
     });
 };
 
-export const removeApiKey = (
-  data: EventActionHistory[],
-): EventActionHistory[] =>
-  data.map((item) => {
-    // Create a shallow copy of item
-    const newItem = { ...item };
-
-    // Check if LLM_API_KEY exists and delete it from a new args object
-    if (newItem.args?.LLM_API_KEY) {
-      const newArgs = { ...newItem.args };
-      delete newArgs.LLM_API_KEY;
-      newItem.args = newArgs;
-    }
-
-    return newItem;
-  });
-
-export const getExtension = (code: string) => {
-  if (code.includes(".")) return code.split(".").pop() || "";
-  return "";
-};
-
 /**
  * Get file extension from file name in uppercase format
  * @param fileName The file name to extract extension from
@@ -182,25 +160,6 @@ export const getFileExtension = (fileName: string): string => {
   const extension = fileName.split(".").pop()?.toUpperCase();
   return extension || "FILE";
 };
-
-/**
- * Format a timestamp to a human-readable format
- * @param timestamp The timestamp to format (ISO 8601)
- * @returns The formatted timestamp
- *
- * @example
- * formatTimestamp("2021-10-10T10:10:10.000") // "10/10/2021, 10:10:10"
- * formatTimestamp("2021-10-10T22:10:10.000") // "10/10/2021, 22:10:10"
- */
-export const formatTimestamp = (timestamp: string) =>
-  new Date(timestamp).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
 
 export const shouldUseInstallationRepos = (
   provider: Provider,
@@ -223,32 +182,9 @@ export const shouldUseInstallationRepos = (
   }
 };
 
-export const getGitProviderBaseUrl = (
-  gitProvider: Provider,
-  host?: string | null,
-): string => {
-  // If custom host provided, use it (with https:// prefix if needed)
-  if (host && host.trim() !== "") {
-    return host.startsWith("http") ? host : `https://${host}`;
-  }
-
-  // Fall back to defaults
-  switch (gitProvider) {
-    case "github":
-      return "https://github.com";
-    case "gitlab":
-      return "https://gitlab.com";
-    case "bitbucket":
-      return "https://bitbucket.org";
-    case "azure_devops":
-      return "https://dev.azure.com";
-    case "forgejo":
-      // Default UI links to Codeberg unless a custom host is available in settings
-      // Note: UI link builders don't currently receive host; consider plumbing settings if needed
-      return "https://codeberg.org";
-    default:
-      return "";
-  }
+export const ensureHttpsPrefix = (host?: string | null): string => {
+  if (!host || host.trim() === "") return "";
+  return host.startsWith("http") ? host : `https://${host}`;
 };
 
 /**
@@ -279,104 +215,6 @@ export const getPR = (isGitLab: boolean) =>
  * @returns The short name of the PR
  */
 export const getPRShort = (isGitLab: boolean) => (isGitLab ? "MR" : "PR");
-
-/**
- * Construct the pull request (merge request) URL for different providers
- * @param prNumber The pull request number
- * @param provider The git provider
- * @param repositoryName The repository name in format "owner/repo"
- * @returns The pull request URL
- *
- * @example
- * constructPullRequestUrl(123, "github", "owner/repo") // "https://github.com/owner/repo/pull/123"
- * constructPullRequestUrl(456, "gitlab", "owner/repo") // "https://gitlab.com/owner/repo/-/merge_requests/456"
- * constructPullRequestUrl(789, "bitbucket", "owner/repo") // "https://bitbucket.org/owner/repo/pull-requests/789"
- * constructPullRequestUrl(789, "bitbucket", "PROJECT/repo", "server.com") // "https://server.com/projects/PROJECT/repos/repo/pull-requests/789"
- */
-export const constructPullRequestUrl = (
-  prNumber: number,
-  provider: Provider,
-  repositoryName: string,
-  host?: string | null,
-): string => {
-  const baseUrl = getGitProviderBaseUrl(provider, host);
-
-  switch (provider) {
-    case "github":
-      return `${baseUrl}/${repositoryName}/pull/${prNumber}`;
-    case "forgejo":
-      return `${baseUrl}/${repositoryName}/pull/${prNumber}`;
-    case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/merge_requests/${prNumber}`;
-    case "bitbucket":
-      return `${baseUrl}/${repositoryName}/pull-requests/${prNumber}`;
-    case "bitbucket_data_center": {
-      const [project, repo] = repositoryName.split("/");
-      return `${baseUrl}/projects/${project}/repos/${repo}/pull-requests/${prNumber}`;
-    }
-    case "azure_devops": {
-      // Azure DevOps format: org/project/repo
-      const parts = repositoryName.split("/");
-      if (parts.length === 3) {
-        const [org, project, repo] = parts;
-        return `${baseUrl}/${org}/${project}/_git/${repo}/pullrequest/${prNumber}`;
-      }
-      return "";
-    }
-    default:
-      return "";
-  }
-};
-
-/**
- * Construct the microagent URL for different providers
- * @param gitProvider The git provider
- * @param repositoryName The repository name in format "owner/repo"
- * @param microagentPath The path to the microagent in the repository
- * @returns The URL to the microagent file in the Git provider
- *
- * @example
- * constructMicroagentUrl("github", "owner/repo", ".openhands/microagents/tell-me-a-joke.md")
- * // "https://github.com/owner/repo/blob/main/.openhands/microagents/tell-me-a-joke.md"
- * constructMicroagentUrl("gitlab", "owner/repo", "microagents/git-helper.md")
- * // "https://gitlab.com/owner/repo/-/blob/main/microagents/git-helper.md"
- * constructMicroagentUrl("bitbucket", "owner/repo", ".openhands/microagents/docker-helper.md")
- * // "https://bitbucket.org/owner/repo/src/main/.openhands/microagents/docker-helper.md"
- */
-export const constructMicroagentUrl = (
-  gitProvider: Provider,
-  repositoryName: string,
-  microagentPath: string,
-  host?: string | null,
-): string => {
-  const baseUrl = getGitProviderBaseUrl(gitProvider, host);
-
-  switch (gitProvider) {
-    case "github":
-      return `${baseUrl}/${repositoryName}/blob/main/${microagentPath}`;
-    case "forgejo":
-      return `${baseUrl}/${repositoryName}/src/branch/main/${microagentPath}`;
-    case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/blob/main/${microagentPath}`;
-    case "bitbucket":
-      return `${baseUrl}/${repositoryName}/src/main/${microagentPath}`;
-    case "bitbucket_data_center": {
-      const [project, repo] = repositoryName.split("/");
-      return `${baseUrl}/projects/${project}/repos/${repo}/browse/${microagentPath}?at=refs/heads/main`;
-    }
-    case "azure_devops": {
-      // Azure DevOps format: org/project/repo
-      const parts = repositoryName.split("/");
-      if (parts.length === 3) {
-        const [org, project, repo] = parts;
-        return `${baseUrl}/${org}/${project}/_git/${repo}?path=/${microagentPath}&version=GBmain`;
-      }
-      return "";
-    }
-    default:
-      return "";
-  }
-};
 
 /**
  * Extract repository owner, repo name, and file path from repository and microagent data
@@ -413,7 +251,7 @@ export const constructRepositoryUrl = (
   repositoryName: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(provider, host);
+  const baseUrl = ensureHttpsPrefix(host);
   if (provider === "bitbucket_data_center") {
     const [project, repo] = repositoryName.split("/");
     return `${baseUrl}/projects/${project}/repos/${repo}`;
@@ -441,7 +279,7 @@ export const constructBranchUrl = (
   branchName: string,
   host?: string | null,
 ): string => {
-  const baseUrl = getGitProviderBaseUrl(provider, host);
+  const baseUrl = ensureHttpsPrefix(host);
 
   switch (provider) {
     case "github":

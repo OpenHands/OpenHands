@@ -1,6 +1,7 @@
 import React from "react";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
+import { setSelectedOrg } from "#/utils/local-storage";
 
 /**
  * Hook that automatically selects an organization when:
@@ -28,6 +29,8 @@ export function useAutoSelectOrganization() {
       // Revalidation is only needed when user explicitly switches organizations
       // to redirect away from admin-only pages they may no longer have access to.
       setOrganizationId(initialOrgId, { skipRevalidation: true });
+      // Broadcast org selection to other apps (e.g. Automations) via localStorage
+      setSelectedOrg(initialOrgId);
     }
   }, [organizationId, organizations, currentOrgId, setOrganizationId]);
 }

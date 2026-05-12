@@ -58,3 +58,45 @@ class TestGetOpenHandsProviderBaseUrl:
                 get_openhands_provider_base_url()
                 == 'https://provider.example.com'
             )
+
+    def test_falls_back_to_llm_base_url_when_provider_base_url_unset(self):
+        from openhands.app_server.config import get_openhands_provider_base_url
+
+        with patch.dict(
+            os.environ,
+            {'LLM_BASE_URL': 'https://legacy-provider.example.com'},
+            clear=True,
+        ):
+            assert (
+                get_openhands_provider_base_url()
+                == 'https://legacy-provider.example.com'
+            )
+
+    def test_strips_whitespace_from_llm_base_url_fallback(self):
+        from openhands.app_server.config import get_openhands_provider_base_url
+
+        with patch.dict(
+            os.environ,
+            {'LLM_BASE_URL': '  https://legacy-provider.example.com  '},
+            clear=True,
+        ):
+            assert (
+                get_openhands_provider_base_url()
+                == 'https://legacy-provider.example.com'
+            )
+
+    def test_provider_base_url_takes_precedence_over_llm_base_url(self):
+        from openhands.app_server.config import get_openhands_provider_base_url
+
+        with patch.dict(
+            os.environ,
+            {
+                'OPENHANDS_PROVIDER_BASE_URL': 'https://provider.example.com',
+                'LLM_BASE_URL': 'https://legacy-provider.example.com',
+            },
+            clear=True,
+        ):
+            assert (
+                get_openhands_provider_base_url()
+                == 'https://provider.example.com'
+            )

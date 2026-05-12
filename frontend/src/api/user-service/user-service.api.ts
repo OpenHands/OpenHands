@@ -11,20 +11,8 @@ class UserService {
    * @returns Git user information
    */
   static async getUser(): Promise<GitUser> {
-    const response = await openHands.get<GitUser>("/api/user/info");
-
-    const { data } = response;
-
-    const user: GitUser = {
-      id: data.id,
-      login: data.login,
-      avatar_url: data.avatar_url,
-      company: data.company,
-      name: data.name,
-      email: data.email,
-    };
-
-    return user;
+    const { data } = await openHands.get<GitUser>("/api/v1/users/git-info");
+    return data;
   }
 
   /**
@@ -33,7 +21,7 @@ class UserService {
    */
   static async getGitOrganizations(): Promise<UserGitOrganizationsResponse> {
     const { data } = await openHands.get<UserGitOrganizationsResponse>(
-      "/api/user/git-organizations",
+      "/api/v1/users/git-organizations",
     );
     return data;
   }

@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
@@ -7,10 +7,38 @@ from pydantic import (
     SecretStr,
     StringConstraints,
     field_validator,
+    model_validator,
 )
+from server.constants import LITE_LLM_API_URL
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
+
+from openhands.app_server.settings.settings_models import (
+    _load_persisted_agent_settings,
+    _load_persisted_conversation_settings,
+)
+from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+
+
+def _validate_persisted_agent_settings(
+    raw: dict[str, Any] | None,
+) -> OpenHandsAgentSettings:
+    """Validate persisted ``org.agent_settings`` against the canonical schema.
+
+    Routes the raw payload through the shared SDK loader so any schema
+    migrations registered with the SDK are applied first. Older rows carry
+    the legacy ``agent_kind: 'llm'`` discriminator from the pre-rename SDK;
+    force ``'openhands'`` after migration so the canonical class accepts
+    both shapes. Mirrors :func:`OrgStore.get_agent_settings_from_org` — kept
+    inline to avoid a circular import (``org_store`` already imports from this
+    module).
+    """
+    loaded = _load_persisted_agent_settings(raw or {})
+    payload = loaded.model_dump(mode='json', context={'expose_secrets': True})
+    payload['agent_kind'] = 'openhands'
+    return OpenHandsAgentSettings.model_validate(payload)
 
 
 class OrgCreationError(Exception):
@@ -144,25 +172,21 @@ class OrgResponse(BaseModel):
     contact_name: str
     contact_email: str
     conversation_expiration: int | None = None
-    agent: str | None = None
-    default_max_iterations: int | None = None
-    security_analyzer: str | None = None
-    confirmation_mode: bool | None = None
-    default_llm_model: str | None = None
-    default_llm_api_key_for_byor: str | None = None
-    default_llm_base_url: str | None = None
     remote_runtime_resource_factor: int | None = None
-    enable_default_condenser: bool = True
     billing_margin: float | None = None
     enable_proactive_conversation_starters: bool = True
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
     org_version: int = 0
-    mcp_config: dict | None = None
+    agent_settings: OpenHandsAgentSettings = Field(
+        default_factory=OpenHandsAgentSettings
+    )
+    conversation_settings: ConversationSettings = Field(
+        default_factory=ConversationSettings
+    )
     search_api_key: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = None
-    enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     credits: float | None = None
     is_personal: bool = False
@@ -171,33 +195,14 @@ class OrgResponse(BaseModel):
     def from_org(
         cls, org: Org, credits: float | None = None, user_id: str | None = None
     ) -> 'OrgResponse':
-        """Create an OrgResponse from an Org entity.
-
-        Args:
-            org: The organization entity to convert
-            credits: Optional credits value (defaults to None)
-            user_id: Optional user ID to determine if org is personal (defaults to None)
-
-        Returns:
-            OrgResponse: The response model instance
-        """
+        """Create an OrgResponse from an Org entity."""
         return cls(
             id=str(org.id),
             name=org.name,
             contact_name=org.contact_name,
             contact_email=org.contact_email,
             conversation_expiration=org.conversation_expiration,
-            agent=org.agent,
-            default_max_iterations=org.default_max_iterations,
-            security_analyzer=org.security_analyzer,
-            confirmation_mode=org.confirmation_mode,
-            default_llm_model=org.default_llm_model,
-            default_llm_api_key_for_byor=None,
-            default_llm_base_url=org.default_llm_base_url,
             remote_runtime_resource_factor=org.remote_runtime_resource_factor,
-            enable_default_condenser=org.enable_default_condenser
-            if org.enable_default_condenser is not None
-            else True,
             billing_margin=org.billing_margin,
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
             if org.enable_proactive_conversation_starters is not None
@@ -205,11 +210,13 @@ class OrgResponse(BaseModel):
             sandbox_base_container_image=org.sandbox_base_container_image,
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             org_version=org.org_version if org.org_version is not None else 0,
-            mcp_config=org.mcp_config,
+            agent_settings=_validate_persisted_agent_settings(org.agent_settings),
+            conversation_settings=_load_persisted_conversation_settings(
+                org.conversation_settings
+            ),
             search_api_key=None,
             sandbox_api_key=None,
             max_budget_per_task=org.max_budget_per_task,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             credits=credits,
             is_personal=str(org.id) == user_id if user_id else False,
@@ -225,9 +232,13 @@ class OrgPage(BaseModel):
 
 
 class OrgUpdate(BaseModel):
-    """Request model for updating an organization."""
+    """Request model for updating an organization.
 
-    # Basic organization information (any authenticated user can update)
+    ``agent_settings_diff`` and ``conversation_settings_diff`` are sparse diffs
+    that are deep-merged into the org row and then validated as full settings
+    before persistence.
+    """
+
     name: Annotated[
         str | None,
         StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
@@ -235,7 +246,6 @@ class OrgUpdate(BaseModel):
     contact_name: str | None = None
     contact_email: EmailStr | None = None
     conversation_expiration: int | None = None
-    default_max_iterations: int | None = Field(default=None, gt=0)
     remote_runtime_resource_factor: int | None = Field(default=None, gt=0)
     billing_margin: float | None = Field(default=None, ge=0, le=1)
     enable_proactive_conversation_starters: bool | None = None
@@ -243,33 +253,155 @@ class OrgUpdate(BaseModel):
     sandbox_runtime_container_image: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = Field(default=None, gt=0)
-    enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
-
-    # LLM settings (require admin/owner role)
-    default_llm_model: str | None = None
-    default_llm_api_key_for_byor: str | None = None
-    default_llm_base_url: str | None = None
     search_api_key: str | None = None
-    security_analyzer: str | None = None
-    agent: str | None = None
-    confirmation_mode: bool | None = None
-    enable_default_condenser: bool | None = None
-    condenser_max_size: int | None = Field(default=None, ge=20)
+    llm_api_key: str | None = None
+    agent_settings_diff: dict[str, Any] | None = None
+    conversation_settings_diff: dict[str, Any] | None = None
+
+    @model_validator(mode='after')
+    def _normalize_settings_diffs(self) -> 'OrgUpdate':
+        """Normalize sparse settings diffs before merge/persistence."""
+        self._normalize_agent_settings_diff()
+        self._cleanup_empty_diff('agent_settings_diff', nested_key='llm')
+        self._cleanup_empty_diff('conversation_settings_diff')
+        return self
+
+    def _normalize_agent_settings_diff(self) -> None:
+        """Normalize nested LLM settings inside ``agent_settings_diff``."""
+        llm_diff = self._get_agent_llm_diff()
+        if llm_diff is None:
+            return
+
+        self._lift_and_mask_llm_api_key(llm_diff)
+        self._resolve_agent_llm_base_url(llm_diff)
+
+    def _get_agent_llm_diff(self) -> dict[str, Any] | None:
+        """Return the nested ``llm`` diff when present and dictionary-shaped."""
+        if self.agent_settings_diff is None:
+            return None
+        llm_diff = self.agent_settings_diff.get('llm')
+        return llm_diff if isinstance(llm_diff, dict) else None
+
+    def _lift_and_mask_llm_api_key(self, llm_diff: dict[str, Any]) -> None:
+        """Lift nested api keys to ``llm_api_key`` and mask the JSON diff."""
+        if 'api_key' not in llm_diff:
+            return
+
+        nested_key = llm_diff.pop('api_key')
+        if (
+            self.llm_api_key is None
+            and nested_key is not None
+            and nested_key != MASKED_API_KEY
+        ):
+            self.llm_api_key = nested_key
+        if nested_key is not None:
+            llm_diff['api_key'] = MASKED_API_KEY
+
+    def _resolve_agent_llm_base_url(self, llm_diff: dict[str, Any]) -> None:
+        """Fill provider-default base URLs for sparse LLM diffs when needed."""
+        resolved_base_url = resolve_llm_base_url(
+            model=llm_diff.get('model'),
+            base_url=llm_diff.get('base_url'),
+            managed_proxy_url=LITE_LLM_API_URL,
+        )
+        if resolved_base_url is not None:
+            llm_diff['base_url'] = resolved_base_url
+
+    def _cleanup_empty_diff(
+        self,
+        field_name: str,
+        nested_key: str | None = None,
+    ) -> None:
+        """Drop empty nested diffs and collapse empty diff payloads to ``None``."""
+        settings_diff = getattr(self, field_name)
+        if not isinstance(settings_diff, dict):
+            if not settings_diff:
+                setattr(self, field_name, None)
+            return
+
+        if nested_key is not None and not settings_diff.get(nested_key):
+            settings_diff.pop(nested_key, None)
+        if not settings_diff:
+            setattr(self, field_name, None)
+
+    def updated_fields(self) -> set[str]:
+        """Return the public field names explicitly present on the update."""
+        return {
+            field
+            for field in type(self).model_fields
+            if getattr(self, field) is not None
+        }
+
+    def has_updates(self) -> bool:
+        """Check if any public update field is set (not None)."""
+        return bool(self.updated_fields())
+
+    def touches_org_defaults(self) -> bool:
+        """Whether this update touches shared organization defaults."""
+        return bool(
+            self.updated_fields()
+            & {
+                'agent_settings_diff',
+                'conversation_settings_diff',
+                'search_api_key',
+                'llm_api_key',
+            }
+        )
+
+    def restricted_fields(self) -> set[str]:
+        """Return fields that require elevated org settings permissions."""
+        return self.updated_fields() & {
+            'agent_settings_diff',
+            'conversation_settings_diff',
+            'search_api_key',
+            'sandbox_api_key',
+            'llm_api_key',
+        }
+
+    def model_update_dict(self) -> dict[str, Any]:
+        """Return JSON-serializable scalar fields for persistence."""
+        return self.model_dump(
+            mode='json',
+            exclude_none=True,
+            exclude={'agent_settings_diff', 'conversation_settings_diff'},
+        )
+
+    def apply_to_org(self, org: Org) -> None:
+        """Apply non-settings fields directly to the organization model."""
+        for key, value in self.model_update_dict().items():
+            if hasattr(org, key):
+                setattr(org, key, value)
+
+    def get_member_updates(self) -> 'OrgMemberSettingsUpdate | None':
+        """Get shared updates that need to be propagated to org members.
+
+        An empty ``llm_api_key`` means the org-wide custom key is being cleared
+        (e.g. owner switching to a managed/OpenHands provider). It must not
+        land in member rows — ``OrgMember.llm_api_key``'s setter has no
+        ``if raw else None`` guard because the column is ``nullable=False``,
+        so an empty string would become an encrypted empty blob rather than a
+        cleared value. Coerce ``""`` to ``None`` so member rows are untouched.
+        """
+        member_settings = OrgMemberSettingsUpdate(
+            agent_settings_diff=self.agent_settings_diff,
+            conversation_settings_diff=self.conversation_settings_diff,
+            llm_api_key=self.llm_api_key or None,
+        )
+        return member_settings if member_settings.has_updates() else None
 
 
-class OrgLLMSettingsResponse(BaseModel):
-    """Response model for organization LLM settings."""
+class OrgDefaultsSettingsResponse(BaseModel):
+    """Response model for organization default settings."""
 
-    default_llm_model: str | None = None
-    default_llm_base_url: str | None = None
+    agent_settings: OpenHandsAgentSettings = Field(
+        default_factory=OpenHandsAgentSettings
+    )
+    conversation_settings: ConversationSettings = Field(
+        default_factory=ConversationSettings
+    )
+    llm_api_key_set: bool = False
     search_api_key: str | None = None  # Masked in response
-    agent: str | None = None
-    confirmation_mode: bool | None = None
-    security_analyzer: str | None = None
-    enable_default_condenser: bool = True
-    condenser_max_size: int | None = None
-    default_max_iterations: int | None = None
 
     @staticmethod
     def _mask_key(secret: SecretStr | None) -> str | None:
@@ -284,87 +416,82 @@ class OrgLLMSettingsResponse(BaseModel):
         return '****' + raw[-4:]
 
     @classmethod
-    def from_org(cls, org: Org) -> 'OrgLLMSettingsResponse':
-        """Create response from Org entity."""
+    def from_org(cls, org: Org) -> 'OrgDefaultsSettingsResponse':
+        """Create response from Org entity.
+
+        Denormalizes the SDK's ``litellm_proxy/`` prefix back to
+        ``openhands/`` so the frontend's basic-view provider/model dropdowns
+        can be populated, and nulls ``api_key`` so neither the raw secret
+        nor the ``MASKED_API_KEY`` marker leaks in the response.
+        ``base_url`` is returned exactly as stored so ``org.agent_settings``,
+        ``org_member.agent_settings_diff`` and this response always carry
+        the same value.
+        """
+        agent_settings = _validate_persisted_agent_settings(org.agent_settings)
+        cls._denormalize_llm_for_response(agent_settings)
         return cls(
-            default_llm_model=org.default_llm_model,
-            default_llm_base_url=org.default_llm_base_url,
+            agent_settings=agent_settings,
+            conversation_settings=_load_persisted_conversation_settings(
+                org.conversation_settings
+            ),
+            llm_api_key_set=org.llm_api_key is not None,
             search_api_key=cls._mask_key(org.search_api_key),
-            agent=org.agent,
-            confirmation_mode=org.confirmation_mode,
-            security_analyzer=org.security_analyzer,
-            enable_default_condenser=org.enable_default_condenser
-            if org.enable_default_condenser is not None
-            else True,
-            condenser_max_size=org.condenser_max_size,
-            default_max_iterations=org.default_max_iterations,
         )
 
+    @staticmethod
+    def _denormalize_llm_for_response(agent_settings: OpenHandsAgentSettings) -> None:
+        """Rewrite ``agent_settings.llm`` in-place for UI consumption.
 
-class OrgMemberLLMSettings(BaseModel):
-    """LLM settings to propagate to organization members.
+        * ``litellm_proxy/X`` → ``openhands/X`` so the basic-view provider
+          dropdown matches (the SDK's ``AgentSettings`` validator
+          normalizes the other direction on load).
+        * ``base_url`` is returned **as stored** so the three sync targets
+          (``org.agent_settings.llm.base_url``,
+          ``org_member.agent_settings_diff.llm.base_url``, and the GET
+          response) always agree. The frontend is responsible for
+          recognizing the managed LiteLLM proxy URL / provider-default URL
+          as "basic mode" — see ``KNOWN_PROVIDER_DEFAULT_BASE_URLS`` in
+          ``frontend/src/routes/llm-settings.tsx``.
+        * ``api_key`` is nulled so neither the raw secret nor the
+          ``MASKED_API_KEY`` marker leaks in the response — the frontend
+          reads ``llm_api_key_set`` to know whether a key exists.
 
-    Field names match OrgMember DB columns.
+        Pydantic v2 field assignment bypasses ``field_validator`` /
+        ``model_validator`` by default (``validate_assignment`` is off on
+        the SDK's ``LLM`` model), so the rename survives without being
+        re-normalized back to ``litellm_proxy/``.
+        """
+        llm = agent_settings.llm
+        if llm.model and llm.model.startswith('litellm_proxy/'):
+            llm.model = f'openhands/{llm.model.removeprefix("litellm_proxy/")}'
+        llm.api_key = None
+
+
+class OrgMemberSettingsUpdate(BaseModel):
+    """Shared settings updates that may be propagated to organization members.
+
+    ``llm_api_key`` is typed as ``SecretStr`` so the raw value never ends up
+    in logs or ``model_dump(mode='json')`` output by accident — the
+    column-backed ``OrgMember.llm_api_key`` setter accepts ``SecretStr``
+    directly and unwraps via ``get_secret_value()``.
+
+    ``has_custom_llm_api_key`` propagates through
+    ``update_all_members_settings_async`` so an org-defaults save can
+    reset every member's "I have a personal BYOR key" flag in one pass —
+    managed-mode switches rely on this to stop load-time fallthrough from
+    returning stale custom markers.
     """
 
-    llm_model: str | None = None
-    llm_base_url: str | None = None
-    max_iterations: int | None = None
-    llm_api_key: str | None = None
+    agent_settings_diff: dict[str, Any] | None = None
+    conversation_settings_diff: dict[str, Any] | None = None
+    llm_api_key: SecretStr | None = None
+    has_custom_llm_api_key: bool | None = None
 
     def has_updates(self) -> bool:
         """Check if any field is set (not None)."""
-        return any(getattr(self, field) is not None for field in self.model_fields)
-
-
-class OrgLLMSettingsUpdate(BaseModel):
-    """Request model for updating organization LLM settings.
-
-    Field names match Org DB columns exactly.
-    """
-
-    default_llm_model: str | None = None
-    default_llm_base_url: str | None = None
-    search_api_key: str | None = None
-    agent: str | None = None
-    confirmation_mode: bool | None = None
-    security_analyzer: str | None = None
-    enable_default_condenser: bool | None = None
-    condenser_max_size: int | None = Field(default=None, ge=20)
-    default_max_iterations: int | None = Field(default=None, gt=0)
-    llm_api_key: str | None = None
-
-    def has_updates(self) -> bool:
-        """Check if any field is set (not None)."""
-        return any(getattr(self, field) is not None for field in self.model_fields)
-
-    def apply_to_org(self, org: Org) -> None:
-        """Apply non-None settings to the organization model.
-
-        Args:
-            org: Organization entity to update in place
-        """
-        for field_name in self.model_fields:
-            value = getattr(self, field_name)
-            # Skip llm_api_key - it's only for member propagation, not org-level
-            if value is not None and field_name != 'llm_api_key':
-                setattr(org, field_name, value)
-
-    def get_member_updates(self) -> OrgMemberLLMSettings | None:
-        """Get updates that need to be propagated to org members.
-
-        Returns:
-            OrgMemberLLMSettings with mapped field values, or None if no member updates needed.
-            Maps: default_llm_model → llm_model, default_llm_base_url → llm_base_url,
-                  default_max_iterations → max_iterations, llm_api_key → llm_api_key
-        """
-        member_settings = OrgMemberLLMSettings(
-            llm_model=self.default_llm_model,
-            llm_base_url=self.default_llm_base_url,
-            max_iterations=self.default_max_iterations,
-            llm_api_key=self.llm_api_key,
+        return any(
+            getattr(self, field) is not None for field in type(self).model_fields
         )
-        return member_settings if member_settings.has_updates() else None
 
 
 class OrgMemberResponse(BaseModel):
@@ -393,25 +520,28 @@ class OrgMemberUpdate(BaseModel):
 
 
 class MeResponse(BaseModel):
-    """Response model for the current user's membership in an organization."""
+    """Response model for the current user's membership in an organization.
+
+    ``agent_settings_diff`` and ``conversation_settings_diff`` carry the
+    member-level overrides on top of the organization defaults.
+    """
 
     org_id: str
     user_id: str
     email: str
     role: str
     llm_api_key: str
-    max_iterations: int | None = None
-    llm_model: str | None = None
     llm_api_key_for_byor: str | None = None
-    llm_base_url: str | None = None
+    agent_settings_diff: dict[str, Any] = Field(default_factory=dict)
+    conversation_settings_diff: dict[str, Any] = Field(default_factory=dict)
     status: str | None = None
 
     @staticmethod
-    def _mask_key(secret: SecretStr | None) -> str:
+    def _mask_key(secret: str | SecretStr | None) -> str:
         """Mask an API key, showing only last 4 characters."""
         if secret is None:
             return ''
-        raw = secret.get_secret_value()
+        raw = secret.get_secret_value() if isinstance(secret, SecretStr) else secret
         if not raw:
             return ''
         if len(raw) <= 4:
@@ -419,27 +549,22 @@ class MeResponse(BaseModel):
         return '****' + raw[-4:]
 
     @classmethod
-    def from_org_member(cls, member: OrgMember, role: Role, email: str) -> 'MeResponse':
-        """Create a MeResponse from an OrgMember, Role, and user email.
-
-        Args:
-            member: The OrgMember entity
-            role: The Role entity (provides role name)
-            email: The user's email address
-
-        Returns:
-            MeResponse with masked API keys
-        """
+    def from_org_member(
+        cls,
+        member: OrgMember,
+        role: Role,
+        email: str,
+    ) -> 'MeResponse':
+        """Create a MeResponse from an OrgMember, Role, and user email."""
         return cls(
             org_id=str(member.org_id),
             user_id=str(member.user_id),
             email=email,
             role=role.name,
             llm_api_key=cls._mask_key(member.llm_api_key),
-            max_iterations=member.max_iterations,
-            llm_model=member.llm_model,
             llm_api_key_for_byor=cls._mask_key(member.llm_api_key_for_byor) or None,
-            llm_base_url=member.llm_base_url,
+            agent_settings_diff=dict(member.agent_settings_diff or {}),
+            conversation_settings_diff=dict(member.conversation_settings_diff or {}),
             status=member.status,
         )
 
@@ -448,7 +573,6 @@ class OrgAppSettingsResponse(BaseModel):
     """Response model for organization app settings."""
 
     enable_proactive_conversation_starters: bool = True
-    enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
     @classmethod
@@ -465,7 +589,6 @@ class OrgAppSettingsResponse(BaseModel):
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
             if org.enable_proactive_conversation_starters is not None
             else True,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             max_budget_per_task=org.max_budget_per_task,
         )
 
@@ -474,7 +597,6 @@ class OrgAppSettingsUpdate(BaseModel):
     """Request model for updating organization app settings."""
 
     enable_proactive_conversation_starters: bool | None = None
-    enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
     @field_validator('max_budget_per_task')

@@ -4,7 +4,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { useSettings } from "#/hooks/query/use-settings";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useLogout } from "#/hooks/mutation/use-logout";
+import { useDeleteGitProviders } from "#/hooks/mutation/use-delete-git-providers";
 import { GitHubTokenInput } from "#/components/features/settings/git-settings/github-token-input";
 import { GitLabTokenInput } from "#/components/features/settings/git-settings/gitlab-token-input";
 import { GitLabWebhookManager } from "#/components/features/settings/git-settings/gitlab-webhook-manager";
@@ -33,7 +33,8 @@ function GitSettingsScreen() {
   const { t } = useTranslation();
 
   const { mutate: saveGitProviders, isPending } = useAddGitProviders();
-  const { mutate: disconnectGitTokens } = useLogout();
+  const { mutate: disconnectGitTokens, isPending: isDisconnecting } =
+    useDeleteGitProviders();
 
   const { data: settings, isLoading } = useSettings();
   const { providers } = useUserProviders();
@@ -87,7 +88,15 @@ function GitSettingsScreen() {
       formData.get("disconnect-tokens-button") !== null;
 
     if (disconnectButtonClicked) {
-      disconnectGitTokens();
+      disconnectGitTokens(undefined, {
+        onSuccess: () => {
+          displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+        },
+        onError: (error) => {
+          const errorMessage = retrieveAxiosErrorMessage(error);
+          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+        },
+      });
       return;
     }
 
@@ -181,8 +190,9 @@ function GitSettingsScreen() {
     !bitbucketDCHostInputHasValue &&
     !azureDevOpsHostInputHasValue &&
     !forgejoHostInputHasValue;
-  const shouldRenderExternalConfigureButtons =
-    isSaas && config?.github_app_slug;
+  const shouldRenderGitHubConfigureButton = isSaas && config?.github_app_slug;
+  const shouldRenderGitLabSection = isSaas && Boolean(config?.gitlab_enabled);
+  const shouldRenderSlackSection = isSaas && Boolean(config?.slack_enabled);
   const shouldRenderProjectManagementIntegrations =
     config?.feature_flags?.enable_jira ||
     config?.feature_flags?.enable_jira_dc ||
@@ -196,7 +206,7 @@ function GitSettingsScreen() {
     >
       {!isLoading && (
         <div className="flex flex-col">
-          {shouldRenderExternalConfigureButtons && !isLoading && (
+          {shouldRenderGitHubConfigureButton && (
             <>
               <div className="pb-1 flex flex-col">
                 <h3 className="text-xl font-medium text-white">
@@ -210,7 +220,7 @@ function GitSettingsScreen() {
             </>
           )}
 
-          {shouldRenderExternalConfigureButtons && !isLoading && (
+          {shouldRenderGitLabSection && (
             <>
               <div className="mt-6 flex flex-col gap-4 pb-8">
                 <Typography.H3 className="text-xl">
@@ -237,7 +247,7 @@ function GitSettingsScreen() {
             </>
           )}
 
-          {shouldRenderExternalConfigureButtons && !isLoading && (
+          {shouldRenderSlackSection && (
             <>
               <div className="pb-1 mt-6 flex flex-col">
                 <h3 className="text-xl font-medium text-white">
@@ -346,7 +356,7 @@ function GitSettingsScreen() {
       {isLoading && <GitSettingInputsSkeleton />}
 
       <div className="flex gap-6 p-6 justify-end">
-        {!shouldRenderExternalConfigureButtons && (
+        {!isSaas && (
           <>
             <BrandButton
               testId="disconnect-tokens-button"
@@ -354,12 +364,13 @@ function GitSettingsScreen() {
               type="submit"
               variant="secondary"
               isDisabled={
-                !isGitHubTokenSet &&
-                !isGitLabTokenSet &&
-                !isBitbucketTokenSet &&
-                !isBitbucketDCTokenSet &&
-                !isAzureDevOpsTokenSet &&
-                !isForgejoTokenSet
+                isDisconnecting ||
+                (!isGitHubTokenSet &&
+                  !isGitLabTokenSet &&
+                  !isBitbucketTokenSet &&
+                  !isBitbucketDCTokenSet &&
+                  !isAzureDevOpsTokenSet &&
+                  !isForgejoTokenSet)
               }
             >
               {t(I18nKey.GIT$DISCONNECT_TOKENS)}

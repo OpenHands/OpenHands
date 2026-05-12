@@ -28,7 +28,6 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
     SandboxStatus,
 )
-from openhands.events.action.message import MessageAction
 from openhands.sdk.event import ConversationStateUpdateEvent
 
 # ---------------------------------------------------------------------------
@@ -73,7 +72,10 @@ def conversation_state_update_event():
 
 @pytest.fixture
 def wrong_event():
-    return MessageAction(content='Hello world')
+    """Return a mock event that is not a ConversationStateUpdateEvent."""
+    mock_event = MagicMock()
+    mock_event.id = uuid4()
+    return mock_event
 
 
 @pytest.fixture

@@ -2,7 +2,6 @@ import html
 import json
 from urllib.parse import quote
 
-import jwt
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -29,29 +28,45 @@ from server.constants import (
     SLACK_WEBHOOKS_ENABLED,
 )
 from server.logger import logger
+from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.signature import SignatureVerifier
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import delete
 from storage.database import a_session_maker
+from storage.redis import get_redis_client_async
 from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
 
-from openhands.integrations.service_types import ProviderTimeoutError, ProviderType
-from openhands.server.shared import config, sio
+from openhands.app_server.config import depends_jwt_service
+from openhands.app_server.integrations.service_types import (
+    ProviderTimeoutError,
+    ProviderType,
+)
+from openhands.app_server.services.jwt_service import JwtService
 
 signature_verifier = SignatureVerifier(signing_secret=SLACK_SIGNING_SECRET)
 slack_router = APIRouter(prefix='/slack')
 
 # Build https://slack.com/oauth/v2/authorize with sufficient query parameters
 authorize_url_generator = AuthorizeUrlGenerator(
-    client_id=SLACK_CLIENT_ID, scopes=['app_mentions:read', 'chat:write']
+    client_id=SLACK_CLIENT_ID,
+    scopes=[
+        'app_mentions:read',
+        'chat:write',
+        'users:read',
+        'channels:history',
+        'groups:history',
+        'mpim:history',
+        'im:history',
+    ],
 )
 token_manager = TokenManager()
 
 slack_manager = SlackManager(token_manager)
 slack_team_store = SlackTeamStore.get_instance()
+jwt_service_dependency = depends_jwt_service()
 
 
 @slack_router.get('/install')
@@ -63,7 +78,11 @@ async def install(state: str = ''):
 
 @slack_router.get('/install-callback')
 async def install_callback(
-    request: Request, code: str = '', state: str = '', error: str = ''
+    request: Request,
+    code: str = '',
+    state: str = '',
+    error: str = '',
+    jwt_service: JwtService = jwt_service_dependency,
 ):
     """Callback from slack authentication. Verifies, then forwards into keycloak authentication."""
     if not code or error:
@@ -79,14 +98,6 @@ async def install_callback(
             title='Error',
             description=html.escape(error or 'No code provided'),
             status_code=400,
-        )
-
-    if not config.jwt_secret:
-        logger.error('slack_install_callback_error JWT not configured.')
-        return _html_response(
-            title='Error',
-            description=html.escape('JWT not configured'),
-            status_code=500,
         )
 
     try:
@@ -105,16 +116,12 @@ async def install_callback(
         # Create a state variable for keycloak oauth
         payload = {}
         if state:
-            payload = jwt.decode(
-                state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
-            )
+            payload = jwt_service.verify_jws_token(state)
         payload['slack_user_id'] = authed_user.get('id')
         payload['bot_access_token'] = bot_access_token
         payload['team_id'] = team_id
 
-        state = jwt.encode(
-            payload, config.jwt_secret.get_secret_value(), algorithm='HS256'
-        )
+        state = jwt_service.create_jws_token(payload)
 
         # Redirect into keycloak
         scope = quote('openid email profile offline_access')
@@ -144,6 +151,7 @@ async def keycloak_callback(
     code: str = '',
     state: str = '',
     error: str = '',
+    jwt_service: JwtService = jwt_service_dependency,
 ):
     if not code or error:
         logger.warning(
@@ -160,17 +168,7 @@ async def keycloak_callback(
             status_code=400,
         )
 
-    if not config.jwt_secret:
-        logger.error('problem_retrieving_keycloak_tokens JWT not configured.')
-        return _html_response(
-            title='Error',
-            description=html.escape('JWT not configured'),
-            status_code=500,
-        )
-
-    payload: dict[str, str] = jwt.decode(
-        state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
-    )
+    payload: dict[str, str] = jwt_service.verify_jws_token(state)
     slack_user_id = payload['slack_user_id']
     bot_access_token: str | None = payload['bot_access_token']
     team_id = payload['team_id']
@@ -232,7 +230,24 @@ async def keycloak_callback(
 
     # Retrieve the display_name from slack
     client = AsyncWebClient(token=bot_access_token)
-    slack_user_info = await client.users_info(user=slack_user_id)
+    try:
+        slack_user_info = await client.users_info(user=slack_user_id)
+    except SlackApiError as e:
+        if e.response.get('error') == 'missing_scope':
+            logger.warning(
+                'slack_missing_scope_during_install',
+                extra={'slack_user_id': slack_user_id, 'team_id': team_id},
+            )
+            return _html_response(
+                title='Re-installation Required',
+                description=(
+                    'The Slack app is missing required permissions. '
+                    f'Please <a href="{HOST_URL}/slack/install" style="color:#ecedee;text-decoration:underline;">re-install the OpenHands Slack App</a> '
+                    'to authorize the updated permissions.'
+                ),
+                status_code=400,
+            )
+        raise
     slack_display_name = slack_user_info.data['user']['profile']['display_name']
     slack_user = SlackUser(
         keycloak_user_id=keycloak_user_id,
@@ -297,7 +312,7 @@ async def on_event(request: Request, background_tasks: BackgroundTasks):
     team_id = payload['team_id']
 
     # Sometimes slack sends duplicates, so we need to make sure this is not a duplicate.
-    redis = sio.manager.redis
+    redis = get_redis_client_async()
     key = f'slack_msg:{client_msg_id}'
     created = await redis.set(key, 1, nx=True, ex=60)
     if not created:
@@ -335,6 +350,9 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     2. Searches for repositories matching the user's query
     3. Returns up to 100 options for the dropdown
 
+    Note: "No Repository" is handled by a separate button in the form, so it's
+    not included in the dropdown options. Error cases return an empty list.
+
     Configuration: Set the Options Load URL in Slack App settings to:
     https://your-domain/slack/on-options-load
     """
@@ -363,7 +381,7 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     # Verify this is a block_suggestion payload
     if payload.get('type') != 'block_suggestion':
         logger.warning(
-            f"slack_on_options_load: Unexpected payload type: {payload.get('type')}"
+            f'slack_on_options_load: Unexpected payload type: {payload.get("type")}'
         )
         return JSONResponse({'options': []})
 

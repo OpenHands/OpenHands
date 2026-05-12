@@ -56,6 +56,7 @@ class TestPermission:
         assert Permission.VIEW_ORG_SETTINGS.value == 'view_org_settings'
         assert Permission.CHANGE_ORGANIZATION_NAME.value == 'change_organization_name'
         assert Permission.DELETE_ORGANIZATION.value == 'delete_organization'
+        assert Permission.MANAGE_AUTOMATIONS.value == 'manage_automations'
 
     def test_permission_from_string(self):
         """
@@ -142,6 +143,7 @@ class TestRolePermissions:
         assert Permission.CHANGE_USER_ROLE_OWNER in owner_perms
         assert Permission.CHANGE_ORGANIZATION_NAME in owner_perms
         assert Permission.DELETE_ORGANIZATION in owner_perms
+        assert Permission.MANAGE_AUTOMATIONS in owner_perms
 
     def test_admin_has_admin_permissions(self):
         """
@@ -159,6 +161,7 @@ class TestRolePermissions:
         assert Permission.INVITE_USER_TO_ORGANIZATION in admin_perms
         assert Permission.CHANGE_USER_ROLE_MEMBER in admin_perms
         assert Permission.CHANGE_USER_ROLE_ADMIN in admin_perms
+        assert Permission.MANAGE_AUTOMATIONS in admin_perms
         # Admin should NOT have owner-only permissions
         assert Permission.CHANGE_USER_ROLE_OWNER not in admin_perms
         assert Permission.CHANGE_ORGANIZATION_NAME not in admin_perms
@@ -177,6 +180,7 @@ class TestRolePermissions:
         assert Permission.MANAGE_INTEGRATIONS in member_perms
         assert Permission.MANAGE_APPLICATION_SETTINGS in member_perms
         assert Permission.MANAGE_API_KEYS in member_perms
+        assert Permission.MANAGE_AUTOMATIONS in member_perms
         assert Permission.VIEW_LLM_SETTINGS in member_perms
         assert Permission.VIEW_ORG_SETTINGS in member_perms
         # Member should NOT have admin/owner permissions

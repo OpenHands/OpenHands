@@ -43,7 +43,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Get Keycloak configuration from environment variables
 KEYCLOAK_SERVER_URL = os.environ.get('KEYCLOAK_SERVER_URL', '')
@@ -52,7 +52,7 @@ KEYCLOAK_CLIENT_ID = os.environ.get('KEYCLOAK_CLIENT_ID', '')
 KEYCLOAK_CLIENT_SECRET = os.environ.get('KEYCLOAK_CLIENT_SECRET', '')
 KEYCLOAK_ADMIN_PASSWORD = os.environ.get('KEYCLOAK_ADMIN_PASSWORD', '')
 
-# Logger is imported from openhands.core.logger
+# Logger is imported from openhands.app_server.utils.logger
 
 # Get configuration from environment variables
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY')

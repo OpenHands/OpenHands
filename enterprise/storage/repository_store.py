@@ -1,18 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.stored_repository import StoredRepository
 
-from openhands.core.config.openhands_config import OpenHandsConfig
 
-
-@dataclass
 class RepositoryStore:
-    config: OpenHandsConfig
-
     async def store_projects(self, repositories: list[StoredRepository]) -> None:
         """
         Store repositories in database (async version)
@@ -50,6 +43,6 @@ class RepositoryStore:
             await session.commit()
 
     @classmethod
-    def get_instance(cls, config: OpenHandsConfig) -> RepositoryStore:
-        """Get an instance of the UserRepositoryStore."""
-        return RepositoryStore(config)
+    def get_instance(cls) -> RepositoryStore:
+        """Get an instance of the RepositoryStore."""
+        return RepositoryStore()
