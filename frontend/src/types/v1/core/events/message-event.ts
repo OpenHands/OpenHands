@@ -1,4 +1,5 @@
 import { TextContent } from "../base/common";
+import { CriticResult } from "../base/critic";
 import { BaseEvent, Message } from "../base/event";
 
 export interface MessageEvent extends BaseEvent {
@@ -16,4 +17,9 @@ export interface MessageEvent extends BaseEvent {
    * List of content added by agent context
    */
   extended_content: TextContent[];
+
+  /**
+   * Optional critic evaluation of the agent's work at this point.
+   */
+  critic_result?: CriticResult | null;
 }

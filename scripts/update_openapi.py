@@ -9,7 +9,7 @@ Usage:
     python scripts/update_openapi.py
 
 Behavior:
-- Uses openhands.server.app.app.openapi() to build the spec.
+- Uses openhands.app_server.app.app.openapi() to build the spec.
 - Preserves existing "servers" from docs/openapi.json if present; otherwise
   writes sensible defaults.
 - Sets info.version to openhands.__version__.
@@ -42,7 +42,7 @@ sys.path.insert(0, str(project_root))
 
 try:
     from openhands import __version__
-    from openhands.server.app import app
+    from openhands.app_server.app import app
 except ImportError as e:
     print(f'Error importing OpenHands modules: {e}')
     print(

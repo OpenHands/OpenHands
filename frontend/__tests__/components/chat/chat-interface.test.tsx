@@ -16,7 +16,6 @@ import { renderWithProviders, useParamsMock } from "test-utils";
 import type { Message } from "#/message";
 import { SUGGESTIONS } from "#/utils/suggestions";
 import { ChatInterface } from "#/components/features/chat/chat-interface";
-import { useWsClient } from "#/context/ws-client-provider";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -53,7 +52,7 @@ vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
 
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(() => ({
-    curAgentState: AgentState.AWAITING_USER_INPUT,
+    curAgentState: AgentState.AWAITING_USER_INPUT, isArchived: false,
   })),
 }));
 
@@ -110,12 +109,6 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      send: vi.fn(),
-      isLoadingMessages: false,
-      parsedEvents: [],
-    });
-
     useOptimisticUserMessageStore.setState({
       optimisticUserMessage: null,
     });
@@ -140,46 +133,6 @@ describe("ChatInterface - Chat Suggestions", () => {
         .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
       isLoading: false,
     });
-  });
-
-  test("should show chat suggestions when there are no events", () => {
-    (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      send: vi.fn(),
-      isLoadingMessages: false,
-      parsedEvents: [],
-    });
-
-    renderWithQueryClient(<ChatInterface />, queryClient);
-
-    // Check if ChatSuggestions is rendered
-    expect(screen.getByTestId("chat-suggestions")).toBeInTheDocument();
-  });
-
-  test("should show chat suggestions when there are only environment events", () => {
-    const environmentEvent: OpenHandsAction = {
-      id: 1,
-      source: "environment",
-      action: "system",
-      args: {
-        content: "source .openhands/setup.sh",
-        tools: null,
-        openhands_version: null,
-        agent_class: null,
-      },
-      message: "Running setup script",
-      timestamp: "2025-07-01T00:00:00Z",
-    };
-
-    (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      send: vi.fn(),
-      isLoadingMessages: false,
-      parsedEvents: [environmentEvent],
-    });
-
-    renderWithQueryClient(<ChatInterface />, queryClient);
-
-    // Check if ChatSuggestions is still rendered with environment events
-    expect(screen.getByTestId("chat-suggestions")).toBeInTheDocument();
   });
 
   test("should hide chat suggestions when there is a user message", () => {
@@ -234,46 +187,6 @@ describe("ChatInterface - Empty state", () => {
       parsedEvents: [],
     })),
   }));
-
-  beforeAll(() => {
-    vi.mock("#/context/socket", async (importActual) => ({
-      ...(await importActual<typeof import("#/context/ws-client-provider")>()),
-      useWsClient: useWsClientMock,
-    }));
-  });
-
-  beforeEach(() => {
-    (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      send: sendMock,
-      status: "CONNECTED",
-      isLoadingMessages: false,
-      parsedEvents: [],
-    });
-
-    useOptimisticUserMessageStore.setState({
-      optimisticUserMessage: null,
-    });
-
-    useErrorMessageStore.setState({
-      errorMessage: null,
-    });
-    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      data: { app_mode: "local" },
-    });
-    (useGetTrajectory as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      mutate: vi.fn(),
-      mutateAsync: vi.fn(),
-      isLoading: false,
-    });
-    (
-      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      mutateAsync: vi
-        .fn()
-        .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
-      isLoading: false,
-    });
-  });
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -362,7 +275,7 @@ describe("ChatInterface - Empty state", () => {
 describe('ChatInterface - Status Indicator', () => {
   it("should render ChatStatusIndicator when agent is not awaiting user input / conversation is NOT ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.LOADING,
+      curAgentState: AgentState.LOADING, isArchived: false,
     });
 
     renderChatInterfaceWithRouter();
@@ -372,7 +285,7 @@ describe('ChatInterface - Status Indicator', () => {
 
   it("should NOT render ChatStatusIndicator when agent is awaiting user input / conversation is ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.AWAITING_USER_INPUT,
+      curAgentState: AgentState.AWAITING_USER_INPUT, isArchived: false,
     });
 
     renderChatInterfaceWithRouter();
@@ -641,44 +554,4 @@ describe.skip("ChatInterface - General functionality", () => {
 
     expect(screen.getByTestId("feedback-actions")).toBeInTheDocument();
   });
-});
-
-describe("ChatInterface – skeleton loading state", () => {
-  test("renders chat message skeleton when loading existing conversation", () => {
-    (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      send: vi.fn(),
-      isLoadingMessages: true,
-      parsedEvents: [],
-    });
-
-    renderWithQueryClient(<ChatInterface />, new QueryClient());
-
-    expect(screen.getByTestId("chat-messages-skeleton")).toBeInTheDocument();
-
-    expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
-
-    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
-  });
-});
-
-test("does not render skeleton for new conversation (shows spinner instead)", () => {
-  useParamsMock.mockReturnValue({ conversationId: undefined } as unknown as {
-    conversationId: string;
-  });
-  (useConversationId as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-    conversationId: "",
-  });
-  (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-    send: vi.fn(),
-    isLoadingMessages: true,
-    parsedEvents: [],
-  });
-
-  renderWithQueryClient(<ChatInterface />, new QueryClient(), "/");
-
-  expect(screen.getAllByTestId("loading-spinner").length).toBeGreaterThan(0);
-
-  expect(
-    screen.queryByTestId("chat-messages-skeleton"),
-  ).not.toBeInTheDocument();
 });

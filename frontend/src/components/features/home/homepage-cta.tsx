@@ -1,12 +1,12 @@
 import { useTranslation } from "react-i18next";
 import { Dispatch, SetStateAction } from "react";
+import { useClientAnalytics } from "#/hooks/use-client-analytics";
 import { Card } from "#/ui/card";
 import { CardTitle } from "#/ui/card-title";
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { setCTADismissed } from "#/utils/local-storage";
-import { useTracking } from "#/hooks/use-tracking";
 import CloseIcon from "#/icons/close.svg?react";
 
 interface HomepageCTAProps {
@@ -15,15 +15,15 @@ interface HomepageCTAProps {
 
 export function HomepageCTA({ setShouldShowCTA }: HomepageCTAProps) {
   const { t } = useTranslation();
-  const { trackSaasSelfhostedInquiry } = useTracking();
+  const { trackEnterpriseCTAClicked } = useClientAnalytics();
+
+  const handleLearnMoreClick = () => {
+    trackEnterpriseCTAClicked({ location: "home_page" });
+  };
 
   const handleClose = () => {
     setCTADismissed("homepage");
     setShouldShowCTA(false);
-  };
-
-  const handleLearnMoreClick = () => {
-    trackSaasSelfhostedInquiry({ location: "home_page" });
   };
 
   return (

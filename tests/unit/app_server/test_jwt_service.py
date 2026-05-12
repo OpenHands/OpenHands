@@ -3,16 +3,20 @@
 This module tests the JWT service functionality including:
 - JWS token creation and verification (sign/verify round trip)
 - JWE token creation and decryption (encrypt/decrypt round trip)
+- Symmetric encrypt/decrypt helpers (JWE + legacy Fernet fallback)
 - Key management and rotation
 - Error handling and edge cases
 """
 
+import hashlib
 import json
+from base64 import b64encode
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import jwt
 import pytest
+from cryptography.fernet import Fernet
 from jwcrypto import jwe as jwcrypto_jwe
 from jwcrypto import jwk
 from pydantic import SecretStr
@@ -157,15 +161,25 @@ class TestJwtService:
         with pytest.raises(ValueError, match='Invalid JWT token format'):
             jwt_service.verify_jws_token('invalid.token')
 
-    def test_jws_token_verification_no_kid_header(self, jwt_service):
-        """Test JWS token verification fails when token has no kid header."""
-        # Create a token without kid header using PyJWT directly
+    def test_jws_token_verification_no_kid_header_falls_back_to_default_key(
+        self, jwt_service, sample_keys
+    ):
+        """Test JWS token verification uses default key when token has no kid header."""
+        # Create a token without kid header using PyJWT directly,
+        # signed with the default key's secret (key2 is newest active).
+        default_secret = sample_keys[1].key.get_secret_value()
         payload = {'user_id': '123'}
-        token = jwt.encode(payload, 'some_secret', algorithm='HS256')
+        token = jwt.encode(payload, default_secret, algorithm='HS256')
 
-        with pytest.raises(
-            ValueError, match="Token does not contain 'kid' header with key ID"
-        ):
+        decoded = jwt_service.verify_jws_token(token)
+        assert decoded['user_id'] == '123'
+
+    def test_jws_token_verification_no_kid_header_wrong_secret(self, jwt_service):
+        """Test JWS verification fails for no-kid token signed with wrong secret."""
+        payload = {'user_id': '123'}
+        token = jwt.encode(payload, 'totally_wrong_secret', algorithm='HS256')
+
+        with pytest.raises(jwt.InvalidTokenError, match='Token verification failed'):
             jwt_service.verify_jws_token(token)
 
     def test_jws_token_verification_wrong_signature(self, jwt_service):
@@ -514,3 +528,73 @@ class TestJwtService:
         assert unicode_decrypted['description'] == 'Testing with émojis 🚀'
         assert unicode_decrypted['chinese'] == '你好世界'
         assert unicode_decrypted['iat'] == 1704067200
+
+
+class TestEncryptDecryptValue:
+    """Tests for JwtService.encrypt_value / decrypt_value (JWE + Fernet fallback)."""
+
+    @pytest.fixture
+    def sample_keys(self):
+        return [
+            EncryptionKey(
+                id='key1',
+                key=SecretStr('test_secret_key_1'),
+                active=True,
+                created_at=datetime(2023, 1, 1, tzinfo=None),
+            ),
+            EncryptionKey(
+                id='key2',
+                key=SecretStr('test_secret_key_2'),
+                active=True,
+                created_at=datetime(2023, 1, 2, tzinfo=None),
+            ),
+        ]
+
+    @pytest.fixture
+    def jwt_service(self, sample_keys):
+        return JwtService(sample_keys)
+
+    def test_encrypt_decrypt_round_trip(self, jwt_service):
+        """encrypt_value then decrypt_value returns the original text."""
+        plaintext = 'super-secret-api-key-12345'
+        ciphertext = jwt_service.encrypt_value(plaintext)
+        assert jwt_service.decrypt_value(ciphertext) == plaintext
+
+    def test_encrypt_decrypt_unicode(self, jwt_service):
+        plaintext = 'Héllo Wörld 🔑'
+        ciphertext = jwt_service.encrypt_value(plaintext)
+        assert jwt_service.decrypt_value(ciphertext) == plaintext
+
+    def test_decrypt_legacy_fernet_value(self, jwt_service, sample_keys):
+        """decrypt_value handles data encrypted with the legacy Fernet scheme."""
+        secret = sample_keys[1].key.get_secret_value()  # key2 (default)
+        fernet_key = b64encode(hashlib.sha256(secret.encode()).digest())
+        f = Fernet(fernet_key)
+        plaintext = 'legacy-encrypted-token'
+        # Fernet.encrypt() returns base64-encoded bytes, decode to string
+        # (no extra b64encode - that was the bug!)
+        legacy_ciphertext = f.encrypt(plaintext.encode()).decode()
+
+        assert jwt_service.decrypt_value(legacy_ciphertext) == plaintext
+
+    def test_decrypt_legacy_fernet_non_default_key(self, jwt_service, sample_keys):
+        """decrypt_value falls through to a non-default key for Fernet."""
+        secret = sample_keys[0].key.get_secret_value()  # key1 (not default)
+        fernet_key = b64encode(hashlib.sha256(secret.encode()).digest())
+        f = Fernet(fernet_key)
+        plaintext = 'old-key-data'
+        # Fernet.encrypt() returns base64-encoded bytes, decode to string
+        # (no extra b64encode - that was the bug!)
+        legacy_ciphertext = f.encrypt(plaintext.encode()).decode()
+
+        assert jwt_service.decrypt_value(legacy_ciphertext) == plaintext
+
+    def test_decrypt_value_fails_for_garbage(self, jwt_service):
+        with pytest.raises(ValueError, match='Failed to decrypt value'):
+            jwt_service.decrypt_value('not-valid-ciphertext-at-all')
+
+    def test_encrypt_value_is_jwe(self, jwt_service):
+        """encrypt_value produces a JWE token (5-part compact serialization)."""
+        ciphertext = jwt_service.encrypt_value('hello')
+        # JWE compact serialization has exactly 4 dots
+        assert ciphertext.count('.') == 4

@@ -4,22 +4,31 @@ This module tests the batch_get_app_conversations endpoint,
 focusing on UUID string parsing, validation, and error handling.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import HTTPException, status
+from fastapi.responses import JSONResponse
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
+    AppConversationInfo,
     AppConversationPage,
+    SwitchProfileRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_router import (
+    AgentServerContext,
     batch_get_app_conversations,
     count_app_conversations,
     search_app_conversations,
+    switch_conversation_profile,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.app_server.settings.llm_profiles import LLMProfiles
+from openhands.app_server.settings.settings_models import Settings
+from openhands.sdk.llm import LLM
 
 
 def _make_mock_app_conversation(
@@ -374,3 +383,328 @@ class TestCountAppConversations:
         assert call_kwargs.get('sandbox_id__eq') == sandbox_id
         assert call_kwargs.get('title__contains') == 'test'
         assert result == 3
+
+
+# ─── switch_conversation_profile ────────────────────────────────────────────
+
+
+def _make_settings_with_profile(
+    profile_name: str = 'gpt-5',
+    model: str = 'openai/gpt-5',
+    api_key: str = 'sk-test',
+) -> Settings:
+    """Build a Settings instance carrying one named LLM profile."""
+    llm = LLM(model=model, api_key=api_key)
+    return Settings(llm_profiles=LLMProfiles(profiles={profile_name: llm}))
+
+
+def _make_agent_server_context(
+    conversation_id, llm_model: str | None = 'openai/old-model'
+) -> AgentServerContext:
+    """Build a minimal AgentServerContext for the success path tests."""
+    info = AppConversationInfo(
+        id=conversation_id,
+        created_by_user_id='test-user',
+        sandbox_id=str(uuid4()),
+        llm_model=llm_model,
+    )
+    return AgentServerContext(
+        conversation=info,
+        sandbox=MagicMock(status=SandboxStatus.RUNNING),
+        sandbox_spec=MagicMock(),
+        agent_server_url='http://agent.test',
+        session_api_key='sess-key',
+    )
+
+
+def _make_httpx_client(post_return=None, post_side_effect=None) -> AsyncMock:
+    client = AsyncMock(spec=httpx.AsyncClient)
+    if post_side_effect is not None:
+        client.post = AsyncMock(side_effect=post_side_effect)
+    else:
+        response = post_return or MagicMock()
+        client.post = AsyncMock(return_value=response)
+    return client
+
+
+@pytest.mark.asyncio
+class TestSwitchConversationProfile:
+    """Test suite for the /switch_profile endpoint."""
+
+    async def test_returns_404_when_user_settings_missing(self):
+        """No user_settings → 404 (precondition for profile lookup)."""
+        with pytest.raises(HTTPException) as exc_info:
+            await switch_conversation_profile(
+                conversation_id=uuid4(),
+                request=SwitchProfileRequest(profile_name='gpt-5'),
+                user_settings=None,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=MagicMock(),
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=_make_httpx_client(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert 'Settings not found' in exc_info.value.detail
+
+    async def test_returns_404_when_profile_not_found(self):
+        """Unknown profile name → 404 with the offending name in detail."""
+        settings = _make_settings_with_profile(profile_name='default')
+
+        with pytest.raises(HTTPException) as exc_info:
+            await switch_conversation_profile(
+                conversation_id=uuid4(),
+                request=SwitchProfileRequest(profile_name='ghost'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=MagicMock(),
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=_make_httpx_client(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert "'ghost'" in exc_info.value.detail
+
+    async def test_returns_409_when_sandbox_paused(self):
+        """_get_agent_server_context returns None for paused sandboxes → 409."""
+        settings = _make_settings_with_profile()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await switch_conversation_profile(
+                    conversation_id=uuid4(),
+                    request=SwitchProfileRequest(profile_name='gpt-5'),
+                    user_settings=settings,
+                    app_conversation_service=MagicMock(),
+                    app_conversation_info_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=_make_httpx_client(),
+                )
+
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
+        assert 'paused' in exc_info.value.detail.lower()
+
+    async def test_propagates_status_when_conversation_not_reachable(self):
+        """A JSONResponse from the helper is mirrored as an HTTPException."""
+        settings = _make_settings_with_profile()
+        helper_response = JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'Conversation not found'},
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=helper_response),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await switch_conversation_profile(
+                    conversation_id=uuid4(),
+                    request=SwitchProfileRequest(profile_name='gpt-5'),
+                    user_settings=settings,
+                    app_conversation_service=MagicMock(),
+                    app_conversation_info_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=_make_httpx_client(),
+                )
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_returns_502_when_agent_server_returns_http_error(self):
+        """A 4xx/5xx from switch_llm is folded into a 502."""
+        conv_id = uuid4()
+        settings = _make_settings_with_profile()
+        ctx = _make_agent_server_context(conv_id)
+        bad_response = MagicMock()
+        bad_response.status_code = 500
+        bad_response.text = 'agent crashed'
+        bad_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                'boom', request=MagicMock(), response=bad_response
+            ),
+        )
+        client = _make_httpx_client(post_return=bad_response)
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await switch_conversation_profile(
+                    conversation_id=conv_id,
+                    request=SwitchProfileRequest(profile_name='gpt-5'),
+                    user_settings=settings,
+                    app_conversation_service=MagicMock(),
+                    app_conversation_info_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=client,
+                )
+
+        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+        assert '500' in exc_info.value.detail
+
+    async def test_returns_502_when_agent_server_unreachable(self):
+        """A network-level RequestError is folded into a 502."""
+        conv_id = uuid4()
+        settings = _make_settings_with_profile()
+        ctx = _make_agent_server_context(conv_id)
+        client = _make_httpx_client(
+            post_side_effect=httpx.RequestError('connection refused'),
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await switch_conversation_profile(
+                    conversation_id=conv_id,
+                    request=SwitchProfileRequest(profile_name='gpt-5'),
+                    user_settings=settings,
+                    app_conversation_service=MagicMock(),
+                    app_conversation_info_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=client,
+                )
+
+        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+        assert 'reach agent server' in exc_info.value.detail.lower()
+
+    async def test_success_persists_new_llm_model_on_conversation(self):
+        """Happy path: agent-server returns 200, llm_model is saved."""
+        conv_id = uuid4()
+        new_model = 'openai/gpt-5'
+        settings = _make_settings_with_profile(model=new_model)
+        ctx = _make_agent_server_context(conv_id, llm_model='openai/old-model')
+
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        client = _make_httpx_client(post_return=ok_response)
+
+        info_for_persist = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id='test-user',
+            sandbox_id=str(uuid4()),
+            llm_model='openai/old-model',
+        )
+        info_service = MagicMock()
+        info_service.get_app_conversation_info = AsyncMock(
+            return_value=info_for_persist,
+        )
+        info_service.save_app_conversation_info = AsyncMock()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await switch_conversation_profile(
+                conversation_id=conv_id,
+                request=SwitchProfileRequest(profile_name='gpt-5'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=info_service,
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        info_service.save_app_conversation_info.assert_awaited_once()
+        saved_info = info_service.save_app_conversation_info.await_args[0][0]
+        assert saved_info.llm_model == new_model
+
+        # The agent-server payload carries the new profile's LLM under the
+        # `llm` key, with a usage_id derived from the profile name.
+        client.post.assert_awaited_once()
+        post_kwargs = client.post.await_args.kwargs
+        assert post_kwargs['json']['llm']['model'] == new_model
+        assert post_kwargs['json']['llm']['usage_id'].startswith('profile:gpt-5:')
+
+    async def test_success_skips_persist_when_model_unchanged(self):
+        """If the conversation already records the new model, save is skipped."""
+        conv_id = uuid4()
+        same_model = 'openai/gpt-5'
+        settings = _make_settings_with_profile(model=same_model)
+        ctx = _make_agent_server_context(conv_id)
+
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        client = _make_httpx_client(post_return=ok_response)
+
+        info_already_correct = AppConversationInfo(
+            id=conv_id,
+            created_by_user_id='test-user',
+            sandbox_id=str(uuid4()),
+            llm_model=same_model,
+        )
+        info_service = MagicMock()
+        info_service.get_app_conversation_info = AsyncMock(
+            return_value=info_already_correct,
+        )
+        info_service.save_app_conversation_info = AsyncMock()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await switch_conversation_profile(
+                conversation_id=conv_id,
+                request=SwitchProfileRequest(profile_name='gpt-5'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=info_service,
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        info_service.save_app_conversation_info.assert_not_awaited()
+
+    async def test_success_swallows_persistence_failures(self):
+        """A save failure is logged but does not fail the request."""
+        conv_id = uuid4()
+        settings = _make_settings_with_profile(model='openai/gpt-5')
+        ctx = _make_agent_server_context(conv_id, llm_model='openai/old-model')
+
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        client = _make_httpx_client(post_return=ok_response)
+
+        info_service = MagicMock()
+        info_service.get_app_conversation_info = AsyncMock(
+            side_effect=RuntimeError('db down'),
+        )
+        info_service.save_app_conversation_info = AsyncMock()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            # Must not raise — the agent-server already accepted the swap.
+            await switch_conversation_profile(
+                conversation_id=conv_id,
+                request=SwitchProfileRequest(profile_name='gpt-5'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=info_service,
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )

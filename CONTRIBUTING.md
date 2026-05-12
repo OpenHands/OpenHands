@@ -36,8 +36,6 @@ Full details in our [Development Guide](./Development.md).
 
 - **[Frontend](./frontend/README.md)** - React application
 - **[App Server (V1)](./openhands/app_server/README.md)** - Current FastAPI application server and REST API modules
-- **[Agents](./openhands/agenthub/README.md)** - AI agent implementations
-- **[Runtime](./openhands/runtime/README.md)** - Execution environments
 - **[Evaluation](https://github.com/OpenHands/benchmarks)** - Testing and benchmarks
 
 ## What Can You Build?

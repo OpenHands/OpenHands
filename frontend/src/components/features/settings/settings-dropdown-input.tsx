@@ -81,7 +81,7 @@ export function SettingsDropdownInput({
         inputProps={{
           classNames: {
             inputWrapper: cn(
-              "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic",
+              "bg-tertiary border border-[#717888] h-10 w-full max-w-[680px] rounded-sm p-2 placeholder:italic",
               inputWrapperClassName,
             ),
             input: inputClassName,

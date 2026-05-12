@@ -6,11 +6,10 @@ import { useConversationId } from "#/hooks/use-conversation-id";
 import { useCommandStore } from "#/stores/command-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentStore } from "#/stores/agent-store";
+import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
 import { AgentState } from "#/types/agent-state";
 
-import { useBatchFeedback } from "#/hooks/query/use-batch-feedback";
 import { EventHandler } from "../wrapper/event-handler";
-import { useConversationConfig } from "#/hooks/query/use-conversation-config";
 
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
@@ -21,6 +20,7 @@ import { ConversationSubscriptionsProvider } from "#/context/conversation-subscr
 
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
 import { ConversationNameWithStatus } from "#/components/features/conversation/conversation-name-with-status";
+import { ArchivedConversationView } from "#/components/features/conversation/archived-conversation-view";
 
 import { ConversationTabs } from "#/components/features/conversation/conversation-tabs/conversation-tabs";
 import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
@@ -29,7 +29,6 @@ import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 
 function AppContent() {
-  useConversationConfig();
   const { t } = useTranslation();
   const { conversationId } = useConversationId();
   const clearEvents = useEventStore((state) => state.clearEvents);
@@ -42,6 +41,9 @@ function AppContent() {
   const { resetConversationState } = useConversationStore();
   const navigate = useNavigate();
   const clearTerminal = useCommandStore((state) => state.clearTerminal);
+  const resetV1ConversationState = useV1ConversationStateStore(
+    (state) => state.reset,
+  );
   const setCurrentAgentState = useAgentStore(
     (state) => state.setCurrentAgentState,
   );
@@ -49,13 +51,11 @@ function AppContent() {
     (state) => state.removeErrorMessage,
   );
 
-  // Fetch batch feedback data when conversation is loaded
-  useBatchFeedback();
-
   // 1. Cleanup Effect - runs when navigating to a different conversation
   React.useEffect(() => {
     clearTerminal();
     resetConversationState();
+    resetV1ConversationState();
     setCurrentAgentState(AgentState.LOADING);
     removeErrorMessage();
     clearEvents();
@@ -63,6 +63,7 @@ function AppContent() {
     conversationId,
     clearTerminal,
     resetConversationState,
+    resetV1ConversationState,
     setCurrentAgentState,
     removeErrorMessage,
     clearEvents,
@@ -90,7 +91,24 @@ function AppContent() {
     }
   }, [conversation, isFetched, isAuthed, navigate, t]);
 
-  const isV0Conversation = conversation?.conversation_version === "V0";
+  // Check if this is an archived conversation (sandbox no longer exists)
+  const isArchived = conversation?.sandbox_status === "MISSING";
+
+  // For archived conversations, show a simplified read-only view
+  // similar to the shared conversation view
+  if (isArchived) {
+    return (
+      <WebSocketProviderWrapper conversationId={conversationId}>
+        <ConversationSubscriptionsProvider>
+          <EventHandler>
+            <div data-testid="app-route" className="flex flex-col h-full gap-3">
+              <ArchivedConversationView />
+            </div>
+          </EventHandler>
+        </ConversationSubscriptionsProvider>
+      </WebSocketProviderWrapper>
+    );
+  }
 
   const content = (
     <ConversationSubscriptionsProvider>
@@ -113,10 +131,7 @@ function AppContent() {
   // Render WebSocket provider immediately to avoid mount/remount cycles
   // The providers internally handle waiting for conversation data to be ready
   return (
-    <WebSocketProviderWrapper
-      version={isV0Conversation ? 0 : 1}
-      conversationId={conversationId}
-    >
+    <WebSocketProviderWrapper conversationId={conversationId}>
       {content}
     </WebSocketProviderWrapper>
   );

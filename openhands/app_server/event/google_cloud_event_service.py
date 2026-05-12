@@ -3,6 +3,7 @@
 import json
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import AsyncGenerator, Iterator
 
@@ -20,6 +21,17 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
 
 _logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _get_shared_storage_client() -> Client:
+    """Return a process-wide shared GCS client.
+
+    google.cloud.storage.Client is thread-safe and manages its own urllib3
+    connection pool.  Creating one per request leads to pool exhaustion under
+    load ("Connection pool is full, discarding connection").
+    """
+    return storage.Client()
 
 
 @dataclass
@@ -78,8 +90,7 @@ class GoogleCloudEventServiceInjector(EventServiceInjector):
             user_id = await user_context.get_user_id()
 
             bucket_name = self.bucket_name
-            storage_client: Client = storage.Client()
-            bucket: Bucket = storage_client.bucket(bucket_name)
+            bucket: Bucket = _get_shared_storage_client().bucket(bucket_name)
 
             yield GoogleCloudEventService(
                 prefix=self.prefix,

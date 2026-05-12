@@ -222,15 +222,15 @@ describe("ComponentName", () => {
 
 For real-world examples of testing, check out these test files:
 
-1. **Chat Input Component Test**:
-   [`__tests__/components/chat/chat-input.test.tsx`](https://github.com/OpenHands/OpenHands/blob/main/frontend/__tests__/components/chat/chat-input.test.tsx)
-   - Demonstrates comprehensive testing of a complex input component
-   - Covers various scenarios like submission, disabled states, and user interactions
+1. **Chat Interface Component Test**:
+   [`__tests__/components/chat/chat-interface.test.tsx`](https://github.com/OpenHands/OpenHands/blob/main/frontend/__tests__/components/chat/chat-interface.test.tsx)
+   - Demonstrates comprehensive testing of a complex chat component
+   - Covers various scenarios like message rendering and user interactions
 
-2. **File Explorer Component Test**:
-   [`__tests__/components/file-explorer/file-explorer.test.tsx`](https://github.com/OpenHands/OpenHands/blob/main/frontend/__tests__/components/file-explorer/file-explorer.test.tsx)
-   - Shows testing of a more complex component with multiple interactions
-   - Illustrates testing of nested components and state management
+2. **Interactive Chat Box Component Test**:
+   [`__tests__/components/interactive-chat-box.test.tsx`](https://github.com/OpenHands/OpenHands/blob/main/frontend/__tests__/components/interactive-chat-box.test.tsx)
+   - Shows testing of a more complex input component with multiple interactions
+   - Illustrates testing of user input handling and state management
 
 ### Test Coverage
 
@@ -248,7 +248,3 @@ Tests are automatically run during:
 ## Contributing
 
 Please read the [CONTRIBUTING.md](../CONTRIBUTING.md) file for details on our code of conduct, and the process for submitting pull requests to us.
-
-## Troubleshooting
-
-TODO

@@ -4,9 +4,21 @@ from typing import TypeVar
 
 from pydantic import SecretStr, TypeAdapter
 from sqlalchemy import JSON, DateTime, String, TypeDecorator
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    """
+    Base class for all SQLAlchemy models.
+
+    Uses SQLAlchemy 2.0 DeclarativeBase for proper type inference with Mapped types.
+    This is backward compatible with existing Column() definitions while enabling
+    gradual migration to mapped_column() with Mapped[T] type annotations.
+    """
+
+    pass
+
+
 T = TypeVar('T', bound=Enum)
 
 

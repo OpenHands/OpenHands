@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { useIsAuthed } from "./use-is-authed";
+import { V1AppConversationPage } from "#/api/conversation-service/v1-conversation-service.types";
 
 export const usePaginatedConversations = (limit: number = 20) => {
   const { data: userIsAuthenticated } = useIsAuthed();
@@ -8,7 +9,7 @@ export const usePaginatedConversations = (limit: number = 20) => {
   return useInfiniteQuery({
     queryKey: ["user", "conversations", "paginated", limit],
     queryFn: async ({ pageParam }) => {
-      const result = await ConversationService.getUserConversations(
+      const result = await V1ConversationService.searchConversations(
         limit,
         pageParam,
       );
@@ -16,7 +17,8 @@ export const usePaginatedConversations = (limit: number = 20) => {
       return result;
     },
     enabled: !!userIsAuthenticated,
-    getNextPageParam: (lastPage) => lastPage.next_page_id,
+    getNextPageParam: (lastPage: V1AppConversationPage) =>
+      lastPage.next_page_id,
     initialPageParam: undefined as string | undefined,
   });
 };

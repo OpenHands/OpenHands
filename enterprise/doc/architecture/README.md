@@ -10,4 +10,4 @@ Architecture diagrams specific to the OpenHands SaaS/Enterprise deployment.
 ## Related Documentation
 
 For core OpenHands architecture (applicable to all deployments), see:
-- [Core Architecture Documentation](../../../openhands/architecture/README.md)
+- [Architecture Documentation](https://docs.openhands.dev/openhands/usage/architecture/backend)

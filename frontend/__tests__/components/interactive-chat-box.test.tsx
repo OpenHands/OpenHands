@@ -57,7 +57,7 @@ describe("InteractiveChatBox", () => {
 
   const mockStores = (agentState: AgentState = AgentState.INIT) => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: agentState,
+      curAgentState: agentState, isArchived: false,
     });
 
     useConversationStore.setState({
