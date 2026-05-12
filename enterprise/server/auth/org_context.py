@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from server.auth.saas_user_auth import SaasUserAuth
 from server.logger import logger
 
@@ -78,7 +78,76 @@ async def maybe_resolve_effective_org_id(request: Request) -> UUID | None:
     return await user_auth.get_effective_org_id()
 
 
+async def reject_x_org_id_path_mismatch(
+    request: Request,
+    x_org_id: str | None = Header(default=None, alias=X_ORG_ID_HEADER),
+) -> None:
+    """Guard for routes with ``{org_id}`` in the path.
+
+    These routes already pin the org via the URL: ``require_permission``
+    runs against the path org, and the handlers do not consult the
+    effective-org resolver. That makes any ``X-Org-Id`` header on such
+    a request *redundant at best, contradictory at worst*. We silently
+    accepted the conflict before, which masked client-state bugs (e.g.
+    a stale org selector in the frontend sending the previous org's id
+    while the user navigates to a new org's page). This dependency
+    converts that into an immediate, actionable 400.
+
+    Behavior:
+
+    * Header absent ............................. pass
+    * Header present, valid UUID, matches path .. pass
+    * Header present, valid UUID, != path ....... 400
+    * Header present, not a UUID ................ 400
+    * Path ``org_id`` itself malformed .......... pass (FastAPI's own
+      type coercion will 422 the request before the handler runs)
+
+    Attach via ``dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH]`` on each
+    path-org route's decorator, or at router-level when *every* route
+    on the router has ``{org_id}`` in its prefix.
+    """
+    if x_org_id is None:
+        return
+
+    path_org_id_raw = request.path_params.get('org_id')
+    if path_org_id_raw is None:
+        # Dep was attached to a route without ``{org_id}``. Treat as a
+        # no-op rather than 500-ing the request; misconfiguration is a
+        # developer concern, not a runtime authorization concern.
+        return
+
+    try:
+        header_uuid = UUID(x_org_id)
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'{X_ORG_ID_HEADER} header is not a valid UUID',
+        )
+
+    try:
+        path_uuid = (
+            path_org_id_raw
+            if isinstance(path_org_id_raw, UUID)
+            else UUID(str(path_org_id_raw))
+        )
+    except (ValueError, TypeError, AttributeError):
+        # If the path UUID is malformed FastAPI's own coercion will
+        # 422 before we reach the handler. Don't shadow that error.
+        return
+
+    if header_uuid != path_uuid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f'{X_ORG_ID_HEADER} header ({header_uuid}) does not match '
+                f'the org in the request path ({path_uuid}). '
+                'Remove the header or set it to the same value.'
+            ),
+        )
+
+
 # Module-level Depends shortcuts so call sites read tidily:
 #     effective_org_id: UUID = EFFECTIVE_ORG_ID,
 EFFECTIVE_ORG_ID = Depends(resolve_effective_org_id)
 MAYBE_EFFECTIVE_ORG_ID = Depends(maybe_resolve_effective_org_id)
+REJECT_X_ORG_ID_PATH_MISMATCH = Depends(reject_x_org_id_path_mismatch)
