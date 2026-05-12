@@ -645,22 +645,15 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
     )
 
     user = await UserStore.get_user_by_id(user_info.sub)
-    has_accepted_tos = user is not None and user.accepted_tos is not None
-
     redirect_url, _, _ = _extract_oauth_state(state)
     default_url = redirect_url if redirect_url else web_url
     final_url = await _get_post_auth_redirect(user_info.sub, default_url, web_url, user)
 
-    response = RedirectResponse(final_url, status_code=302)
-    set_response_cookie(
-        request=request,
-        response=response,
-        keycloak_access_token=keycloak_access_token,
-        keycloak_refresh_token=keycloak_refresh_token,
-        secure=True if web_url.startswith('https') else False,
-        accepted_tos=has_accepted_tos,
-    )
-    return response
+    # Intentionally do NOT write tokens into the `keycloak_auth` cookie:
+    # the cookie tracks the regular (online) session and is the token
+    # passed to Keycloak's /logout endpoint. Putting the offline token
+    # in the cookie causes logout to terminate the offline session.
+    return RedirectResponse(final_url, status_code=302)
 
 
 @oauth_router.get('/github/callback')
