@@ -13,11 +13,13 @@ from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
+    ConversationTrigger,
 )
 from openhands.app_server.config import (
     depends_app_conversation_info_service,
@@ -27,8 +29,14 @@ from openhands.app_server.config import (
     get_global_config,
     get_sandbox_service,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
+from openhands.app_server.event_callback.event_callback_models import EventCallback
+from openhands.app_server.event_callback.set_title_callback_processor import (
+    SetTitleCallbackProcessor,
+)
+from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
@@ -38,14 +46,12 @@ from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
 )
-from openhands.integrations.provider import ProviderType
-from openhands.sdk import ConversationExecutionStatus, Event
-from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.server.types import AppMode
-from openhands.server.user_auth.default_user_auth import DefaultUserAuth
-from openhands.server.user_auth.user_auth import (
+from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
+from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
+from openhands.sdk import ConversationExecutionStatus, Event
+from openhands.sdk.event import ConversationStateUpdateEvent
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()
@@ -53,6 +59,171 @@ app_conversation_info_service_dependency = depends_app_conversation_info_service
 jwt_dependency = depends_jwt_service()
 app_mode = get_global_config().app_mode
 _logger = logging.getLogger(__name__)
+
+
+def _classify_error_type(error_message: str | None) -> str:
+    """Classify conversation error into broad categories for dashboard filtering.
+
+    Categories: budget_exceeded, model_error, runtime_error, timeout, user_cancelled, unknown.
+    Uses best-effort string matching per CONTEXT.md decision.
+    """
+    if not error_message:
+        return 'unknown'
+    msg_lower = error_message.lower()
+    if 'budget' in msg_lower or 'budgetexceeded' in msg_lower:
+        return 'budget_exceeded'
+    if 'timeout' in msg_lower or 'timed out' in msg_lower:
+        return 'timeout'
+    if 'cancel' in msg_lower:
+        return 'user_cancelled'
+    if any(
+        kw in msg_lower
+        for kw in ('model', 'llm', 'api key', 'rate limit', 'authentication')
+    ):
+        return 'model_error'
+    return 'runtime_error'
+
+
+def merge_conversation_tags(
+    existing_tags: dict[str, str] | None,
+    incoming_tags: dict[str, str] | None,
+) -> dict[str, str]:
+    """Merge conversation tags with incoming tags overriding existing ones.
+
+    Args:
+        existing_tags: Tags from the existing conversation (may be None)
+        incoming_tags: Tags from the incoming update (may be None)
+
+    Returns:
+        Merged tags dict (empty dict if both inputs are None/empty)
+    """
+    existing = existing_tags or {}
+    incoming = incoming_tags or {}
+    return {**existing, **incoming}
+
+
+async def _track_conversation_terminal(
+    conversation_id: UUID,
+    app_conversation_info: AppConversationInfo,
+    events: list[Event],
+    exec_status: ConversationExecutionStatus,
+) -> None:
+    """Track analytics for terminal conversation states.
+
+    Handles BIZZ-03 (credit limit), BIZZ-05 (finished), and BIZZ-06 (errored) events.
+    """
+    analytics = get_analytics_service()
+    if not analytics or not app_conversation_info.created_by_user_id:
+        return
+
+    ctx = await resolve_analytics_context(app_conversation_info.created_by_user_id)
+
+    # Extract metrics
+    metrics = app_conversation_info.metrics
+    accumulated_cost = metrics.accumulated_cost if metrics else None
+    prompt_tokens = (
+        metrics.accumulated_token_usage.prompt_tokens
+        if metrics and metrics.accumulated_token_usage
+        else None
+    )
+    completion_tokens = (
+        metrics.accumulated_token_usage.completion_tokens
+        if metrics and metrics.accumulated_token_usage
+        else None
+    )
+
+    is_error = exec_status in (
+        ConversationExecutionStatus.ERROR,
+        ConversationExecutionStatus.STUCK,
+    )
+
+    if is_error:
+        # Find last error message
+        error_message = None
+        for ev in events:
+            if isinstance(ev, ConversationStateUpdateEvent) and ev.key == 'last_error':
+                error_message = str(ev.value)[:500] if ev.value else None
+
+        error_type = _classify_error_type(error_message)
+
+        # BIZZ-06: conversation errored
+        analytics.track_conversation_errored(
+            ctx=ctx,
+            conversation_id=str(conversation_id),
+            error_type=error_type,
+            error_message=error_message,
+            llm_model=app_conversation_info.llm_model,
+            turn_count=None,
+            terminal_state=exec_status.value,
+        )
+
+        # BIZZ-03: credit limit reached
+        if error_type == 'budget_exceeded':
+            analytics.track_credit_limit_reached(
+                ctx=ctx,
+                conversation_id=str(conversation_id),
+                llm_model=app_conversation_info.llm_model,
+            )
+        return
+
+    # BIZZ-05: conversation finished
+    analytics.track_conversation_finished(
+        ctx=ctx,
+        conversation_id=str(conversation_id),
+        terminal_state=exec_status.value,
+        turn_count=None,
+        accumulated_cost_usd=accumulated_cost,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        llm_model=app_conversation_info.llm_model,
+        trigger=app_conversation_info.trigger.value
+        if app_conversation_info.trigger
+        else None,
+    )
+
+
+def detect_automation_trigger(
+    current_trigger: ConversationTrigger | None,
+    merged_tags: dict[str, str],
+    conversation_id: str | None = None,
+    sandbox_id: str | None = None,
+) -> ConversationTrigger | None:
+    """Detect if conversation should have AUTOMATION trigger based on tags.
+
+    Only sets AUTOMATION trigger if:
+    - Current trigger is None (don't override existing trigger)
+    - Tags contain 'automationtrigger', 'automationid', or 'automationrunid' key
+
+    Args:
+        current_trigger: The existing trigger value (may be None)
+        merged_tags: Merged tags dict to inspect
+        conversation_id: Optional conversation ID for logging
+        sandbox_id: Optional sandbox ID for logging
+
+    Returns:
+        ConversationTrigger.AUTOMATION if detected, otherwise current_trigger
+    """
+    if current_trigger is not None:
+        return current_trigger
+
+    if merged_tags and (
+        merged_tags.get('automationtrigger')
+        or merged_tags.get('automationid')
+        or merged_tags.get('automationrunid')
+    ):
+        _logger.info(
+            'Detected automation trigger from conversation tags',
+            extra={
+                'conversation_id': conversation_id,
+                'sandbox_id': sandbox_id,
+                'automationtrigger': merged_tags.get('automationtrigger'),
+                'automationid': merged_tags.get('automationid'),
+                'automationrunid': merged_tags.get('automationrunid'),
+            },
+        )
+        return ConversationTrigger.AUTOMATION
+
+    return None
 
 
 async def valid_sandbox(
@@ -140,6 +311,21 @@ async def on_conversation_update(
     if conversation_info.execution_status == ConversationExecutionStatus.DELETING:
         return Success()
 
+    # Detect if this is a new conversation (stub has title=None)
+    is_new_conversation = existing.title is None
+
+    # Merge tags from incoming conversation info
+    # SDK can set tags via Conversation(tags=...) which includes automation context
+    merged_tags = merge_conversation_tags(existing.tags, conversation_info.tags)
+
+    # Determine trigger - check if tags indicate automation, then fall back to existing
+    trigger = detect_automation_trigger(
+        existing.trigger,
+        merged_tags,
+        conversation_id=str(conversation_info.id),
+        sandbox_id=sandbox_info.id,
+    )
+
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
@@ -150,15 +336,52 @@ async def on_conversation_update(
         selected_repository=existing.selected_repository,
         selected_branch=existing.selected_branch,
         git_provider=existing.git_provider,
-        trigger=existing.trigger,
+        trigger=trigger,
         pr_number=existing.pr_number,
         # Preserve parent/child relationship and other metadata
         parent_conversation_id=existing.parent_conversation_id,
         metrics=conversation_info.stats.get_combined_metrics(),
+        # Store merged tags (includes automation context, skills, etc.)
+        tags=merged_tags,
     )
     await app_conversation_info_service.save_app_conversation_info(
         app_conversation_info
     )
+
+    # Register SetTitleCallbackProcessor for new conversations created via webhook.
+    # This enables auto-titling for conversations created directly on the agent-server
+    # (e.g., automation runs) that notify the app-server via webhook.
+    if is_new_conversation:
+        state = InjectorState()
+        setattr(
+            state,
+            USER_CONTEXT_ATTR,
+            SpecifyUserContext(sandbox_info.created_by_user_id),
+        )
+        async with get_event_callback_service(state) as event_callback_service:
+            await event_callback_service.save_event_callback(
+                EventCallback(
+                    conversation_id=conversation_info.id,
+                    processor=SetTitleCallbackProcessor(),
+                )
+            )
+
+    # Analytics: conversation created
+    analytics = get_analytics_service()
+    if analytics and sandbox_info.created_by_user_id:
+        ctx = await resolve_analytics_context(sandbox_info.created_by_user_id)
+        analytics.track_conversation_created(
+            ctx=ctx,
+            conversation_id=str(conversation_info.id),
+            trigger=existing.trigger.value if existing.trigger else None,
+            llm_model=(
+                conversation_info.agent.llm.model
+                if conversation_info.agent and conversation_info.agent.llm
+                else None
+            ),
+            agent_type='default',
+            has_repository=existing.selected_repository is not None,
+        )
 
     return Success()
 
@@ -184,6 +407,21 @@ async def on_event(
                 await app_conversation_info_service.process_stats_event(
                     event, conversation_id
                 )
+
+        # Analytics: conversation terminal state detection
+        for event in events:
+            if not isinstance(event, ConversationStateUpdateEvent):
+                continue
+            if event.key != 'execution_status':
+                continue
+            try:
+                exec_status = ConversationExecutionStatus(event.value)
+                if exec_status.is_terminal():
+                    await _track_conversation_terminal(
+                        conversation_id, app_conversation_info, events, exec_status
+                    )
+            except Exception:
+                _logger.exception('analytics:conversation_terminal:failed')
 
         asyncio.create_task(
             _run_callbacks_in_bg_and_close(

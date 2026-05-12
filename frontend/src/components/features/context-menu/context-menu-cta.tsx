@@ -1,18 +1,18 @@
 import { useTranslation } from "react-i18next";
+import { useClientAnalytics } from "#/hooks/use-client-analytics";
 import { cn } from "#/utils/utils";
 import { Card } from "#/ui/card";
 import { CardTitle } from "#/ui/card-title";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import StackedIcon from "#/icons/stacked.svg?react";
-import { useTracking } from "#/hooks/use-tracking";
 
 export function ContextMenuCTA() {
   const { t } = useTranslation();
-  const { trackSaasSelfhostedInquiry } = useTracking();
+  const { trackEnterpriseCTAClicked } = useClientAnalytics();
 
   const handleLearnMoreClick = () => {
-    trackSaasSelfhostedInquiry({ location: "context_menu" });
+    trackEnterpriseCTAClicked({ location: "context_menu" });
   };
 
   return (

@@ -12,11 +12,16 @@ describe("hasAdvancedSettingsSet", () => {
   });
 
   describe("should be true if", () => {
-    test("llm_base_url is set", () => {
+    test("llm.base_url is set", () => {
+      const as = DEFAULT_SETTINGS.agent_settings as Record<string, unknown>;
+      const llm = (as?.llm ?? {}) as Record<string, unknown>;
       expect(
         hasAdvancedSettingsSet({
           ...DEFAULT_SETTINGS,
-          llm_base_url: "test",
+          agent_settings: {
+            ...as,
+            llm: { ...llm, base_url: "test" },
+          },
         }),
       ).toBe(true);
     });
@@ -25,50 +30,59 @@ describe("hasAdvancedSettingsSet", () => {
       expect(
         hasAdvancedSettingsSet({
           ...DEFAULT_SETTINGS,
-          agent: "test",
+          agent_settings: {
+            ...DEFAULT_SETTINGS.agent_settings,
+            agent: "test",
+          },
         }),
       ).toBe(true);
     });
 
-    test("enable_default_condenser is disabled", () => {
-      // Arrange
+    test("condenser.enabled is disabled", () => {
+      const as = DEFAULT_SETTINGS.agent_settings as Record<string, unknown>;
+      const condenser = (as?.condenser ?? {}) as Record<string, unknown>;
       const settings = {
         ...DEFAULT_SETTINGS,
-        enable_default_condenser: false,
+        agent_settings: {
+          ...as,
+          condenser: { ...condenser, enabled: false },
+        },
       };
 
-      // Act
       const result = hasAdvancedSettingsSet(settings);
 
-      // Assert
       expect(result).toBe(true);
     });
 
-    test("condenser_max_size is customized above default", () => {
-      // Arrange
+    test("condenser.max_size is customized above default", () => {
+      const as = DEFAULT_SETTINGS.agent_settings as Record<string, unknown>;
+      const condenser = (as?.condenser ?? {}) as Record<string, unknown>;
       const settings = {
         ...DEFAULT_SETTINGS,
-        condenser_max_size: 200,
+        agent_settings: {
+          ...as,
+          condenser: { ...condenser, max_size: 200 },
+        },
       };
 
-      // Act
       const result = hasAdvancedSettingsSet(settings);
 
-      // Assert
       expect(result).toBe(true);
     });
 
-    test("condenser_max_size is customized below default", () => {
-      // Arrange
+    test("condenser.max_size is customized below default", () => {
+      const as = DEFAULT_SETTINGS.agent_settings as Record<string, unknown>;
+      const condenser = (as?.condenser ?? {}) as Record<string, unknown>;
       const settings = {
         ...DEFAULT_SETTINGS,
-        condenser_max_size: 50,
+        agent_settings: {
+          ...as,
+          condenser: { ...condenser, max_size: 50 },
+        },
       };
 
-      // Act
       const result = hasAdvancedSettingsSet(settings);
 
-      // Assert
       expect(result).toBe(true);
     });
 

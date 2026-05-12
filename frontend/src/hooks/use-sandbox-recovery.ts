@@ -5,15 +5,15 @@ import { useUserProviders } from "./use-user-providers";
 import { useVisibilityChange } from "./use-visibility-change";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
-import type { ConversationStatus } from "#/types/conversation-status";
-import type { Conversation } from "#/api/open-hands.types";
+import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 
 interface UseSandboxRecoveryOptions {
   conversationId: string | undefined;
-  conversationStatus: ConversationStatus | undefined;
+  sandboxStatus: V1SandboxStatus | undefined;
   /** Function to refetch the conversation data - used to get fresh status on tab focus */
   refetchConversation?: () => Promise<{
-    data: Conversation | null | undefined;
+    data: V1AppConversation | null | undefined;
   }>;
   onSuccess?: () => void;
   onError?: (error: Error) => void;
@@ -40,7 +40,7 @@ interface UseSandboxRecoveryOptions {
  */
 export function useSandboxRecovery({
   conversationId,
-  conversationStatus,
+  sandboxStatus,
   refetchConversation,
   onSuccess,
   onError,
@@ -54,19 +54,14 @@ export function useSandboxRecovery({
   const processedConversationIdRef = React.useRef<string | null>(null);
 
   const attemptRecovery = React.useCallback(
-    (statusOverride?: ConversationStatus) => {
-      const status = statusOverride ?? conversationStatus;
+    (statusOverride?: V1SandboxStatus) => {
+      const status = statusOverride ?? sandboxStatus;
       /**
-       * Only recover if sandbox is paused (status === STOPPED) and not already resuming
-       *
-       * Note: ConversationStatus uses different terminology than SandboxStatus:
-       *   - SandboxStatus.PAUSED  → ConversationStatus.STOPPED : the runtime is not running but may be restarted
-       *   - SandboxStatus.MISSING → ConversationStatus.ARCHIVED : the runtime is not running and will not restart due to deleted files.
+       * Only recover if sandbox is paused
        */
-      if (!conversationId || status !== "STOPPED" || isResuming) {
+      if (!conversationId || status !== "PAUSED" || isResuming) {
         return;
       }
-
       resumeSandbox(
         { conversationId, providers },
         {
@@ -86,7 +81,7 @@ export function useSandboxRecovery({
     },
     [
       conversationId,
-      conversationStatus,
+      sandboxStatus,
       isResuming,
       providers,
       resumeSandbox,
@@ -98,18 +93,18 @@ export function useSandboxRecovery({
 
   // Handle page refresh (initial load) and conversation navigation
   React.useEffect(() => {
-    if (!conversationId || !conversationStatus) return;
+    if (!conversationId || !sandboxStatus) return;
 
     // Only attempt recovery once per conversation (handles both initial load and navigation)
     if (processedConversationIdRef.current === conversationId) return;
 
     processedConversationIdRef.current = conversationId;
 
-    if (conversationStatus === "STOPPED") {
+    if (sandboxStatus === "PAUSED") {
       attemptRecovery();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, conversationStatus]);
+  }, [conversationId, sandboxStatus]);
 
   const handleVisible = React.useCallback(async () => {
     // Skip if no conversation or refetch function
@@ -118,7 +113,7 @@ export function useSandboxRecovery({
     try {
       // Refetch to get fresh status - cached status may be stale if sandbox was paused while tab was inactive
       const { data } = await refetchConversation();
-      attemptRecovery(data?.status);
+      attemptRecovery(data?.sandbox_status);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(

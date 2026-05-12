@@ -11,6 +11,7 @@ import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import * as FeatureFlags from "#/utils/feature-flags";
 
 // Helper to create mock config with sensible defaults
 const createMockConfig = (
@@ -31,6 +32,7 @@ const createMockConfig = (
       hide_users_page: false,
       hide_billing_page: false,
       hide_integrations_page: false,
+      enable_onboarding: false,
       ...featureFlagOverrides,
     },
     providers_configured: [],
@@ -183,6 +185,38 @@ describe("Sidebar", () => {
       await waitFor(() => {
         expect(screen.queryByTestId("ai-config-modal")).not.toBeInTheDocument();
       });
+    });
+  });
+
+  describe("Automations button visibility", () => {
+    let enableAutomationsSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      enableAutomationsSpy = vi.spyOn(FeatureFlags, "ENABLE_AUTOMATIONS");
+    });
+
+    it("should show automations button when ENABLE_AUTOMATIONS flag is on", async () => {
+      enableAutomationsSpy.mockReturnValue(true);
+
+      renderSidebar();
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("automations-button"),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("should hide automations button when ENABLE_AUTOMATIONS flag is off", async () => {
+      enableAutomationsSpy.mockReturnValue(false);
+
+      renderSidebar();
+
+      await waitFor(() => expect(getSettingsSpy).toHaveBeenCalled());
+
+      expect(
+        screen.queryByTestId("automations-button"),
+      ).not.toBeInTheDocument();
     });
   });
 });

@@ -8,14 +8,13 @@ import BitbucketLogo from "#/assets/branding/bitbucket-logo.svg?react";
 import { useAuthUrl } from "#/hooks/use-auth-url";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import { Provider } from "#/types/settings";
-import { useTracking } from "#/hooks/use-tracking";
 import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-notice";
 import { useRecaptcha } from "#/hooks/use-recaptcha";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { cn } from "#/utils/utils";
-import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 import { LoginCTA } from "./login-cta";
+import { useAppMode } from "#/hooks/use-app-mode";
 
 export interface LoginContentProps {
   githubAuthUrl: string | null;
@@ -43,8 +42,8 @@ export function LoginContent({
   buildOAuthStateData,
 }: LoginContentProps) {
   const { t } = useTranslation();
-  const { trackLoginButtonClick } = useTracking();
   const { data: config } = useConfig();
+  const { isEnterpriseCloud } = useAppMode();
 
   // reCAPTCHA - only need token generation, verification happens at backend callback
   const { isReady: recaptchaReady, executeRecaptcha } = useRecaptcha({
@@ -75,12 +74,7 @@ export function LoginContent({
     authUrl,
   });
 
-  const handleAuthRedirect = async (
-    redirectUrl: string,
-    provider: Provider,
-  ) => {
-    trackLoginButtonClick({ provider });
-
+  const handleAuthRedirect = async (redirectUrl: string) => {
     const url = new URL(redirectUrl);
     const currentState =
       url.searchParams.get("state") || window.location.origin;
@@ -115,31 +109,31 @@ export function LoginContent({
 
   const handleGitHubAuth = () => {
     if (githubAuthUrl) {
-      handleAuthRedirect(githubAuthUrl, "github");
+      handleAuthRedirect(githubAuthUrl);
     }
   };
 
   const handleGitLabAuth = () => {
     if (gitlabAuthUrl) {
-      handleAuthRedirect(gitlabAuthUrl, "gitlab");
+      handleAuthRedirect(gitlabAuthUrl);
     }
   };
 
   const handleBitbucketAuth = () => {
     if (bitbucketAuthUrl) {
-      handleAuthRedirect(bitbucketAuthUrl, "bitbucket");
+      handleAuthRedirect(bitbucketAuthUrl);
     }
   };
 
   const handleBitbucketDataCenterAuth = () => {
     if (bitbucketDataCenterAuthUrl) {
-      handleAuthRedirect(bitbucketDataCenterAuthUrl, "bitbucket_data_center");
+      handleAuthRedirect(bitbucketDataCenterAuthUrl);
     }
   };
 
   const handleEnterpriseSsoAuth = () => {
     if (enterpriseSsoAuthUrl) {
-      handleAuthRedirect(enterpriseSsoAuthUrl, "enterprise_sso");
+      handleAuthRedirect(enterpriseSsoAuthUrl);
     }
   };
 
@@ -306,7 +300,7 @@ export function LoginContent({
         <TermsAndPrivacyNotice className="max-w-[320px] text-[#A3A3A3]" />
       </div>
 
-      {appMode === "saas" && ENABLE_PROJ_USER_JOURNEY() && <LoginCTA />}
+      {isEnterpriseCloud && <LoginCTA />}
     </div>
   );
 }

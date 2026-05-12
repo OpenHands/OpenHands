@@ -18,7 +18,6 @@ interface ChatInputContainerProps {
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   handleFileIconClick: (isDisabled: boolean) => void;
   handleSubmit: () => void;
-  handleResumeAgent: () => void;
   onDragOver: (e: React.DragEvent, isDisabled: boolean) => void;
   onDragLeave: (e: React.DragEvent, isDisabled: boolean) => void;
   onDrop: (e: React.DragEvent, isDisabled: boolean) => void;
@@ -43,7 +42,6 @@ export function ChatInputContainer({
   chatInputRef,
   handleFileIconClick,
   handleSubmit,
-  handleResumeAgent,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -104,10 +102,7 @@ export function ChatInputContainer({
         />
       </div>
 
-      <ChatInputActions
-        disabled={disabled}
-        handleResumeAgent={handleResumeAgent}
-      />
+      <ChatInputActions disabled={disabled} />
     </div>
   );
 }

@@ -14,30 +14,36 @@ from server.auth.auth_error import (
     ExpiredError,
     NoCredentialsError,
 )
+from server.auth.authorization import (
+    get_role_permissions,
+    get_user_org_role,
+)
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 from server.auth.token_manager import TokenManager
-from server.config import get_config
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
 from sqlalchemy import delete, select
 from storage.api_key_store import ApiKeyStore
 from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
+from storage.org_store import OrgStore
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
+from storage.user_store import UserStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
-from openhands.integrations.provider import (
+from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
+    CustomSecret,
     ProviderToken,
     ProviderType,
 )
-from openhands.server.settings import Settings
-from openhands.server.user_auth.user_auth import AuthType, UserAuth
-from openhands.storage.data_models.secrets import Secrets
-from openhands.storage.settings.settings_store import SettingsStore
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.user_auth.user_auth import AuthType, UserAuth
 
 token_manager = TokenManager()
 
@@ -64,6 +70,12 @@ class SaasUserAuth(UserAuth):
     api_key_org_id: UUID | None = None  # Org bound to the API key used for auth
     api_key_id: int | None = None
     api_key_name: str | None = None
+    # Organization context fields - populated lazily via get_org_info()
+    _org_id: str | None = None
+    _org_name: str | None = None
+    _role: str | None = None
+    _permissions: list[str] | None = None
+    _org_info_loaded: bool = False
 
     def get_api_key_org_id(self) -> UUID | None:
         """Get the organization ID bound to the API key used for authentication.
@@ -140,7 +152,7 @@ class SaasUserAuth(UserAuth):
         secrets_store = self.secrets_store
         if secrets_store:
             return secrets_store
-        secrets_store = SaasSecretsStore(self.user_id, get_config())
+        secrets_store = await SaasSecretsStore.get_instance(self.user_id)
         self.secrets_store = secrets_store
         return secrets_store
 
@@ -150,6 +162,20 @@ class SaasUserAuth(UserAuth):
             return user_secrets
         secrets_store = await self.get_secrets_store()
         user_secrets = await secrets_store.load()
+
+        # Inject OPENHANDS_API_KEY (system-level, lazily generated)
+        openhands_api_key = await self._get_openhands_api_key()
+        if openhands_api_key:
+            custom_secrets = dict(user_secrets.custom_secrets) if user_secrets else {}
+            custom_secrets['OPENHANDS_API_KEY'] = CustomSecret(
+                secret=SecretStr(openhands_api_key),
+                description='OpenHands Cloud API Key for automations and integrations (system-managed)',
+            )
+            user_secrets = Secrets(
+                custom_secrets=custom_secrets,
+                provider_tokens=user_secrets.provider_tokens if user_secrets else {},
+            )
+
         self._secrets = user_secrets
         return user_secrets
 
@@ -229,7 +255,7 @@ class SaasUserAuth(UserAuth):
         settings_store = self.settings_store
         if settings_store:
             return settings_store
-        settings_store = SaasSettingsStore(self.user_id, get_config())
+        settings_store = SaasSettingsStore(self.user_id)
         self.settings_store = settings_store
         return settings_store
 
@@ -241,6 +267,93 @@ class SaasUserAuth(UserAuth):
                 self.user_id, 'MCP_API_KEY', None
             )
         return mcp_api_key
+
+    async def _get_openhands_api_key(self) -> str:
+        """Get or create the user's OPENHANDS_API_KEY (system-level, non-deletable).
+
+        This key is automatically generated on first access and stored as a system
+        key that users cannot delete or modify. It is used for automations and
+        integrations.
+        """
+        user = await UserStore.get_user_by_id(self.user_id)
+        if user is None:
+            raise ValueError(f'User not found: {self.user_id}')
+        if user.current_org_id is None:
+            raise ValueError(f'User {self.user_id} has no current organization')
+
+        api_key_store = ApiKeyStore.get_instance()
+        openhands_api_key = await api_key_store.get_or_create_system_api_key(
+            user_id=self.user_id,
+            org_id=user.current_org_id,
+            name='OPENHANDS_API_KEY',
+        )
+        return openhands_api_key
+
+    async def get_org_info(self) -> dict | None:
+        """Get organization info for the current user.
+
+        Lazily loads and caches organization data including:
+        - org_id: Current organization ID
+        - org_name: Current organization name
+        - role: User's role in the organization
+        - permissions: List of permission names for the role
+
+        Returns:
+            dict with org_id, org_name, role, permissions or None if not available
+        """
+        if self._org_info_loaded:
+            if self._org_id is None:
+                return None
+            return {
+                'org_id': self._org_id,
+                'org_name': self._org_name,
+                'role': self._role,
+                'permissions': self._permissions,
+            }
+
+        # Mark as loaded to avoid repeated attempts on failure
+        self._org_info_loaded = True
+
+        try:
+            # Get user and their current org
+            user = await UserStore.get_user_by_id(self.user_id)
+            if not user:
+                logger.warning(f'User {self.user_id} not found for org info')
+                return None
+
+            # Get the current org
+            org = await OrgStore.get_org_by_id(user.current_org_id)
+            if not org:
+                logger.warning(
+                    f'Organization {user.current_org_id} not found for user {self.user_id}'
+                )
+                return None
+
+            # Get user's role in the current org
+            role = await get_user_org_role(self.user_id, user.current_org_id)
+            role_name = role.name if role else None
+
+            # Get permissions for the role
+            permissions: list[str] = []
+            if role_name:
+                role_permissions = get_role_permissions(role_name)
+                permissions = [p.value for p in role_permissions]
+
+            # Cache the results
+            self._org_id = str(user.current_org_id)
+            self._org_name = org.name
+            self._role = role_name
+            self._permissions = permissions
+
+            return {
+                'org_id': self._org_id,
+                'org_name': self._org_name,
+                'role': self._role,
+                'permissions': self._permissions,
+            }
+        except Exception as e:
+            logger.error(f'Error fetching org info for user {self.user_id}: {e}')
+            return None
 
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
@@ -329,8 +442,9 @@ async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
 
 async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     logger.debug('saas_user_auth_from_signed_token')
-    jwt_secret = get_config().jwt_secret.get_secret_value()
-    decoded = jwt.decode(signed_token, jwt_secret, algorithms=['HS256'])
+    from storage.encrypt_utils import get_jwt_service
+
+    decoded = get_jwt_service().verify_jws_token(signed_token)
     logger.debug('saas_user_auth_from_signed_token:decoded')
     access_token = decoded['access_token']
     refresh_token = decoded['refresh_token']

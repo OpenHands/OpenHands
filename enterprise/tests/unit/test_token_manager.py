@@ -2,21 +2,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from keycloak.exceptions import KeycloakConnectionError, KeycloakError
+from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 
-from openhands.core.config.openhands_config import OpenHandsConfig
+from openhands.app_server.services.jwt_service import JwtService
+from openhands.app_server.utils.encryption_key import EncryptionKey
 
 
-@pytest.fixture
-def mock_config():
-    return MagicMock(spec=OpenHandsConfig)
+def _make_jwt_service(secret: str = 'test_secret') -> JwtService:
+    key = EncryptionKey(kid='test', key=SecretStr(secret), active=True)
+    return JwtService(keys=[key])
 
 
 @pytest.fixture
 def token_manager():
-    with patch('server.config.get_config') as mock_get_config:
-        mock_config = mock_get_config.return_value
-        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
+    jwt_svc = _make_jwt_service()
+    with patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc):
         return TokenManager(external=False)
 
 

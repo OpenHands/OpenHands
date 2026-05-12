@@ -2,7 +2,6 @@ from types import MappingProxyType
 
 from github import Auth, Github, GithubIntegration
 from integrations.github.data_collector import GitHubDataCollector
-from integrations.github.github_solvability import summarize_issue_solvability
 from integrations.github.github_view import (
     GithubFactory,
     GithubFailingAction,
@@ -20,7 +19,6 @@ from integrations.models import (
 from integrations.types import ResolverViewInterface
 from integrations.utils import (
     CONVERSATION_URL,
-    ENABLE_SOLVABILITY_ANALYSIS,
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
@@ -32,17 +30,16 @@ from pydantic import SecretStr
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
-from server.utils.conversation_callback_utils import register_callback_processor
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.integrations.service_types import AuthenticationError
-from openhands.server.types import (
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.integrations.service_types import AuthenticationError
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
 )
-from openhands.storage.data_models.secrets import Secrets
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class GithubManager(Manager[GithubViewType]):
@@ -318,17 +315,12 @@ class GithubManager(Manager[GithubViewType]):
             return
 
     async def start_job(self, github_view: GithubViewType) -> None:
-        """Kick off a job with openhands agent.
+        """Kick off a job with openhands agent using V1 app conversation system.
 
         1. Get user credential
         2. Initialize new conversation with repo
         3. Save interaction data
         """
-        # Importing here prevents circular import
-        from server.conversation_callback_processor.github_callback_processor import (
-            GithubCallbackProcessor,
-        )
-
         try:
             msg_info: str = ''
 
@@ -364,26 +356,7 @@ class GithubManager(Manager[GithubViewType]):
                     )
                 )
 
-                # We first initialize a conversation and generate the solvability report BEFORE starting the conversation runtime
-                # This helps us accumulate llm spend without requiring a running runtime. This setups us up for
-                #   1. If there is a problem starting the runtime we still have accumulated total conversation cost
-                #   2. In the future, based on the report confidence we can conditionally start the conversation
-                #   3. Once the conversation is started, its base cost will include the report's spend as well which allows us to control max budget per resolver task
-                convo_metadata = await github_view.initialize_new_conversation()
-                solvability_summary = None
-                if not ENABLE_SOLVABILITY_ANALYSIS:
-                    logger.info(
-                        '[Github]: Solvability report feature is disabled, skipping'
-                    )
-                else:
-                    try:
-                        solvability_summary = await summarize_issue_solvability(
-                            github_view, user_token
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f'[Github]: Error summarizing issue solvability: {str(e)}'
-                        )
+                conversation_id = await github_view.initialize_new_conversation()
 
                 saas_user_auth = await get_saas_user_auth(
                     github_view.user_info.keycloak_user_id, self.token_manager
@@ -392,38 +365,21 @@ class GithubManager(Manager[GithubViewType]):
                 await github_view.create_new_conversation(
                     self.jinja_env,
                     secret_store.provider_tokens,
-                    convo_metadata,
+                    conversation_id,
                     saas_user_auth,
                 )
 
-                conversation_id = github_view.conversation_id
+                conversation_id_hex = github_view.conversation_id
 
                 logger.info(
-                    f'[GitHub] Created conversation {conversation_id} for user {user_info.username}'
+                    f'[GitHub] Created conversation {conversation_id_hex} for user {user_info.username}'
                 )
 
-                if not github_view.v1_enabled:
-                    # Create a GithubCallbackProcessor
-                    processor = GithubCallbackProcessor(
-                        github_view=github_view,
-                        send_summary_instruction=True,
-                    )
-
-                    # Register the callback processor
-                    register_callback_processor(conversation_id, processor)
-
-                    logger.info(
-                        f'[Github] Registered callback processor for conversation {conversation_id}'
-                    )
+                # V1 callback processors are registered by the view during conversation creation
 
                 # Send message with conversation link
-                conversation_link = CONVERSATION_URL.format(conversation_id)
-                base_msg = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
-                # Combine messages: include solvability report with "I'm on it!" if successful
-                if solvability_summary:
-                    msg_info = f'{base_msg}\n\n{solvability_summary}'
-                else:
-                    msg_info = base_msg
+                conversation_link = CONVERSATION_URL.format(conversation_id_hex)
+                msg_info = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
 
             except MissingSettingsError as e:
                 logger.warning(

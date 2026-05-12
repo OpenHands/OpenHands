@@ -1,21 +1,17 @@
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
-import { TrajectoryActions } from "../trajectory/trajectory-actions";
 import { createChatMessage } from "#/services/chat-service";
+import { BtwMessages } from "./btw-messages";
+import { ModelMessages } from "./model-messages";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
-import { FeedbackModal } from "../feedback/feedback-modal";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { TypingIndicator } from "./typing-indicator";
-import { useWsClient } from "#/context/ws-client-provider";
-import { Messages as V0Messages } from "./messages";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
-import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
@@ -29,33 +25,21 @@ import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-
 import { ErrorMessageBanner } from "./error-message-banner";
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
-import { useConfig } from "#/hooks/query/use-config";
 import { validateFiles } from "#/utils/file-validation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConfirmationModeEnabled from "./confirmation-mode-enabled";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { I18nKey } from "#/i18n/declaration";
-
-function getEntryPoint(
-  hasRepository: boolean | null,
-  hasReplayJson: boolean | null,
-): string {
-  if (hasRepository) return "github";
-  if (hasReplayJson) return "replay";
-  return "direct";
-}
+import { ArchivedBanner } from "./archived-banner";
+import { useModelStore } from "#/stores/model-store";
 
 export function ChatInterface() {
-  const posthog = usePostHog();
   const { setMessageToSend } = useConversationStore();
-  const { data: conversation } = useActiveConversation();
   const { errorMessage, removeErrorMessage } = useErrorMessageStore();
-  const { isLoadingMessages } = useWsClient();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   const conversationWebSocket = useConversationWebSocket();
   const { send } = useSendMessage();
@@ -65,7 +49,6 @@ export function ChatInterface() {
     v1FullEvents,
     totalEvents,
     hasSubstantiveAgentActions,
-    v0UserEventsExist,
     v1UserEventsExist,
     userEventsExist,
   } = useFilteredEvents();
@@ -81,13 +64,12 @@ export function ChatInterface() {
     setAutoScroll,
     setHitBottom,
   } = useScrollToBottom(scrollRef);
-  const { data: config } = useConfig();
   const {
     mutate: newConversationCommand,
     isPending: isNewConversationPending,
   } = useNewConversationCommand();
 
-  const { curAgentState } = useAgentState();
+  const { curAgentState, isArchived } = useAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Disable Build button while agent is running (streaming)
@@ -120,17 +102,18 @@ export function ChatInterface() {
     };
   }, [isAgentRunning, handleBuildPlanClick, scrollDomToBottom]);
 
-  const [feedbackPolarity, setFeedbackPolarity] = React.useState<
-    "positive" | "negative"
-  >("positive");
-  const [feedbackModalIsOpen, setFeedbackModalIsOpen] = React.useState(false);
-  const { selectedRepository, replayJson } = useInitialQueryStore();
   const params = useParams();
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();
 
   const optimisticUserMessage = getOptimisticUserMessage();
-
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  const modelEntriesByConversation = useModelStore(
+    (s) => s.entriesByConversation,
+  );
+  const modelEntriesCount =
+    (params.conversationId &&
+      modelEntriesByConversation[params.conversationId]?.length) ||
+    0;
+  const hasModelEntries = modelEntriesCount > 0;
 
   // Show V1 messages immediately if events exist in store (e.g., remount),
   // or once loading completes. This replaces the old transition-observation
@@ -142,9 +125,7 @@ export function ChatInterface() {
   const isReturningToConversation = !!params.conversationId;
   // Only show loading skeleton when genuinely loading AND no events in store yet.
   // If events exist (e.g., remount after data was already fetched), skip skeleton.
-  const isHistoryLoading =
-    (isLoadingMessages && !isV1Conversation && v0Events.length === 0) ||
-    (isV1Conversation && !showV1Messages);
+  const isHistoryLoading = !showV1Messages;
   const isChatLoading = isHistoryLoading && !isTask;
 
   const handleSendMessage = async (
@@ -154,10 +135,6 @@ export function ChatInterface() {
   ) => {
     // Handle /new command for V1 conversations
     if (content.trim() === "/new") {
-      if (!isV1Conversation) {
-        displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_V1_ONLY));
-        return;
-      }
       if (!params.conversationId) {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_NO_ID));
         return;
@@ -176,22 +153,6 @@ export function ChatInterface() {
     // Create mutable copies of the arrays
     const images = [...originalImages];
     const files = [...originalFiles];
-    if (totalEvents === 0) {
-      posthog.capture("initial_query_submitted", {
-        entry_point: getEntryPoint(
-          selectedRepository !== null,
-          replayJson !== null,
-        ),
-        query_character_length: content.length,
-        replay_json_size: replayJson?.length,
-      });
-    } else {
-      posthog.capture("user_message_sent", {
-        session_message_count: totalEvents,
-        current_message_length: content.length,
-      });
-    }
-
     // Validate file sizes before any processing
     const allFiles = [...images, ...files];
     const validation = validateFiles(allFiles);
@@ -228,13 +189,6 @@ export function ChatInterface() {
     setMessageToSend("");
   };
 
-  const onClickShareFeedbackActionButton = async (
-    polarity: "positive" | "negative",
-  ) => {
-    setFeedbackModalIsOpen(true);
-    setFeedbackPolarity(polarity);
-  };
-
   // Auto-scroll to bottom when new messages arrive
   React.useEffect(() => {
     if (autoScroll) {
@@ -247,6 +201,7 @@ export function ChatInterface() {
     v1UiEvents.length,
     v0Events.length,
     optimisticUserMessage,
+    modelEntriesCount,
     scrollDomToBottom,
   ]);
 
@@ -292,7 +247,8 @@ export function ChatInterface() {
         {!hasSubstantiveAgentActions &&
           !optimisticUserMessage &&
           !userEventsExist &&
-          !isChatLoading && (
+          !isChatLoading &&
+          !hasModelEntries && (
             <ChatSuggestions
               onSuggestionsClick={(message) => setMessageToSend(message)}
             />
@@ -314,21 +270,17 @@ export function ChatInterface() {
             </div>
           )}
 
-          {(!isLoadingMessages || v0Events.length > 0) && v0UserEventsExist && (
-            <V0Messages
-              messages={v0Events}
-              isAwaitingUserConfirmation={
-                curAgentState === AgentState.AWAITING_USER_CONFIRMATION
-              }
-            />
-          )}
-
+          <ModelMessages
+            conversationId={params.conversationId}
+            anchorEventId={null}
+          />
           {showV1Messages && v1UserEventsExist && (
             <V1Messages messages={v1UiEvents} allEvents={v1FullEvents} />
           )}
         </div>
 
         <div className="flex flex-col gap-[6px]">
+          <BtwMessages conversationId={params.conversationId} />
           <div className="flex justify-between relative">
             <div className="flex items-end gap-1">
               <ConfirmationModeEnabled />
@@ -336,17 +288,6 @@ export function ChatInterface() {
                 <ChatStatusIndicator
                   statusColor={serverStatusColor}
                   status={serverStatusText}
-                />
-              )}
-              {totalEvents > 0 && !isV1Conversation && (
-                <TrajectoryActions
-                  onPositiveFeedback={() =>
-                    onClickShareFeedbackActionButton("positive")
-                  }
-                  onNegativeFeedback={() =>
-                    onClickShareFeedbackActionButton("negative")
-                  }
-                  isSaasMode={config?.app_mode === "saas"}
                 />
               )}
             </div>
@@ -365,19 +306,15 @@ export function ChatInterface() {
             />
           )}
 
-          <InteractiveChatBox
-            onSubmit={handleSendMessage}
-            disabled={isNewConversationPending}
-          />
-        </div>
+          {isArchived && <ArchivedBanner />}
 
-        {config?.app_mode !== "saas" && !isV1Conversation && (
-          <FeedbackModal
-            isOpen={feedbackModalIsOpen}
-            onClose={() => setFeedbackModalIsOpen(false)}
-            polarity={feedbackPolarity}
-          />
-        )}
+          {!isArchived && (
+            <InteractiveChatBox
+              onSubmit={handleSendMessage}
+              disabled={isNewConversationPending}
+            />
+          )}
+        </div>
       </div>
     </ScrollProvider>
   );

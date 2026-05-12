@@ -93,140 +93,6 @@
 # Maximum age of conversations in seconds before they are automatically closed
 #conversation_max_age_seconds = 864000  # 10 days
 
-#################################### LLM #####################################
-# Configuration for LLM models (group name starts with 'llm')
-# use 'llm' for the default LLM config
-##############################################################################
-[llm]
-# AWS access key ID
-#aws_access_key_id = ""
-
-# AWS region name
-#aws_region_name = ""
-
-# AWS secret access key
-#aws_secret_access_key = ""
-
-# API key to use (For Headless / CLI only -  In Web this is overridden by Session Init)
-api_key = ""
-
-# API base URL (For Headless / CLI only -  In Web this is overridden by Session Init)
-#base_url = ""
-
-# API version
-#api_version = ""
-
-# Reasoning effort for OpenAI o-series models (low, medium, high, or not set)
-#reasoning_effort = "medium"
-
-# Cost per input token
-#input_cost_per_token = 0.0
-
-# Cost per output token
-#output_cost_per_token = 0.0
-
-# Custom LLM provider
-#custom_llm_provider = ""
-
-# Maximum number of characters in an observation's content
-#max_message_chars = 10000
-
-# Maximum number of input tokens
-#max_input_tokens = 0
-
-# Maximum number of output tokens
-#max_output_tokens = 0
-
-# Model to use. (For Headless / CLI only -  In Web this is overridden by Session Init)
-model = "gpt-4o"
-
-# Number of retries to attempt when an operation fails with the LLM.
-# Increase this value to allow more attempts before giving up
-#num_retries = 8
-
-# Maximum wait time (in seconds) between retry attempts
-# This caps the exponential backoff to prevent excessively long
-#retry_max_wait = 120
-
-# Minimum wait time (in seconds) between retry attempts
-# This sets the initial delay before the first retry
-#retry_min_wait = 15
-
-# Multiplier for exponential backoff calculation
-# The wait time increases by this factor after each failed attempt
-# A value of 2.0 means each retry waits twice as long as the previous one
-#retry_multiplier = 2.0
-
-# Drop any unmapped (unsupported) params without causing an exception
-#drop_params = false
-
-# Modify params for litellm to do transformations like adding a default message, when a message is empty.
-# Note: this setting is global, unlike drop_params, it cannot be overridden in each call to litellm.
-#modify_params = true
-
-# Using the prompt caching feature if provided by the LLM and supported
-#caching_prompt = true
-
-# Base URL for the OLLAMA API
-#ollama_base_url = ""
-
-# Temperature for the API
-#temperature = 0.0
-
-# Timeout for the API
-#timeout = 0
-
-# Top p for the API
-#top_p = 1.0
-
-# If model is vision capable, this option allows to disable image processing (useful for cost reduction).
-#disable_vision = true
-
-# Custom tokenizer to use for token counting
-# https://docs.litellm.ai/docs/completion/token_usage
-#custom_tokenizer = ""
-
-# Whether to use native tool calling if supported by the model. Can be true, false, or None by default, which chooses the model's default behavior based on the evaluation.
-# ATTENTION: Based on evaluation, enabling native function calling may lead to worse results
-# in some scenarios. Use with caution and consider testing with your specific use case.
-# https://github.com/OpenHands/OpenHands/pull/4711
-#native_tool_calling = None
-
-
-# Safety settings for models that support them (e.g., Mistral AI, Gemini)
-# Example for Mistral AI:
-# safety_settings = [
-#   { "category" = "hate", "threshold" = "low" },
-#   { "category" = "harassment", "threshold" = "low" },
-#   { "category" = "sexual", "threshold" = "low" },
-#   { "category" = "dangerous", "threshold" = "low" }
-# ]
-#
-# Example for Gemini:
-# safety_settings = [
-#   { "category" = "HARM_CATEGORY_HARASSMENT", "threshold" = "BLOCK_NONE" },
-#   { "category" = "HARM_CATEGORY_HATE_SPEECH", "threshold" = "BLOCK_NONE" },
-#   { "category" = "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold" = "BLOCK_NONE" },
-#   { "category" = "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold" = "BLOCK_NONE" }
-# ]
-#safety_settings = []
-
-[llm.draft_editor]
-# The number of times llm_editor tries to fix an error when editing.
-correct_num = 5
-
-[llm.gpt4o-mini]
-api_key = ""
-model = "gpt-4o"
-
-# Example routing LLM configuration for multimodal model routing
-# Uncomment and configure to enable model routing with a secondary model
-#[llm.secondary_model]
-#model = "kimi-k2"
-#api_key = ""
-#for_routing = true
-#max_input_tokens = 128000
-
 
 #################################### Agent ###################################
 # Configuration for agents (group name starts with 'agent')
@@ -259,9 +125,6 @@ enable_think = true
 # Whether the finish tool is enabled
 enable_finish = true
 
-# LLM config group to use
-#llm_config = 'your-llm-config-group'
-
 # Whether to use prompt extension (e.g., microagent, repo/runtime info) at all
 #enable_prompt_extensions = true
 
@@ -274,11 +137,6 @@ enable_history_truncation = true
 
 # Whether the condensation request tool is enabled
 enable_condensation_request = false
-
-[agent.RepoExplorerAgent]
-# Example: use a cheaper model for RepoExplorerAgent to reduce cost, especially
-# useful when an agent doesn't demand high quality but uses a lot of tokens
-llm_config = 'gpt3'
 
 [agent.CustomAgent]
 # Example: use a custom agent from a different package
