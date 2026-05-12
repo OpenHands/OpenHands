@@ -112,8 +112,8 @@ async def reject_x_org_id_path_mismatch(
     path_org_id_raw = request.path_params.get('org_id')
     if path_org_id_raw is None:
         # Dep was attached to a route without ``{org_id}``. Treat as a
-        # no-op rather than 500-ing the request; misconfiguration is a
-        # developer concern, not a runtime authorization concern.
+        # no-op so this can be attached at the router level to routers
+        # that contain routes with and without ``{org_id}`` in the path.
         return
 
     try:
