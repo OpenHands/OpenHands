@@ -645,8 +645,6 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
     )
 
     user = await UserStore.get_user_by_id(user_info.sub)
-    has_accepted_tos = user is not None and user.accepted_tos is not None
-
     redirect_url, _, _ = _extract_oauth_state(state)
     default_url = redirect_url if redirect_url else web_url
     final_url = await _get_post_auth_redirect(user_info.sub, default_url, web_url, user)
