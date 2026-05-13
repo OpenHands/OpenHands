@@ -789,6 +789,8 @@ def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm()
     )
     from storage.user_settings import UserSettings
 
+    # Use the SDK's current schema version - migration logic should always
+    # output settings matching the SDK's expected schema, regardless of input version
     from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
 
     user_settings = UserSettings(
