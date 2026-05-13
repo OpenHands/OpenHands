@@ -270,7 +270,6 @@ class TestFilesystemEventServiceSearchEvents:
         # Should have found all 5 token events
         assert len(collected_ids) == 5
 
-
     @pytest.mark.asyncio
     async def test_search_events_filter_by_timestamp_gte(
         self, service: FilesystemEventService
@@ -293,9 +292,7 @@ class TestFilesystemEventServiceSearchEvents:
         late_event = create_token_event()
         await service.save_event(conversation_id, late_event)
 
-        result = await service.search_events(
-            conversation_id, timestamp__gte=cutoff
-        )
+        result = await service.search_events(conversation_id, timestamp__gte=cutoff)
 
         assert len(result.items) == 1
         assert result.items[0].id == late_event.id
@@ -321,9 +318,7 @@ class TestFilesystemEventServiceSearchEvents:
         late_event = create_token_event()
         await service.save_event(conversation_id, late_event)
 
-        result = await service.search_events(
-            conversation_id, timestamp__lt=cutoff
-        )
+        result = await service.search_events(conversation_id, timestamp__lt=cutoff)
 
         assert len(result.items) == 1
         assert result.items[0].id == early_event.id
