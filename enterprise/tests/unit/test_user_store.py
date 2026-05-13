@@ -782,13 +782,14 @@ def test_get_org_kwargs_for_migration_preserves_existing_llm_when_not_custom():
 
 
 def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm():
-    from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
     from server.constants import (
         LITE_LLM_API_URL,
         ORG_SETTINGS_VERSION,
         get_default_litellm_model,
     )
     from storage.user_settings import UserSettings
+
+    from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
 
     user_settings = UserSettings(
         keycloak_user_id='test',
