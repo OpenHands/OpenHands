@@ -789,8 +789,6 @@ def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm()
     )
     from storage.user_settings import UserSettings
 
-    from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
-
     user_settings = UserSettings(
         keycloak_user_id='test',
         user_version=3,
@@ -809,7 +807,7 @@ def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm()
 
     assert org_kwargs['org_version'] == ORG_SETTINGS_VERSION
     assert org_kwargs['agent_settings'] == {
-        'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
+        'schema_version': 1,
         'llm': {
             'model': get_default_litellm_model(),
             'base_url': LITE_LLM_API_URL,
