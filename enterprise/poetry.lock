@@ -2959,21 +2959,21 @@ smmap = ">=3.0.1,<6"
 
 [[package]]
 name = "gitpython"
-version = "3.1.46"
+version = "3.1.50"
 description = "GitPython is a Python library used to interact with Git repositories"
 optional = false
 python-versions = ">=3.7"
 groups = ["main"]
 files = [
-    {file = "gitpython-3.1.46-py3-none-any.whl", hash = "sha256:79812ed143d9d25b6d176a10bb511de0f9c67b1fa641d82097b0ab90398a2058"},
-    {file = "gitpython-3.1.46.tar.gz", hash = "sha256:400124c7d0ef4ea03f7310ac2fbf7151e09ff97f2a3288d64a440c584a29c37f"},
+    {file = "gitpython-3.1.50-py3-none-any.whl", hash = "sha256:d352abe2908d07355014abdd21ddf798c2a961469239afec4962e9da884858f9"},
+    {file = "gitpython-3.1.50.tar.gz", hash = "sha256:80da2d12504d52e1f998772dc5baf6e553f8d2fcfe1fcc226c9d9a2ee3372dcc"},
 ]
 
 [package.dependencies]
 gitdb = ">=4.0.1,<5"
 
 [package.extras]
-doc = ["sphinx (>=7.1.2,<7.2)", "sphinx-autodoc-typehints", "sphinx_rtd_theme"]
+doc = ["sphinx (>=7.4.7,<8)", "sphinx-autodoc-typehints", "sphinx_rtd_theme"]
 test = ["coverage[toml]", "ddt (>=1.1.1,!=1.4.3)", "mock ; python_version < \"3.8\"", "mypy (==1.18.2) ; python_version >= \"3.9\"", "pre-commit", "pytest (>=7.3.1)", "pytest-cov", "pytest-instafail", "pytest-mock", "pytest-sugar", "typing-extensions ; python_version < \"3.11\""]
 
 [[package]]
@@ -6409,14 +6409,14 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.19.1"
+version = "1.21.1"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.19.1-py3-none-any.whl", hash = "sha256:4c685bcf7f941f087878f51dca2071a110fea360798da4020fc89b034bee7fda"},
-    {file = "openhands_agent_server-1.19.1.tar.gz", hash = "sha256:0cb8d6a681b0645e1e2391e81466436b5573a56f8985e76620902dab2bcc5092"},
+    {file = "openhands_agent_server-1.21.1-py3-none-any.whl", hash = "sha256:08e315fef9996215767f04b44ebb48a12553213af87cc1fa79a06ce8e9c0b108"},
+    {file = "openhands_agent_server-1.21.1.tar.gz", hash = "sha256:7e3957e3889bc4e63378a61a3b8e5afb8882261ad7c3b07307b0c0bab473ce81"},
 ]
 
 [package.dependencies]
@@ -6456,6 +6456,7 @@ dirhash = "*"
 docker = "*"
 fastapi = "*"
 fastmcp = ">=3.2,<4"
+gitpython = ">=3.1.49"
 google-api-python-client = ">=2.164"
 google-auth-httplib2 = "*"
 google-auth-oauthlib = "*"
@@ -6471,16 +6472,16 @@ jupyter-kernel-gateway = "*"
 jwcrypto = ">=1.5.6"
 kubernetes = ">=33.1"
 libtmux = ">=0.46.2"
-litellm = ">=1.83.14,<1.83.15"
+litellm = ">=1.83.14"
 lmnr = ">=0.7.20"
 mcp = ">=1.25"
 memory-profiler = ">=0.61"
 numpy = "*"
 openai = "2.24"
 openhands-aci = "0.3.3"
-openhands-agent-server = "1.19.1"
-openhands-sdk = "1.19.1"
-openhands-tools = "1.19.1"
+openhands-agent-server = "1.21.1"
+openhands-sdk = "1.21.1"
+openhands-tools = "1.21.1"
 opentelemetry-api = ">=1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = ">=1.33.1"
 orjson = ">=3.11.6"
@@ -6532,14 +6533,14 @@ url = ".."
 
 [[package]]
 name = "openhands-sdk"
-version = "1.19.1"
+version = "1.21.1"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.19.1-py3-none-any.whl", hash = "sha256:fd2c7ed11663595f6131b5e1879f636ad1dd4d897490b582509c924ca238a150"},
-    {file = "openhands_sdk-1.19.1.tar.gz", hash = "sha256:1e9a758649ae516259c965778b891592c38e232de6bcab53036ba05f6fc53551"},
+    {file = "openhands_sdk-1.21.1-py3-none-any.whl", hash = "sha256:028660d3b92f7379c7fc8e07b546ca710506cee2c1925557126958b3f07dd2f2"},
+    {file = "openhands_sdk-1.21.1.tar.gz", hash = "sha256:ec3097ca02bd565175f9a414a6791b2c5b88f48ae5f42ee44cb9e619d8b489fa"},
 ]
 
 [package.dependencies]
@@ -6549,8 +6550,9 @@ fakeredis = {version = ">=2.32.1", extras = ["lua"]}
 fastmcp = ">=3.0.0"
 filelock = ">=3.20.1"
 httpx = {version = ">=0.27.0", extras = ["socks"]}
-litellm = ">=1.82.6,<1.82.7 || >1.82.7,<1.82.8 || >1.82.8"
+litellm = ">=1.83.7"
 lmnr = ">=0.7.47"
+pillow = ">=12.1.1"
 pydantic = ">=2.12.5"
 python-frontmatter = ">=1.1.0"
 python-json-logger = ">=3.3.0"
@@ -6562,14 +6564,14 @@ boto3 = ["boto3 (>=1.35.0)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.19.1"
+version = "1.21.1"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.19.1-py3-none-any.whl", hash = "sha256:695b04399f8f7018aba937d4e0eb97c7caa0111538e9620b46871f5f62726c14"},
-    {file = "openhands_tools-1.19.1.tar.gz", hash = "sha256:0634a0e24e4fd87f05f902ff97e5cd30dd909d5cb2b137aae4470902f800f3db"},
+    {file = "openhands_tools-1.21.1-py3-none-any.whl", hash = "sha256:d606b9aaf8315308ce10bef8a614e7f42ae1eef6f1ecf553d599f6feebf0236d"},
+    {file = "openhands_tools-1.21.1.tar.gz", hash = "sha256:046c6d032f738f3f285dd82f8b942483e95a71aa154834112d366cdb1bdc3265"},
 ]
 
 [package.dependencies]

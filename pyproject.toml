@@ -35,6 +35,7 @@ dependencies = [
   "docker",
   "fastapi",
   "fastmcp>=3.2,<4",
+  "gitpython>=3.1.49",
   "google-api-python-client>=2.164",
   "google-auth-httplib2",
   "google-auth-oauthlib",
@@ -197,6 +198,7 @@ libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
 openhands-aci = "0.3.3"
+gitpython = ">=3.1.49"
 python-socketio = "5.14.0"
 sse-starlette = "^3.0.2"
 psutil = "*"
