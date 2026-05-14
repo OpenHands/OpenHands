@@ -4,7 +4,11 @@ import {
   GetMicroagentsResponse,
   ResultSet,
 } from "#/api/open-hands.types";
-import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
+import {
+  V1AppConversation,
+  V1AppConversationStartRequest,
+  V1AppConversationStartTask,
+} from "#/api/conversation-service/v1-conversation-service.types";
 import { V1ExecutionStatus } from "#/types/v1/core";
 
 const conversations: Conversation[] = [
@@ -88,6 +92,57 @@ const V1_CONVERSATIONS = new Map<string, V1AppConversation>(
   v1Conversations.map((conversation) => [conversation.id, conversation]),
 );
 
+const V1_START_TASKS = new Map<string, V1AppConversationStartTask>();
+
+function createV1Conversation(
+  request: V1AppConversationStartRequest,
+): V1AppConversation {
+  const now = new Date().toISOString();
+  const id = `mock-${crypto.randomUUID()}`;
+
+  return {
+    id,
+    created_by_user_id: "1",
+    sandbox_id: request.sandbox_id ?? `sandbox-${id}`,
+    selected_repository: request.selected_repository ?? null,
+    selected_branch: request.selected_branch ?? null,
+    git_provider: request.git_provider ?? null,
+    title: request.title ?? "New Conversation",
+    trigger: request.trigger ?? null,
+    pr_number: request.pr_number ?? [],
+    llm_model: request.llm_model ?? null,
+    metrics: null,
+    created_at: now,
+    updated_at: now,
+    sandbox_status: "RUNNING",
+    execution_status: V1ExecutionStatus.IDLE,
+    conversation_url: null,
+    session_api_key: null,
+    public: false,
+    sub_conversation_ids: [],
+  };
+}
+
+function createV1StartTask(
+  request: V1AppConversationStartRequest,
+  conversation: V1AppConversation,
+): V1AppConversationStartTask {
+  const now = new Date().toISOString();
+
+  return {
+    id: `task-${crypto.randomUUID()}`,
+    created_by_user_id: "1",
+    status: "READY",
+    detail: null,
+    app_conversation_id: conversation.id,
+    sandbox_id: conversation.sandbox_id,
+    agent_server_url: null,
+    request,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 export const CONVERSATION_HANDLERS = [
   http.get("/api/v1/app-conversations/search", async () =>
     HttpResponse.json({
@@ -107,6 +162,40 @@ export const CONVERSATION_HANDLERS = [
     }
 
     return HttpResponse.json(Array.from(V1_CONVERSATIONS.values()));
+  }),
+
+  http.post("/api/v1/app-conversations", async ({ request }) => {
+    const body =
+      ((await request.json()) as V1AppConversationStartRequest | null) ?? {};
+    const conversation = createV1Conversation(body);
+    const task = createV1StartTask(body, conversation);
+
+    V1_CONVERSATIONS.set(conversation.id, conversation);
+    V1_START_TASKS.set(task.id, task);
+
+    return HttpResponse.json(task, { status: 201 });
+  }),
+
+  http.get("/api/v1/app-conversations/start-tasks", async ({ request }) => {
+    const url = new URL(request.url);
+    const ids = url.searchParams.getAll("ids");
+
+    return HttpResponse.json(ids.map((id) => V1_START_TASKS.get(id) ?? null));
+  }),
+
+  http.get("/api/v1/app-conversations/start-tasks/search", async () =>
+    HttpResponse.json({
+      items: Array.from(V1_START_TASKS.values()),
+      next_page_id: null,
+    }),
+  ),
+
+  http.get("/api/v1/app-conversations/:conversationId", async ({ params }) => {
+    const conversationId = params.conversationId as string;
+    const conversation = V1_CONVERSATIONS.get(conversationId);
+
+    if (conversation) return HttpResponse.json(conversation);
+    return HttpResponse.json(null, { status: 404 });
   }),
 
   http.get("/api/conversations", async () => {
