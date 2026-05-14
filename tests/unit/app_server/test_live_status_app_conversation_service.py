@@ -1005,7 +1005,7 @@ class TestLiveStatusAppConversationService:
     async def test_build_request_passes_enable_sub_agents_false(
         self, mock_tools, mock_register_builtins, mock_get_agent_definitions
     ):
-        """Built-in sub-agents are not registered when the user setting is off."""
+        """Built-in sub-agents are registered but not forwarded when disabled."""
         from openhands.sdk.settings import OpenHandsAgentSettings
 
         agent_settings = OpenHandsAgentSettings(
@@ -1029,7 +1029,7 @@ class TestLiveStatusAppConversationService:
             remote_workspace=None,
         )
 
-        mock_register_builtins.assert_not_called()
+        mock_register_builtins.assert_called_once_with(enable_browser=True)
         mock_get_agent_definitions.assert_not_called()
         mock_tools.assert_called_once_with(enable_browser=True, enable_sub_agents=False)
         assert result.agent_definitions == []

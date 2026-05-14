@@ -127,13 +127,13 @@ _logger = logging.getLogger(__name__)
 def _get_openhands_default_tools_and_agent_definitions(
     enable_sub_agents: bool,
 ) -> tuple[list[Any], list[Any]]:
-    agent_definitions: list[Any] = []
-    if enable_sub_agents:
-        register_builtins_agents(enable_browser=True)
-        agent_definitions = list(get_registered_agent_definitions())
+    register_builtins_agents(enable_browser=True)
     tools = get_default_tools(
         enable_browser=True,
         enable_sub_agents=enable_sub_agents,
+    )
+    agent_definitions = (
+        list(get_registered_agent_definitions()) if enable_sub_agents else []
     )
     return tools, agent_definitions
 

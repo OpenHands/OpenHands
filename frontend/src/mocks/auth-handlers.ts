@@ -15,6 +15,23 @@ export const AUTH_HANDLERS = [
     return HttpResponse.json(user);
   }),
 
+  http.get("/api/v1/users/git-info", () => {
+    const user: GitUser = {
+      id: "1",
+      login: "octocat",
+      avatar_url: "https://avatars.githubusercontent.com/u/583231?v=4",
+      company: "GitHub",
+      email: "placeholder@placeholder.placeholder",
+      name: "monalisa octocat",
+    };
+
+    return HttpResponse.json(user);
+  }),
+
+  http.get("/api/onboarding_status", () =>
+    HttpResponse.json({ should_complete_onboarding: false }),
+  ),
+
   http.post("/api/authenticate", async () =>
     HttpResponse.json({ message: "Authenticated" }),
   ),
