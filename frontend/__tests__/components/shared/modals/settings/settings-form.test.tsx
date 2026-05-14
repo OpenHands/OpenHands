@@ -28,6 +28,12 @@ describe("SettingsForm", () => {
   it("should save the user settings and close the modal when the form is submitted", async () => {
     renderWithProviders(<RouteStub />);
 
+    await waitFor(() =>
+      expect(screen.getByTestId("llm-model-input")).toHaveValue(
+        "claude-opus-4-5-20251101",
+      ),
+    );
+
     fireEvent.submit(screen.getByTestId("settings-form"));
 
     await waitFor(() =>

@@ -24,12 +24,11 @@ def get_default_sandbox_specs():
             id=get_agent_server_image(),
             command=['python', '-m', 'openhands.agent_server'],
             initial_env={
-                'TMUX_TMPDIR': '/tmp',
                 # VSCode disabled for now
                 'OH_ENABLE_VS_CODE': '0',
                 **get_agent_server_env(),
             },
-            working_dir='.',
+            working_dir='',
         )
     ]
 
