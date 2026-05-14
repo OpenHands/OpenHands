@@ -117,9 +117,15 @@ def test_get_agent_settings_schema_includes_critic_verification_fields(test_clie
     assert response.status_code == 200
     schema = response.json()
     section_keys = [s['key'] for s in schema['sections']]
+    agent_section = next(s for s in schema['sections'] if s['key'] == 'agent')
+    agent_field = next(
+        f for f in agent_section['fields'] if f['key'] == 'enable_sub_agents'
+    )
+    assert agent_field['section'] == 'agent'
+    assert agent_field['section_label'] == 'Agent'
     general_section = next(s for s in schema['sections'] if s['key'] == 'general')
     general_field_keys = [f['key'] for f in general_section['fields']]
-    assert 'enable_sub_agents' in general_field_keys
+    assert 'enable_sub_agents' not in general_field_keys
     assert 'verification' in section_keys
     section = next(s for s in schema['sections'] if s['key'] == 'verification')
     field_keys = [f['key'] for f in section['fields']]

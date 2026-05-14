@@ -81,16 +81,16 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
   model_name: "AgentSettings",
   sections: [
     {
-      key: "general",
-      label: "General",
+      key: "agent",
+      label: "Agent",
       fields: [
         {
           key: "enable_sub_agents",
           label: "Enable sub-agents",
           description:
             "Allow the agent to delegate work to specialized built-in sub-agents.",
-          section: "general",
-          section_label: "General",
+          section: "agent",
+          section_label: "Agent",
           value_type: "boolean",
           default: false,
           choices: [],
