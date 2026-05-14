@@ -7,6 +7,32 @@ HTMLCanvasElement.prototype.getContext = vi.fn();
 HTMLElement.prototype.scrollTo = vi.fn();
 window.scrollTo = vi.fn();
 
+// Some Node builds expose an experimental localStorage object without the
+// Storage methods unless --localstorage-file is configured.
+if (typeof globalThis.localStorage?.getItem !== "function") {
+  const storage = new Map<string, string>();
+  const memoryLocalStorage: Storage = {
+    get length() {
+      return storage.size;
+    },
+    clear: () => storage.clear(),
+    getItem: (key: string) => storage.get(key) ?? null,
+    key: (index: number) => Array.from(storage.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      storage.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      storage.set(key, value);
+    },
+  };
+
+  vi.stubGlobal("localStorage", memoryLocalStorage);
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: memoryLocalStorage,
+  });
+}
+
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
   observe = vi.fn();

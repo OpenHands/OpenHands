@@ -6,7 +6,7 @@ import { DangerModal } from "../confirmation-modals/danger-modal";
 import { extractSettings } from "#/utils/settings-utils";
 import { ModalBackdrop } from "../modal-backdrop";
 import { ModelSelector } from "./model-selector";
-import { Settings } from "#/types/settings";
+import type { Settings, SettingsValue } from "#/types/settings";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { HelpLink } from "#/ui/help-link";
@@ -24,14 +24,51 @@ export function SettingsForm({ settings, onClose }: SettingsFormProps) {
 
   const location = useLocation();
   const { t } = useTranslation();
+  const currentModel = getAgentSettingValue(settings, "llm.model");
 
   const formRef = React.useRef<HTMLFormElement>(null);
+  const [selectedModel, setSelectedModel] = React.useState<string | null>(() =>
+    typeof currentModel === "string" ? currentModel : null,
+  );
 
   const [confirmEndSessionModalOpen, setConfirmEndSessionModalOpen] =
     React.useState(false);
 
+  React.useEffect(() => {
+    setSelectedModel(typeof currentModel === "string" ? currentModel : null);
+  }, [currentModel]);
+
+  const handleModelChange = (provider: string | null, model: string | null) => {
+    if (!provider || !model) {
+      setSelectedModel(null);
+      return;
+    }
+
+    setSelectedModel(provider === "openai" ? model : `${provider}/${model}`);
+  };
+
   const handleFormSubmission = async (formData: FormData) => {
     const newSettings = extractSettings(formData);
+    if (selectedModel) {
+      const agentSettings = (newSettings.agent_settings_diff ?? {}) as Record<
+        string,
+        SettingsValue
+      >;
+      const llmSettings = (agentSettings.llm ?? {}) as Record<
+        string,
+        SettingsValue
+      >;
+
+      if (llmSettings.model === undefined) {
+        newSettings.agent_settings_diff = {
+          ...agentSettings,
+          llm: {
+            ...llmSettings,
+            model: selectedModel,
+          },
+        };
+      }
+    }
 
     await saveUserSettings(newSettings, {
       onSuccess: () => {
@@ -57,7 +94,6 @@ export function SettingsForm({ settings, onClose }: SettingsFormProps) {
   };
 
   const isLLMKeySet = settings.llm_api_key_set;
-  const currentModel = getAgentSettingValue(settings, "llm.model");
 
   return (
     <div>
@@ -72,6 +108,7 @@ export function SettingsForm({ settings, onClose }: SettingsFormProps) {
             currentModel={
               typeof currentModel === "string" ? currentModel : undefined
             }
+            onChange={handleModelChange}
             wrapperClassName="!flex-col !gap-[17px]"
             labelClassName={SETTINGS_FORM.LABEL_CLASSNAME}
           />
