@@ -4,6 +4,8 @@ import {
   GetMicroagentsResponse,
   ResultSet,
 } from "#/api/open-hands.types";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
+import { V1ExecutionStatus } from "#/types/v1/core";
 
 const conversations: Conversation[] = [
   {
@@ -55,7 +57,58 @@ const CONVERSATIONS = new Map<string, Conversation>(
   conversations.map((c) => [c.conversation_id, c]),
 );
 
+const v1Conversations: V1AppConversation[] = conversations.map(
+  (conversation) => ({
+    id: conversation.conversation_id,
+    created_by_user_id: "1",
+    sandbox_id: `sandbox-${conversation.conversation_id}`,
+    selected_repository: conversation.selected_repository,
+    selected_branch: conversation.selected_branch,
+    git_provider: conversation.git_provider,
+    title: conversation.title,
+    trigger: null,
+    pr_number: [],
+    llm_model: null,
+    metrics: null,
+    created_at: conversation.created_at,
+    updated_at: conversation.last_updated_at,
+    sandbox_status: conversation.status === "RUNNING" ? "RUNNING" : "MISSING",
+    execution_status:
+      conversation.status === "RUNNING"
+        ? V1ExecutionStatus.RUNNING
+        : V1ExecutionStatus.FINISHED,
+    conversation_url: conversation.url,
+    session_api_key: conversation.session_api_key,
+    public: false,
+    sub_conversation_ids: [],
+  }),
+);
+
+const V1_CONVERSATIONS = new Map<string, V1AppConversation>(
+  v1Conversations.map((conversation) => [conversation.id, conversation]),
+);
+
 export const CONVERSATION_HANDLERS = [
+  http.get("/api/v1/app-conversations/search", async () =>
+    HttpResponse.json({
+      items: Array.from(V1_CONVERSATIONS.values()),
+      next_page_id: null,
+    }),
+  ),
+
+  http.get("/api/v1/app-conversations", async ({ request }) => {
+    const url = new URL(request.url);
+    const ids = url.searchParams.getAll("ids");
+
+    if (ids.length > 0) {
+      return HttpResponse.json(
+        ids.map((id) => V1_CONVERSATIONS.get(id) ?? null),
+      );
+    }
+
+    return HttpResponse.json(Array.from(V1_CONVERSATIONS.values()));
+  }),
+
   http.get("/api/conversations", async () => {
     const values = Array.from(CONVERSATIONS.values());
     const results: ResultSet<Conversation> = {
