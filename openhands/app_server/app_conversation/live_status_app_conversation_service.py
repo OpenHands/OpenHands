@@ -124,20 +124,6 @@ _acp_conversation_info_type_adapter = TypeAdapter(list[ACPConversationInfo | Non
 _logger = logging.getLogger(__name__)
 
 
-def _get_openhands_default_tools_and_agent_definitions(
-    enable_sub_agents: bool,
-) -> tuple[list[Any], list[Any]]:
-    register_builtins_agents(enable_browser=True)
-    tools = get_default_tools(
-        enable_browser=True,
-        enable_sub_agents=enable_sub_agents,
-    )
-    agent_definitions = (
-        list(get_registered_agent_definitions()) if enable_sub_agents else []
-    )
-    return tools, agent_definitions
-
-
 def _agent_kind_to_router_path(agent_kind: str) -> str:
     """Map agent_kind discriminator to the agent-server router path prefix."""
     if agent_kind == 'acp':
@@ -1389,11 +1375,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 plan_path = self._compute_plan_path(project_dir, git_provider)
             tools = get_planning_tools(plan_path=plan_path)
         else:
-            tools, agent_definitions = (
-                _get_openhands_default_tools_and_agent_definitions(
-                    enable_sub_agents=user.agent_settings.enable_sub_agents,
-                )
+            register_builtins_agents(enable_browser=True)
+            tools = get_default_tools(
+                enable_browser=True,
+                enable_sub_agents=user.agent_settings.enable_sub_agents,
             )
+            if user.agent_settings.enable_sub_agents:
+                agent_definitions = list(get_registered_agent_definitions())
 
         # --- build AgentSettings and create agent ---------------------------
         from fastmcp.mcp_config import MCPConfig
