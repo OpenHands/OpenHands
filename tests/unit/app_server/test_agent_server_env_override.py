@@ -485,7 +485,7 @@ class TestProcessSandboxSpecEnvironmentOverride:
 
             # Should have exactly the expected variables
             assert set(spec.initial_env.keys()) == expected_defaults
-            assert spec.initial_env['TMUX_TMPDIR'] == '/tmp'
+            assert spec.initial_env['TMUX_TMPDIR'] == '/tmp/openhands-tmux'
             assert spec.working_dir == '.'
 
 
