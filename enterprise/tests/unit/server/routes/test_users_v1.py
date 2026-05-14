@@ -273,11 +273,11 @@ class TestSdkCompatFields:
 
         from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import AgentSettings
+        from openhands.sdk.settings import OpenHandsAgentSettings
 
         base_user_info = UserInfo(
             id='user-123',
-            agent_settings=AgentSettings(
+            agent_settings=OpenHandsAgentSettings(
                 llm=LLM(model='test-model', base_url='https://test.com')
             ),
         )
@@ -307,11 +307,11 @@ class TestSdkCompatFields:
 
         from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import AgentSettings
+        from openhands.sdk.settings import OpenHandsAgentSettings
 
         base_user_info = UserInfo(
             id='user-123',
-            agent_settings=AgentSettings(
+            agent_settings=OpenHandsAgentSettings(
                 llm=LLM(
                     model='test-model',
                     api_key='sk-test-secret',
@@ -374,11 +374,11 @@ class TestSdkCompatFields:
 
         from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import AgentSettings
+        from openhands.sdk.settings import OpenHandsAgentSettings
 
         base_user_info = UserInfo(
             id='user-123',
-            agent_settings=AgentSettings(llm=LLM(model='test-model')),
+            agent_settings=OpenHandsAgentSettings(llm=LLM(model='test-model')),
         )
         mock_user_context.get_user_info = AsyncMock(return_value=base_user_info)
 

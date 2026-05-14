@@ -45,7 +45,7 @@ from openhands.sdk import Agent, Event
 from openhands.sdk.context.agent_context import AgentContext as _AgentContext
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 # True only on SDK versions that include PR #2984 (secrets acp_compatible=True).
@@ -58,7 +58,7 @@ _SDK_SUPPORTS_ACP_SECRETS = (
 )
 
 
-def _build_test_user_agent_settings(user: SimpleNamespace) -> AgentSettings:
+def _build_test_user_agent_settings(user: SimpleNamespace) -> OpenHandsAgentSettings:
     llm_vals: dict = {}
     model = getattr(user, 'llm_model', '') or ''
     llm_vals['model'] = model
@@ -82,7 +82,7 @@ def _build_test_user_agent_settings(user: SimpleNamespace) -> AgentSettings:
 
 class _TestUserInfo(SimpleNamespace):
     @property
-    def agent_settings(self) -> AgentSettings:
+    def agent_settings(self) -> OpenHandsAgentSettings:
         override = getattr(self, '_agent_settings_override', None)
         if override is not None:
             return override
@@ -103,7 +103,7 @@ class _TestUserInfo(SimpleNamespace):
             kwargs['max_iterations'] = max_iter
         return ConversationSettings(**kwargs)
 
-    def to_agent_settings(self) -> AgentSettings:
+    def to_agent_settings(self) -> OpenHandsAgentSettings:
         return self.agent_settings
 
 
