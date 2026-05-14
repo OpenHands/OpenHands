@@ -55,9 +55,6 @@ from openhands.sdk.settings import (
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
 )
-ENABLE_SUB_AGENTS_FIELD_KEY = 'enable_sub_agents'
-AGENT_SECTION_KEY = 'agent'
-AGENT_SECTION_LABEL = 'Agent'
 
 # Create router with /api/v1/settings prefix
 router = APIRouter(
@@ -82,60 +79,6 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
         base_url=llm.base_url,
         managed_proxy_url=LITE_LLM_API_URL,
     )
-
-
-def _normalize_agent_settings_schema_for_ui(schema: dict[str, Any]) -> dict[str, Any]:
-    """Expose standalone OpenHands agent settings under the Agent UI section."""
-    sections = schema.get('sections')
-    if not isinstance(sections, list):
-        return schema
-
-    enable_sub_agents_field: dict[str, Any] | None = None
-    for section in sections:
-        fields = section.get('fields') if isinstance(section, dict) else None
-        if not isinstance(fields, list):
-            continue
-        for index, field in enumerate(fields):
-            if (
-                isinstance(field, dict)
-                and field.get('key') == ENABLE_SUB_AGENTS_FIELD_KEY
-            ):
-                enable_sub_agents_field = fields.pop(index)
-                break
-        if enable_sub_agents_field is not None:
-            break
-
-    if enable_sub_agents_field is None:
-        return schema
-
-    enable_sub_agents_field = {
-        **enable_sub_agents_field,
-        'section': AGENT_SECTION_KEY,
-        'section_label': AGENT_SECTION_LABEL,
-    }
-
-    agent_section = next(
-        (
-            section
-            for section in sections
-            if isinstance(section, dict) and section.get('key') == AGENT_SECTION_KEY
-        ),
-        None,
-    )
-    if agent_section is None:
-        agent_section = {
-            'key': AGENT_SECTION_KEY,
-            'label': AGENT_SECTION_LABEL,
-            'fields': [],
-            'variant': 'openhands',
-        }
-        sections.insert(1 if sections else 0, agent_section)
-
-    fields = agent_section.setdefault('fields', [])
-    if isinstance(fields, list):
-        fields.append(enable_sub_agents_field)
-
-    return schema
 
 
 # NOTE: We use response_model=None for endpoints that return JSONResponse directly.
@@ -334,9 +277,7 @@ async def store_settings(
 @router.get('/agent-schema')
 async def load_settings_schema() -> dict[str, Any]:
     """Load the schema for settings"""
-    return _normalize_agent_settings_schema_for_ui(
-        export_agent_settings_schema().model_dump(mode='json')
-    )
+    return export_agent_settings_schema().model_dump(mode='json')
 
 
 @router.get('/conversation-schema')

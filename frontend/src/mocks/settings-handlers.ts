@@ -80,17 +80,19 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
 > = {
   model_name: "AgentSettings",
   sections: [
+    // Mirrors the SDK schema; the OpenHands UI displays this field on its
+    // dedicated Agent settings page by key.
     {
-      key: "agent",
-      label: "Agent",
+      key: "general",
+      label: "General",
       fields: [
         {
           key: "enable_sub_agents",
           label: "Enable sub-agents",
           description:
             "Allow the agent to delegate work to specialized built-in sub-agents.",
-          section: "agent",
-          section_label: "Agent",
+          section: "general",
+          section_label: "General",
           value_type: "boolean",
           default: false,
           choices: [],
