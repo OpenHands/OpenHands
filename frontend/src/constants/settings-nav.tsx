@@ -62,6 +62,12 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     section: "personal",
   },
   {
+    icon: <CircuitIcon width={22} height={22} />,
+    to: "/settings/agent",
+    text: "SETTINGS$AGENT",
+    section: "personal",
+  },
+  {
     icon: <MemoryIcon width={22} height={22} />,
     to: "/settings/condenser",
     text: "SETTINGS$NAV_CONDENSER",
@@ -128,6 +134,11 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",
     text: "SETTINGS$NAV_LLM",
+  },
+  {
+    icon: <CircuitIcon width={22} height={22} />,
+    to: "/settings/agent",
+    text: "SETTINGS$AGENT",
   },
   {
     icon: <MemoryIcon width={22} height={22} />,
