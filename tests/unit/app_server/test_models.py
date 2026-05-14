@@ -64,7 +64,7 @@ def test_app_conversation_update_request_includes_title_field():
 
     # The title field must be recognized and tracked in model_fields_set
     assert 'title' in request.model_fields_set, (
-        "title field is not in model_fields_set - title updates will be silently ignored! "
+        'title field is not in model_fields_set - title updates will be silently ignored! '
         "Add 'title: str | None = None' to AppConversationUpdateRequest."
     )
 
@@ -95,6 +95,6 @@ def test_app_conversation_update_request_title_field_updates_conversation_info()
 
     # Verify the title was updated
     assert info.title == 'Updated Title', (
-        "Title was not updated on AppConversationInfo. "
+        'Title was not updated on AppConversationInfo. '
         "Ensure 'title' is in AppConversationUpdateRequest.model_fields_set."
     )
