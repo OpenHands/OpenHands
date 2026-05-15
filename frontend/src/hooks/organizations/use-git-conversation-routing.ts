@@ -28,14 +28,16 @@ export function useGitConversationRouting() {
   const orgs = React.useMemo<GitOrg[]>(() => {
     if (!userGitOrgs) return [];
 
+    const claimList = Array.isArray(claims) ? claims : [];
+    const orgNames = Array.isArray(userGitOrgs.organizations)
+      ? userGitOrgs.organizations
+      : [];
+
     const claimMap = new Map(
-      (claims ?? []).map((c) => [
-        buildOrgId(c.provider, c.git_organization),
-        c,
-      ]),
+      claimList.map((c) => [buildOrgId(c.provider, c.git_organization), c]),
     );
 
-    return userGitOrgs.organizations.map((name) => {
+    return orgNames.map((name) => {
       const id = buildOrgId(userGitOrgs.provider, name);
       const claim = claimMap.get(id);
 

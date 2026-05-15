@@ -102,6 +102,7 @@ from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
+from openhands.sdk.subagent import get_registered_agent_definitions
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
@@ -111,6 +112,7 @@ from openhands.sdk.utils.redact import (
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.tools.preset.default import (
     get_default_tools,
+    register_builtins_agents,
 )
 from openhands.tools.preset.planning import (
     format_plan_structure,
@@ -1366,16 +1368,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 effective_suffix = web_host_context
 
         # --- tools ----------------------------------------------------------
+        agent_definitions: list[Any] = []
         if agent_type == AgentType.PLAN:
             plan_path = None
             if project_dir:
                 plan_path = self._compute_plan_path(project_dir, git_provider)
             tools = get_planning_tools(plan_path=plan_path)
         else:
+            register_builtins_agents(enable_browser=True)
             tools = get_default_tools(
                 enable_browser=True,
                 enable_sub_agents=user.agent_settings.enable_sub_agents,
             )
+            if user.agent_settings.enable_sub_agents:
+                agent_definitions = list(get_registered_agent_definitions())
 
         # --- build AgentSettings and create agent ---------------------------
         from fastmcp.mcp_config import MCPConfig
@@ -1450,6 +1456,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 'workspace': workspace,
                 'conversation_id': conversation_id,
                 'initial_message': final_initial_message,
+                'agent_definitions': agent_definitions,
                 'plugins': sdk_plugins,
                 'hook_config': hook_config,
             }
