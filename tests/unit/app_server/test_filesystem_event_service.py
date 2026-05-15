@@ -5,6 +5,8 @@ focusing on search functionality.
 """
 
 import tempfile
+import time
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -267,6 +269,124 @@ class TestFilesystemEventServiceSearchEvents:
 
         # Should have found all 5 token events
         assert len(collected_ids) == 5
+
+    @pytest.mark.asyncio
+    async def test_search_events_filter_by_timestamp_gte(
+        self, service: FilesystemEventService
+    ):
+        """Test that search_events filters events by timestamp__gte.
+
+        This verifies the fix for a bug where event.timestamp (str) was
+        compared directly against a datetime object, raising TypeError.
+        """
+        conversation_id = uuid4()
+
+        # Create events with a small delay so timestamps differ
+        early_event = create_token_event()
+        await service.save_event(conversation_id, early_event)
+        time.sleep(0.01)
+
+        cutoff = datetime.now()
+        time.sleep(0.01)
+
+        late_event = create_token_event()
+        await service.save_event(conversation_id, late_event)
+
+        result = await service.search_events(conversation_id, timestamp__gte=cutoff)
+
+        assert len(result.items) == 1
+        assert result.items[0].id == late_event.id
+
+    @pytest.mark.asyncio
+    async def test_search_events_filter_by_timestamp_lt(
+        self, service: FilesystemEventService
+    ):
+        """Test that search_events filters events by timestamp__lt.
+
+        This verifies the fix for a bug where event.timestamp (str) was
+        compared directly against a datetime object, raising TypeError.
+        """
+        conversation_id = uuid4()
+
+        early_event = create_token_event()
+        await service.save_event(conversation_id, early_event)
+        time.sleep(0.01)
+
+        cutoff = datetime.now()
+        time.sleep(0.01)
+
+        late_event = create_token_event()
+        await service.save_event(conversation_id, late_event)
+
+        result = await service.search_events(conversation_id, timestamp__lt=cutoff)
+
+        assert len(result.items) == 1
+        assert result.items[0].id == early_event.id
+
+    @pytest.mark.asyncio
+    async def test_search_events_filter_by_timestamp_range(
+        self, service: FilesystemEventService
+    ):
+        """Test that search_events filters events by a timestamp range."""
+        conversation_id = uuid4()
+
+        event1 = create_token_event()
+        await service.save_event(conversation_id, event1)
+        time.sleep(0.01)
+
+        range_start = datetime.now()
+        time.sleep(0.01)
+
+        event2 = create_token_event()
+        await service.save_event(conversation_id, event2)
+        time.sleep(0.01)
+
+        range_end = datetime.now()
+        time.sleep(0.01)
+
+        event3 = create_token_event()
+        await service.save_event(conversation_id, event3)
+
+        result = await service.search_events(
+            conversation_id,
+            timestamp__gte=range_start,
+            timestamp__lt=range_end,
+        )
+
+        assert len(result.items) == 1
+        assert result.items[0].id == event2.id
+
+    @pytest.mark.asyncio
+    async def test_search_events_timestamp_filter_with_desc_sort(
+        self, service: FilesystemEventService
+    ):
+        """Test timestamp filters combined with TIMESTAMP_DESC sort order."""
+        conversation_id = uuid4()
+
+        event1 = create_token_event()
+        await service.save_event(conversation_id, event1)
+        time.sleep(0.01)
+
+        cutoff = datetime.now()
+        time.sleep(0.01)
+
+        event2 = create_token_event()
+        await service.save_event(conversation_id, event2)
+        time.sleep(0.01)
+
+        event3 = create_token_event()
+        await service.save_event(conversation_id, event3)
+
+        result = await service.search_events(
+            conversation_id,
+            timestamp__gte=cutoff,
+            sort_order=EventSortOrder.TIMESTAMP_DESC,
+        )
+
+        assert len(result.items) == 2
+        # Descending: event3 before event2
+        assert result.items[0].id == event3.id
+        assert result.items[1].id == event2.id
 
 
 class TestFilesystemEventServiceIntegration:

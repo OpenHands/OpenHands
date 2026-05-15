@@ -4,6 +4,7 @@ import KeyIcon from "#/icons/key.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
 import LockIcon from "#/icons/lock.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
+import RobotIcon from "#/icons/u-robot.svg?react";
 import ServerProcessIcon from "#/icons/server-process.svg?react";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -59,6 +60,12 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",
     text: "COMMON$LANGUAGE_MODEL_LLM",
+    section: "personal",
+  },
+  {
+    icon: <RobotIcon width={22} height={22} />,
+    to: "/settings/agent",
+    text: "SETTINGS$AGENT",
     section: "personal",
   },
   {
@@ -128,6 +135,11 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",
     text: "SETTINGS$NAV_LLM",
+  },
+  {
+    icon: <RobotIcon width={22} height={22} />,
+    to: "/settings/agent",
+    text: "SETTINGS$AGENT",
   },
   {
     icon: <MemoryIcon width={22} height={22} />,

@@ -2763,21 +2763,21 @@ smmap = ">=3.0.1,<6"
 
 [[package]]
 name = "gitpython"
-version = "3.1.46"
+version = "3.1.50"
 description = "GitPython is a Python library used to interact with Git repositories"
 optional = false
 python-versions = ">=3.7"
 groups = ["main"]
 files = [
-    {file = "gitpython-3.1.46-py3-none-any.whl", hash = "sha256:79812ed143d9d25b6d176a10bb511de0f9c67b1fa641d82097b0ab90398a2058"},
-    {file = "gitpython-3.1.46.tar.gz", hash = "sha256:400124c7d0ef4ea03f7310ac2fbf7151e09ff97f2a3288d64a440c584a29c37f"},
+    {file = "gitpython-3.1.50-py3-none-any.whl", hash = "sha256:d352abe2908d07355014abdd21ddf798c2a961469239afec4962e9da884858f9"},
+    {file = "gitpython-3.1.50.tar.gz", hash = "sha256:80da2d12504d52e1f998772dc5baf6e553f8d2fcfe1fcc226c9d9a2ee3372dcc"},
 ]
 
 [package.dependencies]
 gitdb = ">=4.0.1,<5"
 
 [package.extras]
-doc = ["sphinx (>=7.1.2,<7.2)", "sphinx-autodoc-typehints", "sphinx_rtd_theme"]
+doc = ["sphinx (>=7.4.7,<8)", "sphinx-autodoc-typehints", "sphinx_rtd_theme"]
 test = ["coverage[toml]", "ddt (>=1.1.1,!=1.4.3)", "mock ; python_version < \"3.8\"", "mypy (==1.18.2) ; python_version >= \"3.9\"", "pre-commit", "pytest (>=7.3.1)", "pytest-cov", "pytest-instafail", "pytest-mock", "pytest-sugar", "typing-extensions ; python_version < \"3.11\""]
 
 [[package]]
@@ -4057,6 +4057,24 @@ files = [
 ]
 
 [[package]]
+name = "joserfc"
+version = "1.6.5"
+description = "The ultimate Python library for JOSE RFCs, including JWS, JWE, JWK, JWA, JWT"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "joserfc-1.6.5-py3-none-any.whl", hash = "sha256:e9878a0f8243fe7b95e11fdda81374ca9f7a689e302751579d3dfdeec559675e"},
+    {file = "joserfc-1.6.5.tar.gz", hash = "sha256:1482a7db78fb4602e44ed89e51b599d052e091288c7c532c5b694e20149dec48"},
+]
+
+[package.dependencies]
+cryptography = ">=45.0.1"
+
+[package.extras]
+drafts = ["pycryptodome"]
+
+[[package]]
 name = "json-repair"
 version = "0.58.7"
 description = "A package to repair broken json strings"
@@ -4340,14 +4358,14 @@ test = ["jupyter-server (>=2.0.0)", "pytest (>=7.0)", "pytest-jupyter[server] (>
 
 [[package]]
 name = "jupyterlab"
-version = "4.5.6"
+version = "4.5.7"
 description = "JupyterLab computational environment"
 optional = false
 python-versions = ">=3.9"
 groups = ["runtime"]
 files = [
-    {file = "jupyterlab-4.5.6-py3-none-any.whl", hash = "sha256:d6b3dac883aa4d9993348e0f8e95b24624f75099aed64eab6a4351a9cdd1e580"},
-    {file = "jupyterlab-4.5.6.tar.gz", hash = "sha256:642fe2cfe7f0f5922a8a558ba7a0d246c7bc133b708dfe43f7b3a826d163cf42"},
+    {file = "jupyterlab-4.5.7-py3-none-any.whl", hash = "sha256:fba4cb0e2c44a52859669d8c98b45de029d5e515f8407bf8534d2a8fc5f0964d"},
+    {file = "jupyterlab-4.5.7.tar.gz", hash = "sha256:55a9822c4754da305f41e113452c68383e214dcf96de760146af89ce5d5117b0"},
 ]
 
 [package.dependencies]
@@ -5924,19 +5942,19 @@ files = [
 
 [[package]]
 name = "notebook"
-version = "7.5.5"
+version = "7.5.6"
 description = "Jupyter Notebook - A web-based notebook environment for interactive computing"
 optional = false
 python-versions = ">=3.9"
 groups = ["runtime"]
 files = [
-    {file = "notebook-7.5.5-py3-none-any.whl", hash = "sha256:a7c14dbeefa6592e87f72290ca982e0c10f5bbf3786be2a600fda9da2764a2b8"},
-    {file = "notebook-7.5.5.tar.gz", hash = "sha256:dc0bfab0f2372c8278c457423d3256c34154ac2cc76bf20e9925260c461013c3"},
+    {file = "notebook-7.5.6-py3-none-any.whl", hash = "sha256:4dde3f8fb55fa8fb7946d58c6e869ce9baf46d00fc070664f62604569d0faca0"},
+    {file = "notebook-7.5.6.tar.gz", hash = "sha256:621174aade80108f0020b0f00738000b215f75fa3cd90771ad7aa0f24536a4e1"},
 ]
 
 [package.dependencies]
 jupyter-server = ">=2.4.0,<3"
-jupyterlab = ">=4.5.6,<4.6"
+jupyterlab = ">=4.5.7,<4.6"
 jupyterlab-server = ">=2.28.0,<3"
 notebook-shim = ">=0.2,<0.3"
 tornado = ">=6.2.0"
@@ -6169,14 +6187,14 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.21.1"
+version = "1.22.1"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.21.1-py3-none-any.whl", hash = "sha256:08e315fef9996215767f04b44ebb48a12553213af87cc1fa79a06ce8e9c0b108"},
-    {file = "openhands_agent_server-1.21.1.tar.gz", hash = "sha256:7e3957e3889bc4e63378a61a3b8e5afb8882261ad7c3b07307b0c0bab473ce81"},
+    {file = "openhands_agent_server-1.22.1-py3-none-any.whl", hash = "sha256:a886e314ef64d209e4acf8fac3ee258feb37f8c5ebac375812d3e96274bfcdfe"},
+    {file = "openhands_agent_server-1.22.1.tar.gz", hash = "sha256:ccf534052fa920a877055e570061ef68a1185850f576e82e11e46171ea63bfd4"},
 ]
 
 [package.dependencies]
@@ -6193,14 +6211,14 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-sdk"
-version = "1.21.1"
+version = "1.22.1"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.21.1-py3-none-any.whl", hash = "sha256:028660d3b92f7379c7fc8e07b546ca710506cee2c1925557126958b3f07dd2f2"},
-    {file = "openhands_sdk-1.21.1.tar.gz", hash = "sha256:ec3097ca02bd565175f9a414a6791b2c5b88f48ae5f42ee44cb9e619d8b489fa"},
+    {file = "openhands_sdk-1.22.1-py3-none-any.whl", hash = "sha256:0d77190ff1e4f5face22ed284cdc54927e6db708825d6b35c961e9410aebdd52"},
+    {file = "openhands_sdk-1.22.1.tar.gz", hash = "sha256:1b64c5738182d4f22f1fe3ef0a0f0997ebe74c856fef5d1ac4a685945c2f6eca"},
 ]
 
 [package.dependencies]
@@ -6210,6 +6228,7 @@ fakeredis = {version = ">=2.32.1", extras = ["lua"]}
 fastmcp = ">=3.0.0"
 filelock = ">=3.20.1"
 httpx = {version = ">=0.27.0", extras = ["socks"]}
+joserfc = ">=1.0.0"
 litellm = ">=1.83.7"
 lmnr = ">=0.7.47"
 pillow = ">=12.1.1"
@@ -6224,14 +6243,14 @@ boto3 = ["boto3 (>=1.35.0)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.21.1"
+version = "1.22.1"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.21.1-py3-none-any.whl", hash = "sha256:d606b9aaf8315308ce10bef8a614e7f42ae1eef6f1ecf553d599f6feebf0236d"},
-    {file = "openhands_tools-1.21.1.tar.gz", hash = "sha256:046c6d032f738f3f285dd82f8b942483e95a71aa154834112d366cdb1bdc3265"},
+    {file = "openhands_tools-1.22.1-py3-none-any.whl", hash = "sha256:25daab0cf9c3909a21b05e29385e415de157eba975f0b280f2dd3ea1dfafcc3a"},
+    {file = "openhands_tools-1.22.1.tar.gz", hash = "sha256:452761ace7c4906cde889cf6ebf32e94674bf69a9f954423c0243f6b2996fca3"},
 ]
 
 [package.dependencies]
@@ -14536,4 +14555,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "1f404c19047ed3ce602b63fabf2742bddaed66a50d3820ded2a2c072ab7c275e"
+content-hash = "4d8b8eb2c4338968973606b28811f3330bd70062b66059ee1e9f6e9b494a1f8d"

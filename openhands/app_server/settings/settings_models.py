@@ -31,7 +31,6 @@ from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.utils.jsonpatch_compat import deep_merge
 from openhands.sdk.settings import (
     ACPAgentSettings,
-    AgentSettings,
     AgentSettingsConfig,
     ConversationSettings,
     OpenHandsAgentSettings,
@@ -65,11 +64,11 @@ def _load_persisted_agent_settings(
 ) -> OpenHandsAgentSettings | ACPAgentSettings:
     """Load persisted agent settings via the SDK loader.
 
-    Routes the raw payload through :meth:`AgentSettings.from_persisted` so any
+    Routes the raw payload through :func:`validate_agent_settings` so any
     schema migrations registered with the SDK are applied before validation
     against the discriminated :data:`AgentSettingsConfig` union.
     """
-    return AgentSettings.from_persisted(data or {})
+    return validate_agent_settings(data or {})
 
 
 def _load_persisted_conversation_settings(data: Any) -> ConversationSettings:
