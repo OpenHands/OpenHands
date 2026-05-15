@@ -1031,6 +1031,12 @@ class TestApiKeyOrgIdHandling:
             def get_api_key_org_id(self) -> UUID | None:
                 return self.api_key_org_id
 
+            async def get_effective_org_id(self) -> UUID | None:
+                # Mirror SaasUserAuth precedence: API-key binding wins
+                # over the user's current_org_id. Returning None lets the
+                # injector fall back to user.current_org_id.
+                return self.api_key_org_id
+
         # Create a mock UserContext that wraps the MockUserAuth
         @dataclass
         class MockAuthUserContext:
@@ -1111,6 +1117,12 @@ class TestApiKeyOrgIdHandling:
                 return self.user_id
 
             def get_api_key_org_id(self) -> UUID | None:
+                return self.api_key_org_id
+
+            async def get_effective_org_id(self) -> UUID | None:
+                # Mirror SaasUserAuth precedence: API-key binding wins
+                # over the user's current_org_id. Returning None lets the
+                # injector fall back to user.current_org_id.
                 return self.api_key_org_id
 
         @dataclass
@@ -1225,6 +1237,12 @@ class TestApiKeyOrgIdHandling:
                 return self.user_id
 
             def get_api_key_org_id(self) -> UUID | None:
+                return self.api_key_org_id
+
+            async def get_effective_org_id(self) -> UUID | None:
+                # Mirror SaasUserAuth precedence: API-key binding wins
+                # over the user's current_org_id. Returning None lets the
+                # injector fall back to user.current_org_id.
                 return self.api_key_org_id
 
         @dataclass

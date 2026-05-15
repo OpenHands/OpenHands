@@ -7,6 +7,7 @@ from server.auth.authorization import (
     require_financial_data_access,
     require_permission,
 )
+from server.auth.org_context import EFFECTIVE_ORG_ID, REJECT_X_ORG_ID_PATH_MISMATCH
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
@@ -55,7 +56,11 @@ from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Initialize API router
-org_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
+org_router = APIRouter(
+    prefix='/api/organizations',
+    tags=['Orgs'],
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 
 # Create injector instance and dependency at module level
 _org_app_settings_injector = OrgAppSettingsServiceInjector()
@@ -222,7 +227,10 @@ async def create_org(
         )
 
 
-@org_router.get('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+@org_router.get(
+    '/{org_id}/settings',
+    response_model=OrgDefaultsSettingsResponse,
+)
 async def get_org_defaults_settings(
     org_id: UUID,
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
@@ -247,7 +255,10 @@ async def get_org_defaults_settings(
         )
 
 
-@org_router.patch('/{org_id}/settings', response_model=OrgDefaultsSettingsResponse)
+@org_router.patch(
+    '/{org_id}/settings',
+    response_model=OrgDefaultsSettingsResponse,
+)
 async def update_org_defaults_settings(
     org_id: UUID,
     settings: OrgUpdate,
@@ -310,14 +321,16 @@ async def update_org_defaults_settings(
     deprecated=True,
 )
 async def get_legacy_org_defaults_settings(
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
     user_id: str = Depends(require_permission(Permission.VIEW_LLM_SETTINGS)),
 ) -> OrgDefaultsSettingsResponse:
-    """Get org-default settings through the deprecated ``/llm`` wrapper."""
+    """Get org-default settings through the deprecated ``/llm`` wrapper.
+
+    The org is the request's *effective* org (``X-Org-Id`` > API-key
+    binding > ``user.current_org_id``).
+    """
     try:
-        org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
-        if not org:
-            raise OrgNotFoundError('current')
-        return await get_org_defaults_settings(org_id=org.id, user_id=user_id)
+        return await get_org_defaults_settings(org_id=effective_org_id, user_id=user_id)
     except OrgNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -343,17 +356,18 @@ async def get_legacy_org_defaults_settings(
 )
 async def update_legacy_org_defaults_settings(
     settings: OrgUpdate,
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
     user_id: str = Depends(require_permission(Permission.EDIT_LLM_SETTINGS)),
 ) -> OrgDefaultsSettingsResponse:
     """Update org-default settings through the deprecated ``/llm`` wrapper."""
     try:
-        org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
-        if not org:
-            raise OrgNotFoundError('current')
         if not settings.has_updates():
+            org = await OrgStore.get_org_by_id(effective_org_id)
+            if not org:
+                raise OrgNotFoundError(str(effective_org_id))
             return OrgDefaultsSettingsResponse.from_org(org)
         return await update_org_defaults_settings(
-            org_id=org.id,
+            org_id=effective_org_id,
             settings=settings,
             user_id=user_id,
         )
@@ -507,7 +521,10 @@ async def get_org(
         )
 
 
-@org_router.get('/{org_id}/me', response_model=MeResponse)
+@org_router.get(
+    '/{org_id}/me',
+    response_model=MeResponse,
+)
 async def get_me(
     org_id: UUID,
     user_id: str = Depends(get_user_id),
@@ -566,7 +583,10 @@ async def get_me(
         )
 
 
-@org_router.delete('/{org_id}', status_code=status.HTTP_200_OK)
+@org_router.delete(
+    '/{org_id}',
+    status_code=status.HTTP_200_OK,
+)
 async def delete_org(
     org_id: UUID,
     user_id: str = Depends(require_permission(Permission.DELETE_ORGANIZATION)),
@@ -675,7 +695,10 @@ async def delete_org(
         )
 
 
-@org_router.patch('/{org_id}', response_model=OrgResponse)
+@org_router.patch(
+    '/{org_id}',
+    response_model=OrgResponse,
+)
 async def update_org(
     org_id: UUID,
     update_data: OrgUpdate,
@@ -760,7 +783,9 @@ async def update_org(
         )
 
 
-@org_router.get('/{org_id}/members')
+@org_router.get(
+    '/{org_id}/members',
+)
 async def get_org_members(
     org_id: UUID,
     page_id: Annotated[
@@ -863,7 +888,9 @@ async def get_org_members(
         )
 
 
-@org_router.get('/{org_id}/members/count')
+@org_router.get(
+    '/{org_id}/members/count',
+)
 async def get_org_members_count(
     org_id: UUID,
     email: Annotated[
@@ -1019,7 +1046,9 @@ async def get_org_members_financial(
         )
 
 
-@org_router.delete('/{org_id}/members/{user_id}')
+@org_router.delete(
+    '/{org_id}/members/{user_id}',
+)
 async def remove_org_member(
     org_id: UUID,
     user_id: str,
@@ -1096,7 +1125,9 @@ async def remove_org_member(
 
 
 @org_router.post(
-    '/{org_id}/switch', response_model=OrgResponse, status_code=status.HTTP_200_OK
+    '/{org_id}/switch',
+    response_model=OrgResponse,
+    status_code=status.HTTP_200_OK,
 )
 async def switch_org(
     org_id: UUID,
@@ -1192,7 +1223,10 @@ async def switch_org(
         )
 
 
-@org_router.patch('/{org_id}/members/{user_id}', response_model=OrgMemberResponse)
+@org_router.patch(
+    '/{org_id}/members/{user_id}',
+    response_model=OrgMemberResponse,
+)
 async def update_org_member(
     org_id: UUID,
     user_id: str,

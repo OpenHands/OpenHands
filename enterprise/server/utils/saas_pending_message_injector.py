@@ -51,6 +51,18 @@ class SaasSQLPendingMessageService(SQLPendingMessageService):
         )
         return result.scalars().first()
 
+    async def _get_effective_org_id(self) -> UUID | None:
+        """Resolve the effective org id for the active user context.
+
+        Prefers the X-Org-Id / API-key-bound org, falling back to the
+        user's persisted current_org_id when no SAAS auth is present.
+        """
+        user_auth = getattr(self.user_context, 'user_auth', None)
+        if user_auth is not None and hasattr(user_auth, 'get_effective_org_id'):
+            return await user_auth.get_effective_org_id()
+        user = await self._get_current_user()
+        return user.current_org_id if user else None
+
     async def _validate_conversation_ownership(self, conversation_id: str) -> None:
         """Validate that the current user owns the conversation.
 
@@ -92,10 +104,14 @@ class SaasSQLPendingMessageService(SQLPendingMessageService):
         if saas_metadata.user_id != user_id_uuid:
             raise AuthError('You do not have access to this conversation')
 
-        # Verify organization ownership if applicable
-        user = await self._get_current_user()
-        if user and user.current_org_id is not None:
-            if saas_metadata.org_id != user.current_org_id:
+        # Verify the conversation belongs to the request's *effective*
+        # organization (honors X-Org-Id / API-key binding) rather than
+        # the user's persisted current_org_id. This unblocks API-key
+        # callers whose key was minted before the user last switched
+        # orgs.
+        effective_org_id = await self._get_effective_org_id()
+        if effective_org_id is not None:
+            if saas_metadata.org_id != effective_org_id:
                 raise AuthError('Conversation belongs to a different organization')
 
     async def add_message(
