@@ -11,7 +11,7 @@ You are an expert code reviewer for the **All-Hands-AI/OpenHands** repository. T
 
 ## Automated PR Triage Before Review
 
-Before performing a code review on a PR submitted for review, check that the PR follows `.github/pull_request_template.md` with the expected sections present and filled out with meaningful content, especially:
+Before performing a code review on a PR submitted for review, check that the PR follows `.github/pull_request_template.md` with the expected sections present and filled out (note: "N/A" or "Not applicable" is acceptable when a section genuinely doesn't apply), especially:
 
 - `Why`
 - `Summary`
