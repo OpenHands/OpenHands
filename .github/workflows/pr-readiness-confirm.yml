@@ -36,6 +36,9 @@ jobs:
         github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR' ||
         github.event.pull_request.author_association == 'NONE'
       )
+    concurrency:
+      group: pr-readiness-confirm-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     steps:
       - name: Check for existing confirmation comment
@@ -44,13 +47,12 @@ jobs:
         with:
           script: |
             const marker = '<!-- pr-readiness-confirm -->';
-            const comments = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              per_page: 100,
             });
-            const existing = comments.data.find(c => c.body.includes(marker));
+            const existing = comments.find(c => c.body.includes(marker));
             core.setOutput('exists', existing ? 'true' : 'false');
 
       - name: Post confirmation request
@@ -100,56 +102,58 @@ jobs:
               if (pr.draft) continue;
 
               // Look for the bot's confirmation comment
-              const comments = await github.rest.issues.listComments({
+              const comments = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.number,
-                per_page: 100,
               });
 
-              const botComment = comments.data.find(c => c.body.includes(marker));
+              const botComment = comments.find(c => c.body.includes(marker));
               if (!botComment) continue;
 
               const commentDate = new Date(botComment.created_at);
               if (commentDate > cutoff) continue; // not stale yet
 
               // Check for a 👍 reaction from the PR author
-              const reactions = await github.rest.reactions.listForIssueComment({
+              const reactions = await github.paginate(github.rest.reactions.listForIssueComment, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 comment_id: botComment.id,
-                per_page: 100,
               });
-              const authorReacted = reactions.data.some(
+              const authorReacted = reactions.some(
                 r => r.user.login === pr.user.login && r.content === '+1'
               );
               if (authorReacted) continue;
 
               // Check for any comment from the PR author after the bot comment
-              const authorReplied = comments.data.some(
+              const authorReplied = comments.some(
                 c => c.user.login === pr.user.login &&
                      new Date(c.created_at) > commentDate
               );
               if (authorReplied) continue;
 
               // Convert to draft via GraphQL
-              core.info(`Converting PR #${pr.number} back to draft (no confirmation after ${STALE_DAYS} days)`);
-              await github.graphql(`
-                mutation($id: ID!) {
-                  convertPullRequestToDraft(input: { pullRequestId: $id }) {
-                    pullRequest { number }
+              try {
+                core.info(`Converting PR #${pr.number} back to draft (no confirmation after ${STALE_DAYS} days)`);
+                await github.graphql(`
+                  mutation($id: ID!) {
+                    convertPullRequestToDraft(input: { pullRequestId: $id }) {
+                      pullRequest { number }
+                    }
                   }
-                }
-              `, { id: pr.node_id });
+                `, { id: pr.node_id });
 
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                body: [
-                  `This PR has been converted back to a draft because no confirmation was received within ${STALE_DAYS} days.`,
-                  '',
-                  'When you\'re ready, please mark it as ready for review again.',
-                ].join('\n'),
-              });
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: [
+                    `This PR has been converted back to a draft because no confirmation was received within ${STALE_DAYS} days.`,
+                    '',
+                    'When you\'re ready, please mark it as ready for review again.',
+                  ].join('\n'),
+                });
+              } catch (error) {
+                core.warning(`Failed to convert PR #${pr.number} to draft: ${error.message}`);
+              }
             }
