@@ -646,7 +646,8 @@ class TestGetOrgRepositoryUrl:
     """Test _get_org_repository_url helper function."""
 
     @pytest.mark.asyncio
-    async def test_successful_url_retrieval(self):
+async def test_successful_url_retri# FIX: 移除eval，改用安全方式
+# self):
         """Test successfully retrieving authenticated URL."""
         # Arrange
         mock_user_context = AsyncMock()
