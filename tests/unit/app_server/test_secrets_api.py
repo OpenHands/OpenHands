@@ -282,6 +282,23 @@ async def test_update_existing_custom_secret(test_client, file_secrets_store):
 
 
 @pytest.mark.asyncio
+async def test_update_custom_secret_with_no_existing_secrets(
+    test_client, file_secrets_store
+):
+    """Test updating a custom secret when the secrets store is empty."""
+    update_secret_data = {
+        'name': 'API_KEY',
+        'description': None,
+    }
+
+    response = test_client.put('/secrets/API_KEY', json=update_secret_data)
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Secret with ID API_KEY not found'
+    assert await file_secrets_store.load() is None
+
+
+@pytest.mark.asyncio
 async def test_add_multiple_custom_secrets(test_client, file_secrets_store):
     """Test adding multiple custom secrets at once."""
     # Create initial settings with one custom secret
@@ -414,6 +431,18 @@ async def test_delete_nonexistent_custom_secret(test_client, file_secrets_store)
 
     # Check that other settings were preserved
     assert ProviderType.GITHUB in stored_settings.provider_tokens
+
+
+@pytest.mark.asyncio
+async def test_delete_custom_secret_with_no_existing_secrets(
+    test_client, file_secrets_store
+):
+    """Test deleting a custom secret when the secrets store is empty."""
+    response = test_client.delete('/secrets/API_KEY')
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Secret with ID API_KEY not found'
+    assert await file_secrets_store.load() is None
 
 
 @pytest.mark.asyncio
