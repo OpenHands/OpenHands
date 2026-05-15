@@ -20,7 +20,7 @@ Before performing a code review on a PR submitted for review, check that the PR 
 - `Video/Screenshots` when the change affects UI or behavior that benefits from visual proof
 - `Type`
 
-If the PR does not follow the template, try to mark it back to draft (preferred) or close it, depending on the bot's available permissions, and leave a message explaining the issue. For example:
+If the PR does not follow the template, try to mark it back to draft (preferred) or close it, depending on the bot's available permissions. If neither action is available, leave a comment explaining the issue. For example:
 
 > This PR does not follow our suggested PR template. Once your PR matches the template, you're welcome to re-submit it for review.
 
