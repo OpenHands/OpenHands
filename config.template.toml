@@ -73,6 +73,22 @@
 # Name of the default agent
 #default_agent = "CodeActAgent"
 
+# Example: use Astraflow (global) as the LLM provider
+# Astraflow by UCloud — OpenAI-compatible platform supporting 200+ models (global endpoint)
+# Sign up at https://astraflow.ucloud-global.com
+#[llm]
+#model = "astraflow/gpt-4o"
+#api_key = "<your-ASTRAFLOW_API_KEY>"
+#base_url = "https://api-us-ca.umodelverse.ai/v1"
+
+# Example: use Astraflow CN (China endpoint) as the LLM provider
+# Astraflow by UCloud — OpenAI-compatible platform supporting 200+ models (China endpoint)
+# Sign up at https://astraflow.ucloud.cn
+#[llm]
+#model = "astraflow_cn/gpt-4o"
+#api_key = "<your-ASTRAFLOW_CN_API_KEY>"
+#base_url = "https://api.modelverse.cn/v1"
+
 # JWT secret for authentication
 #jwt_secret = ""
 
