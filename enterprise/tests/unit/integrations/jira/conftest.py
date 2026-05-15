@@ -18,8 +18,8 @@ from storage.jira_conversation import JiraConversation
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
 
-from openhands.integrations.service_types import ProviderType, Repository
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture

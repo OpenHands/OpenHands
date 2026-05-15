@@ -27,7 +27,7 @@ Before pushing any changes, you MUST ensure that any lint errors or simple test 
 
 * If you've made changes to the backend, you should run `pre-commit run --config ./dev_config/python/.pre-commit-config.yaml` (this will run on staged files).
 * If you've made changes to the frontend, you should run `cd frontend && npm run lint:fix && npm run build ; cd ..`
-* If you've made changes to the VSCode extension, you should run `cd openhands/integrations/vscode && npm run lint:fix && npm run compile ; cd ../../..`
+* If you've made changes to the VSCode extension, you should run `cd openhands/app_server/integrations/vscode && npm run lint:fix && npm run compile ; cd ../../..`
 
 The pre-commit hooks MUST pass successfully before pushing any changes to the repository. This is a mandatory requirement to maintain code quality and consistency.
 
@@ -150,7 +150,7 @@ Frontend:
 
 
 VSCode Extension:
-- Located in the `openhands/integrations/vscode` directory
+- Located in the `openhands/app_server/integrations/vscode` directory
 - Setup: Run `npm install` in the extension directory
 - Linting:
   - Run linting with fixes: `npm run lint:fix`
@@ -452,6 +452,24 @@ To add a new LLM model to OpenHands, you need to update multiple files across bo
 - Models appear in CLI provider selection based on the verified arrays
 - The `organize_models_and_providers` function groups models by provider
 - Default model selection prioritizes verified models for each provider
+
+### Environment Variable Enable Toggles
+
+When adding a new boolean enable toggle read from an environment variable (e.g. `FEATURE_ENABLED`, `SLACK_WEBHOOKS_ENABLED`), the check **must** accept both `'true'` and `'1'` as truthy values. Older Helm chart versions default to `'1'` rather than `'true'`, so accepting only one form silently disables the feature in those deployments.
+
+**Required pattern:**
+```python
+os.getenv('MY_FEATURE_ENABLED', 'false').lower() in ('true', '1')
+```
+
+**Do not use:**
+```python
+os.getenv('MY_FEATURE_ENABLED', 'false').lower() == 'true'  # breaks when value is '1'
+os.getenv('MY_FEATURE_ENABLED', 'false') == '1'             # breaks when value is 'true'
+bool(os.getenv('MY_FEATURE_ENABLED'))                       # treats any non-empty string as True
+```
+
+This applies anywhere an env var gates a feature: backend config, web client config injectors, integration service initialization, etc. Add a unit test for the `'1'` case alongside the `'true'` case.
 
 ### Sandbox Settings API (SDK Credential Inheritance)
 

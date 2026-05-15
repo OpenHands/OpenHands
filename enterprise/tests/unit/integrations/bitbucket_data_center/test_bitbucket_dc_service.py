@@ -34,7 +34,7 @@ class TestSaaSBitbucketDCServiceInit:
     def test_refresh_flag_is_true(self):
         # self.refresh = True is required so the base class BitbucketDCService
         # retries the request with a refreshed token on 401 responses.
-        # See openhands/integrations/bitbucket_data_center/service/base.py,
+        # See openhands/app_server/integrations/bitbucket_data_center/service/base.py,
         # which checks `if self.refresh` before attempting the retry.
         service = SaaSBitbucketDCService()
         assert service.refresh is True

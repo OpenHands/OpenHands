@@ -15,19 +15,20 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.app import app
+from openhands.app_server.file_store import get_file_store
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
+from openhands.app_server.settings.llm_profiles import MAX_PROFILES_PER_USER
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import _user_profile_locks
 from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.integrations.service_types import UserGitInfo
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
-from openhands.sdk.settings import AgentSettings
-from openhands.server.app import app
-from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.llm_profiles import MAX_PROFILES_PER_USER
+from openhands.sdk.settings import OpenHandsAgentSettings
 
 
 @pytest.fixture(autouse=True)
@@ -85,7 +86,7 @@ class _MockUserAuth(UserAuth):
 
 @pytest.fixture
 def settings_store(tmp_path: Path) -> FileSettingsStore:
-    return FileSettingsStore(root_dir=tmp_path)
+    return FileSettingsStore(get_file_store('local', str(tmp_path)))
 
 
 @pytest.fixture
@@ -100,7 +101,7 @@ def test_client(settings_store):
         ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=auth,
         ),
         patch(
@@ -114,7 +115,7 @@ def test_client(settings_store):
 def _base_settings() -> Settings:
     """A Settings instance with an LLM configured so 'snapshot current' works."""
     return Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(
                 model='openai/gpt-4o',
                 api_key=SecretStr('sk-current'),
@@ -148,7 +149,7 @@ def _client_for_user(user_id: str, store: FileSettingsStore):
         ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=auth,
         ),
         patch(
@@ -440,6 +441,29 @@ async def test_list_profiles_reports_api_key_set_per_row(test_client, settings_s
 
 
 @pytest.mark.asyncio
+async def test_api_key_set_is_false_for_empty_secret(test_client, settings_store):
+    """``SecretStr('')`` is *not* a stored key — the UI must not claim one is."""
+    settings = _base_settings()
+    settings.llm_profiles.save(
+        'blank', LLM(model='openai/gpt-4o', api_key=SecretStr(''))
+    )
+    settings.llm_profiles.save(
+        'whitespace', LLM(model='openai/gpt-4o', api_key=SecretStr('   '))
+    )
+    await _seed(settings_store, settings)
+
+    rows = {
+        p['name']: p
+        for p in test_client.get('/api/v1/settings/profiles').json()['profiles']
+    }
+    assert rows['blank']['api_key_set'] is False
+    assert rows['whitespace']['api_key_set'] is False
+
+    detail = test_client.get('/api/v1/settings/profiles/blank').json()
+    assert detail['api_key_set'] is False
+
+
+@pytest.mark.asyncio
 async def test_save_profile_rejects_unknown_llm_field(test_client, settings_store):
     """StrictLLM forbids extras → typo in an LLM field returns 422 instead of a silent 201."""
     await _seed(settings_store, _base_settings())
@@ -526,8 +550,33 @@ async def test_activate_profile_applies_base_url_fixup(test_client, settings_sto
     assert response.status_code == 200
 
     stored = await settings_store.load()
-    # Fixup inferred the proxy URL; profile itself remains unchanged.
     assert stored.agent_settings.llm.base_url is not None
+
+
+@pytest.mark.asyncio
+async def test_activate_does_not_mutate_saved_profile_base_url(
+    test_client, settings_store
+):
+    """Activate must not bleed ``_post_merge_llm_fixups`` into the saved
+    profile. A shallow ``model_copy(update={'llm': llm})`` would share the
+    LLM reference and propagate the fixup to ``llm_profiles[name]``.
+
+    Use a custom base_url (not an openhands/* model) so the LLM SDK does
+    not auto-resolve base_url at construction time — that would mask the
+    mutation we want to detect.
+    """
+    settings = _base_settings()
+    settings.llm_profiles.save(
+        'custom',
+        LLM(model='openai/gpt-4o', base_url='https://custom.example.com'),
+    )
+    await _seed(settings_store, settings)
+
+    response = test_client.post('/api/v1/settings/profiles/custom/activate')
+    assert response.status_code == 200
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('custom').base_url == 'https://custom.example.com'
 
 
 # ── POST /profiles/{name}/rename ─────────────────────────────────
@@ -660,8 +709,8 @@ def test_save_profile_rejects_invalid_name(test_client, bad_name):
         f'/api/v1/settings/profiles/{bad_name}',
         json={'llm': {'model': 'openai/gpt-4o'}},
     )
-    # Invalid chars/length → 422 from Path validation; slash → 404 routing miss.
-    assert response.status_code in (404, 422)
+    # Invalid chars/length → 422 from Path validation; slash → 404/405 routing miss.
+    assert response.status_code in (404, 405, 422)
 
 
 # ── Profile count cap ────────────────────────────────────────────
@@ -888,8 +937,12 @@ async def test_profiles_are_isolated_between_users(tmp_path_factory):
     don't key on user_id, or settings stores that accidentally share
     data).
     """
-    store_a = FileSettingsStore(root_dir=tmp_path_factory.mktemp('alice'))
-    store_b = FileSettingsStore(root_dir=tmp_path_factory.mktemp('bob'))
+    store_a = FileSettingsStore(
+        get_file_store('local', str(tmp_path_factory.mktemp('alice')))
+    )
+    store_b = FileSettingsStore(
+        get_file_store('local', str(tmp_path_factory.mktemp('bob')))
+    )
     await store_a.store(_base_settings())
     await store_b.store(_base_settings())
 
@@ -958,7 +1011,7 @@ async def test_concurrent_writes_all_persist(tmp_path: Path):
         save_profile,
     )
 
-    store = FileSettingsStore(root_dir=tmp_path)
+    store = FileSettingsStore(get_file_store('local', str(tmp_path)))
     await store.store(_base_settings())
 
     async def _save_one(i: int) -> None:

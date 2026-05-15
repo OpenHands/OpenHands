@@ -4,6 +4,7 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { MCPConfig } from "#/types/settings";
 import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 export function useDeleteMcpServer() {
   const queryClient = useQueryClient();
@@ -38,7 +39,7 @@ export function useDeleteMcpServer() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["settings", "personal", organizationId],
+        queryKey: SETTINGS_QUERY_KEYS.personal(organizationId),
       });
     },
   });

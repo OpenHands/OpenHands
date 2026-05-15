@@ -17,7 +17,7 @@ from storage.slack_conversation import SlackConversation
 from storage.slack_user import SlackUser
 
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 # ---------------------------------------------------------------------------
 # Fixtures

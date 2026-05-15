@@ -38,13 +38,13 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     ConversationTrigger,
 )
 from openhands.app_server.config import get_app_conversation_service
+from openhands.app_server.integrations.provider import ProviderHandler, ProviderType
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler, ProviderType
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk import TextContent
-from openhands.server.user_auth.user_auth import UserAuth
-from openhands.utils.http_session import httpx_verify_option
 
 JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 

@@ -22,9 +22,7 @@ from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.sdk import Event, MessageEvent
-
-# TODO(OpenHands/evaluation#418): import from openhands.sdk.utils.redact
-from openhands.utils._redact_compat import redact_text_secrets
+from openhands.sdk.utils.redact import redact_text_secrets
 
 _logger = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@ from types import MappingProxyType
 from uuid import UUID
 
 import jwt
-from fastapi import Request
+from fastapi import HTTPException, Request
 from keycloak.exceptions import KeycloakError
 from pydantic import SecretStr
 from server.auth.auth_error import (
@@ -20,7 +20,6 @@ from server.auth.authorization import (
 )
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 from server.auth.token_manager import TokenManager
-from server.config import get_config
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
 from sqlalchemy import delete, select
@@ -35,15 +34,16 @@ from storage.user_authorization_store import UserAuthorizationStore
 from storage.user_store import UserStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
-from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.settings.settings_models import Settings
-from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.integrations.provider import (
+from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
+    CustomSecret,
     ProviderToken,
     ProviderType,
 )
-from openhands.server.user_auth.user_auth import AuthType, UserAuth
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.user_auth.user_auth import AuthType, UserAuth
 
 token_manager = TokenManager()
 
@@ -76,6 +76,13 @@ class SaasUserAuth(UserAuth):
     _role: str | None = None
     _permissions: list[str] | None = None
     _org_info_loaded: bool = False
+    # Per-request `X-Org-Id` header (raw, unvalidated); see
+    # `enterprise/server/auth/org_context.py` for resolution rules.
+    _x_org_id_header: str | None = None
+    # Cached result of `get_effective_org_id()`. The `_resolved` flag is
+    # needed to distinguish "not yet computed" from "computed and None".
+    _effective_org_id: UUID | None = None
+    _effective_org_id_resolved: bool = False
 
     def get_api_key_org_id(self) -> UUID | None:
         """Get the organization ID bound to the API key used for authentication.
@@ -85,6 +92,105 @@ class SaasUserAuth(UserAuth):
             (cookie auth or legacy API keys without org binding).
         """
         return self.api_key_org_id
+
+    async def get_effective_org_id(self) -> UUID | None:
+        """Resolve the effective organization ID for this request.
+
+        Precedence (highest first):
+
+        1. ``api_key_org_id`` — if the request is authenticated with an
+           org-bound API key, that org wins. If the caller also sent an
+           ``X-Org-Id`` header that disagrees, raise 403.
+        2. ``X-Org-Id`` header — explicit, per-request override. The
+           authenticated user must be a member of that org or we raise
+           403. Malformed UUIDs raise 400.
+        3. ``user.current_org_id`` — server-side default.
+
+        The resolved value is cached on the auth instance for the rest
+        of the request, so callers can invoke this freely.
+
+        Raises:
+            HTTPException: 400 for a malformed header, 403 for
+                membership / API-key conflicts.
+        """
+        if self._effective_org_id_resolved:
+            return self._effective_org_id
+
+        # Import locally to avoid a circular import via authorization.py.
+        from fastapi import status
+        from storage.org_member_store import OrgMemberStore
+
+        header_value = self._x_org_id_header
+        requested: UUID | None = None
+        if header_value:
+            try:
+                requested = UUID(header_value)
+            except ValueError as exc:
+                logger.warning(
+                    'x_org_id_invalid',
+                    extra={'user_id': self.user_id, 'header': header_value},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail='Invalid X-Org-Id header (must be a UUID)',
+                ) from exc
+
+        # Case 1: API key binds the org.
+        if self.api_key_org_id is not None:
+            if requested is not None and requested != self.api_key_org_id:
+                logger.warning(
+                    'x_org_id_api_key_mismatch',
+                    extra={
+                        'user_id': self.user_id,
+                        'api_key_org_id': str(self.api_key_org_id),
+                        'x_org_id': str(requested),
+                    },
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail='API key is not authorized for this organization',
+                )
+            self._effective_org_id = self.api_key_org_id
+            self._effective_org_id_resolved = True
+            return self._effective_org_id
+
+        # Case 2: X-Org-Id override; verify membership.
+        if requested is not None:
+            try:
+                user_uuid = UUID(self.user_id)
+            except ValueError as exc:
+                # Shouldn't happen, but treat as not-a-member.
+                logger.error(
+                    'x_org_id_invalid_user_id',
+                    extra={'user_id': self.user_id},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail='User is not a member of the requested organization',
+                ) from exc
+            member = await OrgMemberStore.get_org_member(requested, user_uuid)
+            if member is None:
+                logger.warning(
+                    'x_org_id_not_a_member',
+                    extra={
+                        'user_id': self.user_id,
+                        'x_org_id': str(requested),
+                    },
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail='User is not a member of the requested organization',
+                )
+            self._effective_org_id = requested
+            self._effective_org_id_resolved = True
+            return self._effective_org_id
+
+        # Case 3: Fall back to the user's currently-selected org.
+        user = await UserStore.get_user_by_id(self.user_id)
+        if user is not None:
+            self._effective_org_id = user.current_org_id
+        self._effective_org_id_resolved = True
+        return self._effective_org_id
 
     async def get_user_id(self) -> str | None:
         return self.user_id
@@ -152,7 +258,15 @@ class SaasUserAuth(UserAuth):
         secrets_store = self.secrets_store
         if secrets_store:
             return secrets_store
-        secrets_store = SaasSecretsStore(self.user_id, get_config())
+        # Scope secrets to the request's effective org so that callers
+        # using an API key bound to org A — or supplying an X-Org-Id
+        # header — read/write secrets under that org, not under whatever
+        # `user.current_org_id` happens to point at.
+        effective_org_id = await self.get_effective_org_id()
+        secrets_store = await SaasSecretsStore.get_instance(
+            self.user_id,
+            effective_org_id=effective_org_id,
+        )
         self.secrets_store = secrets_store
         return secrets_store
 
@@ -162,6 +276,20 @@ class SaasUserAuth(UserAuth):
             return user_secrets
         secrets_store = await self.get_secrets_store()
         user_secrets = await secrets_store.load()
+
+        # Inject OPENHANDS_API_KEY (system-level, lazily generated)
+        openhands_api_key = await self._get_openhands_api_key()
+        if openhands_api_key:
+            custom_secrets = dict(user_secrets.custom_secrets) if user_secrets else {}
+            custom_secrets['OPENHANDS_API_KEY'] = CustomSecret(
+                secret=SecretStr(openhands_api_key),
+                description='OpenHands Cloud API Key for automations and integrations (system-managed)',
+            )
+            user_secrets = Secrets(
+                custom_secrets=custom_secrets,
+                provider_tokens=user_secrets.provider_tokens if user_secrets else {},
+            )
+
         self._secrets = user_secrets
         return user_secrets
 
@@ -241,18 +369,59 @@ class SaasUserAuth(UserAuth):
         settings_store = self.settings_store
         if settings_store:
             return settings_store
-        settings_store = SaasSettingsStore(self.user_id, get_config())
+        # Scope settings to the request's effective org. See
+        # `get_secrets_store` for the same rationale: the store mutates
+        # the resolved Org row (and per-member overrides), so the
+        # effective org must flow through here rather than letting the
+        # store fall back to `user.current_org_id`.
+        effective_org_id = await self.get_effective_org_id()
+        settings_store = SaasSettingsStore(
+            self.user_id, effective_org_id=effective_org_id
+        )
         self.settings_store = settings_store
         return settings_store
 
     async def get_mcp_api_key(self) -> str:
         api_key_store = ApiKeyStore.get_instance()
-        mcp_api_key = await api_key_store.retrieve_mcp_api_key(self.user_id)
+        # Scope MCP_API_KEY to the request's effective org so that an
+        # X-Org-Id override or API-key binding produces an MCP key in
+        # the correct org context. Falls back to user.current_org_id
+        # when no SAAS auth or effective org can be resolved.
+        effective_org_id = await self.get_effective_org_id()
+        mcp_api_key = await api_key_store.retrieve_mcp_api_key(
+            self.user_id, org_id=effective_org_id
+        )
         if not mcp_api_key:
             mcp_api_key = await api_key_store.create_api_key(
-                self.user_id, 'MCP_API_KEY', None
+                self.user_id,
+                'MCP_API_KEY',
+                None,
+                org_id=effective_org_id,
             )
         return mcp_api_key
+
+    async def _get_openhands_api_key(self) -> str:
+        """Get or create the user's OPENHANDS_API_KEY (system-level, non-deletable).
+
+        This key is automatically generated on first access and stored as a system
+        key that users cannot delete or modify. It is used for automations and
+        integrations.
+
+        The key is scoped to the request's *effective* organization (honoring
+        an ``X-Org-Id`` override or API-key binding) rather than the user's
+        persisted ``current_org_id``.
+        """
+        effective_org_id = await self.get_effective_org_id()
+        if effective_org_id is None:
+            raise ValueError(f'User {self.user_id} has no current organization')
+
+        api_key_store = ApiKeyStore.get_instance()
+        openhands_api_key = await api_key_store.get_or_create_system_api_key(
+            user_id=self.user_id,
+            org_id=effective_org_id,
+            name='OPENHANDS_API_KEY',
+        )
+        return openhands_api_key
 
     async def get_org_info(self) -> dict | None:
         """Get organization info for the current user.
@@ -280,22 +449,26 @@ class SaasUserAuth(UserAuth):
         self._org_info_loaded = True
 
         try:
-            # Get user and their current org
-            user = await UserStore.get_user_by_id(self.user_id)
-            if not user:
-                logger.warning(f'User {self.user_id} not found for org info')
-                return None
-
-            # Get the current org
-            org = await OrgStore.get_org_by_id(user.current_org_id)
-            if not org:
+            # Use the effective org id so that requests carrying an
+            # X-Org-Id override (or an org-bound API key) see info for
+            # the org they're actually operating in, not the user's
+            # persisted current_org_id.
+            effective_org_id = await self.get_effective_org_id()
+            if effective_org_id is None:
                 logger.warning(
-                    f'Organization {user.current_org_id} not found for user {self.user_id}'
+                    f'No effective org for user {self.user_id} in get_org_info'
                 )
                 return None
 
-            # Get user's role in the current org
-            role = await get_user_org_role(self.user_id, user.current_org_id)
+            org = await OrgStore.get_org_by_id(effective_org_id)
+            if not org:
+                logger.warning(
+                    f'Organization {effective_org_id} not found for user {self.user_id}'
+                )
+                return None
+
+            # Get user's role in that org
+            role = await get_user_org_role(self.user_id, effective_org_id)
             role_name = role.name if role else None
 
             # Get permissions for the role
@@ -305,7 +478,7 @@ class SaasUserAuth(UserAuth):
                 permissions = [p.value for p in role_permissions]
 
             # Cache the results
-            self._org_id = str(user.current_org_id)
+            self._org_id = str(effective_org_id)
             self._org_name = org.name
             self._role = role_name
             self._permissions = permissions
@@ -316,6 +489,9 @@ class SaasUserAuth(UserAuth):
                 'role': self._role,
                 'permissions': self._permissions,
             }
+        except HTTPException:
+            # Propagate validation errors raised by get_effective_org_id().
+            raise
         except Exception as e:
             logger.error(f'Error fetching org info for user {self.user_id}: {e}')
             return None
@@ -332,6 +508,10 @@ class SaasUserAuth(UserAuth):
         if instance is None:
             logger.debug('saas_user_auth_get_instance:no_credentials')
             raise NoCredentialsError('failed to authenticate')
+        # Capture the raw X-Org-Id header (if any) so it can be validated
+        # lazily by `get_effective_org_id()` the first time the request
+        # needs an org context. See `server.auth.org_context`.
+        instance._x_org_id_header = request.headers.get('X-Org-Id')
         if not getattr(request.state, 'user_rate_limit_processed', False):
             user_id = await instance.get_user_id()
             if user_id:
@@ -407,8 +587,9 @@ async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
 
 async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     logger.debug('saas_user_auth_from_signed_token')
-    jwt_secret = get_config().jwt_secret.get_secret_value()
-    decoded = jwt.decode(signed_token, jwt_secret, algorithms=['HS256'])
+    from storage.encrypt_utils import get_jwt_service
+
+    decoded = get_jwt_service().verify_jws_token(signed_token)
     logger.debug('saas_user_auth_from_signed_token:decoded')
     access_token = decoded['access_token']
     refresh_token = decoded['refresh_token']

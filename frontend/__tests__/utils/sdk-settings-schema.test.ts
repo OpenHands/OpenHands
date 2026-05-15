@@ -76,16 +76,16 @@ const BASE_SETTINGS: Settings = {
         ],
       },
       {
-        key: "critic",
-        label: "Critic",
+        key: "verification",
+        label: "Verification",
         fields: [
           {
-            key: "critic.enabled",
+            key: "verification.critic_enabled",
             label: "Enable critic",
-            section: "critic",
-            section_label: "Critic",
+            section: "verification",
+            section_label: "Verification",
             value_type: "boolean",
-            default: false,
+            default: true,
             choices: [],
             depends_on: [],
             prominence: "critical",
@@ -93,17 +93,17 @@ const BASE_SETTINGS: Settings = {
             required: true,
           },
           {
-            key: "critic.mode",
+            key: "verification.critic_mode",
             label: "Mode",
-            section: "critic",
-            section_label: "Critic",
+            section: "verification",
+            section_label: "Verification",
             value_type: "string",
             default: "finish_and_message",
             choices: [
               { label: "finish_and_message", value: "finish_and_message" },
               { label: "all_actions", value: "all_actions" },
             ],
-            depends_on: ["critic.enabled"],
+            depends_on: ["verification.critic_enabled"],
             prominence: "minor",
             secret: false,
             required: true,
@@ -133,15 +133,13 @@ const BASE_SETTINGS: Settings = {
   },
   agent_settings: {
     agent: "CodeActAgent",
-    critic: {
-      mode: "finish_and_message",
-      enabled: false,
-    },
     llm: {
       api_key: null,
       model: "openai/gpt-4o",
     },
     verification: {
+      critic_enabled: false,
+      critic_mode: "finish_and_message",
       confirmation_mode: false,
     },
     condenser: {
@@ -154,13 +152,13 @@ const BASE_SETTINGS: Settings = {
 describe("sdk settings schema helpers", () => {
   it("builds initial form values from the current settings", () => {
     expect(buildInitialSettingsFormValues(BASE_SETTINGS)).toEqual({
-      "critic.mode": "finish_and_message",
-      "critic.enabled": false,
       "llm.api_key": "",
       "llm.base_url": "",
       "llm.litellm_extra_body": "{}",
       "llm.model": "openai/gpt-4o",
       mcp_config: "",
+      "verification.critic_enabled": false,
+      "verification.critic_mode": "finish_and_message",
     });
   });
 
@@ -172,10 +170,10 @@ describe("sdk settings schema helpers", () => {
       ...BASE_SETTINGS,
       agent_settings: {
         ...BASE_SETTINGS.agent_settings,
-        critic: {
+        verification: {
           ...(BASE_SETTINGS.agent_settings as Record<string, unknown>)
-            .critic as Record<string, unknown>,
-          mode: "all_actions",
+            .verification as Record<string, unknown>,
+          critic_mode: "all_actions",
         },
       },
     };
@@ -213,11 +211,13 @@ describe("sdk settings schema helpers", () => {
 
     const allSections = getVisibleSettingsSections(
       BASE_SETTINGS.agent_settings_schema!,
-      { ...values, "critic.enabled": true },
+      { ...values, "verification.critic_enabled": true },
       "all",
     );
-    const criticSection = allSections.find((s) => s.key === "critic");
-    expect(criticSection?.fields).toHaveLength(2);
+    const verificationSection = allSections.find(
+      (s) => s.key === "verification",
+    );
+    expect(verificationSection?.fields).toHaveLength(2);
   });
 
   it("passes through all fields when excludeKeys is empty", () => {
@@ -238,7 +238,7 @@ describe("sdk settings schema helpers", () => {
       BASE_SETTINGS.agent_settings_schema!,
       {
         ...buildInitialSettingsFormValues(BASE_SETTINGS),
-        "critic.enabled": true,
+        "verification.critic_enabled": true,
         "llm.api_key": "new-key",
         "llm.litellm_extra_body": JSON.stringify(
           { metadata: { tier: "enterprise" } },
@@ -247,7 +247,7 @@ describe("sdk settings schema helpers", () => {
         ),
       },
       {
-        "critic.enabled": true,
+        "verification.critic_enabled": true,
         "llm.api_key": true,
         "llm.litellm_extra_body": true,
         "llm.model": false,
@@ -255,11 +255,11 @@ describe("sdk settings schema helpers", () => {
     );
 
     expect(payload).toEqual({
-      critic: { enabled: true },
       llm: {
         api_key: "new-key",
         litellm_extra_body: { metadata: { tier: "enterprise" } },
       },
+      verification: { critic_enabled: true },
     });
   });
 
@@ -286,8 +286,8 @@ describe("sdk settings schema helpers", () => {
       }),
       "llm.model": "anthropic/claude-sonnet-4-20250514",
       "llm.timeout": "90",
-      "critic.enabled": true,
-      "critic.mode": "all_actions",
+      "verification.critic_enabled": true,
+      "verification.critic_mode": "all_actions",
       "llm.litellm_extra_body": JSON.stringify(
         { metadata: { tier: "enterprise" } },
         null,
@@ -298,8 +298,8 @@ describe("sdk settings schema helpers", () => {
     const dirty = {
       "llm.model": true,
       "llm.timeout": true,
-      "critic.enabled": true,
-      "critic.mode": true,
+      "verification.critic_enabled": true,
+      "verification.critic_mode": true,
       "llm.litellm_extra_body": true,
     };
 
@@ -309,8 +309,8 @@ describe("sdk settings schema helpers", () => {
         timeout: 30,
         litellm_extra_body: {},
       },
-      critic: { enabled: true, mode: "finish_and_message" },
       mcp_config: null,
+      verification: { critic_enabled: true, critic_mode: "finish_and_message" },
     });
 
     expect(
@@ -321,8 +321,8 @@ describe("sdk settings schema helpers", () => {
         timeout: 90,
         litellm_extra_body: {},
       },
-      critic: { enabled: true, mode: "finish_and_message" },
       mcp_config: null,
+      verification: { critic_enabled: true, critic_mode: "finish_and_message" },
     });
 
     expect(buildSdkSettingsPayloadForView(schema, values, dirty, "all")).toEqual({
@@ -331,7 +331,7 @@ describe("sdk settings schema helpers", () => {
         timeout: 90,
         litellm_extra_body: { metadata: { tier: "enterprise" } },
       },
-      critic: { enabled: true, mode: "all_actions" },
+      verification: { critic_enabled: true, critic_mode: "all_actions" },
     });
   });
 });

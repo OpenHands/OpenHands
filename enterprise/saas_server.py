@@ -8,12 +8,16 @@ load_dotenv()
 if not os.getenv('OPENHANDS_CONFIG_CLS'):
     os.environ['OPENHANDS_CONFIG_CLS'] = 'server.config.SaaSServerConfig'
 
-import socketio  # noqa: E402
+# SaaS registers enterprise routes below, then mounts the frontend last. Avoid
+# the base app's import-time SPA mount from shadowing those routes.
+os.environ['SERVE_FRONTEND'] = 'false'
+
 from fastapi import Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
+    BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_DATA_CENTER_HOST,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
@@ -32,7 +36,6 @@ from server.routes.github_proxy import add_github_proxy_routes  # noqa: E402
 from server.routes.integration.jira import jira_integration_router  # noqa: E402
 from server.routes.integration.jira_dc import jira_dc_integration_router  # noqa: E402
 from server.routes.integration.slack import slack_router  # noqa: E402
-from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
 from server.routes.org_invitations import (  # noqa: E402
     accept_router as invitation_accept_router,
@@ -56,20 +59,14 @@ from server.sharing.shared_event_router import (  # noqa: E402
 from server.verified_models.verified_model_router import (  # noqa: E402
     api_router as verified_models_router,
 )
-from server.verified_models.verified_model_router import (  # noqa: E402
-    override_llm_models_dependency,
-)
 
-from openhands.server.app import app as base_app  # noqa: E402
-from openhands.server.listen_socket import sio  # noqa: E402
-from openhands.server.middleware import (  # noqa: E402
+from openhands.app_server.app import app as base_app  # noqa: E402
+from openhands.app_server.middleware import (  # noqa: E402
     CacheControlMiddleware,
 )
-from openhands.server.static import SPAStaticFiles  # noqa: E402
+from openhands.app_server.static import SPAStaticFiles  # noqa: E402
 
 directory = os.getenv('FRONTEND_DIRECTORY', './frontend/build')
-
-patch_mcp_server()
 
 
 @base_app.get('/saas')
@@ -116,16 +113,25 @@ if GITLAB_APP_CLIENT_ID:
 
     base_app.include_router(gitlab_integration_router)
 
+# Add Bitbucket Cloud integration router only if BITBUCKET_APP_CLIENT_ID is set
+if BITBUCKET_APP_CLIENT_ID:
+    from integrations.bitbucket.bitbucket_v1_callback_processor import (  # noqa: E402
+        BitbucketV1CallbackProcessor,
+    )
+    from server.routes.integration.bitbucket import (  # noqa: E402
+        bitbucket_integration_router,
+    )
+
+    logger.debug(f'Loaded {BitbucketV1CallbackProcessor.__name__}')
+
+    base_app.include_router(bitbucket_integration_router)
+
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
 base_app.include_router(
     verified_models_router
 )  # Add routes for verified models management
-
-# Override the default LLM models implementation with SaaS version
-# This must happen after all routers are included
-override_llm_models_dependency(base_app)
 
 # Override the /api/v1/users/me endpoint to include organization info
 # This replaces the OSS endpoint with a SAAS version that adds org_id, org_name, role, permissions
@@ -145,6 +151,18 @@ if BITBUCKET_DATA_CENTER_HOST:
     )
 
     base_app.include_router(bitbucket_dc_proxy_router)
+
+    # Bitbucket Data Center resolver webhook (PR comment trigger).
+    from integrations.bitbucket_data_center.bitbucket_dc_v1_callback_processor import (  # noqa: E402
+        BitbucketDCV1CallbackProcessor,
+    )
+    from server.routes.integration.bitbucket_dc import (  # noqa: E402
+        bitbucket_dc_integration_router,
+    )
+
+    logger.debug(f'Loaded {BitbucketDCV1CallbackProcessor.__name__}')
+
+    base_app.include_router(bitbucket_dc_integration_router)
 base_app.include_router(email_router)  # Add routes for email management
 
 
@@ -178,4 +196,5 @@ async def expired_exception_handler(request: Request, exc: ExpiredError):
     return JSONResponse({'error': ExpiredError.__name__}, status.HTTP_401_UNAUTHORIZED)
 
 
-app = socketio.ASGIApp(sio, other_asgi_app=base_app)
+# Note: socketio is no longer used for communication. The base FastAPI app is used directly.
+app = base_app

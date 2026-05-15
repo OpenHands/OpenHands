@@ -24,8 +24,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     ConversationTrigger,
 )
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
-from openhands.integrations.service_types import ProviderType
 
 # Test UUIDs
 USER1_ID = UUID('a1111111-1111-1111-1111-111111111111')
@@ -1031,6 +1031,12 @@ class TestApiKeyOrgIdHandling:
             def get_api_key_org_id(self) -> UUID | None:
                 return self.api_key_org_id
 
+            async def get_effective_org_id(self) -> UUID | None:
+                # Mirror SaasUserAuth precedence: API-key binding wins
+                # over the user's current_org_id. Returning None lets the
+                # injector fall back to user.current_org_id.
+                return self.api_key_org_id
+
         # Create a mock UserContext that wraps the MockUserAuth
         @dataclass
         class MockAuthUserContext:
@@ -1111,6 +1117,12 @@ class TestApiKeyOrgIdHandling:
                 return self.user_id
 
             def get_api_key_org_id(self) -> UUID | None:
+                return self.api_key_org_id
+
+            async def get_effective_org_id(self) -> UUID | None:
+                # Mirror SaasUserAuth precedence: API-key binding wins
+                # over the user's current_org_id. Returning None lets the
+                # injector fall back to user.current_org_id.
                 return self.api_key_org_id
 
         @dataclass
@@ -1225,6 +1237,12 @@ class TestApiKeyOrgIdHandling:
                 return self.user_id
 
             def get_api_key_org_id(self) -> UUID | None:
+                return self.api_key_org_id
+
+            async def get_effective_org_id(self) -> UUID | None:
+                # Mirror SaasUserAuth precedence: API-key binding wins
+                # over the user's current_org_id. Returning None lets the
+                # injector fall back to user.current_org_id.
                 return self.api_key_org_id
 
         @dataclass

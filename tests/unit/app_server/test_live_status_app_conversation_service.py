@@ -26,6 +26,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
 )
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     ExposedUrl,
@@ -39,17 +41,24 @@ from openhands.app_server.settings.settings_models import (
     Settings,
 )
 from openhands.app_server.user.user_context import UserContext
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.integrations.service_types import SuggestedTask, TaskType
 from openhands.sdk import Agent, Event
+from openhands.sdk.context.agent_context import AgentContext as _AgentContext
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.server.types import AppMode
+
+# True only on SDK versions that include PR #2984 (secrets acp_compatible=True).
+# When False, _build_acp_start_conversation_request skips the agent_context path.
+_SDK_SUPPORTS_ACP_SECRETS = (
+    _AgentContext.model_fields.get('secrets') is not None
+    and isinstance(_AgentContext.model_fields['secrets'].json_schema_extra, dict)
+    and _AgentContext.model_fields['secrets'].json_schema_extra.get('acp_compatible')
+    is True
+)
 
 
-def _build_test_user_agent_settings(user: SimpleNamespace) -> AgentSettings:
+def _build_test_user_agent_settings(user: SimpleNamespace) -> OpenHandsAgentSettings:
     llm_vals: dict = {}
     model = getattr(user, 'llm_model', '') or ''
     llm_vals['model'] = model
@@ -73,7 +82,7 @@ def _build_test_user_agent_settings(user: SimpleNamespace) -> AgentSettings:
 
 class _TestUserInfo(SimpleNamespace):
     @property
-    def agent_settings(self) -> AgentSettings:
+    def agent_settings(self) -> OpenHandsAgentSettings:
         override = getattr(self, '_agent_settings_override', None)
         if override is not None:
             return override
@@ -94,7 +103,7 @@ class _TestUserInfo(SimpleNamespace):
             kwargs['max_iterations'] = max_iter
         return ConversationSettings(**kwargs)
 
-    def to_agent_settings(self) -> AgentSettings:
+    def to_agent_settings(self) -> OpenHandsAgentSettings:
         return self.agent_settings
 
 
@@ -706,188 +715,6 @@ class TestLiveStatusAppConversationService:
         assert isinstance(llm, LLM)
         assert mcp_config == {}
 
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_with_user_search_api_key(self):
-        """Test _configure_llm_and_mcp adds tavily when user has search_api_key."""
-        # Arrange
-        self.mock_user.search_api_key = SecretStr('user_search_key')
-        self.mock_user_context.get_mcp_api_key.return_value = 'mcp_api_key'
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_with_env_tavily_key(self):
-        """Test _configure_llm_and_mcp adds tavily when service has tavily_api_key."""
-        # Arrange
-        self.service.tavily_api_key = 'env_tavily_key'
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_user_key_takes_precedence(self):
-        """Test _configure_llm_and_mcp user search_api_key takes precedence over env key."""
-        # Arrange
-        self.mock_user.search_api_key = SecretStr('user_search_key')
-        self.service.tavily_api_key = 'env_tavily_key'
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'tavily' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_no_tavily_without_keys(self):
-        """Test _configure_llm_and_mcp does not add tavily when no keys are available."""
-        # Arrange
-        self.mock_user.search_api_key = None
-        self.service.tavily_api_key = None
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' not in mcp_config['mcpServers']
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_saas_mode_no_tavily_without_user_key(self):
-        """Test _configure_llm_and_mcp does not add tavily in SAAS mode without user search_api_key.
-
-        In SAAS mode, the global tavily_api_key should not be passed to the service instance,
-        so tavily should only be added if the user has their own search_api_key.
-        """
-        # Arrange - simulate SAAS mode where no global tavily key is available
-        self.service.app_mode = AppMode.SAAS.value
-        self.service.tavily_api_key = None  # In SAAS mode, this should be None
-        self.mock_user.search_api_key = None
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' not in mcp_config['mcpServers']
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_saas_mode_with_user_search_key(self):
-        """Test _configure_llm_and_mcp adds tavily in SAAS mode when user has search_api_key.
-
-        Even in SAAS mode, if the user has their own search_api_key, tavily should be added.
-        """
-        # Arrange - simulate SAAS mode with user having their own search key
-        self.service.app_mode = AppMode.SAAS.value
-        self.service.tavily_api_key = None  # In SAAS mode, this should be None
-        self.mock_user.search_api_key = SecretStr('user_search_key')
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert 'tavily' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_with_empty_user_search_key(self):
-        """Test _configure_llm_and_mcp handles empty user search_api_key correctly."""
-        # Arrange
-        self.mock_user.search_api_key = SecretStr('')  # Empty string
-        self.service.tavily_api_key = 'env_tavily_key'
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'tavily' in mcp_config['mcpServers']
-        # Should fall back to env key since user key is empty
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_tavily_with_whitespace_user_search_key(self):
-        """Test _configure_llm_and_mcp handles whitespace-only user search_api_key correctly."""
-        # Arrange
-        self.mock_user.search_api_key = SecretStr('   ')  # Whitespace only
-        self.service.tavily_api_key = 'env_tavily_key'
-        self.mock_user_context.get_mcp_api_key.return_value = None
-
-        # Act
-        llm, mcp_config = await self.service._configure_llm_and_mcp(
-            self.mock_user, None, self.conversation_id
-        )
-
-        # Assert
-        assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-        assert 'tavily' in mcp_config['mcpServers']
-        # Should fall back to env key since user key is whitespace only
-        assert (
-            mcp_config['mcpServers']['tavily']['url']
-            == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
-        )
-
     def test_compute_plan_path_default_uses_agents_tmp(self):
         """Test _compute_plan_path returns .agents_tmp/PLAN.md for default/GitHub."""
         # Arrange
@@ -1112,6 +939,100 @@ class TestLiveStatusAppConversationService:
         self.service._configure_llm_and_mcp.assert_called_once_with(
             self.mock_user, 'gpt-4', test_conversation_id
         )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_registered_agent_definitions'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.register_builtins_agents'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_passes_enable_sub_agents_true(
+        self, mock_tools, mock_register_builtins, mock_get_agent_definitions
+    ):
+        """Built-in sub-agents are registered when the user setting is on."""
+        from openhands.sdk.settings import OpenHandsAgentSettings
+        from openhands.sdk.subagent.schema import AgentDefinition
+
+        agent_definition = AgentDefinition(
+            name='general-purpose',
+            description='General-purpose subagent',
+            tools=['terminal'],
+        )
+        mock_get_agent_definitions.return_value = [agent_definition]
+
+        agent_settings = OpenHandsAgentSettings(
+            llm={'model': 'gpt-4', 'api_key': 'test-key'},
+            enable_sub_agents=True,
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        mock_register_builtins.assert_called_once_with(enable_browser=True)
+        mock_get_agent_definitions.assert_called_once_with()
+        mock_tools.assert_called_once_with(enable_browser=True, enable_sub_agents=True)
+        assert result.agent_definitions == [agent_definition]
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_registered_agent_definitions'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.register_builtins_agents'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_passes_enable_sub_agents_false(
+        self, mock_tools, mock_register_builtins, mock_get_agent_definitions
+    ):
+        """Built-in sub-agents are registered but not forwarded when disabled."""
+        from openhands.sdk.settings import OpenHandsAgentSettings
+
+        agent_settings = OpenHandsAgentSettings(
+            llm={'model': 'gpt-4', 'api_key': 'test-key'},
+            enable_sub_agents=False,
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+        )
+
+        mock_register_builtins.assert_called_once_with(enable_browser=True)
+        mock_get_agent_definitions.assert_not_called()
+        mock_tools.assert_called_once_with(enable_browser=True, enable_sub_agents=False)
+        assert result.agent_definitions == []
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
@@ -1736,7 +1657,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_remote_servers(self):
         """Test _configure_llm_and_mcp merges custom remote servers."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1765,7 +1686,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_http_servers(self):
         """Test _configure_llm_and_mcp merges custom HTTP servers with timeout."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1790,7 +1711,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_stdio_servers(self):
         """Test _configure_llm_and_mcp merges custom STDIO servers with explicit names."""
-        from openhands.core.config.mcp_config import MCPConfig, StdioMCPServer
+        from fastmcp.mcp_config import MCPConfig, StdioMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1819,13 +1740,12 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_merges_system_and_custom_servers(self):
         """Test _configure_llm_and_mcp merges both system and custom MCP servers."""
-        from openhands.core.config.mcp_config import (
+        from fastmcp.mcp_config import (
             MCPConfig,
             RemoteMCPServer,
             StdioMCPServer,
         )
 
-        self.mock_user.search_api_key = SecretStr('tavily_key')
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
                 'custom-sse': RemoteMCPServer(
@@ -1842,12 +1762,13 @@ class TestLiveStatusAppConversationService:
 
         mcp_servers = mcp_config['mcpServers']
 
+        # System provides default MCP server (Tavily is proxied through it if configured)
         assert 'default' in mcp_servers
-        assert 'tavily' in mcp_servers
+        # Custom servers are merged
         assert 'custom-sse' in mcp_servers
         assert 'custom-stdio' in mcp_servers
 
-        assert len(mcp_servers) == 4
+        assert len(mcp_servers) == 3
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_custom_config_error_handling(self):
@@ -1896,7 +1817,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_empty_custom_config(self):
         """Test _configure_llm_and_mcp handles empty custom MCP config."""
-        from openhands.core.config.mcp_config import MCPConfig
+        from fastmcp.mcp_config import MCPConfig
 
         self.mock_user.mcp_config = MCPConfig(mcpServers={})
         self.mock_user_context.get_mcp_api_key.return_value = None
@@ -1912,7 +1833,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_remote_server_without_auth(self):
         """Test _configure_llm_and_mcp handles remote servers without auth."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1931,7 +1852,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_http_server_default_timeout(self):
         """Test _configure_llm_and_mcp handles HTTP servers with default timeout."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1952,7 +1873,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_stdio_server_without_env(self):
         """Test _configure_llm_and_mcp handles STDIO servers without environment variables."""
-        from openhands.core.config.mcp_config import MCPConfig, StdioMCPServer
+        from fastmcp.mcp_config import MCPConfig, StdioMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -1974,7 +1895,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_multiple_servers_same_type(self):
         """Test _configure_llm_and_mcp handles multiple custom servers of the same type."""
-        from openhands.core.config.mcp_config import MCPConfig, RemoteMCPServer
+        from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
         self.mock_user.mcp_config = MCPConfig(
             mcpServers={
@@ -2004,7 +1925,7 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_mixed_server_types(self):
         """Test _configure_llm_and_mcp handles all server types together."""
-        from openhands.core.config.mcp_config import (
+        from fastmcp.mcp_config import (
             MCPConfig,
             RemoteMCPServer,
             StdioMCPServer,
@@ -3302,7 +3223,7 @@ class TestAgentKindConversationUrl:
             id=UUID('11111111-1111-1111-1111-111111111111'),
             created_by_user_id=None,
             sandbox_id='sandbox-a',
-            agent_kind='llm',
+            agent_kind='openhands',
         )
         sandbox = SandboxInfo(
             id='sandbox-a',
@@ -3361,20 +3282,26 @@ class TestAgentKindConversationUrl:
         )
 
     def test_agent_kind_to_router_path_known_kinds(self):
-        """``'llm'`` → ``'conversations'``, ``'acp'`` → ``'acp/conversations'``."""
+        """``'openhands'`` routes to standard conversations; ``'acp'`` to ACP."""
+        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
+            _agent_kind_to_router_path,
+        )
+
+        assert _agent_kind_to_router_path('openhands') == 'conversations'
+        assert _agent_kind_to_router_path('acp') == 'acp/conversations'
+
+    def test_agent_kind_to_router_path_unknown_falls_back(self):
+        """Any value that is not 'acp' routes to 'conversations'.
+
+        This includes the legacy ``'llm'`` value that the old default emitted
+        before the rename, so rows stored with ``agent_kind='llm'`` continue to
+        route correctly without a migration.
+        """
         from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
             _agent_kind_to_router_path,
         )
 
         assert _agent_kind_to_router_path('llm') == 'conversations'
-        assert _agent_kind_to_router_path('acp') == 'acp/conversations'
-
-    def test_agent_kind_to_router_path_unknown_falls_back(self):
-        """Unknown variants fall back to the LLM route."""
-        from openhands.app_server.app_conversation.live_status_app_conversation_service import (  # noqa: E501
-            _agent_kind_to_router_path,
-        )
-
         assert _agent_kind_to_router_path('future-variant') == 'conversations'
 
 
@@ -3464,10 +3391,14 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.agent_context is not None
-        ctx = request.agent.agent_context.secrets
-        assert ctx.get('GITHUB_TOKEN') is github_secret
-        assert ctx.get('MY_API_KEY') is api_secret
+        if _SDK_SUPPORTS_ACP_SECRETS:
+            assert request.agent.agent_context is not None
+            ctx = request.agent.agent_context.secrets
+            assert ctx.get('GITHUB_TOKEN') is github_secret
+            assert ctx.get('MY_API_KEY') is api_secret
+        else:
+            # Pinned SDK doesn't support ACP secrets yet; agent_context stays unset.
+            assert request.agent.agent_context is None
 
     @pytest.mark.asyncio
     async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
@@ -3480,8 +3411,11 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
+        if _SDK_SUPPORTS_ACP_SECRETS:
+            assert request.agent.agent_context is not None
+            assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
+        else:
+            assert request.agent.agent_context is None
 
     @pytest.mark.asyncio
     async def test_explicit_acp_env_preserved(self, service, tmp_path):
@@ -3509,10 +3443,14 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
-        )
+        if _SDK_SUPPORTS_ACP_SECRETS:
+            assert request.agent.agent_context is not None
+            assert (
+                request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY')
+                is panel_secret
+            )
+        else:
+            assert request.agent.agent_context is None
 
     @pytest.mark.asyncio
     async def test_no_secrets_no_agent_context(self, service, tmp_path):

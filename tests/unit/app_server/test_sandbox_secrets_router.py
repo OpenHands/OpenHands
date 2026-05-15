@@ -16,6 +16,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.integrations.provider import ProviderHandler, ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
     SandboxStatus,
@@ -32,11 +34,9 @@ from openhands.app_server.sandbox.session_auth import (
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.user.user_router import get_current_user
-from openhands.integrations.provider import ProviderHandler, ProviderToken
-from openhands.integrations.service_types import ProviderType
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import StaticSecret
-from openhands.sdk.settings import AgentSettings
+from openhands.sdk.settings import OpenHandsAgentSettings
 
 SANDBOX_ID = 'sb-test-123'
 USER_ID = 'test-user-id'
@@ -135,7 +135,7 @@ class TestValidateSessionKey:
             mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
             mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            from openhands.server.types import AppMode
+            from openhands.app_server.types import AppMode
 
             mock_cfg.return_value.app_mode = AppMode.SAAS
 
@@ -257,7 +257,7 @@ class TestGetCurrentUserExposeSecrets:
         """With valid session key, expose_secrets=true returns unmasked llm_api_key."""
         user_info = UserInfo(
             id=USER_ID,
-            agent_settings=AgentSettings(
+            agent_settings=OpenHandsAgentSettings(
                 llm=LLM(
                     model='anthropic/claude-sonnet-4-20250514',
                     api_key=SecretStr('sk-test-key-123'),
@@ -337,7 +337,7 @@ class TestGetCurrentUserExposeSecrets:
         """Without expose_secrets, llm_api_key is masked (no session key needed)."""
         user_info = UserInfo(
             id=USER_ID,
-            agent_settings=AgentSettings(
+            agent_settings=OpenHandsAgentSettings(
                 llm=LLM(model='gpt-4o', api_key=SecretStr('sk-test-key-123')),
             ),
         )
@@ -553,7 +553,7 @@ class TestExposeSecretsIntegration:
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
                 id=USER_ID,
-                agent_settings=AgentSettings(
+                agent_settings=OpenHandsAgentSettings(
                     llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
                 ),
             )
@@ -574,7 +574,7 @@ class TestExposeSecretsIntegration:
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
                 id=USER_ID,
-                agent_settings=AgentSettings(
+                agent_settings=OpenHandsAgentSettings(
                     llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
                 ),
             )
@@ -606,7 +606,7 @@ class TestExposeSecretsIntegration:
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
                 id='user-A',
-                agent_settings=AgentSettings(
+                agent_settings=OpenHandsAgentSettings(
                     llm=LLM(model='gpt-4o', api_key=SecretStr('sk-secret-123')),
                 ),
             )
@@ -642,7 +642,7 @@ class TestExposeSecretsIntegration:
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
                 id=USER_ID,
-                agent_settings=AgentSettings(
+                agent_settings=OpenHandsAgentSettings(
                     llm=LLM(
                         model='anthropic/claude-sonnet-4-20250514',
                         api_key=SecretStr('sk-real-secret'),
@@ -684,7 +684,7 @@ class TestExposeSecretsIntegration:
         mock_user_ctx.get_user_info = AsyncMock(
             return_value=UserInfo(
                 id=USER_ID,
-                agent_settings=AgentSettings(
+                agent_settings=OpenHandsAgentSettings(
                     llm=LLM(
                         model='gpt-4o',
                         api_key=SecretStr('sk-should-be-masked'),

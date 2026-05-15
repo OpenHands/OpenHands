@@ -12,9 +12,9 @@ import pytest
 from fastapi import HTTPException, status
 from pydantic import SecretStr
 
+from openhands.app_server.integrations.provider import ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.user_context import UserContext
-from openhands.integrations.provider import ProviderToken
-from openhands.integrations.service_types import ProviderType
 
 
 def _make_user_context(provider_tokens, user_id: str = 'user-1') -> UserContext:
@@ -26,8 +26,12 @@ def _make_user_context(provider_tokens, user_id: str = 'user-1') -> UserContext:
 
 
 @pytest.mark.asyncio
-async def test_raises_401_when_no_provider_tokens():
-    """Without provider tokens the endpoint refuses the request."""
+async def test_raises_403_when_no_provider_tokens():
+    """Without provider tokens the endpoint refuses the request with 403 Forbidden.
+
+    Note: Uses 403 (not 401) to avoid triggering automatic logout in the frontend.
+    The user is authenticated but lacks the required git provider token.
+    """
     # Arrange
     from server.routes.users_v1 import get_current_user_git_organizations
 
@@ -38,7 +42,7 @@ async def test_raises_401_when_no_provider_tokens():
         await get_current_user_git_organizations(user_context=user_context)
 
     # Assert
-    assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert excinfo.value.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
@@ -97,7 +101,7 @@ async def test_returns_organizations_for_supported_provider(
     )
 
     with patch(
-        'openhands.integrations.provider.ProviderHandler.get_service'
+        'openhands.app_server.integrations.provider.ProviderHandler.get_service'
     ) as mock_get_service:
         mock_service = mock_get_service.return_value
         setattr(mock_service, service_method, AsyncMock(return_value=service_return))

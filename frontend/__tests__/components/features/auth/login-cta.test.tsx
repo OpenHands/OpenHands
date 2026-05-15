@@ -4,11 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
 import { LoginCTA } from "#/components/features/auth/login-cta";
 
-// Mock useTracking hook
-const mockTrackSaasSelfhostedInquiry = vi.fn();
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackSaasSelfhostedInquiry: mockTrackSaasSelfhostedInquiry,
+vi.mock("#/hooks/use-client-analytics", () => ({
+  useClientAnalytics: () => ({
+    trackEnterpriseCTAClicked: vi.fn(),
+    trackEnterpriseLeadFormSubmitted: vi.fn(),
   }),
 }));
 
@@ -49,7 +48,7 @@ describe("LoginCTA", () => {
     expect(screen.getByText("CTA$FEATURE_SUPPORT")).toBeInTheDocument();
   });
 
-  it("should track and navigate to information request page when Learn More is clicked", async () => {
+  it("should navigate to information request page when Learn More is clicked", async () => {
     const user = userEvent.setup();
     renderWithRouter();
 
@@ -58,9 +57,6 @@ describe("LoginCTA", () => {
     });
     await user.click(learnMoreLink);
 
-    expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
-      location: "login_page",
-    });
     expect(screen.getByTestId("information-request-page")).toBeInTheDocument();
   });
 
@@ -90,17 +86,4 @@ describe("LoginCTA", () => {
     expect(learnMoreLink).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("should track device_verify location when Learn More is clicked in device verify mode", async () => {
-    const user = userEvent.setup();
-    renderWithRouter("device_verify");
-
-    const learnMoreLink = screen.getByRole("link", {
-      name: "CTA$LEARN_MORE",
-    });
-    await user.click(learnMoreLink);
-
-    expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
-      location: "device_verify",
-    });
-  });
 });

@@ -9,7 +9,7 @@ try:
 except ImportError:
     RESEND_AVAILABLE = False
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 DEFAULT_FROM_EMAIL = 'OpenHands <no-reply@openhands.dev>'
 DEFAULT_WEB_HOST = 'https://app.all-hands.dev'

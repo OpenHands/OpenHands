@@ -6,21 +6,22 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.app import app
+from openhands.app_server.file_store.memory import InMemoryFileStore
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.integrations.service_types import UserGitInfo
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
-    AgentSettings,
     ConversationSettings,
+    OpenHandsAgentSettings,
     VerificationSettings,
 )
-from openhands.server.app import app
-from openhands.server.user_auth.user_auth import UserAuth
 
 _EXPOSE = {'expose_secrets': True}
 
@@ -88,8 +89,8 @@ class MockUserAuth(UserAuth):
 
 
 @pytest.fixture
-def test_client(tmp_path):
-    # Create a test client with a temp directory for file settings store
+def test_client():
+    # Create a test client
     with (
         patch.dict(
             os.environ,
@@ -98,12 +99,12 @@ def test_client(tmp_path):
         ),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            'openhands.server.user_auth.user_auth.UserAuth.get_instance',
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=MockUserAuth(),
         ),
         patch(
             'openhands.app_server.settings.file_settings_store.FileSettingsStore.get_instance',
-            AsyncMock(return_value=FileSettingsStore(root_dir=tmp_path)),
+            AsyncMock(return_value=FileSettingsStore(InMemoryFileStore())),
         ),
     ):
         client = TestClient(app)
@@ -116,10 +117,14 @@ def test_get_agent_settings_schema_includes_critic_verification_fields(test_clie
     assert response.status_code == 200
     schema = response.json()
     section_keys = [s['key'] for s in schema['sections']]
+    general_section = next(s for s in schema['sections'] if s['key'] == 'general')
+    general_field_keys = [f['key'] for f in general_section['fields']]
+    assert 'enable_sub_agents' in general_field_keys
     assert 'verification' in section_keys
     section = next(s for s in schema['sections'] if s['key'] == 'verification')
     field_keys = [f['key'] for f in section['fields']]
     assert 'verification.critic_enabled' in field_keys
+    assert 'verification.enable_iterative_refinement' in field_keys
     assert 'confirmation_mode' not in field_keys
     assert 'security_analyzer' not in field_keys
 
@@ -146,7 +151,7 @@ async def test_settings_api_endpoints(test_client):
     settings = Settings(
         language='en',
         remote_runtime_resource_factor=2,
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             agent='test-agent',
             llm=LLM(
                 model='test-model',
@@ -239,7 +244,7 @@ async def test_saving_settings_with_frozen_secrets_store(test_client):
     payload = _dump_update(
         Settings(
             language='en',
-            agent_settings=AgentSettings(llm=LLM(model='gpt-4')),
+            agent_settings=OpenHandsAgentSettings(llm=LLM(model='gpt-4')),
         )
     )
     # Inject an extra key the API should ignore gracefully
@@ -256,7 +261,7 @@ async def test_search_api_key_explicit_clear(test_client):
         json=_dump_update(
             Settings(
                 search_api_key='initial-secret-key',
-                agent_settings=AgentSettings(llm=LLM(model='gpt-4')),
+                agent_settings=OpenHandsAgentSettings(llm=LLM(model='gpt-4')),
             )
         ),
     )
@@ -271,7 +276,7 @@ async def test_search_api_key_explicit_clear(test_client):
         json=_dump_update(
             Settings(
                 search_api_key='',
-                agent_settings=AgentSettings(llm=LLM(model='claude-3-opus')),
+                agent_settings=OpenHandsAgentSettings(llm=LLM(model='claude-3-opus')),
             )
         ),
     )
@@ -291,7 +296,7 @@ async def test_disabled_skills_persistence(test_client):
         json=_dump_update(
             Settings(
                 disabled_skills=['skill_a', 'skill_b'],
-                agent_settings=AgentSettings(llm=LLM(model='test-model')),
+                agent_settings=OpenHandsAgentSettings(llm=LLM(model='test-model')),
             )
         ),
     )

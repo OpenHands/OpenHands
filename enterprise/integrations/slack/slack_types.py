@@ -5,7 +5,7 @@ from integrations.types import SummaryExtractionTracker
 from jinja2 import Environment
 from storage.slack_user import SlackUser
 
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @dataclass
@@ -53,7 +53,7 @@ class SlackMessageView:
             SlackMessageView if all required fields are available,
             None if required fields are missing or bot token unavailable.
         """
-        from openhands.core.logger import openhands_logger as logger
+        from openhands.app_server.utils.logger import openhands_logger as logger
 
         team_id = payload.get('team', {}).get('id') or payload.get('team_id')
         channel_id = (

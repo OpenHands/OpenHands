@@ -1,0 +1,159 @@
+---
+name: PR Readiness Confirmation
+
+on:
+  # Trigger when a PR is opened (non-draft) or converted from draft to ready.
+  pull_request:
+    types: [opened, ready_for_review]
+  pull_request_target:
+    types: [opened, ready_for_review]
+
+  # Daily check for stale unconfirmed PRs.
+  schedule:
+    - cron: '0 9 * * *'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ── Post a confirmation request when a PR becomes ready for review ──
+  ask-confirmation:
+    if: |
+      github.event_name != 'schedule' &&
+      github.event.pull_request.draft == false &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        ) ||
+        (
+          github.event_name == 'pull_request_target' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        )
+      ) &&
+      (
+        github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR' ||
+        github.event.pull_request.author_association == 'NONE'
+      )
+    concurrency:
+      group: pr-readiness-confirm-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check for existing confirmation comment
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- pr-readiness-confirm -->';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            core.setOutput('exists', existing ? 'true' : 'false');
+
+      - name: Post confirmation request
+        if: steps.check.outputs.exists != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- pr-readiness-confirm -->';
+            const body = [
+              marker,
+              '👋 Thanks for opening this PR!',
+              '',
+              'Your PR is marked for review. Can you confirm with a 👍 reaction **on this comment** or a reply that this PR is ready to review?',
+              '',
+              '> If no confirmation is received within 7 days, this PR will be converted back to a draft.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+  # ── Convert stale unconfirmed PRs back to draft ──
+  check-stale-unconfirmed:
+    if: github.event_name == 'schedule' && github.repository == 'OpenHands/OpenHands'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Find and convert stale unconfirmed PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const STALE_DAYS = 7;
+            const marker = '<!-- pr-readiness-confirm -->';
+            const cutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
+
+            // List open, non-draft PRs
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            for (const pr of prs) {
+              if (pr.draft) continue;
+
+              // Look for the bot's confirmation comment
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+              });
+
+              const botComment = comments.find(c => c.body.includes(marker));
+              if (!botComment) continue;
+
+              const commentDate = new Date(botComment.created_at);
+              if (commentDate > cutoff) continue; // not stale yet
+
+              // Check for a 👍 reaction from the PR author
+              const reactions = await github.paginate(github.rest.reactions.listForIssueComment, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+              });
+              const authorReacted = reactions.some(
+                r => r.user.login === pr.user.login && r.content === '+1'
+              );
+              if (authorReacted) continue;
+
+              // Check for any comment from the PR author after the bot comment
+              const authorReplied = comments.some(
+                c => c.user.login === pr.user.login &&
+                     new Date(c.created_at) > commentDate
+              );
+              if (authorReplied) continue;
+
+              // Convert to draft via GraphQL
+              try {
+                core.info(`Converting PR #${pr.number} back to draft (no confirmation after ${STALE_DAYS} days)`);
+                await github.graphql(`
+                  mutation($id: ID!) {
+                    convertPullRequestToDraft(input: { pullRequestId: $id }) {
+                      pullRequest { number }
+                    }
+                  }
+                `, { id: pr.node_id });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: [
+                    `This PR has been converted back to a draft because no confirmation was received within ${STALE_DAYS} days.`,
+                    '',
+                    'When you\'re ready, please mark it as ready for review again.',
+                  ].join('\n'),
+                });
+              } catch (error) {
+                core.warning(`Failed to convert PR #${pr.number} to draft: ${error.message}`);
+              }
+            }

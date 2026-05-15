@@ -2,23 +2,32 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 
+from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.app_server.utils.file_store_mixin import FileStoreMixin
-from openhands.core.config.openhands_config import OpenHandsConfig
+from openhands.app_server.utils.async_utils import call_sync_from_async
 
 
 @dataclass
-class FileSettingsStore(FileStoreMixin, SettingsStore):
-    root_dir: Path
-    filename: str = 'settings.json'
+class FileSettingsStore(SettingsStore):
+    file_store: FileStore
+    path: str = 'settings.json'
 
     async def load(self) -> Settings | None:
         try:
-            json_str = await self._read_file_async()
+            json_str = await call_sync_from_async(self.file_store.read, self.path)
             kwargs = json.loads(json_str)
+            # Seed a Default profile from legacy agent_settings.llm when
+            # llm_profiles is absent — pre-llm_profiles settings.json files
+            # would otherwise present an empty profiles UI on upgrade.
+            if 'llm_profiles' not in kwargs:
+                legacy_llm = (kwargs.get('agent_settings') or {}).get('llm')
+                if isinstance(legacy_llm, dict) and legacy_llm.get('model'):
+                    kwargs['llm_profiles'] = {
+                        'profiles': {'Default': legacy_llm},
+                        'active': 'Default',
+                    }
             settings = Settings(**kwargs)
 
             # Turn on V1 in OpenHands
@@ -33,11 +42,15 @@ class FileSettingsStore(FileStoreMixin, SettingsStore):
         json_str = settings.model_dump_json(
             context={'expose_secrets': True, 'persist_settings': True}
         )
-        await self._write_file_async(json_str)
+        await call_sync_from_async(self.file_store.write, self.path, json_str)
 
     @classmethod
-    async def get_instance(
-        cls, config: OpenHandsConfig, user_id: str | None
-    ) -> FileSettingsStore:
-        root_dir = cls._resolve_root_dir(config.file_store_path)
-        return FileSettingsStore(root_dir=root_dir)
+    async def get_instance(cls, user_id: str | None) -> FileSettingsStore:
+        """Get a FileSettingsStore instance using the global config's file_store.
+
+        TODO: This method should be replaced with dependency injection.
+        """
+        from openhands.app_server.config import get_global_config
+
+        file_store = get_global_config().file_store
+        return FileSettingsStore(file_store)

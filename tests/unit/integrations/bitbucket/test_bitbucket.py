@@ -5,14 +5,18 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import SecretStr
 
+from openhands.app_server.integrations.bitbucket.bitbucket_service import (
+    BitBucketService,
+)
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.integrations.service_types import OwnerType, Repository
+from openhands.app_server.integrations.service_types import (
+    ProviderType as ServiceProviderType,
+)
+from openhands.app_server.integrations.utils import validate_provider_token
 from openhands.app_server.secrets.secrets_router import check_provider_tokens
 from openhands.app_server.settings.settings_models import POSTProviderModel
-from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.integrations.service_types import OwnerType, Repository
-from openhands.integrations.service_types import ProviderType as ServiceProviderType
-from openhands.integrations.utils import validate_provider_token
-from openhands.server.types import AppMode
+from openhands.app_server.types import AppMode
 
 
 # Provider Token Validation Tests
@@ -24,10 +28,14 @@ async def test_validate_provider_token_with_bitbucket_token():
     """
     # Mock the service classes to avoid actual API calls
     with (
-        patch('openhands.integrations.utils.GitHubService') as mock_github_service,
-        patch('openhands.integrations.utils.GitLabService') as mock_gitlab_service,
         patch(
-            'openhands.integrations.utils.BitBucketService'
+            'openhands.app_server.integrations.utils.GitHubService'
+        ) as mock_github_service,
+        patch(
+            'openhands.app_server.integrations.utils.GitLabService'
+        ) as mock_gitlab_service,
+        patch(
+            'openhands.app_server.integrations.utils.BitBucketService'
         ) as mock_bitbucket_service,
     ):
         # Set up the mocks
@@ -44,7 +52,7 @@ async def test_validate_provider_token_with_bitbucket_token():
         mock_bitbucket_service.return_value = bitbucket_instance
 
         # Test with a Bitbucket token
-        token = SecretStr('username:app_password')
+        token = SecretStr('test@example.com:api_token')
         result = await validate_provider_token(token)
 
         # Verify that all services were tried
@@ -66,7 +74,7 @@ async def test_check_provider_tokens_with_only_bitbucket():
     # Create provider tokens with only Bitbucket
     provider_tokens = {
         ProviderType.BITBUCKET: ProviderToken(
-            token=SecretStr('username:app_password'), host='bitbucket.org'
+            token=SecretStr('test@example.com:api_token'), host='bitbucket.org'
         ),
         ProviderType.GITHUB: ProviderToken(token=SecretStr(''), host='github.com'),
         ProviderType.GITLAB: ProviderToken(token=SecretStr(''), host='gitlab.com'),
@@ -87,7 +95,7 @@ async def test_check_provider_tokens_with_only_bitbucket():
 
         # Verify that the token passed to validate_provider_token was the Bitbucket token
         args, kwargs = mock_validate.call_args
-        assert args[0].get_secret_value() == 'username:app_password'
+        assert args[0].get_secret_value() == 'test@example.com:api_token'
 
 
 @pytest.mark.asyncio
@@ -101,7 +109,17 @@ async def test_bitbucket_sort_parameter_mapping():
         # Mock workspaces response
         mock_request.side_effect = [
             # First call: workspaces
-            ({'values': [{'slug': 'test-workspace', 'name': 'Test Workspace'}]}, {}),
+            (
+                {
+                    'values': [
+                        {
+                            'workspace': {'slug': 'test-workspace'},
+                            'name': 'Test Workspace',
+                        }
+                    ]
+                },
+                {},
+            ),
             # Second call: repositories with mapped sort parameter
             ({'values': []}, {}),
         ]
@@ -132,7 +150,17 @@ async def test_bitbucket_pagination():
         # Mock responses for pagination test
         mock_request.side_effect = [
             # First call: workspaces
-            ({'values': [{'slug': 'test-workspace', 'name': 'Test Workspace'}]}, {}),
+            (
+                {
+                    'values': [
+                        {
+                            'workspace': {'slug': 'test-workspace'},
+                            'name': 'Test Workspace',
+                        }
+                    ]
+                },
+                {},
+            ),
             # Second call: first page of repositories
             (
                 {
@@ -198,10 +226,14 @@ async def test_validate_provider_token_with_empty_tokens():
     """Test that validate_provider_token handles empty tokens correctly."""
     # Create a mock for each service
     with (
-        patch('openhands.integrations.utils.GitHubService') as mock_github_service,
-        patch('openhands.integrations.utils.GitLabService') as mock_gitlab_service,
         patch(
-            'openhands.integrations.utils.BitBucketService'
+            'openhands.app_server.integrations.utils.GitHubService'
+        ) as mock_github_service,
+        patch(
+            'openhands.app_server.integrations.utils.GitLabService'
+        ) as mock_gitlab_service,
+        patch(
+            'openhands.app_server.integrations.utils.BitBucketService'
         ) as mock_bitbucket_service,
     ):
         # Configure mocks to raise exceptions for invalid tokens
@@ -251,7 +283,7 @@ async def test_bitbucket_get_repositories_with_user_owner_type():
     service = BitBucketService(token=SecretStr('test-token'))
 
     # Mock repository data for user repositories (private workspace)
-    mock_workspaces = [{'slug': 'test-user', 'name': 'Test User'}]
+    mock_workspaces = [{'workspace': {'slug': 'test-user'}, 'name': 'Test User'}]
     mock_repos = [
         {
             'uuid': 'repo-1',
@@ -290,7 +322,7 @@ async def test_bitbucket_get_repositories_with_organization_owner_type():
     service = BitBucketService(token=SecretStr('test-token'))
 
     # Mock repository data for organization repositories (public workspace)
-    mock_workspaces = [{'slug': 'test-org', 'name': 'Test Organization'}]
+    mock_workspaces = [{'workspace': {'slug': 'test-org'}, 'name': 'Test Organization'}]
     mock_repos = [
         {
             'uuid': 'repo-3',
@@ -330,8 +362,8 @@ async def test_bitbucket_get_repositories_mixed_owner_types():
 
     # Mock repository data with mixed workspace types
     mock_workspaces = [
-        {'slug': 'test-user', 'name': 'Test User'},
-        {'slug': 'test-org', 'name': 'Test Organization'},
+        {'workspace': {'slug': 'test-user'}, 'name': 'Test User'},
+        {'workspace': {'slug': 'test-org'}, 'name': 'Test Organization'},
     ]
 
     # First workspace (user) repositories
@@ -378,7 +410,9 @@ async def test_bitbucket_get_repositories_mixed_owner_types():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_selects_primary_confirmed():
     """_resolve_primary_email returns the email marked primary and confirmed."""
-    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        BitBucketMixinBase,
+    )
 
     emails = [
         {'email': 'secondary@example.com', 'is_primary': False, 'is_confirmed': True},
@@ -396,7 +430,9 @@ async def test_resolve_primary_email_selects_primary_confirmed():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_when_no_primary():
     """_resolve_primary_email returns None when no email is marked primary."""
-    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        BitBucketMixinBase,
+    )
 
     emails = [
         {'email': 'a@example.com', 'is_primary': False, 'is_confirmed': True},
@@ -409,7 +445,9 @@ async def test_resolve_primary_email_returns_none_when_no_primary():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_when_primary_not_confirmed():
     """_resolve_primary_email returns None when primary email is not confirmed."""
-    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        BitBucketMixinBase,
+    )
 
     emails = [
         {'email': 'primary@example.com', 'is_primary': True, 'is_confirmed': False},
@@ -422,7 +460,9 @@ async def test_resolve_primary_email_returns_none_when_primary_not_confirmed():
 @pytest.mark.asyncio
 async def test_resolve_primary_email_returns_none_for_empty_list():
     """_resolve_primary_email returns None for an empty list."""
-    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+    from openhands.app_server.integrations.bitbucket.service.base import (
+        BitBucketMixinBase,
+    )
 
     result = BitBucketMixinBase._resolve_primary_email([])
     assert result is None

@@ -9,14 +9,31 @@ import VerificationSettingsScreen, {
 } from "#/routes/verification-settings";
 import { Settings } from "#/types/settings";
 
+const mockUseConfig = vi.fn();
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => mockUseConfig(),
+}));
+
+vi.mock("#/hooks/query/use-is-authed", () => ({
+  useIsAuthed: () => ({ data: true }),
+}));
+
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     ...MOCK_DEFAULT_USER_SETTINGS,
     ...overrides,
+    agent_settings: {
+      ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+      ...overrides.agent_settings,
+    },
     conversation_settings: {
       ...MOCK_DEFAULT_USER_SETTINGS.conversation_settings,
       ...overrides.conversation_settings,
     },
+    agent_settings_schema:
+      overrides.agent_settings_schema ??
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema,
     conversation_settings_schema:
       overrides.conversation_settings_schema ??
       MOCK_DEFAULT_USER_SETTINGS.conversation_settings_schema,
@@ -39,31 +56,64 @@ function renderVerificationSettingsScreen() {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  mockUseConfig.mockReturnValue({
+    data: { app_mode: "oss" },
+    isLoading: false,
+  });
 });
 
 describe("VerificationSettingsScreen", () => {
-  it("keeps confirmation mode visible in the basic view", async () => {
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+  it("renders critic controls alongside existing confirmation settings", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          verification: {
+            critic_enabled: true,
+            enable_iterative_refinement: false,
+          },
+        },
+      }),
+    );
 
     renderVerificationSettingsScreen();
 
     await screen.findByTestId("verification-settings-screen");
 
     expect(
+      screen.getByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).toBeInTheDocument();
+    expect(
       screen.getByTestId("sdk-settings-confirmation_mode"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-verification.critic_mode"),
+    ).not.toBeInTheDocument();
+    // Security analyzer is hidden when confirmation mode is off
     expect(
       screen.queryByTestId("sdk-settings-security_analyzer"),
     ).not.toBeInTheDocument();
   });
 
-  it("shows the security analyzer only in advanced view", async () => {
+  it("keeps security analyzer in the existing advanced view", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
         conversation_settings: {
           ...MOCK_DEFAULT_USER_SETTINGS.conversation_settings,
           confirmation_mode: true,
           security_analyzer: "llm",
+        },
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          verification: {
+            critic_enabled: true,
+            enable_iterative_refinement: false,
+          },
         },
       }),
     );
@@ -81,8 +131,10 @@ describe("VerificationSettingsScreen", () => {
     expect(
       await screen.findByTestId("sdk-settings-security_analyzer"),
     ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_mode"),
+    ).toBeInTheDocument();
   });
-
 });
 
 describe("clientLoader permission checks", () => {

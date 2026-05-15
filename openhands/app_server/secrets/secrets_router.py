@@ -8,6 +8,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from openhands.app_server.errors import AuthError
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    CustomSecret,
+    ProviderType,
+)
+from openhands.app_server.integrations.utils import validate_provider_token
 from openhands.app_server.secrets.secrets_models import (
     CustomSecretCreate,
     CustomSecretPage,
@@ -16,19 +22,14 @@ from openhands.app_server.secrets.secrets_models import (
 )
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.settings_models import POSTProviderModel
-from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.app_server.utils.models import EditResponse
-from openhands.integrations.provider import (
-    PROVIDER_TOKEN_TYPE,
-    CustomSecret,
-    ProviderType,
-)
-from openhands.integrations.utils import validate_provider_token
-from openhands.server.user_auth import (
+from openhands.app_server.user_auth import (
     get_provider_tokens,
     get_secrets,
     get_secrets_store,
+    get_user_id,
 )
+from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.app_server.utils.models import EditResponse
 
 # Create router with /api/v1/secrets prefix
 router = APIRouter(
@@ -96,6 +97,7 @@ async def store_provider_tokens(
     provider_info: POSTProviderModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
+    user_id: str | None = Depends(get_user_id),
 ) -> EditResponse:
     """Store git provider tokens.
 
@@ -130,6 +132,20 @@ async def store_provider_tokens(
         update={'provider_tokens': provider_info.provider_tokens}
     )
     await secrets_store.store(updated_secrets)
+
+    # ACTV-02: git provider connected analytics
+    from openhands.analytics import get_analytics_service, resolve_analytics_context
+
+    analytics = get_analytics_service()
+    if analytics and user_id and provider_info.provider_tokens:
+        ctx = await resolve_analytics_context(user_id)
+        for provider_type, token_value in provider_info.provider_tokens.items():
+            # Only fire for providers with actual token, not host-only updates
+            if token_value.token:
+                analytics.track_git_provider_connected(
+                    ctx=ctx,
+                    provider_type=provider_type.value,
+                )
 
     return EditResponse(
         message='Git providers stored',
@@ -188,6 +204,8 @@ async def search_custom_secrets(
 
     Retrieves the names and descriptions of custom secrets for the authenticated user.
     Results are paginated and can be filtered by name.
+
+    In SaaS mode, includes the system-generated OPENHANDS_API_KEY which cannot be deleted.
 
     Returns:
         CustomSecretPage: Paginated list of custom secrets (without values)
@@ -293,7 +311,7 @@ async def update_custom_secret(
     if existing_secrets:
         # Check if the secret to update exists
         if secret_id not in existing_secrets.custom_secrets:
-            return HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f'Secret with ID {secret_id} not found',
             )
