@@ -37,11 +37,14 @@ export function CustomChatInput({
   buttonClassName = "",
 }: CustomChatInputProps) {
   const {
+    images,
+    files,
     submittedMessage,
     clearAllFiles,
     setShouldHideSuggestions,
     setSubmittedMessage,
   } = useConversationStore();
+  const hasAttachments = images.length > 0 || files.length > 0;
 
   // Disable input when conversation is stopped
   const isConversationStopped = sandboxStatus === "MISSING";
@@ -95,6 +98,7 @@ export function CustomChatInput({
     fileInputRef as React.RefObject<HTMLInputElement | null>,
     smartResize,
     onSubmit,
+    hasAttachments,
     resetManualResize,
   );
 
@@ -166,7 +170,7 @@ export function CustomChatInput({
           onPaste={handlePaste}
           onKeyDown={(e) => {
             if (handleSlashKeyDown(e)) return;
-            handleKeyDown(e, isDisabled, handleSubmit);
+            handleKeyDown(e, isDisabled, handleSubmit, hasAttachments);
           }}
           onFocus={handleFocus}
           onBlur={() => {

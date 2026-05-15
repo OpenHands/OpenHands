@@ -63,7 +63,12 @@ export const useChatInputEvents = (
 
   // Handle key events
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent, disabled: boolean, handleSubmit: () => void) => {
+    (
+      e: React.KeyboardEvent,
+      disabled: boolean,
+      handleSubmit: () => void,
+      hasAttachments = false,
+    ) => {
       if (e.key !== "Enter") {
         return;
       }
@@ -74,7 +79,7 @@ export const useChatInputEvents = (
         return;
       }
 
-      if (checkIsContentEmpty()) {
+      if (checkIsContentEmpty() && !hasAttachments) {
         e.preventDefault();
         increaseHeightForEmptyContent();
         return;

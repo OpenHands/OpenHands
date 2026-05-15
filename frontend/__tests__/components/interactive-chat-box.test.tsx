@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
@@ -199,6 +199,44 @@ describe("InteractiveChatBox", () => {
     await user.click(submitButton);
 
     expect(onSubmitMock).toHaveBeenCalledWith("Hello, world!", [], []);
+  });
+
+  it("should submit attachments without text from the send button", async () => {
+    const user = userEvent.setup();
+    mockStores(AgentState.INIT);
+    const image = new File(["image-content"], "screenshot.png", {
+      type: "image/png",
+    });
+    useConversationStore.setState({ images: [image], files: [] });
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+    });
+
+    await user.click(screen.getByTestId("submit-button"));
+
+    expect(onSubmitMock).toHaveBeenCalledWith("", [image], []);
+  });
+
+  it("should submit attachments without text from Enter", () => {
+    mockStores(AgentState.INIT);
+    const file = new File(["file-content"], "notes.txt", {
+      type: "text/plain",
+    });
+    useConversationStore.setState({ images: [], files: [file] });
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+    });
+
+    fireEvent.keyDown(screen.getByTestId("chat-input"), {
+      key: "Enter",
+      code: "Enter",
+      charCode: 13,
+    });
+
+    expect(onSubmitMock).toHaveBeenCalledWith("", [], [file]);
   });
 
   it("should disable the submit button when awaiting user confirmation", async () => {
