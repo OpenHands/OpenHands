@@ -145,6 +145,10 @@ describe("Form submission", () => {
     // Language check
     const language = await screen.findByTestId("language-input");
     await userEvent.click(language);
+    await userEvent.type(language, "Nor");
+    expect(submit).toBeDisabled();
+
+    await userEvent.click(language);
     const norsk = screen.getByText("Norsk");
     await userEvent.click(norsk);
     expect(submit).not.toBeDisabled();
