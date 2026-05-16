@@ -13,7 +13,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 # The version of the agent server to use for deployments.
 # Typically this will be the same as the values from the pyproject.toml
-AGENT_SERVER_IMAGE = "ghcr.io/openhands/agent-server:1.22.1-python"
+AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.22.1-python'
 
 
 class SandboxSpecService(ABC):
@@ -39,7 +39,7 @@ class SandboxSpecService(ABC):
         """Get the default sandbox spec."""
         page = await self.search_sandbox_specs()
         if not page.items:
-            raise SandboxError("No sandbox specs available!")
+            raise SandboxError('No sandbox specs available!')
         return page.items[0]
 
     async def batch_get_sandbox_specs(
@@ -64,20 +64,20 @@ class SandboxSpecServiceInjector(
 def get_agent_server_image() -> str:
     # Backward compatibility for docker-compose setups that still configure
     # custom runtimes via the pre-V1 sandbox image variable.
-    sandbox_runtime_container_image = os.getenv("SANDBOX_RUNTIME_CONTAINER_IMAGE")
+    sandbox_runtime_container_image = os.getenv('SANDBOX_RUNTIME_CONTAINER_IMAGE')
     if sandbox_runtime_container_image:
         return sandbox_runtime_container_image
 
-    agent_server_image_repository = os.getenv("AGENT_SERVER_IMAGE_REPOSITORY")
-    agent_server_image_tag = os.getenv("AGENT_SERVER_IMAGE_TAG")
+    agent_server_image_repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY')
+    agent_server_image_tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
     if agent_server_image_repository and agent_server_image_tag:
-        return f"{agent_server_image_repository}:{agent_server_image_tag}"
+        return f'{agent_server_image_repository}:{agent_server_image_tag}'
     return AGENT_SERVER_IMAGE
 
 
 # Prefixes for environment variables that should be auto-forwarded to agent-server
 # These are typically configuration variables that affect the agent's behavior
-AUTO_FORWARD_PREFIXES = ("LLM_", "LMNR_")
+AUTO_FORWARD_PREFIXES = ('LLM_', 'LMNR_')
 
 
 def get_agent_server_env() -> dict[str, str]:
@@ -133,7 +133,7 @@ def get_agent_server_env() -> dict[str, str]:
 
     # Step 2: Apply explicit overrides from OH_AGENT_SERVER_ENV
     # These take precedence over auto-forwarded variables
-    explicit_env = env_parser.from_env(dict[str, str], "OH_AGENT_SERVER_ENV")
+    explicit_env = env_parser.from_env(dict[str, str], 'OH_AGENT_SERVER_ENV')
     result.update(explicit_env)
 
     return result
