@@ -246,7 +246,9 @@ describe("Manage Org Route", () => {
     await userEvent.click(nextButton);
 
     // expect redirect to payment page
-    expect(createCheckoutSessionSpy).toHaveBeenCalledWith(1000);
+    await waitFor(() =>
+      expect(createCheckoutSessionSpy).toHaveBeenCalledWith(1000),
+    );
 
     await waitFor(() =>
       expect(screen.queryByTestId("add-credits-form")).not.toBeInTheDocument(),

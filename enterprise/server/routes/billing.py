@@ -3,12 +3,14 @@ import typing
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
+from uuid import UUID
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
+from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.constants import STRIPE_API_KEY
 from server.logger import logger
 from server.utils.url_utils import get_web_url
@@ -86,17 +88,17 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 
 # Endpoint to retrieve the current organization's credit balance
 @billing_router.get('/credits')
-async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
+async def get_credits(
+    user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
+) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    user = await UserStore.get_user_by_id(user_id)
-    if user is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail='User not found')
     user_team_info = await LiteLlmManager.get_user_team_info(
-        user_id, str(user.current_org_id)
+        user_id, str(effective_org_id)
     )
     max_budget, spend = LiteLlmManager.get_budget_from_team_info(
-        user_team_info, user_id, str(user.current_org_id)
+        user_team_info, user_id, str(effective_org_id)
     )
     credits = max(max_budget - spend, 0)
     return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))
@@ -132,19 +134,28 @@ async def get_subscription_access(
 
 # Endpoint to check if a user has entered a payment method into stripe
 @billing_router.post('/has-payment-method')
-async def has_payment_method(user_id: str = Depends(get_user_id)) -> bool:
+async def has_payment_method(
+    user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
+) -> bool:
     if not user_id:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
-    return await stripe_service.has_payment_method_by_user_id(user_id)
+    return await stripe_service.has_payment_method_by_user_id(
+        user_id, org_id=effective_org_id
+    )
 
 
 # Endpoint to create a new setup intent in stripe
 @billing_router.post('/create-customer-setup-session')
 async def create_customer_setup_session(
-    request: Request, user_id: str = Depends(get_user_id)
+    request: Request,
+    user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
-    customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    customer_info = await stripe_service.find_or_create_customer_by_user_id(
+        user_id, org_id=effective_org_id
+    )
     if not customer_info:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -167,10 +178,13 @@ async def create_checkout_session(
     body: CreateCheckoutSessionRequest,
     request: Request,
     user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
     base_url = get_web_url(request)
-    customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    customer_info = await stripe_service.find_or_create_customer_by_user_id(
+        user_id, org_id=effective_org_id
+    )
     if not customer_info:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

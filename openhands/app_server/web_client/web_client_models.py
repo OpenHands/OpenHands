@@ -20,6 +20,7 @@ class WebClientFeatureFlags(BaseModel):
     hide_users_page: bool = False
     hide_billing_page: bool = False
     hide_integrations_page: bool = False
+    enable_acp: bool = False
     deployment_mode: DeploymentMode | None = None
     enable_onboarding: bool = False
 
@@ -29,6 +30,12 @@ class WebClientFeatureFlags(BaseModel):
         if self.deployment_mode is None:
             self.deployment_mode = get_deployment_mode()
         return self
+
+
+class ACPProviderConfig(BaseModel):
+    key: str
+    display_name: str
+    default_command: list[str]
 
 
 class WebClientConfig(DiscriminatedUnionMixin):
@@ -46,3 +53,4 @@ class WebClientConfig(DiscriminatedUnionMixin):
     gitlab_enabled: bool = False
     provider_default_hosts: dict[str, str] = Field(default_factory=dict)
     slack_enabled: bool = False
+    acp_providers: list[ACPProviderConfig] = Field(default_factory=list)

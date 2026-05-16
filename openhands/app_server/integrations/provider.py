@@ -556,15 +556,18 @@ class ProviderHandler:
                         f'{protocol}://oauth2:{token_value}@{domain}/{repo_name}.git'
                     )
                 elif provider == ProviderType.BITBUCKET:
-                    # For Bitbucket, handle username:app_password format
+                    # For Bitbucket, handle email:api_token format
                     if ':' in token_value:
-                        # App token format: username:app_password
+                        # API token format: email:api_token
+                        # Percent-encode both email and token as email contains '@'
+                        user, password = token_value.split(':', 1)
+                        url_creds = f'{quote(user, safe="")}:{quote(password, safe="")}'
                         remote_url = (
-                            f'{protocol}://{token_value}@{domain}/{repo_name}.git'
+                            f'{protocol}://{url_creds}@{domain}/{repo_name}.git'
                         )
                     else:
                         # Access token format: use x-token-auth
-                        remote_url = f'{protocol}://x-token-auth:{token_value}@{domain}/{repo_name}.git'
+                        remote_url = f'{protocol}://x-token-auth:{quote(token_value, safe="")}@{domain}/{repo_name}.git'
                 elif provider == ProviderType.BITBUCKET_DATA_CENTER:
                     # DC uses HTTP Basic auth — token must be in username:token format
                     project, repo_slug = (
