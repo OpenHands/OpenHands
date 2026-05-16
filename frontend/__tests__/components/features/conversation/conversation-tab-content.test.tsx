@@ -31,7 +31,8 @@ vi.mock("#/routes/changes-tab", () => ({
 }));
 
 // Control for lazy loading test
-let pendingBrowserTab: { promise: Promise<void>; resolve: () => void } | null = null;
+let pendingBrowserTab: { promise: Promise<void>; resolve: () => void } | null =
+  null;
 vi.mock("#/routes/browser-tab", () => ({
   default: () => {
     if (pendingBrowserTab) {
@@ -41,16 +42,8 @@ vi.mock("#/routes/browser-tab", () => ({
   },
 }));
 
-vi.mock("#/routes/served-tab", () => ({
-  default: () => (
-    <div data-testid="served-tab-content">Served Tab Content</div>
-  ),
-}));
-
 vi.mock("#/routes/vscode-tab", () => ({
-  default: () => (
-    <div data-testid="vscode-tab-content">VSCode Tab Content</div>
-  ),
+  default: () => <div data-testid="vscode-tab-content">VSCode Tab Content</div>,
 }));
 
 vi.mock("#/routes/planner-tab", () => ({
@@ -78,7 +71,9 @@ describe("ConversationTabContent", () => {
   const createWrapper = () => {
     return ({ children }: { children: React.ReactNode }) => (
       <MemoryRouter initialEntries={["/conversations/test-conversation-id"]}>
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
       </MemoryRouter>
     );
   };
@@ -154,18 +149,6 @@ describe("ConversationTabContent", () => {
       expect(screen.getByText("COMMON$BROWSER")).toBeInTheDocument();
     });
 
-    it("should render served tab when selected", async () => {
-      setSelectedTab("served");
-
-      render(<ConversationTabContent />, { wrapper: createWrapper() });
-
-      await waitFor(() => {
-        expect(screen.getByTestId("served-tab-content")).toBeInTheDocument();
-      });
-
-      expect(screen.getByText("COMMON$APP")).toBeInTheDocument();
-    });
-
     it("should render vscode tab when selected", async () => {
       setSelectedTab("vscode");
 
@@ -208,13 +191,12 @@ describe("ConversationTabContent", () => {
       tab: ConversationTab;
       expectedTitle: string;
     }> = [
-        { tab: "editor", expectedTitle: "COMMON$CHANGES" },
-        { tab: "browser", expectedTitle: "COMMON$BROWSER" },
-        { tab: "served", expectedTitle: "COMMON$APP" },
-        { tab: "vscode", expectedTitle: "COMMON$CODE" },
-        { tab: "terminal", expectedTitle: "COMMON$TERMINAL" },
-        { tab: "planner", expectedTitle: "COMMON$PLANNER" },
-      ];
+      { tab: "editor", expectedTitle: "COMMON$CHANGES" },
+      { tab: "browser", expectedTitle: "COMMON$BROWSER" },
+      { tab: "vscode", expectedTitle: "COMMON$CODE" },
+      { tab: "terminal", expectedTitle: "COMMON$TERMINAL" },
+      { tab: "planner", expectedTitle: "COMMON$PLANNER" },
+    ];
 
     tabTitleMapping.forEach(({ tab, expectedTitle }) => {
       it(`should display "${expectedTitle}" title for "${tab}" tab`, async () => {

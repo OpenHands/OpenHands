@@ -9,7 +9,7 @@ from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.sdk.llm import LLM
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
 
 @pytest.fixture(autouse=True)
@@ -39,7 +39,7 @@ async def test_store_and_load_data(file_settings_store):
     # Test data
     init_data = Settings(
         language='python',
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             agent='test-agent',
             llm=LLM(
                 model='test-model',

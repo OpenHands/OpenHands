@@ -296,7 +296,7 @@ describe("ConversationName", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should render the llm model when available", () => {
+  it("should render the OpenHands brand when an llm_model is set", () => {
     useActiveConversationMock.mockReturnValue({
       data: {
         conversation_id: "test-conversation-id",
@@ -310,14 +310,56 @@ describe("ConversationName", () => {
 
     const model = screen.getByTestId("conversation-name-llm-model");
     expect(model).toBeInTheDocument();
-    expect(model).toHaveTextContent("openai/gpt-4o");
+    // Visible chip is the harness brand; raw model is preserved on hover.
+    expect(model).toHaveTextContent("OpenHands");
     expect(model).toHaveAttribute("title", "openai/gpt-4o");
     expect(model.querySelector("svg")).toBeInTheDocument();
+  });
 
-    // Verify the model name is rendered in full (no truncation)
-    const textSpan = model.querySelector("span");
-    expect(textSpan).toBeInTheDocument();
-    expect(textSpan).toHaveTextContent("openai/gpt-4o");
+  it("should render plain 'ACP' for ACP-agent conversations", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        agent_kind: "acp",
+      } as unknown as Conversation,
+    });
+
+    renderConversationNameWithRouter();
+
+    const model = screen.getByTestId("conversation-name-llm-model");
+    expect(model).toHaveTextContent("ACP");
+    expect(model).toHaveAttribute("title", "ACP");
+  });
+
+  it("should render the provider brand label when acp_server matches a known provider", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        agent_kind: "acp",
+        tags: { acp_server: "claude-code" },
+      } as unknown as Conversation,
+    });
+    useConfigMock.mockReturnValue({
+      data: {
+        app_mode: "oss",
+        acp_providers: [
+          {
+            key: "claude-code",
+            display_name: "Claude Code",
+            default_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useConfigMock>);
+
+    renderConversationNameWithRouter();
+
+    const model = screen.getByTestId("conversation-name-llm-model");
+    expect(model).toHaveTextContent("Claude Code");
   });
 
   it("should not render the llm model when not available", () => {

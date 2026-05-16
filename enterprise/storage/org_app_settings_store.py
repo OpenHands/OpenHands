@@ -47,13 +47,21 @@ class OrgAppSettingsStore:
         if not org_id:
             return None
 
-        # Get the organization
+        return await self.get_org_by_id(org_id)
+
+    async def get_org_by_id(self, org_id: UUID) -> Org | None:
+        """Get an organization by its id, validating the org version.
+
+        Args:
+            org_id: The organization's UUID.
+
+        Returns:
+            Org: The organization object, or None if not found.
+        """
         org_result = await self.db_session.execute(select(Org).filter(Org.id == org_id))
         org = org_result.scalars().first()
-
         if not org:
             return None
-
         return await self._validate_org_version(org)
 
     async def _validate_org_version(self, org: Org) -> Org:

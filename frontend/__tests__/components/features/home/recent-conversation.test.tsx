@@ -54,7 +54,7 @@ const renderRecentConversation = (conversation: V1AppConversation) =>
   );
 
 describe("RecentConversation - llm_model", () => {
-  it("should render the llm model when provided", () => {
+  it("should render the OpenHands brand label when llm_model is provided", () => {
     renderRecentConversation({
       ...baseConversation,
       llm_model: "anthropic/claude-sonnet-4-20250514",
@@ -62,20 +62,32 @@ describe("RecentConversation - llm_model", () => {
 
     const model = screen.getByTestId("recent-conversation-llm-model");
     expect(model).toBeInTheDocument();
-    expect(model).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
+    // Visible label is the harness brand; raw model is preserved on hover.
+    expect(model).toHaveTextContent("OpenHands");
     expect(model).toHaveAttribute(
       "title",
       "anthropic/claude-sonnet-4-20250514",
     );
     expect(model.querySelector("svg")).toBeInTheDocument();
 
-    // Verify truncation structure: text is wrapped in a span with truncate class
     const textSpan = model.querySelector("span.truncate");
     expect(textSpan).toBeInTheDocument();
-    expect(textSpan).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
+    expect(textSpan).toHaveTextContent("OpenHands");
   });
 
-  it("should not render the llm model when not provided", () => {
+  it("should render plain 'ACP' for ACP-agent conversations", () => {
+    renderRecentConversation({
+      ...baseConversation,
+      agent_kind: "acp",
+      llm_model: null,
+    });
+
+    const model = screen.getByTestId("recent-conversation-llm-model");
+    expect(model).toHaveTextContent("ACP");
+    expect(model).toHaveAttribute("title", "ACP");
+  });
+
+  it("should not render the model chip when neither llm_model nor ACP", () => {
     renderRecentConversation(baseConversation);
 
     expect(

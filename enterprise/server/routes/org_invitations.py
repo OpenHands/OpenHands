@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
+from server.auth.org_context import REJECT_X_ORG_ID_PATH_MISMATCH
 from server.routes.org_invitation_models import (
     AcceptInvitationRequest,
     AcceptInvitationResponse,
@@ -26,10 +27,19 @@ from openhands.analytics import get_analytics_service
 from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
 
-# Router for invitation operations on an organization (requires org_id)
-invitation_router = APIRouter(prefix='/api/organizations/{org_id}/members')
+# Router for invitation operations on an organization (requires org_id).
+# Every route under this prefix has ``{org_id}`` in its path, so we
+# attach REJECT_X_ORG_ID_PATH_MISMATCH at the router level — a request
+# with a conflicting ``X-Org-Id`` is rejected before any handler runs.
+invitation_router = APIRouter(
+    prefix='/api/organizations/{org_id}/members',
+    dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
+)
 
-# Router for accepting invitations (no org_id required)
+# Router for accepting invitations (no org_id in path; the target org
+# is encoded in the invitation token). X-Org-Id has no meaning here
+# and must not influence which invitation is accepted, so the guard
+# is intentionally NOT attached.
 accept_router = APIRouter(prefix='/api/organizations/members/invite')
 
 

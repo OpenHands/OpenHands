@@ -28,8 +28,15 @@ export interface WebClientFeatureFlags {
   hide_users_page: boolean;
   hide_billing_page: boolean;
   hide_integrations_page: boolean;
+  enable_acp?: boolean;
   deployment_mode?: DeploymentMode;
   enable_onboarding: boolean;
+}
+
+export interface ACPProviderConfig {
+  key: string;
+  display_name: string;
+  default_command: string[];
 }
 
 export interface WebClientConfig {
@@ -47,4 +54,5 @@ export interface WebClientConfig {
   gitlab_enabled?: boolean;
   provider_default_hosts?: Partial<Record<Provider, string>>;
   slack_enabled?: boolean;
+  acp_providers?: ACPProviderConfig[];
 }
