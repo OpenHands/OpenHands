@@ -135,7 +135,7 @@ async def test_set_title_callback_processor_fetches_title_from_conversation():
 
 
 @pytest.mark.asyncio
-async def test_set_title_callback_processor_no_title_yet_returns_none():
+async def test_set_title_callback_processor_falls_back_to_user_message_title():
     conversation_id = uuid4()
     session_api_key = 'test-session-key'
     conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
@@ -201,11 +201,15 @@ async def test_set_title_callback_processor_no_title_yet_returns_none():
     ):
         result = await processor(conversation_id, callback, event)
 
-    assert result is None
+    assert result is not None
 
-    app_conversation_info_service.save_app_conversation_info.assert_not_called()
-    event_callback_service.save_event_callback.assert_not_called()
-    assert callback.status == EventCallbackStatus.ACTIVE
+    app_conversation_info_service.save_app_conversation_info.assert_called_once()
+    saved_info = app_conversation_info_service.save_app_conversation_info.call_args[0][
+        0
+    ]
+    assert saved_info.title == 'hi'
+    assert callback.status == EventCallbackStatus.DISABLED
+    event_callback_service.save_event_callback.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -292,3 +296,154 @@ async def test_set_title_callback_processor_request_errors_return_none():
     app_conversation_info_service.save_app_conversation_info.assert_not_called()
     event_callback_service.save_event_callback.assert_not_called()
     assert callback.status == EventCallbackStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_set_title_callback_processor_keeps_callback_active_without_user_text():
+    conversation_id = uuid4()
+    session_api_key = 'test-session-key'
+    conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
+
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+        session_api_key=session_api_key,
+    )
+
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+
+    httpx_client = _FakeHttpxClient(titles=[None])
+
+    def get_app_conversation_service(_state):
+        return _ctx(app_conversation_service)
+
+    def get_app_conversation_info_service(_state):
+        return _ctx(app_conversation_info_service)
+
+    def get_event_callback_service(_state):
+        return _ctx(event_callback_service)
+
+    def get_httpx_client(_state):
+        return _ctx(httpx_client)
+
+    callback = EventCallback(
+        conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+    )
+    event = MessageEvent(
+        source='agent',
+        llm_message=Message(role='assistant', content=[TextContent(text='hello')]),
+    )
+
+    processor = SetTitleCallbackProcessor()
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            get_app_conversation_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            get_app_conversation_info_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            get_event_callback_service,
+        ),
+        patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor.asyncio.sleep',
+            new=AsyncMock(),
+        ),
+    ):
+        result = await processor(conversation_id, callback, event)
+
+    assert result is None
+    app_conversation_info_service.save_app_conversation_info.assert_not_called()
+    event_callback_service.save_event_callback.assert_not_called()
+    assert callback.status == EventCallbackStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_set_title_callback_processor_truncates_fallback_title():
+    conversation_id = uuid4()
+    conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
+    long_message = (
+        'Fix the authentication bug in login.py and update every related test'
+    )
+
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+    )
+
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+
+    httpx_client = _FakeHttpxClient(titles=[None])
+
+    def get_app_conversation_service(_state):
+        return _ctx(app_conversation_service)
+
+    def get_app_conversation_info_service(_state):
+        return _ctx(app_conversation_info_service)
+
+    def get_event_callback_service(_state):
+        return _ctx(event_callback_service)
+
+    def get_httpx_client(_state):
+        return _ctx(httpx_client)
+
+    callback = EventCallback(
+        conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+    )
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[TextContent(text=long_message)]),
+    )
+
+    processor = SetTitleCallbackProcessor()
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            get_app_conversation_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            get_app_conversation_info_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            get_event_callback_service,
+        ),
+        patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor.asyncio.sleep',
+            new=AsyncMock(),
+        ),
+    ):
+        result = await processor(conversation_id, callback, event)
+
+    assert result is not None
+    saved_info = app_conversation_info_service.save_app_conversation_info.call_args[0][
+        0
+    ]
+    assert (
+        saved_info.title
+        == 'Fix the authentication bug in login.py and update every r...'
+    )

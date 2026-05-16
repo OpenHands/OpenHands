@@ -30,13 +30,14 @@ _logger = logging.getLogger(__name__)
 _POLL_DELAY_S = 3
 # Number of attempts to poll title
 _NUM_POLL_ATTEMPTS = 4
+_MAX_FALLBACK_TITLE_CHARS = 60
 
 
 async def _poll_for_title(
     httpx_client: httpx.AsyncClient,
     url: str,
     session_api_key: str | None,
-) -> str | None:
+) -> tuple[str | None, bool]:
     """Poll the agent server for the conversation title.
 
     Args:
@@ -45,8 +46,9 @@ async def _poll_for_title(
         session_api_key: The session API key for authentication.
 
     Returns:
-        The title if available, None otherwise.
+        The title if available, and whether any poll response succeeded.
     """
+    has_successful_response = False
     for _ in range(_NUM_POLL_ATTEMPTS):
         await asyncio.sleep(_POLL_DELAY_S)
         try:
@@ -70,11 +72,36 @@ async def _poll_for_title(
                 exc,
             )
         else:
+            has_successful_response = True
             title = response.json().get('title')
             if title:
-                return title
+                return title, True
 
-    return None
+    return None, has_successful_response
+
+
+def _fallback_title_from_event(event: MessageEvent) -> str | None:
+    if event.source != 'user':
+        return None
+
+    content = getattr(event.llm_message, 'content', None)
+    text_parts: list[str] = []
+    if isinstance(content, str):
+        text_parts.append(content)
+    else:
+        for part in content or []:
+            text = getattr(part, 'text', None)
+            if isinstance(text, str):
+                text_parts.append(text)
+
+    title = ' '.join(' '.join(text_parts).split())
+    if not title:
+        return None
+
+    if len(title) > _MAX_FALLBACK_TITLE_CHARS:
+        title = f'{title[: _MAX_FALLBACK_TITLE_CHARS - 3].rstrip()}...'
+
+    return title
 
 
 class SetTitleCallbackProcessor(EventCallbackProcessor):
@@ -119,19 +146,23 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
                 app_conversation_url
             )
 
-            title = await _poll_for_title(
+            title, title_poll_succeeded = await _poll_for_title(
                 httpx_client,
                 app_conversation_url,
                 app_conversation.session_api_key,
             )
 
             if not title:
-                # Keep the callback active so later message events can retry.
-                _logger.info(
-                    f'Conversation {conversation_id} title not available yet; '
-                    'will retry on a future message event.'
+                title = (
+                    _fallback_title_from_event(event) if title_poll_succeeded else None
                 )
-                return None
+                if not title:
+                    # Keep the callback active so later message events can retry.
+                    _logger.info(
+                        f'Conversation {conversation_id} title not available yet; '
+                        'will retry on a future message event.'
+                    )
+                    return None
 
             # Save the conversation info
             info = AppConversationInfo(
