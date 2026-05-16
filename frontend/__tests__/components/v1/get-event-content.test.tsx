@@ -81,6 +81,21 @@ describe("getEventContent", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("falls back to action title when summary is SDK-generated JSON", () => {
+    const actionWithGeneratedSummary = {
+      ...terminalActionEvent,
+      summary: 'terminal: {"command":"git status"}',
+    };
+    const { title } = getEventContent(actionWithGeneratedSummary);
+
+    render(<span>{title}</span>);
+
+    expect(screen.getByText("ACTION_MESSAGE$RUN")).toBeInTheDocument();
+    expect(
+      screen.queryByText('terminal: {"command":"git status"}'),
+    ).not.toBeInTheDocument();
+  });
+
   it("returns empty details for file view action instead of 'Unknown event'", () => {
     const fileViewAction: ActionEvent = {
       id: "action-2",
@@ -110,6 +125,7 @@ describe("getEventContent", () => {
       },
       llm_response_id: "response-2",
       security_risk: SecurityRisk.LOW,
+      summary: 'file_editor: {"command":"view","path":"/workspace/README.md"}',
     };
 
     const { title, details } = getEventContent(fileViewAction);
@@ -144,5 +160,23 @@ describe("getEventContent", () => {
 
     expect(screen.getByText("Check repository status")).toBeInTheDocument();
     expect(screen.queryByText("$ git status")).not.toBeInTheDocument();
+  });
+
+  it("falls back to observation title when paired action summary is SDK-generated JSON", () => {
+    const actionWithGeneratedSummary = {
+      ...terminalActionEvent,
+      summary: 'terminal: {"command":"git status"}',
+    };
+    const { title } = getEventContent(
+      terminalObservationEvent,
+      actionWithGeneratedSummary,
+    );
+
+    render(<span>{title}</span>);
+
+    expect(screen.getByText("OBSERVATION_MESSAGE$RUN")).toBeInTheDocument();
+    expect(
+      screen.queryByText('terminal: {"command":"git status"}'),
+    ).not.toBeInTheDocument();
   });
 });

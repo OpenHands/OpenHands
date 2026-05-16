@@ -42,10 +42,40 @@ const createTitleFromKey = (
   );
 };
 
+const isGeneratedJsonSummary = (
+  event: ActionEvent,
+  summary: string,
+): boolean => {
+  const toolName = event.tool_name?.trim();
+  if (!toolName) {
+    return false;
+  }
+
+  const prefix = `${toolName}:`;
+  if (!summary.startsWith(prefix)) {
+    return false;
+  }
+
+  const payload = summary.slice(prefix.length).trim();
+  if (!payload.startsWith("{")) {
+    return false;
+  }
+
+  try {
+    JSON.parse(payload);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const getSummaryTitleForActionEvent = (
   event: ActionEvent,
 ): React.ReactNode | null => {
   const summary = event.summary?.trim().replace(/\s+/g, " ") || "";
+  if (summary && isGeneratedJsonSummary(event, summary)) {
+    return null;
+  }
   return summary || null;
 };
 
