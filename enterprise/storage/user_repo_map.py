@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, Integer, String
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 
@@ -8,7 +9,8 @@ class UserRepositoryMap(Base):
     """
 
     __tablename__ = 'user-repos'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, nullable=False)
-    repo_id = Column(String, nullable=False)
-    admin = Column(Boolean, nullable=True)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    repo_id: Mapped[str] = mapped_column(String, nullable=False)
+    admin: Mapped[bool | None] = mapped_column(nullable=True)

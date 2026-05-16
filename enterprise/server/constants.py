@@ -6,14 +6,44 @@ HOST = os.getenv('WEB_HOST', 'app.all-hands.dev').strip()
 
 # Check if this is a feature environment
 # Feature environments have a host format like {some-text}.staging.all-hands.dev
+# or {some-text}.ohe-staging.platform-team.all-hands.dev (for platform-team sandbox)
 # Just staging.all-hands.dev doesn't count as a feature environment
 IS_STAGING_ENV = bool(
-    re.match(r'^.+\.staging\.all-hands\.dev$', HOST) or HOST == 'staging.all-hands.dev'
+    re.match(r'^.+\.staging\.all-hands\.dev$', HOST)
+    or re.match(r'^.+\.ohe-staging\.platform-team\.all-hands\.dev$', HOST)
+    or HOST == 'staging.all-hands.dev'
 )  # Includes the staging deployment + feature deployments
 IS_FEATURE_ENV = (
     IS_STAGING_ENV and HOST != 'staging.all-hands.dev'
 )  # Does not include the staging deployment
 IS_LOCAL_ENV = bool(HOST == 'localhost')
+
+
+# _is_all_hands_managed_domain() can be removed/replaced when a self-hosted specific
+# env var is created (e.g is_self_hosted` or `deployment_mode`)
+def _is_all_hands_managed_domain(host: str) -> bool:
+    """Check if the host is an All-Hands managed domain."""
+    return (
+        host == 'app.all-hands.dev'
+        or host == 'app.openhands.ai'
+        or host.endswith('.all-hands.dev')
+        or host.endswith('.openhands.ai')
+    )
+
+
+def _get_deployment_mode() -> str:
+    """Determine deployment mode based on WEB_HOST.
+
+    Returns:
+        'cloud' for All-Hands managed infrastructure (app.all-hands.dev, etc.)
+        'self_hosted' for enterprise self-hosted deployments (customer domains)
+    """
+    if _is_all_hands_managed_domain(HOST):
+        return 'cloud'
+    return 'self_hosted'
+
+
+DEPLOYMENT_MODE = _get_deployment_mode()
 
 # Role name constants
 ROLE_OWNER = 'owner'

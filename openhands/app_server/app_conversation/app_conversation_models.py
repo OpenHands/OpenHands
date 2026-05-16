@@ -3,23 +3,42 @@ from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
-from openhands.agent_server.models import OpenHandsModel, SendMessageRequest
+from openhands.agent_server.models import (
+    ImageContent,
+    OpenHandsModel,
+    SendMessageRequest,
+    TextContent,
+)
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
+from openhands.app_server.integrations.service_types import ProviderType, SuggestedTask
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
-from openhands.integrations.service_types import ProviderType, SuggestedTask
-from openhands.sdk.conversation.state import ConversationExecutionStatus
+
+# Import from new location and re-export for backward compatibility
+from openhands.app_server.settings.settings_models import SandboxGroupingStrategy
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
-from openhands.storage.data_models.settings import SandboxGroupingStrategy
 
-# Re-export SandboxGroupingStrategy for backward compatibility
 __all__ = ['SandboxGroupingStrategy']
+
+
+class ConversationTrigger(Enum):
+    RESOLVER = 'resolver'
+    GUI = 'gui'
+    SUGGESTED_TASK = 'suggested_task'
+    REMOTE_API_KEY = 'openhands_api'
+    SLACK = 'slack'
+    MICROAGENT_MANAGEMENT = 'microagent_management'
+    JIRA = 'jira'
+    JIRA_DC = 'jira_dc'
+    LINEAR = 'linear'
+    BITBUCKET = 'bitbucket'
+    AUTOMATION = 'automation'
 
 
 class AgentType(Enum):
@@ -83,6 +102,7 @@ class AppConversationInfo(BaseModel):
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
     llm_model: str | None = None
+    agent_kind: str = 'openhands'
 
     metrics: MetricsSnapshot | None = None
 
@@ -90,6 +110,9 @@ class AppConversationInfo(BaseModel):
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
 
     public: bool | None = None
+
+    # Tags for conversation metadata (e.g., automation context, skills used)
+    tags: dict[str, str] = Field(default_factory=dict)
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -172,6 +195,18 @@ class AppConversationStartRequest(OpenHandsModel):
         ),
     )
 
+    # Secrets passed directly via API at conversation start time
+    secrets: dict[str, SecretStr] | None = Field(
+        default=None,
+        description=(
+            'Secrets to pass to the conversation. These are merged with any '
+            'existing secrets (from database or git providers), with API-provided '
+            'secrets taking precedence (overriding any existing secret with the same name). '
+            'Keys are secret names (e.g., "MY_API_KEY"), values are the secret values. '
+            'Warning: Providing a secret that already exists will silently override it.'
+        ),
+    )
+
 
 class AppConversationUpdateRequest(BaseModel):
     """Request model for updating conversation metadata.
@@ -179,6 +214,7 @@ class AppConversationUpdateRequest(BaseModel):
     All fields are optional - only provided fields will be updated.
     """
 
+    title: str | None = None
     public: bool | None = None
     selected_repository: str | None = None
     selected_branch: str | None = None
@@ -271,3 +307,50 @@ class GetHooksResponse(BaseModel):
     """Response model for hooks endpoint."""
 
     hooks: list[HookEventResponse] = []
+
+
+class AppSendMessageRequest(BaseModel):
+    """Request to send a follow-up message to a conversation.
+
+    This is used to send messages to an existing conversation via REST API,
+    as an alternative to WebSocket communication.
+    """
+
+    role: Literal['user'] = Field(
+        default='user',
+        description='The role of the message sender. Currently only "user" is supported.',
+    )
+    content: list[TextContent | ImageContent] = Field(
+        ...,
+        min_length=1,
+        description='The message content as a list of text and/or image content blocks.',
+    )
+    run: bool = Field(
+        default=True,
+        description='Whether to automatically run the agent after sending the message.',
+    )
+
+
+class SwitchProfileRequest(BaseModel):
+    """Request to switch a running conversation's LLM to a saved profile."""
+
+    profile_name: str = Field(
+        ...,
+        description='Name of a profile previously saved via /api/v1/settings/profiles.',
+        min_length=1,
+    )
+
+
+class AppSendMessageResponse(BaseModel):
+    """Response from sending a message to a conversation."""
+
+    success: bool = Field(
+        description='Whether the message was successfully sent to the agent.',
+    )
+    sandbox_status: SandboxStatus = Field(
+        description='The current status of the sandbox after the operation.',
+    )
+    message: str | None = Field(
+        default=None,
+        description='Optional message with additional details (e.g., if sandbox was resumed).',
+    )

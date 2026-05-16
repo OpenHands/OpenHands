@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import SecretStr
+from server.routes.org_models import OrgUpdate
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from storage.org import Org
@@ -13,7 +13,8 @@ from storage.org_store import OrgStore
 from storage.role import Role
 from storage.user import User
 
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
 
 @pytest.fixture
@@ -97,7 +98,10 @@ async def test_update_org(async_session_maker, mock_litellm_api):
     # Test updating org details
     async with async_session_maker() as session:
         # Create a test org
-        org = Org(name='test-org', agent='CodeActAgent')
+        org = Org(
+            name='test-org',
+            agent_settings=OpenHandsAgentSettings(agent='CodeActAgent'),
+        )
         session.add(org)
         await session.commit()
         await session.refresh(org)
@@ -106,14 +110,53 @@ async def test_update_org(async_session_maker, mock_litellm_api):
     # Test update
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._maybe_get_managed_llm_key_for_user',
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
+            new=AsyncMock(),
+        ),
     ):
         updated_org = await OrgStore.update_org(
-            org_id=org_id, kwargs={'name': 'updated-org', 'agent': 'PlannerAgent'}
+            org_id=org_id,
+            update_data=OrgUpdate(
+                name='updated-org',
+                agent_settings_diff={'llm': {'model': 'openhands/claude-3'}},
+            ),
+            user_id=str(uuid.uuid4()),
         )
 
         assert updated_org is not None
         assert updated_org.name == 'updated-org'
-        assert updated_org.agent == 'PlannerAgent'
+        agent_settings = OrgStore.get_agent_settings_from_org(updated_org)
+        assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+
+
+def test_get_org_settings_from_org_use_persisted_loaders():
+    org = MagicMock(spec=Org)
+    org.agent_settings = {'legacy': True}
+    org.conversation_settings = {'legacy': True}
+
+    loaded_agent_settings = OpenHandsAgentSettings(agent='MigratedAgent')
+    loaded_conversation_settings = ConversationSettings(max_iterations=77)
+
+    with (
+        patch(
+            'storage.org_store._load_persisted_agent_settings',
+            return_value=loaded_agent_settings,
+        ) as agent_loader,
+        patch(
+            'storage.org_store._load_persisted_conversation_settings',
+            return_value=loaded_conversation_settings,
+        ) as conversation_loader,
+    ):
+        assert OrgStore.get_agent_settings_from_org(org).agent == 'MigratedAgent'
+        assert OrgStore.get_conversation_settings_from_org(org).max_iterations == 77
+
+    agent_loader.assert_called_once_with({'legacy': True})
+    conversation_loader.assert_called_once_with({'legacy': True})
 
 
 @pytest.mark.asyncio
@@ -123,7 +166,7 @@ async def test_update_org_not_found(async_session_maker):
         from uuid import uuid4
 
         updated_org = await OrgStore.update_org(
-            org_id=uuid4(), kwargs={'name': 'updated-org'}
+            org_id=uuid4(), update_data=OrgUpdate(name='updated-org')
         )
         assert updated_org is None
 
@@ -135,12 +178,15 @@ async def test_create_org(async_session_maker, mock_litellm_api):
         patch('storage.org_store.a_session_maker', async_session_maker),
     ):
         org = await OrgStore.create_org(
-            kwargs={'name': 'new-org', 'agent': 'CodeActAgent'}
+            kwargs={
+                'name': 'new-org',
+                'agent_settings': OpenHandsAgentSettings(agent='CodeActAgent'),
+            }
         )
 
         assert org is not None
         assert org.name == 'new-org'
-        assert org.agent == 'CodeActAgent'
+        assert org.agent_settings['agent'] == 'CodeActAgent'
         assert org.id is not None
 
 
@@ -274,21 +320,32 @@ async def test_get_current_org_from_keycloak_user_id(
 
 def test_get_kwargs_from_settings():
     # Test extracting org kwargs from settings
-    settings = Settings(
-        language='es',
-        agent='CodeActAgent',
-        llm_model='gpt-4',
-        llm_api_key=SecretStr('test-key'),
-        enable_sound_notifications=True,
+    settings = Settings()
+    settings.update(
+        {
+            'language': 'es',
+            'enable_sound_notifications': True,
+            'agent_settings_diff': {
+                'agent': 'CodeActAgent',
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'api_key': 'test-key',
+                },
+            },
+        }
     )
 
     kwargs = OrgStore.get_kwargs_from_settings(settings)
 
     # Should only include fields that exist in Org model
-    assert 'agent' in kwargs
-    assert 'default_llm_model' in kwargs
-    assert kwargs['agent'] == 'CodeActAgent'
-    assert kwargs['default_llm_model'] == 'gpt-4'
+    assert 'agent_settings' in kwargs
+    assert 'agent' not in kwargs
+    assert 'default_llm_model' not in kwargs
+    assert kwargs['agent_settings']['agent'] == 'CodeActAgent'
+    assert (
+        kwargs['agent_settings']['llm']['model']
+        == 'anthropic/claude-sonnet-4-5-20250929'
+    )
     # Should not include fields that don't exist in Org model
     assert 'language' not in kwargs  # language is not in Org model
     assert 'llm_api_key' not in kwargs
@@ -379,7 +436,7 @@ async def test_persist_org_with_owner_returns_refreshed_org(
         name='Test Org',
         contact_name='Jane Doe',
         contact_email='jane@example.com',
-        agent='CodeActAgent',
+        agent_settings=OpenHandsAgentSettings(agent='CodeActAgent'),
     )
 
     org_member = OrgMember(
@@ -397,7 +454,7 @@ async def test_persist_org_with_owner_returns_refreshed_org(
     # Assert - verify the returned object has database-generated fields
     assert result.id == org_id
     assert result.name == 'Test Org'
-    assert result.agent == 'CodeActAgent'
+    assert result.agent_settings['agent'] == 'CodeActAgent'
     # Verify org_version was set by create_org logic (if applicable)
     assert hasattr(result, 'org_version')
 
@@ -480,9 +537,7 @@ async def test_persist_org_with_owner_with_multiple_fields(
         name='Complex Org',
         contact_name='Alice Smith',
         contact_email='alice@example.com',
-        agent='CodeActAgent',
-        default_max_iterations=50,
-        confirmation_mode=True,
+        agent_settings=OpenHandsAgentSettings(agent='CodeActAgent'),
         billing_margin=0.15,
     )
 
@@ -492,8 +547,12 @@ async def test_persist_org_with_owner_with_multiple_fields(
         role_id=1,
         status='active',
         llm_api_key='test-key',
-        max_iterations=100,
-        llm_model='gpt-4',
+        agent_settings_diff={
+            'llm': {'model': 'gpt-4'},
+        },
+        conversation_settings_diff={
+            'max_iterations': 100,
+        },
     )
 
     # Act
@@ -502,25 +561,21 @@ async def test_persist_org_with_owner_with_multiple_fields(
 
     # Assert
     assert result.name == 'Complex Org'
-    assert result.agent == 'CodeActAgent'
-    assert result.default_max_iterations == 50
-    assert result.confirmation_mode is True
+    assert result.agent_settings['agent'] == 'CodeActAgent'
     assert result.billing_margin == 0.15
 
     # Verify persistence
     async with async_session_maker() as session:
         persisted_org = await session.get(Org, org_id)
-        assert persisted_org.agent == 'CodeActAgent'
-        assert persisted_org.default_max_iterations == 50
-        assert persisted_org.confirmation_mode is True
+        assert persisted_org.agent_settings['agent'] == 'CodeActAgent'
         assert persisted_org.billing_margin == 0.15
 
         result_query = await session.execute(
             select(OrgMember).filter_by(org_id=org_id, user_id=user_id)
         )
         persisted_member = result_query.scalars().first()
-        assert persisted_member.max_iterations == 100
-        assert persisted_member.llm_model == 'gpt-4'
+        assert persisted_member.conversation_settings_diff['max_iterations'] == 100
+        assert persisted_member.agent_settings_diff['llm']['model'] == 'gpt-4'
 
 
 @pytest.mark.asyncio
@@ -1011,18 +1066,17 @@ def test_org_deletion_with_invitations_uses_passive_deletes(
 
 
 # =============================================================================
-# Tests for async LLM settings methods
+# Tests for async organization-defaults propagation methods
 # =============================================================================
 
 
 @pytest.mark.asyncio
-async def test_update_org_llm_settings_async_with_llm_api_key():
-    """
-    GIVEN: Organization with members and llm_api_key in update settings
-    WHEN: update_org_llm_settings_async is called
+async def test_update_org_defaults_async_with_llm_api_key():
+    """GIVEN: Organization with members and llm_api_key in update settings
+    WHEN: update_org_defaults_async is called
     THEN: Org fields are updated and llm_api_key is propagated to all members
     """
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    from server.routes.org_models import OrgUpdate
 
     # Arrange
     org_id = uuid.uuid4()
@@ -1030,11 +1084,11 @@ async def test_update_org_llm_settings_async_with_llm_api_key():
     mock_org = Org(
         id=org_id,
         name='Test Organization',
-        default_llm_model='old-model',
+        agent_settings=OpenHandsAgentSettings(llm={'model': 'old-model'}),
     )
 
-    llm_settings = OrgLLMSettingsUpdate(
-        default_llm_model='new-model',
+    llm_settings = OrgUpdate(
+        agent_settings_diff={'llm': {'model': 'new-model'}},
         llm_api_key='new-member-api-key',
     )
 
@@ -1053,37 +1107,140 @@ async def test_update_org_llm_settings_async_with_llm_api_key():
     with (
         patch('storage.org_store.a_session_maker', mock_a_session_maker),
         patch(
-            'storage.org_member_store.OrgMemberStore.update_all_members_llm_settings_async',
+            'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
             AsyncMock(),
         ) as mock_member_update,
     ):
         # Act
-        result = await OrgStore.update_org_llm_settings_async(org_id, llm_settings)
+        result = await OrgStore.update_org_defaults_async(
+            org_id,
+            llm_settings,
+            str(uuid.uuid4()),
+        )
 
         # Assert - Org is returned
         assert result is not None
-        assert result.default_llm_model == 'new-model'
+        assert result.agent_settings['llm']['model'] == 'new-model'
 
         # Assert - Member update was called with correct settings
         mock_member_update.assert_called_once()
         call_args = mock_member_update.call_args
         member_settings = call_args[0][2]  # Third positional arg is member_settings
-        assert member_settings.llm_api_key == 'new-member-api-key'
-        assert member_settings.llm_model == 'new-model'
+        assert member_settings.llm_api_key.get_secret_value() == 'new-member-api-key'
+        assert member_settings.agent_settings_diff == {'llm': {'model': 'new-model'}}
 
 
 @pytest.mark.asyncio
-async def test_update_org_llm_settings_async_org_not_found():
+async def test_update_org_defaults_async_propagates_managed_key_reset():
+    """GIVEN: A unified OrgUpdate save that resolves to a managed org key
+    WHEN: update_org_defaults_async is called
+    THEN: the propagated member update carries that key and resets the custom-key flag
     """
-    GIVEN: Non-existent organization ID
-    WHEN: update_org_llm_settings_async is called
+    from server.routes.org_models import OrgUpdate
+
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        agent_settings=OpenHandsAgentSettings(llm={'model': 'openhands/claude-3'}),
+    )
+    update_data = OrgUpdate(
+        agent_settings_diff={'llm': {'model': 'openhands/claude-3'}}
+    )
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_org
+    mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    with (
+        patch('storage.org_store.a_session_maker', mock_a_session_maker),
+        patch(
+            'storage.org_store.OrgStore._maybe_get_managed_llm_key_for_user',
+            AsyncMock(return_value='managed-key'),
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
+            AsyncMock(),
+        ) as mock_member_update,
+    ):
+        result = await OrgStore.update_org_defaults_async(org_id, update_data, user_id)
+
+    assert result is not None
+    agent_settings = OrgStore.get_agent_settings_from_org(result)
+    assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+    mock_member_update.assert_called_once()
+    member_settings = mock_member_update.call_args[0][2]
+    assert member_settings.llm_api_key.get_secret_value() == 'managed-key'
+    assert member_settings.has_custom_llm_api_key is False
+
+
+@pytest.mark.asyncio
+async def test_update_org_defaults_async_non_key_changes_keep_custom_key_flags():
+    """GIVEN: An org-defaults save that only updates shared settings
+    WHEN: update_org_defaults_async is called
+    THEN: member propagation keeps personal custom-key flags untouched
+    """
+    from server.routes.org_models import OrgUpdate
+
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        agent_settings=OpenHandsAgentSettings(llm={'model': 'openhands/claude-3'}),
+        conversation_settings=ConversationSettings(),
+    )
+    update_data = OrgUpdate(conversation_settings_diff={'max_iterations': 42})
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_org
+    mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    with (
+        patch('storage.org_store.a_session_maker', mock_a_session_maker),
+        patch(
+            'storage.org_store.OrgStore._maybe_get_managed_llm_key_for_user',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
+            AsyncMock(),
+        ) as mock_member_update,
+    ):
+        await OrgStore.update_org_defaults_async(org_id, update_data, user_id)
+
+    mock_member_update.assert_called_once()
+    member_settings = mock_member_update.call_args[0][2]
+    assert member_settings.conversation_settings_diff == {'max_iterations': 42}
+    assert member_settings.has_custom_llm_api_key is None
+
+
+@pytest.mark.asyncio
+async def test_update_org_defaults_async_org_not_found():
+    """GIVEN: Non-existent organization ID
+    WHEN: update_org_defaults_async is called
     THEN: Returns None
     """
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    from server.routes.org_models import OrgUpdate
 
     # Arrange
     non_existent_org_id = uuid.uuid4()
-    llm_settings = OrgLLMSettingsUpdate(default_llm_model='new-model')
+    llm_settings = OrgUpdate(agent_settings_diff={'llm': {'model': 'new-model'}})
 
     # Mock the async session to return None for org
     mock_session = AsyncMock()
@@ -1097,8 +1254,10 @@ async def test_update_org_llm_settings_async_org_not_found():
 
     # Act
     with patch('storage.org_store.a_session_maker', mock_a_session_maker):
-        result = await OrgStore.update_org_llm_settings_async(
-            non_existent_org_id, llm_settings
+        result = await OrgStore.update_org_defaults_async(
+            non_existent_org_id,
+            llm_settings,
+            str(uuid.uuid4()),
         )
 
     # Assert

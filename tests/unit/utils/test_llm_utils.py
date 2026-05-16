@@ -1,6 +1,12 @@
-"""Tests for openhands.utils.llm module."""
+"""Tests for openhands.app_server.utils.llm module."""
 
-from openhands.utils.llm import get_provider_api_base, is_openhands_model
+from openhands.app_server.utils import llm as llm_utils
+from openhands.app_server.utils.llm import (
+    _assign_provider,
+    _derive_verified_models,
+    get_provider_api_base,
+    is_openhands_model,
+)
 
 
 class TestIsOpenhandsModel:
@@ -32,6 +38,92 @@ class TestIsOpenhandsModel:
         assert is_openhands_model('openhands') is False  # Missing slash
         assert is_openhands_model('openhandsx/model') is False  # Extra char
         assert is_openhands_model('OPENHANDS/model') is False  # Wrong case
+
+
+class TestAssignProvider:
+    """Tests for the _assign_provider helper."""
+
+    def test_known_bare_models_get_prefixed(self, monkeypatch):
+        """Test that known bare models get the expected provider prefix."""
+        monkeypatch.setattr(llm_utils, '_BARE_OPENAI_MODELS', {'gpt-5.2'})
+        monkeypatch.setattr(
+            llm_utils, '_BARE_ANTHROPIC_MODELS', {'claude-sonnet-4-5-20250929'}
+        )
+        monkeypatch.setattr(llm_utils, '_BARE_MISTRAL_MODELS', {'mistral-large-latest'})
+
+        assert _assign_provider('gpt-5.2') == 'openai/gpt-5.2'
+        assert (
+            _assign_provider('claude-sonnet-4-5-20250929')
+            == 'anthropic/claude-sonnet-4-5-20250929'
+        )
+        assert (
+            _assign_provider('mistral-large-latest') == 'mistral/mistral-large-latest'
+        )
+
+    def test_prefixed_models_remain_unchanged(self, monkeypatch):
+        """Test that already-prefixed models are returned untouched."""
+        monkeypatch.setattr(llm_utils, '_BARE_OPENAI_MODELS', {'gpt-5.2'})
+        monkeypatch.setattr(llm_utils, '_BARE_ANTHROPIC_MODELS', set())
+        monkeypatch.setattr(llm_utils, '_BARE_MISTRAL_MODELS', set())
+
+        assert _assign_provider('openai/gpt-5.2') == 'openai/gpt-5.2'
+
+    def test_unresolvable_bare_models_remain_unchanged(self, monkeypatch):
+        """Bare names LiteLLM cannot resolve fall through unchanged."""
+        monkeypatch.setattr(llm_utils, '_BARE_OPENAI_MODELS', set())
+        monkeypatch.setattr(llm_utils, '_BARE_ANTHROPIC_MODELS', set())
+        monkeypatch.setattr(llm_utils, '_BARE_MISTRAL_MODELS', set())
+
+        assert _assign_provider('totally-made-up-model-xyz') == (
+            'totally-made-up-model-xyz'
+        )
+
+    def test_unverified_bare_models_use_litellm_fallback(self, monkeypatch):
+        """Unverified bare names reach the dropdown via LiteLLM's routing."""
+        monkeypatch.setattr(llm_utils, '_BARE_OPENAI_MODELS', set())
+        monkeypatch.setattr(llm_utils, '_BARE_ANTHROPIC_MODELS', set())
+        monkeypatch.setattr(llm_utils, '_BARE_MISTRAL_MODELS', set())
+
+        # gemini-* lives bare in litellm.model_cost; LiteLLM routes it to
+        # vertex_ai. Without the fallback the frontend's provider filter
+        # drops it entirely.
+        assert _assign_provider('gemini-2.0-flash') == 'vertex_ai/gemini-2.0-flash'
+        # cohere.<model>:<rev> is the Bedrock-style ID for Cohere models;
+        # LiteLLM resolves it to bedrock.
+        assert (
+            _assign_provider('cohere.command-r-v1:0') == 'bedrock/cohere.command-r-v1:0'
+        )
+
+    def test_litellm_fallback_exception_is_swallowed(self, monkeypatch):
+        """A raising get_llm_provider must not break the model list build."""
+        monkeypatch.setattr(llm_utils, '_BARE_OPENAI_MODELS', set())
+        monkeypatch.setattr(llm_utils, '_BARE_ANTHROPIC_MODELS', set())
+        monkeypatch.setattr(llm_utils, '_BARE_MISTRAL_MODELS', set())
+
+        def _boom(*_args, **_kwargs):
+            raise RuntimeError('litellm exploded')
+
+        monkeypatch.setattr(llm_utils, 'get_llm_provider', _boom)
+
+        assert _assign_provider('whatever') == 'whatever'
+
+
+class TestDeriveVerifiedModels:
+    """Tests for the _derive_verified_models helper."""
+
+    def test_extracts_openhands_model_names(self):
+        """Test that only openhands-prefixed models are returned bare."""
+        models = [
+            'openhands/claude-opus-4-5-20251101',
+            'openhands/gpt-5',
+            'openai/gpt-5',
+            'gpt-4o',
+        ]
+
+        assert _derive_verified_models(models) == [
+            'claude-opus-4-5-20251101',
+            'gpt-5',
+        ]
 
 
 class TestGetProviderApiBase:

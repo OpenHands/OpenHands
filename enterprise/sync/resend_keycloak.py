@@ -13,7 +13,6 @@ Required environment variables:
 - RESEND_AUDIENCE_ID: ID of the Resend audience to add users to
 
 Optional environment variables:
-- KEYCLOAK_PROVIDER_NAME: Provider name for Keycloak
 - KEYCLOAK_CLIENT_ID: Client ID for Keycloak
 - KEYCLOAK_CLIENT_SECRET: Client secret for Keycloak
 - RESEND_FROM_EMAIL: Email address to use as the sender (default: "OpenHands Team <no-reply@welcome.openhands.dev>")
@@ -44,17 +43,16 @@ from tenacity import (
     wait_exponential,
 )
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Get Keycloak configuration from environment variables
 KEYCLOAK_SERVER_URL = os.environ.get('KEYCLOAK_SERVER_URL', '')
 KEYCLOAK_REALM_NAME = os.environ.get('KEYCLOAK_REALM_NAME', '')
-KEYCLOAK_PROVIDER_NAME = os.environ.get('KEYCLOAK_PROVIDER_NAME', '')
 KEYCLOAK_CLIENT_ID = os.environ.get('KEYCLOAK_CLIENT_ID', '')
 KEYCLOAK_CLIENT_SECRET = os.environ.get('KEYCLOAK_CLIENT_SECRET', '')
 KEYCLOAK_ADMIN_PASSWORD = os.environ.get('KEYCLOAK_ADMIN_PASSWORD', '')
 
-# Logger is imported from openhands.core.logger
+# Logger is imported from openhands.app_server.utils.logger
 
 # Get configuration from environment variables
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY')

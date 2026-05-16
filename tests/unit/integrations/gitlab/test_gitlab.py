@@ -1,13 +1,58 @@
 """Tests for GitLab integration."""
 
+import importlib
 from unittest.mock import patch
 
 import pytest
 from pydantic import SecretStr
 
-from openhands.integrations.gitlab.gitlab_service import GitLabService
-from openhands.integrations.service_types import OwnerType, ProviderType, Repository
-from openhands.server.types import AppMode
+from openhands.app_server.integrations import provider as provider_module
+from openhands.app_server.integrations.gitlab import (
+    constants as gitlab_constants_module,
+)
+from openhands.app_server.integrations.gitlab.constants import GITLAB_HOST
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabService
+from openhands.app_server.integrations.service_types import (
+    OwnerType,
+    ProviderType,
+    Repository,
+)
+from openhands.app_server.types import AppMode
+
+
+@pytest.mark.asyncio
+async def test_gitlab_get_user_groups_returns_group_paths():
+    """Test that get_user_groups returns group paths the user belongs to."""
+    service = GitLabService(token=SecretStr('test-token'))
+
+    mock_groups = [
+        {'path': 'my-team', 'name': 'My Team', 'id': 1},
+        {'path': 'open-source', 'name': 'Open Source Projects', 'id': 2},
+    ]
+
+    with patch.object(service, '_make_request') as mock_request:
+        mock_request.return_value = (mock_groups, {})
+
+        groups = await service.get_user_groups()
+
+        assert groups == ['my-team', 'open-source']
+        mock_request.assert_called_once_with(
+            f'{service.BASE_URL}/groups',
+            {'min_access_level': '10', 'per_page': '100'},
+        )
+
+
+@pytest.mark.asyncio
+async def test_gitlab_get_user_groups_returns_empty_on_error():
+    """Test that get_user_groups returns empty list when the API call fails."""
+    service = GitLabService(token=SecretStr('test-token'))
+
+    with patch.object(service, '_make_request') as mock_request:
+        mock_request.side_effect = Exception('API error')
+
+        groups = await service.get_user_groups()
+
+        assert groups == []
 
 
 @pytest.mark.asyncio
@@ -440,3 +485,45 @@ async def test_gitlab_search_repositories_single_term_query():
 
         # Verify we got the expected repositories
         assert len(repositories) == 1
+
+
+class TestGitLabHostEnvVar:
+    """GITLAB_HOST env var configures the deployment-wide GitLab URL."""
+
+    def test_base_url_derived_from_gitlab_host(self):
+        assert GitLabService.BASE_URL == f'https://{GITLAB_HOST}/api/v4'
+        assert GitLabService.GRAPHQL_URL == f'https://{GITLAB_HOST}/api/graphql'
+
+    def test_provider_domains_uses_gitlab_host(self):
+        assert (
+            provider_module.ProviderHandler.PROVIDER_DOMAINS[ProviderType.GITLAB]
+            == GITLAB_HOST
+        )
+
+    def test_empty_gitlab_host_falls_back_to_default(self):
+        """An explicitly empty GITLAB_HOST falls back to gitlab.com."""
+        with patch.dict('os.environ', {'GITLAB_HOST': ''}):
+            reloaded = importlib.reload(gitlab_constants_module)
+        try:
+            assert reloaded.GITLAB_HOST == 'gitlab.com'
+        finally:
+            importlib.reload(gitlab_constants_module)
+
+    @pytest.mark.parametrize(
+        'raw,expected',
+        [
+            ('gitlab.example.com/', 'gitlab.example.com'),
+            ('https://gitlab.example.com', 'gitlab.example.com'),
+            ('http://gitlab.example.com', 'gitlab.example.com'),
+            ('https://gitlab.example.com/', 'gitlab.example.com'),
+            ('  https://gitlab.example.com/  ', 'gitlab.example.com'),
+        ],
+    )
+    def test_gitlab_host_is_sanitized(self, raw, expected):
+        """Common user input mistakes (protocol prefix, trailing slash, whitespace) are stripped."""
+        with patch.dict('os.environ', {'GITLAB_HOST': raw}):
+            reloaded = importlib.reload(gitlab_constants_module)
+        try:
+            assert reloaded.GITLAB_HOST == expected
+        finally:
+            importlib.reload(gitlab_constants_module)

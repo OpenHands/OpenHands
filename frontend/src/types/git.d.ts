@@ -30,6 +30,30 @@ interface PaginatedBranchesResponse {
   total_count?: number;
 }
 
+/**
+ * V1 API response for paginated branch search (cursor-based)
+ */
+interface BranchPage {
+  items: Branch[];
+  next_page_id: string | null;
+}
+
+/**
+ * V1 API response for paginated repository search (cursor-based)
+ */
+interface RepositoryPage {
+  items: GitRepository[];
+  next_page_id: string | null;
+}
+
+/**
+ * V1 API response for paginated installation search (cursor-based)
+ */
+interface InstallationPage {
+  items: string[];
+  next_page_id: string | null;
+}
+
 interface GitRepository {
   id: string;
   full_name: string;

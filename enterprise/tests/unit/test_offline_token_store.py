@@ -4,19 +4,14 @@ from storage.offline_token_store import OfflineTokenStore
 from storage.stored_offline_token import StoredOfflineToken
 
 
-@pytest.fixture
-def mock_config():
-    return None  # Not used in tests
-
-
 @pytest.mark.asyncio
-async def test_store_token_new_record(async_session_maker, mock_config):
+async def test_store_token_new_record(async_session_maker):
     # Setup - inject the test session maker into the store module
     import storage.offline_token_store as store_module
 
     store_module.a_session_maker = async_session_maker
 
-    token_store = OfflineTokenStore('test_user_id', mock_config)
+    token_store = OfflineTokenStore('test_user_id')
     test_token = 'test_offline_token'
 
     # Execute
@@ -36,13 +31,13 @@ async def test_store_token_new_record(async_session_maker, mock_config):
 
 
 @pytest.mark.asyncio
-async def test_store_token_existing_record(async_session_maker, mock_config):
+async def test_store_token_existing_record(async_session_maker):
     # Setup - inject the test session maker into the store module
     import storage.offline_token_store as store_module
 
     store_module.a_session_maker = async_session_maker
 
-    token_store = OfflineTokenStore('test_user_id', mock_config)
+    token_store = OfflineTokenStore('test_user_id')
 
     async with async_session_maker() as session:
         session.add(
@@ -70,13 +65,13 @@ async def test_store_token_existing_record(async_session_maker, mock_config):
 
 
 @pytest.mark.asyncio
-async def test_load_token_existing(async_session_maker, mock_config):
+async def test_load_token_existing(async_session_maker):
     # Setup - inject the test session maker into the store module
     import storage.offline_token_store as store_module
 
     store_module.a_session_maker = async_session_maker
 
-    token_store = OfflineTokenStore('test_user_id', mock_config)
+    token_store = OfflineTokenStore('test_user_id')
 
     async with async_session_maker() as session:
         session.add(
@@ -94,13 +89,13 @@ async def test_load_token_existing(async_session_maker, mock_config):
 
 
 @pytest.mark.asyncio
-async def test_load_token_not_found(async_session_maker, mock_config):
+async def test_load_token_not_found(async_session_maker):
     # Setup - inject the test session maker into the store module
     import storage.offline_token_store as store_module
 
     store_module.a_session_maker = async_session_maker
 
-    token_store = OfflineTokenStore('nonexistent_user', mock_config)
+    token_store = OfflineTokenStore('nonexistent_user')
 
     # Execute
     result = await token_store.load_token()
@@ -110,12 +105,12 @@ async def test_load_token_not_found(async_session_maker, mock_config):
 
 
 @pytest.mark.asyncio
-async def test_get_instance(mock_config):
+async def test_get_instance():
     # Setup
     test_user_id = 'test_user_id'
 
     # Execute
-    result = await OfflineTokenStore.get_instance(mock_config, test_user_id)
+    result = await OfflineTokenStore.get_instance(test_user_id)
 
     # Verify
     assert isinstance(result, OfflineTokenStore)

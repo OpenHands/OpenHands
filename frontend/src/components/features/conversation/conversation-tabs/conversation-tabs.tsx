@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
-import ServerIcon from "#/icons/server.svg?react";
 import GitChanges from "#/icons/git_changes.svg?react";
 import VSCodeIcon from "#/icons/vscode.svg?react";
 import ThreeDotsVerticalIcon from "#/icons/three-dots-vertical.svg?react";
@@ -105,15 +104,6 @@ export function ConversationTabs() {
       className: "pl-2",
     },
     {
-      tabValue: "served",
-      isActive: isTabActive("served"),
-      icon: ServerIcon,
-      onClick: () => selectTab("served"),
-      tooltipContent: t(I18nKey.COMMON$APP),
-      tooltipAriaLabel: t(I18nKey.COMMON$APP),
-      label: t(I18nKey.COMMON$APP),
-    },
-    {
       tabValue: "browser",
       isActive: isTabActive("browser"),
       icon: GlobeIcon,
@@ -145,7 +135,7 @@ export function ConversationTabs() {
     <div
       className={cn(
         "relative w-full",
-        "flex flex-row justify-start lg:justify-end items-center gap-4.5",
+        "flex flex-row justify-start lg:justify-end items-center gap-4.5 flex-wrap",
       )}
     >
       {visibleTabs.map(

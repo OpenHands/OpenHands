@@ -19,8 +19,10 @@ import {
   ConversationStateUpdateEventFullState,
   ConversationStateUpdateEventStats,
   ConversationErrorEvent,
+  ServerErrorEvent,
 } from "./core/events/conversation-state-event";
 import { HookExecutionEvent } from "./core/events/hook-execution-event";
+import { ACPToolCallEvent } from "./core/events/acp-tool-call-event";
 import { SystemPromptEvent } from "./core/events/system-event";
 import type { OpenHandsParsedEvent } from "../core/index";
 
@@ -194,12 +196,35 @@ export const isConversationErrorEvent = (
   "kind" in event && event.kind === "ConversationErrorEvent";
 
 /**
+ * Type guard function to check if an event is a server error event
+ */
+export const isServerErrorEvent = (
+  event: OpenHandsEvent,
+): event is ServerErrorEvent =>
+  "kind" in event && event.kind === "ServerErrorEvent";
+
+/**
+ * Type guard function to check if an event is a displayable error event
+ * (ConversationErrorEvent or ServerErrorEvent) - both should show as error banners
+ */
+export const isDisplayableErrorEvent = (event: OpenHandsEvent): boolean =>
+  isConversationErrorEvent(event) || isServerErrorEvent(event);
+
+/**
  * Type guard function to check if an event is a hook execution event
  */
 export const isHookExecutionEvent = (
   event: OpenHandsEvent,
 ): event is HookExecutionEvent =>
   "kind" in event && event.kind === "HookExecutionEvent";
+
+/**
+ * Type guard function to check if an event is an ACP tool call event
+ */
+export const isACPToolCallEvent = (
+  event: OpenHandsEvent,
+): event is ACPToolCallEvent =>
+  "kind" in event && event.kind === "ACPToolCallEvent";
 
 // =============================================================================
 // TEMPORARY COMPATIBILITY TYPE GUARDS

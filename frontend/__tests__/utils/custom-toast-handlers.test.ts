@@ -29,7 +29,7 @@ describe("custom-toast-handlers", () => {
           duration: 5000, // Should use minimum duration of 5000ms
           position: "top-right",
           style: expect.objectContaining({
-            width: "400px",
+            maxWidth: "400px",
             wordBreak: "break-word",
           }),
         }),
@@ -47,7 +47,7 @@ describe("custom-toast-handlers", () => {
           duration: expect.any(Number),
           position: "top-right",
           style: expect.objectContaining({
-            width: "400px",
+            maxWidth: "400px",
             wordBreak: "break-word",
           }),
         }),
@@ -77,7 +77,7 @@ describe("custom-toast-handlers", () => {
           duration: 4000, // Should use minimum duration of 4000ms for errors
           position: "top-right",
           style: expect.objectContaining({
-            width: "400px",
+            maxWidth: "400px",
             wordBreak: "break-word",
           }),
         }),
@@ -95,7 +95,7 @@ describe("custom-toast-handlers", () => {
           duration: expect.any(Number),
           position: "top-right",
           style: expect.objectContaining({
-            width: "400px",
+            maxWidth: "400px",
             wordBreak: "break-word",
           }),
         }),

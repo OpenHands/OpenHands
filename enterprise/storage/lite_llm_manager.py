@@ -17,11 +17,10 @@ from server.constants import (
     get_default_litellm_model,
 )
 from server.logger import logger
-from storage.encrypt_utils import decrypt_legacy_value
 from storage.user_settings import UserSettings
 
-from openhands.server.settings import Settings
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 # Timeout in seconds for key verification requests to LiteLLM
 KEY_VERIFICATION_TIMEOUT = 5.0
@@ -216,11 +215,18 @@ class LiteLlmManager:
                     None,
                 )
 
-        oss_settings.agent = 'CodeActAgent'
-        # Use the model corresponding to the current user settings version
-        oss_settings.llm_model = get_default_litellm_model()
-        oss_settings.llm_api_key = SecretStr(key)
-        oss_settings.llm_base_url = LITE_LLM_API_URL
+        oss_settings.update(
+            {
+                'agent_settings_diff': {
+                    'agent': 'CodeActAgent',
+                    'llm': {
+                        'model': get_default_litellm_model(),
+                        'api_key': key,
+                        'base_url': LITE_LLM_API_URL,
+                    },
+                }
+            }
+        )
         return oss_settings
 
     @staticmethod
@@ -354,12 +360,16 @@ class LiteLlmManager:
                 # Check if the database key exists in LiteLLM
                 # If not, generate a new key to prevent verification failures later
                 db_key = None
-                if (
-                    user_settings
-                    and user_settings.llm_api_key
-                    and user_settings.llm_base_url == LITE_LLM_API_URL
-                ):
-                    db_key = user_settings.llm_api_key
+                llm_base_url = None
+                # agent_settings is a JSON column (dict) on UserSettings
+                llm_cfg = (
+                    (user_settings.agent_settings or {}).get('llm', {})
+                    if user_settings
+                    else {}
+                )
+                llm_base_url = llm_cfg.get('base_url')
+                if llm_base_url == LITE_LLM_API_URL:
+                    db_key = llm_cfg.get('api_key')
                     if hasattr(db_key, 'get_secret_value'):
                         db_key = db_key.get_secret_value()
 
@@ -392,8 +402,11 @@ class LiteLlmManager:
                             extra={'org_id': org_id, 'user_id': keycloak_user_id},
                         )
                         # Update user_settings with the new key so it gets stored in org_member
-                        user_settings.llm_api_key = SecretStr(new_key)
-                        user_settings.llm_api_key_for_byor = SecretStr(new_key)
+                        # agent_settings is a non-nullable JSON column (dict) on UserSettings
+                        user_settings.agent_settings.setdefault('llm', {})[
+                            'api_key'
+                        ] = new_key
+                        user_settings.llm_api_key_for_byor_secret = SecretStr(new_key)
 
         logger.info(
             'LiteLlmManager:migrate_lite_llm_entries:complete',
@@ -860,13 +873,6 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
-
-        try:
-            # Sometimes the key we get is encrypted - attempt to decrypt.
-            key = decrypt_legacy_value(key)
-        except Exception:
-            # The key was not encrypted
-            pass
 
         payload = {
             'key': key,

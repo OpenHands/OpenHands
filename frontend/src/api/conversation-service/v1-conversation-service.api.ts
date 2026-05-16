@@ -207,6 +207,50 @@ class V1ConversationService {
   }
 
   /**
+   * Ask the agent a side question without queueing a full turn.
+   * @param conversationId The conversation ID
+   * @param conversationUrl The conversation URL
+   * @param question The side question to ask
+   * @param sessionApiKey Session API key for authentication
+   * @returns The agent's response
+   */
+  static async askAgent(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    question: string,
+    sessionApiKey?: string | null,
+  ): Promise<{ response: string }> {
+    const url = this.buildRuntimeUrl(
+      conversationUrl,
+      `/api/conversations/${conversationId}/ask_agent`,
+    );
+    const headers = buildSessionHeaders(sessionApiKey);
+
+    const { data } = await axios.post<{ response: string }>(
+      url,
+      { question },
+      { headers },
+    );
+    return data;
+  }
+
+  /**
+   * Switch the running conversation's LLM to a saved profile.
+   * Goes through the app-server proxy, which loads the profile from user
+   * settings (with api_key) and hands the LLM to the agent-server's
+   * `switch_llm` endpoint.
+   */
+  static async switchProfile(
+    conversationId: string,
+    profileName: string,
+  ): Promise<void> {
+    await openHands.post(
+      `/api/v1/app-conversations/${conversationId}/switch_profile`,
+      { profile_name: profileName },
+    );
+  }
+
+  /**
    * Resume a V1 conversation
    * Uses the custom runtime URL from the conversation
    *
@@ -434,10 +478,29 @@ class V1ConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<V1RuntimeConversationInfo> {
-    const url = this.buildRuntimeUrl(
-      conversationUrl,
-      `/api/conversations/${conversationId}`,
-    );
+    // The agent-server provides a full ``conversationUrl`` with a
+    // ``/api/conversations/{id}`` path (the SDK unified the LLM and ACP
+    // endpoints onto this single route). We still preserve the URL's path
+    // verbatim because a proxy deployment may add a prefix (e.g.
+    // ``/runtime/55313/api/conversations/...``). If the URL is missing or
+    // malformed we fall back to the default path derived from
+    // ``window.location``.
+    //
+    // Either way we route through ``buildRuntimeUrl`` so its
+    // ``extractBaseHost`` rewrites localhost/127.0.0.1 to the browser's
+    // hostname when accessed from a non-local browser (proxy/external host
+    // deployments). Without this, a conversation_url containing
+    // ``localhost`` is unreachable from anywhere but the host machine.
+    let path = `/api/conversations/${conversationId}`;
+    if (conversationUrl) {
+      try {
+        path = new URL(conversationUrl).pathname;
+      } catch {
+        // Malformed URL — fall back to the default LLM path; buildRuntimeUrl
+        // will resolve the host against window.location.
+      }
+    }
+    const url = this.buildRuntimeUrl(conversationUrl, path);
     const headers = buildSessionHeaders(sessionApiKey);
 
     const { data } = await axios.get<V1RuntimeConversationInfo>(url, {
@@ -466,6 +529,57 @@ class V1ConversationService {
     );
 
     return data.items;
+  }
+
+  /**
+   * Search for V1 conversations (general search with pagination)
+   * Use this to populate the side menu with user's conversations
+   *
+   * @param limit Maximum number of results (default: 20)
+   * @param pageId Optional page ID for pagination
+   * @returns Paginated list of conversations
+   */
+  static async searchConversations(
+    limit: number = 20,
+    pageId?: string,
+  ): Promise<V1AppConversationPage> {
+    const params = new URLSearchParams();
+    params.append("limit", limit.toString());
+    if (pageId) {
+      params.append("page_id", pageId);
+    }
+
+    const { data } = await openHands.get<V1AppConversationPage>(
+      `/api/v1/app-conversations/search?${params.toString()}`,
+    );
+
+    return data;
+  }
+
+  /**
+   * Delete a V1 conversation
+   * @param conversationId The conversation ID to delete
+   * @returns void on success
+   */
+  static async deleteConversation(conversationId: string): Promise<void> {
+    await openHands.delete(`/api/v1/app-conversations/${conversationId}`);
+  }
+
+  /**
+   * Update a V1 conversation's title
+   * @param conversationId The conversation ID
+   * @param title The new title
+   * @returns Updated conversation info
+   */
+  static async updateConversationTitle(
+    conversationId: string,
+    title: string,
+  ): Promise<V1AppConversation> {
+    const { data } = await openHands.patch<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      { title },
+    );
+    return data;
   }
 }
 

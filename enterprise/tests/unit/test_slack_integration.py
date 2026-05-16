@@ -11,12 +11,12 @@ from integrations.slack.slack_manager import (
 from integrations.slack.slack_view import SlackNewConversationView
 from storage.slack_user import SlackUser
 
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
     ProviderType,
     Repository,
 )
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture
@@ -64,7 +64,6 @@ def slack_new_conversation_view(mock_slack_user, mock_user_auth):
         send_summary_instruction=True,
         conversation_id='',
         team_id='T1234567890',
-        v1_enabled=False,
     )
 
 
@@ -90,21 +89,21 @@ def test_infer_repo_from_message(message, expected):
 class TestRepoVerificationHandling:
     """Test repo verification handling for Slack integration."""
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch('integrations.slack.slack_manager.ProviderHandler')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
     async def test_timeout_during_verification_shows_selector(
         self,
         mock_send_message,
         mock_provider_handler_class,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
         slack_new_conversation_view,
     ):
         """Test that when repo verification times out, selector is shown."""
         # Setup Redis mock
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Setup: Modify message to include exactly one repo reference to trigger verification
         slack_new_conversation_view.user_msg = 'Help me with OpenHands/OpenHands repo'
@@ -133,19 +132,24 @@ class TestRepoVerificationHandling:
         assert isinstance(selector_message, dict)
         assert selector_message.get('text') == 'Choose a Repository:'
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
-    async def test_no_repo_mentioned_shows_external_selector(
+    async def test_no_repo_mentioned_shows_button_and_dropdown(
         self,
         mock_send_message,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
         slack_new_conversation_view,
     ):
-        """Test that when no repo is mentioned, external_select repo selector is shown."""
+        """Test that when no repo is mentioned, a button and dropdown are shown.
+
+        The form shows:
+        1. A "No Repository" button - immediately clickable without loading
+        2. An external_select dropdown - for searching repositories dynamically
+        """
         # Setup Redis mock
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Setup: user message without any repo mention
         slack_new_conversation_view.user_msg = 'Hello, can you help me?'
@@ -162,26 +166,84 @@ class TestRepoVerificationHandling:
         mock_send_message.assert_called_once()
         call_args = mock_send_message.call_args
 
-        # Should be the repo selection form with external_select
+        # Should be the repo selection form with button + external_select
         message = call_args[0][0]
         assert isinstance(message, dict)
         assert message.get('text') == 'Choose a Repository:'
-        # Verify it's using external_select
+
         blocks = message.get('blocks', [])
         actions_block = next((b for b in blocks if b.get('type') == 'actions'), None)
         assert actions_block is not None
         elements = actions_block.get('elements', [])
-        assert len(elements) > 0
-        assert elements[0].get('type') == 'external_select'
 
-    @patch('integrations.slack.slack_manager.sio')
+        # Should have 2 elements: button and external_select
+        assert len(elements) == 2
+
+        # First element: "No Repository" button (immediately available)
+        assert elements[0].get('type') == 'button'
+        assert elements[0].get('action_id').startswith('no_repository:')
+        assert elements[0].get('value') == '-'
+
+        # Second element: external_select for searching repos
+        assert elements[1].get('type') == 'external_select'
+        assert elements[1].get('action_id').startswith('repository_select:')
+
+    @pytest.mark.asyncio
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
+    async def test_no_repository_button_click_processes_correctly(
+        self,
+        mock_get_redis_client_async,
+        slack_manager,
+    ):
+        """Test that clicking 'No Repository' button correctly processes the interaction.
+
+        This verifies the button click path through receive_form_interaction, ensuring
+        the no_repository: action_id is correctly parsed and processed.
+        """
+        # Setup: Mock Redis to return a stored user message
+        mock_redis = AsyncMock()
+        mock_get_redis_client_async.return_value = mock_redis
+        stored_msg = json.dumps({'text': 'Hello, help me with code', 'user': 'U123'})
+        mock_redis.get = AsyncMock(return_value=stored_msg)
+
+        # Simulate button click payload (what Slack sends when button is clicked)
+        button_payload = {
+            'type': 'block_actions',
+            'actions': [
+                {
+                    'action_id': 'no_repository:1234567890.123456:None',
+                    'type': 'button',
+                    'value': '-',
+                }
+            ],
+            'user': {'id': 'U123'},
+            'container': {'channel_id': 'C123'},
+            'team': {'id': 'T123'},
+        }
+
+        # Mock receive_message to capture what's passed to it
+        with patch.object(
+            slack_manager, 'receive_message', new_callable=AsyncMock
+        ) as mock_receive:
+            await slack_manager.receive_form_interaction(button_payload)
+
+            # Verify receive_message was called
+            mock_receive.assert_called_once()
+
+            # Verify the message payload has selected_repo as None
+            call_args = mock_receive.call_args[0][0]
+            assert call_args.message['selected_repo'] is None
+            assert call_args.message['message_ts'] == '1234567890.123456'
+            assert call_args.message['thread_ts'] is None
+
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch('integrations.slack.slack_manager.ProviderHandler')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
     async def test_verified_repo_starts_job(
         self,
         mock_send_message,
         mock_provider_handler_class,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
         slack_new_conversation_view,
     ):
@@ -189,7 +251,7 @@ class TestRepoVerificationHandling:
 
         # Setup Redis mock
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Setup: Modify message to include exactly one repo reference
         slack_new_conversation_view.user_msg = 'Help me with OpenHands/OpenHands repo'
@@ -223,8 +285,8 @@ class TestRepoVerificationHandling:
 class TestBuildRepoOptions:
     """Test the _build_repo_options helper method.
 
-    Note: _build_repo_options always includes the "No Repository" option at the top.
-    This is by design for the external_select dropdown.
+    Note: _build_repo_options returns only actual repositories. The "No Repository"
+    option is now handled by a separate button in the form, not the dropdown.
     """
 
     def test_build_options_with_repos(self, slack_manager):
@@ -247,21 +309,20 @@ class TestBuildRepoOptions:
 
         options = slack_manager._build_repo_options(repos)
 
-        # Should have 3 options: "No Repository" + 2 repos
-        assert len(options) == 3
-        assert options[0]['value'] == '-'
-        assert options[0]['text']['text'] == 'No Repository'
-        assert options[1]['value'] == 'owner/repo1'
-        assert options[2]['value'] == 'owner/repo2'
+        # Should have 2 options (repos only - "No Repository" is now a button)
+        assert len(options) == 2
+        assert options[0]['value'] == 'owner/repo1'
+        assert options[1]['value'] == 'owner/repo2'
 
     def test_build_options_empty_repos(self, slack_manager):
-        """Test building options with empty repo list still includes No Repository."""
+        """Test building options with empty repo list returns empty list.
+
+        Note: "No Repository" is now handled by a separate button in the form.
+        """
         options = slack_manager._build_repo_options([])
 
-        # Should have 1 option: just "No Repository"
-        assert len(options) == 1
-        assert options[0]['value'] == '-'
-        assert options[0]['text']['text'] == 'No Repository'
+        # Should have 0 options (empty list)
+        assert len(options) == 0
 
     def test_build_options_truncates_long_names(self, slack_manager):
         """Test that repo names longer than 75 chars are truncated."""
@@ -278,12 +339,12 @@ class TestBuildRepoOptions:
 
         options = slack_manager._build_repo_options(repos)
 
-        # First option is "No Repository", second is the repo
-        assert len(options) == 2
+        # Should have 1 option (the repo only - "No Repository" is a button)
+        assert len(options) == 1
         # Text should be truncated to 75 chars
-        assert len(options[1]['text']['text']) == 75
+        assert len(options[0]['text']['text']) == 75
         # But value should have full name
-        assert options[1]['value'] == long_name
+        assert options[0]['value'] == long_name
 
 
 class TestSearchRepositories:
@@ -413,23 +474,23 @@ class TestSearchRepositories:
         options = slack_manager._build_repo_options(search_results)
 
         # Verify: Options are correctly built from search results
-        assert len(options) == 4  # "No Repository" + 3 repos
+        # Note: "No Repository" is now a button, not in the dropdown
+        assert len(options) == 3  # 3 repos only
 
-        # First option should be "No Repository"
-        assert options[0]['value'] == '-'
-        assert options[0]['text']['text'] == 'No Repository'
-
-        # Remaining options should be the repos in order
-        assert options[1]['value'] == 'myorg/react-dashboard'
-        assert options[1]['text']['text'] == 'myorg/react-dashboard'
-        assert options[2]['value'] == 'myorg/python-api'
-        assert options[3]['value'] == 'myorg/docs-site'
+        # Options should be the repos in order
+        assert options[0]['value'] == 'myorg/react-dashboard'
+        assert options[0]['text']['text'] == 'myorg/react-dashboard'
+        assert options[1]['value'] == 'myorg/python-api'
+        assert options[2]['value'] == 'myorg/docs-site'
 
     @patch('integrations.slack.slack_manager.ProviderHandler')
-    async def test_search_with_empty_results_builds_no_repo_only_option(
+    async def test_search_with_empty_results_builds_empty_options(
         self, mock_provider_handler_class, slack_manager, mock_user_auth
     ):
-        """Test that when search returns no results, only 'No Repository' option is shown."""
+        """Test that when search returns no results, empty options list is returned.
+
+        Note: "No Repository" is now handled by a separate button in the form.
+        """
         # Setup: No matching repos
         mock_provider_handler = MagicMock()
         mock_provider_handler.search_repositories = AsyncMock(return_value=[])
@@ -447,10 +508,8 @@ class TestSearchRepositories:
         )
         options = slack_manager._build_repo_options(search_results)
 
-        # Verify: Only "No Repository" option
-        assert len(options) == 1
-        assert options[0]['value'] == '-'
-        assert options[0]['text']['text'] == 'No Repository'
+        # Verify: Empty options list (button handles "No Repository")
+        assert len(options) == 0
 
 
 class TestUserMsgStorage:
@@ -473,13 +532,18 @@ class TestUserMsgStorage:
         ],
         ids=['with_thread', 'without_thread', 'different_timestamps'],
     )
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_store_user_msg_for_form(
-        self, mock_sio, slack_manager, message_ts, thread_ts, user_msg
+        self,
+        mock_get_redis_client_async,
+        slack_manager,
+        message_ts,
+        thread_ts,
+        user_msg,
     ):
         """Test storing user message in Redis with various timestamp combinations."""
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Should not raise an exception on success
         await slack_manager._store_user_msg_for_form(message_ts, thread_ts, user_msg)
@@ -498,16 +562,16 @@ class TestUserMsgStorage:
         ],
         ids=['connection_error', 'timeout_error', 'generic_exception'],
     )
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_store_user_msg_for_form_redis_failure(
-        self, mock_sio, slack_manager, exception_type, exception_msg
+        self, mock_get_redis_client_async, slack_manager, exception_type, exception_msg
     ):
         """Test that Redis failures during store raise SlackError."""
         from integrations.slack.slack_errors import SlackError, SlackErrorCode
 
         mock_redis = AsyncMock()
         mock_redis.set.side_effect = exception_type(exception_msg)
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         message_ts = '1234567890.123456'
         thread_ts = '1234567890.111111'
@@ -532,14 +596,18 @@ class TestUserMsgStorage:
         ],
         ids=['bytes_response', 'string_response'],
     )
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_retrieve_user_msg_for_form(
-        self, mock_sio, slack_manager, redis_return_value, expected_result
+        self,
+        mock_get_redis_client_async,
+        slack_manager,
+        redis_return_value,
+        expected_result,
     ):
         """Test retrieving user message from Redis with various response types."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = redis_return_value
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         message_ts = '1234567890.123456'
         thread_ts = '1234567890.111111'
@@ -550,16 +618,16 @@ class TestUserMsgStorage:
         mock_redis.get.assert_called_once_with(expected_key)
         assert result == expected_result
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_retrieve_user_msg_for_form_key_not_found(
-        self, mock_sio, slack_manager
+        self, mock_get_redis_client_async, slack_manager
     ):
         """Test that missing key raises SlackError with SESSION_EXPIRED."""
         from integrations.slack.slack_errors import SlackError, SlackErrorCode
 
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         message_ts = '1234567890.123456'
         thread_ts = '1234567890.111111'
@@ -578,16 +646,16 @@ class TestUserMsgStorage:
         ],
         ids=['connection_error', 'timeout_error'],
     )
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     async def test_retrieve_user_msg_for_form_redis_failure(
-        self, mock_sio, slack_manager, exception_type, exception_msg
+        self, mock_get_redis_client_async, slack_manager, exception_type, exception_msg
     ):
         """Test that Redis failures during retrieve raise SlackError."""
         from integrations.slack.slack_errors import SlackError, SlackErrorCode
 
         mock_redis = AsyncMock()
         mock_redis.get.side_effect = exception_type(exception_msg)
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         message_ts = '1234567890.123456'
         thread_ts = '1234567890.111111'
@@ -602,18 +670,18 @@ class TestUserMsgStorage:
 class TestIsJobRequestedWithUserMsgStorage:
     """Test that is_job_requested properly stores user message for form flow."""
 
-    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
     async def test_stores_user_msg_when_showing_repo_selector(
         self,
         mock_send_message,
-        mock_sio,
+        mock_get_redis_client_async,
         slack_manager,
         slack_new_conversation_view,
     ):
         """Test that user_msg is stored in Redis when repo selector is shown."""
         mock_redis = AsyncMock()
-        mock_sio.manager.redis = mock_redis
+        mock_get_redis_client_async.return_value = mock_redis
 
         # Setup: user message without any repo mention (no repo inferred)
         slack_new_conversation_view.user_msg = 'Hello, can you help me?'
@@ -669,7 +737,10 @@ class TestOnOptionsLoadEndpoint:
     async def test_on_options_load_disabled_returns_empty_options(
         self, mock_request, background_tasks
     ):
-        """Test that when webhooks are disabled, empty options are returned."""
+        """Test that when webhooks are disabled, empty options are returned.
+
+        Note: 'No Repository' is handled by a separate button in the form.
+        """
         from server.routes.integration.slack import on_options_load
 
         response = await on_options_load(mock_request, background_tasks)
@@ -683,7 +754,10 @@ class TestOnOptionsLoadEndpoint:
     async def test_on_options_load_no_payload_returns_empty_options(
         self, mock_request, background_tasks
     ):
-        """Test that when no payload is in request, empty options are returned."""
+        """Test that when no payload is in request, empty options are returned.
+
+        Note: 'No Repository' is handled by a separate button in the form.
+        """
         from server.routes.integration.slack import on_options_load
 
         mock_request.body = AsyncMock(return_value=b'')
@@ -731,7 +805,10 @@ class TestOnOptionsLoadEndpoint:
     async def test_on_options_load_wrong_payload_type_returns_empty_options(
         self, mock_signature_verifier, mock_request, background_tasks
     ):
-        """Test that non-block_suggestion payload returns empty options."""
+        """Test that non-block_suggestion payload returns empty options.
+
+        Note: 'No Repository' is handled by a separate button in the form.
+        """
         from server.routes.integration.slack import on_options_load
 
         payload = {
@@ -764,7 +841,10 @@ class TestOnOptionsLoadEndpoint:
         background_tasks,
         valid_block_suggestion_payload,
     ):
-        """Test that unauthenticated users get empty options and linking message is queued."""
+        """Test that unauthenticated users get empty options and linking message is queued.
+
+        Note: 'No Repository' is handled by a separate button in the form.
+        """
         from server.routes.integration.slack import on_options_load
 
         payload_str = json.dumps(valid_block_suggestion_payload)
@@ -817,9 +897,8 @@ class TestOnOptionsLoadEndpoint:
             return_value=(mock_slack_user, mock_user_auth)
         )
 
-        # Expected options from search_repos_for_slack
+        # Expected options from search_repos_for_slack (no "No Repository" - that's a button)
         expected_options = [
-            {'text': {'type': 'plain_text', 'text': 'No Repository'}, 'value': '-'},
             {
                 'text': {'type': 'plain_text', 'text': 'owner/repo1'},
                 'value': 'owner/repo1',
@@ -878,11 +957,8 @@ class TestOnOptionsLoadEndpoint:
         mock_slack_manager.authenticate_user = AsyncMock(
             return_value=(mock_slack_user, mock_user_auth)
         )
-        mock_slack_manager.search_repos_for_slack = AsyncMock(
-            return_value=[
-                {'text': {'type': 'plain_text', 'text': 'No Repository'}, 'value': '-'}
-            ]
-        )
+        # Empty search returns empty list (no repos found, and "No Repository" is a button)
+        mock_slack_manager.search_repos_for_slack = AsyncMock(return_value=[])
 
         response = await on_options_load(mock_request, background_tasks)
 
@@ -907,7 +983,10 @@ class TestOnOptionsLoadEndpoint:
         mock_slack_user,
         mock_user_auth,
     ):
-        """Test that when search raises an exception, empty options are returned gracefully."""
+        """Test that when search raises an exception, empty options are returned gracefully.
+
+        Note: 'No Repository' is handled by a separate button in the form.
+        """
         from server.routes.integration.slack import on_options_load
 
         payload_str = json.dumps(valid_block_suggestion_payload)

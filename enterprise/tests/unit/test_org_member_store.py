@@ -10,6 +10,71 @@ from storage.org_member import OrgMember
 from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.user import User
+from storage.user_settings import UserSettings
+
+from openhands.app_server.settings.settings_models import Settings
+
+
+def test_get_kwargs_from_user_settings_uses_agent_settings_as_source_of_truth():
+    user_settings = UserSettings(
+        llm_api_key='legacy-secret',
+        agent_settings={
+            'agent': 'CodeActAgent',
+            'llm': {
+                'model': 'anthropic/claude-sonnet-4-5-20250929',
+                'base_url': 'https://api.example.com',
+            },
+            'condenser': {
+                'enabled': False,
+                'max_size': 128,
+            },
+        },
+        conversation_settings={
+            'confirmation_mode': True,
+            'security_analyzer': 'llm',
+            'max_iterations': 42,
+        },
+    )
+
+    kwargs = OrgMemberStore.get_kwargs_from_user_settings(user_settings)
+
+    assert kwargs['llm_api_key'] == 'legacy-secret'
+    assert kwargs['agent_settings_diff']['agent'] == 'CodeActAgent'
+    assert (
+        kwargs['agent_settings_diff']['llm']['model']
+        == 'anthropic/claude-sonnet-4-5-20250929'
+    )
+    assert kwargs['agent_settings_diff']['llm']['base_url'] == 'https://api.example.com'
+    assert kwargs['agent_settings_diff']['condenser']['enabled'] is False
+    assert kwargs['agent_settings_diff']['condenser']['max_size'] == 128
+    assert kwargs['conversation_settings_diff']['confirmation_mode'] is True
+    assert kwargs['conversation_settings_diff']['security_analyzer'] == 'llm'
+    assert kwargs['conversation_settings_diff']['max_iterations'] == 42
+
+
+def test_get_kwargs_from_settings_starts_members_without_agent_setting_overrides():
+    settings = Settings()
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'agent': 'CodeActAgent',
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'base_url': 'https://api.example.com',
+                    'api_key': 'member-secret',
+                },
+            },
+            'conversation_settings_diff': {
+                'max_iterations': 42,
+                'confirmation_mode': True,
+            },
+        }
+    )
+
+    kwargs = OrgMemberStore.get_kwargs_from_settings(settings)
+
+    assert kwargs['llm_api_key'].get_secret_value() == 'member-secret'
+    assert kwargs['agent_settings_diff'] == {}
 
 
 @pytest.fixture
@@ -271,16 +336,23 @@ async def test_add_user_to_org_with_llm_settings(async_session_maker):
             role_id=role_id,
             llm_api_key='test-api-key',
             status='active',
-            llm_model='claude-sonnet-4',
-            llm_base_url='https://api.example.com',
-            max_iterations=50,
+            agent_settings_diff={
+                'schema_version': 1,
+                'llm': {
+                    'model': 'claude-sonnet-4',
+                    'base_url': 'https://api.example.com',
+                },
+                'max_iterations': 50,
+            },
         )
 
     # Assert
     assert org_member is not None
-    assert org_member.llm_model == 'claude-sonnet-4'
-    assert org_member.llm_base_url == 'https://api.example.com'
-    assert org_member.max_iterations == 50
+    assert org_member.agent_settings_diff['llm']['model'] == 'claude-sonnet-4'
+    assert (
+        org_member.agent_settings_diff['llm']['base_url'] == 'https://api.example.com'
+    )
+    assert org_member.agent_settings_diff['max_iterations'] == 50
 
 
 @pytest.mark.asyncio
@@ -879,15 +951,15 @@ async def test_get_org_members_paginated_email_filter_case_insensitive(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_llm_api_key(
+async def test_update_all_members_settings_async_with_llm_api_key(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members and llm_api_key in member settings
-    WHEN: update_all_members_llm_settings_async is called with llm_api_key
+    WHEN: update_all_members_settings_async is called with llm_api_key
     THEN: The llm_api_key is encrypted and stored in _llm_api_key column for all members
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
     from storage.encrypt_utils import decrypt_value
 
     # Arrange
@@ -923,10 +995,10 @@ async def test_update_all_members_llm_settings_async_with_llm_api_key(
 
     # Act
     new_api_key = 'new-test-api-key-12345'
-    member_settings = OrgMemberLLMSettings(llm_api_key=new_api_key)
+    member_settings = OrgMemberSettingsUpdate(llm_api_key=new_api_key)
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -948,15 +1020,15 @@ async def test_update_all_members_llm_settings_async_with_llm_api_key(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
+async def test_update_all_members_settings_async_with_non_encrypted_fields(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members
-    WHEN: update_all_members_llm_settings_async is called with non-encrypted fields
+    WHEN: update_all_members_settings_async is called with non-encrypted fields
     THEN: The fields are updated directly without encryption
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
     async with async_session_maker() as session:
@@ -977,8 +1049,11 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
             user_id=user.id,
             role_id=role.id,
             llm_api_key='test-key',
-            llm_model='old-model',
-            max_iterations=10,
+            agent_settings_diff={
+                'schema_version': 1,
+                'llm': {'model': 'old-model'},
+                'max_iterations': 10,
+            },
             status='active',
         )
         session.add(org_member)
@@ -986,14 +1061,18 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
         org_id = org.id
 
     # Act
-    member_settings = OrgMemberLLMSettings(
-        llm_model='new-model',
-        llm_base_url='https://new-url.com',
-        max_iterations=50,
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'llm': {
+                'model': 'new-model',
+                'base_url': 'https://new-url.com',
+            },
+            'max_iterations': 50,
+        }
     )
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -1007,21 +1086,24 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
         )
         updated_member = result.scalars().first()
 
-        assert updated_member.llm_model == 'new-model'
-        assert updated_member.llm_base_url == 'https://new-url.com'
-        assert updated_member.max_iterations == 50
+        assert updated_member.agent_settings_diff['llm']['model'] == 'new-model'
+        assert (
+            updated_member.agent_settings_diff['llm']['base_url']
+            == 'https://new-url.com'
+        )
+        assert updated_member.agent_settings_diff['max_iterations'] == 50
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_empty_settings(
+async def test_update_all_members_settings_async_with_empty_settings(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members and empty member settings
-    WHEN: update_all_members_llm_settings_async is called with no fields set
+    WHEN: update_all_members_settings_async is called with no fields set
     THEN: No database update is performed
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
     async with async_session_maker() as session:
@@ -1042,7 +1124,10 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
             user_id=user.id,
             role_id=role.id,
             llm_api_key='original-key',
-            llm_model='original-model',
+            agent_settings_diff={
+                'schema_version': 1,
+                'llm': {'model': 'original-model'},
+            },
             status='active',
         )
         session.add(org_member)
@@ -1050,10 +1135,10 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
         org_id = org.id
 
     # Act - Empty settings (all None)
-    member_settings = OrgMemberLLMSettings()
+    member_settings = OrgMemberSettingsUpdate()
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -1067,138 +1152,6 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
         )
         member = result.scalars().first()
 
-        assert member.llm_model == 'original-model'
+        assert member.agent_settings_diff['llm']['model'] == 'original-model'
         # Original key should still be there (encrypted)
         assert member._llm_api_key is not None
-
-
-# =============================================================================
-# OrgMemberLLMSettings and OrgLLMSettingsUpdate Model Unit Tests
-# =============================================================================
-
-
-def test_org_member_llm_settings_has_updates_with_llm_api_key():
-    """
-    GIVEN: OrgMemberLLMSettings with only llm_api_key set
-    WHEN: has_updates() is called
-    THEN: Returns True
-    """
-    from server.routes.org_models import OrgMemberLLMSettings
-
-    # Arrange
-    settings = OrgMemberLLMSettings(llm_api_key='test-key')
-
-    # Act
-    result = settings.has_updates()
-
-    # Assert
-    assert result is True
-
-
-def test_org_member_llm_settings_has_updates_empty():
-    """
-    GIVEN: OrgMemberLLMSettings with no fields set
-    WHEN: has_updates() is called
-    THEN: Returns False
-    """
-    from server.routes.org_models import OrgMemberLLMSettings
-
-    # Arrange
-    settings = OrgMemberLLMSettings()
-
-    # Act
-    result = settings.has_updates()
-
-    # Assert
-    assert result is False
-
-
-def test_org_llm_settings_update_apply_to_org_skips_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with llm_api_key and other fields set
-    WHEN: apply_to_org() is called
-    THEN: llm_api_key is NOT applied to org, but other fields are
-    """
-    from unittest.mock import MagicMock
-
-    from server.routes.org_models import OrgLLMSettingsUpdate
-
-    # Arrange
-    settings = OrgLLMSettingsUpdate(
-        default_llm_model='claude-3',
-        llm_api_key='should-not-be-applied',
-    )
-    mock_org = MagicMock()
-    mock_org.default_llm_model = None
-
-    # Act
-    settings.apply_to_org(mock_org)
-
-    # Assert
-    assert mock_org.default_llm_model == 'claude-3'
-    # llm_api_key should NOT be set on org (it's member-only)
-    assert (
-        not hasattr(mock_org, 'llm_api_key')
-        or mock_org.llm_api_key != 'should-not-be-applied'
-    )
-
-
-def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with llm_api_key set
-    WHEN: get_member_updates() is called
-    THEN: Returns OrgMemberLLMSettings with llm_api_key included
-    """
-    from server.routes.org_models import OrgLLMSettingsUpdate
-
-    # Arrange
-    settings = OrgLLMSettingsUpdate(
-        default_llm_model='claude-3',
-        llm_api_key='new-member-key',
-    )
-
-    # Act
-    member_updates = settings.get_member_updates()
-
-    # Assert
-    assert member_updates is not None
-    assert member_updates.llm_api_key == 'new-member-key'
-    assert member_updates.llm_model == 'claude-3'
-
-
-def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
-    WHEN: get_member_updates() is called
-    THEN: Returns OrgMemberLLMSettings with llm_api_key (not None)
-    """
-    from server.routes.org_models import OrgLLMSettingsUpdate
-
-    # Arrange
-    settings = OrgLLMSettingsUpdate(llm_api_key='member-key-only')
-
-    # Act
-    member_updates = settings.get_member_updates()
-
-    # Assert
-    assert member_updates is not None
-    assert member_updates.llm_api_key == 'member-key-only'
-    assert member_updates.llm_model is None
-
-
-def test_org_llm_settings_update_has_updates_with_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
-    WHEN: has_updates() is called
-    THEN: Returns True
-    """
-    from server.routes.org_models import OrgLLMSettingsUpdate
-
-    # Arrange
-    settings = OrgLLMSettingsUpdate(llm_api_key='test-key')
-
-    # Act
-    result = settings.has_updates()
-
-    # Assert
-    assert result is True

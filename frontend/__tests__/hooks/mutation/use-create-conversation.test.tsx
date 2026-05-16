@@ -20,12 +20,6 @@ vi.mock("#/hooks/query/use-settings", async () => {
   };
 });
 
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackConversationCreated: vi.fn(),
-  }),
-}));
-
 describe("useCreateConversation", () => {
   it("passes suggested tasks to the V1 create conversation API", async () => {
     const createConversationSpy = vi

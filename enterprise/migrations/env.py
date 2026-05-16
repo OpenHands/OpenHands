@@ -6,9 +6,15 @@ from logging.config import fileConfig
 # These plugin setup messages would otherwise appear before logging is configured
 logging.getLogger('alembic.runtime.plugins').setLevel(logging.WARNING)
 
+# Prevent SQLAlchemy engine from logging SQL results at DEBUG level, which can
+# leak sensitive column data (e.g. API keys, tokens) into log aggregators.
+# This is set before any engine is created so it takes effect immediately.
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
+
 from alembic import context  # noqa: E402
 from google.cloud.sql.connector import Connector  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy import create_engine, text  # noqa: E402
 from storage.base import Base  # noqa: E402
 
 target_metadata = Base.metadata
@@ -70,6 +76,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Re-apply SQLAlchemy engine log suppression after fileConfig, which may override
+# our earlier settings from alembic.ini. This ensures DEBUG-level SQL result logging
+# is always suppressed, preventing sensitive data from leaking into log aggregators.
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -108,6 +120,10 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             version_table_schema=target_metadata.schema,
         )
+
+        # Lock number must be unique — md5 hash of 'openhands_enterprise_migrations'
+        # Lock is released when the connection context manager exits
+        connection.execute(text('SELECT pg_advisory_lock(3617572382373537863)'))
 
         with context.begin_transaction():
             context.run_migrations()

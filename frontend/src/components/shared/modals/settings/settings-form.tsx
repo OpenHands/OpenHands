@@ -1,9 +1,7 @@
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { I18nKey } from "#/i18n/declaration";
-import { organizeModelsAndProviders } from "#/utils/organize-models-and-providers";
 import { DangerModal } from "../confirmation-modals/danger-modal";
 import { extractSettings } from "#/utils/settings-utils";
 import { ModalBackdrop } from "../modal-backdrop";
@@ -13,16 +11,15 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { HelpLink } from "#/ui/help-link";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
+import { getAgentSettingValue } from "#/utils/sdk-settings-schema";
 import { SETTINGS_FORM } from "#/utils/constants";
 
 interface SettingsFormProps {
   settings: Settings;
-  models: string[];
   onClose: () => void;
 }
 
-export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
-  const posthog = usePostHog();
+export function SettingsForm({ settings, onClose }: SettingsFormProps) {
   const { mutate: saveUserSettings } = useSaveSettings();
 
   const location = useLocation();
@@ -39,14 +36,6 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
     await saveUserSettings(newSettings, {
       onSuccess: () => {
         onClose();
-
-        posthog.capture("settings_saved", {
-          LLM_MODEL: newSettings.llm_model,
-          LLM_API_KEY_SET: newSettings.llm_api_key_set ? "SET" : "UNSET",
-          SEARCH_API_KEY_SET: newSettings.search_api_key ? "SET" : "UNSET",
-          REMOTE_RUNTIME_RESOURCE_FACTOR:
-            newSettings.remote_runtime_resource_factor,
-        });
       },
     });
   };
@@ -68,6 +57,7 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
   };
 
   const isLLMKeySet = settings.llm_api_key_set;
+  const currentModel = getAgentSettingValue(settings, "llm.model");
 
   return (
     <div>
@@ -79,8 +69,9 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
       >
         <div className="flex flex-col gap-[17px]">
           <ModelSelector
-            models={organizeModelsAndProviders(models)}
-            currentModel={settings.llm_model}
+            currentModel={
+              typeof currentModel === "string" ? currentModel : undefined
+            }
             wrapperClassName="!flex-col !gap-[17px]"
             labelClassName={SETTINGS_FORM.LABEL_CLASSNAME}
           />
@@ -99,7 +90,7 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
             testId="llm-api-key-help-anchor"
             text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
             linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-            href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
+            href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
             size="settings"
             linkColor="white"
           />

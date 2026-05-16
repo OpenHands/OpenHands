@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
@@ -53,7 +53,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
 
         Filters conversations by:
         - user_id: Only show conversations belonging to the current user
-        - org_id: Only show conversations belonging to the user's current organization
+        - org_id: Only show conversations belonging to the request's
+          *effective* organization (honors ``X-Org-Id`` and API-key org
+          binding; falls back to ``user.current_org_id``).
 
         Args:
             query: SQLAlchemy query to apply filters to
@@ -78,14 +80,28 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user_id_uuid = UUID(user_id_str)
         query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
 
-        # Filter by organization ID to ensure conversations are isolated per organization
-        user = await self._get_current_user()
-        if user and user.current_org_id is not None:
+        # Filter by the *effective* organization id (X-Org-Id override or
+        # API-key binding take precedence over user.current_org_id).
+        effective_org_id = await self._get_effective_org_id()
+        if effective_org_id is not None:
             query = query.where(
-                StoredConversationMetadataSaas.org_id == user.current_org_id
+                StoredConversationMetadataSaas.org_id == effective_org_id
             )
 
         return query
+
+    async def _get_effective_org_id(self) -> UUID | None:
+        """Resolve the effective org id for the active user context.
+
+        Returns the request's effective org id (X-Org-Id > api_key_org_id >
+        user.current_org_id) when the user is authenticated via SAAS auth,
+        otherwise falls back to the user's persisted current_org_id.
+        """
+        user_auth = getattr(self.user_context, 'user_auth', None)
+        if user_auth is not None and hasattr(user_auth, 'get_effective_org_id'):
+            return await user_auth.get_effective_org_id()
+        user = await self._get_current_user()
+        return user.current_org_id if user else None
 
     async def _secure_select(self):
         query = (
@@ -242,7 +258,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
     ):
         """Apply filters to query that includes SAAS metadata."""
         # Apply the same filters as the base class
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
                 StoredConversationMetadata.title.like(f'%{title__contains}%')
@@ -350,25 +366,32 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             # Convert string user_id to UUID
             user_id_uuid = UUID(user_id_str)
             user_query = select(User).where(User.id == user_id_uuid)
-            result = await self.db_session.execute(user_query)
-            user = result.scalar_one_or_none()
+            user_result = await self.db_session.execute(user_query)
+            user = user_result.scalar_one_or_none()
             assert user
 
-            # Determine org_id: prefer API key's org_id if authenticated via API key
-            org_id = user.current_org_id  # Default fallback
-            if hasattr(self.user_context, 'user_auth'):
-                user_auth = self.user_context.user_auth
-                if hasattr(user_auth, 'get_api_key_org_id'):
-                    api_key_org_id = user_auth.get_api_key_org_id()
-                    if api_key_org_id is not None:
-                        org_id = api_key_org_id
+            # Determine org_id. The effective org id resolver handles
+            # the X-Org-Id > api_key_org_id > current_org_id precedence;
+            # we fall back to user.current_org_id for the ADMIN/webhook
+            # path where no user_auth is attached.
+            org_id = await self._get_effective_org_id()
+            if org_id is None:
+                org_id = user.current_org_id
+
+            # Override with resolver org_id if set (from git org claim resolution).
+            # This intentionally trumps the effective org because resolver
+            # conversations are authored against a webhook-resolved org,
+            # not the caller's session org.
+            resolver_org_id = getattr(self.user_context, 'resolver_org_id', None)
+            if resolver_org_id is not None:
+                org_id = resolver_org_id
 
             # Check if SAAS metadata already exists
             saas_query = select(StoredConversationMetadataSaas).where(
                 StoredConversationMetadataSaas.conversation_id == str(info.id)
             )
-            result = await self.db_session.execute(saas_query)
-            existing_saas_metadata = result.scalar_one_or_none()
+            saas_result = await self.db_session.execute(saas_query)
+            existing_saas_metadata = saas_result.scalar_one_or_none()
             assert existing_saas_metadata is None or (
                 existing_saas_metadata.user_id == user_id_uuid
                 and existing_saas_metadata.org_id == org_id

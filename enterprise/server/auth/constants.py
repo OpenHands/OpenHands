@@ -1,12 +1,13 @@
 import os
 
+from openhands.app_server.integrations.gitlab.constants import GITLAB_HOST
+
 GITHUB_APP_CLIENT_ID = os.getenv('GITHUB_APP_CLIENT_ID', '').strip()
 GITHUB_APP_CLIENT_SECRET = os.getenv('GITHUB_APP_CLIENT_SECRET', '').strip()
 GITHUB_APP_WEBHOOK_SECRET = os.getenv('GITHUB_APP_WEBHOOK_SECRET', '')
 GITHUB_APP_PRIVATE_KEY = os.getenv('GITHUB_APP_PRIVATE_KEY', '').replace('\\n', '\n')
 KEYCLOAK_SERVER_URL = os.getenv('KEYCLOAK_SERVER_URL', '').rstrip('/')
 KEYCLOAK_REALM_NAME = os.getenv('KEYCLOAK_REALM_NAME', '')
-KEYCLOAK_PROVIDER_NAME = os.getenv('KEYCLOAK_PROVIDER_NAME', '')
 KEYCLOAK_CLIENT_ID = os.getenv('KEYCLOAK_CLIENT_ID', '')
 KEYCLOAK_CLIENT_SECRET = os.getenv('KEYCLOAK_CLIENT_SECRET', '')
 KEYCLOAK_SERVER_URL_EXT = os.getenv(
@@ -15,6 +16,7 @@ KEYCLOAK_SERVER_URL_EXT = os.getenv(
 KEYCLOAK_ADMIN_PASSWORD = os.getenv('KEYCLOAK_ADMIN_PASSWORD', '')
 GITLAB_APP_CLIENT_ID = os.getenv('GITLAB_APP_CLIENT_ID', '').strip()
 GITLAB_APP_CLIENT_SECRET = os.getenv('GITLAB_APP_CLIENT_SECRET', '').strip()
+GITLAB_TOKEN_URL = f'https://{GITLAB_HOST}/oauth/token'
 BITBUCKET_APP_CLIENT_ID = os.getenv('BITBUCKET_APP_CLIENT_ID', '').strip()
 BITBUCKET_APP_CLIENT_SECRET = os.getenv('BITBUCKET_APP_CLIENT_SECRET', '').strip()
 ENABLE_ENTERPRISE_SSO = os.getenv('ENABLE_ENTERPRISE_SSO', '').strip()
@@ -56,6 +58,23 @@ RECAPTCHA_PROJECT_ID = os.getenv('RECAPTCHA_PROJECT_ID', '').strip()
 RECAPTCHA_SITE_KEY = os.getenv('RECAPTCHA_SITE_KEY', '').strip()
 RECAPTCHA_HMAC_SECRET = os.getenv('RECAPTCHA_HMAC_SECRET', '').strip()
 RECAPTCHA_BLOCK_THRESHOLD = float(os.getenv('RECAPTCHA_BLOCK_THRESHOLD', '0.3'))
+
+# Automation Service
+AUTOMATION_SERVICE_URL = os.getenv('AUTOMATION_SERVICE_URL', '').strip()
+if AUTOMATION_SERVICE_URL and not AUTOMATION_SERVICE_URL.startswith(
+    ('http://', 'https://')
+):
+    raise ValueError(
+        f'AUTOMATION_SERVICE_URL must start with http:// or https://, '
+        f'got: {AUTOMATION_SERVICE_URL}'
+    )
+AUTOMATION_EVENT_FORWARDING_ENABLED = os.getenv(
+    'AUTOMATION_EVENT_FORWARDING_ENABLED', 'false'
+) in ('1', 'true')
+# Shared secret for signing payloads sent to automation service (separate from GitHub webhook secret)
+AUTOMATION_WEBHOOK_SECRET = os.getenv('AUTOMATION_WEBHOOK_SECRET', '').strip()
+# Default HTTP timeout for automation service requests (seconds)
+AUTOMATION_SERVICE_TIMEOUT = int(os.getenv('AUTOMATION_SERVICE_TIMEOUT', '30'))
 
 # Account Defender labels that indicate suspicious activity
 SUSPICIOUS_LABELS = {

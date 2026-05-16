@@ -1,0 +1,59 @@
+# Adds a git-tag name to existing Docker images.
+# Triggered when a tag is pushed: finds the images built at the tag's commit
+# (tagged `sha-<full>`) and adds the tag name as an alias for the same manifest.
+# Semver tags (X.Y.Z) also get X.Y, X, and latest aliases.
+# No rebuild — pure registry-side retag via `docker buildx imagetools create`.
+name: Tag Docker images
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  retag:
+    runs-on: ubuntu-22.04
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        image:
+          - ghcr.io/openhands/openhands
+          - ghcr.io/openhands/enterprise-server
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ matrix.image }}
+          flavor: latest=auto
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+      - name: Add tags to existing image
+        env:
+          SRC: ${{ matrix.image }}:sha-${{ github.sha }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! docker buildx imagetools inspect "$SRC" > /dev/null 2>&1; then
+            echo "::error::Source image $SRC does not exist. The Docker workflow for commit ${{ github.sha }} may not have completed successfully. Re-run this workflow once the build finishes."
+            exit 1
+          fi
+          args=()
+          while IFS= read -r tag; do
+            [[ -z "$tag" ]] && continue
+            args+=(-t "$tag")
+          done <<< "$TAGS"
+          docker buildx imagetools create "${args[@]}" "$SRC"
