@@ -1,4 +1,5 @@
 import glob
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,7 +8,10 @@ from typing import AsyncGenerator
 from fastapi import Request
 
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
-from openhands.app_server.event.event_service_base import EventServiceBase
+from openhands.app_server.event.event_service_base import (
+    EventSearchMetadata,
+    EventServiceBase,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
 
@@ -28,6 +32,19 @@ class FilesystemEventService(EventServiceBase):
         except Exception:
             if path.exists():
                 _logger.exception('Error reading event', stack_info=True)
+            return None
+
+    def _load_event_search_metadata(self, path: Path) -> EventSearchMetadata | None:
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            kind = data.get('kind')
+            timestamp = data.get('timestamp')
+            if not isinstance(kind, str) or not isinstance(timestamp, str):
+                return None
+            return EventSearchMetadata(path=path, kind=kind, timestamp=timestamp)
+        except Exception:
+            if path.exists():
+                _logger.exception('Error reading event metadata', stack_info=True)
             return None
 
     def _store_event(self, path: Path, event: Event):

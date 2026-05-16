@@ -20,6 +20,16 @@ from openhands.sdk.utils.paging import page_iterator
 
 
 @dataclass
+class EventSearchMetadata:
+    """Lightweight event data needed to filter, sort, and page search results."""
+
+    path: Path
+    kind: str
+    timestamp: str
+    event: Event | None = None
+
+
+@dataclass
 class EventServiceBase(EventService, ABC):
     """Event Service for getting events - the only check on permissions for events is
     in the strict prefix for storage.
@@ -43,6 +53,22 @@ class EventServiceBase(EventService, ABC):
     @abstractmethod
     def _search_paths(self, prefix: Path) -> list[Path]:
         """Search paths."""
+
+    def _load_event_search_metadata(self, path: Path) -> EventSearchMetadata | None:
+        """Load lightweight metadata for event search.
+
+        Storage backends may override this to avoid hydrating full event models
+        for files that will be filtered out or paginated away.
+        """
+        event = self._load_event(path)
+        if not event:
+            return None
+        return EventSearchMetadata(
+            path=path,
+            kind=event.kind,
+            timestamp=event.timestamp,
+            event=event,
+        )
 
     async def get_conversation_path(self, conversation_id: UUID) -> Path:
         """Get a path for a conversation. Ensure user_id is included if possible."""
@@ -87,42 +113,53 @@ class EventServiceBase(EventService, ABC):
         prefix = await self.get_conversation_path(conversation_id)
         paths = await loop.run_in_executor(None, self._search_paths, prefix)
 
-        # Type error: run_in_executor expects a return value, but self._load_event is typed return Event | None.
-        events = await asyncio.gather(
-            *[loop.run_in_executor(None, self._load_event, path) for path in paths]  # type: ignore[arg-type]
+        metadata_results = await asyncio.gather(
+            *[
+                loop.run_in_executor(None, self._load_event_search_metadata, path)
+                for path in paths
+            ]
         )
         # Convert datetime filters to ISO strings so they can be compared
         # against event.timestamp (which is stored as an ISO 8601 string).
         timestamp_gte_str = timestamp__gte.isoformat() if timestamp__gte else None
         timestamp_lt_str = timestamp__lt.isoformat() if timestamp__lt else None
 
-        items = []
-        for event in events:
-            if not event:
+        matching_metadata: list[EventSearchMetadata] = []
+        for metadata in metadata_results:
+            if not metadata:
                 continue
-            if kind__eq and event.kind != kind__eq:
+            if kind__eq and metadata.kind != kind__eq:
                 continue
-            if timestamp_gte_str and event.timestamp < timestamp_gte_str:
+            if timestamp_gte_str and metadata.timestamp < timestamp_gte_str:
                 continue
-            if timestamp_lt_str and event.timestamp >= timestamp_lt_str:
+            if timestamp_lt_str and metadata.timestamp >= timestamp_lt_str:
                 continue
-            items.append(event)
+            matching_metadata.append(metadata)
 
         if sort_order:
-            items.sort(
-                key=lambda e: e.timestamp,
+            matching_metadata.sort(
+                key=lambda metadata: metadata.timestamp,
                 reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC),
             )
 
-        # Apply pagination to items (not paths)
+        # Apply pagination before hydrating full Event models for the page.
         start_offset = 0
         next_page_id = None
         if page_id:
             start_offset = int(page_id)
-            items = items[start_offset:]
-        if len(items) > limit:
+            matching_metadata = matching_metadata[start_offset:]
+        if len(matching_metadata) > limit:
             next_page_id = str(start_offset + limit)
-            items = items[:limit]
+            matching_metadata = matching_metadata[:limit]
+
+        items = []
+        for metadata in matching_metadata:
+            if metadata.event:
+                items.append(metadata.event)
+                continue
+            event = await loop.run_in_executor(None, self._load_event, metadata.path)  # type: ignore[arg-type]
+            if event:
+                items.append(event)
 
         return EventPage(items=items, next_page_id=next_page_id)
 

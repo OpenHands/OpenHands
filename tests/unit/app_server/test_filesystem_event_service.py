@@ -8,6 +8,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -181,6 +182,33 @@ class TestFilesystemEventServiceSearchEvents:
 
         assert len(result.items) == page_limit
         assert result.next_page_id is not None
+
+    @pytest.mark.asyncio
+    async def test_search_events_pagination_only_loads_requested_page(
+        self, service: FilesystemEventService
+    ):
+        """Unfiltered pagination should not hydrate every event in the conversation."""
+        conversation_id = uuid4()
+        total_events = 10
+        page_limit = 3
+
+        for _ in range(total_events):
+            await service.save_event(conversation_id, create_token_event())
+
+        original_load_event = service._load_event
+        load_count = 0
+
+        def counting_load_event(path: Path):
+            nonlocal load_count
+            load_count += 1
+            return original_load_event(path)
+
+        with patch.object(service, '_load_event', side_effect=counting_load_event):
+            result = await service.search_events(conversation_id, limit=page_limit)
+
+        assert len(result.items) == page_limit
+        assert result.next_page_id is not None
+        assert load_count == page_limit
 
     @pytest.mark.asyncio
     async def test_search_events_pagination_iterates_all_events(
