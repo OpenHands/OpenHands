@@ -277,7 +277,7 @@ jobs:
                             owner: context.repo.owner,
                             repo: context.repo.repo,
                             name: candidateLabel,
-                            color: 'C5DEF5',
+                            color: 'FBCA04',
                             description: 'Potential duplicate awaiting auto-close or maintainer review',
                           });
                         }
@@ -319,7 +319,7 @@ jobs:
                         core.setFailed(`No canonical issue number was returned for issue #${issueNumber}.`);
                         return;
                       }
-                        
+
                       if (!(await ensureCanonicalIssueIsOpenIssue())) {
                         return;
                       }
