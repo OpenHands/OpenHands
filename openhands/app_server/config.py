@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from typing import AsyncContextManager
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import Depends, Request
@@ -108,6 +109,15 @@ def get_default_permitted_cors_origins() -> list[str]:
     if legacy:
         return [o.strip() for o in legacy.split(',') if o.strip()]
     return []
+
+
+def _get_explicit_port(url: str | None) -> int | None:
+    if not url:
+        return None
+    try:
+        return urlparse(url).port
+    except ValueError:
+        return None
 
 
 def get_openhands_provider_base_url() -> str | None:
@@ -344,6 +354,8 @@ def config_from_env() -> AppServerConfig:
                 docker_sandbox_kwargs['host_port'] = int(
                     os.environ['SANDBOX_HOST_PORT']
                 )
+            elif web_url_port := _get_explicit_port(config.web_url):
+                docker_sandbox_kwargs['host_port'] = web_url_port
             if os.getenv('SANDBOX_CONTAINER_URL_PATTERN'):
                 docker_sandbox_kwargs['container_url_pattern'] = os.environ[
                     'SANDBOX_CONTAINER_URL_PATTERN'

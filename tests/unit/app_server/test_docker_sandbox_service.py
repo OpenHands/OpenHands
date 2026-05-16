@@ -1320,7 +1320,7 @@ class TestDockerSandboxServiceInjectorFromEnv:
             'SANDBOX_HOST_PORT': '4000',
         }
 
-        with patch.dict(os.environ, env_vars, clear=False):
+        with patch.dict(os.environ, env_vars, clear=True):
             # Clear the global config to force reload
             import openhands.app_server.config as config_module
             from openhands.app_server.config import config_from_env
@@ -1330,6 +1330,49 @@ class TestDockerSandboxServiceInjectorFromEnv:
             config = config_from_env()
             assert config.sandbox is not None
             assert config.sandbox.host_port == 4000
+
+    def test_config_from_env_infers_host_port_from_web_url(self):
+        """Test that OH_WEB_URL port is used for Docker webhook callbacks."""
+        import os
+        from unittest.mock import patch
+
+        env_vars = {
+            'OH_WEB_URL': 'http://192.168.1.220:4000',
+            'SANDBOX_CONTAINER_URL_PATTERN': 'http://192.168.1.220:{port}',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            assert config.sandbox.host_port == 4000
+            assert config.sandbox.container_url_pattern == 'http://192.168.1.220:{port}'
+
+    def test_config_from_env_prefers_explicit_sandbox_host_port(self):
+        """Test that SANDBOX_HOST_PORT overrides the OH_WEB_URL port."""
+        import os
+        from unittest.mock import patch
+
+        env_vars = {
+            'OH_WEB_URL': 'http://192.168.1.220:4000',
+            'SANDBOX_HOST_PORT': '5000',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=False):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            assert config.sandbox.host_port == 5000
 
     def test_config_from_env_with_sandbox_container_url_pattern(self):
         """Test that SANDBOX_CONTAINER_URL_PATTERN environment variable is respected."""
