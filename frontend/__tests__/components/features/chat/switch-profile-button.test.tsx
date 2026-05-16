@@ -67,6 +67,7 @@ const setupHooks = (
     profiles?: LlmProfileSummary[];
     activeProfile?: string | null;
     conversationModel?: string | null;
+    agentKind?: "openhands" | "acp";
   } = {},
 ) => {
   mockUseLlmProfiles.mockReturnValue({
@@ -76,7 +77,10 @@ const setupHooks = (
     },
   });
   mockUseActiveConversation.mockReturnValue({
-    data: { llm_model: options.conversationModel ?? null },
+    data: {
+      llm_model: options.conversationModel ?? null,
+      agent_kind: options.agentKind ?? "openhands",
+    },
   });
 };
 
@@ -91,6 +95,13 @@ describe("SwitchProfileButton", () => {
 
   it("renders nothing when there are no profiles", () => {
     setupHooks({ profiles: [] });
+    renderButton();
+    expect(screen.queryByTestId("switch-profile-button")).toBeNull();
+  });
+
+  it("renders nothing for ACP conversations even when profiles exist", () => {
+    // LLM profiles don't apply to ACP — the sub-agent picks its own model.
+    setupHooks({ agentKind: "acp" });
     renderButton();
     expect(screen.queryByTestId("switch-profile-button")).toBeNull();
   });

@@ -207,7 +207,8 @@ describe("UserContextMenu", () => {
         item.to !== "/settings/org" &&
         item.to !== "/settings/billing" &&
         !item.to.startsWith("/settings/org-defaults") &&
-        !personalLlmPaths.has(item.to),
+        !personalLlmPaths.has(item.to) &&
+        true,
     );
 
     await waitFor(() => {
@@ -242,7 +243,9 @@ describe("UserContextMenu", () => {
     // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
     const expectedItems = SAAS_NAV_ITEMS.filter(
       (item) =>
-        item.to !== "/settings/org-members" && item.to !== "/settings/org",
+        item.to !== "/settings/org-members" &&
+        item.to !== "/settings/org" &&
+        true,
     );
 
     await waitFor(() => {

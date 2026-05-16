@@ -129,9 +129,12 @@ describe("useSettingsNavItems", () => {
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {
-      // OSS mode should return items matching OSS_NAV_ITEMS paths
+      // OSS mode should return items matching OSS_NAV_ITEMS paths,
+      // minus any items hidden behind a feature flag that's off by default.
       const navItems = getNavItems(result.current);
-      const ossPaths = OSS_NAV_ITEMS.map((item) => item.to);
+      const ossPaths = OSS_NAV_ITEMS.map(
+        (item) => item.to,
+      );
       const resultPaths = navItems.map((item) =>
         item.type === "item" ? item.item.to : null,
       );

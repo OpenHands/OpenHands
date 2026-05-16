@@ -6,10 +6,16 @@ import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
 import { SettingsLayout } from "#/components/features/settings";
 import { WebClientConfig } from "#/api/option-service/option.types";
-import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
+import {
+  QUERY_KEYS,
+  CONFIG_CACHE_OPTIONS,
+  SETTINGS_QUERY_KEYS,
+} from "#/hooks/query/query-keys";
 import { Organization } from "#/types/org";
 import { Typography } from "#/ui/typography";
+import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
+import { getSettingsQueryFn } from "#/hooks/query/use-settings";
 import { getActiveOrganizationUser } from "#/utils/org/permission-checks";
 import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organization-store";
 import { rolePermissions } from "#/utils/org/permissions";
@@ -66,6 +72,42 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     const fallbackPath = getFirstAvailablePath(isSaas, featureFlags);
     if (fallbackPath && fallbackPath !== pathname) {
       return redirect(fallbackPath);
+    }
+  }
+
+  // Step 3b: ACP guard. The LLM / Condenser / MCP personal-settings screens
+  // have no useful content while an external ACP subprocess is driving
+  // conversations (the sub-agent owns its own tools, LLM, condenser, MCP),
+  // so bounce them to ``/settings/agent``. Driven by the nav-item
+  // ``disabledByAcp`` flag so this list and the greyed-out nav state
+  // ([`use-settings-nav-items.ts`]) come from the same source of truth.
+  //
+  // Doing the redirect in the loader (instead of a per-route ``useEffect``)
+  // means the personal LLM/condenser/MCP pages don't paint a one-frame
+  // flash of their content before the guard fires.
+  //
+  // Gated on ``enable_acp`` so the guard is fully off when the feature
+  // flag is disabled. If we can't fetch settings (unauthed, no org, etc.)
+  // we fall through and let the page render — same behaviour the
+  // previous hook-based guard had.
+  if (featureFlags?.enable_acp) {
+    const navItems = isSaas ? SAAS_NAV_ITEMS : OSS_NAV_ITEMS;
+    const currentItem = navItems.find((item) => item.to === pathname);
+    if (currentItem?.disabledByAcp) {
+      try {
+        const orgId = getSelectedOrganizationIdFromStore();
+        const personalSettings = await queryClient.fetchQuery({
+          queryKey: SETTINGS_QUERY_KEYS.byScope("personal", orgId),
+          queryFn: () => getSettingsQueryFn("personal", orgId),
+          staleTime: 1000 * 60 * 5,
+        });
+        if (personalSettings?.agent_settings?.agent_kind === "acp") {
+          return redirect("/settings/agent");
+        }
+      } catch {
+        // Settings unfetchable (unauthed, no org, network) — let the
+        // page render rather than redirect-loop on a missing payload.
+      }
     }
   }
 

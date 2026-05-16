@@ -59,9 +59,15 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     return true;
   }
 
-  // Render ACP sub-agent tool call events
+  // Render ACP sub-agent tool call events only once they've reached a
+  // terminal status. The ACP server emits multiple events per
+  // ``tool_call_id`` as the call progresses; ``handleEventForUI`` dedupes
+  // them into a single in-place card. Showing pre-terminal events flashes
+  // an empty ``Input: {}`` / ``Output: [no output]`` card while
+  // ``raw_input`` / ``raw_output`` are still streaming in. Wait for the
+  // call to settle before rendering anything.
   if (isACPToolCallEvent(event)) {
-    return true;
+    return event.status === "completed" || event.status === "failed";
   }
 
   // Don't render any other event types (system events, etc.)

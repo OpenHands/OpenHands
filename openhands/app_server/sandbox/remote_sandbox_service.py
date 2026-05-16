@@ -16,7 +16,10 @@ from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from openhands.agent_server.models import ConversationInfo, EventPage
+from openhands.agent_server.models import (
+    ConversationInfo,
+    EventPage,
+)
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,

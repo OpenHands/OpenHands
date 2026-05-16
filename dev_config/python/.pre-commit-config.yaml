@@ -59,8 +59,8 @@ repos:
             types-Markdown,
             pydantic,
             lxml,
-            "openhands-sdk==1.19.1",
-            "openhands-tools==1.19.1",
+            "openhands-sdk==1.22.1",
+            "openhands-tools==1.22.1",
             "sqlalchemy>=2.0",
           ]
         # To see gaps add `--html-report mypy-report/`

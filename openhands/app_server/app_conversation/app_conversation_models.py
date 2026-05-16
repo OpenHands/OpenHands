@@ -214,6 +214,7 @@ class AppConversationUpdateRequest(BaseModel):
     All fields are optional - only provided fields will be updated.
     """
 
+    title: str | None = None
     public: bool | None = None
     selected_repository: str | None = None
     selected_branch: str | None = None

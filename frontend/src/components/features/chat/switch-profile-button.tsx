@@ -28,6 +28,14 @@ export function SwitchProfileButton() {
     ? (profiles.find((p) => p.model === conversationModel)?.name ?? null)
     : (data?.active_profile ?? null);
 
+  // LLM profiles don't apply to ACP conversations: the sub-agent
+  // (Claude Code / Codex / Gemini CLI) drives its own model selection,
+  // and ``llm_model`` is intentionally null. Hide the toggle so the user
+  // isn't shown a switch that has no effect.
+  if (conversation?.agent_kind === "acp") {
+    return null;
+  }
+
   if (profiles.length === 0) {
     return null;
   }
