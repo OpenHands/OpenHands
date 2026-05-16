@@ -773,6 +773,155 @@ class TestSearchBranches:
         assert call_kwargs.get('repository') == 'user/repo'
         assert call_kwargs.get('query') == 'feature'
         assert call_kwargs.get('per_page') == 11  # limit + 1
+        assert call_kwargs.get('page') == 1  # first page
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_search_with_page_id_does_not_return_400(self, mock_handler_cls):
+        """Test that search with query and page_id no longer returns 400.
+
+        This is the core fix for issue #13883 - previously the endpoint would
+        return HTTP 400 when both query and page_id were provided.
+        """
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.search_branches = AsyncMock(
+            return_value=[
+                Branch(name='feature-2', commit_sha='aaa111', protected=False),
+                Branch(name='feature-3', commit_sha='bbb222', protected=False),
+            ]
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act - request second page with a query (previously returned 400)
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='feature',
+            page_id=encode_page_id(2),
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert - should succeed and return results
+        assert len(result.items) == 2
+        assert result.items[0].name == 'feature-2'
+        assert result.items[1].name == 'feature-3'
+        assert result.next_page_id is None  # No more pages (2 items <= limit)
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_search_passes_page_to_provider(self, mock_handler_cls):
+        """Test that page_id is decoded and passed as page to the provider."""
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.search_branches = AsyncMock(return_value=[])
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act - request page 3
+        await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='feature',
+            page_id=encode_page_id(3),
+            limit=10,
+            user_context=mock_context,
+        )
+
+        # Assert - page should be decoded and passed to provider
+        mock_handler.search_branches.assert_called_once()
+        call_kwargs = mock_handler.search_branches.call_args.kwargs
+        assert call_kwargs.get('page') == 3
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_search_pagination_returns_next_page_id(self, mock_handler_cls):
+        """Test that search returns next_page_id when there are more results."""
+        # Arrange - return limit+1 items to indicate more pages
+        mock_handler = MagicMock()
+        mock_handler.search_branches = AsyncMock(
+            return_value=[
+                Branch(name='feat-1', commit_sha='a1', protected=False),
+                Branch(name='feat-2', commit_sha='a2', protected=False),
+                Branch(name='feat-3', commit_sha='a3', protected=False),
+            ]
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act - request first page with limit=2 (provider returns 3 = limit+1)
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='feat',
+            page_id=None,
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert - should return 2 items and a next_page_id
+        assert len(result.items) == 2
+        assert result.items[0].name == 'feat-1'
+        assert result.items[1].name == 'feat-2'
+        assert result.next_page_id == encode_page_id(2)
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_search_second_page_returns_next_page_id(self, mock_handler_cls):
+        """Test pagination across multiple pages for branch search."""
+        # Arrange - simulate second page also having more results
+        mock_handler = MagicMock()
+        mock_handler.search_branches = AsyncMock(
+            return_value=[
+                Branch(name='feat-3', commit_sha='a3', protected=False),
+                Branch(name='feat-4', commit_sha='a4', protected=False),
+                Branch(name='feat-5', commit_sha='a5', protected=False),
+            ]
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act - request second page with limit=2
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='feat',
+            page_id=encode_page_id(2),
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert - should return 2 items and next_page_id for page 3
+        assert len(result.items) == 2
+        assert result.items[0].name == 'feat-3'
+        assert result.items[1].name == 'feat-4'
+        assert result.next_page_id == encode_page_id(3)
 
     def test_returns_403_when_no_provider_tokens(self, test_client):
         """Test that 403 is returned when no provider tokens."""

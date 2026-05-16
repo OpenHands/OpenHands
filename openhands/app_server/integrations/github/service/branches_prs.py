@@ -103,7 +103,7 @@ class GitHubBranchesMixin(GitHubMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int = 1
     ) -> list[Branch]:
         """Search branches by name using GitHub GraphQL with a partial query."""
         # Require a non-empty query
@@ -119,11 +119,44 @@ class GitHubBranchesMixin(GitHubMixinBase):
             return []
         owner, name = parts[-2], parts[-1]
 
+        # For page > 1, we need to skip (page-1)*per_page items using cursor pagination.
+        # We fetch pages sequentially until we reach the desired page.
+        cursor: str | None = None
+        if page > 1:
+            # Fetch preceding pages to get the cursor for the desired page
+            skip_count = per_page
+            for _ in range(page - 1):
+                variables = {
+                    'owner': owner,
+                    'name': name,
+                    'query': query or '',
+                    'perPage': skip_count,
+                    'after': cursor,
+                }
+                try:
+                    result = await self.execute_graphql_query(
+                        search_branches_graphql_query, variables
+                    )
+                except Exception as e:
+                    logger.warning(f'Failed to search for branches: {e}')
+                    return []
+
+                repo_data = result.get('data', {}).get('repository')
+                if not repo_data or not repo_data.get('refs'):
+                    return []
+
+                page_info = repo_data['refs'].get('pageInfo', {})
+                if not page_info.get('hasNextPage'):
+                    # No more pages available
+                    return []
+                cursor = page_info.get('endCursor')
+
         variables = {
             'owner': owner,
             'name': name,
             'query': query or '',
             'perPage': per_page,
+            'after': cursor,
         }
 
         try:
@@ -135,12 +168,12 @@ class GitHubBranchesMixin(GitHubMixinBase):
             # Fallback to empty result on any GraphQL error
             return []
 
-        repo = result.get('data', {}).get('repository')
-        if not repo or not repo.get('refs'):
+        repo_data = result.get('data', {}).get('repository')
+        if not repo_data or not repo_data.get('refs'):
             return []
 
         branches: list[Branch] = []
-        for node in repo['refs'].get('nodes', []):
+        for node in repo_data['refs'].get('nodes', []):
             bname = node.get('name') or ''
             target = node.get('target') or {}
             typename = target.get('__typename')

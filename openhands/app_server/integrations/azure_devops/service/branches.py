@@ -140,7 +140,7 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int = 1
     ) -> list[Branch]:
         """Search for branches within a repository."""
         # Parse repository string: organization/project/repo
@@ -166,7 +166,7 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
             branches_data = response.get('value', [])
 
             # Filter branches by query
-            filtered_branches = []
+            matching_names: list[tuple[str, str]] = []
             for branch_data in branches_data:
                 # Extract branch name from the ref (e.g., "refs/heads/main" -> "main")
                 name = branch_data.get('name', '').replace('refs/heads/', '')
@@ -174,25 +174,30 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
                 # Check if query matches branch name
                 if query.lower() in name.lower():
                     object_id = branch_data.get('objectId', '')
+                    matching_names.append((name, object_id))
 
-                    # Get commit details for this branch
-                    commit_url = f'https://dev.azure.com/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/commits/{object_id}?api-version=7.1'
-                    try:
-                        commit_data, _ = await self._make_request(commit_url)
-                        last_push_date = commit_data.get('committer', {}).get('date')
-                    except Exception:
-                        last_push_date = None
+            # Apply pagination to filtered results
+            start_idx = (page - 1) * per_page
+            end_idx = start_idx + per_page
+            paginated = matching_names[start_idx:end_idx]
 
-                    branch = Branch(
-                        name=name,
-                        commit_sha=object_id,
-                        protected=False,  # Skip protected check for search to improve performance
-                        last_push_date=last_push_date,
-                    )
-                    filtered_branches.append(branch)
+            filtered_branches = []
+            for name, object_id in paginated:
+                # Get commit details for this branch
+                commit_url = f'https://dev.azure.com/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/commits/{object_id}?api-version=7.1'
+                try:
+                    commit_data, _ = await self._make_request(commit_url)
+                    last_push_date = commit_data.get('committer', {}).get('date')
+                except Exception:
+                    last_push_date = None
 
-                    if len(filtered_branches) >= per_page:
-                        break
+                branch = Branch(
+                    name=name,
+                    commit_sha=object_id,
+                    protected=False,  # Skip protected check for search to improve performance
+                    last_push_date=last_push_date,
+                )
+                filtered_branches.append(branch)
 
             return filtered_branches
         except Exception:

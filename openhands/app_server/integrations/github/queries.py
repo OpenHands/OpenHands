@@ -128,15 +128,21 @@ query ($threadId: ID!, $page: Int = 50, $after: String) {
 # - refPrefix: "refs/heads/" to restrict to branches
 # - query: partial branch name provided by the user
 # - first: pagination size (clamped by caller to GitHub limits)
+# - after: optional cursor for pagination (from previous pageInfo.endCursor)
 search_branches_graphql_query = """
-    query SearchBranches($owner: String!, $name: String!, $query: String!, $perPage: Int!) {
+    query SearchBranches($owner: String!, $name: String!, $query: String!, $perPage: Int!, $after: String) {
         repository(owner: $owner, name: $name) {
             refs(
                 refPrefix: "refs/heads/",
                 query: $query,
                 first: $perPage,
+                after: $after,
                 orderBy: { field: ALPHABETICAL, direction: ASC }
             ) {
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
                 nodes {
                     name
                     target {
