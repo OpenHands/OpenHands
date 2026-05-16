@@ -37,6 +37,22 @@ def iso_timestamp(value: datetime) -> str:
     return value.astimezone(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
+def test_auto_close_parse_args_rejects_invalid_repository_format(monkeypatch, capsys):
+    module = load_module('auto_close_duplicate_issues.py')
+
+    monkeypatch.setattr(
+        module.sys,
+        'argv',
+        ['auto_close_duplicate_issues.py', '--repository', 'bad/repo/name'],
+    )
+
+    with pytest.raises(SystemExit, match='2'):
+        module.parse_args()
+
+    captured = capsys.readouterr()
+    assert 'Invalid repository format: bad/repo/name' in captured.err
+
+
 def test_list_open_issues_filters_by_duplicate_candidate_label(monkeypatch):
     module = load_module('auto_close_duplicate_issues.py')
     requested_paths: list[str] = []

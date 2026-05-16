@@ -17,6 +17,7 @@ MAX_PAGES = 100
 DUPLICATE_CANDIDATE_LABEL = 'duplicate-candidate'
 DUPLICATE_VETO_MARKER = '<!-- openhands-duplicate-veto -->'
 AUTOMATION_BOT_LOGINS = {'all-hands-bot'}
+REPOSITORY_PATTERN = re.compile(r'^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$')
 DUPLICATE_MARKER_RE = re.compile(
     r'<!-- openhands-duplicate-check canonical=(?P<canonical>\d+) '
     r'auto-close=(?P<auto_close>true|false) -->'
@@ -30,7 +31,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--repository', required=True)
     parser.add_argument('--close-after-days', type=int, default=3)
     parser.add_argument('--dry-run', action='store_true')
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not REPOSITORY_PATTERN.fullmatch(args.repository):
+        parser.error(f'Invalid repository format: {args.repository}')
+    return args
 
 
 def github_headers() -> dict[str, str]:
