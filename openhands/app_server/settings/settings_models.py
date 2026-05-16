@@ -208,14 +208,33 @@ class Settings(BaseModel):
             replace_mcp_config = 'mcp_config' in agent_update
             mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
 
-            merged = deep_merge(
-                self.agent_settings.model_dump(
+            # acp_env is a flat credential dict that should be replaced wholesale
+            # when present; deep-merging would make removed keys persist across saves.
+            replace_acp_env = 'acp_env' in agent_update
+            acp_env = coerced.pop('acp_env', None) if replace_acp_env else None
+
+            new_kind = coerced.get('agent_kind')
+            current_kind = self.agent_settings.agent_kind
+
+            if new_kind and new_kind != current_kind:
+                # ``agent_settings`` is a discriminated union over
+                # ``OpenHandsAgentSettings | ACPAgentSettings``. Deep-merging
+                # the incoming kind's fields onto the outgoing kind's dump
+                # produces a mongrel (``llm`` plus ``acp_command``) that
+                # fails validation. Start from a fresh base for the new
+                # kind. Cross-kind config preservation tracked in
+                # OpenHands/OpenHands#14370.
+                base: dict[str, Any] = {'agent_kind': new_kind}
+            else:
+                base = self.agent_settings.model_dump(
                     mode='json', context={'expose_secrets': True}
-                ),
-                coerced,
-            )
+                )
+
+            merged = deep_merge(base, coerced)
             if replace_mcp_config:
                 merged['mcp_config'] = mcp_config
+            if replace_acp_env:
+                merged['acp_env'] = acp_env or {}
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.

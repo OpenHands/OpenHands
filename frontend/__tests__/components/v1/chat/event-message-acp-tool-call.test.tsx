@@ -53,11 +53,10 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
       />,
     );
 
-    // The test-utils i18n instance doesn't load the real translation bundle,
-    // so createTitleFromKey falls back to the key literal. Assert on the
-    // key — the integration case (rendered string) is covered by a Storybook
-    // story + manual verification listed in the PR description.
-    expect(screen.getByText("ACTION_MESSAGE$ACP_RUN")).toBeInTheDocument();
+    // The title row renders ``event.title`` verbatim — the upstream ACP
+    // sub-agent (Claude Code / Codex / Gemini CLI) already emits a
+    // humanised label, so no translation-key wrapping happens here.
+    expect(screen.getByText("gh pr diff 490")).toBeInTheDocument();
   });
 
   it("shows the success check mark for completed tool calls", () => {
@@ -103,7 +102,10 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     await user.click(screen.getByRole("button", { name: "Expand" }));
 
     // Markdown renderer wraps code blocks but the plain text survives.
-    expect(screen.getByText(/gh pr diff 490/)).toBeInTheDocument();
+    // ``gh pr diff 490`` appears twice now — once in the title row (the
+    // verbatim ``event.title``) and once in the ``Command:`` block in the
+    // expanded details. We just care that the details panel contains it.
+    expect(screen.getAllByText(/gh pr diff 490/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/diff output here/)).toBeInTheDocument();
   });
 });

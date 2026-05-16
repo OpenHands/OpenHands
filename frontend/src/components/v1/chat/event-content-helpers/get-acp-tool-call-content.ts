@@ -3,26 +3,6 @@ import i18n from "#/i18n";
 import { MAX_CONTENT_LENGTH } from "./shared";
 
 /**
- * Pick the translation key used for the ACP tool call title row. Mirrors
- * ACTION_MESSAGE$RUN / $EDIT / $READ etc. but with an ``ACP · `` prefix so
- * the card is visually distinguishable from regular OpenHands actions.
- */
-export const getACPToolCallTitleKey = (event: ACPToolCallEvent): string => {
-  switch (event.tool_kind) {
-    case "execute":
-      return "ACTION_MESSAGE$ACP_RUN";
-    case "edit":
-      return "ACTION_MESSAGE$ACP_EDIT";
-    case "read":
-      return "ACTION_MESSAGE$ACP_READ";
-    case "fetch":
-      return "ACTION_MESSAGE$ACP_FETCH";
-    default:
-      return "ACTION_MESSAGE$ACP_TOOL";
-  }
-};
-
-/**
  * Stringify an arbitrary raw_input / raw_output payload for markdown
  * rendering. Strings pass through; objects are pretty-printed JSON.
  */
