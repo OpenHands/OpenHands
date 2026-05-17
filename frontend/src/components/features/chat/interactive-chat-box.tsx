@@ -3,6 +3,7 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { validateFiles } from "#/utils/file-validation";
 import { CustomChatInput } from "./custom-chat-input";
 import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
+import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { GitControlBar } from "./git-control-bar";
@@ -138,13 +139,13 @@ export function InteractiveChatBox({
     }
   };
 
-  const handleSubmit = useBtwInterceptor(
-    conversation?.id ?? null,
-    (message) => {
-      onSubmit(message, images, files);
-      clearAllFiles();
-    },
-  );
+  const conversationId = conversation?.id ?? null;
+  const submitWithFiles = (message: string) => {
+    onSubmit(message, images, files);
+    clearAllFiles();
+  };
+  const handleAfterModel = useBtwInterceptor(conversationId, submitWithFiles);
+  const handleSubmit = useModelInterceptor(conversationId, handleAfterModel);
 
   const handleSuggestionsClick = (suggestion: string) => {
     handleSubmit(suggestion);

@@ -262,7 +262,7 @@ export default function MainApp() {
       <title>{appTitle}</title>
       <Sidebar />
 
-      <div className="flex flex-col w-full h-[calc(100%-50px)] md:h-full gap-3">
+      <div className="flex flex-col w-full min-w-0 h-[calc(100%-50px)] md:h-full gap-3">
         {config.data &&
           (config.data.maintenance_start_time ||
             (config.data.faulty_models &&

@@ -91,16 +91,20 @@ class EventServiceBase(EventService, ABC):
         events = await asyncio.gather(
             *[loop.run_in_executor(None, self._load_event, path) for path in paths]  # type: ignore[arg-type]
         )
+        # Convert datetime filters to ISO strings so they can be compared
+        # against event.timestamp (which is stored as an ISO 8601 string).
+        timestamp_gte_str = timestamp__gte.isoformat() if timestamp__gte else None
+        timestamp_lt_str = timestamp__lt.isoformat() if timestamp__lt else None
+
         items = []
         for event in events:
             if not event:
                 continue
             if kind__eq and event.kind != kind__eq:
                 continue
-            # TODO: Are these comparison operators valid?
-            if timestamp__gte and event.timestamp < timestamp__gte:  # type: ignore[operator]
+            if timestamp_gte_str and event.timestamp < timestamp_gte_str:
                 continue
-            if timestamp__lt and event.timestamp >= timestamp__lt:  # type: ignore[operator]
+            if timestamp_lt_str and event.timestamp >= timestamp_lt_str:
                 continue
             items.append(event)
 

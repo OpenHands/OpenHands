@@ -214,6 +214,7 @@ class AppConversationUpdateRequest(BaseModel):
     All fields are optional - only provided fields will be updated.
     """
 
+    title: str | None = None
     public: bool | None = None
     selected_repository: str | None = None
     selected_branch: str | None = None
@@ -327,6 +328,16 @@ class AppSendMessageRequest(BaseModel):
     run: bool = Field(
         default=True,
         description='Whether to automatically run the agent after sending the message.',
+    )
+
+
+class SwitchProfileRequest(BaseModel):
+    """Request to switch a running conversation's LLM to a saved profile."""
+
+    profile_name: str = Field(
+        ...,
+        description='Name of a profile previously saved via /api/v1/settings/profiles.',
+        min_length=1,
     )
 
 

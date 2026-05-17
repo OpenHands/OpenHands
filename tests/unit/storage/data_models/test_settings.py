@@ -1,5 +1,6 @@
 import importlib
 import warnings
+from unittest.mock import patch
 
 import pytest
 from fastmcp.mcp_config import MCPConfig
@@ -12,8 +13,8 @@ from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
     AGENT_SETTINGS_SCHEMA_VERSION,
-    AgentSettings,
     ConversationSettings,
+    OpenHandsAgentSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
 
@@ -21,7 +22,7 @@ from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
 def test_settings_handles_sensitive_data():
     settings = Settings(
         language='en',
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             agent='test-agent',
             llm=LLM(
                 model='test-model',
@@ -42,10 +43,37 @@ def test_settings_handles_sensitive_data():
     assert llm_api_key.get_secret_value() == 'test-key'
 
 
+def test_settings_loads_persisted_settings_via_sdk_loaders():
+    loaded_agent_settings = OpenHandsAgentSettings(agent='migrated-agent')
+    loaded_conversation_settings = ConversationSettings(max_iterations=77)
+
+    with (
+        patch.object(
+            settings_module,
+            'validate_agent_settings',
+            return_value=loaded_agent_settings,
+        ) as agent_loader,
+        patch.object(
+            ConversationSettings,
+            'from_persisted',
+            return_value=loaded_conversation_settings,
+        ) as conversation_loader,
+    ):
+        settings = Settings(
+            agent_settings={'legacy': True},
+            conversation_settings={'legacy': True},
+        )
+
+    agent_loader.assert_called_once_with({'legacy': True})
+    conversation_loader.assert_called_once_with({'legacy': True})
+    assert settings.agent_settings.agent == 'migrated-agent'
+    assert settings.conversation_settings.max_iterations == 77
+
+
 def test_settings_update_deep_merges_agent_settings():
     """Updating agent_settings with a partial dict must not overwrite sibling sub-fields."""
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='existing-model', api_key=SecretStr('existing-key')),
             condenser=CondenserSettings(enabled=True, max_size=200),
         ),
@@ -61,7 +89,7 @@ def test_settings_update_deep_merges_agent_settings():
 
 def test_settings_preserve_agent_settings():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(
                 model='test-model',
                 api_key=SecretStr('test-key'),
@@ -89,7 +117,7 @@ def test_settings_preserve_agent_settings():
 
 def test_settings_to_agent_settings_uses_agent_vals():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(
                 model='sdk-model',
                 base_url='https://sdk.example.com',
@@ -115,7 +143,7 @@ def test_settings_to_agent_settings_uses_agent_vals():
 
 def test_settings_agent_settings_keeps_sdk_mcp_shape_canonical():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
@@ -140,7 +168,9 @@ def test_settings_agent_settings_keeps_sdk_mcp_shape_canonical():
 
 
 def test_settings_update_mcp_config():
-    settings = Settings(agent_settings=AgentSettings(llm=LLM(model='sdk-model')))
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(llm=LLM(model='sdk-model'))
+    )
 
     settings.update(
         {
@@ -166,7 +196,7 @@ def test_settings_update_mcp_config():
 
 def test_settings_update_replaces_existing_mcp_servers():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
@@ -202,7 +232,7 @@ def test_settings_update_replaces_existing_mcp_servers():
 
 def test_settings_update_can_clear_mcp_config():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
@@ -289,7 +319,7 @@ def test_switch_to_profile_preserves_other_agent_settings():
     ``switch_to_profile`` would silently drop those sibling configs.
     """
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='openai/gpt-4o'),
             condenser=CondenserSettings(enabled=True, max_size=321),
             verification=VerificationSettings(
@@ -316,6 +346,47 @@ def test_switch_to_profile_preserves_other_agent_settings():
     assert 's' in settings.agent_settings.mcp_config.mcpServers
 
 
+def test_delete_active_profile_promotes_remaining_one():
+    settings = Settings()
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
+
+    assert settings.delete_profile('a') is True
+
+    assert 'a' not in settings.llm_profiles.profiles
+    assert settings.llm_profiles.active == 'b'
+    assert settings.agent_settings.llm.model == 'anthropic/claude-opus-4'
+
+
+def test_delete_inactive_profile_does_not_touch_active():
+    settings = Settings()
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
+
+    assert settings.delete_profile('b') is True
+
+    assert settings.llm_profiles.active == 'a'
+    assert settings.agent_settings.llm.model == 'openai/gpt-4o'
+
+
+def test_delete_only_profile_clears_active():
+    settings = Settings()
+    settings.llm_profiles.save('only', LLM(model='openai/gpt-4o'))
+    settings.switch_to_profile('only')
+
+    assert settings.delete_profile('only') is True
+
+    assert settings.llm_profiles.profiles == {}
+    assert settings.llm_profiles.active is None
+
+
+def test_delete_missing_profile_returns_false():
+    settings = Settings()
+    assert settings.delete_profile('nope') is False
+
+
 def test_update_ignores_llm_profiles_payload():
     """``Settings.update`` refuses to mutate ``llm_profiles``; profile changes
     must go through the dedicated endpoints (which enforce name rules, the
@@ -338,7 +409,7 @@ def test_update_ignores_llm_profiles_payload():
 def test_update_clears_active_when_llm_diverges():
     """Editing agent_settings.llm via ``update`` must drop a now-stale active profile."""
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
         )
     )
@@ -358,7 +429,7 @@ def test_update_clears_active_when_llm_diverges():
 def test_update_keeps_active_when_llm_unchanged():
     """A no-op LLM update must not spuriously clear ``active``."""
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
         )
     )
@@ -418,7 +489,7 @@ def test_settings_no_pydantic_frozen_field_warning():
 def test_litellm_proxy_to_openhands_conversion_with_openhands_proxy():
     """Test that litellm_proxy/ is converted to openhands/ when using OpenHands proxy."""
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(
                 model='litellm_proxy/claude-opus-4-5-20251101',
                 base_url=LITE_LLM_API_URL,
@@ -437,7 +508,7 @@ def test_litellm_proxy_to_openhands_conversion_with_openhands_proxy():
 def test_litellm_proxy_custom_endpoint_keeps_prefix():
     """Test that custom litellm_proxy endpoints keep their litellm_proxy/ prefix."""
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(
                 model='litellm_proxy/gpt-5.3-codex',
                 base_url='http://custom-proxy.example.com:4000',
@@ -456,7 +527,7 @@ def test_litellm_proxy_custom_endpoint_keeps_prefix():
 def test_openhands_model_converts_to_litellm_proxy_internally():
     """Test that openhands/ models are stored as litellm_proxy/ internally."""
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='openhands/claude-opus-4-5-20251101')
         )
     )

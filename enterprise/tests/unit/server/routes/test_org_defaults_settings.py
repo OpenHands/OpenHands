@@ -87,6 +87,34 @@ def test_normalize_agent_settings_fills_base_url_for_all_providers():
     assert 'anthropic.com' in anthropic_base
 
 
+def test_from_org_validates_persisted_openhands_agent_kind():
+    """GIVEN: An org row whose persisted ``agent_settings`` carry the
+        canonical ``agent_kind: 'openhands'`` discriminator (the exact shape
+        from the 500-error log)
+    WHEN: ``OrgDefaultsSettingsResponse.from_org`` serializes the org
+    THEN: The response is built without a Pydantic literal-mismatch error
+        and exposes the expected canonical agent kind and llm model.
+    """
+    # Arrange
+    org = MagicMock(spec=Org)
+    org.agent_settings = {
+        'schema_version': 1,
+        'agent': 'CodeActAgent',
+        'agent_kind': 'openhands',
+        'llm': {'model': 'openhands/claude', 'base_url': LITE_LLM_API_URL},
+    }
+    org.conversation_settings = {}
+    org.llm_api_key = None
+    org.search_api_key = None
+
+    # Act
+    response = OrgDefaultsSettingsResponse.from_org(org)
+
+    # Assert
+    assert response.agent_settings.agent_kind == 'openhands'
+    assert response.agent_settings.llm.model == 'openhands/claude'
+
+
 def test_from_org_denormalizes_litellm_proxy_prefix_and_returns_base_url_as_stored():
     """Managed-model responses should be denormalized for the frontend."""
     org = MagicMock(spec=Org)

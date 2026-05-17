@@ -51,12 +51,6 @@ vi.mock("#/hooks/use-auth-url", () => ({
     useAuthUrlMock(config),
 }));
 
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackLoginButtonClick: vi.fn(),
-  }),
-}));
-
 const { useInvitationMock, buildOAuthStateDataMock } = vi.hoisted(() => ({
   useInvitationMock: vi.fn(() => ({
     invitationToken: null as string | null,

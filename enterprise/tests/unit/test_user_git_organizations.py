@@ -26,8 +26,12 @@ def _make_user_context(provider_tokens, user_id: str = 'user-1') -> UserContext:
 
 
 @pytest.mark.asyncio
-async def test_raises_401_when_no_provider_tokens():
-    """Without provider tokens the endpoint refuses the request."""
+async def test_raises_403_when_no_provider_tokens():
+    """Without provider tokens the endpoint refuses the request with 403 Forbidden.
+
+    Note: Uses 403 (not 401) to avoid triggering automatic logout in the frontend.
+    The user is authenticated but lacks the required git provider token.
+    """
     # Arrange
     from server.routes.users_v1 import get_current_user_git_organizations
 
@@ -38,7 +42,7 @@ async def test_raises_401_when_no_provider_tokens():
         await get_current_user_git_organizations(user_context=user_context)
 
     # Assert
-    assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert excinfo.value.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio

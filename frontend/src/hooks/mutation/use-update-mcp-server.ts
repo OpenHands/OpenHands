@@ -9,6 +9,7 @@ import {
 } from "#/types/settings";
 import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 type MCPServerType = "sse" | "stdio" | "shttp";
 
@@ -77,7 +78,7 @@ export function useUpdateMcpServer() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["settings", "personal", organizationId],
+        queryKey: SETTINGS_QUERY_KEYS.personal(organizationId),
       });
     },
   });

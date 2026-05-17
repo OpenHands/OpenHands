@@ -18,6 +18,16 @@ class FileSettingsStore(SettingsStore):
         try:
             json_str = await call_sync_from_async(self.file_store.read, self.path)
             kwargs = json.loads(json_str)
+            # Seed a Default profile from legacy agent_settings.llm when
+            # llm_profiles is absent — pre-llm_profiles settings.json files
+            # would otherwise present an empty profiles UI on upgrade.
+            if 'llm_profiles' not in kwargs:
+                legacy_llm = (kwargs.get('agent_settings') or {}).get('llm')
+                if isinstance(legacy_llm, dict) and legacy_llm.get('model'):
+                    kwargs['llm_profiles'] = {
+                        'profiles': {'Default': legacy_llm},
+                        'active': 'Default',
+                    }
             settings = Settings(**kwargs)
 
             # Turn on V1 in OpenHands

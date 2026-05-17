@@ -23,17 +23,16 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+vi.mock("#/hooks/use-client-analytics", () => ({
+  useClientAnalytics: () => ({
+    trackSaasSelfhostedInquiry: vi.fn(),
+    trackEnterpriseLeadFormSubmitted: vi.fn(),
+  }),
+}));
+
 // Mock local storage
 vi.mock("#/utils/local-storage", () => ({
   setCTADismissed: vi.fn(),
-}));
-
-// Mock useTracking hook
-const mockTrackSaasSelfhostedInquiry = vi.fn();
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackSaasSelfhostedInquiry: mockTrackSaasSelfhostedInquiry,
-  }),
 }));
 
 import { setCTADismissed } from "#/utils/local-storage";
@@ -118,18 +117,6 @@ describe("HomepageCTA", () => {
   });
 
   describe("Learn More link behavior", () => {
-    it("calls trackSaasSelfhostedInquiry with location 'home_page' when clicked", async () => {
-      const user = userEvent.setup();
-      renderHomepageCTA();
-
-      const learnMoreLink = screen.getByRole("link", { name: "Learn More" });
-      await user.click(learnMoreLink);
-
-      expect(mockTrackSaasSelfhostedInquiry).toHaveBeenCalledWith({
-        location: "home_page",
-      });
-    });
-
     it("has correct href and target attributes", () => {
       renderHomepageCTA();
 

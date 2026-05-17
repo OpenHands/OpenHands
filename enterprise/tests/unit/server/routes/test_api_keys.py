@@ -202,6 +202,7 @@ class TestGetLlmApiKeyForByor:
         """Test that when no key exists in database, a new one is generated."""
         # Arrange
         user_id = 'user-123'
+        org_id = uuid.uuid4()
         new_key = 'sk-new-generated-key'
         mock_check_enabled.return_value = True
         mock_get_key.return_value = None
@@ -209,14 +210,16 @@ class TestGetLlmApiKeyForByor:
         mock_store_key.return_value = None
 
         # Act
-        result = await get_llm_api_key_for_byor(user_id=user_id)
+        result = await get_llm_api_key_for_byor(
+            user_id=user_id, effective_org_id=org_id
+        )
 
         # Assert
         assert result == LlmApiKeyResponse(key=new_key)
-        mock_check_enabled.assert_called_once_with(user_id)
-        mock_get_key.assert_called_once_with(user_id)
-        mock_generate_key.assert_called_once_with(user_id)
-        mock_store_key.assert_called_once_with(user_id, new_key)
+        mock_check_enabled.assert_called_once_with(user_id, org_id=org_id)
+        mock_get_key.assert_called_once_with(user_id, org_id)
+        mock_generate_key.assert_called_once_with(user_id, org_id)
+        mock_store_key.assert_called_once_with(user_id, org_id, new_key)
 
     @pytest.mark.asyncio
     @patch('storage.org_service.OrgService.check_byor_export_enabled')
@@ -228,18 +231,21 @@ class TestGetLlmApiKeyForByor:
         """Test that when a valid key exists in database, it is returned."""
         # Arrange
         user_id = 'user-123'
+        org_id = uuid.uuid4()
         existing_key = 'sk-existing-valid-key'
         mock_check_enabled.return_value = True
         mock_get_key.return_value = existing_key
         mock_verify_key.return_value = True
 
         # Act
-        result = await get_llm_api_key_for_byor(user_id=user_id)
+        result = await get_llm_api_key_for_byor(
+            user_id=user_id, effective_org_id=org_id
+        )
 
         # Assert
         assert result == LlmApiKeyResponse(key=existing_key)
-        mock_check_enabled.assert_called_once_with(user_id)
-        mock_get_key.assert_called_once_with(user_id)
+        mock_check_enabled.assert_called_once_with(user_id, org_id=org_id)
+        mock_get_key.assert_called_once_with(user_id, org_id)
         mock_verify_key.assert_called_once_with(existing_key, user_id)
 
     @pytest.mark.asyncio
@@ -261,6 +267,7 @@ class TestGetLlmApiKeyForByor:
         """Test that when an invalid key exists in database, it is regenerated."""
         # Arrange
         user_id = 'user-123'
+        org_id = uuid.uuid4()
         invalid_key = 'sk-invalid-key'
         new_key = 'sk-new-generated-key'
         mock_check_enabled.return_value = True
@@ -271,16 +278,18 @@ class TestGetLlmApiKeyForByor:
         mock_store_key.return_value = None
 
         # Act
-        result = await get_llm_api_key_for_byor(user_id=user_id)
+        result = await get_llm_api_key_for_byor(
+            user_id=user_id, effective_org_id=org_id
+        )
 
         # Assert
         assert result == LlmApiKeyResponse(key=new_key)
-        mock_check_enabled.assert_called_once_with(user_id)
-        mock_get_key.assert_called_once_with(user_id)
+        mock_check_enabled.assert_called_once_with(user_id, org_id=org_id)
+        mock_get_key.assert_called_once_with(user_id, org_id)
         mock_verify_key.assert_called_once_with(invalid_key, user_id)
-        mock_delete_key.assert_called_once_with(user_id, invalid_key)
-        mock_generate_key.assert_called_once_with(user_id)
-        mock_store_key.assert_called_once_with(user_id, new_key)
+        mock_delete_key.assert_called_once_with(user_id, org_id, invalid_key)
+        mock_generate_key.assert_called_once_with(user_id, org_id)
+        mock_store_key.assert_called_once_with(user_id, org_id, new_key)
 
     @pytest.mark.asyncio
     @patch('storage.org_service.OrgService.check_byor_export_enabled')
@@ -301,6 +310,7 @@ class TestGetLlmApiKeyForByor:
         """Test that even if deletion fails, regeneration still proceeds."""
         # Arrange
         user_id = 'user-123'
+        org_id = uuid.uuid4()
         invalid_key = 'sk-invalid-key'
         new_key = 'sk-new-generated-key'
         mock_check_enabled.return_value = True
@@ -311,14 +321,16 @@ class TestGetLlmApiKeyForByor:
         mock_store_key.return_value = None
 
         # Act
-        result = await get_llm_api_key_for_byor(user_id=user_id)
+        result = await get_llm_api_key_for_byor(
+            user_id=user_id, effective_org_id=org_id
+        )
 
         # Assert
         assert result == LlmApiKeyResponse(key=new_key)
-        mock_check_enabled.assert_called_once_with(user_id)
-        mock_delete_key.assert_called_once_with(user_id, invalid_key)
-        mock_generate_key.assert_called_once_with(user_id)
-        mock_store_key.assert_called_once_with(user_id, new_key)
+        mock_check_enabled.assert_called_once_with(user_id, org_id=org_id)
+        mock_delete_key.assert_called_once_with(user_id, org_id, invalid_key)
+        mock_generate_key.assert_called_once_with(user_id, org_id)
+        mock_store_key.assert_called_once_with(user_id, org_id, new_key)
 
     @pytest.mark.asyncio
     @patch('storage.org_service.OrgService.check_byor_export_enabled')
@@ -381,92 +393,34 @@ class TestDeleteByorKeyFromLitellm:
 
     @pytest.mark.asyncio
     @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
-    @patch('storage.user_store.UserStore.get_user_by_id')
-    async def test_delete_constructs_alias_from_user(
-        self, mock_get_user, mock_delete_key
-    ):
-        """Test that delete_byor_key_from_litellm constructs key alias from user."""
+    async def test_delete_constructs_alias_from_org(self, mock_delete_key):
+        """Test that delete_byor_key_from_litellm builds the key alias from the effective org."""
         # Arrange
         user_id = 'user-123'
-        org_id = 'org-456'
+        org_id = uuid.uuid4()
         byor_key = 'sk-byor-key-to-delete'
         expected_alias = f'BYOR Key - user {user_id}, org {org_id}'
-
-        mock_user = MagicMock()
-        mock_user.current_org_id = org_id
-        mock_get_user.return_value = mock_user
         mock_delete_key.return_value = None
 
         # Act
-        result = await delete_byor_key_from_litellm(user_id, byor_key)
+        result = await delete_byor_key_from_litellm(user_id, org_id, byor_key)
 
         # Assert
         assert result is True
-        mock_get_user.assert_called_once_with(user_id)
         mock_delete_key.assert_called_once_with(byor_key, key_alias=expected_alias)
 
     @pytest.mark.asyncio
     @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
-    @patch('storage.user_store.UserStore.get_user_by_id')
-    async def test_delete_without_user_passes_no_alias(
-        self, mock_get_user, mock_delete_key
-    ):
-        """Test that when user is not found, no alias is passed."""
-        # Arrange
-        user_id = 'user-123'
-        byor_key = 'sk-byor-key-to-delete'
-
-        mock_get_user.return_value = None
-        mock_delete_key.return_value = None
-
-        # Act
-        result = await delete_byor_key_from_litellm(user_id, byor_key)
-
-        # Assert
-        assert result is True
-        mock_delete_key.assert_called_once_with(byor_key, key_alias=None)
-
-    @pytest.mark.asyncio
-    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
-    @patch('storage.user_store.UserStore.get_user_by_id')
-    async def test_delete_without_org_id_passes_no_alias(
-        self, mock_get_user, mock_delete_key
-    ):
-        """Test that when user has no current_org_id, no alias is passed."""
-        # Arrange
-        user_id = 'user-123'
-        byor_key = 'sk-byor-key-to-delete'
-
-        mock_user = MagicMock()
-        mock_user.current_org_id = None
-        mock_get_user.return_value = mock_user
-        mock_delete_key.return_value = None
-
-        # Act
-        result = await delete_byor_key_from_litellm(user_id, byor_key)
-
-        # Assert
-        assert result is True
-        mock_delete_key.assert_called_once_with(byor_key, key_alias=None)
-
-    @pytest.mark.asyncio
-    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
-    @patch('storage.user_store.UserStore.get_user_by_id')
-    async def test_delete_returns_false_on_exception(
-        self, mock_get_user, mock_delete_key
-    ):
+    async def test_delete_returns_false_on_exception(self, mock_delete_key):
         """Test that exceptions during deletion return False."""
         # Arrange
         user_id = 'user-123'
+        org_id = uuid.uuid4()
         byor_key = 'sk-byor-key-to-delete'
-
-        mock_user = MagicMock()
-        mock_user.current_org_id = 'org-456'
-        mock_get_user.return_value = mock_user
         mock_delete_key.side_effect = Exception('LiteLLM API error')
 
         # Act
-        result = await delete_byor_key_from_litellm(user_id, byor_key)
+        result = await delete_byor_key_from_litellm(user_id, org_id, byor_key)
 
         # Assert
         assert result is False
@@ -481,14 +435,15 @@ class TestCheckByorPermitted:
         """Test that permitted=True is returned when BYOR export is enabled."""
         # Arrange
         user_id = 'user-123'
+        org_id = uuid.uuid4()
         mock_check_enabled.return_value = True
 
         # Act
-        result = await check_byor_permitted(user_id=user_id)
+        result = await check_byor_permitted(user_id=user_id, effective_org_id=org_id)
 
         # Assert
         assert result == ByorPermittedResponse(permitted=True)
-        mock_check_enabled.assert_called_once_with(user_id)
+        mock_check_enabled.assert_called_once_with(user_id, org_id=org_id)
 
     @pytest.mark.asyncio
     @patch('storage.org_service.OrgService.check_byor_export_enabled')
@@ -496,14 +451,15 @@ class TestCheckByorPermitted:
         """Test that permitted=False is returned when BYOR export is disabled."""
         # Arrange
         user_id = 'user-123'
+        org_id = uuid.uuid4()
         mock_check_enabled.return_value = False
 
         # Act
-        result = await check_byor_permitted(user_id=user_id)
+        result = await check_byor_permitted(user_id=user_id, effective_org_id=org_id)
 
         # Assert
         assert result == ByorPermittedResponse(permitted=False)
-        mock_check_enabled.assert_called_once_with(user_id)
+        mock_check_enabled.assert_called_once_with(user_id, org_id=org_id)
 
     @pytest.mark.asyncio
     @patch('storage.org_service.OrgService.check_byor_export_enabled')
@@ -511,11 +467,12 @@ class TestCheckByorPermitted:
         """Test that an exception raises 500 error."""
         # Arrange
         user_id = 'user-123'
+        org_id = uuid.uuid4()
         mock_check_enabled.side_effect = Exception('Database error')
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await check_byor_permitted(user_id=user_id)
+            await check_byor_permitted(user_id=user_id, effective_org_id=org_id)
 
         assert exc_info.value.status_code == 500
         assert 'Failed to check BYOR export permission' in exc_info.value.detail

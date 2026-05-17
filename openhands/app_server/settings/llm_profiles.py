@@ -6,6 +6,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SecretStr,
     SerializationInfo,
     ValidationError,
     field_serializer,
@@ -15,6 +16,22 @@ from pydantic import (
 
 from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
+
+
+def has_real_api_key(api_key: Any) -> bool:
+    """Return True iff ``api_key`` carries a non-empty value.
+
+    A ``SecretStr('')`` should report as *not set* — otherwise the UI tells
+    the user a key is stored when it isn't. Mirrors the check used in
+    ``Settings.llm_api_key_is_set``.
+    """
+    if api_key is None:
+        return False
+    secret_value = (
+        api_key.get_secret_value() if isinstance(api_key, SecretStr) else str(api_key)
+    )
+    return bool(secret_value and secret_value.strip())
+
 
 # Soft cap — keeps Settings payload bounded and blocks per-user storage
 # blow-ups. Tune if product requirements change.
@@ -136,7 +153,7 @@ class LLMProfiles(BaseModel):
                 'name': name,
                 'model': llm.model,
                 'base_url': llm.base_url,
-                'api_key_set': llm.api_key is not None,
+                'api_key_set': has_real_api_key(llm.api_key),
             }
             for name, llm in self.profiles.items()
         ]
