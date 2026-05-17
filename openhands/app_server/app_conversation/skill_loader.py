@@ -127,7 +127,11 @@ async def _get_provider_type(
 async def _determine_org_repo_path(
     selected_repository: str, user_context: UserContext
 ) -> tuple[str, str]:
-    """Determine the organization repository path and organization name.
+    """Determine the preferred organization repository path and organization name.
+
+    Prefer the current ``.agents`` repository for GitHub-style providers, while
+    callers that need backward compatibility should use
+    :func:`_determine_org_repo_candidates`.
 
     Args:
         selected_repository: Repository name (e.g., 'owner/repo' or 'org/project/repo')
@@ -139,10 +143,20 @@ async def _determine_org_repo_path(
         - org_name: Organization name extracted from repository
 
     Examples:
-        - GitHub/Bitbucket: ('owner/.openhands', 'owner')
+        - GitHub/Bitbucket: ('owner/.agents', 'owner')
         - GitLab: ('owner/openhands-config', 'owner')
         - Azure DevOps: ('org/openhands-config/openhands-config', 'org')
     """
+    org_repo_candidates, org_name = await _determine_org_repo_candidates(
+        selected_repository, user_context
+    )
+    return org_repo_candidates[0], org_name
+
+
+async def _determine_org_repo_candidates(
+    selected_repository: str, user_context: UserContext
+) -> tuple[list[str], str]:
+    """Determine organization config repositories to probe in precedence order."""
     repo_parts = selected_repository.split('/')
 
     is_azure_devops = await _is_azure_devops_repository(
@@ -156,13 +170,13 @@ async def _determine_org_repo_path(
         org_name = repo_parts[-2]
 
     if is_gitlab:
-        org_openhands_repo = f'{org_name}/openhands-config'
+        org_repos = [f'{org_name}/openhands-config']
     elif is_azure_devops:
-        org_openhands_repo = f'{org_name}/openhands-config/openhands-config'
+        org_repos = [f'{org_name}/openhands-config/openhands-config']
     else:
-        org_openhands_repo = f'{org_name}/.openhands'
+        org_repos = [f'{org_name}/.agents', f'{org_name}/.openhands']
 
-    return org_openhands_repo, org_name
+    return org_repos, org_name
 
 
 async def _get_org_repository_url(
@@ -219,12 +233,18 @@ async def build_org_config(
         return None
 
     try:
-        org_openhands_repo, org_name = await _determine_org_repo_path(
+        org_openhands_repos, org_name = await _determine_org_repo_candidates(
             selected_repository, user_context
         )
 
-        org_repo_url = await _get_org_repository_url(org_openhands_repo, user_context)
-        if not org_repo_url:
+        org_repo_url = None
+        for org_openhands_repo in org_openhands_repos:
+            org_repo_url = await _get_org_repository_url(
+                org_openhands_repo, user_context
+            )
+            if org_repo_url:
+                break
+        else:
             return None
 
         provider = await _get_provider_type(selected_repository, user_context)

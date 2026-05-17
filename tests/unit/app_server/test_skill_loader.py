@@ -15,6 +15,7 @@ from openhands.app_server.app_conversation.skill_loader import (
     SandboxConfig,
     SkillInfo,
     _convert_skill_info_to_skill,
+    _determine_org_repo_candidates,
     _determine_org_repo_path,
     _get_org_repository_url,
     _get_provider_type,
@@ -164,7 +165,7 @@ class TestBuildOrgConfig:
 
     @pytest.mark.asyncio
     @patch(
-        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_path'
+        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_candidates'
     )
     @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
     @patch('openhands.app_server.app_conversation.skill_loader._get_provider_type')
@@ -173,8 +174,8 @@ class TestBuildOrgConfig:
     ):
         """Test successfully building org config."""
         # Arrange
-        mock_determine_path.return_value = ('owner/.openhands', 'owner')
-        mock_get_url.return_value = 'https://token@github.com/owner/.openhands.git'
+        mock_determine_path.return_value = (['owner/.agents'], 'owner')
+        mock_get_url.return_value = 'https://token@github.com/owner/.agents.git'
         mock_get_provider.return_value = 'github'
 
         # Act
@@ -185,7 +186,7 @@ class TestBuildOrgConfig:
         assert isinstance(result, OrgConfig)
         assert result.repository == 'owner/repo'
         assert result.provider == 'github'
-        assert result.org_repo_url == 'https://token@github.com/owner/.openhands.git'
+        assert result.org_repo_url == 'https://token@github.com/owner/.agents.git'
         assert result.org_name == 'owner'
 
     @pytest.mark.asyncio
@@ -210,7 +211,7 @@ class TestBuildOrgConfig:
 
     @pytest.mark.asyncio
     @patch(
-        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_path'
+        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_candidates'
     )
     @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
     async def test_returns_none_when_url_not_available(
@@ -218,7 +219,10 @@ class TestBuildOrgConfig:
     ):
         """Test returns None when org repository URL cannot be retrieved."""
         # Arrange
-        mock_determine_path.return_value = ('owner/.openhands', 'owner')
+        mock_determine_path.return_value = (
+            ['owner/.agents', 'owner/.openhands'],
+            'owner',
+        )
         mock_get_url.return_value = None
 
         # Act
@@ -226,6 +230,42 @@ class TestBuildOrgConfig:
 
         # Assert
         assert result is None
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_candidates'
+    )
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    @patch('openhands.app_server.app_conversation.skill_loader._get_provider_type')
+    async def test_falls_back_to_legacy_org_repo(
+        self, mock_get_provider, mock_get_url, mock_determine_path, mock_user_context
+    ):
+        """Test falling back to .openhands when .agents is unavailable."""
+        # Arrange
+        mock_determine_path.return_value = (
+            ['owner/.agents', 'owner/.openhands'],
+            'owner',
+        )
+        mock_get_url.side_effect = [
+            None,
+            'https://token@github.com/owner/.openhands.git',
+        ]
+        mock_get_provider.return_value = 'github'
+
+        # Act
+        result = await build_org_config('owner/repo', mock_user_context)
+
+        # Assert
+        assert result is not None
+        assert result.org_repo_url == 'https://token@github.com/owner/.openhands.git'
+        assert mock_get_url.await_args_list[0].args == (
+            'owner/.agents',
+            mock_user_context,
+        )
+        assert mock_get_url.await_args_list[1].args == (
+            'owner/.openhands',
+            mock_user_context,
+        )
 
 
 class TestBuildSandboxConfig:
@@ -596,7 +636,7 @@ class TestDetermineOrgRepoPath:
         )
 
         # Assert
-        assert org_repo == 'owner/.openhands'
+        assert org_repo == 'owner/.agents'
         assert org_name == 'owner'
 
     @pytest.mark.asyncio
@@ -640,6 +680,31 @@ class TestDetermineOrgRepoPath:
         # Assert
         assert org_repo == 'org/openhands-config/openhands-config'
         assert org_name == 'org'
+
+
+class TestDetermineOrgRepoCandidates:
+    """Test _determine_org_repo_candidates helper function."""
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._is_gitlab_repository')
+    @patch(
+        'openhands.app_server.app_conversation.skill_loader._is_azure_devops_repository'
+    )
+    async def test_github_repository_candidates(self, mock_is_azure, mock_is_gitlab):
+        """Test GitHub org skills prefer .agents and retain .openhands fallback."""
+        # Arrange
+        mock_user_context = AsyncMock()
+        mock_is_gitlab.return_value = False
+        mock_is_azure.return_value = False
+
+        # Act
+        org_repos, org_name = await _determine_org_repo_candidates(
+            'owner/repo', mock_user_context
+        )
+
+        # Assert
+        assert org_repos == ['owner/.agents', 'owner/.openhands']
+        assert org_name == 'owner'
 
 
 class TestGetOrgRepositoryUrl:
