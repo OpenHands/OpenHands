@@ -51,14 +51,17 @@ export const useBulkDeleteConversations = () => {
     },
     onSuccess: (data) => {
       data.succeeded.forEach(clearConversationLocalStorage);
+      if (data.failed.length > 0) {
+        queryClient.invalidateQueries({
+          queryKey: ["user", "conversations"],
+        });
+      }
     },
     onError: (_err, _variables, context) => {
       if (context?.previousData) {
         restoreConversationsCache(queryClient, context.previousData);
       }
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({
+      queryClient.invalidateQueries({
         queryKey: ["user", "conversations"],
       });
     },

@@ -1,12 +1,10 @@
-import { useInfiniteQuery, useIsMutating } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { useIsAuthed } from "./use-is-authed";
 import { V1AppConversationPage } from "#/api/conversation-service/v1-conversation-service.types";
 
 export const usePaginatedConversations = (limit: number = 20) => {
   const { data: userIsAuthenticated } = useIsAuthed();
-  const isBulkDeleting =
-    useIsMutating({ mutationKey: ["bulk-delete-conversations"] }) > 0;
 
   return useInfiniteQuery({
     queryKey: ["user", "conversations", "paginated", limit],
@@ -18,7 +16,7 @@ export const usePaginatedConversations = (limit: number = 20) => {
 
       return result;
     },
-    enabled: !!userIsAuthenticated && !isBulkDeleting,
+    enabled: !!userIsAuthenticated,
     getNextPageParam: (lastPage: V1AppConversationPage) =>
       lastPage.next_page_id,
     initialPageParam: undefined as string | undefined,
