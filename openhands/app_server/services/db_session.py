@@ -29,7 +29,7 @@ the same reason: importing this module must not pull in
 ``app_server.config``.
 """
 
-from typing import AsyncContextManager
+from typing import AsyncContextManager, AsyncGenerator
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,8 +46,29 @@ def get_db_session(
     return get_global_config().db_session.context(state, request)
 
 
-def depends_db_session():
-    """FastAPI ``Depends(...)`` factory for the request-scoped ``AsyncSession``."""
+async def _yield_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
+    """Per-request FastAPI dependency yielding the request-scoped ``AsyncSession``.
+
+    ``get_global_config`` is looked up at request time -- not at module load --
+    so that this module is safe to evaluate from inside ``config_from_env``.
+    Concretely, when ``OH_LLM_MODEL_KIND`` (or a similar discriminated-union env
+    var) names a feature class whose module body calls ``depends_db_session()``
+    as a default argument, ``env_parser`` will dynamically import that module
+    while we are still constructing the global config. Calling
+    ``get_global_config()`` eagerly here would re-enter the unfinished
+    initialiser and recurse until the stack blows.
+    """
     from openhands.app_server.config import get_global_config
 
-    return Depends(get_global_config().db_session.depends)
+    async for db_session in get_global_config().db_session.depends(request):
+        yield db_session
+
+
+def depends_db_session():
+    """FastAPI ``Depends(...)`` factory for the request-scoped ``AsyncSession``.
+
+    Returns a stable ``Depends`` object that defers the ``get_global_config()``
+    lookup to request time. Safe to call from module top level (e.g. as a
+    default argument), even while ``config_from_env`` is still running.
+    """
+    return Depends(_yield_db_session)
