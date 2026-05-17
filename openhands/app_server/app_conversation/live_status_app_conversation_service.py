@@ -921,11 +921,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             provider_base_url=self.openhands_provider_base_url,
         )
 
-        return LLM(
-            model=model,
-            base_url=base_url,
-            api_key=user.agent_settings.llm.api_key,
-            usage_id='agent',
+        return user.agent_settings.llm.model_copy(
+            update={
+                'model': model,
+                'base_url': base_url,
+                'api_key': user.agent_settings.llm.api_key,
+                'usage_id': 'agent',
+            }
         )
 
     async def _add_system_mcp_servers(

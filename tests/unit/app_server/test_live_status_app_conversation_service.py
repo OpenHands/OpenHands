@@ -567,6 +567,35 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://sdk-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_preserves_user_llm_overrides(self):
+        """User LLM overrides should not be replaced by SDK defaults."""
+        self.mock_user.agent_settings = OpenHandsAgentSettings(
+            llm=LLM(
+                model='anthropic/claude-opus-4-7',
+                api_key=SecretStr('test-key'),
+                base_url='https://sdk-llm.example.com',
+                reasoning_effort=None,
+                extended_thinking_budget=None,
+                drop_params=False,
+                max_output_tokens=4096,
+            )
+        )
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.model == 'anthropic/claude-opus-4-7'
+        assert llm.base_url == 'https://sdk-llm.example.com'
+        assert llm.api_key.get_secret_value() == 'test-key'
+        assert llm.usage_id == 'agent'
+        assert llm.reasoning_effort is None
+        assert llm.extended_thinking_budget is None
+        assert llm.drop_params is False
+        assert llm.max_output_tokens == 4096
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
         self,
     ):
