@@ -134,6 +134,31 @@ async def test_update_org(async_session_maker, mock_litellm_api):
         assert agent_settings.llm.model == 'litellm_proxy/claude-3'
 
 
+def test_get_org_settings_from_org_use_persisted_loaders():
+    org = MagicMock(spec=Org)
+    org.agent_settings = {'legacy': True}
+    org.conversation_settings = {'legacy': True}
+
+    loaded_agent_settings = OpenHandsAgentSettings(agent='MigratedAgent')
+    loaded_conversation_settings = ConversationSettings(max_iterations=77)
+
+    with (
+        patch(
+            'storage.org_store._load_persisted_agent_settings',
+            return_value=loaded_agent_settings,
+        ) as agent_loader,
+        patch(
+            'storage.org_store._load_persisted_conversation_settings',
+            return_value=loaded_conversation_settings,
+        ) as conversation_loader,
+    ):
+        assert OrgStore.get_agent_settings_from_org(org).agent == 'MigratedAgent'
+        assert OrgStore.get_conversation_settings_from_org(org).max_iterations == 77
+
+    agent_loader.assert_called_once_with({'legacy': True})
+    conversation_loader.assert_called_once_with({'legacy': True})
+
+
 @pytest.mark.asyncio
 async def test_update_org_not_found(async_session_maker):
     # Test updating org that doesn't exist

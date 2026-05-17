@@ -59,6 +59,23 @@ def _coerce_dict_secrets(d: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _load_persisted_agent_settings(
+    data: Any,
+) -> OpenHandsAgentSettings | ACPAgentSettings:
+    """Load persisted agent settings via the SDK loader.
+
+    Routes the raw payload through :func:`validate_agent_settings` so any
+    schema migrations registered with the SDK are applied before validation
+    against the discriminated :data:`AgentSettingsConfig` union.
+    """
+    return validate_agent_settings(data or {})
+
+
+def _load_persisted_conversation_settings(data: Any) -> ConversationSettings:
+    """Load persisted conversation settings via the SDK loader."""
+    return ConversationSettings.from_persisted(data or {})
+
+
 class SandboxGroupingStrategy(str, Enum):
     """Strategy for grouping conversations within sandboxes."""
 
@@ -191,14 +208,33 @@ class Settings(BaseModel):
             replace_mcp_config = 'mcp_config' in agent_update
             mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
 
-            merged = deep_merge(
-                self.agent_settings.model_dump(
+            # acp_env is a flat credential dict that should be replaced wholesale
+            # when present; deep-merging would make removed keys persist across saves.
+            replace_acp_env = 'acp_env' in agent_update
+            acp_env = coerced.pop('acp_env', None) if replace_acp_env else None
+
+            new_kind = coerced.get('agent_kind')
+            current_kind = self.agent_settings.agent_kind
+
+            if new_kind and new_kind != current_kind:
+                # ``agent_settings`` is a discriminated union over
+                # ``OpenHandsAgentSettings | ACPAgentSettings``. Deep-merging
+                # the incoming kind's fields onto the outgoing kind's dump
+                # produces a mongrel (``llm`` plus ``acp_command``) that
+                # fails validation. Start from a fresh base for the new
+                # kind. Cross-kind config preservation tracked in
+                # OpenHands/OpenHands#14370.
+                base: dict[str, Any] = {'agent_kind': new_kind}
+            else:
+                base = self.agent_settings.model_dump(
                     mode='json', context={'expose_secrets': True}
-                ),
-                coerced,
-            )
+                )
+
+            merged = deep_merge(base, coerced)
             if replace_mcp_config:
                 merged['mcp_config'] = mcp_config
+            if replace_acp_env:
+                merged['acp_env'] = acp_env or {}
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
@@ -313,7 +349,9 @@ class Settings(BaseModel):
         # --- Agent settings: coerce SecretStr leaves to plain strings ---
         agent_settings = data.get('agent_settings')
         if isinstance(agent_settings, dict):
-            data['agent_settings'] = _coerce_dict_secrets(agent_settings)
+            data['agent_settings'] = _load_persisted_agent_settings(
+                _coerce_dict_secrets(agent_settings)
+            ).model_dump(mode='json', context={'expose_secrets': True})
         elif isinstance(agent_settings, (OpenHandsAgentSettings, ACPAgentSettings)):
             data['agent_settings'] = agent_settings.model_dump(
                 mode='json', context={'expose_secrets': True}
@@ -321,7 +359,11 @@ class Settings(BaseModel):
 
         # --- Conversation settings: normalize ---
         conversation_settings = data.get('conversation_settings')
-        if isinstance(conversation_settings, ConversationSettings):
+        if isinstance(conversation_settings, dict):
+            data['conversation_settings'] = _load_persisted_conversation_settings(
+                conversation_settings
+            ).model_dump(mode='json')
+        elif isinstance(conversation_settings, ConversationSettings):
             data['conversation_settings'] = conversation_settings.model_dump(
                 mode='json'
             )

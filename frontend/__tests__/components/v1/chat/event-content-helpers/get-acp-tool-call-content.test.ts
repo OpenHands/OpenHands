@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  getACPToolCallContent,
-  getACPToolCallTitleKey,
-} from "#/components/v1/chat/event-content-helpers/get-acp-tool-call-content";
+import { getACPToolCallContent } from "#/components/v1/chat/event-content-helpers/get-acp-tool-call-content";
 import { getACPToolCallResult } from "#/components/v1/chat/event-content-helpers/get-observation-result";
 import { ACPToolCallEvent } from "#/types/v1/core/events/acp-tool-call-event";
 
@@ -24,26 +21,6 @@ const baseEvent: ACPToolCallEvent = {
 const makeEvent = (overrides: Partial<ACPToolCallEvent>): ACPToolCallEvent => ({
   ...baseEvent,
   ...overrides,
-});
-
-describe("getACPToolCallTitleKey", () => {
-  it.each([
-    ["execute", "ACTION_MESSAGE$ACP_RUN"],
-    ["edit", "ACTION_MESSAGE$ACP_EDIT"],
-    ["read", "ACTION_MESSAGE$ACP_READ"],
-    ["fetch", "ACTION_MESSAGE$ACP_FETCH"],
-    ["other", "ACTION_MESSAGE$ACP_TOOL"],
-  ] as const)("maps tool_kind=%s to %s", (toolKind, expectedKey) => {
-    expect(getACPToolCallTitleKey(makeEvent({ tool_kind: toolKind }))).toBe(
-      expectedKey,
-    );
-  });
-
-  it("falls back to ACP_TOOL when tool_kind is null", () => {
-    expect(getACPToolCallTitleKey(makeEvent({ tool_kind: null }))).toBe(
-      "ACTION_MESSAGE$ACP_TOOL",
-    );
-  });
 });
 
 describe("getACPToolCallContent", () => {

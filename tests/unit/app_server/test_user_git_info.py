@@ -67,8 +67,13 @@ class TestGetCurrentUserGitInfo:
         assert result.name is None
         assert result.email is None
 
-    async def test_raises_401_when_user_git_info_is_none(self, mock_user_context):
-        """When get_user_git_info returns None, raises 401 Unauthorized."""
+    async def test_raises_403_when_user_git_info_is_none(self, mock_user_context):
+        """When get_user_git_info returns None, raises 403 Forbidden.
+
+        We use 403 (not 401) because the user IS authenticated - they just don't
+        have a git provider connected (e.g., logged in via SAML without GitHub linked).
+        Using 401 would trigger frontend logout behavior.
+        """
         from fastapi import HTTPException
 
         mock_user_context.get_user_git_info = AsyncMock(return_value=None)
@@ -78,8 +83,8 @@ class TestGetCurrentUserGitInfo:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user_git_info(user_context=mock_user_context)
 
-        assert exc_info.value.status_code == 401
-        assert 'Not authenticated' in exc_info.value.detail
+        assert exc_info.value.status_code == 403
+        assert 'Git provider not connected' in exc_info.value.detail
         mock_user_context.get_user_git_info.assert_called_once()
 
     async def test_raises_401_when_user_git_info_returns_none_for_company(

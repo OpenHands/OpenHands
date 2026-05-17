@@ -48,5 +48,11 @@ async def get_current_user_git_info(
     """Get the current authenticated user's metadata from the git provider."""
     user = await user_context.get_user_git_info()
     if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
+        # Return 403 Forbidden (not 401) when user has no git provider connected
+        # 401 would trigger frontend logout, but the user IS authenticated - they just
+        # don't have a git provider (e.g., logged in via SAML without GitHub linked)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail='Git provider not connected',
+        )
     return user

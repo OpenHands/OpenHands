@@ -1,0 +1,468 @@
+---
+name: Issue Duplicate Check via OpenHands Cloud
+
+on:
+    issues:
+        types: [opened]
+    schedule:
+        - cron: 0 9 * * *
+    workflow_dispatch:
+        inputs:
+            mode:
+                description: Which workflow path to run
+                required: true
+                type: choice
+                options:
+                    - smoke-clone
+                    - issue-check
+                    - auto-close
+                default: smoke-clone
+            issue_number:
+                description: Existing issue number to analyze when mode is issue-check
+                required: false
+                type: number
+            close_after_days:
+                description: Days to wait before auto-closing duplicate candidates in auto-close mode
+                required: false
+                type: number
+                default: 3
+
+
+permissions:
+    contents: read
+    issues: write
+
+jobs:
+    smoke-clone:
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'smoke-clone'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Clone repository
+              run: |
+                  git clone --depth 1 "https://github.com/${{ github.repository }}.git" /tmp/repo-clone
+                  echo "Repository HEAD: $(git -C /tmp/repo-clone rev-parse --short HEAD)"
+
+            - name: Summarize smoke test
+              run: |
+                  {
+                    echo "## Smoke clone completed"
+                    echo
+                    echo "- Repository cloned to /tmp/repo-clone"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+    issue-duplicate-check:
+        if: |
+            github.event_name == 'issues' ||
+            (github.event_name == 'workflow_dispatch' && inputs.mode == 'issue-check' && inputs.issue_number != null)
+        runs-on: ubuntu-latest
+        timeout-minutes: 35
+        concurrency:
+            group: issue-duplicate-check-${{ github.repository }}-${{ github.event.issue.number || inputs.issue_number }}
+            cancel-in-progress: false
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.13'
+
+            - name: Validate duplicate check inputs
+              env:
+                  OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+                  ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+              run: |
+                  if [ -z "$OPENHANDS_API_KEY" ]; then
+                    echo "Error: OPENHANDS_API_KEY secret is required"
+                    exit 1
+                  fi
+                  if [ -z "$ISSUE_NUMBER" ]; then
+                    echo "Error: ISSUE_NUMBER is required"
+                    exit 1
+                  fi
+
+            - name: Run OpenHands duplicate check conversation
+              id: run_check
+              env:
+                  OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+                  GITHUB_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+                  ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+                  OUTPUT_PATH: ${{ runner.temp }}/issue-duplicate-check-result.json
+              run: |
+                  python scripts/issue_duplicate_check_openhands.py \
+                    --repository "${{ github.repository }}" \
+                    --issue-number "$ISSUE_NUMBER" \
+                    --output "$OUTPUT_PATH"
+                  test -f "$OUTPUT_PATH" || {
+                    echo "Error: Output file not created"
+                    exit 1
+                  }
+                  echo "result_path=$OUTPUT_PATH" >> "$GITHUB_OUTPUT"
+
+            - name: Parse duplicate check result
+              id: parsed_result
+              env:
+                  RESULT_PATH: ${{ steps.run_check.outputs.result_path }}
+              run: |
+                  python - <<'PY'
+                  import json
+                  import os
+                  import sys
+                  from pathlib import Path
+
+                  try:
+                      result = json.loads(Path(os.environ['RESULT_PATH']).read_text())
+                  except (FileNotFoundError, json.JSONDecodeError) as exc:
+                      print(
+                          f"Error: Failed to read duplicate check result: {exc}",
+                          file=sys.stderr,
+                      )
+                      raise SystemExit(1) from exc
+                  output_path = Path(os.environ['GITHUB_OUTPUT'])
+                  summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
+
+                  def write_multiline(name: str, value: str) -> None:
+                      delimiter = f"EOF_{os.urandom(8).hex()}"
+                      with output_path.open('a', encoding='utf-8') as fh:
+                          fh.write(f"{name}<<{delimiter}\n{value}\n{delimiter}\n")
+
+                  canonical_issue_number = result.get('canonical_issue_number')
+                  with output_path.open('a', encoding='utf-8') as fh:
+                      fh.write(f"should_comment={'true' if result.get('should_comment') else 'false'}\n")
+                      fh.write(f"is_duplicate={'true' if result.get('is_duplicate') else 'false'}\n")
+                      fh.write(
+                          f"auto_close_candidate={'true' if result.get('auto_close_candidate') else 'false'}\n"
+                      )
+                      fh.write(f"confidence={result.get('confidence', '')}\n")
+                      fh.write(f"classification={result.get('classification', '')}\n")
+                      fh.write(
+                          f"canonical_issue_number={canonical_issue_number if canonical_issue_number is not None else ''}\n"
+                      )
+                      fh.write(f"conversation_url={result.get('conversation_url', '')}\n")
+                      fh.write(f"app_conversation_id={result.get('app_conversation_id', '')}\n")
+
+                  write_multiline('summary', str(result.get('summary', '')).strip())
+                  write_multiline(
+                      'candidate_issues_json',
+                      json.dumps(result.get('candidate_issues', []), ensure_ascii=False),
+                  )
+
+                  candidate_lines = []
+                  for candidate in result.get('candidate_issues', []):
+                      candidate_lines.append(
+                          f"- #{candidate.get('number')}: {candidate.get('title')} ({candidate.get('url')}) — {candidate.get('similarity_reason', '')}"
+                      )
+
+                  summary_path.write_text(
+                      "\n".join(
+                          [
+                              "## Duplicate check result",
+                              "",
+                              f"- Repository: {result.get('repository')}",
+                              f"- Issue: #{result.get('issue_number')}",
+                              f"- Should comment: {result.get('should_comment')}",
+                              f"- Exact duplicate: {result.get('is_duplicate')}",
+                              f"- Auto-close candidate: {result.get('auto_close_candidate')}",
+                              f"- Classification: {result.get('classification')}",
+                              f"- Confidence: {result.get('confidence')}",
+                              f"- Canonical issue: {canonical_issue_number}",
+                              f"- Conversation: {result.get('conversation_url')}",
+                              "",
+                              "### Summary",
+                              result.get('summary', ''),
+                              "",
+                              "### Candidate issues",
+                              *(candidate_lines or ["- None"]),
+                          ]
+                      )
+                      + "\n",
+                      encoding='utf-8',
+                  )
+                  PY
+
+            - name: Post duplicate overlap notice
+              if: steps.parsed_result.outputs.should_comment == 'true'
+              uses: actions/github-script@v7
+              env:
+                  ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+                  SUMMARY: ${{ steps.parsed_result.outputs.summary }}
+                  CANDIDATE_ISSUES_JSON: ${{ steps.parsed_result.outputs.candidate_issues_json }}
+                  CLASSIFICATION: ${{ steps.parsed_result.outputs.classification }}
+                  AUTO_CLOSE_CANDIDATE: ${{ steps.parsed_result.outputs.auto_close_candidate }}
+                  CANONICAL_ISSUE_NUMBER: ${{ steps.parsed_result.outputs.canonical_issue_number }}
+                  CLOSE_AFTER_DAYS: ${{ inputs.close_after_days || '3' }}
+              with:
+                  github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+                  script: |
+                      const issueNumber = Number(process.env.ISSUE_NUMBER);
+                      const summary = (process.env.SUMMARY || '').trim();
+                      const classification = process.env.CLASSIFICATION || 'no-match';
+                      const autoClose = process.env.AUTO_CLOSE_CANDIDATE === 'true';
+                      const closeAfterDays = process.env.CLOSE_AFTER_DAYS || '3';
+                      let candidates = [];
+                      try {
+                        candidates = JSON.parse(process.env.CANDIDATE_ISSUES_JSON || '[]');
+                      } catch (error) {
+                        core.setFailed(`Invalid candidate JSON: ${error.message}`);
+                        return;
+                      }
+                      if (!Array.isArray(candidates)) {
+                        core.setFailed('CANDIDATE_ISSUES_JSON is not an array');
+                        return;
+                      }
+                      if (candidates.length === 0) {
+                        core.setFailed(`No candidate issues were returned for issue #${issueNumber}.`);
+                        return;
+                      }
+                      const canonicalIssueRaw = process.env.CANONICAL_ISSUE_NUMBER || candidates[0].number;
+                      const canonicalIssueNumber = canonicalIssueRaw ? Number(canonicalIssueRaw) : Number.NaN;
+                      const candidateLabel = 'duplicate-candidate';
+
+                      function parseDuplicateCheckMarker(body) {
+                        if (!body) {
+                          return null;
+                        }
+                        const match = body.match(/<!-- openhands-duplicate-check canonical=(\d+) auto-close=(true|false) -->/);
+                        if (!match) {
+                          return null;
+                        }
+                        return {
+                          canonicalIssueNumber: Number(match[1]),
+                          autoClose: match[2] === 'true',
+                        };
+                      }
+
+                      async function ensureCanonicalIssueIsOpenIssue() {
+                        let canonicalIssue;
+                        try {
+                          ({ data: canonicalIssue } = await github.rest.issues.get({
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            issue_number: canonicalIssueNumber,
+                          }));
+                        } catch (error) {
+                          if (error.status === 404) {
+                            core.setFailed(`Canonical issue #${canonicalIssueNumber} does not exist.`);
+                            return false;
+                          }
+                          throw error;
+                        }
+                        if (canonicalIssue.pull_request) {
+                          core.setFailed(`Canonical issue #${canonicalIssueNumber} is a pull request, not an issue.`);
+                          return false;
+                        }
+                        if (canonicalIssue.state !== 'open' || canonicalIssue.locked) {
+                          core.setFailed(`Canonical issue #${canonicalIssueNumber} must be an open, unlocked issue.`);
+                          return false;
+                        }
+                        return true;
+                      }
+
+                      async function ensureCandidateLabelOnIssue() {
+                        try {
+                          await github.rest.issues.getLabel({
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            name: candidateLabel,
+                          });
+                        } catch (error) {
+                          if (error.status !== 404) {
+                            throw error;
+                          }
+                          await github.rest.issues.createLabel({
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            name: candidateLabel,
+                            color: 'FBCA04',
+                            description: 'Potential duplicate awaiting auto-close or maintainer review',
+                          });
+                        }
+
+                        const { data: issue } = await github.rest.issues.get({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: issueNumber,
+                        });
+                        const labelNames = (issue.labels || []).map((label) => (
+                          typeof label === 'string' ? label : label.name
+                        ));
+                        if (!labelNames.includes(candidateLabel)) {
+                          await github.rest.issues.addLabels({
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            issue_number: issueNumber,
+                            labels: [candidateLabel],
+                          });
+                        }
+                      }
+
+                      async function removeCandidateLabelFromIssue() {
+                        try {
+                          await github.rest.issues.removeLabel({
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            issue_number: issueNumber,
+                            name: candidateLabel,
+                          });
+                        } catch (error) {
+                          if (error.status !== 404) {
+                            throw error;
+                          }
+                        }
+                      }
+
+                      if (!Number.isInteger(canonicalIssueNumber) || canonicalIssueNumber <= 0) {
+                        core.setFailed(`No canonical issue number was returned for issue #${issueNumber}.`);
+                        return;
+                      }
+
+                      if (!(await ensureCanonicalIssueIsOpenIssue())) {
+                        return;
+                      }
+
+                      const marker = `<!-- openhands-duplicate-check canonical=${canonicalIssueNumber} auto-close=${autoClose ? 'true' : 'false'} -->`;
+                      const header = candidates.length === 1
+                        ? 'Found 1 possible duplicate issue:'
+                        : `Found ${candidates.length} possible duplicate issues:`;
+                      const candidateLines = candidates.map((candidate, index) => (
+                        `${index + 1}. [#${candidate.number}](${candidate.url}) — ${candidate.title}`
+                      ));
+
+                      const sections = [];
+                      if (summary) {
+                        sections.push(summary, '');
+                      }
+                      sections.push(header, '', ...candidateLines);
+
+                      if (classification === 'overlapping-scope') {
+                        sections.push(
+                          '',
+                          'These may not be exact duplicates, but the scope appears to overlap enough that keeping discussion in one place may be more useful.'
+                        );
+                      }
+
+                      if (autoClose) {
+                        sections.push(
+                          '',
+                          `This issue will be automatically closed as a duplicate in ${closeAfterDays} days.`,
+                          '',
+                          '- If your issue is a duplicate, please close it and 👍 the existing issue instead',
+                          '- To prevent auto-closure, add a comment or 👎 this comment'
+                        );
+                      }
+
+                      sections.push(
+                        '',
+                        marker,
+                        '_This comment was created by an AI assistant (OpenHands) on behalf of the repository maintainer._'
+                      );
+                      const body = sections.join('\n').trim();
+
+                      const MAX_COMMENT_PAGES = 50;
+                      let allComments = [];
+                      let page = 1;
+                      while (page <= MAX_COMMENT_PAGES) {
+                        const { data: comments } = await github.rest.issues.listComments({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: issueNumber,
+                          per_page: 100,
+                          page,
+                        });
+                        if (!comments || comments.length === 0) {
+                          break;
+                        }
+                        allComments = allComments.concat(comments);
+                        if (comments.length < 100) {
+                          break;
+                        }
+                        page += 1;
+                      }
+                      if (page > MAX_COMMENT_PAGES) {
+                        core.setFailed(
+                          `Stopped loading comments for issue #${issueNumber} after ${MAX_COMMENT_PAGES} pages.`
+                        );
+                        return;
+                      }
+
+                      const existing = allComments.find((comment) => comment.body && comment.body.includes('<!-- openhands-duplicate-check '));
+                      if (existing) {
+                        const existingMarker = parseDuplicateCheckMarker(existing.body);
+                        if (existingMarker) {
+                          if (existingMarker.autoClose) {
+                            await ensureCandidateLabelOnIssue();
+                          } else {
+                            await removeCandidateLabelFromIssue();
+                          }
+                          if (
+                            existingMarker.canonicalIssueNumber !== canonicalIssueNumber ||
+                            existingMarker.autoClose !== autoClose
+                          ) {
+                            core.setFailed(
+                              `Duplicate check comment already exists on issue #${issueNumber} with different canonical/auto-close metadata; manual reconciliation is required.`
+                            );
+                            return;
+                          }
+                        } else {
+                          core.warning(
+                            `Duplicate check comment already exists on issue #${issueNumber} but its marker could not be parsed; leaving label state unchanged.`
+                          );
+                        }
+                        core.info(`Duplicate check comment already exists on issue #${issueNumber}; skipping.`);
+                        return;
+                      }
+
+                      await github.rest.issues.createComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: issueNumber,
+                        body,
+                      });
+
+                      if (autoClose) {
+                        await ensureCandidateLabelOnIssue();
+                      }
+
+    auto-close-duplicates:
+        if: |
+            github.event_name == 'schedule' ||
+            (github.event_name == 'workflow_dispatch' && inputs.mode == 'auto-close')
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        concurrency:
+            group: auto-close-duplicates-${{ github.repository }}
+            cancel-in-progress: false
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.13'
+
+            - name: Auto-close aged duplicate candidates
+              env:
+                  GITHUB_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+                  CLOSE_AFTER_DAYS: ${{ inputs.close_after_days || '3' }}
+              run: |
+                  python scripts/auto_close_duplicate_issues.py \
+                    --repository "${{ github.repository }}" \
+                    --close-after-days "$CLOSE_AFTER_DAYS" | tee "$RUNNER_TEMP/auto-close-summary.json"
+                  status=${PIPESTATUS[0]}
+                  if [ "$status" -ne 0 ]; then
+                    echo "::error::Auto-close script failed with exit code $status"
+                    exit "$status"
+                  fi
+
+            - name: Summarize auto-close run
+              run: |
+                  {
+                    echo "## Auto-close duplicate candidates"
+                    echo
+                    cat "$RUNNER_TEMP/auto-close-summary.json"
+                  } >> "$GITHUB_STEP_SUMMARY"
