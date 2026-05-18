@@ -17,5 +17,16 @@ Since agents can do things that may harm your system, they are typically run ins
 
 - Secure containerized execution environments
 - Sandbox lifecycle management (create, start, stop, destroy)
-- Multiple sandbox backend support (Docker, Remote, Local)
+- Multiple sandbox backend support (Docker, Remote, Local, boxd)
 - User-scoped sandbox access control
+
+## Backends
+
+| `RUNTIME=` | Class | Isolation | Use case |
+|---|---|---|---|
+| `docker` (default) | `DockerSandboxService` | Docker container | Local dev, single machine |
+| `remote` | `RemoteSandboxService` | All-Hands managed runtime | Managed cloud |
+| `local` / `process` | `ProcessSandboxService` | Local process | Minimal isolation, dev only |
+| `boxd` | `BoxdSandboxService` | KVM microVM | Self-hostable cloud with per-VM IPv4 + sub-ms warm suspend/resume |
+
+See `boxd-runtime.md` for the boxd setup guide.
