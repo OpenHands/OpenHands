@@ -19,7 +19,7 @@ import pytest
 # sandbox backends (modal, daytona, e2b, runloop) follow the same
 # pattern of not pinning the SDK in test deps. Reviewers can run these
 # locally with `pip install boxd`.
-pytest.importorskip("boxd")
+pytest.importorskip('boxd')
 
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
@@ -49,10 +49,10 @@ def mock_sandbox_spec_service():
     """SandboxSpecService that returns a deterministic spec."""
     mock_service = AsyncMock()
     mock_spec = SandboxSpecInfo(
-        id="ghcr.io/openhands/agent-server:1.22.1-python",
-        command=["/usr/local/bin/openhands-agent-server", "--port", "60000"],
-        initial_env={"LOG_JSON": "true"},
-        working_dir="/workspace/project",
+        id='ghcr.io/openhands/agent-server:1.22.1-python',
+        command=['/usr/local/bin/openhands-agent-server', '--port', '60000'],
+        initial_env={'LOG_JSON': 'true'},
+        working_dir='/workspace/project',
     )
     mock_service.get_default_sandbox_spec.return_value = mock_spec
     mock_service.get_sandbox_spec.return_value = mock_spec
@@ -62,7 +62,7 @@ def mock_sandbox_spec_service():
 @pytest.fixture
 def mock_user_context():
     mock_context = AsyncMock(spec=UserContext)
-    mock_context.get_user_id.return_value = "test-user-123"
+    mock_context.get_user_id.return_value = 'test-user-123'
     return mock_context
 
 
@@ -90,22 +90,22 @@ def boxd_sandbox_service(
     return BoxdSandboxService(
         sandbox_spec_service=mock_sandbox_spec_service,
         compute=mock_compute,
-        web_url="https://web.example.com",
+        web_url='https://web.example.com',
         max_num_sandboxes=10,
         auto_suspend_timeout=300,
         vcpu=2,
-        memory="8G",
-        disk="100G",
+        memory='8G',
+        disk='100G',
         user_context=mock_user_context,
         db_session=mock_db_session,
     )
 
 
 def make_box_mock(
-    box_id: str = "box-abc",
-    name: str = "oh-test-sandbox",
-    status: str = "running",
-    proxy_domain: str = "agent-oh-test-sandbox.boxd.sh",
+    box_id: str = 'box-abc',
+    name: str = 'oh-test-sandbox',
+    status: str = 'running',
+    proxy_domain: str = 'agent-oh-test-sandbox.boxd.sh',
 ):
     """Build a MagicMock Box. Production Box objects don't carry env back."""
     box = MagicMock()
@@ -127,9 +127,9 @@ def make_box_mock(
 
 
 def make_stored(
-    sandbox_id: str = "test-sandbox-123",
-    user_id: str = "test-user-123",
-    spec_id: str = "ghcr.io/openhands/agent-server:1.22.1-python",
+    sandbox_id: str = 'test-sandbox-123',
+    user_id: str = 'test-user-123',
+    spec_id: str = 'ghcr.io/openhands/agent-server:1.22.1-python',
     session_api_key_hash: str | None = None,
     created_at: datetime | None = None,
 ) -> StoredBoxdSandbox:
@@ -163,19 +163,19 @@ def stub_get_stored_returns(boxd_sandbox_service, stored):
 
 class TestStatusMapping:
     def test_running_maps_to_running(self):
-        assert STATUS_MAPPING["running"] == SandboxStatus.RUNNING
+        assert STATUS_MAPPING['running'] == SandboxStatus.RUNNING
 
     def test_suspended_maps_to_paused(self):
-        assert STATUS_MAPPING["suspended"] == SandboxStatus.PAUSED
+        assert STATUS_MAPPING['suspended'] == SandboxStatus.PAUSED
 
     def test_starting_maps_to_starting(self):
-        assert STATUS_MAPPING["starting"] == SandboxStatus.STARTING
+        assert STATUS_MAPPING['starting'] == SandboxStatus.STARTING
 
     def test_error_maps_to_error(self):
-        assert STATUS_MAPPING["error"] == SandboxStatus.ERROR
+        assert STATUS_MAPPING['error'] == SandboxStatus.ERROR
 
     def test_stopped_maps_to_missing(self):
-        assert STATUS_MAPPING["stopped"] == SandboxStatus.MISSING
+        assert STATUS_MAPPING['stopped'] == SandboxStatus.MISSING
 
 
 class TestStartSandbox:
@@ -188,10 +188,10 @@ class TestStartSandbox:
         mock_compute.box.create.return_value = make_box_mock()
         info = await boxd_sandbox_service.start_sandbox()
         assert info.status == SandboxStatus.RUNNING
-        assert info.created_by_user_id == "test-user-123"
+        assert info.created_by_user_id == 'test-user-123'
         mock_compute.box.create.assert_called_once()
         call_kwargs = mock_compute.box.create.call_args.kwargs
-        assert "config" in call_kwargs
+        assert 'config' in call_kwargs
 
     @pytest.mark.asyncio
     async def test_passes_image_from_spec(self, boxd_sandbox_service, mock_compute):
@@ -199,7 +199,7 @@ class TestStartSandbox:
         mock_compute.box.create.return_value = make_box_mock()
         await boxd_sandbox_service.start_sandbox()
         call_kwargs = mock_compute.box.create.call_args.kwargs
-        assert call_kwargs["image"] == "ghcr.io/openhands/agent-server:1.22.1-python"
+        assert call_kwargs['image'] == 'ghcr.io/openhands/agent-server:1.22.1-python'
 
     @pytest.mark.asyncio
     async def test_sets_env_from_spec_and_webhook(
@@ -208,8 +208,8 @@ class TestStartSandbox:
         stub_search_returns(boxd_sandbox_service, [])
         mock_compute.box.create.return_value = make_box_mock()
         await boxd_sandbox_service.start_sandbox()
-        config = mock_compute.box.create.call_args.kwargs["config"]
-        assert config.env["LOG_JSON"] == "true"
+        config = mock_compute.box.create.call_args.kwargs['config']
+        assert config.env['LOG_JSON'] == 'true'
         assert WEBHOOK_CALLBACK_VARIABLE in config.env
         assert ALLOW_CORS_ORIGINS_VARIABLE in config.env
 
@@ -223,8 +223,8 @@ class TestStartSandbox:
         mock_db_session.add.assert_called_once()
         added = mock_db_session.add.call_args.args[0]
         assert isinstance(added, StoredBoxdSandbox)
-        assert added.created_by_user_id == "test-user-123"
-        assert added.sandbox_spec_id == "ghcr.io/openhands/agent-server:1.22.1-python"
+        assert added.created_by_user_id == 'test-user-123'
+        assert added.sandbox_spec_id == 'ghcr.io/openhands/agent-server:1.22.1-python'
         assert added.session_api_key_hash is not None
 
     @pytest.mark.asyncio
@@ -234,7 +234,7 @@ class TestStartSandbox:
         stub_search_returns(boxd_sandbox_service, [])
         mock_compute.box.create.return_value = make_box_mock()
         await boxd_sandbox_service.start_sandbox()
-        config = mock_compute.box.create.call_args.kwargs["config"]
+        config = mock_compute.box.create.call_args.kwargs['config']
         session_key = config.env[SESSION_API_KEY_VARIABLE]
         added = mock_db_session.add.call_args.args[0]
         assert added.session_api_key_hash == _hash_session_api_key(session_key)
@@ -246,7 +246,7 @@ class TestStartSandbox:
         from boxd.errors import BoxdError
 
         stub_search_returns(boxd_sandbox_service, [])
-        mock_compute.box.create.side_effect = BoxdError("boxd is down")
+        mock_compute.box.create.side_effect = BoxdError('boxd is down')
         with pytest.raises(SandboxError):
             await boxd_sandbox_service.start_sandbox()
 
@@ -266,28 +266,28 @@ class TestStartSandbox:
         await boxd_sandbox_service.start_sandbox()
         assert box.create_proxy.await_count == 2
         proxy_names = {call.args[0] for call in box.create_proxy.await_args_list}
-        assert proxy_names == {"agent", "vscode"}
+        assert proxy_names == {'agent', 'vscode'}
 
 
 class TestGetSandbox:
     @pytest.mark.asyncio
     async def test_returns_none_when_no_stored_row(self, boxd_sandbox_service):
         stub_get_stored_returns(boxd_sandbox_service, None)
-        result = await boxd_sandbox_service.get_sandbox("missing")
+        result = await boxd_sandbox_service.get_sandbox('missing')
         assert result is None
 
     @pytest.mark.asyncio
     async def test_returns_info_when_row_and_vm_exist(
         self, boxd_sandbox_service, mock_compute
     ):
-        stored = make_stored(sandbox_id="abc")
+        stored = make_stored(sandbox_id='abc')
         stub_get_stored_returns(boxd_sandbox_service, stored)
-        mock_compute.box.get.return_value = make_box_mock(name="oh-abc")
-        info = await boxd_sandbox_service.get_sandbox("abc")
+        mock_compute.box.get.return_value = make_box_mock(name='oh-abc')
+        info = await boxd_sandbox_service.get_sandbox('abc')
         assert info is not None
-        assert info.id == "abc"
+        assert info.id == 'abc'
         assert info.status == SandboxStatus.RUNNING
-        assert info.created_by_user_id == "test-user-123"
+        assert info.created_by_user_id == 'test-user-123'
 
     @pytest.mark.asyncio
     async def test_status_missing_when_vm_gone_but_row_present(
@@ -295,10 +295,10 @@ class TestGetSandbox:
     ):
         from boxd.errors import NotFoundError
 
-        stored = make_stored(sandbox_id="abc")
+        stored = make_stored(sandbox_id='abc')
         stub_get_stored_returns(boxd_sandbox_service, stored)
-        mock_compute.box.get.side_effect = NotFoundError("gone")
-        info = await boxd_sandbox_service.get_sandbox("abc")
+        mock_compute.box.get.side_effect = NotFoundError('gone')
+        info = await boxd_sandbox_service.get_sandbox('abc')
         assert info is not None
         assert info.status == SandboxStatus.MISSING
 
@@ -308,36 +308,36 @@ class TestSearchSandboxes:
     async def test_returns_page_with_running_status(
         self, boxd_sandbox_service, mock_compute
     ):
-        stored = make_stored(sandbox_id="abc")
+        stored = make_stored(sandbox_id='abc')
         stub_search_returns(boxd_sandbox_service, [stored])
-        mock_compute.box.get.return_value = make_box_mock(name="oh-abc")
+        mock_compute.box.get.return_value = make_box_mock(name='oh-abc')
         page = await boxd_sandbox_service.search_sandboxes()
         assert len(page.items) == 1
-        assert page.items[0].id == "abc"
+        assert page.items[0].id == 'abc'
 
     @pytest.mark.asyncio
     async def test_pagination_sets_next_page_id(
         self, boxd_sandbox_service, mock_compute
     ):
         # limit=3 but we return 4 rows — the +1 sentinel signals "more".
-        rows = [make_stored(sandbox_id=f"sb-{i}") for i in range(4)]
+        rows = [make_stored(sandbox_id=f'sb-{i}') for i in range(4)]
         stub_search_returns(boxd_sandbox_service, rows)
         mock_compute.box.get.return_value = make_box_mock()
         page = await boxd_sandbox_service.search_sandboxes(limit=3)
         assert len(page.items) == 3
-        assert page.next_page_id == "3"
+        assert page.next_page_id == '3'
 
 
 class TestGetSandboxBySessionApiKey:
     @pytest.mark.asyncio
     async def test_finds_by_session_key(self, boxd_sandbox_service, mock_compute):
-        session_key = "session-secret"
+        session_key = 'session-secret'
         stored = make_stored(
-            sandbox_id="abc",
+            sandbox_id='abc',
             session_api_key_hash=_hash_session_api_key(session_key),
         )
         stub_get_stored_returns(boxd_sandbox_service, stored)
-        mock_compute.box.get.return_value = make_box_mock(name="oh-abc")
+        mock_compute.box.get.return_value = make_box_mock(name='oh-abc')
         info = await boxd_sandbox_service.get_sandbox_by_session_api_key(session_key)
         assert info is not None
         assert info.session_api_key == session_key
@@ -345,17 +345,17 @@ class TestGetSandboxBySessionApiKey:
     @pytest.mark.asyncio
     async def test_returns_none_when_no_match(self, boxd_sandbox_service):
         stub_get_stored_returns(boxd_sandbox_service, None)
-        assert await boxd_sandbox_service.get_sandbox_by_session_api_key("nope") is None
+        assert await boxd_sandbox_service.get_sandbox_by_session_api_key('nope') is None
 
 
 class TestLifecycleOperations:
     @pytest.mark.asyncio
     async def test_pause_calls_suspend(self, boxd_sandbox_service, mock_compute):
-        stored = make_stored(sandbox_id="abc", session_api_key_hash="HASH")
+        stored = make_stored(sandbox_id='abc', session_api_key_hash='HASH')
         stub_get_stored_returns(boxd_sandbox_service, stored)
-        box = make_box_mock(name="oh-abc")
+        box = make_box_mock(name='oh-abc')
         mock_compute.box.get.return_value = box
-        ok = await boxd_sandbox_service.pause_sandbox("abc")
+        ok = await boxd_sandbox_service.pause_sandbox('abc')
         assert ok is True
         box.suspend.assert_called_once()
         # Security: hash is cleared on pause
@@ -366,14 +366,14 @@ class TestLifecycleOperations:
         self, boxd_sandbox_service
     ):
         stub_get_stored_returns(boxd_sandbox_service, None)
-        assert await boxd_sandbox_service.pause_sandbox("abc") is False
+        assert await boxd_sandbox_service.pause_sandbox('abc') is False
 
     @pytest.mark.asyncio
     async def test_resume_calls_resume(self, boxd_sandbox_service, mock_compute):
         # resume_sandbox calls pause_old_sandboxes first → needs search stub
         # and _get_stored stub. The mock_db_session is shared, so we install
         # a side_effect that returns different shapes per call.
-        stored = make_stored(sandbox_id="abc")
+        stored = make_stored(sandbox_id='abc')
         search_scalar = MagicMock()
         search_scalar.all.return_value = []
         search_result = MagicMock()
@@ -383,9 +383,9 @@ class TestLifecycleOperations:
         boxd_sandbox_service.db_session.execute = AsyncMock(
             side_effect=[search_result, get_result]
         )
-        box = make_box_mock(name="oh-abc")
+        box = make_box_mock(name='oh-abc')
         mock_compute.box.get.return_value = box
-        ok = await boxd_sandbox_service.resume_sandbox("abc")
+        ok = await boxd_sandbox_service.resume_sandbox('abc')
         assert ok is True
         box.resume.assert_called_once()
 
@@ -393,11 +393,11 @@ class TestLifecycleOperations:
     async def test_delete_calls_destroy_and_drops_row(
         self, boxd_sandbox_service, mock_compute, mock_db_session
     ):
-        stored = make_stored(sandbox_id="abc")
+        stored = make_stored(sandbox_id='abc')
         stub_get_stored_returns(boxd_sandbox_service, stored)
-        box = make_box_mock(name="oh-abc")
+        box = make_box_mock(name='oh-abc')
         mock_compute.box.get.return_value = box
-        ok = await boxd_sandbox_service.delete_sandbox("abc")
+        ok = await boxd_sandbox_service.delete_sandbox('abc')
         assert ok is True
         box.destroy.assert_called_once()
         mock_db_session.delete.assert_called_once_with(stored)
@@ -408,10 +408,10 @@ class TestLifecycleOperations:
     ):
         from boxd.errors import NotFoundError
 
-        stored = make_stored(sandbox_id="abc")
+        stored = make_stored(sandbox_id='abc')
         stub_get_stored_returns(boxd_sandbox_service, stored)
-        mock_compute.box.get.side_effect = NotFoundError("gone")
-        ok = await boxd_sandbox_service.delete_sandbox("abc")
+        mock_compute.box.get.side_effect = NotFoundError('gone')
+        ok = await boxd_sandbox_service.delete_sandbox('abc')
         # We still cleaned the index — return True so callers don't retry.
         assert ok is True
         mock_db_session.delete.assert_called_once_with(stored)
@@ -425,12 +425,12 @@ class TestLifecycleOperations:
         If boxd destroy fails the row must still be dropped so the leaked
         session_api_key_hash can't be used and stale rows don't accumulate.
         """
-        stored = make_stored(sandbox_id="abc")
+        stored = make_stored(sandbox_id='abc')
         stub_get_stored_returns(boxd_sandbox_service, stored)
-        box = make_box_mock(name="oh-abc")
-        box.destroy.side_effect = RuntimeError("boxd flaked")
+        box = make_box_mock(name='oh-abc')
+        box.destroy.side_effect = RuntimeError('boxd flaked')
         mock_compute.box.get.return_value = box
-        ok = await boxd_sandbox_service.delete_sandbox("abc")
+        ok = await boxd_sandbox_service.delete_sandbox('abc')
         assert ok is False
         mock_db_session.delete.assert_called_once_with(stored)
 
@@ -443,17 +443,17 @@ class TestInjector:
         )
 
         injector = BoxdSandboxServiceInjector(
-            api_key="bxk_test",
+            api_key='bxk_test',
             max_num_sandboxes=5,
             auto_suspend_timeout=600,
             vcpu=2,
-            memory="8G",
-            disk="100G",
+            memory='8G',
+            disk='100G',
         )
 
-        assert injector.api_key == "bxk_test"
+        assert injector.api_key == 'bxk_test'
         assert injector.max_num_sandboxes == 5
         assert injector.auto_suspend_timeout == 600
         assert injector.vcpu == 2
-        assert injector.memory == "8G"
-        assert injector.disk == "100G"
+        assert injector.memory == '8G'
+        assert injector.disk == '100G'
