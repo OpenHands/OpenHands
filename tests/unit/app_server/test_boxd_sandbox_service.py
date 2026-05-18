@@ -62,7 +62,7 @@ def mock_user_context():
 
 @pytest.fixture
 def mock_compute():
-    """boxd Compute client. Tests configure box.create/list/get per case."""
+    """Mock boxd Compute client. Tests configure box.create/list/get per case."""
     return MagicMock()
 
 
