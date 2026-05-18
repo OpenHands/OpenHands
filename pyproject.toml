@@ -283,6 +283,10 @@ pytest-timeout = "^2.4.0"
 pandas = "*"
 reportlab = "*"
 gevent = ">=24.2.1,<26.0.0"
+# Optional sandbox backends — needed for their respective unit-test
+# modules to import. Production deployments install via the per-backend
+# extra (e.g. `pip install boxd`).
+boxd = ">=0.1.2,<1.0.0"
 
 [tool.poetry.group.runtime]
 optional = true
