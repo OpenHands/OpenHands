@@ -82,6 +82,91 @@ class BitbucketDCWebhookIdUpdateResult(BaseModel):
     error: str | None
 
 
+class BitbucketDCWebhookRequest(BaseModel):
+    resource: BitbucketDCResourceIdentifier
+
+
+class BitbucketDCWebhookInstallationResult(BaseModel):
+    project_key: str
+    repo_slug: str
+    success: bool
+    error: str | None
+    webhook_id: str | None
+
+
+def _normalize_dc_resource(
+    resource: BitbucketDCResourceIdentifier,
+) -> tuple[str, str]:
+    project_key = resource.project_key.strip()
+    repo_slug = resource.repo_slug.strip()
+    if not project_key or not repo_slug:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='project_key and repo_slug are required',
+        )
+    return project_key, repo_slug
+
+
+async def _ensure_dc_admin_access(
+    bitbucket_dc_service: SaaSBitbucketDCService,
+    project_key: str,
+    repo_slug: str,
+) -> None:
+    """Mirror of Cloud's ``_ensure_admin_access``.
+
+    The DC ``user_has_admin_access`` implementation fails open on
+    introspection errors (see its docstring), so this check is genuinely
+    gating only when the BBDC permissions endpoint returns a clean answer.
+    The webhook write itself will surface a 403 if the user really lacks
+    admin — that's the true authoritative check.
+    """
+    if not await bitbucket_dc_service.user_has_admin_access(project_key, repo_slug):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='User does not have admin access to this repository',
+        )
+
+
+async def _get_or_create_dc_webhook(
+    bitbucket_dc_service: SaaSBitbucketDCService,
+    project_key: str,
+    repo_slug: str,
+    webhook_secret: str,
+) -> str | None:
+    """Idempotent webhook (re)installation against BBDC.
+
+    Looks up an existing webhook by URL, updates it with the freshly
+    rotated secret if found, or creates a new one. Matches the Cloud
+    ``_get_or_create_cloud_webhook`` shape so the route handlers stay
+    symmetric.
+    """
+    (
+        webhook_exists,
+        webhook_id,
+    ) = await bitbucket_dc_service.check_webhook_exists_on_repository(
+        project_key, repo_slug, BITBUCKET_DC_WEBHOOK_URL
+    )
+    if webhook_exists and webhook_id:
+        return await bitbucket_dc_service.update_repository_webhook(
+            owner=project_key,
+            repo_slug=repo_slug,
+            webhook_id=webhook_id,
+            name=BITBUCKET_DC_WEBHOOK_NAME,
+            webhook_url=BITBUCKET_DC_WEBHOOK_URL,
+            webhook_secret=webhook_secret,
+            events=BITBUCKET_DC_WEBHOOK_EVENTS,
+        )
+
+    return await bitbucket_dc_service.create_repository_webhook(
+        owner=project_key,
+        repo_slug=repo_slug,
+        name=BITBUCKET_DC_WEBHOOK_NAME,
+        webhook_url=BITBUCKET_DC_WEBHOOK_URL,
+        webhook_secret=webhook_secret,
+        events=BITBUCKET_DC_WEBHOOK_EVENTS,
+    )
+
+
 def _extract_repo_identity(payload_data: dict) -> tuple[str, str]:
     """Pull ``(project_key, repo_slug)`` out of a DC webhook payload.
 
@@ -298,6 +383,145 @@ async def update_bitbucket_dc_webhook_id(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to update Bitbucket DC webhook id',
+        )
+
+
+@bitbucket_dc_integration_router.post('/bitbucket-dc/reinstall-webhook')
+async def reinstall_bitbucket_dc_webhook(
+    body: BitbucketDCWebhookRequest,
+    user_id: str = Depends(require_permission(Permission.MANAGE_INTEGRATIONS)),
+) -> BitbucketDCWebhookInstallationResult:
+    """Install or reinstall the webhook for a BBDC repo via the REST API.
+
+    Replaces the manual paste-the-secret flow with a single call: rotates a
+    fresh shared secret, idempotently creates or updates the webhook on
+    BBDC, and persists the resulting ``webhook_id`` + secret. Requires the
+    caller's BBDC OAuth token to have ``REPO_ADMIN`` scope (the Keycloak
+    BBDC IDP requests this scope once the chart enables webhook lifecycle).
+    """
+    project_key, repo_slug = _normalize_dc_resource(body.resource)
+    bitbucket_dc_service = SaaSBitbucketDCService(external_auth_id=user_id)
+
+    try:
+        await _ensure_dc_admin_access(bitbucket_dc_service, project_key, repo_slug)
+        webhook_secret = secrets.token_urlsafe(32)
+        webhook_id = await _get_or_create_dc_webhook(
+            bitbucket_dc_service, project_key, repo_slug, webhook_secret
+        )
+        if not webhook_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Failed to install Bitbucket DC webhook',
+            )
+
+        await webhook_store.upsert_webhook_enrollment(
+            project_key=project_key,
+            repo_slug=repo_slug,
+            user_id=user_id,
+            webhook_id=webhook_id,
+            webhook_secret=webhook_secret,
+        )
+
+        # Audit log so operators can correlate UI clicks with BBDC
+        # webhook state changes when reviewing security incidents — the
+        # ``user_has_admin_access`` pre-check is intentionally permissive
+        # (BBDC's API is the authoritative auth boundary), so the audit
+        # trail lives here.
+        logger.info(
+            '[Bitbucket DC] Webhook installed',
+            extra={
+                'user_id': user_id,
+                'project_key': project_key,
+                'repo_slug': repo_slug,
+                'webhook_id': webhook_id,
+            },
+        )
+
+        return BitbucketDCWebhookInstallationResult(
+            project_key=project_key,
+            repo_slug=repo_slug,
+            success=True,
+            error=None,
+            webhook_id=webhook_id,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'Error installing Bitbucket DC webhook: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to install Bitbucket DC webhook',
+        )
+
+
+@bitbucket_dc_integration_router.post('/bitbucket-dc/uninstall-webhook')
+async def uninstall_bitbucket_dc_webhook(
+    body: BitbucketDCWebhookRequest,
+    user_id: str = Depends(require_permission(Permission.MANAGE_INTEGRATIONS)),
+) -> BitbucketDCWebhookInstallationResult:
+    """Delete the webhook on BBDC and drop the local enrollment row.
+
+    Looks up the webhook by URL on BBDC (in case the stored ``webhook_id``
+    drifted from reality) and calls ``DELETE .../webhooks/{id}``; then
+    removes the ``bitbucket_dc_webhook`` row so the resource flips back to
+    "not enrolled" in the UI. If no webhook exists on either side this is
+    treated as a no-op success — uninstall is idempotent.
+    """
+    project_key, repo_slug = _normalize_dc_resource(body.resource)
+    bitbucket_dc_service = SaaSBitbucketDCService(external_auth_id=user_id)
+
+    try:
+        await _ensure_dc_admin_access(bitbucket_dc_service, project_key, repo_slug)
+        webhook = await webhook_store.get_webhook_by_repo(project_key, repo_slug)
+        (
+            provider_exists,
+            provider_id,
+        ) = await bitbucket_dc_service.check_webhook_exists_on_repository(
+            project_key, repo_slug, BITBUCKET_DC_WEBHOOK_URL
+        )
+        db_id = webhook.webhook_id if webhook else None
+        webhook_id = provider_id or db_id
+        if provider_id:
+            await bitbucket_dc_service.delete_repository_webhook(
+                project_key, repo_slug, provider_id
+            )
+        elif provider_exists:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Failed to locate Bitbucket DC webhook id',
+            )
+
+        await webhook_store.delete_webhook_by_repo(
+            project_key=project_key,
+            repo_slug=repo_slug,
+        )
+
+        logger.info(
+            '[Bitbucket DC] Webhook uninstalled',
+            extra={
+                'user_id': user_id,
+                'project_key': project_key,
+                'repo_slug': repo_slug,
+                'webhook_id': webhook_id,
+            },
+        )
+
+        return BitbucketDCWebhookInstallationResult(
+            project_key=project_key,
+            repo_slug=repo_slug,
+            success=True,
+            error=None,
+            webhook_id=webhook_id,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'Error uninstalling Bitbucket DC webhook: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to uninstall Bitbucket DC webhook',
         )
 
 

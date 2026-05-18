@@ -177,3 +177,58 @@ def test_confirm_incoming_source_type_raises_on_wrong_source():
         manager._confirm_incoming_source_type(
             Message(source=SourceType.BITBUCKET, message={})
         )
+
+
+@pytest.mark.asyncio
+async def test_resolve_responder_uses_mentioner_when_linked_in_keycloak():
+    """When the @-mentioning user has an OHE account, reply as them."""
+    token_manager = AsyncMock()
+    token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value='kc-alice')
+    manager = BitbucketDCManager(token_manager)
+
+    keycloak_id = await manager._resolve_responder_keycloak_id(_pr_comment_view())
+
+    assert keycloak_id == 'kc-alice'
+    token_manager.get_user_id_from_idp_user_id.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resolve_responder_falls_back_when_mentioner_has_no_ohe_account():
+    """Mentioner without a Keycloak federated identity falls back to installer."""
+    token_manager = AsyncMock()
+    token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value=None)
+    manager = BitbucketDCManager(token_manager)
+
+    keycloak_id = await manager._resolve_responder_keycloak_id(_pr_comment_view())
+
+    assert keycloak_id == 'kc-installer'
+
+
+@pytest.mark.asyncio
+async def test_resolve_responder_falls_back_when_lookup_raises():
+    """Transient Keycloak errors should not break replies."""
+    token_manager = AsyncMock()
+    token_manager.get_user_id_from_idp_user_id = AsyncMock(
+        side_effect=RuntimeError('keycloak unreachable')
+    )
+    manager = BitbucketDCManager(token_manager)
+
+    keycloak_id = await manager._resolve_responder_keycloak_id(_pr_comment_view())
+
+    assert keycloak_id == 'kc-installer'
+
+
+@pytest.mark.asyncio
+async def test_send_message_constructs_service_with_resolved_responder_id():
+    """End-to-end: send_message uses the mentioner's keycloak id, not the installer's."""
+    token_manager = AsyncMock()
+    token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value='kc-alice')
+    manager = BitbucketDCManager(token_manager)
+
+    with patch(
+        'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
+    ) as service_cls:
+        service_cls.return_value = AsyncMock()
+        await manager.send_message('Done', _pr_comment_view())
+
+    service_cls.assert_called_once_with(external_auth_id='kc-alice')
