@@ -20,23 +20,23 @@ class TestBoxdSandboxSpecDefaults:
     def test_default_spec_uses_agent_server_image(self):
         specs = get_default_boxd_sandbox_specs()
         # The spec id IS the image tag — agent-server is keyed by image.
-        assert 'agent-server' in specs[0].id
+        assert "agent-server" in specs[0].id
 
     def test_default_spec_has_agent_server_command(self):
         specs = get_default_boxd_sandbox_specs()
         cmd = specs[0].command
         assert cmd is not None
-        assert any('openhands-agent-server' in part for part in cmd)
-        assert '--port' in cmd
-        assert '60000' in cmd
+        assert any("openhands-agent-server" in part for part in cmd)
+        assert "--port" in cmd
+        assert "60000" in cmd
 
     def test_default_spec_working_dir_is_project(self):
         specs = get_default_boxd_sandbox_specs()
-        assert specs[0].working_dir == '/workspace/project'
+        assert specs[0].working_dir == "/workspace/project"
 
     def test_default_spec_initial_env_includes_log_json(self):
         specs = get_default_boxd_sandbox_specs()
-        assert specs[0].initial_env.get('LOG_JSON') == 'true'
+        assert specs[0].initial_env.get("LOG_JSON") == "true"
 
 
 class TestBoxdSandboxSpecServiceInjector:

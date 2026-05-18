@@ -71,16 +71,16 @@ from openhands.sdk.utils.models import OpenHandsModel
 
 def get_default_persistence_dir() -> Path:
     # Recheck env because this function is also used to generate other defaults
-    persistence_dir = os.getenv('OH_PERSISTENCE_DIR')
+    persistence_dir = os.getenv("OH_PERSISTENCE_DIR")
 
     # Legacy V0 fallback variable
     if persistence_dir is None:
-        persistence_dir = os.getenv('FILE_STORE_PATH')
+        persistence_dir = os.getenv("FILE_STORE_PATH")
 
     if persistence_dir:
         result = Path(persistence_dir)
     else:
-        result = Path.home() / '.openhands'
+        result = Path.home() / ".openhands"
 
     result.mkdir(parents=True, exist_ok=True)
     return result
@@ -91,10 +91,10 @@ def get_default_web_url() -> str | None:
 
     If present, we assume we are running under https.
     """
-    web_host = os.getenv('WEB_HOST')
+    web_host = os.getenv("WEB_HOST")
     if not web_host:
         return None
-    return f'https://{web_host}'
+    return f"https://{web_host}"
 
 
 def get_default_permitted_cors_origins() -> list[str]:
@@ -104,9 +104,9 @@ def get_default_permitted_cors_origins() -> list[str]:
     (handled by the pydantic from_env parser). This fallback supports the legacy
     comma-separated PERMITTED_CORS_ORIGINS environment variable.
     """
-    legacy = os.getenv('PERMITTED_CORS_ORIGINS', '')
+    legacy = os.getenv("PERMITTED_CORS_ORIGINS", "")
     if legacy:
-        return [o.strip() for o in legacy.split(',') if o.strip()]
+        return [o.strip() for o in legacy.split(",") if o.strip()]
     return []
 
 
@@ -115,7 +115,7 @@ def get_openhands_provider_base_url() -> str | None:
 
     Falls back to LLM_BASE_URL for backward compatibility.
     """
-    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or os.getenv('LLM_BASE_URL') or None
+    return os.getenv("OPENHANDS_PROVIDER_BASE_URL") or os.getenv("LLM_BASE_URL") or None
 
 
 def get_default_tavily_api_key() -> str | None:
@@ -123,13 +123,13 @@ def get_default_tavily_api_key() -> str | None:
 
     Falls back to SEARCH_API_KEY for backward compatibility.
     """
-    return os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY') or None
+    return os.getenv("TAVILY_API_KEY") or os.getenv("SEARCH_API_KEY") or None
 
 
 # The SDK auto-fills this URL as the default for openhands/ and litellm_proxy/
 # models.  Deployments (e.g. staging) may use a different LLM proxy, configured
 # via OPENHANDS_PROVIDER_BASE_URL.
-_SDK_DEFAULT_PROXY = 'https://llm-proxy.app.all-hands.dev/'
+_SDK_DEFAULT_PROXY = "https://llm-proxy.app.all-hands.dev/"
 
 
 def resolve_provider_llm_base_url(
@@ -152,12 +152,12 @@ def resolve_provider_llm_base_url(
             ``get_openhands_provider_base_url()`` when *None*.
     """
     if not model or not (
-        model.startswith('openhands/') or model.startswith('litellm_proxy/')
+        model.startswith("openhands/") or model.startswith("litellm_proxy/")
     ):
         return base_url
 
-    user_set_custom = base_url and base_url.rstrip('/') != _SDK_DEFAULT_PROXY.rstrip(
-        '/'
+    user_set_custom = base_url and base_url.rstrip("/") != _SDK_DEFAULT_PROXY.rstrip(
+        "/"
     )
     if user_set_custom:
         return base_url
@@ -173,7 +173,7 @@ def resolve_provider_llm_base_url(
 def _get_default_lifespan():
     # Check legacy parameters for saas mode. If we are in SAAS mode use
     # SaasAppLifespanService to initialize PostHog analytics
-    if 'saas' in (os.getenv('OPENHANDS_CONFIG_CLS') or '').lower():
+    if "saas" in (os.getenv("OPENHANDS_CONFIG_CLS") or "").lower():
         from server.app_lifespan.saas_app_lifespan_service import (
             SaasAppLifespanService,
         )
@@ -192,23 +192,23 @@ class AppServerConfig(OpenHandsModel):
     file_store: FileStore = Field(default_factory=_get_default_file_store)
     web_url: str | None = Field(
         default_factory=get_default_web_url,
-        description='The URL where OpenHands is running (e.g., http://localhost:3000)',
+        description="The URL where OpenHands is running (e.g., http://localhost:3000)",
     )
     permitted_cors_origins: list[str] = Field(
         default_factory=get_default_permitted_cors_origins,
         description=(
-            'Additional permitted CORS origins for both the app server and agent '
-            'server containers. Configure via OH_PERMITTED_CORS_ORIGINS_0, _1, etc. '
-            'Falls back to legacy PERMITTED_CORS_ORIGINS env var.'
+            "Additional permitted CORS origins for both the app server and agent "
+            "server containers. Configure via OH_PERMITTED_CORS_ORIGINS_0, _1, etc. "
+            "Falls back to legacy PERMITTED_CORS_ORIGINS env var."
         ),
     )
     openhands_provider_base_url: str | None = Field(
         default_factory=get_openhands_provider_base_url,
-        description='Base URL for the OpenHands provider',
+        description="Base URL for the OpenHands provider",
     )
     tavily_api_key: str | None = Field(
         default_factory=get_default_tavily_api_key,
-        description='Tavily API key for search integration (proxied via MCP server)',
+        description="Tavily API key for search integration (proxied via MCP server)",
     )
     # Dependency Injection Injectors
     llm_model: LLMModelServiceInjector | None = None
@@ -259,6 +259,12 @@ def config_from_env() -> AppServerConfig:
     from openhands.app_server.event_callback.sql_event_callback_service import (
         SQLEventCallbackServiceInjector,
     )
+    from openhands.app_server.sandbox.boxd_sandbox_service import (
+        BoxdSandboxServiceInjector,
+    )
+    from openhands.app_server.sandbox.boxd_sandbox_spec_service import (
+        BoxdSandboxSpecServiceInjector,
+    )
     from openhands.app_server.sandbox.docker_sandbox_service import (
         DockerSandboxServiceInjector,
     )
@@ -277,17 +283,11 @@ def config_from_env() -> AppServerConfig:
     from openhands.app_server.sandbox.remote_sandbox_spec_service import (
         RemoteSandboxSpecServiceInjector,
     )
-    from openhands.app_server.sandbox.boxd_sandbox_service import (
-        BoxdSandboxServiceInjector,
-    )
-    from openhands.app_server.sandbox.boxd_sandbox_spec_service import (
-        BoxdSandboxSpecServiceInjector,
-    )
     from openhands.app_server.user.auth_user_context import (
         AuthUserContextInjector,
     )
 
-    config: AppServerConfig = from_env(AppServerConfig, 'OH')  # type: ignore
+    config: AppServerConfig = from_env(AppServerConfig, "OH")  # type: ignore
 
     if config.llm_model is None:
         from openhands.app_server.config_api.default_llm_model_service import (
@@ -295,17 +295,17 @@ def config_from_env() -> AppServerConfig:
         )
 
         llm_model_kwargs: dict = {}
-        aws_region = os.getenv('AWS_REGION_NAME')
-        aws_key = os.getenv('AWS_ACCESS_KEY_ID')
-        aws_secret = os.getenv('AWS_SECRET_ACCESS_KEY')
+        aws_region = os.getenv("AWS_REGION_NAME")
+        aws_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
         if aws_region and aws_key and aws_secret:
-            llm_model_kwargs['aws_region_name'] = aws_region
-            llm_model_kwargs['aws_access_key_id'] = SecretStr(aws_key)
-            llm_model_kwargs['aws_secret_access_key'] = SecretStr(aws_secret)
+            llm_model_kwargs["aws_region_name"] = aws_region
+            llm_model_kwargs["aws_access_key_id"] = SecretStr(aws_key)
+            llm_model_kwargs["aws_secret_access_key"] = SecretStr(aws_secret)
 
-        ollama_url = os.getenv('OLLAMA_BASE_URL')
+        ollama_url = os.getenv("OLLAMA_BASE_URL")
         if ollama_url:
-            llm_model_kwargs['ollama_base_url'] = ollama_url
+            llm_model_kwargs["ollama_base_url"] = ollama_url
 
         config.llm_model = DefaultLLMModelServiceInjector(**llm_model_kwargs)
 
@@ -314,18 +314,18 @@ def config_from_env() -> AppServerConfig:
 
         if provider == StorageProvider.AWS:
             # AWS S3 storage configuration
-            bucket_name = os.environ.get('FILE_STORE_PATH')
+            bucket_name = os.environ.get("FILE_STORE_PATH")
             if not bucket_name:
                 raise ValueError(
-                    'FILE_STORE_PATH environment variable is required for S3 storage'
+                    "FILE_STORE_PATH environment variable is required for S3 storage"
                 )
             config.event = AwsEventServiceInjector(bucket_name=bucket_name)
         elif provider == StorageProvider.GCP:
             # Google Cloud storage configuration
-            bucket_name = os.environ.get('FILE_STORE_PATH')
+            bucket_name = os.environ.get("FILE_STORE_PATH")
             if not bucket_name:
                 raise ValueError(
-                    'FILE_STORE_PATH environment variable is required for Google Cloud storage'
+                    "FILE_STORE_PATH environment variable is required for Google Cloud storage"
                 )
             config.event = GoogleCloudEventServiceInjector(bucket_name=bucket_name)
         else:
@@ -336,70 +336,70 @@ def config_from_env() -> AppServerConfig:
 
     if config.sandbox is None:
         # Legacy fallback
-        if os.getenv('RUNTIME') == 'remote':
+        if os.getenv("RUNTIME") == "remote":
             config.sandbox = RemoteSandboxServiceInjector(
-                api_key=os.environ['SANDBOX_API_KEY'],
-                api_url=os.environ['SANDBOX_REMOTE_RUNTIME_API_URL'],
+                api_key=os.environ["SANDBOX_API_KEY"],
+                api_url=os.environ["SANDBOX_REMOTE_RUNTIME_API_URL"],
             )
-        elif os.getenv('RUNTIME') == 'boxd':
+        elif os.getenv("RUNTIME") == "boxd":
             boxd_kwargs: dict[str, Any] = {}
-            if os.getenv('BOXD_API_KEY'):
-                boxd_kwargs['api_key'] = os.environ['BOXD_API_KEY']
-            if os.getenv('BOXD_API_URL'):
-                boxd_kwargs['api_url'] = os.environ['BOXD_API_URL']
-            if os.getenv('BOXD_AUTO_SUSPEND_TIMEOUT'):
-                boxd_kwargs['auto_suspend_timeout'] = int(
-                    os.environ['BOXD_AUTO_SUSPEND_TIMEOUT']
+            if os.getenv("BOXD_API_KEY"):
+                boxd_kwargs["api_key"] = os.environ["BOXD_API_KEY"]
+            if os.getenv("BOXD_API_URL"):
+                boxd_kwargs["api_url"] = os.environ["BOXD_API_URL"]
+            if os.getenv("BOXD_AUTO_SUSPEND_TIMEOUT"):
+                boxd_kwargs["auto_suspend_timeout"] = int(
+                    os.environ["BOXD_AUTO_SUSPEND_TIMEOUT"]
                 )
-            if os.getenv('BOXD_MAX_NUM_SANDBOXES'):
-                boxd_kwargs['max_num_sandboxes'] = int(
-                    os.environ['BOXD_MAX_NUM_SANDBOXES']
+            if os.getenv("BOXD_MAX_NUM_SANDBOXES"):
+                boxd_kwargs["max_num_sandboxes"] = int(
+                    os.environ["BOXD_MAX_NUM_SANDBOXES"]
                 )
-            if os.getenv('BOXD_VCPU'):
-                boxd_kwargs['vcpu'] = int(os.environ['BOXD_VCPU'])
-            if os.getenv('BOXD_MEMORY'):
-                boxd_kwargs['memory'] = os.environ['BOXD_MEMORY']
-            if os.getenv('BOXD_DISK'):
-                boxd_kwargs['disk'] = os.environ['BOXD_DISK']
+            if os.getenv("BOXD_VCPU"):
+                boxd_kwargs["vcpu"] = int(os.environ["BOXD_VCPU"])
+            if os.getenv("BOXD_MEMORY"):
+                boxd_kwargs["memory"] = os.environ["BOXD_MEMORY"]
+            if os.getenv("BOXD_DISK"):
+                boxd_kwargs["disk"] = os.environ["BOXD_DISK"]
             config.sandbox = BoxdSandboxServiceInjector(**boxd_kwargs)
-        elif os.getenv('RUNTIME') in ('local', 'process'):
+        elif os.getenv("RUNTIME") in ("local", "process"):
             config.sandbox = ProcessSandboxServiceInjector()
         else:
             # Support legacy environment variables for Docker sandbox configuration
             docker_sandbox_kwargs: dict = {}
-            if os.getenv('SANDBOX_HOST_PORT'):
-                docker_sandbox_kwargs['host_port'] = int(
-                    os.environ['SANDBOX_HOST_PORT']
+            if os.getenv("SANDBOX_HOST_PORT"):
+                docker_sandbox_kwargs["host_port"] = int(
+                    os.environ["SANDBOX_HOST_PORT"]
                 )
-            if os.getenv('SANDBOX_CONTAINER_URL_PATTERN'):
-                docker_sandbox_kwargs['container_url_pattern'] = os.environ[
-                    'SANDBOX_CONTAINER_URL_PATTERN'
+            if os.getenv("SANDBOX_CONTAINER_URL_PATTERN"):
+                docker_sandbox_kwargs["container_url_pattern"] = os.environ[
+                    "SANDBOX_CONTAINER_URL_PATTERN"
                 ]
             # Allow configuring sandbox startup grace period
             # This is useful for slower machines or cloud environments where
             # the agent-server container takes longer to initialize
-            if os.getenv('SANDBOX_STARTUP_GRACE_SECONDS'):
-                docker_sandbox_kwargs['startup_grace_seconds'] = int(
-                    os.environ['SANDBOX_STARTUP_GRACE_SECONDS']
+            if os.getenv("SANDBOX_STARTUP_GRACE_SECONDS"):
+                docker_sandbox_kwargs["startup_grace_seconds"] = int(
+                    os.environ["SANDBOX_STARTUP_GRACE_SECONDS"]
                 )
             # Parse SANDBOX_VOLUMES and convert to VolumeMount objects
             # This is set by the CLI's --mount-cwd flag
-            sandbox_volumes = os.getenv('SANDBOX_VOLUMES')
+            sandbox_volumes = os.getenv("SANDBOX_VOLUMES")
             if sandbox_volumes:
                 from openhands.app_server.sandbox.docker_sandbox_service import (
                     VolumeMount,
                 )
 
                 mounts = []
-                for mount_spec in sandbox_volumes.split(','):
+                for mount_spec in sandbox_volumes.split(","):
                     mount_spec = mount_spec.strip()
                     if not mount_spec:
                         continue
-                    parts = mount_spec.split(':')
+                    parts = mount_spec.split(":")
                     if len(parts) >= 2:
                         host_path = parts[0]
                         container_path = parts[1]
-                        mode = parts[2] if len(parts) > 2 else 'rw'
+                        mode = parts[2] if len(parts) > 2 else "rw"
                         mounts.append(
                             VolumeMount(
                                 host_path=host_path,
@@ -408,15 +408,15 @@ def config_from_env() -> AppServerConfig:
                             )
                         )
                 if mounts:
-                    docker_sandbox_kwargs['mounts'] = mounts
+                    docker_sandbox_kwargs["mounts"] = mounts
             config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
 
     if config.sandbox_spec is None:
-        if os.getenv('RUNTIME') == 'remote':
+        if os.getenv("RUNTIME") == "remote":
             config.sandbox_spec = RemoteSandboxSpecServiceInjector()
-        elif os.getenv('RUNTIME') == 'boxd':
+        elif os.getenv("RUNTIME") == "boxd":
             config.sandbox_spec = BoxdSandboxSpecServiceInjector()
-        elif os.getenv('RUNTIME') in ('local', 'process'):
+        elif os.getenv("RUNTIME") in ("local", "process"):
             config.sandbox_spec = ProcessSandboxSpecServiceInjector()
         else:
             config.sandbox_spec = DockerSandboxSpecServiceInjector()

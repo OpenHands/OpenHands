@@ -60,24 +60,24 @@ _logger = logging.getLogger(__name__)
 # boxd VM status → internal SandboxStatus. Lowercased keys; SDK returns
 # mixed-case strings, we normalize on read.
 STATUS_MAPPING: dict[str, SandboxStatus] = {
-    'running': SandboxStatus.RUNNING,
-    'suspended': SandboxStatus.PAUSED,
-    'starting': SandboxStatus.STARTING,
-    'creating': SandboxStatus.STARTING,
-    'error': SandboxStatus.ERROR,
-    'failed': SandboxStatus.ERROR,
-    'stopped': SandboxStatus.MISSING,
-    'destroyed': SandboxStatus.MISSING,
+    "running": SandboxStatus.RUNNING,
+    "suspended": SandboxStatus.PAUSED,
+    "starting": SandboxStatus.STARTING,
+    "creating": SandboxStatus.STARTING,
+    "error": SandboxStatus.ERROR,
+    "failed": SandboxStatus.ERROR,
+    "stopped": SandboxStatus.MISSING,
+    "destroyed": SandboxStatus.MISSING,
 }
 
 AGENT_SERVER_PORT = 60000
 VSCODE_PORT = 60001
-AGENT_PROXY_NAME = 'agent'
-VSCODE_PROXY_NAME = 'vscode'
+AGENT_PROXY_NAME = "agent"
+VSCODE_PROXY_NAME = "vscode"
 
 # All boxd VMs we create are prefixed so search/list can distinguish
 # ours from VMs created out-of-band by the same user.
-VM_NAME_PREFIX = 'oh-'
+VM_NAME_PREFIX = "oh-"
 
 
 class StoredBoxdSandbox(Base):
@@ -89,7 +89,7 @@ class StoredBoxdSandbox(Base):
     the pattern used by ``StoredRemoteSandbox``.
     """
 
-    __tablename__ = 'v1_boxd_sandbox'
+    __tablename__ = "v1_boxd_sandbox"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     created_by_user_id: Mapped[str | None] = mapped_column(
@@ -112,7 +112,7 @@ class BoxdSandboxService(SandboxService):
     """
 
     sandbox_spec_service: SandboxSpecService
-    compute: 'Compute'
+    compute: "Compute"
     web_url: str | None
     max_num_sandboxes: int
     auto_suspend_timeout: int
@@ -177,16 +177,14 @@ class BoxdSandboxService(SandboxService):
         for (name, port), result in zip(proxies, results):
             if isinstance(result, Exception):
                 _logger.warning(
-                    'create_proxy(%s, port=%d) on box %s failed: %s',
+                    "create_proxy(%s, port=%d) on box %s failed: %s",
                     name,
                     port,
-                    getattr(box, 'id', '?'),
+                    getattr(box, "id", "?"),
                     result,
                 )
 
-    async def _build_environment(
-        self, sandbox_spec: SandboxSpecInfo
-    ) -> dict[str, str]:
+    async def _build_environment(self, sandbox_spec: SandboxSpecInfo) -> dict[str, str]:
         """Compose the env dict the box will boot with.
 
         Note: app-side metadata (spec_id, owner) lives in the DB, not the
@@ -194,14 +192,14 @@ class BoxdSandboxService(SandboxService):
         """
         env = dict(sandbox_spec.initial_env)
         if self.web_url:
-            env[WEBHOOK_CALLBACK_VARIABLE] = f'{self.web_url}/api/v1/webhooks'
+            env[WEBHOOK_CALLBACK_VARIABLE] = f"{self.web_url}/api/v1/webhooks"
             env[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
         return env
 
     def _derive_status(self, box: Any | None) -> SandboxStatus:
         if box is None:
             return SandboxStatus.MISSING
-        raw = (getattr(box, 'status', '') or '').lower()
+        raw = (getattr(box, "status", "") or "").lower()
         return STATUS_MAPPING.get(raw, SandboxStatus.ERROR)
 
     _PROXY_TO_URL_NAME = {
@@ -217,13 +215,17 @@ class BoxdSandboxService(SandboxService):
     ) -> SandboxInfo:
         """Project (stored row, optional live Box) into a SandboxInfo."""
         status = self._derive_status(box)
-        exposed_urls = await self._exposed_urls(box) if status == SandboxStatus.RUNNING else None
+        exposed_urls = (
+            await self._exposed_urls(box) if status == SandboxStatus.RUNNING else None
+        )
         return SandboxInfo(
             id=stored.id,
             created_by_user_id=stored.created_by_user_id,
             sandbox_spec_id=stored.sandbox_spec_id,
             status=status,
-            session_api_key=session_api_key if status == SandboxStatus.RUNNING else None,
+            session_api_key=session_api_key
+            if status == SandboxStatus.RUNNING
+            else None,
             exposed_urls=exposed_urls,
             created_at=stored.created_at,
         )
@@ -235,8 +237,8 @@ class BoxdSandboxService(SandboxService):
             proxies = await box.proxies()
         except Exception as exc:
             _logger.warning(
-                'Failed to list proxies on box %s: %s',
-                getattr(box, 'id', '?'),
+                "Failed to list proxies on box %s: %s",
+                getattr(box, "id", "?"),
                 exc,
             )
             return []
@@ -247,7 +249,7 @@ class BoxdSandboxService(SandboxService):
                 continue
             url_name, port = mapping
             urls.append(
-                ExposedUrl(name=url_name, url=f'https://{proxy.domain}', port=port)
+                ExposedUrl(name=url_name, url=f"https://{proxy.domain}", port=port)
             )
         return urls
 
@@ -255,7 +257,7 @@ class BoxdSandboxService(SandboxService):
         """Fetch the boxd VM, swallowing NotFound. Other errors propagate."""
         from boxd.aio import NotFoundError
 
-        vm_name = f'{VM_NAME_PREFIX}{sandbox_id}'
+        vm_name = f"{VM_NAME_PREFIX}{sandbox_id}"
         try:
             return await self.compute.box.get(vm_name)
         except NotFoundError:
@@ -278,12 +280,12 @@ class BoxdSandboxService(SandboxService):
                 sandbox_spec_id
             )
             if sandbox_spec_maybe is None:
-                raise SandboxError(f'Sandbox spec not found: {sandbox_spec_id}')
+                raise SandboxError(f"Sandbox spec not found: {sandbox_spec_id}")
             sandbox_spec = sandbox_spec_maybe
 
         if sandbox_id is None:
             sandbox_id = base62.encodebytes(os.urandom(16))
-        vm_name = f'{VM_NAME_PREFIX}{sandbox_id}'
+        vm_name = f"{VM_NAME_PREFIX}{sandbox_id}"
 
         user_id = await self.user_context.get_user_id()
         env = await self._build_environment(sandbox_spec)
@@ -314,17 +316,15 @@ class BoxdSandboxService(SandboxService):
                 image=sandbox_spec.id,
             )
         except BoxdError as exc:
-            _logger.error('Failed to create boxd VM %s: %s', vm_name, exc)
-            raise SandboxError(f'Failed to start sandbox: {exc}')
+            _logger.error("Failed to create boxd VM %s: %s", vm_name, exc)
+            raise SandboxError(f"Failed to start sandbox: {exc}")
 
         await self._ensure_named_proxies(box)
 
         _logger.info(
-            'Started boxd sandbox %s (vm=%s)', sandbox_id, getattr(box, 'id', '?')
+            "Started boxd sandbox %s (vm=%s)", sandbox_id, getattr(box, "id", "?")
         )
-        return await self._to_sandbox_info(
-            stored, box, session_api_key=session_api_key
-        )
+        return await self._to_sandbox_info(stored, box, session_api_key=session_api_key)
 
     async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
         stored = await self._get_stored(sandbox_id)
@@ -384,9 +384,7 @@ class BoxdSandboxService(SandboxService):
         if stored is None:
             return None
         box = await self._get_box_or_none(stored.id)
-        return await self._to_sandbox_info(
-            stored, box, session_api_key=session_api_key
-        )
+        return await self._to_sandbox_info(stored, box, session_api_key=session_api_key)
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
         stored = await self._get_stored(sandbox_id)
@@ -404,7 +402,7 @@ class BoxdSandboxService(SandboxService):
             await box.suspend()
             return True
         except Exception as exc:
-            _logger.error('Failed to suspend boxd sandbox %s: %s', sandbox_id, exc)
+            _logger.error("Failed to suspend boxd sandbox %s: %s", sandbox_id, exc)
             return False
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
@@ -420,7 +418,7 @@ class BoxdSandboxService(SandboxService):
             await box.resume()
             return True
         except Exception as exc:
-            _logger.error('Failed to resume boxd sandbox %s: %s', sandbox_id, exc)
+            _logger.error("Failed to resume boxd sandbox %s: %s", sandbox_id, exc)
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
@@ -433,7 +431,7 @@ class BoxdSandboxService(SandboxService):
             try:
                 await box.destroy()
             except Exception as exc:
-                _logger.error('Failed to destroy boxd sandbox %s: %s', sandbox_id, exc)
+                _logger.error("Failed to destroy boxd sandbox %s: %s", sandbox_id, exc)
                 destroy_ok = False
         # Always drop the row — even on destroy failure this invalidates
         # the leaked session_api_key_hash and stops the sandbox from
@@ -449,28 +447,27 @@ class BoxdSandboxServiceInjector(SandboxServiceInjector):
     api_key: str | None = Field(
         default=None,
         description=(
-            'boxd API key (e.g. bxk_...). If unset, the boxd SDK falls '
-            'back to the BOXD_API_KEY environment variable.'
+            "boxd API key (e.g. bxk_...). If unset, the boxd SDK falls "
+            "back to the BOXD_API_KEY environment variable."
         ),
     )
     api_url: str | None = Field(
         default=None,
-        description='Optional boxd control-plane URL (defaults to the SDK default).',
+        description="Optional boxd control-plane URL (defaults to the SDK default).",
     )
     auto_suspend_timeout: int = Field(
         default=300,
         description=(
-            'Seconds of inactivity before boxd warm-suspends the VM '
-            '(sub-ms resume).'
+            "Seconds of inactivity before boxd warm-suspends the VM (sub-ms resume)."
         ),
     )
     max_num_sandboxes: int = Field(
         default=10,
-        description='Maximum number of running sandboxes per user.',
+        description="Maximum number of running sandboxes per user.",
     )
-    vcpu: int = Field(default=2, description='vCPUs per VM.')
-    memory: str = Field(default='8G', description='Memory per VM (boxd size string).')
-    disk: str = Field(default='100G', description='Disk per VM (boxd size string).')
+    vcpu: int = Field(default=2, description="vCPUs per VM.")
+    memory: str = Field(default="8G", description="Memory per VM (boxd size string).")
+    disk: str = Field(default="100G", description="Disk per VM (boxd size string).")
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -490,9 +487,9 @@ class BoxdSandboxServiceInjector(SandboxServiceInjector):
 
         compute_kwargs: dict[str, Any] = {}
         if self.api_key:
-            compute_kwargs['api_key'] = self.api_key
+            compute_kwargs["api_key"] = self.api_key
         if self.api_url:
-            compute_kwargs['api_url'] = self.api_url
+            compute_kwargs["api_url"] = self.api_url
 
         async with (
             get_user_context(state, request) as user_context,
