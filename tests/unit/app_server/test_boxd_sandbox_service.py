@@ -63,7 +63,13 @@ def mock_user_context():
 @pytest.fixture
 def mock_compute():
     """Mock boxd Compute client. Tests configure box.create/list/get per case."""
-    return MagicMock()
+    # Use MagicMock with async methods explicitly stubbed per test, since the
+    # boxd async SDK exposes coroutine methods on box.create / box.get / etc.
+    mock = MagicMock()
+    mock.box.create = AsyncMock()
+    mock.box.get = AsyncMock()
+    mock.box.list = AsyncMock()
+    return mock
 
 
 @pytest.fixture
@@ -105,7 +111,12 @@ def make_box_mock(
     proxy.domain = proxy_domain
     proxy.port = AGENT_SERVER_PORT
     proxy.is_default = False
-    box.proxies.return_value = [proxy]
+    # Async SDK: lifecycle and proxy methods are coroutines
+    box.proxies = AsyncMock(return_value=[proxy])
+    box.create_proxy = AsyncMock(return_value=proxy)
+    box.suspend = AsyncMock()
+    box.resume = AsyncMock()
+    box.destroy = AsyncMock()
     return box
 
 
@@ -233,6 +244,20 @@ class TestStartSandbox:
         mock_compute.box.create.side_effect = BoxdError('boxd is down')
         with pytest.raises(SandboxError):
             await boxd_sandbox_service.start_sandbox()
+
+    @pytest.mark.asyncio
+    async def test_creates_named_proxies_after_vm_create(
+        self, boxd_sandbox_service, mock_compute
+    ):
+        """Named proxies aren't auto-created by BoxConfig — start_sandbox must
+        explicitly call box.create_proxy for agent + vscode."""
+        stub_search_returns(boxd_sandbox_service, [])
+        box = make_box_mock()
+        mock_compute.box.create.return_value = box
+        await boxd_sandbox_service.start_sandbox()
+        assert box.create_proxy.await_count == 2
+        proxy_names = {call.args[0] for call in box.create_proxy.await_args_list}
+        assert proxy_names == {'agent', 'vscode'}
 
 
 class TestGetSandbox:

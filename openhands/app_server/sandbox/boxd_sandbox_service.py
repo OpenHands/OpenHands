@@ -142,8 +142,14 @@ class BoxdSandboxService(SandboxService):
     def _build_box_config(
         self, sandbox_spec: SandboxSpecInfo, env: dict[str, str]
     ) -> Any:
-        """Build a BoxConfig matching our standard agent-server shape."""
-        from boxd import BoxConfig, LifecycleConfig, NetworkConfig, ProxyEntry
+        """Build a BoxConfig matching our standard agent-server shape.
+
+        Note: named subdomain proxies are created post-boot via
+        ``box.create_proxy(...)``; passing them through
+        ``NetworkConfig.proxies`` is silently ignored by the current boxd
+        server (only the default catch-all proxy is auto-created).
+        """
+        from boxd.aio import BoxConfig, LifecycleConfig
 
         return BoxConfig(
             vcpu=self.vcpu,
@@ -152,14 +158,28 @@ class BoxdSandboxService(SandboxService):
             env=env,
             cmd=sandbox_spec.command,
             lifecycle=LifecycleConfig(auto_suspend_timeout=self.auto_suspend_timeout),
-            network=NetworkConfig(
-                ssh=True,
-                proxies=[
-                    ProxyEntry(name=AGENT_PROXY_NAME, port=AGENT_SERVER_PORT),
-                    ProxyEntry(name=VSCODE_PROXY_NAME, port=VSCODE_PORT),
-                ],
-            ),
         )
+
+    async def _ensure_named_proxies(self, box: Any) -> None:
+        """Create the agent + vscode subdomain proxies on a fresh VM.
+
+        Idempotent: if a proxy with the same name already exists boxd will
+        return an error which we log and continue past.
+        """
+        for name, port in (
+            (AGENT_PROXY_NAME, AGENT_SERVER_PORT),
+            (VSCODE_PROXY_NAME, VSCODE_PORT),
+        ):
+            try:
+                await box.create_proxy(name, port=port)
+            except Exception as exc:
+                _logger.warning(
+                    'create_proxy(%s, port=%d) on box %s failed: %s',
+                    name,
+                    port,
+                    getattr(box, 'id', '?'),
+                    exc,
+                )
 
     async def _build_environment(
         self, sandbox_spec: SandboxSpecInfo
@@ -181,7 +201,7 @@ class BoxdSandboxService(SandboxService):
         raw = (getattr(box, 'status', '') or '').lower()
         return STATUS_MAPPING.get(raw, SandboxStatus.ERROR)
 
-    def _to_sandbox_info(
+    async def _to_sandbox_info(
         self,
         stored: StoredBoxdSandbox,
         box: Any | None,
@@ -194,7 +214,7 @@ class BoxdSandboxService(SandboxService):
         if status == SandboxStatus.RUNNING and box is not None:
             exposed_urls = []
             try:
-                proxies = box.proxies()
+                proxies = await box.proxies()
             except Exception as exc:
                 _logger.warning(
                     'Failed to list proxies on box %s: %s',
@@ -232,13 +252,13 @@ class BoxdSandboxService(SandboxService):
             created_at=stored.created_at,
         )
 
-    def _get_box_or_none(self, sandbox_id: str) -> Any | None:
+    async def _get_box_or_none(self, sandbox_id: str) -> Any | None:
         """Fetch the boxd VM, swallowing NotFound. Other errors propagate."""
-        from boxd.errors import NotFoundError
+        from boxd.aio import NotFoundError
 
         vm_name = f'{VM_NAME_PREFIX}{sandbox_id}'
         try:
-            return self.compute.box.get(vm_name)
+            return await self.compute.box.get(vm_name)
         except NotFoundError:
             return None
 
@@ -247,7 +267,7 @@ class BoxdSandboxService(SandboxService):
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
-        from boxd.errors import BoxdError
+        from boxd.aio import BoxdError
 
         # Enforce per-user sandbox limits before creating another.
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
@@ -289,7 +309,7 @@ class BoxdSandboxService(SandboxService):
         config = self._build_box_config(sandbox_spec, env)
 
         try:
-            box = self.compute.box.create(
+            box = await self.compute.box.create(
                 name=vm_name,
                 config=config,
                 image=sandbox_spec.id,
@@ -298,17 +318,21 @@ class BoxdSandboxService(SandboxService):
             _logger.error('Failed to create boxd VM %s: %s', vm_name, exc)
             raise SandboxError(f'Failed to start sandbox: {exc}')
 
+        await self._ensure_named_proxies(box)
+
         _logger.info(
             'Started boxd sandbox %s (vm=%s)', sandbox_id, getattr(box, 'id', '?')
         )
-        return self._to_sandbox_info(stored, box, session_api_key=session_api_key)
+        return await self._to_sandbox_info(
+            stored, box, session_api_key=session_api_key
+        )
 
     async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
         stored = await self._get_stored(sandbox_id)
         if stored is None:
             return None
-        box = self._get_box_or_none(sandbox_id)
-        return self._to_sandbox_info(stored, box)
+        box = await self._get_box_or_none(sandbox_id)
+        return await self._to_sandbox_info(stored, box)
 
     async def search_sandboxes(
         self, page_id: str | None = None, limit: int = 100
@@ -338,8 +362,8 @@ class BoxdSandboxService(SandboxService):
 
         items: list[SandboxInfo] = []
         for stored in stored_rows:
-            box = self._get_box_or_none(stored.id)
-            items.append(self._to_sandbox_info(stored, box))
+            box = await self._get_box_or_none(stored.id)
+            items.append(await self._to_sandbox_info(stored, box))
 
         return SandboxPage(items=items, next_page_id=next_page_id)
 
@@ -353,14 +377,16 @@ class BoxdSandboxService(SandboxService):
         stored = result.scalar_one_or_none()
         if stored is None:
             return None
-        box = self._get_box_or_none(stored.id)
-        return self._to_sandbox_info(stored, box, session_api_key=session_api_key)
+        box = await self._get_box_or_none(stored.id)
+        return await self._to_sandbox_info(
+            stored, box, session_api_key=session_api_key
+        )
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
         stored = await self._get_stored(sandbox_id)
         if stored is None:
             return False
-        box = self._get_box_or_none(sandbox_id)
+        box = await self._get_box_or_none(sandbox_id)
         if box is None:
             return False
         # Security: invalidate the session key hash so leaked keys can't
@@ -369,7 +395,7 @@ class BoxdSandboxService(SandboxService):
         # restore the hash.
         stored.session_api_key_hash = None
         try:
-            box.suspend()
+            await box.suspend()
             return True
         except Exception as exc:
             _logger.error('Failed to suspend boxd sandbox %s: %s', sandbox_id, exc)
@@ -381,11 +407,11 @@ class BoxdSandboxService(SandboxService):
         stored = await self._get_stored(sandbox_id)
         if stored is None:
             return False
-        box = self._get_box_or_none(sandbox_id)
+        box = await self._get_box_or_none(sandbox_id)
         if box is None:
             return False
         try:
-            box.resume()
+            await box.resume()
             return True
         except Exception as exc:
             _logger.error('Failed to resume boxd sandbox %s: %s', sandbox_id, exc)
@@ -398,13 +424,13 @@ class BoxdSandboxService(SandboxService):
         # Drop the row first — deleting the session_api_key_hash
         # invalidates leaked keys even if the boxd call fails.
         await self.db_session.delete(stored)
-        box = self._get_box_or_none(sandbox_id)
+        box = await self._get_box_or_none(sandbox_id)
         if box is None:
             # VM was already gone or unreachable; the row removal is
             # still useful (cleans up our index).
             return True
         try:
-            box.destroy()
+            await box.destroy()
             return True
         except Exception as exc:
             _logger.error('Failed to destroy boxd sandbox %s: %s', sandbox_id, exc)
@@ -443,7 +469,7 @@ class BoxdSandboxServiceInjector(SandboxServiceInjector):
     async def inject(
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[SandboxService, None]:
-        from boxd import Compute
+        from boxd.aio import Compute
 
         # Defer to break the circular path with config.py.
         from openhands.app_server.config import (
@@ -466,21 +492,17 @@ class BoxdSandboxServiceInjector(SandboxServiceInjector):
             get_user_context(state, request) as user_context,
             get_sandbox_spec_service(state, request) as sandbox_spec_service,
             get_db_session(state, request) as db_session,
+            Compute(**compute_kwargs) as compute,
         ):
-            compute = Compute(**compute_kwargs)
-            try:
-                yield BoxdSandboxService(
-                    sandbox_spec_service=sandbox_spec_service,
-                    compute=compute,
-                    web_url=web_url,
-                    max_num_sandboxes=self.max_num_sandboxes,
-                    auto_suspend_timeout=self.auto_suspend_timeout,
-                    vcpu=self.vcpu,
-                    memory=self.memory,
-                    disk=self.disk,
-                    user_context=user_context,
-                    db_session=db_session,
-                )
-            finally:
-                if hasattr(compute, 'close'):
-                    compute.close()
+            yield BoxdSandboxService(
+                sandbox_spec_service=sandbox_spec_service,
+                compute=compute,
+                web_url=web_url,
+                max_num_sandboxes=self.max_num_sandboxes,
+                auto_suspend_timeout=self.auto_suspend_timeout,
+                vcpu=self.vcpu,
+                memory=self.memory,
+                disk=self.disk,
+                user_context=user_context,
+                db_session=db_session,
+            )
