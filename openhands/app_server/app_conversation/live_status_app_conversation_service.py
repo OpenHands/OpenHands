@@ -538,13 +538,34 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 conversation_url += f'/api/conversations/{app_conversation_info.id.hex}'
             session_api_key = sandbox.session_api_key
 
+        payload = app_conversation_info.model_dump()
+        live_title = getattr(conversation_info, 'title', None) if conversation_info else None
+        stored_title = payload.get('title')
+        if (
+            live_title
+            and isinstance(live_title, str)
+            and self._is_default_generated_title(
+                stored_title, app_conversation_info.id.hex
+            )
+        ):
+            payload['title'] = live_title
+
         return AppConversation(
-            **app_conversation_info.model_dump(),
+            **payload,
             sandbox_status=sandbox_status,
             execution_status=execution_status,
             conversation_url=conversation_url,
             session_api_key=session_api_key,
         )
+
+    @staticmethod
+    def _is_default_generated_title(title: str | None, conversation_id_hex: str) -> bool:
+        if not title:
+            return True
+        return title in {
+            f'Conversation {conversation_id_hex[:5]}',
+            f'Conversation {conversation_id_hex}',
+        }
 
     def _get_sandbox_id_to_conversation_ids(
         self, stored_conversations: Sequence[AppConversationInfo | None]

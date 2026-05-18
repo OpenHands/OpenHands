@@ -3146,6 +3146,64 @@ class TestAgentKindConversationUrl:
             'http://localhost:8000/api/conversations/11111111111111111111111111111111'
         )
 
+    def test_build_conversation_prefers_live_title_over_default_placeholder(self):
+        from types import SimpleNamespace
+        from uuid import UUID
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfo,
+        )
+        from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+
+        service = LiveStatusAppConversationService.__new__(
+            LiveStatusAppConversationService
+        )
+
+        info = AppConversationInfo(
+            id=UUID('22222222-2222-2222-2222-222222222222'),
+            created_by_user_id=None,
+            sandbox_id='sandbox-a',
+            title='Conversation 22222',
+        )
+        live_info = SimpleNamespace(
+            execution_status=None,
+            title='Fix auth regression in login flow',
+        )
+
+        result = service._build_conversation(info, None, live_info)
+
+        assert result is not None
+        assert result.sandbox_status == SandboxStatus.MISSING
+        assert result.title == 'Fix auth regression in login flow'
+
+    def test_build_conversation_keeps_non_default_stored_title(self):
+        from types import SimpleNamespace
+        from uuid import UUID
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfo,
+        )
+
+        service = LiveStatusAppConversationService.__new__(
+            LiveStatusAppConversationService
+        )
+
+        info = AppConversationInfo(
+            id=UUID('33333333-3333-3333-3333-333333333333'),
+            created_by_user_id=None,
+            sandbox_id='sandbox-a',
+            title='Ship production-ready OAuth fix',
+        )
+        live_info = SimpleNamespace(
+            execution_status=None,
+            title='Interim generated title',
+        )
+
+        result = service._build_conversation(info, None, live_info)
+
+        assert result is not None
+        assert result.title == 'Ship production-ready OAuth fix'
+
 
 class TestBuildAcpStartConversationRequestSecrets:
     """Tests for user-secret injection in ``_build_acp_start_conversation_request``.
