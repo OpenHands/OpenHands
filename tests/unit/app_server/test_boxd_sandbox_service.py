@@ -249,8 +249,12 @@ class TestStartSandbox:
     async def test_creates_named_proxies_after_vm_create(
         self, boxd_sandbox_service, mock_compute
     ):
-        """Named proxies aren't auto-created by BoxConfig — start_sandbox must
-        explicitly call box.create_proxy for agent + vscode."""
+        """Named proxies must be created post-create.
+
+        Pre-declaring them via BoxConfig.network.proxies is silently
+        dropped by the current boxd server, so start_sandbox must call
+        box.create_proxy() for agent + vscode explicitly.
+        """
         stub_search_returns(boxd_sandbox_service, [])
         box = make_box_mock()
         mock_compute.box.create.return_value = box
@@ -407,6 +411,24 @@ class TestLifecycleOperations:
         ok = await boxd_sandbox_service.delete_sandbox('abc')
         # We still cleaned the index — return True so callers don't retry.
         assert ok is True
+        mock_db_session.delete.assert_called_once_with(stored)
+
+    @pytest.mark.asyncio
+    async def test_delete_drops_row_even_when_destroy_fails(
+        self, boxd_sandbox_service, mock_compute, mock_db_session
+    ):
+        """Destroy failure must not block index cleanup.
+
+        If boxd destroy fails the row must still be dropped so the leaked
+        session_api_key_hash can't be used and stale rows don't accumulate.
+        """
+        stored = make_stored(sandbox_id='abc')
+        stub_get_stored_returns(boxd_sandbox_service, stored)
+        box = make_box_mock(name='oh-abc')
+        box.destroy.side_effect = RuntimeError('boxd flaked')
+        mock_compute.box.get.return_value = box
+        ok = await boxd_sandbox_service.delete_sandbox('abc')
+        assert ok is False
         mock_db_session.delete.assert_called_once_with(stored)
 
 

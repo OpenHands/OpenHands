@@ -14,12 +14,12 @@ for VM status.
 
 from __future__ import annotations
 
-import hashlib
+import asyncio
 import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 import base62
 from fastapi import Request
@@ -30,6 +30,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.errors import SandboxError
+from openhands.app_server.sandbox.remote_sandbox_service import _hash_session_api_key
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     VSCODE,
@@ -50,6 +51,9 @@ from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
+
+if TYPE_CHECKING:
+    from boxd.aio import Compute
 
 _logger = logging.getLogger(__name__)
 
@@ -74,11 +78,6 @@ VSCODE_PROXY_NAME = 'vscode'
 # All boxd VMs we create are prefixed so search/list can distinguish
 # ours from VMs created out-of-band by the same user.
 VM_NAME_PREFIX = 'oh-'
-
-
-def _hash_session_api_key(session_api_key: str) -> str:
-    """SHA-256 of the session API key for indexed lookup."""
-    return hashlib.sha256(session_api_key.encode()).hexdigest()
 
 
 class StoredBoxdSandbox(Base):
@@ -113,7 +112,7 @@ class BoxdSandboxService(SandboxService):
     """
 
     sandbox_spec_service: SandboxSpecService
-    compute: Any  # boxd.Compute — typed Any so the SDK isn't a hard import
+    compute: 'Compute'
     web_url: str | None
     max_num_sandboxes: int
     auto_suspend_timeout: int
@@ -163,22 +162,26 @@ class BoxdSandboxService(SandboxService):
     async def _ensure_named_proxies(self, box: Any) -> None:
         """Create the agent + vscode subdomain proxies on a fresh VM.
 
-        Idempotent: if a proxy with the same name already exists boxd will
-        return an error which we log and continue past.
+        Independent RPCs are gathered. Per-proxy failures are logged and
+        swallowed so a partial proxy state never blocks the VM coming up
+        (e.g. if one proxy already exists from a prior crash).
         """
-        for name, port in (
+        proxies = (
             (AGENT_PROXY_NAME, AGENT_SERVER_PORT),
             (VSCODE_PROXY_NAME, VSCODE_PORT),
-        ):
-            try:
-                await box.create_proxy(name, port=port)
-            except Exception as exc:
+        )
+        results = await asyncio.gather(
+            *(box.create_proxy(name, port=port) for name, port in proxies),
+            return_exceptions=True,
+        )
+        for (name, port), result in zip(proxies, results):
+            if isinstance(result, Exception):
                 _logger.warning(
                     'create_proxy(%s, port=%d) on box %s failed: %s',
                     name,
                     port,
                     getattr(box, 'id', '?'),
-                    exc,
+                    result,
                 )
 
     async def _build_environment(
@@ -201,6 +204,11 @@ class BoxdSandboxService(SandboxService):
         raw = (getattr(box, 'status', '') or '').lower()
         return STATUS_MAPPING.get(raw, SandboxStatus.ERROR)
 
+    _PROXY_TO_URL_NAME = {
+        AGENT_PROXY_NAME: (AGENT_SERVER, AGENT_SERVER_PORT),
+        VSCODE_PROXY_NAME: (VSCODE, VSCODE_PORT),
+    }
+
     async def _to_sandbox_info(
         self,
         stored: StoredBoxdSandbox,
@@ -209,48 +217,39 @@ class BoxdSandboxService(SandboxService):
     ) -> SandboxInfo:
         """Project (stored row, optional live Box) into a SandboxInfo."""
         status = self._derive_status(box)
-
-        exposed_urls: list[ExposedUrl] | None = None
-        if status == SandboxStatus.RUNNING and box is not None:
-            exposed_urls = []
-            try:
-                proxies = await box.proxies()
-            except Exception as exc:
-                _logger.warning(
-                    'Failed to list proxies on box %s: %s',
-                    getattr(box, 'id', '?'),
-                    exc,
-                )
-                proxies = []
-            for proxy in proxies:
-                if proxy.name == AGENT_PROXY_NAME:
-                    exposed_urls.append(
-                        ExposedUrl(
-                            name=AGENT_SERVER,
-                            url=f'https://{proxy.domain}',
-                            port=AGENT_SERVER_PORT,
-                        )
-                    )
-                elif proxy.name == VSCODE_PROXY_NAME:
-                    exposed_urls.append(
-                        ExposedUrl(
-                            name=VSCODE,
-                            url=f'https://{proxy.domain}',
-                            port=VSCODE_PORT,
-                        )
-                    )
-
+        exposed_urls = await self._exposed_urls(box) if status == SandboxStatus.RUNNING else None
         return SandboxInfo(
             id=stored.id,
             created_by_user_id=stored.created_by_user_id,
             sandbox_spec_id=stored.sandbox_spec_id,
             status=status,
-            session_api_key=session_api_key
-            if status == SandboxStatus.RUNNING
-            else None,
+            session_api_key=session_api_key if status == SandboxStatus.RUNNING else None,
             exposed_urls=exposed_urls,
             created_at=stored.created_at,
         )
+
+    async def _exposed_urls(self, box: Any | None) -> list[ExposedUrl]:
+        if box is None:
+            return []
+        try:
+            proxies = await box.proxies()
+        except Exception as exc:
+            _logger.warning(
+                'Failed to list proxies on box %s: %s',
+                getattr(box, 'id', '?'),
+                exc,
+            )
+            return []
+        urls: list[ExposedUrl] = []
+        for proxy in proxies:
+            mapping = self._PROXY_TO_URL_NAME.get(proxy.name)
+            if mapping is None:
+                continue
+            url_name, port = mapping
+            urls.append(
+                ExposedUrl(name=url_name, url=f'https://{proxy.domain}', port=port)
+            )
+        return urls
 
     async def _get_box_or_none(self, sandbox_id: str) -> Any | None:
         """Fetch the boxd VM, swallowing NotFound. Other errors propagate."""
@@ -360,12 +359,19 @@ class BoxdSandboxService(SandboxService):
 
         next_page_id = str(offset + limit) if has_more else None
 
-        items: list[SandboxInfo] = []
-        for stored in stored_rows:
-            box = await self._get_box_or_none(stored.id)
-            items.append(await self._to_sandbox_info(stored, box))
-
-        return SandboxPage(items=items, next_page_id=next_page_id)
+        # Fan out the per-row boxd lookups so a page of N is one round-trip
+        # of latency, not N. boxd doesn't expose a batch-get; this is the
+        # next-best thing.
+        boxes = await asyncio.gather(
+            *(self._get_box_or_none(stored.id) for stored in stored_rows)
+        )
+        items = await asyncio.gather(
+            *(
+                self._to_sandbox_info(stored, box)
+                for stored, box in zip(stored_rows, boxes)
+            )
+        )
+        return SandboxPage(items=list(items), next_page_id=next_page_id)
 
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str
@@ -421,20 +427,20 @@ class BoxdSandboxService(SandboxService):
         stored = await self._get_stored(sandbox_id)
         if stored is None:
             return False
-        # Drop the row first — deleting the session_api_key_hash
-        # invalidates leaked keys even if the boxd call fails.
-        await self.db_session.delete(stored)
         box = await self._get_box_or_none(sandbox_id)
-        if box is None:
-            # VM was already gone or unreachable; the row removal is
-            # still useful (cleans up our index).
-            return True
-        try:
-            await box.destroy()
-            return True
-        except Exception as exc:
-            _logger.error('Failed to destroy boxd sandbox %s: %s', sandbox_id, exc)
-            return False
+        destroy_ok = True
+        if box is not None:
+            try:
+                await box.destroy()
+            except Exception as exc:
+                _logger.error('Failed to destroy boxd sandbox %s: %s', sandbox_id, exc)
+                destroy_ok = False
+        # Always drop the row — even on destroy failure this invalidates
+        # the leaked session_api_key_hash and stops the sandbox from
+        # showing up in subsequent searches. The user can retry destroy
+        # via the boxd CLI if needed.
+        await self.db_session.delete(stored)
+        return destroy_ok
 
 
 class BoxdSandboxServiceInjector(SandboxServiceInjector):
