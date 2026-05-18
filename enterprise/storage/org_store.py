@@ -8,7 +8,8 @@ from server.constants import (
     DEFAULT_V1_ENABLED,
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
-    get_default_litellm_model,
+    get_default_llm_base_url,
+    get_default_llm_model,
 )
 from server.routes.org_models import (
     OrgMemberSettingsUpdate,
@@ -85,12 +86,14 @@ class OrgStore:
             org = Org(**kwargs)
             org.org_version = ORG_SETTINGS_VERSION
             agent_settings = org.agent_settings or {}
+            llm_settings = agent_settings.get('llm', {})
             org.agent_settings = deep_merge(
                 agent_settings,
                 {
                     'llm': {
-                        'model': agent_settings.get('llm', {}).get('model')
-                        or get_default_litellm_model()
+                        'model': llm_settings.get('model') or get_default_llm_model(),
+                        'base_url': llm_settings.get('base_url')
+                        or get_default_llm_base_url(),
                     }
                 },
             )
@@ -174,8 +177,8 @@ class OrgStore:
                     'org_version': ORG_SETTINGS_VERSION,
                     'agent_settings_diff': {
                         'llm': {
-                            'model': get_default_litellm_model(),
-                            'base_url': LITE_LLM_API_URL,
+                            'model': get_default_llm_model(),
+                            'base_url': get_default_llm_base_url(),
                         },
                     },
                 },
