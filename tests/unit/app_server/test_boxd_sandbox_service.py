@@ -14,7 +14,14 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+
+# boxd is an optional dependency; the in-repo tests for the other
+# sandbox backends (modal, daytona, e2b, runloop) follow the same
+# pattern of not pinning the SDK in test deps. Reviewers can run these
+# locally with `pip install boxd`.
+pytest.importorskip("boxd")
+
+from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.boxd_sandbox_service import (
