@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import AsyncContextManager
+from typing import Any, AsyncContextManager
 
 import httpx
 from fastapi import Depends, Request
@@ -277,6 +277,12 @@ def config_from_env() -> AppServerConfig:
     from openhands.app_server.sandbox.remote_sandbox_spec_service import (
         RemoteSandboxSpecServiceInjector,
     )
+    from openhands.app_server.sandbox.boxd_sandbox_service import (
+        BoxdSandboxServiceInjector,
+    )
+    from openhands.app_server.sandbox.boxd_sandbox_spec_service import (
+        BoxdSandboxSpecServiceInjector,
+    )
     from openhands.app_server.user.auth_user_context import (
         AuthUserContextInjector,
     )
@@ -335,6 +341,27 @@ def config_from_env() -> AppServerConfig:
                 api_key=os.environ['SANDBOX_API_KEY'],
                 api_url=os.environ['SANDBOX_REMOTE_RUNTIME_API_URL'],
             )
+        elif os.getenv('RUNTIME') == 'boxd':
+            boxd_kwargs: dict[str, Any] = {}
+            if os.getenv('BOXD_API_KEY'):
+                boxd_kwargs['api_key'] = os.environ['BOXD_API_KEY']
+            if os.getenv('BOXD_API_URL'):
+                boxd_kwargs['api_url'] = os.environ['BOXD_API_URL']
+            if os.getenv('BOXD_AUTO_SUSPEND_TIMEOUT'):
+                boxd_kwargs['auto_suspend_timeout'] = int(
+                    os.environ['BOXD_AUTO_SUSPEND_TIMEOUT']
+                )
+            if os.getenv('BOXD_MAX_NUM_SANDBOXES'):
+                boxd_kwargs['max_num_sandboxes'] = int(
+                    os.environ['BOXD_MAX_NUM_SANDBOXES']
+                )
+            if os.getenv('BOXD_VCPU'):
+                boxd_kwargs['vcpu'] = int(os.environ['BOXD_VCPU'])
+            if os.getenv('BOXD_MEMORY'):
+                boxd_kwargs['memory'] = os.environ['BOXD_MEMORY']
+            if os.getenv('BOXD_DISK'):
+                boxd_kwargs['disk'] = os.environ['BOXD_DISK']
+            config.sandbox = BoxdSandboxServiceInjector(**boxd_kwargs)
         elif os.getenv('RUNTIME') in ('local', 'process'):
             config.sandbox = ProcessSandboxServiceInjector()
         else:
@@ -387,6 +414,8 @@ def config_from_env() -> AppServerConfig:
     if config.sandbox_spec is None:
         if os.getenv('RUNTIME') == 'remote':
             config.sandbox_spec = RemoteSandboxSpecServiceInjector()
+        elif os.getenv('RUNTIME') == 'boxd':
+            config.sandbox_spec = BoxdSandboxSpecServiceInjector()
         elif os.getenv('RUNTIME') in ('local', 'process'):
             config.sandbox_spec = ProcessSandboxSpecServiceInjector()
         else:
