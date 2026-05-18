@@ -3,12 +3,15 @@ import { Link } from "react-router";
 import CodeBranchIcon from "#/icons/u-code-branch.svg?react";
 import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 import { GitProviderIcon } from "#/components/shared/git-provider-icon";
+import { useConfig } from "#/hooks/query/use-config";
 import { Provider } from "#/types/settings";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { I18nKey } from "#/i18n/declaration";
 import { SandboxStatusIndicator } from "./sandbox-status-indicator";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
+import { Typography } from "#/ui/typography";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
+import { agentDisplayLabel } from "#/utils/agent-display-label";
 
 interface RecentConversationProps {
   conversation: V1AppConversation;
@@ -16,9 +19,16 @@ interface RecentConversationProps {
 
 export function RecentConversation({ conversation }: RecentConversationProps) {
   const { t } = useTranslation();
+  const { data: config } = useConfig();
 
   const hasRepository =
     conversation.selected_repository && conversation.selected_branch;
+  const agentLabel = agentDisplayLabel(
+    conversation.agent_kind,
+    conversation.llm_model,
+    conversation.tags,
+    config?.acp_providers,
+  );
 
   return (
     <Link
@@ -66,14 +76,16 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {conversation.llm_model && (
+          {agentLabel && (
             <span
               className="max-w-[120px] flex items-center gap-1 overflow-hidden"
-              title={conversation.llm_model}
+              title={conversation.llm_model ?? agentLabel}
               data-testid="recent-conversation-llm-model"
             >
               <CircuitIcon width={12} height={12} className="shrink-0" />
-              <span className="truncate">{conversation.llm_model}</span>
+              <Typography.Text className="text-xs truncate">
+                {agentLabel}
+              </Typography.Text>
             </span>
           )}
           {(conversation.created_at || conversation.updated_at) && (

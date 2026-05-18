@@ -10,10 +10,7 @@ import { MonoComponent } from "../../../features/chat/mono-component";
 import { PathComponent } from "../../../features/chat/path-component";
 import { getActionContent } from "./get-action-content";
 import { getObservationContent } from "./get-observation-content";
-import {
-  getACPToolCallContent,
-  getACPToolCallTitleKey,
-} from "./get-acp-tool-call-content";
+import { getACPToolCallContent } from "./get-acp-tool-call-content";
 import { TaskTrackingObservationContent } from "../task-tracking/task-tracking-observation-content";
 import { TaskTrackerObservation } from "#/types/v1/core/base/observation";
 import { SkillReadyEvent, isSkillReadyEvent } from "./create-skill-ready-event";
@@ -272,14 +269,13 @@ export const getEventContent = (
       details = getObservationContent(event);
     }
   } else if (isACPToolCallEvent(event)) {
-    // ACP sub-agent tool calls reuse the same card shape as observations:
-    // title is "ACP · Running/Editing/Reading …" via a translation key that
-    // mirrors ACTION_MESSAGE$RUN etc.; details are markdown built from
-    // raw_input + raw_output the same way getTerminalObservationContent
-    // builds "Command: / Output:" blocks.
-    title = createTitleFromKey(getACPToolCallTitleKey(event), {
-      title: event.title,
-    });
+    // ACP sub-agent tool calls reuse the same card shape as observations.
+    // ``event.title`` is the upstream sub-agent's own humanised label
+    // (Claude Code / Codex / Gemini CLI emit things like "Read tests" or
+    // "Edit foo.py"), so we render it verbatim — same pattern as the OH
+    // path's ``event.summary`` short-circuit. Wrapping it in a verb-prefix
+    // translation key (e.g. "Reading {{title}}") would double the verb.
+    title = event.title;
     details = getACPToolCallContent(event);
   } else if (
     // Lenient fallback for action-like events that fail the strict isActionEvent() guard

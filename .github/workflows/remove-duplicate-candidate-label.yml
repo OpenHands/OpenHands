@@ -1,0 +1,64 @@
+---
+name: Remove duplicate candidate label on activity
+
+on:
+    issue_comment:
+        types: [created]
+
+permissions:
+    issues: write
+
+concurrency:
+    group: remove-duplicate-${{ github.repository }}-${{ github.event.issue.number }}
+    cancel-in-progress: false
+
+jobs:
+    remove-duplicate-candidate:
+        if: |
+            github.event.issue.state == 'open' &&
+            github.event.issue.pull_request == null &&
+            contains(github.event.issue.labels.*.name, 'duplicate-candidate') &&
+            github.event.comment.user.type != 'Bot' &&
+            !startsWith(github.event.comment.body || '', '<!-- openhands-duplicate-check') &&
+            !startsWith(github.event.comment.body || '', '<!-- openhands-duplicate-veto')
+        runs-on: ubuntu-latest
+        steps:
+            - name: Remove duplicate-candidate label
+              uses: actions/github-script@v7
+              with:
+                  github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+                  script: |
+                      const issueNumber = context.issue.number;
+                      const commenter = context.payload.comment.user.login || '';
+                      const normalizedCommenter = commenter.toLowerCase();
+
+                      if (
+                        normalizedCommenter.endsWith('[bot]') ||
+                        normalizedCommenter === 'all-hands-bot'
+                      ) {
+                        core.info(
+                          `Skipping duplicate-candidate label removal for bot comment from ${commenter || 'unknown'}`
+                        );
+                        return;
+                      }
+
+                      core.info(
+                        `Removing duplicate-candidate label from issue #${issueNumber} after comment from ${commenter}`
+                      );
+
+                      try {
+                        await github.rest.issues.removeLabel({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: issueNumber,
+                          name: 'duplicate-candidate',
+                        });
+                      } catch (error) {
+                        if (error.status === 404) {
+                          core.info(
+                            `duplicate-candidate label was already removed from issue #${issueNumber}`
+                          );
+                          return;
+                        }
+                        throw error;
+                      }
