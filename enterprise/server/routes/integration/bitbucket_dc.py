@@ -14,12 +14,12 @@ from integrations.bitbucket_data_center.bitbucket_dc_service import (
 from integrations.models import Message, SourceType
 from integrations.utils import HOST_URL, IS_LOCAL_DEPLOYMENT
 from pydantic import BaseModel
+from server.auth.authorization import Permission, require_permission
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 from storage.redis import get_redis_client_async
 
 from openhands.app_server.config_api.config_models import AppMode
-from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 bitbucket_dc_integration_router = APIRouter(prefix='/integration')
@@ -151,7 +151,7 @@ async def verify_bitbucket_dc_signature(
 
 @bitbucket_dc_integration_router.get('/bitbucket-dc/resources')
 async def get_bitbucket_dc_resources(
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.MANAGE_INTEGRATIONS)),
 ) -> BitbucketDCResourcesResponse:
     """List Bitbucket DC repositories visible to the user with enrollment status."""
     try:
@@ -208,7 +208,7 @@ async def get_bitbucket_dc_resources(
 @bitbucket_dc_integration_router.post('/bitbucket-dc/enroll-webhook')
 async def enroll_bitbucket_dc_webhook(
     body: EnrollBitbucketDCWebhookRequest,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.MANAGE_INTEGRATIONS)),
 ) -> BitbucketDCWebhookEnrollmentResult:
     """Create or rotate the local enrollment state for a BBDC repo webhook."""
     project_key = body.resource.project_key.strip()
@@ -251,7 +251,7 @@ async def enroll_bitbucket_dc_webhook(
 @bitbucket_dc_integration_router.patch('/bitbucket-dc/webhook-id')
 async def update_bitbucket_dc_webhook_id(
     body: UpdateBitbucketDCWebhookIdRequest,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.MANAGE_INTEGRATIONS)),
 ) -> BitbucketDCWebhookIdUpdateResult:
     """Record the numeric BBDC webhook id after an admin creates it manually."""
     project_key = body.resource.project_key.strip()

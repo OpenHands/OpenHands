@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import and_, or_, select, text, update
+from sqlalchemy import and_, or_, select, update
 from storage.bitbucket_dc_webhook import BitbucketDCWebhook
 from storage.database import a_session_maker
 
@@ -107,7 +107,7 @@ class BitbucketDCWebhookStore:
                 if webhook:
                     webhook.user_id = user_id
                     webhook.webhook_secret = webhook_secret
-                    webhook.last_synced = datetime.utcnow()
+                    webhook.last_synced = datetime.now(timezone.utc)
                     if webhook_id is not None:
                         webhook.webhook_id = webhook_id
                 else:
@@ -136,7 +136,7 @@ class BitbucketDCWebhookStore:
                     )
                     .values(
                         webhook_id=webhook_id,
-                        last_synced=text('CURRENT_TIMESTAMP'),
+                        last_synced=datetime.now(timezone.utc),
                     )
                 )
                 result = await session.execute(stmt)
