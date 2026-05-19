@@ -455,3 +455,73 @@ class TestOnConversationUpdateAutoTitle:
 
         # Verify order: conversation saved first, then callback registered
         assert operation_order == ['save_conversation', 'save_callback']
+
+    @pytest.mark.asyncio
+    async def test_persists_live_title_when_existing_title_is_default_placeholder(
+        self,
+        async_session,
+        app_conversation_info_service,
+        sandbox_info,
+        mock_conversation_info,
+    ):
+        conversation_id = mock_conversation_info.id
+        mock_conversation_info.title = 'Fix the authentication bug in login.py'
+
+        existing_conv = AppConversationInfo(
+            id=conversation_id,
+            title=f'Conversation {conversation_id.hex[:5]}',
+            sandbox_id='sandbox_123',
+            created_by_user_id='user_123',
+        )
+
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
+
+        assert isinstance(result, Success)
+        saved = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id
+        )
+        assert saved is not None
+        assert saved.title == 'Fix the authentication bug in login.py'
+
+    @pytest.mark.asyncio
+    async def test_preserves_existing_custom_title_over_live_generated_title(
+        self,
+        async_session,
+        app_conversation_info_service,
+        sandbox_info,
+        mock_conversation_info,
+    ):
+        conversation_id = mock_conversation_info.id
+        mock_conversation_info.title = 'Interim generated title'
+
+        existing_conv = AppConversationInfo(
+            id=conversation_id,
+            title='My custom conversation title',
+            sandbox_id='sandbox_123',
+            created_by_user_id='user_123',
+        )
+
+        with patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            return_value=existing_conv,
+        ):
+            result = await on_conversation_update(
+                conversation_info=mock_conversation_info,
+                sandbox_info=sandbox_info,
+                app_conversation_info_service=app_conversation_info_service,
+            )
+
+        assert isinstance(result, Success)
+        saved = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id
+        )
+        assert saved is not None
+        assert saved.title == 'My custom conversation title'

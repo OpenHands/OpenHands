@@ -226,14 +226,25 @@ def detect_automation_trigger(
     return None
 
 
+def _is_default_generated_title(title: str | None, conversation_id_hex: str) -> bool:
+    if not title:
+        return True
+    return title in {
+        f'Conversation {conversation_id_hex[:5]}',
+        f'Conversation {conversation_id_hex}',
+    }
+
+
 async def valid_sandbox(
     request: Request,
     session_api_key: str = Depends(
         APIKeyHeader(name='X-Session-API-Key', auto_error=False)
     ),
 ) -> SandboxInfo:
-    """Use a session api key for validation, and get a sandbox. Subsequent actions
-    are executed in the context of the owner of the sandbox"""
+    """Use a session API key for validation, and get a sandbox.
+
+    Subsequent actions are executed in the context of the owner of the sandbox.
+    """
     if not session_api_key:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail='X-Session-API-Key header is required'
@@ -346,9 +357,17 @@ async def on_conversation_update(
         agent_kind = 'openhands'
         llm_model = agent.llm.model
 
+    resolved_title = existing.title or f'Conversation {conversation_info.id.hex}'
+    if (
+        isinstance(conversation_info.title, str)
+        and conversation_info.title
+        and _is_default_generated_title(existing.title, conversation_info.id.hex)
+    ):
+        resolved_title = conversation_info.title
+
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
-        title=existing.title or f'Conversation {conversation_info.id.hex}',
+        title=resolved_title,
         sandbox_id=sandbox_info.id,
         created_by_user_id=sandbox_info.created_by_user_id,
         llm_model=llm_model,
@@ -457,9 +476,11 @@ async def get_secret(
     access_token: str = Depends(APIKeyHeader(name='X-Access-Token', auto_error=False)),
     jwt_service: JwtService = jwt_dependency,
 ) -> Response:
-    """Given an access token, retrieve a user secret. The access token
-    is limited by user and provider type, and may include a timeout, limiting
-    the damage in the event that a token is ever leaked"""
+    """Given an access token, retrieve a user secret.
+
+    The access token is limited by user and provider type, and may include a
+    timeout, limiting the damage in the event that a token is ever leaked.
+    """
     try:
         payload = jwt_service.verify_jws_token(access_token)
         user_id = payload['user_id']
@@ -493,7 +514,7 @@ async def _run_callbacks_in_bg_and_close(
     user_id: str | None,
     events: list[Event],
 ):
-    """Run all callbacks and close the session"""
+    """Run all callbacks and close the session."""
     state = InjectorState()
     setattr(state, USER_CONTEXT_ATTR, SpecifyUserContext(user_id=user_id))
 
