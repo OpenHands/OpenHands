@@ -34,7 +34,7 @@ on:
         type: boolean
         default: false
       buildx-driver-opts:
-        description: Extra buildx driver-opts (e.g. "network=host" for enterprise).
+        description: Extra buildx driver-opts (e.g. "network=host").
         required: false
         type: string
         default: ""

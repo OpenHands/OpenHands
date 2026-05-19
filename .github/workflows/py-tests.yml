@@ -69,41 +69,11 @@ jobs:
             .coverage.runtime.${{ matrix.python_version }}
           include-hidden-files: true
 
-  test-enterprise:
-    name: Enterprise Python Unit Tests
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        python-version: ["3.12"]
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install poetry via pipx
-        run: pipx install poetry
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "poetry"
-      - name: Install Python dependencies using Poetry
-        working-directory: ./enterprise
-        run: poetry install --with dev,test
-      - name: Run Unit Tests
-        # Use base working directory for coverage paths to line up.
-        run: PYTHONPATH=".:$PYTHONPATH" poetry run --project=enterprise pytest --forked -n auto -s -p no:ddtrace -p no:ddtrace.pytest_bdd -p no:ddtrace.pytest_benchmark ./enterprise/tests/unit --cov=enterprise --cov-branch
-        env:
-          COVERAGE_FILE: ".coverage.enterprise.${{ matrix.python_version }}"
-      - name: Store coverage file
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-enterprise
-          path: ".coverage.enterprise.${{ matrix.python_version }}"
-          include-hidden-files: true
-
   coverage-comment:
     name: Coverage Comment
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    needs: [test-on-linux, test-enterprise]
+    needs: [test-on-linux]
 
     permissions:
       pull-requests: write

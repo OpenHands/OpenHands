@@ -55,21 +55,3 @@ jobs:
         run: pip install pre-commit==3.7.0
       - name: Run pre-commit hooks
         run: pre-commit run --all-files --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
-
-  lint-enterprise-python:
-    name: Lint enterprise python
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Set up python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-          cache: "pip"
-      - name: Install pre-commit
-        run: pip install pre-commit==4.2.0
-      - name: Run pre-commit hooks
-        working-directory: ./enterprise
-        run: pre-commit run --all-files --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
