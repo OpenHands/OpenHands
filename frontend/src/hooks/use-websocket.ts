@@ -19,6 +19,7 @@ export const useWebSocket = <T = string>(
   const [isConnected, setIsConnected] = React.useState(false);
   const [lastMessage, setLastMessage] = React.useState<T | null>(null);
   const [messages, setMessages] = React.useState<T[]>([]);
+  const [socket, setSocket] = React.useState<WebSocket | null>(null);
   const [error, setError] = React.useState<Error | null>(null);
   const [isReconnecting, setIsReconnecting] = React.useState(false);
   const wsRef = React.useRef<WebSocket | null>(null);
@@ -53,6 +54,7 @@ export const useWebSocket = <T = string>(
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
+    setSocket(ws); // Make socket available immediately (in CONNECTING state)
     // Mark this WebSocket instance as allowed to reconnect
     allowedToReconnectRef.current.add(ws);
 
@@ -183,7 +185,7 @@ export const useWebSocket = <T = string>(
     lastMessage,
     messages,
     error,
-    socket: wsRef.current,
+    socket,
     sendMessage,
     isReconnecting,
     attemptCount: attemptCountRef.current,

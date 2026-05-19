@@ -132,6 +132,10 @@ export function ConversationWebSocketProvider({
     conversationId: string;
   } | null>(null);
 
+  // Queue for messages submitted while WebSocket is connecting
+  // These are flushed in order once the connection opens
+  const pendingMessagesRef = useRef<V1SendMessageRequest[]>([]);
+
   const isPlanFilePath = (path: string | null): boolean =>
     path?.toUpperCase().endsWith("PLAN.MD") ?? false;
 
@@ -331,6 +335,8 @@ export function ConversationWebSocketProvider({
     receivedEventCountRefMain.current = 0;
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
+    // Clear any pending messages queued for the previous conversation
+    pendingMessagesRef.current = [];
   }, [conversationId]);
 
   const { data: preloadedEvents, isFetched: isHistoryFetched } =
@@ -831,7 +837,7 @@ export function ConversationWebSocketProvider({
   );
 
   // V1 send message function via WebSocket
-  // Falls back to REST API queue when WebSocket is not connected
+  // Queues in memory when WebSocket is connecting; falls back to REST API when closed
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest): Promise<SendMessageResult> => {
       const currentMode = useConversationStore.getState().conversationMode;
@@ -839,8 +845,13 @@ export function ConversationWebSocketProvider({
         currentMode === "plan" ? planningAgentSocket : mainSocket;
 
       if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
-        // WebSocket not connected - queue message via REST API
-        // Message will be delivered automatically when conversation becomes ready
+        // WebSocket still connecting — queue in memory for auto-flush on open
+        if (currentSocket?.readyState === WebSocket.CONNECTING) {
+          pendingMessagesRef.current.push(message);
+          return { queued: true };
+        }
+
+        // WebSocket closed — queue via REST API for server-side delivery
         if (!conversationId) {
           const error = new Error("No conversation ID available");
           setErrorMessage(error.message);
@@ -852,7 +863,7 @@ export function ConversationWebSocketProvider({
             role: "user",
             content: message.content,
           });
-          // Message queued successfully - it will be delivered when ready
+          // Message queued successfully — it will be delivered when ready
           // Return queued: true so caller knows not to show optimistic UI
           return { queued: true };
         } catch (error) {
@@ -878,6 +889,39 @@ export function ConversationWebSocketProvider({
     },
     [mainSocket, planningAgentSocket, setErrorMessage, conversationId],
   );
+
+  // Flush pending messages when main socket opens
+  useEffect(() => {
+    if (mainSocket?.readyState === WebSocket.OPEN) {
+      const pending = pendingMessagesRef.current;
+      pendingMessagesRef.current = [];
+      for (const msg of pending) {
+        try {
+          mainSocket.send(JSON.stringify(msg));
+        } catch {
+          // If send fails, re-queue remaining messages
+          pendingMessagesRef.current.push(msg);
+          break;
+        }
+      }
+    }
+  }, [mainSocket?.readyState]);
+
+  // Flush pending messages when planning socket opens
+  useEffect(() => {
+    if (planningAgentSocket?.readyState === WebSocket.OPEN) {
+      const pending = pendingMessagesRef.current;
+      pendingMessagesRef.current = [];
+      for (const msg of pending) {
+        try {
+          planningAgentSocket.send(JSON.stringify(msg));
+        } catch {
+          pendingMessagesRef.current.push(msg);
+          break;
+        }
+      }
+    }
+  }, [planningAgentSocket?.readyState]);
 
   // Track main socket state changes
   useEffect(() => {
