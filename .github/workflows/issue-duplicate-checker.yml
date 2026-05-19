@@ -186,7 +186,7 @@ jobs:
 
             - name: Post duplicate overlap notice
               if: steps.parsed_result.outputs.should_comment == 'true'
-              uses: actions/github-script@v7
+              uses: actions/github-script@v9
               env:
                   ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
                   SUMMARY: ${{ steps.parsed_result.outputs.summary }}
