@@ -3,16 +3,23 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import secrets
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from integrations.bitbucket_data_center.bitbucket_dc_manager import BitbucketDCManager
+from integrations.bitbucket_data_center.bitbucket_dc_service import (
+    SaaSBitbucketDCService,
+)
 from integrations.models import Message, SourceType
-from integrations.utils import IS_LOCAL_DEPLOYMENT
+from integrations.utils import HOST_URL, IS_LOCAL_DEPLOYMENT
+from pydantic import BaseModel
+from server.auth.authorization import Permission, require_permission
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 from storage.redis import get_redis_client_async
 
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 bitbucket_dc_integration_router = APIRouter(prefix='/integration')
@@ -20,6 +27,59 @@ bitbucket_dc_integration_router = APIRouter(prefix='/integration')
 webhook_store = BitbucketDCWebhookStore()
 token_manager = TokenManager()
 bitbucket_dc_manager = BitbucketDCManager(token_manager)
+
+BITBUCKET_DC_WEBHOOK_NAME = 'OpenHands Resolver'
+BITBUCKET_DC_WEBHOOK_EVENTS = ['pr:comment:added', 'pr:comment:edited']
+BITBUCKET_DC_WEBHOOK_URL = f'{HOST_URL}/integration/bitbucket-dc/events'
+
+
+class BitbucketDCResourceIdentifier(BaseModel):
+    project_key: str
+    repo_slug: str
+
+
+class BitbucketDCResourceWithWebhookStatus(BaseModel):
+    project_key: str
+    repo_slug: str
+    name: str
+    full_name: str
+    type: str = 'repository'
+    webhook_enrolled: bool
+    webhook_id: str | None
+    webhook_secret_set: bool
+    installed_by_user_id: str | None
+    last_synced: str | None
+
+
+class BitbucketDCResourcesResponse(BaseModel):
+    resources: list[BitbucketDCResourceWithWebhookStatus]
+
+
+class EnrollBitbucketDCWebhookRequest(BaseModel):
+    resource: BitbucketDCResourceIdentifier
+
+
+class BitbucketDCWebhookEnrollmentResult(BaseModel):
+    project_key: str
+    repo_slug: str
+    success: bool
+    error: str | None
+    webhook_url: str | None
+    webhook_secret: str | None
+    webhook_name: str
+    events: list[str]
+
+
+class UpdateBitbucketDCWebhookIdRequest(BaseModel):
+    resource: BitbucketDCResourceIdentifier
+    webhook_id: str
+
+
+class BitbucketDCWebhookIdUpdateResult(BaseModel):
+    project_key: str
+    repo_slug: str
+    success: bool
+    error: str | None
 
 
 def _extract_repo_identity(payload_data: dict) -> tuple[str, str]:
@@ -87,6 +147,158 @@ async def verify_bitbucket_dc_signature(
     )
     if not hmac.compare_digest(expected, signature_header):
         raise HTTPException(status_code=403, detail="Request signatures didn't match!")
+
+
+@bitbucket_dc_integration_router.get('/bitbucket-dc/resources')
+async def get_bitbucket_dc_resources(
+    user_id: str = Depends(require_permission(Permission.MANAGE_INTEGRATIONS)),
+) -> BitbucketDCResourcesResponse:
+    """List Bitbucket DC repositories visible to the user with enrollment status."""
+    try:
+        bitbucket_dc_service = SaaSBitbucketDCService(external_auth_id=user_id)
+        repositories = await bitbucket_dc_service.get_all_repositories(
+            sort='updated', app_mode=AppMode.SAAS
+        )
+
+        repo_identities: list[tuple[str, str]] = []
+        for repo in repositories:
+            parts = repo.full_name.split('/', 1)
+            if len(parts) != 2:
+                logger.warning(
+                    f'[Bitbucket DC] Skipping repo with unexpected full_name: {repo.full_name}'
+                )
+                continue
+            repo_identities.append((parts[0], parts[1]))
+
+        webhook_map = await webhook_store.get_webhooks_by_repos(repo_identities)
+
+        resources: list[BitbucketDCResourceWithWebhookStatus] = []
+        for project_key, repo_slug in repo_identities:
+            webhook = webhook_map.get((project_key, repo_slug))
+            resources.append(
+                BitbucketDCResourceWithWebhookStatus(
+                    project_key=project_key,
+                    repo_slug=repo_slug,
+                    name=repo_slug,
+                    full_name=f'{project_key}/{repo_slug}',
+                    webhook_enrolled=bool(webhook and webhook.webhook_secret),
+                    webhook_id=webhook.webhook_id if webhook else None,
+                    webhook_secret_set=bool(webhook and webhook.webhook_secret),
+                    installed_by_user_id=webhook.user_id if webhook else None,
+                    last_synced=(
+                        webhook.last_synced.isoformat()
+                        if webhook and webhook.last_synced
+                        else None
+                    ),
+                )
+            )
+
+        return BitbucketDCResourcesResponse(resources=resources)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'Error retrieving Bitbucket DC resources: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve Bitbucket DC resources',
+        )
+
+
+@bitbucket_dc_integration_router.post('/bitbucket-dc/enroll-webhook')
+async def enroll_bitbucket_dc_webhook(
+    body: EnrollBitbucketDCWebhookRequest,
+    user_id: str = Depends(require_permission(Permission.MANAGE_INTEGRATIONS)),
+) -> BitbucketDCWebhookEnrollmentResult:
+    """Create or rotate the local enrollment state for a BBDC repo webhook."""
+    project_key = body.resource.project_key.strip()
+    repo_slug = body.resource.repo_slug.strip()
+    if not project_key or not repo_slug:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='project_key and repo_slug are required',
+        )
+
+    webhook_secret = secrets.token_urlsafe(32)
+
+    try:
+        await webhook_store.upsert_webhook_enrollment(
+            project_key=project_key,
+            repo_slug=repo_slug,
+            user_id=user_id,
+            webhook_secret=webhook_secret,
+        )
+
+        return BitbucketDCWebhookEnrollmentResult(
+            project_key=project_key,
+            repo_slug=repo_slug,
+            success=True,
+            error=None,
+            webhook_url=BITBUCKET_DC_WEBHOOK_URL,
+            webhook_secret=webhook_secret,
+            webhook_name=BITBUCKET_DC_WEBHOOK_NAME,
+            events=BITBUCKET_DC_WEBHOOK_EVENTS,
+        )
+
+    except Exception as e:
+        logger.exception(f'Error enrolling Bitbucket DC webhook: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to enroll Bitbucket DC webhook',
+        )
+
+
+@bitbucket_dc_integration_router.patch('/bitbucket-dc/webhook-id')
+async def update_bitbucket_dc_webhook_id(
+    body: UpdateBitbucketDCWebhookIdRequest,
+    user_id: str = Depends(require_permission(Permission.MANAGE_INTEGRATIONS)),
+) -> BitbucketDCWebhookIdUpdateResult:
+    """Record the numeric BBDC webhook id after an admin creates it manually."""
+    project_key = body.resource.project_key.strip()
+    repo_slug = body.resource.repo_slug.strip()
+    webhook_id = body.webhook_id.strip()
+    if not project_key or not repo_slug or not webhook_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='project_key, repo_slug, and webhook_id are required',
+        )
+
+    try:
+        updated = await webhook_store.update_webhook_id(
+            project_key=project_key,
+            repo_slug=repo_slug,
+            webhook_id=webhook_id,
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='Bitbucket DC webhook enrollment not found',
+            )
+
+        logger.info(
+            '[Bitbucket DC] Webhook id recorded',
+            extra={
+                'user_id': user_id,
+                'project_key': project_key,
+                'repo_slug': repo_slug,
+                'webhook_id': webhook_id,
+            },
+        )
+        return BitbucketDCWebhookIdUpdateResult(
+            project_key=project_key,
+            repo_slug=repo_slug,
+            success=True,
+            error=None,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'Error updating Bitbucket DC webhook id: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update Bitbucket DC webhook id',
+        )
 
 
 @bitbucket_dc_integration_router.post('/bitbucket-dc/events')

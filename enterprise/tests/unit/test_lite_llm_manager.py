@@ -243,6 +243,42 @@ class TestLiteLlmManager:
                     assert result is None
 
     @pytest.mark.asyncio
+    async def test_create_entries_direct_defaults_skip_litellm(self, mock_settings):
+        """Test direct LLM defaults without provisioning LiteLLM users or keys."""
+        with (
+            patch(
+                'storage.lite_llm_manager.should_use_direct_llm_defaults',
+                return_value=True,
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_model',
+                return_value='openai/anthropic/claude-sonnet',
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_base_url',
+                return_value='https://bifrost.example.com/openai/v1',
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_api_key',
+                return_value='sk-bf-shared-smoke-test',
+            ),
+            patch('httpx.AsyncClient') as mock_client_class,
+        ):
+            result = await LiteLlmManager.create_entries(
+                'test-org-id', 'test-user-id', mock_settings, create_user=True
+            )
+
+            assert result is not None
+            assert _agent_value(result, 'agent') == 'CodeActAgent'
+            assert _agent_value(result, 'llm.model') == 'openai/anthropic/claude-sonnet'
+            assert (
+                _agent_value(result, 'llm.base_url')
+                == 'https://bifrost.example.com/openai/v1'
+            )
+            assert _secret_value(result, 'llm.api_key') == 'sk-bf-shared-smoke-test'
+            mock_client_class.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_create_entries_local_deployment(self, mock_settings):
         """Test create_entries in local deployment mode."""
         with patch.dict(os.environ, {'LOCAL_DEPLOYMENT': '1'}):

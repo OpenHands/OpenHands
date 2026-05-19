@@ -11,7 +11,8 @@ from server.constants import (
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     PERSONAL_WORKSPACE_VERSION_TO_MODEL,
-    get_default_litellm_model,
+    get_default_llm_base_url,
+    get_default_llm_model,
 )
 from server.logger import logger
 from sqlalchemy import select, text
@@ -1074,8 +1075,8 @@ class UserStore:
             org_kwargs['agent_settings'] = {
                 'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
                 'llm': {
-                    'model': get_default_litellm_model(),
-                    'base_url': LITE_LLM_API_URL,
+                    'model': get_default_llm_model(),
+                    'base_url': get_default_llm_base_url(),
                 },
             }
 

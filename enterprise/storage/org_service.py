@@ -7,7 +7,11 @@ from typing import NoReturn
 from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
-from server.constants import ORG_SETTINGS_VERSION, get_default_litellm_model
+from server.constants import (
+    ORG_SETTINGS_VERSION,
+    get_default_llm_base_url,
+    get_default_llm_model,
+)
 from server.routes.org_models import (
     LiteLLMIntegrationError,
     OrgAuthorizationError,
@@ -109,7 +113,8 @@ class OrgService:
             Org: New organization entity (not yet persisted)
         """
         agent_settings = default_agent_settings()
-        agent_settings.llm.model = get_default_litellm_model()
+        agent_settings.llm.model = get_default_llm_model()
+        agent_settings.llm.base_url = get_default_llm_base_url()
         return Org(
             id=org_id,
             name=name,

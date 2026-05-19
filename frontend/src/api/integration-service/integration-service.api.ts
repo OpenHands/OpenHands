@@ -1,6 +1,11 @@
 import { openHands } from "../open-hands-axios";
 import {
+  BitbucketDCResourcesResponse,
+  BitbucketDCWebhookEnrollmentResult,
+  BitbucketDCWebhookIdUpdateResult,
+  BitbucketDCResourceIdentifier,
   GitLabResourcesResponse,
+  UpdateBitbucketDCWebhookIdRequest,
   ReinstallWebhookRequest,
   ResourceIdentifier,
   ResourceInstallationResult,
@@ -31,6 +36,54 @@ export const integrationService = {
     const requestBody: ReinstallWebhookRequest = { resource };
     const { data } = await openHands.post<ResourceInstallationResult>(
       "/integration/gitlab/reinstall-webhook",
+      requestBody,
+    );
+    return data;
+  },
+
+  /**
+   * Get all Bitbucket Data Center repositories visible to the user with webhook enrollment status
+   * @returns Promise with list of repositories and their webhook status
+   */
+  getBitbucketDCResources: async (): Promise<BitbucketDCResourcesResponse> => {
+    const { data } = await openHands.get<BitbucketDCResourcesResponse>(
+      "/integration/bitbucket-dc/resources",
+    );
+    return data;
+  },
+
+  /**
+   * Enroll a Bitbucket Data Center repository webhook in OpenHands.
+   * The returned secret and URL must be copied into Bitbucket Data Center manually.
+   */
+  enrollBitbucketDCWebhook: async ({
+    resource,
+  }: {
+    resource: BitbucketDCResourceIdentifier;
+  }): Promise<BitbucketDCWebhookEnrollmentResult> => {
+    const { data } = await openHands.post<BitbucketDCWebhookEnrollmentResult>(
+      "/integration/bitbucket-dc/enroll-webhook",
+      { resource },
+    );
+    return data;
+  },
+
+  /**
+   * Record the numeric Bitbucket Data Center webhook id after manual creation.
+   */
+  updateBitbucketDCWebhookId: async ({
+    resource,
+    webhookId,
+  }: {
+    resource: BitbucketDCResourceIdentifier;
+    webhookId: string;
+  }): Promise<BitbucketDCWebhookIdUpdateResult> => {
+    const requestBody: UpdateBitbucketDCWebhookIdRequest = {
+      resource,
+      webhook_id: webhookId,
+    };
+    const { data } = await openHands.patch<BitbucketDCWebhookIdUpdateResult>(
+      "/integration/bitbucket-dc/webhook-id",
       requestBody,
     );
     return data;
