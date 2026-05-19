@@ -3717,7 +3717,7 @@ requires-dist = [
     { name = "pygithub", specifier = ">=2.5" },
     { name = "pyjwt", specifier = ">=2.12" },
     { name = "pylatexenc" },
-    { name = "pypdf", specifier = ">=6.9.2" },
+    { name = "pypdf", specifier = ">=6.10.2" },
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "python-frontmatter", specifier = ">=1.1" },
