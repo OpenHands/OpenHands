@@ -362,9 +362,7 @@ class BitbucketDCFactory:
             description='',
             previous_comments=[],
             branch_name=branch_name,
-            installer_keycloak_user_id=(
-                installer_keycloak_user_id or keycloak_user_id
-            ),
+            installer_keycloak_user_id=(installer_keycloak_user_id or keycloak_user_id),
         )
 
         if BitbucketDCFactory.is_pr_comment(message, inline=True):
