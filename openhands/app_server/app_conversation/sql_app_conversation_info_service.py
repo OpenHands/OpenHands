@@ -34,6 +34,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -383,8 +384,22 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             tags=info.tags if info.tags else None,
         )
 
-        await self.db_session.merge(stored)
-        await self.db_session.commit()
+        try:
+            await self.db_session.merge(stored)
+            await self.db_session.commit()
+        except IntegrityError:
+            await self.db_session.rollback()
+            existing = await self.db_session.get(
+                StoredConversationMetadata, stored.conversation_id
+            )
+            if existing is None:
+                raise
+
+            for column in StoredConversationMetadata.__table__.columns:
+                if column.primary_key:
+                    continue
+                setattr(existing, column.name, getattr(stored, column.name))
+            await self.db_session.commit()
         return info
 
     async def update_conversation_statistics(
@@ -575,8 +590,10 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         )
 
     def _fix_timezone(self, value: datetime | None) -> datetime:
-        """Sqlite does not store timezones - and since we can't update the existing models
-        we assume UTC if the timezone is missing. Returns current UTC time if value is None.
+        """Sqlite does not store timezones.
+
+        Since we can't update the existing models, we assume UTC if the timezone is
+        missing. Returns current UTC time if value is None.
         """
         if value is None:
             # Fallback for legacy data: use current time to match model defaults.

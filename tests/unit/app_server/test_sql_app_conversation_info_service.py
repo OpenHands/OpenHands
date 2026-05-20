@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -20,6 +21,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
+    StoredConversationMetadata,
 )
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
@@ -559,6 +561,54 @@ class TestSQLAppConversationInfoService:
 
         # Verify other fields remain unchanged
         assert retrieved_info.sandbox_id == sample_conversation_info.sandbox_id
+
+    @pytest.mark.asyncio
+    async def test_save_recovers_from_concurrent_insert(
+        self,
+        async_engine,
+        service: SQLAppConversationInfoService,
+        sample_conversation_info: AppConversationInfo,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        original_commit = service.db_session.commit
+        commit_count = 0
+
+        async def commit_with_race():
+            nonlocal commit_count
+            commit_count += 1
+            if commit_count == 1:
+                session_maker = async_sessionmaker(
+                    async_engine, class_=AsyncSession, expire_on_commit=False
+                )
+                async with session_maker() as racing_session:
+                    racing_session.add(
+                        StoredConversationMetadata(
+                            conversation_id=str(sample_conversation_info.id),
+                            conversation_version='V1',
+                            sandbox_id='webhook_sandbox',
+                            title='Webhook Title',
+                            pr_number=[],
+                        )
+                    )
+                    await racing_session.commit()
+                raise IntegrityError('insert conversation_metadata', {}, Exception())
+
+            await original_commit()
+
+        monkeypatch.setattr(service.db_session, 'commit', commit_with_race)
+
+        await service.save_app_conversation_info(sample_conversation_info)
+
+        retrieved_info = await service.get_app_conversation_info(
+            sample_conversation_info.id
+        )
+        assert retrieved_info is not None
+        assert retrieved_info.title == sample_conversation_info.title
+        assert retrieved_info.sandbox_id == sample_conversation_info.sandbox_id
+        assert retrieved_info.selected_repository == (
+            sample_conversation_info.selected_repository
+        )
+        assert commit_count == 2
 
     @pytest.mark.asyncio
     async def test_search_with_invalid_page_id(
