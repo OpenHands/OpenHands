@@ -15,14 +15,14 @@
 
 ## About nue
 
-**nue** is a self-hosted, customizable fork of [OpenHands](https://github.com/OpenHands/OpenHands), an open-source AI agent framework for software development. This fork is designed for teams and researchers who want:
+**nue** is a self-hosted, customizable fork of [OpenHands](https://github.com/OpenHands/OpenHands), an open-source AI agent framework for software development. This fork is designed for individual development with:
 
 - **Full control**: Self-hosted, no external dependencies
 - **Deep customization**: Modify frontend, backend, and agent orchestration
 - **Clean infrastructure**: Removal of enterprise features and unnecessary integrations
 - **Development-focused**: Purpose-built for iterating on AI agent capabilities
 
-nue maintains compatibility with OpenHands while allowing independent evolution. See [NOTICE.md](NOTICE.md) for upstream attribution.
+nue maintains compatibility with OpenHands while allowing independent evolution.
 
 ## Quick Start
 
@@ -116,23 +116,33 @@ nue is built on OpenHands with the following modifications:
 - **V0 codebase cleaned**: Deprecated server/controller code removed.
 - **Docker-first sandbox**: Agents run in isolated containers by default for safety and reproducibility.
 
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Install pre-commit hooks: `make install-pre-commit-hooks`
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make changes and commit with descriptive messages
-4. Run tests and linting before pushing
-5. Submit a pull request
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
 ## License
 
 nue is MIT-licensed. This fork builds on [OpenHands](https://github.com/OpenHands/OpenHands), also MIT-licensed.
 
-See [LICENSE](LICENSE) for full text and [NOTICE.md](NOTICE.md) for upstream attribution.
+See [LICENSE](LICENSE) for full text.
+
+## Attribution
+
+**nue** is a fork of [OpenHands](https://github.com/OpenHands/OpenHands), maintained by the OpenHands community.
+
+- **Upstream**: https://github.com/OpenHands/OpenHands
+- **Fork base commit**: `15716df79` (upstream/main, May 2026)
+- **License**: MIT (same as upstream)
+
+**Modifications from upstream:**
+- Enterprise directory removed (507 files, Keycloak/Stripe/GitLab/Jira/Slack/Linear integrations)
+- Telemetry gating via `NUE_DISABLE_TELEMETRY` / `OPENHANDS_DISABLE_TELEMETRY`
+- Surface rebrand to nue; configuration directory migrated to `~/.nue/`
+
+nue incorporates open-source projects used by OpenHands, including
+[SWE-Agent](https://github.com/princeton-nlp/swe-agent) (MIT),
+[Aider](https://github.com/paul-gauthier/aider) (Apache 2.0),
+[BrowserGym](https://github.com/ServiceNow/BrowserGym) (Apache 2.0),
+and evaluation benchmarks (HumanEval, SWE-Bench, DSP, AgentBench, BIRD, and others — see
+[OpenHands CREDITS](https://github.com/OpenHands/OpenHands/blob/main/CREDITS.md) for the full list).
+
+Third-party dependency licenses are compatible with MIT. See `pyproject.toml` and `frontend/package.json`.
 
 ## Support
 
