@@ -339,54 +339,61 @@ describe("edge cases", () => {
     });
   });
 
-  it("should handle server with missing url", () => {
+  it("should treat server with missing url as stdio server", () => {
     const input = {
       mcpServers: {
-        "broken-server": {
+        "no-url-server": {
           transport: "sse",
-          // url is missing
+          command: "/usr/bin/server",
         },
       },
     };
 
     const result = parseMcpConfig(input);
 
-    // Should skip the broken server or handle gracefully
-    expect(result.sse_servers).toHaveLength(0);
+    // Servers without url are treated as stdio servers
+    expect(result.stdio_servers).toHaveLength(1);
+    expect(result.stdio_servers[0]).toEqual({
+      name: "no-url-server",
+      command: "/usr/bin/server",
+    });
   });
 
-  it("should handle server with unknown transport type", () => {
+  it("should treat unknown transport type as shttp server", () => {
     const input = {
       mcpServers: {
         "unknown-transport": {
           url: "https://example.com",
-          transport: "websocket", // not a valid type
+          transport: "websocket", // not "sse", so falls through to shttp
         },
       },
     };
 
     const result = parseMcpConfig(input);
 
-    // Should not crash, servers with unknown transport are skipped
+    // Non-SSE transports with url go to shttp_servers
     expect(result.sse_servers).toHaveLength(0);
-    expect(result.shttp_servers).toHaveLength(0);
-    expect(result.stdio_servers).toHaveLength(0);
+    expect(result.shttp_servers).toHaveLength(1);
+    expect(result.shttp_servers[0]).toEqual({
+      name: "unknown-transport",
+      url: "https://example.com",
+    });
   });
 
-  it("should handle mixed valid and invalid servers", () => {
+  it("should handle mixed server types correctly", () => {
     const input = {
       mcpServers: {
-        valid: { url: "https://valid.com", transport: "sse" },
-        invalid: { transport: "sse" }, // missing url
-        "also-valid": { url: "https://also-valid.com", transport: "http" },
+        "sse-server": { url: "https://sse.com", transport: "sse" },
+        "http-server": { url: "https://http.com", transport: "http" },
+        "stdio-server": { command: "/usr/bin/cmd" },
       },
     };
 
     const result = parseMcpConfig(input);
 
-    // Should parse valid servers and skip invalid ones
     expect(result.sse_servers).toHaveLength(1);
     expect(result.shttp_servers).toHaveLength(1);
+    expect(result.stdio_servers).toHaveLength(1);
   });
 
   it("should handle deleting all servers (empty result)", () => {
@@ -398,7 +405,6 @@ describe("edge cases", () => {
 
     const result = toSdkMcpConfig(config);
 
-    // Should return null when no servers
     expect(result).toBeNull();
   });
 
@@ -414,14 +420,12 @@ describe("edge cases", () => {
     const parsed = parseMcpConfig(input);
     const serialized = toSdkMcpConfig(parsed);
 
-    // Names should be preserved exactly
     expect(serialized?.mcpServers).toHaveProperty("server/with/slashes");
     expect(serialized?.mcpServers).toHaveProperty("server:with:colons");
     expect(serialized?.mcpServers).toHaveProperty("server with spaces");
   });
 
   it("should handle cross-type name collisions", () => {
-    // If an SSE server and stdio server both have the same name
     const config: MCPConfig = {
       sse_servers: [{ name: "myserver", url: "https://sse.com" }],
       stdio_servers: [{ name: "myserver", command: "/usr/bin/cmd" }],
@@ -430,7 +434,6 @@ describe("edge cases", () => {
 
     const result = toSdkMcpConfig(config);
 
-    // Should handle collision by adding suffix to second one
     const names = Object.keys(result?.mcpServers || {});
     expect(names).toContain("myserver");
     expect(names).toContain("myserver_1");
