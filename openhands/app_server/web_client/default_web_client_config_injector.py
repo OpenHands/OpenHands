@@ -31,7 +31,18 @@ def _get_posthog_client_key() -> str:
 
     Reads POSTHOG_CLIENT_KEY from environment. If not set or empty,
     returns the OSS default key for backwards compatibility.
+
+    Telemetry can be disabled via NUE_DISABLE_TELEMETRY (canonical) or
+    OPENHANDS_DISABLE_TELEMETRY (fallback). When disabled, returns empty
+    string to disable PostHog client-side analytics.
     """
+    # Check if telemetry is explicitly disabled
+    disable_telemetry = os.getenv('NUE_DISABLE_TELEMETRY') or os.getenv(
+        'OPENHANDS_DISABLE_TELEMETRY'
+    )
+    if disable_telemetry and disable_telemetry.lower() in ('true', '1'):
+        return ''
+
     key = os.getenv('POSTHOG_CLIENT_KEY', '').strip()
     return key if key else _OSS_POSTHOG_KEY
 

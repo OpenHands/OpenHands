@@ -6,10 +6,25 @@ from openhands.app_server.utils.import_utils import get_impl
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 
+def _get_posthog_client_key() -> str:
+    """Get PostHog client key, respecting telemetry disable flags.
+
+    Returns empty string if NUE_DISABLE_TELEMETRY or OPENHANDS_DISABLE_TELEMETRY
+    is set to 'true' or '1' (case-insensitive), which disables PostHog.
+    Otherwise returns the configured key or OSS default.
+    """
+    disable_telemetry = os.environ.get('NUE_DISABLE_TELEMETRY') or os.environ.get(
+        'OPENHANDS_DISABLE_TELEMETRY'
+    )
+    if disable_telemetry and disable_telemetry.lower() in ('true', '1'):
+        return ''
+    return 'phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA'
+
+
 class ServerConfig(ServerConfigInterface):
     config_cls = os.environ.get('OPENHANDS_CONFIG_CLS', None)
     app_mode = AppMode.OPENHANDS
-    posthog_client_key = 'phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA'
+    posthog_client_key = _get_posthog_client_key()
     github_client_id = os.environ.get('GITHUB_APP_CLIENT_ID', '')
     enable_billing = os.environ.get('ENABLE_BILLING', 'false') == 'true'
     hide_llm_settings = os.environ.get('HIDE_LLM_SETTINGS', 'false') == 'true'
