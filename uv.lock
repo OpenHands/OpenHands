@@ -2609,19 +2609,6 @@ wheels = [
 ]
 
 [[package]]
-name = "jwcrypto"
-version = "1.5.7"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/8c/90/f065668004d22715c1940d6e88e4c3afc8ee16d5664e4478d2c8fd23a250/jwcrypto-1.5.7.tar.gz", hash = "sha256:70204d7cca406eda8c82352e3c41ba2d946610dafd19e54403f0a1f4f18633c6", size = 89535, upload-time = "2026-04-07T00:35:36.116Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/24/fb7da4d6613de7001feaf540d4b5969c6b5a1c42839043b0196cb13aa057/jwcrypto-1.5.7-py3-none-any.whl", hash = "sha256:729463fefe28b6de5cf1ebfda3e94f1a1b41d2799148ef98a01cb9678ebe2bb0", size = 94799, upload-time = "2026-04-07T00:35:35.085Z" },
-]
-
-[[package]]
 name = "keyring"
 version = "25.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3570,9 +3557,9 @@ dependencies = [
     { name = "ipywidgets" },
     { name = "jinja2" },
     { name = "joblib" },
+    { name = "joserfc" },
     { name = "json-repair" },
     { name = "jupyter-kernel-gateway" },
-    { name = "jwcrypto" },
     { name = "kubernetes" },
     { name = "libtmux" },
     { name = "litellm" },
@@ -3686,9 +3673,9 @@ requires-dist = [
     { name = "ipywidgets", specifier = ">=8.1.5" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "joblib" },
+    { name = "joserfc", specifier = ">=1.0.0" },
     { name = "json-repair" },
     { name = "jupyter-kernel-gateway" },
-    { name = "jwcrypto", specifier = ">=1.5.6" },
     { name = "kubernetes", specifier = ">=33.1" },
     { name = "libtmux", specifier = ">=0.46.2" },
     { name = "litellm", specifier = ">=1.83.14" },
