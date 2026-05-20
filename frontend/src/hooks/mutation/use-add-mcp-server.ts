@@ -31,9 +31,19 @@ export function useAddMcpServer() {
 
   return useMutation({
     mutationFn: async (server: MCPServerConfig): Promise<void> => {
-      if (!settings) return;
+      console.log("[MCP:ADD] mutationFn called", {
+        server,
+        settingsExists: !!settings,
+        organizationId,
+      });
+
+      if (!settings) {
+        console.warn("[MCP:ADD] EARLY RETURN: settings is undefined!");
+        return;
+      }
 
       const currentConfig = parseMcpConfig(settings.agent_settings?.mcp_config);
+      console.log("[MCP:ADD] Current config:", currentConfig);
 
       const newConfig: MCPConfig = {
         sse_servers: [...currentConfig.sse_servers],
@@ -64,14 +74,24 @@ export function useAddMcpServer() {
         newConfig.shttp_servers.push(shttpServer);
       }
 
-      await SettingsService.saveSettings({
+      const payload = {
         agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
-      });
+      };
+      console.log("[MCP:ADD] Calling saveSettings with:", payload);
+
+      await SettingsService.saveSettings(payload);
+      console.log("[MCP:ADD] saveSettings completed successfully");
     },
     onSuccess: () => {
+      console.log("[MCP:ADD] onSuccess - invalidating queries", {
+        organizationId,
+      });
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.personal(organizationId),
       });
+    },
+    onError: (error) => {
+      console.error("[MCP:ADD] onError:", error);
     },
   });
 }

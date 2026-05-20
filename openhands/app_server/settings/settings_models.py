@@ -10,6 +10,7 @@ This module contains:
 
 from __future__ import annotations
 
+import logging
 from enum import Enum
 from typing import Annotated, Any
 
@@ -37,6 +38,8 @@ from openhands.sdk.settings import (
     default_agent_settings,
     validate_agent_settings,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _coerce_value(value: Any) -> Any:
@@ -188,6 +191,8 @@ class Settings(BaseModel):
         dict shape (matching model_dump). Top-level keys are set directly on the
         model.
         """
+        logger.info(f'[MCP:DEBUG] Settings.update called with payload keys: {list(payload.keys())}')
+
         legacy_nested_keys = [
             key for key in ('agent_settings', 'conversation_settings') if key in payload
         ]
@@ -199,6 +204,7 @@ class Settings(BaseModel):
 
         agent_update = payload.get('agent_settings_diff')
         if isinstance(agent_update, dict):
+            logger.info(f'[MCP:DEBUG] agent_settings_diff keys: {list(agent_update.keys())}')
             coerced: dict[str, Any] = {}
             for key, value in agent_update.items():
                 coerced[key] = (
@@ -207,6 +213,10 @@ class Settings(BaseModel):
 
             replace_mcp_config = 'mcp_config' in agent_update
             mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
+            logger.info(
+                f'[MCP:DEBUG] replace_mcp_config={replace_mcp_config}, '
+                f'mcp_config={mcp_config}'
+            )
 
             # acp_env is a flat credential dict that should be replaced wholesale
             # when present; deep-merging would make removed keys persist across saves.
@@ -229,16 +239,20 @@ class Settings(BaseModel):
                 base = self.agent_settings.model_dump(
                     mode='json', context={'expose_secrets': True}
                 )
+            logger.info(f'[MCP:DEBUG] base mcp_config before merge: {base.get("mcp_config")}')
 
             merged = deep_merge(base, coerced)
             if replace_mcp_config:
                 merged['mcp_config'] = mcp_config
+                logger.info(f'[MCP:DEBUG] Set merged mcp_config to: {mcp_config}')
             if replace_acp_env:
                 merged['acp_env'] = acp_env or {}
+            logger.info(f'[MCP:DEBUG] merged mcp_config after all operations: {merged.get("mcp_config")}')
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
             object.__setattr__(self, 'agent_settings', validate_agent_settings(merged))
+            logger.info(f'[MCP:DEBUG] Final agent_settings.mcp_config: {self.agent_settings.mcp_config}')
 
         conv_update = payload.get('conversation_settings_diff')
         if isinstance(conv_update, dict):

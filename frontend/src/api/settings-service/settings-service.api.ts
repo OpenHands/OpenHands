@@ -37,8 +37,21 @@ class SettingsService {
   static async saveSettings(
     settings: Partial<Settings> & Record<string, unknown>,
   ): Promise<boolean> {
-    const data = await openHands.post("/api/v1/settings", settings);
-    return data.status === 200;
+    console.log(
+      "[SettingsService:saveSettings] Request payload:",
+      JSON.stringify(settings, null, 2),
+    );
+    try {
+      const response = await openHands.post("/api/v1/settings", settings);
+      console.log("[SettingsService:saveSettings] Response:", {
+        status: response.status,
+        data: response.data,
+      });
+      return response.status === 200;
+    } catch (error) {
+      console.error("[SettingsService:saveSettings] ERROR:", error);
+      throw error;
+    }
   }
 }
 

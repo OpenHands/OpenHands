@@ -210,10 +210,23 @@ async def store_settings(
         422: Legacy nested settings keys are rejected
         500: Error storing settings
     """
+    logger.info(
+        f'[MCP:DEBUG] store_settings called: user_id={user_id}, '
+        f'payload_keys={list(payload.keys())}'
+    )
+    if 'agent_settings_diff' in payload:
+        agent_diff = payload.get('agent_settings_diff', {})
+        logger.info(
+            f'[MCP:DEBUG] agent_settings_diff keys={list(agent_diff.keys()) if isinstance(agent_diff, dict) else "not a dict"}'
+        )
+        if isinstance(agent_diff, dict) and 'mcp_config' in agent_diff:
+            logger.info(f'[MCP:DEBUG] mcp_config in payload: {agent_diff.get("mcp_config")}')
+
     legacy_nested_keys = sorted(
         key for key in ('agent_settings', 'conversation_settings') if key in payload
     )
     if legacy_nested_keys:
+        logger.warning(f'[MCP:DEBUG] Rejecting legacy nested keys: {legacy_nested_keys}')
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={
@@ -224,8 +237,15 @@ async def store_settings(
 
     try:
         existing_settings = await settings_store.load()
+        logger.info(
+            f'[MCP:DEBUG] Loaded existing settings: exists={existing_settings is not None}, '
+            f'mcp_config={existing_settings.agent_settings.mcp_config if existing_settings else None}'
+        )
         settings = existing_settings.model_copy() if existing_settings else Settings()
         settings.update(payload)
+        logger.info(
+            f'[MCP:DEBUG] After update: mcp_config={settings.agent_settings.mcp_config}'
+        )
 
         _post_merge_llm_fixups(settings)
 
@@ -239,7 +259,9 @@ async def store_settings(
             if settings.disabled_skills is None:
                 settings.disabled_skills = existing_settings.disabled_skills
 
+        logger.info('[MCP:DEBUG] About to call settings_store.store()')
         await settings_store.store(settings)
+        logger.info('[MCP:DEBUG] settings_store.store() completed successfully')
 
         # Analytics: track settings saved
         try:
@@ -267,7 +289,7 @@ async def store_settings(
             content={'message': 'Settings stored'},
         )
     except Exception as e:
-        logger.warning(f'Something went wrong storing settings: {e}')
+        logger.exception(f'[MCP:DEBUG] EXCEPTION storing settings: {e}')
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': 'Something went wrong storing settings'},
