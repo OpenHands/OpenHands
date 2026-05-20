@@ -30,6 +30,7 @@ import {
   isPlanningFileEditorObservationEvent,
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
+  isServerErrorEvent,
 } from "#/types/v1/type-guards";
 import { ConversationStateUpdateEventStats } from "#/types/v1/core/events/conversation-state-event";
 import type {
@@ -396,6 +397,20 @@ export function ConversationWebSocketProvider({
             });
             if (isBudgetOrCreditError(errorEvent.detail)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            } else if (
+              isServerErrorEvent(errorEvent) &&
+              errorEvent.code === "MCPError"
+            ) {
+              // Enrich MCP errors with troubleshooting guidance
+              const mcpTroubleshootingMsg =
+                "MCP Connection Failure: The agent could not reach the OpenHands MCP server.\n\n" +
+                "This usually means the backend isn't listening on 0.0.0.0 for Docker container communication.\n\n" +
+                "To fix:\n" +
+                "1. Stop OpenHands: make stop\n" +
+                "2. Restart: make run (ensures backend binds to 0.0.0.0)\n" +
+                "3. Refresh this page and create a new conversation\n\n" +
+                `Technical details: ${errorEvent.detail}`;
+              setErrorMessage(mcpTroubleshootingMsg);
             } else {
               setErrorMessage(errorEvent.detail);
             }

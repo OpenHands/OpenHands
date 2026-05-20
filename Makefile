@@ -296,6 +296,12 @@ _run_setup:
 		echo "$(RED) Windows is not supported, use WSL instead!$(RESET)"; \
 		exit 1; \
 	fi
+	@if [ "$(BACKEND_HOST)" = "127.0.0.1" ] && [ -z "$$ALLOW_LOOPBACK_BACKEND" ]; then \
+		echo "$(RED)ERROR: BACKEND_HOST is 127.0.0.1 — Docker sandboxes will fail.$(RESET)"; \
+		echo "$(YELLOW)Use 'make run' (recommended) or set BACKEND_HOST=0.0.0.0 explicitly.$(RESET)"; \
+		echo "$(YELLOW)To override (e.g., for tests without Docker), set ALLOW_LOOPBACK_BACKEND=1.$(RESET)"; \
+		exit 1; \
+	fi
 	@mkdir -p logs
 	@echo "$(YELLOW)Starting backend server...$(RESET)"
 	@poetry run uvicorn openhands.server.listen:app --host $(BACKEND_HOST) --port $(BACKEND_PORT) &
@@ -304,6 +310,9 @@ _run_setup:
 	@echo "$(GREEN)Backend started successfully.$(RESET)"
 
 # Run the app (standard mode)
+# For local development with Docker sandboxes, default to 0.0.0.0 to allow container-to-host communication
+run: export BACKEND_HOST = 0.0.0.0
+run: export FRONTEND_HOST = 0.0.0.0
 run:
 	@echo "$(YELLOW)Running the app...$(RESET)"
 	@$(MAKE) -s _run_setup
@@ -372,6 +381,18 @@ docker-dev:
 		./containers/dev/dev.sh $(OPTIONS); \
 	fi
 
+# Stop the application
+stop:
+	@echo "$(YELLOW)Stopping OpenHands application...$(RESET)"
+	@pkill -f "uvicorn openhands.server.listen:app" 2>/dev/null || true
+	@pkill -f "npm run dev" 2>/dev/null || true
+	@if command -v docker >/dev/null 2>&1; then \
+		echo "$(YELLOW)Stopping Docker containers...$(RESET)"; \
+		docker ps -a --filter "name=oh-agent-server-" --quiet | xargs -r docker stop 2>/dev/null || true; \
+		docker ps -a --filter "name=oh-agent-server-" --quiet | xargs -r docker rm 2>/dev/null || true; \
+	fi
+	@echo "$(GREEN)Application stopped successfully.$(RESET)"
+
 # Clean up all caches
 clean:
 	@echo "$(YELLOW)Cleaning up caches...$(RESET)"
@@ -390,10 +411,11 @@ help:
 	@echo "  $(GREEN)start-frontend$(RESET)      - Start the frontend server for the OpenHands project."
 	@echo "  $(GREEN)run$(RESET)                 - Run the OpenHands application, starting both backend and frontend servers."
 	@echo "                        Backend Log file will be stored in the 'logs' directory."
+	@echo "  $(GREEN)stop$(RESET)                - Stop the OpenHands application and clean up Docker containers."
 	@echo "  $(GREEN)docker-dev$(RESET)          - Build and run the OpenHands application in Docker."
 	@echo "  $(GREEN)docker-run$(RESET)          - Run the OpenHands application, starting both backend and frontend servers in Docker."
 	@echo "  $(GREEN)help$(RESET)                - Display this help message, providing information on available targets."
 
 # Phony targets
-.PHONY: build check-dependencies check-system check-python check-npm check-nodejs check-docker check-poetry install-python-dependencies install-frontend-dependencies install-pre-commit-hooks lint-backend lint-frontend lint test-frontend test build-frontend start-backend start-frontend _run_setup run run-wsl setup-config setup-config-prompts setup-config-basic openhands-cloud-run docker-dev docker-run clean help
+.PHONY: build check-dependencies check-system check-python check-npm check-nodejs check-docker check-poetry install-python-dependencies install-frontend-dependencies install-pre-commit-hooks lint-backend lint-frontend lint test-frontend test build-frontend start-backend start-frontend _run_setup run run-wsl setup-config setup-config-prompts setup-config-basic openhands-cloud-run docker-dev docker-run stop clean help
 .PHONY: kind

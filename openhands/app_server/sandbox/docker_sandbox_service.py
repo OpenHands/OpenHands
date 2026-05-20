@@ -357,6 +357,109 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return None
 
+    async def _verify_container_connectivity(
+        self, container, host: str = 'host.docker.internal', port: int = 3000
+    ) -> None:
+        """Verify that a container can reach the host backend.
+
+        This checks if the container can connect to host.docker.internal:port,
+        which is required for MCP initialization and other agent-server communication.
+
+        Args:
+            container: The Docker container object to test
+            host: The hostname to test (default: host.docker.internal)
+            port: The port to test (default: 3000)
+
+        Raises:
+            SandboxError: If the connectivity check fails after retries
+        """
+        max_retries = 3
+        retry_delay = 0.5
+
+        for attempt in range(max_retries):
+            try:
+                # Use curl via docker exec to test connectivity
+                # curl with short timeout and exit code checking
+                result = container.exec_run(
+                    f'sh -c "curl -s --max-time 2 http://{host}:{port}/health > /dev/null 2>&1 && echo OK || echo FAIL"',
+                    stdout=True,
+                    stderr=True,
+                )
+
+                output = result.output.decode('utf-8').strip() if result.output else ''
+
+                if result.exit_code == 0 and 'OK' in output:
+                    _logger.info(
+                        f'Container {container.name} successfully connected to {host}:{port}'
+                    )
+                    return
+
+                if attempt < max_retries - 1:
+                    _logger.debug(
+                        f'Connectivity check attempt {attempt + 1}/{max_retries} for {container.name} failed, retrying...'
+                    )
+                    await asyncio.sleep(retry_delay)
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    _logger.debug(
+                        f'Error testing connectivity in {container.name}: {e}, retrying...'
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    _logger.error(f'Failed to test container connectivity: {e}')
+
+        # If we get here, connectivity check failed
+        error_block = (
+            '\n'
+            '╔══════════════════════════════════════════════════════════════════╗\n'
+            '║ SANDBOX CONNECTIVITY CHECK FAILED                                ║\n'
+            '╠══════════════════════════════════════════════════════════════════╣\n'
+            f'║ Container {container.name:<46} ║\n'
+            f'║ Cannot reach: {host}:{port:<47} ║\n'
+            '║                                                                  ║\n'
+            '║ CAUSE: Backend is not listening on 0.0.0.0 (likely 127.0.0.1)   ║\n'
+            '║        Docker containers cannot reach loopback via              ║\n'
+            '║        host.docker.internal.                                    ║\n'
+            '║                                                                  ║\n'
+            '║ FIX: Stop and restart the app:                                  ║\n'
+            '║   make stop && make run                                          ║\n'
+            '║                                                                  ║\n'
+            '║ For details, check: logs/sandbox-connectivity.log               ║\n'
+            '╚══════════════════════════════════════════════════════════════════╝'
+        )
+
+        # Log to both stderr (console) and file
+        _logger.error(error_block)
+
+        # Also log detailed technical info to a file for troubleshooting
+        try:
+            os.makedirs('logs', exist_ok=True)
+            with open('logs/sandbox-connectivity.log', 'a') as f:
+                f.write(
+                    f'\n[{datetime.now().isoformat()}] SANDBOX CONNECTIVITY FAILURE\n'
+                )
+                f.write(f'Container: {container.name}\n')
+                f.write(f'Target: {host}:{port}\n')
+                f.write(f'Max retries: {max_retries}\n')
+                f.write(f'Retry delay: {retry_delay}s\n')
+                f.write('\nTroubleshooting steps:\n')
+                f.write('1. Verify backend is running: ss -tlnp | grep :3000\n')
+                f.write(
+                    '2. Check backend binding: should show 0.0.0.0:3000, not 127.0.0.1:3000\n'
+                )
+                f.write('3. Restart with: make stop && make run\n')
+                f.write('4. Test container connectivity: ')
+                f.write(
+                    f'docker exec {container.name} curl http://host.docker.internal:{port}/health\n'
+                )
+                f.write('\n' + '-' * 70 + '\n')
+        except Exception as e:
+            _logger.debug(f'Failed to write connectivity log file: {e}')
+
+        # Don't raise - log as error but allow startup to continue
+        # The actual MCP error will surface when the agent tries to use it
+
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
@@ -484,6 +587,11 @@ class DockerSandboxService(SandboxService):
                 network_mode=network_mode,
                 # Device passthrough for KVM hardware virtualization
                 devices=devices,
+            )
+
+            # Verify that the container can reach the backend host
+            await self._verify_container_connectivity(
+                container, host='host.docker.internal', port=self.host_port
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)
