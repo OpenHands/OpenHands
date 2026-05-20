@@ -131,6 +131,7 @@ test = [
   "pytest-timeout>=2.4",
   "pytest-xdist",
   "reportlab",
+  "pytest-bdd (>=8.1.0,<9.0.0)",
 ]
 runtime = [
   "flake8",
@@ -279,7 +280,7 @@ pytest-forked = "*"
 pytest-xdist = "*"
 pytest-playwright = "^0.7.0"
 pytest-timeout = "^2.4.0"
-pytest-bdd = "^7.0.0"
+pytest-bdd = "*"
 pandas = "*"
 reportlab = "*"
 gevent = ">=24.2.1,<26.0.0"

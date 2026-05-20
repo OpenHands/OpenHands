@@ -195,6 +195,34 @@ class LLMMock:
 
         return response
 
+    def call_sync(self, user_message: str) -> dict[str, Any]:
+        """Synchronous wrapper for call() method (for BDD steps).
+
+        Args:
+            user_message: User input
+
+        Returns:
+            Response dict with action and data
+        """
+        self.call_count += 1
+        self.memory.add_user_message(user_message)
+
+        # Check for error injection
+        if self.error_mode and self.error_count.get(self.error_mode, 0) > 0:
+            self.error_count[self.error_mode] -= 1
+            if self.error_mode == 'timeout':
+                raise TimeoutError('Mock LLM timeout')
+            elif self.error_mode == 'api_error':
+                raise RuntimeError('Mock LLM API error')
+            elif self.error_mode == 'invalid_response':
+                raise ValueError('Mock LLM returned invalid response')
+
+        # Generate response
+        response = self.generator.generate(user_message)
+        self.memory.add_assistant_message(json.dumps(response))
+
+        return response
+
     def get_memory(self) -> ConversationMemory:
         """Get conversation memory."""
         return self.memory

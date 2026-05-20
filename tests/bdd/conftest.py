@@ -25,6 +25,11 @@ from tests.bdd.mocks.sandbox_mock import MockSandbox
 from tests.bdd.utils.api_client import AppServerAPIClient
 from tests.bdd.utils.test_data import TEST_APP_SERVER_URL
 
+# Import step modules for pytest-bdd discovery
+from tests.bdd.steps import agent_steps  # noqa: F401
+from tests.bdd.steps import common_steps  # noqa: F401
+from tests.bdd.steps import frontend_steps  # noqa: F401
+
 
 # Configure logging for BDD tests
 def configure_logging() -> None:
@@ -290,3 +295,39 @@ def temp_workspace(tmp_path: Path) -> Path:
     """
     logger.debug(f'Created temporary workspace: {tmp_path}')
     return tmp_path
+
+
+# ============================================================================
+# BDD Test Context Fixtures
+# ============================================================================
+
+
+class AgentContext:
+    """Shared context for agent test steps."""
+
+    def __init__(self) -> None:
+        """Initialize context."""
+        self.llm: Optional[Any] = None
+        self.messages: list[dict[str, Any]] = []
+        self.last_response: Optional[dict[str, Any]] = None
+        self.llm_call_count: int = 0
+
+    def reset(self) -> None:
+        """Reset context."""
+        self.messages.clear()
+        self.last_response = None
+        self.llm_call_count = 0
+
+
+@pytest.fixture
+def agent_context() -> Generator[AgentContext, None, None]:
+    """Provide agent context for steps.
+
+    Returns:
+        AgentContext instance (reset after test)
+    """
+    context = AgentContext()
+    logger.debug('Created agent context')
+    yield context
+    logger.debug(f'Agent context stats: messages={len(context.messages)}, calls={context.llm_call_count}')
+    context.reset()

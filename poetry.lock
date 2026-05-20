@@ -2747,6 +2747,18 @@ recommended = ["cffi (>=1.17.1) ; platform_python_implementation == \"CPython\""
 test = ["cffi (>=1.17.1) ; platform_python_implementation == \"CPython\"", "coverage (>=5.0) ; sys_platform != \"win32\"", "dnspython (>=1.16.0,<2.0) ; python_version < \"3.10\"", "idna ; python_version < \"3.10\"", "objgraph", "psutil (>=5.7.0) ; sys_platform != \"win32\" or platform_python_implementation == \"CPython\"", "requests"]
 
 [[package]]
+name = "gherkin-official"
+version = "29.0.0"
+description = "Gherkin parser (official, by Cucumber team)"
+optional = false
+python-versions = "*"
+groups = ["test"]
+files = [
+    {file = "gherkin_official-29.0.0-py3-none-any.whl", hash = "sha256:26967b0d537a302119066742669e0e8b663e632769330be675457ae993e1d1bc"},
+    {file = "gherkin_official-29.0.0.tar.gz", hash = "sha256:dbea32561158f02280d7579d179b019160d072ce083197625e2f80a6776bb9eb"},
+]
+
+[[package]]
 name = "gitdb"
 version = "4.0.12"
 description = "Git Object Database"
@@ -5156,7 +5168,7 @@ version = "1.3.12"
 description = "A super-fast templating language that borrows the best ideas from the existing templating languages."
 optional = false
 python-versions = ">=3.8"
-groups = ["main"]
+groups = ["main", "test"]
 files = [
     {file = "mako-1.3.12-py3-none-any.whl", hash = "sha256:8f61569480282dbf557145ce441e4ba888be453c30989f879f0d652e39f53ea9"},
     {file = "mako-1.3.12.tar.gz", hash = "sha256:9f778e93289bd410bb35daadeb4fc66d95a746f0b75777b942088b7fd7af550a"},
@@ -5231,7 +5243,7 @@ version = "3.0.3"
 description = "Safely add untrusted strings to HTML/XML markup."
 optional = false
 python-versions = ">=3.9"
-groups = ["main", "runtime"]
+groups = ["main", "runtime", "test"]
 files = [
     {file = "markupsafe-3.0.3-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:2f981d352f04553a7171b8e44369f2af4055f888dfb147d55e42d29e29e74559"},
     {file = "markupsafe-3.0.3-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:e1c1493fb6e50ab01d20a22826e57520f1284df32f2d8601fdd90b6304601419"},
@@ -6652,6 +6664,39 @@ files = [
     {file = "pandocfilters-1.5.1-py2.py3-none-any.whl", hash = "sha256:93be382804a9cdb0a7267585f157e5d1731bbe5545a85b268d6f5fe6232de2bc"},
     {file = "pandocfilters-1.5.1.tar.gz", hash = "sha256:002b4a555ee4ebc03f8b66307e287fa492e4a77b4ea14d3f934328297bb4939e"},
 ]
+
+[[package]]
+name = "parse"
+version = "1.22.0"
+description = "parse() is the opposite of format()"
+optional = false
+python-versions = "*"
+groups = ["test"]
+files = [
+    {file = "parse-1.22.0-py2.py3-none-any.whl", hash = "sha256:eea8ed34e2614cea65d9c1d4af9cb68cce26aea13d44bdcaf83c1b40884fe945"},
+    {file = "parse-1.22.0.tar.gz", hash = "sha256:d4987d68ccf08b6ba3bf80b5004ff7de61c4337cba2d8350ae5c9925794979d9"},
+]
+
+[[package]]
+name = "parse-type"
+version = "0.6.6"
+description = "Simplifies to build parse types based on the parse module"
+optional = false
+python-versions = "!=3.0.*,!=3.1.*,>=2.7"
+groups = ["test"]
+files = [
+    {file = "parse_type-0.6.6-py2.py3-none-any.whl", hash = "sha256:3ca79bbe71e170dfccc8ec6c341edfd1c2a0fc1e5cfd18330f93af938de2348c"},
+    {file = "parse_type-0.6.6.tar.gz", hash = "sha256:513a3784104839770d690e04339a8b4d33439fcd5dd99f2e4580f9fc1097bfb2"},
+]
+
+[package.dependencies]
+parse = {version = ">=1.18.0", markers = "python_version >= \"3.0\""}
+six = ">=1.15"
+
+[package.extras]
+develop = ["build (>=0.5.1)", "coverage (>=4.4)", "pylint", "pytest (<5.0) ; python_version < \"3.0\"", "pytest (>=5.0) ; python_version >= \"3.0\"", "pytest-cov", "pytest-html (>=1.19.0)", "ruff ; python_version >= \"3.7\"", "setuptools", "setuptools-scm", "tox (>=2.8,<4.0)", "twine (>=1.13.0)", "virtualenv (<20.22.0) ; python_version <= \"3.6\"", "virtualenv (>=20.0.0) ; python_version > \"3.6\"", "wheel"]
+docs = ["Sphinx (>=1.6)", "sphinx_bootstrap_theme (>=0.6.0)"]
+testing = ["pytest (<5.0) ; python_version < \"3.0\"", "pytest (>=5.0) ; python_version >= \"3.0\"", "pytest-html (>=1.19.0)"]
 
 [[package]]
 name = "parso"
@@ -11478,6 +11523,27 @@ requests = ">=2.9"
 test = ["black (>=22.1.0)", "flake8 (>=4.0.1)", "pre-commit (>=2.17.0)", "pytest-localserver (>=0.7.1)", "tox (>=3.24.5)"]
 
 [[package]]
+name = "pytest-bdd"
+version = "8.1.0"
+description = "BDD for pytest"
+optional = false
+python-versions = ">=3.9"
+groups = ["test"]
+files = [
+    {file = "pytest_bdd-8.1.0-py3-none-any.whl", hash = "sha256:2124051e71a05ad7db15296e39013593f72ebf96796e1b023a40e5453c47e5fb"},
+    {file = "pytest_bdd-8.1.0.tar.gz", hash = "sha256:ef0896c5cd58816dc49810e8ff1d632f4a12019fb3e49959b2d349ffc1c9bfb5"},
+]
+
+[package.dependencies]
+gherkin-official = ">=29.0.0,<30.0.0"
+Mako = "*"
+packaging = "*"
+parse = "*"
+parse-type = "*"
+pytest = ">=7.0.0"
+typing-extensions = "*"
+
+[[package]]
 name = "pytest-cov"
 version = "7.1.0"
 description = "Pytest plugin for measuring coverage."
@@ -14553,4 +14619,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "8eecf83507aafb7e81c4674dcca81898e42315d5f0e57111ac72eb7e1c76b7b2"
+content-hash = "92201424a5591df275ce8b4efa8d5b7c5dfea4dc0d4d24063b4269744a6902f8"
