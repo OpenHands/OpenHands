@@ -86,9 +86,7 @@ describe("ChatMessage", () => {
     expect(indicator).toBeInTheDocument();
     // Under the test i18n shim, useTranslation returns the key verbatim.
     // Asserting on the key keeps the test stable across translation updates.
-    expect(indicator).toHaveTextContent(
-      /CHAT_INTERFACE\$MESSAGE_DELIVERING/,
-    );
+    expect(indicator).toHaveTextContent(/CHAT_INTERFACE\$MESSAGE_DELIVERING/);
     // role=status with aria-live ensures assistive tech announces the
     // transition when the indicator unmounts on delivery.
     expect(indicator).toHaveAttribute("role", "status");
