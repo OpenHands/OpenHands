@@ -9,6 +9,7 @@ from server.auth.auth_error import (
     NoCredentialsError,
     TosNotAcceptedError,
 )
+from server.auth.cookie_chunking import delete_chunked_cookie, read_chunked_cookie
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth, token_manager
 from server.routes.auth import set_response_cookie
@@ -25,7 +26,7 @@ class SetAuthCookieMiddleware:
     """
 
     async def __call__(self, request: Request, call_next: Callable):
-        keycloak_auth_cookie = request.cookies.get('keycloak_auth')
+        keycloak_auth_cookie = read_chunked_cookie(request, 'keycloak_auth')
         logger.debug('request_with_cookie', extra={'cookie': keycloak_auth_cookie})
         try:
             if self._should_attach(request):
@@ -86,8 +87,9 @@ class SetAuthCookieMiddleware:
                 {'error': str(e) or e.__class__.__name__}, status.HTTP_401_UNAUTHORIZED
             )
             if keycloak_auth_cookie:
-                response.delete_cookie(
-                    key='keycloak_auth',
+                delete_chunked_cookie(
+                    response,
+                    'keycloak_auth',
                     domain=get_cookie_domain(),
                     samesite=get_cookie_samesite(),
                 )
@@ -100,7 +102,7 @@ class SetAuthCookieMiddleware:
         return cast(SaasUserAuth, user_auth)
 
     def _check_tos(self, request: Request):
-        keycloak_auth_cookie = request.cookies.get('keycloak_auth')
+        keycloak_auth_cookie = read_chunked_cookie(request, 'keycloak_auth')
         auth_header = request.headers.get('Authorization')
         mcp_auth_header = request.headers.get('X-Session-API-Key')
         api_auth_header = request.headers.get('X-Access-Token')

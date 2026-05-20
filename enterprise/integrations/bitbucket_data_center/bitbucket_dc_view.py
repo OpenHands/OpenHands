@@ -69,7 +69,7 @@ class BitbucketDCPR(ResolverViewInterface):
     repo_slug: str
     full_repo_name: str  # f"{project_key}/{repo_slug}"
     is_public_repo: bool
-    user_info: UserData
+    user_info: UserData  # keycloak_user_id here is the @-mentioning user
     raw_payload: Message
     conversation_id: str
     should_extract: bool
@@ -78,6 +78,11 @@ class BitbucketDCPR(ResolverViewInterface):
     description: str
     previous_comments: list[Comment]
     branch_name: str | None
+    # Webhook installer's keycloak_user_id. We run the conversation,
+    # token exchanges, and reply path as the mentioner (``user_info``),
+    # but keep this around for the things only the installer can do:
+    # the per-commenter permission check and webhook lifecycle calls.
+    installer_keycloak_user_id: str
 
     def _get_branch_name(self) -> str | None:
         return self.branch_name
@@ -280,14 +285,19 @@ class BitbucketDCFactory:
 
     @staticmethod
     async def create_bitbucket_dc_view_from_payload(
-        message: Message, keycloak_user_id: str
+        message: Message,
+        keycloak_user_id: str,
+        installer_keycloak_user_id: str | None = None,
     ) -> BitbucketDCViewType:
         """Build a view from a Bitbucket DC webhook payload.
 
-        ``keycloak_user_id`` is the OpenHands user that **installed** the
-        webhook (looked up by ``(project_key, repo_slug)`` from the
-        ``bitbucket_dc_webhook`` table by the manager). The resolver acts
-        on Bitbucket DC as the installer.
+        ``keycloak_user_id`` is the OpenHands user the resolver runs the
+        job as — the @-mentioning user when they have an OHE account, or
+        the webhook installer as a fallback. ``installer_keycloak_user_id``
+        is the user that installed the webhook (looked up from the
+        ``bitbucket_dc_webhook`` table); when omitted it defaults to
+        ``keycloak_user_id`` for backward compatibility with older
+        callers/tests that pass a single id.
         """
         payload = cast(dict, message.message['payload'])
         installation_id = cast(str, message.message.get('installation_id') or '')
@@ -352,6 +362,7 @@ class BitbucketDCFactory:
             description='',
             previous_comments=[],
             branch_name=branch_name,
+            installer_keycloak_user_id=(installer_keycloak_user_id or keycloak_user_id),
         )
 
         if BitbucketDCFactory.is_pr_comment(message, inline=True):
