@@ -19,6 +19,7 @@ from server.auth.authorization import (
     get_user_org_role,
 )
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
+from server.auth.cookie_chunking import read_chunked_cookie
 from server.auth.token_manager import TokenManager
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
@@ -577,7 +578,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
 
 async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
     try:
-        signed_token = request.cookies.get('keycloak_auth')
+        signed_token = read_chunked_cookie(request, 'keycloak_auth')
         if not signed_token:
             return None
         return await saas_user_auth_from_signed_token(signed_token)
