@@ -101,7 +101,7 @@ dependencies = [
   "toml",
   "tornado>=6.5",
   "types-toml",
-  "urllib3>=2.6.3",
+  "urllib3>=2.7.0",
   "uvicorn",
   "whatthepatch>=1.0.6",
   "zope-interface==7.2",
@@ -222,7 +222,7 @@ bashlex = "^0.18"
 pypdf = "^6.10.2"
 pillow = "^12.1.1"
 starlette = ">=0.49.1,<1.1.0"
-urllib3 = "^2.6.3"
+urllib3 = "^2.7.0"
 requests = "^2.33.0"
 setuptools = ">=78.1.1"
 
