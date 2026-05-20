@@ -33,6 +33,9 @@ from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
+from openhands.app_server.event_callback.memory_integrity_callback_processor import (  # noqa: F401
+    MemoryIntegrityCallbackProcessor,
+)
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
 )
