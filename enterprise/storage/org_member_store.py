@@ -267,10 +267,17 @@ class OrgMemberStore:
                 org_member.llm_api_key = raw_key
 
             if agent_settings_diff is not None:
-                org_member.agent_settings_diff = deep_merge(
+                merged = deep_merge(
                     org_member.agent_settings_diff,
                     agent_settings_diff,
                 )
+                # mcp_config and acp_env need wholesale replacement (not deep merge)
+                # because merging would resurrect deleted keys. Overwrite after merge.
+                if 'mcp_config' in agent_settings_diff:
+                    merged['mcp_config'] = agent_settings_diff['mcp_config']
+                if 'acp_env' in agent_settings_diff:
+                    merged['acp_env'] = agent_settings_diff['acp_env']
+                org_member.agent_settings_diff = merged
 
             if conversation_settings_diff is not None:
                 org_member.conversation_settings_diff = deep_merge(

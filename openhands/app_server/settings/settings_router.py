@@ -118,6 +118,11 @@ async def load_settings(
                 content={'error': 'Settings not found'},
             )
 
+        logger.info(
+            f'[MCP:DEBUG] load_settings returning mcp_config='
+            f'{getattr(settings.agent_settings, "mcp_config", None)}'
+        )
+
         # On initial load, user secrets may not be populated with values migrated from settings store
         user_secrets = await invalidate_legacy_secrets_store(
             settings, settings_store, secrets_store

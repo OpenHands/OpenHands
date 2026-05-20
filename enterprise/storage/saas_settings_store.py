@@ -258,34 +258,18 @@ class SaasSettingsStore(SettingsStore):
                 f'{effective_agent_settings_diff.get("mcp_config")}'
             )
 
-            # Pop fields that need wholesale replacement (not deep merge)
-            # mcp_config: map of servers - merging would resurrect deleted servers
-            # acp_env: flat credential dict - merging would persist removed keys
-            replace_mcp_config = 'mcp_config' in effective_agent_settings_diff
-            mcp_config_value = (
-                effective_agent_settings_diff.pop('mcp_config', None)
-                if replace_mcp_config
-                else None
-            )
-
-            replace_acp_env = 'acp_env' in effective_agent_settings_diff
-            acp_env_value = (
-                effective_agent_settings_diff.pop('acp_env', None)
-                if replace_acp_env
-                else None
-            )
-
-            # Deep merge everything else
+            # Deep merge org settings with the diff
             merged = deep_merge(
                 OrgStore.get_agent_settings_from_org(org).model_dump(mode='json'),
                 effective_agent_settings_diff,
             )
 
-            # Replace mcp_config and acp_env wholesale (not merged)
-            if replace_mcp_config:
-                merged['mcp_config'] = mcp_config_value
-            if replace_acp_env:
-                merged['acp_env'] = acp_env_value or {}
+            # mcp_config and acp_env need wholesale replacement (not deep merge)
+            # because merging would resurrect deleted keys. Overwrite after merge.
+            if 'mcp_config' in effective_agent_settings_diff:
+                merged['mcp_config'] = effective_agent_settings_diff['mcp_config']
+            if 'acp_env' in effective_agent_settings_diff:
+                merged['acp_env'] = effective_agent_settings_diff['acp_env']
 
             # Single assignment so SQLAlchemy tracks the change
             org.agent_settings = merged
