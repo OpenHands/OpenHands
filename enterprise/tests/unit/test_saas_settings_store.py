@@ -1024,10 +1024,14 @@ async def test_store_replaces_mcp_config_on_delete(
         org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
         assert org is not None
         mcp_servers = org.agent_settings.get('mcp_config', {}).get('mcpServers', {})
-        assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}: {mcp_servers}'
+        assert (
+            len(mcp_servers) == 2
+        ), f'Expected 2 servers, got {len(mcp_servers)}: {mcp_servers}'
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
-        assert 'server3' not in mcp_servers, 'Deleted server was resurrected by deep_merge'
+        assert (
+            'server3' not in mcp_servers
+        ), 'Deleted server was resurrected by deep_merge'
 
         # Also verify member diffs have 2 servers
         members = {
