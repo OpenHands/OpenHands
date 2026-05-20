@@ -110,3 +110,24 @@ async def test_factory_records_actor_slug_and_assigns_keycloak_user_id():
     assert view.user_info.user_id == 'alice'
     assert view.user_info.username == 'Alice'
     assert view.user_info.keycloak_user_id == 'kc-installer'
+    # Single-arg form (no explicit installer) keeps the mentioner id on
+    # both fields for backward compatibility.
+    assert view.installer_keycloak_user_id == 'kc-installer'
+
+
+@pytest.mark.asyncio
+async def test_factory_keeps_mentioner_and_installer_distinct_when_passed():
+    """The mentioner runs the job; the installer's id is carried alongside
+    on ``installer_keycloak_user_id`` for the bits that need elevated
+    permissions (permission check, webhook lifecycle).
+    """
+    msg = _make_message(body='@openhands fix')
+
+    view = await BitbucketDCFactory.create_bitbucket_dc_view_from_payload(
+        msg,
+        keycloak_user_id='kc-alice',
+        installer_keycloak_user_id='kc-installer',
+    )
+
+    assert view.user_info.keycloak_user_id == 'kc-alice'
+    assert view.installer_keycloak_user_id == 'kc-installer'

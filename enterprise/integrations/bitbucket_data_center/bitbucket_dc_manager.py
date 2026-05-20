@@ -117,8 +117,45 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             )
             return
 
+        # Mirror the GitHub resolver pattern: the job runs as the user who
+        # @-mentioned us, not the webhook installer. Look up the mentioner
+        # in Keycloak by their BBDC slug; the installer keycloak_user_id is
+        # carried alongside so the permission check and webhook lifecycle
+        # calls can keep using the installer's elevated token.
+        payload = message.message.get('payload') or {}
+        actor = payload.get('actor') or {}
+        mentioner_slug = extract_actor_slug(actor)
+        mentioner_keycloak_id: str | None = None
+        if mentioner_slug:
+            try:
+                mentioner_keycloak_id = (
+                    await self.token_manager.get_user_id_from_idp_user_id(
+                        mentioner_slug, ProviderType.BITBUCKET_DATA_CENTER
+                    )
+                )
+            except Exception as e:
+                logger.warning(
+                    f'[Bitbucket DC] Keycloak lookup for mentioner '
+                    f'{mentioner_slug!r} failed: {e}'
+                )
+
+        if not mentioner_keycloak_id:
+            logger.info(
+                f'[Bitbucket DC] Mentioner {mentioner_slug!r} has no OHE '
+                f'account; falling back to installer for this job'
+            )
+            mentioner_keycloak_id = installer_user_id
+        elif mentioner_keycloak_id != installer_user_id:
+            logger.info(
+                f'[Bitbucket DC] Running job as mentioner {mentioner_slug!r} '
+                f'(keycloak {mentioner_keycloak_id}) instead of installer '
+                f'({installer_user_id})'
+            )
+
         bitbucket_view = await BitbucketDCFactory.create_bitbucket_dc_view_from_payload(
-            message, installer_user_id
+            message,
+            keycloak_user_id=mentioner_keycloak_id,
+            installer_keycloak_user_id=installer_user_id,
         )
         logger.info(
             f'[Bitbucket DC] Creating job for {bitbucket_view.user_info.username} '
@@ -139,8 +176,9 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             SaaSBitbucketDCService,
         )
 
-        keycloak_user_id = bitbucket_view.user_info.keycloak_user_id
-        bitbucket_service = SaaSBitbucketDCService(external_auth_id=keycloak_user_id)
+        bitbucket_service = SaaSBitbucketDCService(
+            external_auth_id=bitbucket_view.user_info.keycloak_user_id
+        )
 
         if isinstance(bitbucket_view, BitbucketDCInlinePRComment):
             await bitbucket_service.reply_to_pr_comment(
