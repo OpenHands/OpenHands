@@ -43,6 +43,12 @@ OpenHands supports a diverse array of Language Models (LMs) through the powerful
 
 For the V1 web app, start OpenHands and configure your model and API key in the Settings UI.
 
+For OpenAI-compatible gateways, use the gateway base URL as the custom base URL,
+the gateway-issued API key, and the model alias routed by that gateway. For
+example, Tuning Engines users can set the custom base URL to
+`https://api.tuningengines.com/v1`, use a `sk-te-...` inference key, and choose
+the model alias configured in their Tuning Engines catalog.
+
 If you are running headless or CLI workflows, you can prepare local defaults with:
 
 ```bash
