@@ -15,7 +15,10 @@ from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.app_server.settings.settings_models import Settings
-from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.app_server.utils.jsonpatch_compat import (
+    deep_merge,
+    deep_merge_with_wholesale_keys,
+)
 
 
 class OrgMemberStore:
@@ -267,17 +270,10 @@ class OrgMemberStore:
                 org_member.llm_api_key = raw_key
 
             if agent_settings_diff is not None:
-                merged = deep_merge(
+                org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
                     org_member.agent_settings_diff,
                     agent_settings_diff,
                 )
-                # mcp_config and acp_env need wholesale replacement (not deep merge)
-                # because merging would resurrect deleted keys. Overwrite after merge.
-                if 'mcp_config' in agent_settings_diff:
-                    merged['mcp_config'] = agent_settings_diff['mcp_config']
-                if 'acp_env' in agent_settings_diff:
-                    merged['acp_env'] = agent_settings_diff['acp_env']
-                org_member.agent_settings_diff = merged
 
             if conversation_settings_diff is not None:
                 org_member.conversation_settings_diff = deep_merge(

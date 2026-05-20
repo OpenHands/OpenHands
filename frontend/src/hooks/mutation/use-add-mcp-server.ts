@@ -32,11 +32,9 @@ export function useAddMcpServer() {
       // Fetch fresh settings at mutation time to avoid stale closure issues
       const settings = await SettingsService.getSettings();
 
-      if (!settings) {
-        return;
-      }
-
-      const currentConfig = parseMcpConfig(settings.agent_settings?.mcp_config);
+      const currentConfig = parseMcpConfig(
+        settings?.agent_settings?.mcp_config,
+      );
 
       const newConfig: MCPConfig = {
         sse_servers: [...currentConfig.sse_servers],
