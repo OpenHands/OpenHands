@@ -4441,22 +4441,6 @@ files = [
 ]
 
 [[package]]
-name = "jwcrypto"
-version = "1.5.6"
-description = "Implementation of JOSE Web standards"
-optional = false
-python-versions = ">= 3.8"
-groups = ["main"]
-files = [
-    {file = "jwcrypto-1.5.6-py3-none-any.whl", hash = "sha256:150d2b0ebbdb8f40b77f543fb44ffd2baeff48788be71f67f03566692fd55789"},
-    {file = "jwcrypto-1.5.6.tar.gz", hash = "sha256:771a87762a0c081ae6166958a954f80848820b2ab066937dc8b8379d65b1b039"},
-]
-
-[package.dependencies]
-cryptography = ">=3.4"
-typing-extensions = ">=4.5.0"
-
-[[package]]
 name = "keyring"
 version = "25.7.0"
 description = "Store and access your passwords safely."
@@ -14555,4 +14539,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "25f6d1edcc4da5a2acb9c4b160cc894ba09a5f107cca48f206918414f9580d68"
+content-hash = "df2623ab17f93a61809cb9a2a932d29ef91a823e43f3fd6a4e79f1f8838979c8"
