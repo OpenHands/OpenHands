@@ -326,3 +326,114 @@ describe("round-trip preservation", () => {
     expect(serialized?.mcpServers).not.toHaveProperty("sse_1");
   });
 });
+
+describe("edge cases", () => {
+  it("should handle empty mcpServers object", () => {
+    const input = { mcpServers: {} };
+    const result = parseMcpConfig(input);
+
+    expect(result).toEqual({
+      sse_servers: [],
+      stdio_servers: [],
+      shttp_servers: [],
+    });
+  });
+
+  it("should handle server with missing url", () => {
+    const input = {
+      mcpServers: {
+        "broken-server": {
+          transport: "sse",
+          // url is missing
+        },
+      },
+    };
+
+    const result = parseMcpConfig(input);
+
+    // Should skip the broken server or handle gracefully
+    expect(result.sse_servers).toHaveLength(0);
+  });
+
+  it("should handle server with unknown transport type", () => {
+    const input = {
+      mcpServers: {
+        "unknown-transport": {
+          url: "https://example.com",
+          transport: "websocket", // not a valid type
+        },
+      },
+    };
+
+    const result = parseMcpConfig(input);
+
+    // Should not crash, servers with unknown transport are skipped
+    expect(result.sse_servers).toHaveLength(0);
+    expect(result.shttp_servers).toHaveLength(0);
+    expect(result.stdio_servers).toHaveLength(0);
+  });
+
+  it("should handle mixed valid and invalid servers", () => {
+    const input = {
+      mcpServers: {
+        valid: { url: "https://valid.com", transport: "sse" },
+        invalid: { transport: "sse" }, // missing url
+        "also-valid": { url: "https://also-valid.com", transport: "http" },
+      },
+    };
+
+    const result = parseMcpConfig(input);
+
+    // Should parse valid servers and skip invalid ones
+    expect(result.sse_servers).toHaveLength(1);
+    expect(result.shttp_servers).toHaveLength(1);
+  });
+
+  it("should handle deleting all servers (empty result)", () => {
+    const config: MCPConfig = {
+      sse_servers: [],
+      stdio_servers: [],
+      shttp_servers: [],
+    };
+
+    const result = toSdkMcpConfig(config);
+
+    // Should return null when no servers
+    expect(result).toBeNull();
+  });
+
+  it("should handle servers with special characters in names", () => {
+    const input = {
+      mcpServers: {
+        "server/with/slashes": { url: "https://s1.com", transport: "sse" },
+        "server:with:colons": { url: "https://s2.com", transport: "sse" },
+        "server with spaces": { url: "https://s3.com", transport: "sse" },
+      },
+    };
+
+    const parsed = parseMcpConfig(input);
+    const serialized = toSdkMcpConfig(parsed);
+
+    // Names should be preserved exactly
+    expect(serialized?.mcpServers).toHaveProperty("server/with/slashes");
+    expect(serialized?.mcpServers).toHaveProperty("server:with:colons");
+    expect(serialized?.mcpServers).toHaveProperty("server with spaces");
+  });
+
+  it("should handle cross-type name collisions", () => {
+    // If an SSE server and stdio server both have the same name
+    const config: MCPConfig = {
+      sse_servers: [{ name: "myserver", url: "https://sse.com" }],
+      stdio_servers: [{ name: "myserver", command: "/usr/bin/cmd" }],
+      shttp_servers: [],
+    };
+
+    const result = toSdkMcpConfig(config);
+
+    // Should handle collision by adding suffix to second one
+    const names = Object.keys(result?.mcpServers || {});
+    expect(names).toContain("myserver");
+    expect(names).toContain("myserver_1");
+    expect(names).toHaveLength(2);
+  });
+});
