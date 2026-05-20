@@ -76,3 +76,15 @@ export interface BitbucketDCWebhookIdUpdateResult {
   success: boolean;
   error: string | null;
 }
+
+export interface BitbucketDCWebhookRequest {
+  resource: BitbucketDCResourceIdentifier;
+}
+
+export interface BitbucketDCWebhookInstallationResult {
+  project_key: string;
+  repo_slug: string;
+  success: boolean;
+  error: string | null;
+  webhook_id: string | null;
+}

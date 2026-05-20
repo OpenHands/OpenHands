@@ -6485,9 +6485,9 @@ httpx-aiohttp = ">=0.1.8"
 ipywidgets = ">=8.1.5"
 jinja2 = ">=3.1.6"
 joblib = "*"
+joserfc = ">=1.0.0"
 json-repair = "*"
 jupyter-kernel-gateway = "*"
-jwcrypto = ">=1.5.6"
 kubernetes = ">=33.1"
 libtmux = ">=0.46.2"
 litellm = ">=1.83.14"
@@ -6516,12 +6516,12 @@ pybase62 = ">=1"
 pygithub = ">=2.5"
 pyjwt = ">=2.12"
 pylatexenc = "*"
-pypdf = ">=6.9.2"
+pypdf = ">=6.10.2"
 python-docx = "*"
 python-dotenv = "*"
 python-frontmatter = ">=1.1"
 python-json-logger = ">=3.2.1"
-python-multipart = ">=0.0.26"
+python-multipart = ">=0.0.28"
 python-pptx = "*"
 python-socketio = "5.14"
 pythonnet = {version = "*", markers = "sys_platform == \"win32\""}
@@ -6540,7 +6540,7 @@ termcolor = "*"
 toml = "*"
 tornado = ">=6.5"
 types-toml = "*"
-urllib3 = ">=2.6.3"
+urllib3 = ">=2.7.0"
 uvicorn = "*"
 whatthepatch = ">=1.0.6"
 zope-interface = "7.2"
@@ -12104,14 +12104,14 @@ requests-toolbelt = ">=0.6.0"
 
 [[package]]
 name = "python-multipart"
-version = "0.0.26"
+version = "0.0.28"
 description = "A streaming multipart parser for Python"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "python_multipart-0.0.26-py3-none-any.whl", hash = "sha256:c0b169f8c4484c13b0dcf2ef0ec3a4adb255c4b7d18d8e420477d2b1dd03f185"},
-    {file = "python_multipart-0.0.26.tar.gz", hash = "sha256:08fadc45918cd615e26846437f50c5d6d23304da32c341f289a617127b081f17"},
+    {file = "python_multipart-0.0.28-py3-none-any.whl", hash = "sha256:10faac07eb966c3f48dc415f9dee46c04cb10d58d30a35677db8027c825ed9b6"},
+    {file = "python_multipart-0.0.28.tar.gz", hash = "sha256:8550da197eac0f7ab748961fc9509b999fa2662ea25cef857f05249f6893c0f8"},
 ]
 
 [[package]]
@@ -14325,14 +14325,14 @@ files = [
 
 [[package]]
 name = "urllib3"
-version = "2.6.3"
+version = "2.7.0"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
-    {file = "urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4"},
-    {file = "urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed"},
+    {file = "urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897"},
+    {file = "urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c"},
 ]
 
 [package.extras]

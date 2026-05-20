@@ -41,8 +41,10 @@ jobs:
               uses: actions/checkout@v6
 
             - name: Clone repository
+              env:
+                  REPOSITORY: ${{ github.repository }}
               run: |
-                  git clone --depth 1 "https://github.com/${{ github.repository }}.git" /tmp/repo-clone
+                  git clone --depth 1 "https://github.com/${REPOSITORY}.git" /tmp/repo-clone
                   echo "Repository HEAD: $(git -C /tmp/repo-clone rev-parse --short HEAD)"
 
             - name: Summarize smoke test
@@ -92,9 +94,10 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
                   ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
                   OUTPUT_PATH: ${{ runner.temp }}/issue-duplicate-check-result.json
+                  REPOSITORY: ${{ github.repository }}
               run: |
                   python scripts/issue_duplicate_check_openhands.py \
-                    --repository "${{ github.repository }}" \
+                    --repository "$REPOSITORY" \
                     --issue-number "$ISSUE_NUMBER" \
                     --output "$OUTPUT_PATH"
                   test -f "$OUTPUT_PATH" || {
@@ -451,7 +454,7 @@ jobs:
                   CLOSE_AFTER_DAYS: ${{ inputs.close_after_days || '3' }}
               run: |
                   python scripts/auto_close_duplicate_issues.py \
-                    --repository "${{ github.repository }}" \
+                    --repository "$REPOSITORY" \
                     --close-after-days "$CLOSE_AFTER_DAYS" | tee "$RUNNER_TEMP/auto-close-summary.json"
                   status=${PIPESTATUS[0]}
                   if [ "$status" -ne 0 ]; then

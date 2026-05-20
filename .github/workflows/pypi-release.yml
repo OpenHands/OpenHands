@@ -37,4 +37,6 @@ jobs:
       - name: Build poetry project
         run: ./build.sh
       - name: publish
-        run: poetry publish -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: poetry publish -u __token__ -p "$PYPI_TOKEN"

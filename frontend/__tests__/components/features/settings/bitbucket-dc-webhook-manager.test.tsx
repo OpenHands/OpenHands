@@ -86,40 +86,72 @@ describe("BitbucketDCWebhookManager", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows manual setup values after enrolling a repo", async () => {
+  it("calls reinstall when the Install button is clicked on a not-enrolled repo", async () => {
     const user = userEvent.setup();
     vi.spyOn(integrationService, "getBitbucketDCResources").mockResolvedValue({
       resources: mockResources,
     });
-    vi.spyOn(integrationService, "enrollBitbucketDCWebhook").mockResolvedValue({
-      project_key: "PROJ",
-      repo_slug: "myrepo",
-      success: true,
-      error: null,
-      webhook_url: "https://ohe.example.com/integration/bitbucket-dc/events",
-      webhook_secret: "generated-secret",
-      webhook_name: "OpenHands Resolver",
-      events: ["pr:comment:added", "pr:comment:edited"],
-    });
+    const reinstallSpy = vi
+      .spyOn(integrationService, "reinstallBitbucketDCWebhook")
+      .mockResolvedValue({
+        project_key: "PROJ",
+        repo_slug: "myrepo",
+        success: true,
+        error: null,
+        webhook_id: "101",
+      });
 
     renderComponent();
 
     await user.click(
-      await screen.findByTestId("bbdc-enroll-webhook-PROJ/myrepo"),
+      await screen.findByTestId("bbdc-install-webhook-PROJ/myrepo"),
     );
 
     await waitFor(() => {
-      expect(screen.getByText("generated-secret")).toBeInTheDocument();
+      expect(reinstallSpy).toHaveBeenCalledWith({
+        resource: { project_key: "PROJ", repo_slug: "myrepo" },
+      });
+    });
+  });
+
+  it("calls uninstall when the Uninstall button is clicked on an enrolled repo", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(integrationService, "getBitbucketDCResources").mockResolvedValue({
+      resources: mockResources,
+    });
+    const uninstallSpy = vi
+      .spyOn(integrationService, "uninstallBitbucketDCWebhook")
+      .mockResolvedValue({
+        project_key: "OPS",
+        repo_slug: "platform",
+        success: true,
+        error: null,
+        webhook_id: "42",
+      });
+
+    renderComponent();
+
+    await user.click(
+      await screen.findByTestId("bbdc-uninstall-webhook-OPS/platform"),
+    );
+
+    await waitFor(() => {
+      expect(uninstallSpy).toHaveBeenCalledWith({
+        resource: { project_key: "OPS", repo_slug: "platform" },
+      });
+    });
+  });
+
+  it("does not render an Uninstall button on a not-enrolled repo", async () => {
+    vi.spyOn(integrationService, "getBitbucketDCResources").mockResolvedValue({
+      resources: mockResources,
     });
 
-    expect(screen.getByText("OpenHands Resolver")).toBeInTheDocument();
+    renderComponent();
+
+    await screen.findByTestId("bbdc-install-webhook-PROJ/myrepo");
     expect(
-      screen.getByText(
-        "https://ohe.example.com/integration/bitbucket-dc/events",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("pr:comment:added, pr:comment:edited"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("bbdc-uninstall-webhook-PROJ/myrepo"),
+    ).not.toBeInTheDocument();
   });
 });
