@@ -25277,5 +25277,22 @@
     "de": "Sonstiges:",
     "uk": "Інше:",
     "ca": "Altres:"
+  },
+  "CHAT_INTERFACE$MESSAGE_DELIVERING": {
+    "en": "Delivering",
+    "ja": "送信中",
+    "zh-CN": "正在发送",
+    "zh-TW": "正在傳送",
+    "ko-KR": "전송 중",
+    "no": "Leverer",
+    "it": "Invio in corso",
+    "pt": "Entregando",
+    "es": "Entregando",
+    "ar": "جارٍ التسليم",
+    "fr": "Envoi en cours",
+    "tr": "Gönderiliyor",
+    "de": "Wird gesendet",
+    "uk": "Доставка",
+    "ca": "S'està lliurant"
   }
 }

@@ -181,11 +181,13 @@ export function ChatInterface() {
     const result = await send(
       createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
     );
-    // Only show optimistic UI if message was sent immediately via WebSocket
-    // If queued for later delivery, the message will appear when actually delivered
-    if (!result.queued) {
-      setOptimisticUserMessage(content);
-    }
+    // Show the optimistic user message in both cases. When the message was
+    // sent directly over the WebSocket we render it as a normal message; when
+    // it was queued server-side via the REST pending-message endpoint we mark
+    // it pending so the UI shows a "Delivering..." status until the
+    // conversation becomes ready and the real event echoes back (issue
+    // #14181).
+    setOptimisticUserMessage(content, result.queued);
     setMessageToSend("");
   };
 

@@ -1,8 +1,10 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { CopyToClipboardButton } from "#/components/shared/buttons/copy-to-clipboard-button";
 import { OpenHandsSourceType } from "#/types/core/base";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 
 interface ChatMessageProps {
@@ -14,6 +16,12 @@ interface ChatMessageProps {
     tooltip?: string;
   }>;
   isFromPlanningAgent?: boolean;
+  /**
+   * When true, renders a "Delivering..." status indicator beneath the
+   * message bubble. Used while a user message has been queued server-side
+   * and is awaiting WebSocket delivery (issue #14181).
+   */
+  isPendingDelivery?: boolean;
 }
 
 export function ChatMessage({
@@ -22,7 +30,9 @@ export function ChatMessage({
   children,
   actions,
   isFromPlanningAgent = false,
+  isPendingDelivery = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
+  const { t } = useTranslation();
   const [isHovering, setIsHovering] = React.useState(false);
   const [isCopy, setIsCopy] = React.useState(false);
 
@@ -109,6 +119,29 @@ export function ChatMessage({
       >
         <MarkdownRenderer includeStandard>{message}</MarkdownRenderer>
       </div>
+
+      {isPendingDelivery && (
+        <div
+          data-testid="delivering-indicator"
+          role="status"
+          aria-live="polite"
+          className={cn(
+            "flex items-center gap-1 text-xs italic",
+            "text-content-2/70",
+          )}
+        >
+          <span>{t(I18nKey.CHAT_INTERFACE$MESSAGE_DELIVERING)}</span>
+          <span className="inline-flex items-end gap-0.5" aria-hidden="true">
+            <span className="animate-[pulse_1.2s_ease-in-out_infinite]">.</span>
+            <span className="animate-[pulse_1.2s_ease-in-out_0.2s_infinite]">
+              .
+            </span>
+            <span className="animate-[pulse_1.2s_ease-in-out_0.4s_infinite]">
+              .
+            </span>
+          </span>
+        </div>
+      )}
 
       {children}
     </article>

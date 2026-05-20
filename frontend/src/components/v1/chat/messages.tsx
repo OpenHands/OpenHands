@@ -18,11 +18,13 @@ interface MessagesProps {
 
 export const Messages: React.FC<MessagesProps> = React.memo(
   ({ messages, allEvents }) => {
-    const { getOptimisticUserMessage } = useOptimisticUserMessageStore();
+    const { getOptimisticUserMessage, isOptimisticUserMessagePending } =
+      useOptimisticUserMessageStore();
     const params = useParams();
     const conversationId = params.conversationId ?? null;
 
     const optimisticUserMessage = getOptimisticUserMessage();
+    const isOptimisticPending = isOptimisticUserMessagePending();
 
     // Get the set of event IDs that should render PlanPreview
     // This ensures only one preview per user message "phase"
@@ -75,7 +77,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         })}
 
         {optimisticUserMessage && (
-          <ChatMessage type="user" message={optimisticUserMessage} />
+          <ChatMessage
+            type="user"
+            message={optimisticUserMessage}
+            isPendingDelivery={isOptimisticPending}
+          />
         )}
       </>
     );

@@ -13,8 +13,10 @@ interface MessagesProps {
 
 export const Messages: React.FC<MessagesProps> = React.memo(
   ({ messages, isAwaitingUserConfirmation }) => {
-    const { getOptimisticUserMessage } = useOptimisticUserMessageStore();
+    const { getOptimisticUserMessage, isOptimisticUserMessagePending } =
+      useOptimisticUserMessageStore();
     const optimisticUserMessage = getOptimisticUserMessage();
+    const isOptimisticPending = isOptimisticUserMessagePending();
 
     const actionHasObservationPair = React.useCallback(
       (event: OpenHandsAction | OpenHandsObservation): boolean => {
@@ -42,7 +44,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         ))}
 
         {optimisticUserMessage && (
-          <ChatMessage type="user" message={optimisticUserMessage} />
+          <ChatMessage
+            type="user"
+            message={optimisticUserMessage}
+            isPendingDelivery={isOptimisticPending}
+          />
         )}
       </>
     );

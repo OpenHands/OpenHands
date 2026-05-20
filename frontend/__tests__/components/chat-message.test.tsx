@@ -65,4 +65,47 @@ describe("ChatMessage", () => {
     expect(codeElement.tagName.toLowerCase()).toBe("code");
     expect(codeElement.closest("article")).not.toBeNull();
   });
+
+  // Regression coverage for issue #14181: queued messages need a visible
+  // "Delivering..." status so users know the message has not been lost while
+  // the conversation is booting and the WebSocket is not open yet.
+  it("should not render the delivering indicator by default", () => {
+    render(<ChatMessage type="user" message="Queued message" />);
+
+    expect(
+      screen.queryByTestId("delivering-indicator"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should render the delivering indicator when isPendingDelivery is true", () => {
+    render(
+      <ChatMessage type="user" message="Queued message" isPendingDelivery />,
+    );
+
+    const indicator = screen.getByTestId("delivering-indicator");
+    expect(indicator).toBeInTheDocument();
+    // Under the test i18n shim, useTranslation returns the key verbatim.
+    // Asserting on the key keeps the test stable across translation updates.
+    expect(indicator).toHaveTextContent(
+      /CHAT_INTERFACE\$MESSAGE_DELIVERING/,
+    );
+    // role=status with aria-live ensures assistive tech announces the
+    // transition when the indicator unmounts on delivery.
+    expect(indicator).toHaveAttribute("role", "status");
+    expect(indicator).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("should not render the delivering indicator when isPendingDelivery is false", () => {
+    render(
+      <ChatMessage
+        type="user"
+        message="Queued message"
+        isPendingDelivery={false}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("delivering-indicator"),
+    ).not.toBeInTheDocument();
+  });
 });
