@@ -13,7 +13,7 @@ router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependenc
 
 # skills/ is at the repo root, two levels above the openhands package __file__
 GLOBAL_SKILLS_DIR = Path(openhands.__file__).parent.parent / 'skills'
-USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
+USER_SKILLS_DIR = Path.home() / '.nue' / 'microagents'
 
 
 class SkillInfo(BaseModel):

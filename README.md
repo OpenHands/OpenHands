@@ -1,153 +1,145 @@
 <a name="readme-top"></a>
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/OpenHands/docs/main/openhands/static/img/logo.png" alt="Logo" width="200">
-  <h1 align="center" style="border-bottom: none">OpenHands: AI-Driven Development</h1>
+  <h1 align="center" style="border-bottom: none">nue: AI-Driven Development</h1>
+  <p>A self-hosted, customizable fork of <a href="https://github.com/OpenHands/OpenHands">OpenHands</a></p>
 </div>
 
-
 <div align="center">
-  <a href="https://github.com/OpenHands/OpenHands/blob/main/LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-20B2AA?style=for-the-badge" alt="MIT License"></a>
-  <a href="https://docs.google.com/spreadsheets/d/1wOUdFCMyY6Nt0AIqF705KN4JKOWgeI4wUGUP60krXXs/edit?gid=811504672#gid=811504672"><img src="https://img.shields.io/badge/SWEBench-77.6-00cc00?logoColor=FFE165&style=for-the-badge" alt="Benchmark Score"></a>
+  <a href="https://github.com/GusCayresMindsight/nue-agentic-work/blob/main/LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-20B2AA?style=for-the-badge" alt="MIT License"></a>
   <br/>
-  <a href="https://docs.openhands.dev/sdk"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Check out the documentation"></a>
-  <a href="https://arxiv.org/abs/2511.03690"><img src="https://img.shields.io/badge/Paper-000?logoColor=FFE165&logo=arxiv&style=for-the-badge" alt="Tech Report"></a>
-
-
-  <!-- Keep these links. Translations will automatically update with the README. -->
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=de">Deutsch</a> |
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=es">Español</a> |
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=fr">français</a> |
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=ja">日本語</a> |
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=ko">한국어</a> |
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=pt">Português</a> |
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=ru">Русский</a> |
-  <a href="https://www.readme-i18n.com/OpenHands/OpenHands?lang=zh">中文</a>
+  <a href="https://github.com/GusCayresMindsight/nue-agentic-work"><img src="https://img.shields.io/badge/Repository-GitHub-000?logo=github&style=for-the-badge" alt="GitHub Repository"></a>
 </div>
 
 <hr>
 
-🙌 Welcome to OpenHands, a [community](COMMUNITY.md) focused on AI-driven development. We’d love for you to [join us on Slack](https://dub.sh/openhands).
+## About nue
 
-There are a few ways to work with OpenHands:
+**nue** is a self-hosted, customizable fork of [OpenHands](https://github.com/OpenHands/OpenHands), an open-source AI agent framework for software development. This fork is designed for teams and researchers who want:
 
-### OpenHands Software Agent SDK
-The SDK is a composable Python library that contains all of our agentic tech. It's the engine that powers everything else below.
+- **Full control**: Self-hosted, no external dependencies
+- **Deep customization**: Modify frontend, backend, and agent orchestration
+- **Clean infrastructure**: Removal of enterprise features and unnecessary integrations
+- **Development-focused**: Purpose-built for iterating on AI agent capabilities
 
-Define agents in code, then run them locally, or scale to 1000s of agents in the cloud.
+nue maintains compatibility with OpenHands while allowing independent evolution. See [NOTICE.md](NOTICE.md) for upstream attribution.
 
-[Check out the docs](https://docs.openhands.dev/sdk) or [view the source](https://github.com/OpenHands/software-agent-sdk/)
+## Quick Start
 
-### OpenHands CLI
-The CLI is the easiest way to start using OpenHands. The experience will be familiar to anyone who has worked
-with e.g. Claude Code or Codex. You can power it with Claude, GPT, or any other LLM.
+### Prerequisites
 
-[Check out the docs](https://docs.openhands.dev/openhands/usage/run-openhands/cli-mode) or [view the source](https://github.com/OpenHands/OpenHands-CLI)
+- Python ≥3.12, <3.14
+- Node.js ≥22.12.0
+- Poetry ≥1.8.0
+- Docker (for sandbox runtime)
 
-### OpenHands Local GUI
-Use the Local GUI for running agents on your laptop. It comes with a REST API and a single-page React application.
-The experience will be familiar to anyone who has used Devin or Jules.
+### Setup
 
-[Check out the docs](https://docs.openhands.dev/openhands/usage/run-openhands/local-setup) or view the source in this repo.
+```bash
+# Install pre-commit hooks (required)
+make install-pre-commit-hooks
 
-### OpenHands Cloud
-This is a deployment of OpenHands GUI, running on hosted infrastructure.
+# Build the entire application (backend + frontend)
+make build
 
-You can try it for free using the Minimax model by [signing in with your GitHub or GitLab account](https://app.all-hands.dev).
+# Run the application (backend on port 3000, frontend on port 3001+)
+make run
+```
 
-OpenHands Cloud comes with source-available features and integrations:
-- Integrations with Slack, Jira, and Linear
-- Multi-user support
-- RBAC and permissions
-- Collaboration features (e.g., conversation sharing)
+Access the web UI at `http://localhost:3001`.
 
-### OpenHands Enterprise
-Large enterprises can work with us to self-host OpenHands Cloud in their own VPC, via Kubernetes.
-OpenHands Enterprise can also work with the CLI and SDK above.
+### Environment Variables
 
-OpenHands Enterprise is source-available--you can see all the source code here in the enterprise/ directory,
-but you'll need to purchase a license if you want to run it for more than one month.
+Key configuration options:
 
-Enterprise contracts also come with extended support and access to our research team.
+- `RUNTIME=docker` (default) — Run agents in isolated Docker containers
+- `BACKEND_PORT=3000` — Backend server port
+- `NUE_DISABLE_TELEMETRY=true` — Disable PostHog analytics (optional)
+- `LLM_MODEL` — LLM model to use (e.g., `gpt-4o`, `claude-3-5-sonnet`)
 
-Learn more at [openhands.dev/enterprise](https://openhands.dev/enterprise)
+See `openhands/app_server/server_config/server_config.py` for all available options.
 
-### Everything Else
+## Development
 
-Check out our [Product Roadmap](https://github.com/orgs/openhands/projects/1), and feel free to
-[open up an issue](https://github.com/OpenHands/OpenHands/issues) if there's something you'd like to see!
+### Project Structure
 
-You might also be interested in our [evaluation infrastructure](https://github.com/OpenHands/benchmarks), our [chrome extension](https://github.com/OpenHands/openhands-chrome-extension/), or our [Theory-of-Mind module](https://github.com/OpenHands/ToM-SWE).
+```
+nue-agentic-work/
+├── openhands/              # Python backend (AI agent framework)
+├── frontend/               # React web UI
+├── tests/                  # Test suite (pytest + vitest)
+├── dev_config/             # Pre-commit and linting configuration
+├── docker-compose.yml      # Local runtime definition
+└── Makefile               # Central task runner
+```
 
-All our work is available under the MIT license, except for the `enterprise/` directory in this repository (see the [enterprise license](enterprise/LICENSE) for details).
-The core `openhands` and `agent-server` Docker images are fully MIT-licensed as well.
+### Common Commands
 
-If you need help with anything, or just want to chat, [come find us on Slack](https://dub.sh/openhands).
+```bash
+# Run tests
+poetry run pytest tests/unit/
 
-<hr>
+# Lint backend (Python)
+pre-commit run --config ./dev_config/python/.pre-commit-config.yaml
 
-### Thank You to Our Contributors
+# Lint frontend (JavaScript/TypeScript)
+cd frontend && npm run lint:fix && npm run build
 
-<div align="center">
+# Rebuild after dependency changes
+make build
 
-[![OpenHands Contributors](https://assets.openhands.dev/readme/openhands-openhands-contributors.svg)](https://github.com/OpenHands/OpenHands/graphs/contributors)
+# Start backend only
+make start-backend
 
-</div>
+# Start frontend only (from frontend/ dir)
+npm run dev
+```
 
-<hr>
+### Adding Features
 
-### Trusted by Engineers at
+- **Frontend changes**: Modify files in `frontend/src/`. Changes to the React app hot-reload during development.
+- **Backend changes**: Modify files in `openhands/`. Backend requires restart to apply changes.
+- **Tests**: Add pytest-bdd scenarios in `tests/bdd/` for behavioral test coverage.
 
-<div align="center">
-  <br/><br/>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/tiktok.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/tiktok.svg" alt="TikTok" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/vmware.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/vmware.svg" alt="VMware" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/roche.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/roche.svg" alt="Roche" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/amazon.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/amazon.svg" alt="Amazon" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/c3-ai.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/c3-ai.svg" alt="C3 AI" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/netflix.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/netflix.svg" alt="Netflix" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/mastercard.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/mastercard.svg" alt="Mastercard" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/red-hat.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/red-hat.svg" alt="Red Hat" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/mongodb.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/mongodb.svg" alt="MongoDB" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/apple.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/apple.svg" alt="Apple" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/nvidia.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/nvidia.svg" alt="NVIDIA" height="17" hspace="5">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/google.svg">
-    <img src="https://assets.openhands.dev/logos/external/black/google.svg" alt="Google" height="17" hspace="5">
-  </picture>
-</div>
+### Configuration
 
-</div>
+Configuration directory: `~/.nue/` (auto-migrated from `~/.openhands/` on first run).
+
+Database: SQLite by default (dev), PostgreSQL (production).
+
+## Architecture
+
+nue is built on OpenHands with the following modifications:
+
+- **Enterprise directory removed**: Keycloak auth, Stripe billing, GitLab/Jira integrations, and custom integrations removed.
+- **Telemetry gating**: PostHog analytics disabled by default (controlled via `NUE_DISABLE_TELEMETRY`).
+- **V0 codebase cleaned**: Deprecated server/controller code removed.
+- **Docker-first sandbox**: Agents run in isolated containers by default for safety and reproducibility.
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Install pre-commit hooks: `make install-pre-commit-hooks`
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Make changes and commit with descriptive messages
+4. Run tests and linting before pushing
+5. Submit a pull request
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+## License
+
+nue is MIT-licensed. This fork builds on [OpenHands](https://github.com/OpenHands/OpenHands), also MIT-licensed.
+
+See [LICENSE](LICENSE) for full text and [NOTICE.md](NOTICE.md) for upstream attribution.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/GusCayresMindsight/nue-agentic-work/issues)
+- **Documentation**: See `AGENTS.md` and inline code documentation
+- **OpenHands upstream**: For features or documentation from the original OpenHands project, see [OpenHands Docs](https://docs.openhands.dev/)
+
+---
+
+**Built on [OpenHands](https://github.com/OpenHands/OpenHands) — AI-driven development for everyone.**

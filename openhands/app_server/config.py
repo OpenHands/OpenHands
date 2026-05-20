@@ -83,7 +83,27 @@ def get_default_persistence_dir() -> Path:
     if persistence_dir:
         result = Path(persistence_dir)
     else:
-        result = Path.home() / '.openhands'
+        result = Path.home() / '.nue'
+
+        # Migrate from ~/.openhands to ~/.nue on first run
+        old_dir = Path.home() / '.openhands'
+        if old_dir.exists() and not result.exists():
+            import logging
+
+            logger = logging.getLogger(__name__)
+            try:
+                old_dir.rename(result)
+                logger.info(f'Migrated config directory from {old_dir} to {result}')
+            except (OSError, Exception) as e:
+                logger.warning(
+                    f'Failed to migrate {old_dir} to {result}: {e}. '
+                    f'Using new directory and old config will not be accessible.'
+                )
+                result.mkdir(parents=True, exist_ok=True)
+        else:
+            result.mkdir(parents=True, exist_ok=True)
+
+        return result
 
     result.mkdir(parents=True, exist_ok=True)
     return result
