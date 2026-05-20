@@ -55,7 +55,7 @@ jobs:
         arch: [amd64, arm64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Login to GHCR
@@ -76,7 +76,7 @@ jobs:
           ref-name: ${{ env.RELEVANT_REF_NAME }}
           suffix: -${{ matrix.arch }}
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
@@ -102,7 +102,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
       - name: Compute base tags
         id: meta_base
         uses: ./.github/actions/docker-image-tags

@@ -32,7 +32,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Compute tags
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@v5
         with:
           images: ${{ matrix.image }}
           flavor: latest=auto

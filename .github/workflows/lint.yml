@@ -21,7 +21,7 @@ jobs:
     name: Lint frontend
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - name: Install Node.js 22
         uses: actions/setup-node@v4
         with:
@@ -43,7 +43,7 @@ jobs:
     name: Lint python
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up python
