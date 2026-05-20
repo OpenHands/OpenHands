@@ -8,6 +8,7 @@ Focuses on V1 conversation scenarios:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from integrations.slack.slack_types import StartingConvoException
 from integrations.slack.slack_view import (
     SlackNewConversationView,
     SlackUpdateExistingConversationView,
@@ -128,6 +129,48 @@ class TestV1ConversationCreation:
         # Verify
         assert result == slack_new_conversation_view.conversation_id
         mock_create_v1.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('integrations.slack.slack_view.get_app_conversation_service')
+    @patch.object(SlackNewConversationView, '_get_instructions', new_callable=AsyncMock)
+    async def test_create_v1_conversation_missing_critic_api_key(
+        self,
+        mock_get_instructions,
+        mock_get_service,
+        slack_new_conversation_view,
+        mock_jinja_env,
+    ):
+        """Missing critic API key surfaces a user-friendly StartingConvoException."""
+        from unittest.mock import MagicMock
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationStartTaskStatus,
+        )
+
+        mock_get_instructions.return_value = ('User message', '')
+        mock_service = AsyncMock()
+
+        validation_detail = (
+            '1 validation error for ConversationInfo\n'
+            'agent.critic.api_key\n'
+            '  Value error, api_key must be non-empty '
+            '[type=value_error, input_value=None, input_type=NoneType]'
+        )
+
+        async def mock_error_generator(*args, **kwargs):
+            yield MagicMock(
+                status=AppConversationStartTaskStatus.ERROR,
+                detail=validation_detail,
+            )
+
+        mock_service.start_app_conversation = mock_error_generator
+        mock_get_service.return_value.__aenter__.return_value = mock_service
+
+        with pytest.raises(StartingConvoException) as exc_info:
+            await slack_new_conversation_view._create_v1_conversation(mock_jinja_env)
+
+        assert 'critic agent' in str(exc_info.value)
+        assert 'LLM API key' in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

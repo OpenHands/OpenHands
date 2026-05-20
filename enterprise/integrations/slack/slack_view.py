@@ -14,6 +14,7 @@ from integrations.slack.slack_types import (
 from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProcessor
 from integrations.utils import (
     CONVERSATION_URL,
+    HOST_URL,
 )
 from jinja2 import Environment
 from slack_sdk import WebClient
@@ -265,6 +266,15 @@ class SlackNewConversationView(SlackViewInterface):
             ):
                 if task.status == AppConversationStartTaskStatus.ERROR:
                     logger.error(f'Failed to start V1 conversation: {task.detail}')
+                    detail = task.detail or ''
+                    if (
+                        'agent.critic.api_key' in detail
+                        and 'api_key must be non-empty' in detail
+                    ):
+                        raise StartingConvoException(
+                            f'Please set a valid LLM API key for your critic agent in '
+                            f'[OpenHands Cloud]({HOST_URL}) settings before starting a job.'
+                        )
                     raise RuntimeError(
                         f'Failed to start V1 conversation: {task.detail}'
                     )
