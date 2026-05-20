@@ -276,16 +276,19 @@ class SaasSettingsStore(SettingsStore):
             )
 
             # Deep merge everything else
-            org.agent_settings = deep_merge(
+            merged = deep_merge(
                 OrgStore.get_agent_settings_from_org(org).model_dump(mode='json'),
                 effective_agent_settings_diff,
             )
 
             # Replace mcp_config and acp_env wholesale (not merged)
             if replace_mcp_config:
-                org.agent_settings['mcp_config'] = mcp_config_value
+                merged['mcp_config'] = mcp_config_value
             if replace_acp_env:
-                org.agent_settings['acp_env'] = acp_env_value or {}
+                merged['acp_env'] = acp_env_value or {}
+
+            # Single assignment so SQLAlchemy tracks the change
+            org.agent_settings = merged
 
             logger.info(f'[MCP:DEBUG] After deep_merge, org.agent_settings mcp_config={org.agent_settings.get("mcp_config")}')
 
