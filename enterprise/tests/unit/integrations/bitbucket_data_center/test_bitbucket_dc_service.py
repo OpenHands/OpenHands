@@ -146,9 +146,7 @@ async def test_add_comment_reaction_uses_comment_likes_put():
     service = SaaSBitbucketDCService()
     service.BASE_URL = 'https://bb.example.com/rest/api/1.0'
 
-    with patch.object(
-        service, '_make_request', new_callable=AsyncMock
-    ) as mock_request:
+    with patch.object(service, '_make_request', new_callable=AsyncMock) as mock_request:
         await service.add_comment_reaction(
             owner='PROJ',
             repo_slug='myrepo',
