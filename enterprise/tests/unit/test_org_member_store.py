@@ -1155,3 +1155,168 @@ async def test_update_all_members_settings_async_with_empty_settings(
         assert member.agent_settings_diff['llm']['model'] == 'original-model'
         # Original key should still be there (encrypted)
         assert member._llm_api_key is not None
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_replaces_mcp_config(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing mcp_config in agent_settings_diff
+    WHEN: update_all_members_settings_async is called with fewer MCP servers
+    THEN: mcp_config should be replaced (not merged), so deleted servers stay deleted
+
+    This tests the fix for APP-1862: MCP server settings cannot be updated
+    or deleted because deep_merge was resurrecting deleted servers.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has 3 MCP servers
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                        'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                        'server3': {'url': 'https://server3.com', 'transport': 'sse'},
+                    },
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update with only 2 servers (delete server3)
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {
+                    'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                    'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                    # server3 is deleted
+                },
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Only 2 servers should remain, server3 should NOT be resurrected
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_servers = member.agent_settings_diff.get('mcp_config', {}).get(
+            'mcpServers', {}
+        )
+        assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
+        assert 'server1' in mcp_servers
+        assert 'server2' in mcp_servers
+        assert (
+            'server3' not in mcp_servers
+        ), 'Deleted server was resurrected by deep_merge'
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_replaces_acp_env(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing acp_env in agent_settings_diff
+    WHEN: update_all_members_settings_async is called with fewer env vars
+    THEN: acp_env should be replaced (not merged), so deleted vars stay deleted
+
+    acp_env has the same replacement semantics as mcp_config.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has 3 env vars
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'acp_env': {
+                    'VAR1': 'value1',
+                    'VAR2': 'value2',
+                    'VAR3': 'value3',
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update with only 2 vars (delete VAR3)
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'acp_env': {
+                'VAR1': 'value1',
+                'VAR2': 'value2',
+                # VAR3 is deleted
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Only 2 vars should remain, VAR3 should NOT be resurrected
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        acp_env = member.agent_settings_diff.get('acp_env', {})
+        assert len(acp_env) == 2, f'Expected 2 vars, got {len(acp_env)}'
+        assert 'VAR1' in acp_env
+        assert 'VAR2' in acp_env
+        assert 'VAR3' not in acp_env, 'Deleted var was resurrected by deep_merge'
