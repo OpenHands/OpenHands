@@ -3,6 +3,7 @@ import {
   trackError,
   showErrorToast,
   showChatError,
+  isBudgetOrCreditError,
 } from "#/utils/error-handler";
 import * as Actions from "#/services/actions";
 import * as CustomToast from "#/utils/custom-toast-handlers";
@@ -83,6 +84,33 @@ describe("Error Handler", () => {
         id: undefined,
         status_update: true,
       });
+    });
+  });
+
+  describe("isBudgetOrCreditError", () => {
+    it("identifies OpenHands budget and credit limit errors", () => {
+      expect(
+        isBudgetOrCreditError(
+          "Budget has been exceeded! Current cost: 18.51, Max budget: 18.24",
+        ),
+      ).toBe(true);
+      expect(isBudgetOrCreditError("OpenHands Credits are exhausted")).toBe(
+        true,
+      );
+      expect(isBudgetOrCreditError("Credit limit reached")).toBe(true);
+    });
+
+    it("does not rewrite provider-side credit messages as OpenHands billing errors", () => {
+      expect(
+        isBudgetOrCreditError(
+          "OpenrouterException - This model requires provider credits. Check your OpenRouter account.",
+        ),
+      ).toBe(false);
+      expect(
+        isBudgetOrCreditError(
+          "Provider returned insufficient credits for minimax/minimax-m2.5:free",
+        ),
+      ).toBe(false);
     });
   });
 });
