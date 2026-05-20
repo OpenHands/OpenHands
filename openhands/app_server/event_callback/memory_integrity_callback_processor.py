@@ -61,22 +61,22 @@ _logger = logging.getLogger(__name__)
 class MemoryIntegrityPolicy(str, Enum):
     """How to react when a finding is produced."""
 
-    AUDIT = "AUDIT"  # record SUCCESS with findings in detail; no signal change
-    WARN = "WARN"  # log a warning and record SUCCESS with findings
-    BLOCK = "BLOCK"  # record an ERROR result so operators can react
+    AUDIT = 'AUDIT'  # record SUCCESS with findings in detail; no signal change
+    WARN = 'WARN'  # log a warning and record SUCCESS with findings
+    BLOCK = 'BLOCK'  # record an ERROR result so operators can react
 
 
 class MemoryIntegrityBackend(str, Enum):
     """Selectable detector backend."""
 
-    BUILTIN = "BUILTIN"
-    OWASP_AGENT_MEMORY_GUARD = "OWASP_AGENT_MEMORY_GUARD"
+    BUILTIN = 'BUILTIN'
+    OWASP_AGENT_MEMORY_GUARD = 'OWASP_AGENT_MEMORY_GUARD'
 
 
 class FindingSeverity(str, Enum):
-    INFO = "INFO"
-    WARNING = "WARNING"
-    CRITICAL = "CRITICAL"
+    INFO = 'INFO'
+    WARNING = 'WARNING'
+    CRITICAL = 'CRITICAL'
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ class FindingSeverity(str, Enum):
 
 
 def _finding(code: str, severity: FindingSeverity, detail: str) -> dict[str, str]:
-    return {"code": code, "severity": severity.value, "detail": detail}
+    return {'code': code, 'severity': severity.value, 'detail': detail}
 
 
 # ---------------------------------------------------------------------------
@@ -98,33 +98,33 @@ def _finding(code: str, severity: FindingSeverity, detail: str) -> dict[str, str
 # coverage can opt into the OWASP backend.
 _INJECTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
-        "injection.ignore_previous",
+        'injection.ignore_previous',
         re.compile(
-            r"ignore\s+(all\s+)?(the\s+)?(previous|prior|above)\s+instructions?",
+            r'ignore\s+(all\s+)?(the\s+)?(previous|prior|above)\s+instructions?',
             re.IGNORECASE,
         ),
     ),
     (
-        "injection.disregard_system",
+        'injection.disregard_system',
         re.compile(
-            r"disregard\s+(the\s+)?(system|above|previous)\s+(prompt|instructions?)?",
+            r'disregard\s+(the\s+)?(system|above|previous)\s+(prompt|instructions?)?',
             re.IGNORECASE,
         ),
     ),
     (
-        "injection.role_override",
+        'injection.role_override',
         re.compile(
-            r"you\s+are\s+now\s+(?:a|an|the)\s+\w+",
+            r'you\s+are\s+now\s+(?:a|an|the)\s+\w+',
             re.IGNORECASE,
         ),
     ),
     (
-        "injection.fake_system_tag",
-        re.compile(r"<\|(?:im_start|system|assistant)\|>", re.IGNORECASE),
+        'injection.fake_system_tag',
+        re.compile(r'<\|(?:im_start|system|assistant)\|>', re.IGNORECASE),
     ),
     (
-        "injection.developer_mode",
-        re.compile(r"(developer|jailbreak|DAN)\s+mode\s+enabled", re.IGNORECASE),
+        'injection.developer_mode',
+        re.compile(r'(developer|jailbreak|DAN)\s+mode\s+enabled', re.IGNORECASE),
     ),
 )
 
@@ -132,13 +132,13 @@ _INJECTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 # credentials or private keys an attacker might exfiltrate on the next turn.
 _LEAK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
-        "leak.private_key",
-        re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"),
+        'leak.private_key',
+        re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----'),
     ),
-    ("leak.aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("leak.github_token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b")),
-    ("leak.stripe_live_key", re.compile(r"\bsk_live_[A-Za-z0-9]{16,}\b")),
-    ("leak.slack_token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b")),
+    ('leak.aws_access_key', re.compile(r'\bAKIA[0-9A-Z]{16}\b')),
+    ('leak.github_token', re.compile(r'\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b')),
+    ('leak.stripe_live_key', re.compile(r'\bsk_live_[A-Za-z0-9]{16,}\b')),
+    ('leak.slack_token', re.compile(r'\bxox[abprs]-[A-Za-z0-9-]{10,}\b')),
 )
 
 
@@ -159,11 +159,11 @@ _FINGERPRINTS: dict[UUID, str] = {}
 def _extend_chain(conversation_id: UUID, event: Event, text: str) -> str:
     h = hashlib.sha256()
     with _CHAIN_LOCK:
-        prev = _FINGERPRINTS.get(conversation_id, "")
-        h.update(prev.encode("utf-8"))
-        h.update(str(event.id).encode("utf-8"))
-        h.update(str(event.timestamp).encode("utf-8"))
-        h.update(text.encode("utf-8", errors="replace"))
+        prev = _FINGERPRINTS.get(conversation_id, '')
+        h.update(prev.encode('utf-8'))
+        h.update(str(event.id).encode('utf-8'))
+        h.update(str(event.timestamp).encode('utf-8'))
+        h.update(text.encode('utf-8', errors='replace'))
         new_fp = h.hexdigest()
         _FINGERPRINTS[conversation_id] = new_fp
     return new_fp
@@ -197,8 +197,8 @@ def _extract_text(event: Event) -> str:
             if isinstance(piece, TextContent):
                 parts.append(piece.text)
             elif isinstance(piece, ImageContent):
-                parts.append(f"[image:{len(piece.image_urls)}]")
-        return "\n".join(parts)
+                parts.append(f'[image:{len(piece.image_urls)}]')
+        return '\n'.join(parts)
     return redact_text_secrets(str(event))
 
 
@@ -210,13 +210,13 @@ def _extract_text(event: Event) -> str:
 def _scan_builtin(text: str, max_text_bytes: int) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
 
-    encoded_len = len(text.encode("utf-8", errors="replace"))
+    encoded_len = len(text.encode('utf-8', errors='replace'))
     if encoded_len > max_text_bytes:
         findings.append(
             _finding(
-                "anomaly.size",
+                'anomaly.size',
                 FindingSeverity.WARNING,
-                f"event text {encoded_len} bytes exceeds threshold {max_text_bytes}",
+                f'event text {encoded_len} bytes exceeds threshold {max_text_bytes}',
             )
         )
 
@@ -226,7 +226,7 @@ def _scan_builtin(text: str, max_text_bytes: int) -> list[dict[str, str]]:
                 _finding(
                     code,
                     FindingSeverity.CRITICAL,
-                    f"matched injection pattern {code}",
+                    f'matched injection pattern {code}',
                 )
             )
 
@@ -236,7 +236,7 @@ def _scan_builtin(text: str, max_text_bytes: int) -> list[dict[str, str]]:
                 _finding(
                     code,
                     FindingSeverity.CRITICAL,
-                    f"matched sensitive-material pattern {code}",
+                    f'matched sensitive-material pattern {code}',
                 )
             )
 
@@ -249,7 +249,7 @@ def _scan_builtin(text: str, max_text_bytes: int) -> list[dict[str, str]]:
 
 
 _OWASP_INSTALL_HINT = (
-    "OWASP_AGENT_MEMORY_GUARD backend requires the optional "
+    'OWASP_AGENT_MEMORY_GUARD backend requires the optional '
     "'agent-memory-guard' package. Install it with "
     "'pip install agent-memory-guard' (or add it to your environment)."
 )
@@ -275,11 +275,11 @@ def _scan_owasp(text: str, event_id: str) -> list[dict[str, str]]:
     try:
         # The upstream API raises PolicyViolation on a blocked write; we use
         # the event id as the key so each event is screened independently.
-        guard.write(f"openhands.event.{event_id}", text)
+        guard.write(f'openhands.event.{event_id}', text)
     except PolicyViolation as exc:
         return [
             _finding(
-                "owasp.policy_violation",
+                'owasp.policy_violation',
                 FindingSeverity.CRITICAL,
                 str(exc),
             )
@@ -320,7 +320,7 @@ class MemoryIntegrityCallbackProcessor(EventCallbackProcessor):
 
     # Marker so other code can find this processor without an isinstance
     # import (avoids touching modules that don't already depend on this one).
-    KIND: ClassVar[str] = "MemoryIntegrityCallbackProcessor"
+    KIND: ClassVar[str] = 'MemoryIntegrityCallbackProcessor'
 
     policy: MemoryIntegrityPolicy = Field(default=MemoryIntegrityPolicy.AUDIT)
     backend: MemoryIntegrityBackend = Field(default=MemoryIntegrityBackend.BUILTIN)
@@ -343,7 +343,7 @@ class MemoryIntegrityCallbackProcessor(EventCallbackProcessor):
         except ImportError as exc:
             # Surface the missing optional dep as a callback ERROR result so
             # the operator sees it; do not crash the callback loop.
-            _logger.error("memory-integrity backend unavailable: %s", exc)
+            _logger.error('memory-integrity backend unavailable: %s', exc)
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
@@ -356,21 +356,21 @@ class MemoryIntegrityCallbackProcessor(EventCallbackProcessor):
             fp = _extend_chain(conversation_id, event, text)
             findings.append(
                 _finding(
-                    "integrity.chain_fingerprint",
+                    'integrity.chain_fingerprint',
                     FindingSeverity.INFO,
                     fp,
                 )
             )
 
         critical_or_warning = any(
-            f["severity"]
+            f['severity']
             in (FindingSeverity.CRITICAL.value, FindingSeverity.WARNING.value)
             for f in findings
         )
 
         if self.policy is MemoryIntegrityPolicy.WARN and critical_or_warning:
             _logger.warning(
-                "memory-integrity findings on conversation %s event %s: %s",
+                'memory-integrity findings on conversation %s event %s: %s',
                 conversation_id,
                 event.id,
                 redact_text_secrets(json.dumps(findings)),
@@ -380,7 +380,7 @@ class MemoryIntegrityCallbackProcessor(EventCallbackProcessor):
         if self.policy is MemoryIntegrityPolicy.BLOCK and critical_or_warning:
             status = EventCallbackResultStatus.ERROR
             _logger.error(
-                "memory-integrity BLOCK on conversation %s event %s: %s",
+                'memory-integrity BLOCK on conversation %s event %s: %s',
                 conversation_id,
                 event.id,
                 redact_text_secrets(json.dumps(findings)),
@@ -398,5 +398,5 @@ class MemoryIntegrityCallbackProcessor(EventCallbackProcessor):
 def _serialize_detail(findings: list[dict[str, Any]]) -> str:
     """Compact, redacted JSON for the result ``detail`` column."""
     return redact_text_secrets(
-        json.dumps({"findings": findings}, separators=(",", ":"))
+        json.dumps({'findings': findings}, separators=(',', ':'))
     )
