@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSettings } from "#/hooks/query/use-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MCPConfig } from "#/types/settings";
 import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
@@ -8,17 +7,18 @@ import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 export function useDeleteMcpServer() {
   const queryClient = useQueryClient();
-  const { data: settings } = useSettings();
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: async (serverId: string): Promise<void> => {
       console.log("[MCP:DELETE] mutationFn called", {
         serverId,
-        settingsExists: !!settings,
-        settingsAgentMcp: settings?.agent_settings?.mcp_config,
         organizationId,
       });
+
+      // Fetch fresh settings at mutation time to avoid stale closure issues
+      const settings = await SettingsService.getSettings();
+      console.log("[MCP:DELETE] Fetched fresh settings:", !!settings);
 
       const currentConfig = parseMcpConfig(
         settings?.agent_settings?.mcp_config,

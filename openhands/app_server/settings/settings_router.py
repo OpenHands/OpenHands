@@ -220,13 +220,17 @@ async def store_settings(
             f'[MCP:DEBUG] agent_settings_diff keys={list(agent_diff.keys()) if isinstance(agent_diff, dict) else "not a dict"}'
         )
         if isinstance(agent_diff, dict) and 'mcp_config' in agent_diff:
-            logger.info(f'[MCP:DEBUG] mcp_config in payload: {agent_diff.get("mcp_config")}')
+            logger.info(
+                f'[MCP:DEBUG] mcp_config in payload: {agent_diff.get("mcp_config")}'
+            )
 
     legacy_nested_keys = sorted(
         key for key in ('agent_settings', 'conversation_settings') if key in payload
     )
     if legacy_nested_keys:
-        logger.warning(f'[MCP:DEBUG] Rejecting legacy nested keys: {legacy_nested_keys}')
+        logger.warning(
+            f'[MCP:DEBUG] Rejecting legacy nested keys: {legacy_nested_keys}'
+        )
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={
@@ -239,12 +243,12 @@ async def store_settings(
         existing_settings = await settings_store.load()
         logger.info(
             f'[MCP:DEBUG] Loaded existing settings: exists={existing_settings is not None}, '
-            f'mcp_config={existing_settings.agent_settings.mcp_config if existing_settings else None}'
+            f'mcp_config={getattr(existing_settings.agent_settings, "mcp_config", None) if existing_settings else None}'
         )
         settings = existing_settings.model_copy() if existing_settings else Settings()
         settings.update(payload)
         logger.info(
-            f'[MCP:DEBUG] After update: mcp_config={settings.agent_settings.mcp_config}'
+            f'[MCP:DEBUG] After update: mcp_config={getattr(settings.agent_settings, "mcp_config", None)}'
         )
 
         _post_merge_llm_fixups(settings)

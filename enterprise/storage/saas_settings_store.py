@@ -258,10 +258,35 @@ class SaasSettingsStore(SettingsStore):
                 f'{effective_agent_settings_diff.get("mcp_config")}'
             )
 
+            # Pop fields that need wholesale replacement (not deep merge)
+            # mcp_config: map of servers - merging would resurrect deleted servers
+            # acp_env: flat credential dict - merging would persist removed keys
+            replace_mcp_config = 'mcp_config' in effective_agent_settings_diff
+            mcp_config_value = (
+                effective_agent_settings_diff.pop('mcp_config', None)
+                if replace_mcp_config
+                else None
+            )
+
+            replace_acp_env = 'acp_env' in effective_agent_settings_diff
+            acp_env_value = (
+                effective_agent_settings_diff.pop('acp_env', None)
+                if replace_acp_env
+                else None
+            )
+
+            # Deep merge everything else
             org.agent_settings = deep_merge(
                 OrgStore.get_agent_settings_from_org(org).model_dump(mode='json'),
                 effective_agent_settings_diff,
             )
+
+            # Replace mcp_config and acp_env wholesale (not merged)
+            if replace_mcp_config:
+                org.agent_settings['mcp_config'] = mcp_config_value
+            if replace_acp_env:
+                org.agent_settings['acp_env'] = acp_env_value or {}
+
             logger.info(f'[MCP:DEBUG] After deep_merge, org.agent_settings mcp_config={org.agent_settings.get("mcp_config")}')
 
             effective_conversation_diff = item.conversation_settings.model_dump(

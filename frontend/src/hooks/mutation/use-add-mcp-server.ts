@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSettings } from "#/hooks/query/use-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   MCPSHTTPServer,
@@ -26,16 +25,18 @@ interface MCPServerConfig {
 
 export function useAddMcpServer() {
   const queryClient = useQueryClient();
-  const { data: settings } = useSettings();
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: async (server: MCPServerConfig): Promise<void> => {
       console.log("[MCP:ADD] mutationFn called", {
         server,
-        settingsExists: !!settings,
         organizationId,
       });
+
+      // Fetch fresh settings at mutation time to avoid stale closure issues
+      const settings = await SettingsService.getSettings();
+      console.log("[MCP:ADD] Fetched fresh settings:", !!settings);
 
       if (!settings) {
         console.warn("[MCP:ADD] EARLY RETURN: settings is undefined!");
