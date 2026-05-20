@@ -247,14 +247,18 @@ class ApiKeyAwareCORSMiddleware:
             return True
         if scope['method'] == 'OPTIONS':
             # Preflight: the auth header hasn't been sent yet, so look at the
-            # headers the browser is asking permission to send.
+            # headers the browser is asking permission to send. Parse the
+            # comma-separated list into a set so we match whole header names
+            # only — otherwise something like ``x-my-authorization-token``
+            # would substring-match ``authorization``.
             for name, value in scope['headers']:
                 if name == b'access-control-request-headers':
-                    requested = value.decode('latin-1').lower()
-                    return (
-                        'authorization' in requested
-                        or 'x-session-api-key' in requested
-                        or 'x-access-token' in requested
+                    requested_headers = {
+                        h.strip() for h in value.decode('latin-1').lower().split(',')
+                    }
+                    return bool(
+                        requested_headers
+                        & {'authorization', 'x-session-api-key', 'x-access-token'}
                     )
             return False
         for name, value in scope['headers']:

@@ -14,6 +14,7 @@ non-allowlisted origin should be accepted with an API key and rejected
 without one.
 """
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from server.middleware import ApiKeyAwareCORSMiddleware
@@ -105,6 +106,68 @@ class TestApiKeyAwareCORSMiddleware:
         assert 'access-control-allow-credentials' not in {
             k.lower() for k in response.headers
         }
+
+    @pytest.mark.parametrize(
+        'auth_header',
+        ['X-Session-API-Key', 'X-Access-Token'],
+    )
+    def test_alternate_api_key_headers_return_wildcard_cors(self, auth_header):
+        # Arrange — the middleware also recognises MCP session keys and
+        # access tokens; both should route through the permissive path.
+        client = _build_client()
+
+        # Act
+        response = client.get(
+            '/api/v1/settings',
+            headers={
+                'Origin': FOREIGN_ORIGIN,
+                auth_header: 'test-key',
+            },
+        )
+
+        # Assert
+        assert response.status_code == 200
+        assert response.headers.get('access-control-allow-origin') == '*'
+        assert 'access-control-allow-credentials' not in {
+            k.lower() for k in response.headers
+        }
+
+    def test_cookie_request_from_allowed_origin_preserves_strict_cors(self):
+        # Arrange — the SaaS web UI calls the API from the allowlisted
+        # origin with cookies; that path must keep credentials enabled and
+        # echo the specific origin (never wildcard).
+        client = _build_client()
+
+        # Act
+        response = client.get(
+            '/api/v1/settings',
+            headers={'Origin': ALLOWED_ORIGIN},
+        )
+
+        # Assert
+        assert response.status_code == 200
+        assert response.headers.get('access-control-allow-origin') == ALLOWED_ORIGIN
+        assert response.headers.get('access-control-allow-credentials') == 'true'
+
+    def test_preflight_with_lookalike_header_does_not_match_authorization(self):
+        # Arrange — a custom header whose name contains "authorization" as
+        # a substring (e.g. ``x-my-authorization-token``) must NOT be
+        # treated as an API-key request. This guards against the
+        # substring-matching regression flagged in code review.
+        client = _build_client()
+
+        # Act
+        response = client.options(
+            '/api/v1/settings',
+            headers={
+                'Origin': FOREIGN_ORIGIN,
+                'Access-Control-Request-Method': 'GET',
+                'Access-Control-Request-Headers': 'x-my-authorization-token',
+            },
+        )
+
+        # Assert — strict path means no allow-origin header for foreign origin.
+        assert response.headers.get('access-control-allow-origin') is None
 
     def test_device_flow_path_is_permissive_without_api_key_header(self):
         # Arrange — RFC 8628 endpoints are unauthenticated by design; they
